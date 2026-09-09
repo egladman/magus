@@ -106,7 +106,7 @@ func genMD(outDir string) {
 // are declared as globs, so without this a command dropped from the registry keeps
 // its page forever: magus-churn.1 shipped for a command that never existed.
 //
-// It only ever considers names THIS generator produces - magus<ext> and
+// It only ever considers names THIS generator produces: magus<ext> and
 // magus-<command><ext>. -out is a free-form flag, so an unconfined glob would make a
 // mistyped path destructive: `-format md -out .` at the repo root would delete
 // README.md and CHANGELOG.md. Confined this way a wrong -out deletes nothing.

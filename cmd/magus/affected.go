@@ -238,13 +238,13 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		scopeLabel = "0 projects"
 	}
 	// The base goes on its own line rather than in the projects suffix. It is the third
-	// input that decides what runs - the same command against a different base is a
-	// different build - and burying it in parentheses after a project list made it the
+	// input that decides what runs (the same command against a different base is a
+	// different build), and burying it in parentheses after a project list made it the
 	// one header fact nobody read. source already names the VCS that produced it
 	// ("git diff vs origin/main"), which is what distinguishes a git base from a jj one.
 	m.LogScope(ctx, scopeLabel, "")
 	m.LogBase(ctx, source, "")
-	// Merge magus.yaml default_charms with any explicit charm on the target - the same
+	// Merge magus.yaml default_charms with any explicit charm on the target, the same
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
@@ -532,7 +532,7 @@ func planSummaryMarkdown(out planOutput) string {
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
-// writes. The plan has always known which projects may run concurrently - the hard half -
+// writes. The plan has always known which projects may run concurrently (the hard half)
 // while saying nothing about their content, leaving any reader to infer it from paths.
 //
 // Every field is JOINED from declarations magus already holds; none of it is new analysis.
@@ -563,7 +563,7 @@ type shardDetail struct {
 // feature added for one.
 type shardAgents struct {
 	// Skills names the skills this shard's work routes to; Why states the derivation.
-	// Derived rather than declared so it cannot drift from what the shard does - and
+	// Derived rather than declared so it cannot drift from what the shard does, and
 	// stated, because a routing decision an agent cannot audit is one it should not trust.
 	Skills []string `json:"skills"`
 	Why    []string `json:"why,omitempty"`
@@ -591,7 +591,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// hardcoded "ci". A target is required — magus favors explicitness, and a silent
 	// default is the footgun this mode used to have (it ignored the target entirely).
 	// Leading positionals after the target are project filters, the same grammar
-	// `magus run <target> <projects>` already uses - so there is nothing new to learn, and
+	// `magus run <target> <projects>` already uses, so there is nothing new to learn, and
 	// no flag invented for something the CLI already spells one way.
 	var target string
 	var only []string
@@ -729,7 +729,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// `-o yaml`, in both flag positions.
 	//
 	// FormatText maps to JSON rather than to a prose rendering, because the plan has
-	// no prose rendering to fall back on - the default output IS the machine-readable
+	// no prose rendering to fall back on: the default output IS the machine-readable
 	// document, and a workflow that pipes `--plan` without -o must keep getting it.
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -787,14 +787,14 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 // rerun were already correct.
 //
 // It lives at the CLI edge, not behind magus.Affected, because a library entry point
-// must not write to a stream its caller never opted into - the condition rides
+// must not write to a stream its caller never opted into; the condition rides
 // types.AffectedResult.UndeclaredBySeed for every other consumer.
 //
 // The message names the SEED PROJECTS and nothing per-changeset, which is what makes
 // it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
 // every request and churn a long-lived daemon's hint set instead of teaching once. The
-// files are already on screen where this is emitted - --impact and --explain both mark
-// each one - and `magus describe file` explains any of them in full.
+// files are already on screen where this is emitted (--impact and --explain both mark
+// each one), and `magus describe file` explains any of them in full.
 func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 	if len(undeclaredBySeed) == 0 {
 		return
@@ -863,8 +863,8 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	noteUndeclaredSeeds(undeclared)
 
 	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
-	// changed code). These read the heavier knowledge store - a prior symbol index and,
-	// for coverage, a prior `magus run coverage` - not the lean workspace handle Compute
+	// changed code). These read the heavier knowledge store (a prior symbol index and,
+	// for coverage, a prior `magus run coverage`), not the lean workspace handle Compute
 	// runs on, so load the graph (with the lazily-merged @symbols/@coverage shards) here
 	// and hand it to the enrichment step. Best-effort: a graph that fails to load leaves
 	// the blast radius intact and records a Note rather than failing the whole report.
@@ -896,8 +896,8 @@ const impactFileCap = 12
 // grouped under the seed project that owns them (not dumped as one flat list) so a
 // large changeset stays legible.
 func printImpactText(out *types.ImpactResult) error {
-	// Notes carry graceful degradation - a knowledge graph that failed to load, a
-	// missing symbol index - so they must survive the early returns below. Without
+	// Notes carry graceful degradation (a knowledge graph that failed to load, a
+	// missing symbol index), so they must survive the early returns below. Without
 	// this, an empty changeset rendered as a clean "nothing is affected" while the
 	// reason the overlays were absent went unsaid, which is the worst shape a silent
 	// failure can take in a gate command.
@@ -935,7 +935,7 @@ func printImpactText(out *types.ImpactResult) error {
 		seeded += len(p.Files)
 		// "seeded by 12 changed files" reads as twelve files this project is built
 		// from. Some of them may be seeding it by directory containment alone, which
-		// is a rerun whose result was already correct - so the count says how many,
+		// is a rerun whose result was already correct, so the count says how many,
 		// and the listing below marks which.
 		label := countLabel(len(p.Files), "changed file", "changed files")
 		if n := len(p.UndeclaredFiles); n > 0 {
@@ -977,7 +977,7 @@ func printImpactText(out *types.ImpactResult) error {
 	printImpactOverlays(out)
 
 	// Complementary deep-link into the live Graph Explorer, focused on a single
-	// representative seed with a blast view (what depends on it - the closure the
+	// representative seed with a blast view (what depends on it: the closure the
 	// change ripples out to). The query grammar ANDs its terms with no OR, so the
 	// full affected set cannot be selected in one query. Always printed; the daemon
 	// may not be up when the browser opens it, hence the hint.
@@ -1002,8 +1002,8 @@ func printImpactText(out *types.ImpactResult) error {
 // so a large changeset stays readable while the full set is one -o json away.
 const impactSymbolCap = 20
 
-// printImpactOverlays renders the differentiated overlay sections - changed-symbol
-// callers and coverage on changed code - beneath the blast radius. Each is additive and
+// printImpactOverlays renders the differentiated overlay sections (changed-symbol
+// callers and coverage on changed code) beneath the blast radius. Each is additive and
 // self-suppressing: an overlay with no data prints nothing here (its honest output is
 // the Note the enrichment appended). Same house style as the blast radius: counts before
 // lists, verbs not arrows, plain ASCII.
@@ -1095,7 +1095,7 @@ type affectedExplainPath struct {
 	Seed  string   `json:"seed"  yaml:"seed"`
 	Chain []string `json:"chain" yaml:"chain"`
 	Files []string `json:"files" yaml:"files"`
-	// Undeclared is the subset of Files that no project declares - the ones whose
+	// Undeclared is the subset of Files that no project declares: the ones whose
 	// answer to "why did this run" is directory containment rather than a cache key.
 	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 }
@@ -1174,7 +1174,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 }
 
 // printAffectedExplainText renders the text and wide forms of `magus affected --explain`,
-// reporting whether the project is affected at all - the caller appends the VCS diff
+// reporting whether the project is affected at all; the caller appends the VCS diff
 // hints only when it is. Split out for the same reason printImpactText is: the rendering
 // is a pure function of the result, and the I/O around it is not.
 func printAffectedExplainText(out affectedExplainOutput) bool {
@@ -1220,7 +1220,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 	}
 
 	// Per-TARGET writes as well as project-wide ones. A project that declares its outputs
-	// per target - ctx.writesFiles(...) - has an EMPTY project-level Outputs, so a
+	// per target (ctx.writesFiles(...)) has an EMPTY project-level Outputs, so a
 	// project-only join reported this workspace's root shard as writing nothing while it
 	// rewrites MAGUS.md and gen/*.json. A collision surface that omits the busiest writer
 	// is worse than none: it reads as a cleared shard.
@@ -1269,7 +1269,7 @@ func planDetail(ctx context.Context, m *magus.Magus, target string, shards []typ
 // shardSkills derives the agent skills a shard's work routes to, and says why.
 //
 // Derived from what the shard DOES rather than declared in a table, so it cannot drift
-// from the shard it describes - a second copy of the routing table would rot the first
+// from the shard it describes: a second copy of the routing table would rot the first
 // time a project changed spells. Each reason is returned alongside, because a routing
 // decision an agent cannot audit is one it should not act on.
 func shardSkills(b shardDetail) (skills, why []string) {
@@ -1322,7 +1322,7 @@ func appendUnique(dst []string, values ...string) []string {
 //
 // A name that matches no project in the WORKSPACE is an error, because it is a typo and
 // silently planning nothing is how a typo turns into "the change affected nothing". A name
-// that is a real project but outside the affected set is not an error - that is the honest
+// that is a real project but outside the affected set is not an error: that is the honest
 // empty answer, and it is the question being asked.
 func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, only []string) ([]types.Shard, error) {
 	projects, err := m.ListProjects(ctx)

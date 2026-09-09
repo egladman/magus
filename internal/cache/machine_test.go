@@ -609,7 +609,7 @@ func TestMachineGateRefusesRatherThanQueueWhenBlindToItsAncestry(t *testing.T) {
 	defer held()
 
 	// Bounded, so a regression that queues fails in a second instead of hanging the
-	// package until the go test timeout - which is how this test first went wrong.
+	// package until the go test timeout, which is how this test first went wrong.
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
 	defer cancel()
 	// No Ancestors on the claim, none on the context, none in the environment.

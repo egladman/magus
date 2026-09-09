@@ -295,7 +295,7 @@ func TestHashKeyByteLayout(t *testing.T) {
 // cache key. Before this, a run with different args replayed the previous run's
 // result: the args changed what the target did but not what it hashed.
 //
-// The empty case is the back-compat guarantee - no extra args must hash exactly
+// The empty case is the back-compat guarantee: no extra args must hash exactly
 // as before, so adding this invalidated no existing entry (same property the
 // Charms lines rely on).
 func TestHashStepKeysExtraArgs(t *testing.T) {
@@ -324,8 +324,8 @@ func TestHashStepKeysExtraArgs(t *testing.T) {
 }
 
 // TestHashStepKeysSpellFilter locks in that an explicit `spell::op` invocation keys
-// separately from the plain target. The filter changes which definition runs - an
-// explicit op bypasses the magusfile export that shadows its name - so before this
+// separately from the plain target. The filter changes which definition runs (an
+// explicit op bypasses the magusfile export that shadows its name), so before this
 // line a compile-only `go::go-build` recorded a pass that `magus run go-build` then
 // replayed, leaving a stale binary that read as a successful rebuild.
 func TestHashStepKeysSpellFilter(t *testing.T) {
@@ -374,8 +374,8 @@ func TestVerifyRejectsCrossDomainSignature(t *testing.T) {
 }
 
 // TestVerifyAcceptsLegacyEnvelopeAndReportsIt: an artifact signed by a released
-// magus (bare signature over the manifest, no members) still verifies - rejecting it
-// would turn every existing remote entry into a miss - and reports legacy so the
+// magus (bare signature over the manifest, no members) still verifies (rejecting it
+// would turn every existing remote entry into a miss), and reports legacy so the
 // caller drops the extras the signature never covered.
 func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
 	pub, seed := mustKeypair(t)
@@ -400,7 +400,7 @@ func TestVerifyAcceptsLegacyEnvelopeAndReportsIt(t *testing.T) {
 }
 
 // TestHashStepHostFactOptOut: os and arch key a step by default and each can be left
-// out ALONE - the point of splitting them, since an image varies by arch while a shell
+// out ALONE: the point of splitting them, since an image varies by arch while a shell
 // suite varies by OS. The opt-out must change the key, or the claim is decorative.
 func TestHashStepHostFactOptOut(t *testing.T) {
 	t.Parallel()

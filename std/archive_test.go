@@ -497,7 +497,7 @@ func TestArchiveResultPathsCarryTheirBase(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, un.Files)
 	// Not an exact string compare against dest: the impl resolves the path first, and on
-	// macOS that turns /var into /private/var. What matters is the invariant - the entry
+	// macOS that turns /var into /private/var. What matters is the invariant: the entry
 	// knows its base, so Resolve() alone lands on the real file.
 	assert.NotEmpty(t, un.Files[0].Base, "an extracted entry knows where it was written")
 	assert.FileExists(t, un.Files[0].Resolve().Value, "so Resolve alone finds it on disk")

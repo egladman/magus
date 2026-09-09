@@ -61,7 +61,7 @@ func TestInputDecodesAMultiByteRune(t *testing.T) {
 func TestInputDecodesThePagingKeys(t *testing.T) {
 	t.Parallel()
 	// The tilde family is numbered, not lettered: "ESC [ 5 ~" and "ESC [ 6 ~". A MODIFIED
-	// page key carries a second parameter and stays unknown, which callers ignore - acting on
+	// page key carries a second parameter and stays unknown, which callers ignore: acting on
 	// it as the bare key would bind a chord nobody asked for.
 	in, _ := newTestInput("\x1b[5~\x1b[6~\x1b[5;2~")
 	got := drain(t, in)
@@ -295,7 +295,7 @@ func TestInputMotionDoesNotArmADoubleClick(t *testing.T) {
 func TestMouseTrackingDropsHoverOverSSH(t *testing.T) {
 	// Hover reports an event per cell crossed. Over a link with latency that is
 	// a stream of round trips for a highlight, and the pointer starts to feel
-	// heavy - a worse first impression than having no hover at all. Clicks are
+	// heavy: a worse first impression than having no hover at all. Clicks are
 	// unaffected.
 	t.Setenv("SSH_TTY", "")
 	t.Setenv("SSH_CONNECTION", "")
@@ -307,7 +307,7 @@ func TestMouseTrackingDropsHoverOverSSH(t *testing.T) {
 
 func TestMouseTrackingOffDisablesBothModes(t *testing.T) {
 	// Whichever mode was enabled has to be the one turned off, and the process
-	// exit path cannot know which was chosen - so the reset disables both. A
+	// exit path cannot know which was chosen, so the reset disables both. A
 	// mode that was never on is a no-op to disable.
 	assert.Contains(t, mouseTrackOff, "1003l")
 	assert.Contains(t, mouseTrackOff, "1000l")
@@ -328,7 +328,7 @@ func TestInputParsesACursorReply(t *testing.T) {
 
 func TestInputNeverSurfacesACursorReplyAsInput(t *testing.T) {
 	t.Parallel()
-	// A stray reply - one nobody asked for, or one that outlived its query -
+	// A stray reply (one nobody asked for, or one that outlived its query)
 	// is not something the user did. Handing it to a caller would look like a
 	// phantom keypress.
 	in, _ := newTestInput("\x1b[12;40Rx")
@@ -371,7 +371,7 @@ func TestInputQueuesKeystrokesThatOvertakeAReply(t *testing.T) {
 func TestCursorPositionRefusesWhenItCannotBoundTheWait(t *testing.T) {
 	// The failure mode being guarded is a HANG: a terminal that does not
 	// implement the query says nothing at all, and a blocking read on it never
-	// returns. Without a deadline to bound the wait, refuse outright - the
+	// returns. Without a deadline to bound the wait, refuse outright: the
 	// caller keeps its keyboard handling and goes without mouse support.
 	var out ttyBuf
 	in, _ := newTestInput("")
@@ -469,7 +469,7 @@ func TestInputDecodesABareEscapeWithoutWaiting(t *testing.T) {
 func TestCursorPositionDropsTheRemainsOfATimedOutReply(t *testing.T) {
 	t.Parallel()
 	// The deadline can fire part-way through a sequence. Its tail must not be
-	// left for the next decode to read as fresh keystrokes - a half-arrived
+	// left for the next decode to read as fresh keystrokes: a half-arrived
 	// reply would surface as a stray bracket or letter the user never typed.
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
@@ -491,7 +491,7 @@ func TestCursorPositionDropsTheRemainsOfATimedOutReply(t *testing.T) {
 //
 // The sibling test above truncates at "\x1b[12;", which reaches decodeCSI and
 // correctly propagates the deadline. A reply truncated at EXACTLY "\x1b[" instead
-// stalls on the Peek right after the '[' - and that site used to answer a read
+// stalls on the Peek right after the '[', and that site used to answer a read
 // error with KeyEscape rather than the error. CursorPosition treats an event as a
 // real keystroke that overtook the reply, so the fabricated key was appended to
 // i.pending, where discardBuffered (which drops BYTES) could not reach it. The

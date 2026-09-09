@@ -13,7 +13,7 @@ import (
 // runAPI writes magus's public CLI API as a sorted .lock snapshot (the same plain
 // sorted-line format as urls.lock): one line per subcommand, flag, project target,
 // and config key. Committed and drift-gated, its diff is what a reviewer inspects
-// for backward-incompatible changes - a removed line is a removed API element.
+// for backward-incompatible changes: a removed line is a removed API element.
 func runAPI(args []string) error {
 	fs := flag.NewFlagSet("api", flag.ContinueOnError)
 	out := fs.String("out", "", "write the public-API lock to this path (default: stdout)")

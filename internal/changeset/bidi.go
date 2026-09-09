@@ -14,7 +14,7 @@ import (
 // difference rather than reordering one.
 //
 // Escaped rather than stripped, and this is the whole design. Stripping would make the line render
-// honestly and silently misreport the file's contents - a reviewer would approve bytes magus never
+// honestly and silently misreport the file's contents: a reviewer would approve bytes magus never
 // showed them, which is the failure this is meant to prevent rather than a milder version of it.
 // Escaping says exactly where the character is and what it was.
 //
@@ -48,7 +48,7 @@ func SanitizeBidi(line string) (string, bool) {
 //     that look identical, which is how a homoglyph or a lookalike identifier goes unnoticed.
 //
 // Ordinary control characters are deliberately NOT here. A tab is not deceptive, and a diff full of
-// escaped tabs is a diff nobody reads - which would cost more review than the attack does.
+// escaped tabs is a diff nobody reads, which would cost more review than the attack does.
 func deceptive(r rune) bool {
 	switch {
 	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:

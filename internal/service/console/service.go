@@ -159,7 +159,7 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 	if s.magus != nil {
 		out.SymbolIndexes = s.magus.SymbolIndexStatus(ctx)
 		// Held locks come from the workspace cache rather than the pool query, because a
-		// lock is taken by whichever process mutates a project - usually a plain
+		// lock is taken by whichever process mutates a project, usually a plain
 		// `magus run` the daemon never sees.
 		out.Locks = s.magus.HeldLocks()
 	}
@@ -389,7 +389,7 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 const diffReplayEvents = 2000
 
 // diffTouches adapts the trail's own Touch to the review's, which is a straight rename
-// across a package boundary types must not cross - types imports nothing internal, and the
+// across a package boundary types must not cross: types imports nothing internal, and the
 // trail is internal.
 func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
 	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
@@ -465,7 +465,7 @@ func projectSkeleton(tg types.TargetGraphOutput) types.KnowledgeGraphOutput {
 		// The vocabulary travels with every flavor, because the schema version is what a
 		// consumer reads to decide whether it can resolve a predicate without a matching
 		// binary. Stamping the version while leaving these null tells it the vocabulary is
-		// there and then hands it nothing - worse than an older version, which at least
+		// there and then hands it nothing, worse than an older version, which at least
 		// says to fall back.
 		Relations:           types.KnowledgeRelationDefinitions(),
 		RelationFingerprint: types.KnowledgeRelationFingerprint(),

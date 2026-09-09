@@ -1,7 +1,7 @@
 // Package insight is the console-facing InsightService handler: it serves every insight lens
 // (the four VCS-history lenses from one cached git-log scan, plus the run-outcome volatility
 // lens folded in fresh) as the magus.insight.v1alpha1 wire type. It is READ-only and maps
-// types.InsightView to the wire at the boundary - the console service owns assembly and
+// types.InsightView to the wire at the boundary: the console service owns assembly and
 // caching, this owns the wire, and types/ stays free of protobuf.
 //
 // It is the typed replacement for the hand-marshaled JSON GET /api/v1/insight route, which

@@ -16,12 +16,12 @@ import (
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
-// search, over a corpus of shell commands. It turns magus's own doctrine - query before
-// grepping - into a number a user can watch move as the graph gets easier to reach.
+// search, over a corpus of shell commands. It turns magus's own doctrine (query before
+// grepping) into a number a user can watch move as the graph gets easier to reach.
 //
 // magus does the ANALYSIS; it never reads a specific agent host's logs, because it is
 // host-agnostic (a conventions test forbids naming one). The caller extracts the commands from
-// wherever their host records them - the help prints the recipe - and feeds them in.
+// wherever their host records them (the help prints the recipe) and feeds them in.
 type adoptionReport struct {
 	Total          int            `json:"total"`
 	GraphVerbs     int            `json:"graph_verbs"`      // magus query/refs/explain/path/graph
@@ -104,7 +104,7 @@ var adoptionHints = hint.NewTranslator()
 
 // The report's category NAMES are frozen, and hint's taxonomy is richer than
 // they are: hint calls a non-recursive grep and bat reads. This set pins the
-// mapping back onto them - only the read tools the report has always counted
+// mapping back onto them: only the read tools the report has always counted
 // land in file_reads. Counts are not bit-comparable across versions: routing
 // through hint re-baselines a few edge shapes (a search narrowed by a flag
 // glob, an in-place sed).

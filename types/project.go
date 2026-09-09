@@ -23,7 +23,7 @@ const workspaceScheme = "workspace://"
 // ProjectRef is the canonical project reference: holds the data once
 // (workspace-relative path plus optional absolute dir) and exposes two
 // render methods. One source of truth means the URI form and the display
-// form cannot drift - they share the same fields and the same ProjectLabel
+// form cannot drift: they share the same fields and the same ProjectLabel
 // / WorkspaceRef helpers both delegate to a method on this struct.
 type ProjectRef struct {
 	// Path is the workspace-relative identifier: "." for the root, "pkg/foo"
@@ -122,7 +122,7 @@ type Binding struct {
 // is a whole value you compare, while a provided project's origin CARRIES the
 // provider's name, so it has no single constant to compare against. Constructing
 // and reading it through ProvidedBy and Provider keeps that asymmetry out of every
-// call site - a hand-written `origin == "provider"` would be a condition that never
+// call site: a hand-written `origin == "provider"` would be a condition that never
 // fires.
 type ProjectOrigin string
 
@@ -155,12 +155,12 @@ type Project struct {
 	// Name is the declared human label from magus.project's "name" key, or "" to
 	// derive one from the path. It exists for the ROOT project, whose path is "."
 	// and whose label would otherwise fall back to the checkout's directory
-	// basename - so a worktree, a clone under a different name, or a CI checkout
+	// basename, so a worktree, a clone under a different name, or a CI checkout
 	// each renamed the root project and rewrote every generated index that names
 	// it. Declaring the name makes generated output reproducible anywhere.
 	Name string
 	// Origin is what put this project in the workspace (see ProjectOrigin). It is
-	// PROVENANCE, never identity - nothing dispatches on it - and it exists because a
+	// PROVENANCE, never identity (nothing dispatches on it), and it exists because a
 	// provided project has no file to point at, so "where did this come from" would
 	// otherwise be unanswerable for exactly the projects a reader has never seen
 	// declared anywhere. Named Origin rather than Source because Sources below is the
@@ -193,7 +193,7 @@ type Project struct {
 	// config.Load merges a user-global tier ($XDG_CONFIG_HOME/magus/) beneath the
 	// workspace, so a bound living there could be set in one person's private file and
 	// silently gate every workspace on their machine. A magusfile is committed, is read
-	// by everyone who reads the project, and is per project - which also means `console`
+	// by everyone who reads the project, and is per project, which also means `console`
 	// and `docs` can hold different policies instead of sharing one workspace-wide map.
 	//
 	// Sharing is an explicit import of a shared MODULE, never ambient inheritance: see
@@ -212,16 +212,16 @@ type Project struct {
 	//
 	// It exists so the finding can be QUIET. "Nobody read this" is true of nearly every
 	// file in nearly every changeset, and a report that says so everywhere is one people
-	// learn to skip - taking the signing code and the cache-key logic with it. Naming the
+	// learn to skip, taking the signing code and the cache-key logic with it. Naming the
 	// few places where an unread change is a real risk is what makes the report worth
 	// reading, and only the workspace knows which those are.
 	//
 	// Declared, never inferred. magus could guess from churn or from a security-sounding
-	// path, and a guess here would be magus asserting whose code is dangerous - which is
+	// path, and a guess here would be magus asserting whose code is dangerous, which is
 	// the judgment this key exists to leave with the people who own it.
 	ReviewRequired []string
 	// GateLowRisk are the globs whose changes the ci-gate redundancy check treats
-	// as prose - low-risk on their own - from magus.project's "gate_low_risk" key.
+	// as prose (low-risk on their own) from magus.project's "gate_low_risk" key.
 	// Globs are project-relative, like ReviewRequired. GateLowRiskDeclared is what
 	// separates "not declared" (magus's built-in markdown defaults apply) from
 	// "declared empty" (the prose class is off): the moment any project declares
@@ -235,8 +235,8 @@ type Project struct {
 	GateLowRiskDeclared bool
 	// GateInheritOff is magus.project's "gate_inherit" key declared false: this
 	// workspace's CI plan never inherits a green run's verdict, however the
-	// delta classifies. One declaration turns it off workspace-wide - the same
-	// reach a gate_low_risk declaration has - because inheritance is one
+	// delta classifies. One declaration turns it off workspace-wide (the same
+	// reach a gate_low_risk declaration has) because inheritance is one
 	// decision over the whole plan, not a per-project one.
 	GateInheritOff bool
 	// IgnoredOptions are magus.project keys this binary did not recognize and dropped,
@@ -277,7 +277,7 @@ type Project struct {
 	// MagusfileTargets are the target names this project's magusfile exports, normalized.
 	// They live here rather than on the magusfile spell because that spell is ONE global
 	// instance shared by every project, so it cannot know what any particular magusfile
-	// declares - which is why its Targets() is empty and why nothing could previously ask
+	// declares, which is why its Targets() is empty and why nothing could previously ask
 	// whether a magusfile shadows a spell op of the same name.
 	MagusfileTargets []string
 	// TargetCrossDeps are the cross-project targets each target depends on, declared
@@ -299,7 +299,7 @@ type Project struct {
 	TargetObservations map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
-	// relative to THIS project's root, so they compose with Outputs directly - which is
+	// relative to THIS project's root, so they compose with Outputs directly, which is
 	// the whole reason they are filed here rather than left on the writer, whose own
 	// globs are relative to a different root. Without this a cross-project output would
 	// be invisible to every consumer that asks a project what lands in its tree: clean,
@@ -314,9 +314,9 @@ type Project struct {
 // AllOutputs is every output glob that lands in this project's tree, deduplicated and
 // PROJECT-ROOT RELATIVE: the project-wide Outputs, every per-target ctx.writesFiles glob
 // this project declares for itself (TargetOutputs), and every glob another project
-// declares into it (InboundOutputs). It is the "what files appear in this tree" view -
-// consumed by `magus clean --outputs`, watch's rebuild-loop guard, output-ownership
-// lookup, and the merge driver - as opposed to the per-target cache view (buildStep's
+// declares into it (InboundOutputs). It is the "what files appear in this tree" view
+// (consumed by `magus clean --outputs`, watch's rebuild-loop guard, output-ownership
+// lookup, and the merge driver), as opposed to the per-target cache view (buildStep's
 // step.Outputs), which stays scoped to the one target being run.
 //
 // A cross-project ref in TargetOutputs is skipped here and counted on the OWNER instead,
@@ -364,7 +364,7 @@ func (p *Project) AllOutputs() []string {
 //
 // It CLEANS the join rather than concatenating, and that is the whole point. A
 // project-wide source glob may legitimately reach out of its own tree ("../proto/**"
-// declared by docs/) - reaching across a boundary is what the affordance is FOR - and
+// declared by docs/); reaching across a boundary is what the affordance is FOR, and
 // plain concatenation leaves "docs/../proto/**", which matches nothing, because ".." is
 // an ordinary path segment to doublestar and no walked path ever contains one. That is
 // a declaration that keys nothing and attributes nothing while reading as supported:
@@ -382,12 +382,12 @@ func RootGlob(projectPath, glob string) string {
 }
 
 // MatchesAnyGlob reports whether a workspace-relative path matches any of the
-// workspace-rooted globs - the question every consumer of [Project.DeclaredGlobs] asks,
+// workspace-rooted globs: the question every consumer of [Project.DeclaredGlobs] asks,
 // so it lives beside the rooting rather than once per caller. The three callers (affected
 // attribution, doctor's standing check, `magus describe file`) would otherwise be three
 // places for the matcher family to drift from the cache's.
 //
-// It TOLERATES an unparsable pattern, which then matches nothing - the same thing the
+// It TOLERATES an unparsable pattern, which then matches nothing: the same thing the
 // cache walk does with one. Tolerance is the right default (a bad glob must not fail a
 // build that never depended on it) but it is silent, so the pattern is worth reporting
 // where the glob set is assembled: see [InvalidGlobs].
@@ -404,7 +404,7 @@ func MatchesAnyGlob(globs []string, path string) bool {
 // given. It is what lets a caller SAY that a declaration matches nothing before it
 // silently matches nothing for the rest of the run: an unparsable glob declares an input
 // that can never key, and MGS1028 would then advise declaring a path that is already
-// declared - by a pattern that never matches it.
+// declared, by a pattern that never matches it.
 //
 // The error is not returned with it because doublestar has only one (ErrBadPattern, with
 // no position), so the pattern itself is the whole of the information.
@@ -432,12 +432,12 @@ func InvalidGlobs(globs []string) []string {
 // nothing can match, while joining the same glob with filepath.Join resolves it.
 //
 // Dedup here is string equality on the ROOTED form, so two spellings that resolve to
-// one path collapse to one entry - a project-wide "../proto/**" and a per-target
+// one path collapse to one entry: a project-wide "../proto/**" and a per-target
 // ctx.readsFiles of proto's "**" are the same declaration and count once.
 //
 // Deliberately NOT the magusfile globs the cache step layers on top. Every project's
 // key carries the ROOT magusfile, so counting those here would make one magusfile
-// edit read as a declaration by every project in the workspace - and attribution
+// edit read as a declaration by every project in the workspace, and attribution
 // would then seed all of them where directory containment seeds exactly one.
 func (p *Project) DeclaredGlobs() []string {
 	var out []string
@@ -477,7 +477,7 @@ func (p *Project) DeclaredGlobs() []string {
 
 // AttachSpell associates spell with p without applying registration overrides.
 func (p *Project) AttachSpell(spell *spells.Spell) {
-	// Internal plumbing never claims the primary slot - see the same rule in
+	// Internal plumbing never claims the primary slot; see the same rule in
 	// magus.bindSpell. The magusfile registration attaches on every project (it is
 	// how a project is discovered), so it won this race everywhere and `magus ls`
 	// answered "spell: magusfile" for almost every project: true by construction,

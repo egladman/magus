@@ -491,7 +491,7 @@ func TestPrunedPrefixIgnoresARelativePrefix(t *testing.T) {
 }
 
 // TestGuardTemplateBasenamesAreShipped pins the list against the templates that actually
-// exist, because for the whole life of one rename it named magus-pause.sh - a file the
+// exist, because for the whole life of one rename it named magus-pause.sh, a file the
 // same commit had renamed to magus-checkpoint.sh.
 //
 // The cost of that is total and silent: guardReferencedTemplates only inspects a config

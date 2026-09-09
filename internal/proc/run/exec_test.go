@@ -59,7 +59,7 @@ func TestExecWithoutAResolverIsUnchanged(t *testing.T) {
 // TestExecCapturesOutputWithNoTrailingNewline is the regression for a corruption a
 // redaction writer introduced: its held-back tail was flushed in a defer that ran AFTER
 // the capture buffers were read, so anything past the last newline vanished. It hit every
-// run, not only ones touching a secret - `printf` came back empty.
+// run, not only ones touching a secret: `printf` came back empty.
 func TestExecCapturesOutputWithNoTrailingNewline(t *testing.T) {
 	for _, withResolver := range []bool{false, true} {
 		ctx := t.Context()
@@ -103,7 +103,7 @@ func TestExecMissingBinaryStaysUnwrappable(t *testing.T) {
 
 // TestExecConsultsTheStepGate is the regression for --step being a silent no-op. The
 // gate is installed by `magus run/x/affected --step` on the run's root ctx, but only
-// the old run.Run consulted it, and nothing in production called run.Run - every
+// the old run.Run consulted it, and nothing in production called run.Run; every
 // subprocess forks through Exec. So the flag forced concurrency to 1, demanded a TTY,
 // and then ran everything without ever prompting.
 func TestExecConsultsTheStepGate(t *testing.T) {

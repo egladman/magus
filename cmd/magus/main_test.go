@@ -68,8 +68,8 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected target still forwards", "affected", []string{"ci"}, full},
 		// A forensic mode runs nothing, so a forward buys no pool and costs the report:
 		// the daemon prints it on its own stdout and the client exits 0 with an empty one.
-		// That is what made magus\affectedImpact - which forks `affected --impact -o json`
-		// and decodes the child's stdout - fail with "decode report:" and an empty stderr
+		// That is what made magus\affectedImpact (which forks `affected --impact -o json`
+		// and decodes the child's stdout) fail with "decode report:" and an empty stderr
 		// whenever the caller had a daemon to forward to.
 		{"affected --impact stays local", "affected", []string{"--impact"}, usageOnly},
 		{"affected --impact with a base stays local", "affected", []string{"--impact", "--base", "origin/main", "-o", "json"}, usageOnly},
@@ -167,7 +167,7 @@ func TestPeekSubConsumesTheShortGlobalValues(t *testing.T) {
 // --version like any other dash-prefixed token (skip it, keep scanning for a
 // subcommand), so `magus --version` alone found no subcommand, fell through to
 // the main flag parse, and died on an unregistered flag ("flag parse failed")
-// instead of printing the version - `magus version` worked, `magus --version`
+// instead of printing the version: `magus version` worked, `magus --version`
 // did not. -v is deliberately excluded: it is the verbosity flag (-v, -vv,
 // -vvv), not a version request, so it must keep being skipped as an ordinary
 // boolean flag here.
@@ -255,7 +255,7 @@ func TestPreScanExtractorsStopAtSeparator(t *testing.T) {
 //
 // dispatchAdopted itself is not called directly here: its "run"/"affected" branches
 // load a real workspace through loadMagus/inspectWorkspace, both memoized behind a
-// process-wide sync.Once that panics if invoked twice with a different root - not
+// process-wide sync.Once that panics if invoked twice with a different root, not
 // something a unit test can safely drive. Instead this exercises the exact mechanism
 // dispatchAdopted's callees use to set the field (cmdParse -> gen.BindFlags) and proves
 // snapshotGlobals's restore undoes it, which is the narrowest reachable seam for the fix.
@@ -310,7 +310,7 @@ func TestExitCodeOf(t *testing.T) {
 // anything.
 //
 // Every subcommand's own parser prints usage and returns before it loads a workspace, but
-// the pre-dispatch preload runs FIRST - so `magus diff -h` opened the workspace, and opening
+// the pre-dispatch preload runs FIRST, so `magus diff -h` opened the workspace, and opening
 // one refreshes the VCS merge-driver registration, which writes the tracked .gitattributes
 // and a git config entry naming the running binary. A persona doing nothing but reading help
 // left a dangling registration pointing at a throwaway binary path.
@@ -592,13 +592,13 @@ var newFlagSetRe = regexp.MustCompile(`^\s*(\w+) := flag\.NewFlagSet\(`)
 //
 // It is a TEXT scan rather than a behavioral test on purpose. The failure it
 // prevents is a command forgetting to call bindDisplayFlags, which no runtime
-// assertion can see without enumerating and invoking every subcommand - and an
+// assertion can see without enumerating and invoking every subcommand, and an
 // enumeration is exactly the thing that goes stale when someone adds a command.
 //
 // The rule exists because partial support is worse than none. `magus graph
 // verify -s` died on "flag provided but not defined", and `magus agent install
 // ... -s` did the same with stderr redirected, which looked precisely like a
-// successful install - the skills were never written and nothing said so. An
+// successful install: the skills were never written and nothing said so. An
 // agent told to always pass -s meets one of those, concludes the flag is
 // unreliable, and stops using it everywhere. One gap decays the whole
 // convention, so the convention has to be total.

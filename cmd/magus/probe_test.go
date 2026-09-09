@@ -299,7 +299,7 @@ func TestReadinessHTTPHandler(t *testing.T) {
 
 	t.Run("not-ready-despite-healthy-extras", func(t *testing.T) {
 		// No workspaces loaded fails the gate even though every extra component
-		// reports healthy - the gate is workspace-loaded alone, unchanged by this body.
+		// reports healthy: the gate is workspace-loaded alone, unchanged by this body.
 		extra := readinessExtras{knowledgeGraph: func() (bool, bool) { return true, true }}
 		rec := do(readinessHTTPHandler(statusOf(), extra))
 		require.Equal(t, http.StatusServiceUnavailable, rec.Code)

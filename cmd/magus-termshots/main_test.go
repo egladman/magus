@@ -19,7 +19,7 @@ import (
 // These render magus's own interactive surfaces, so a change to how the zone
 // lays out a band, or to what the failure prompt says, silently makes the
 // documentation show something the terminal no longer does. Committed output
-// with no gate is committed output that rots - which is exactly what happened
+// with no gate is committed output that rots, which is exactly what happened
 // to the langservice manifest before it grew one.
 func TestShotsUpToDate(t *testing.T) {
 	t.Parallel()

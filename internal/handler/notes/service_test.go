@@ -16,7 +16,7 @@ import (
 	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
 )
 
-// coldWorkspace is a workspace whose knowledge graph will not load - the ordinary state on a
+// coldWorkspace is a workspace whose knowledge graph will not load, the ordinary state on a
 // fresh clone, before the first build, and any time the symbol index is cold.
 type coldWorkspace struct{ root string }
 
@@ -73,8 +73,8 @@ func TestListNotesReportsBothStoresEvenWhenUndeclared(t *testing.T) {
 }
 
 // The console renders this path as where to open the note, so it has to be the file. A note
-// that declares an id is identified by that id and not by its filename - renaming the file in
-// a vault is the normal case ids exist for - and the path used to be rebuilt from the name,
+// that declares an id is identified by that id and not by its filename (renaming the file in
+// a vault is the normal case ids exist for), and the path used to be rebuilt from the name,
 // which named a file that stopped existing the moment the two diverged.
 func TestASharedNotePathIsTheFileNotTheId(t *testing.T) {
 	root := t.TempDir()
@@ -149,7 +149,7 @@ func TestGetNoteRefusesToGuessTheStore(t *testing.T) {
 
 // TestGetNoteFromAnUndeclaredStoreIsNotFound: asking the private store for a note when this
 // workspace has no private store is a NotFound about the STORE, not a silent fallback to the
-// shared one - which would hand back a team note in answer to a question about a private one.
+// shared one, which would hand back a team note in answer to a question about a private one.
 func TestGetNoteFromAnUndeclaredStoreIsNotFound(t *testing.T) {
 	root := t.TempDir()
 	writeNote(t, filepath.Join(root, "notes"), "auth", "how auth works",

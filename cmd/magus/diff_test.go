@@ -35,7 +35,7 @@ import (
 // Each row used to be a usage error, correctly: the flag was opt-in, so asking for the viewer
 // somewhere it cannot draw was a mistake worth naming. Now nobody asked. A script running
 // `magus diff -o json`, a patch file, a watch loop are ordinary invocations, and any one of
-// them erroring because a default changed would be the worst kind of regression - it breaks
+// them erroring because a default changed would be the worst kind of regression: it breaks
 // callers that were never using the feature.
 //
 // The terminal is an ARGUMENT rather than a probe, which is what makes this testable with no pty.
@@ -335,8 +335,8 @@ func TestImpactRendersEverySection(t *testing.T) {
 
 // TestImpactEmptyFormsSayNobodyLooked is the half that matters.
 //
-// Every one of these sections is empty for two completely different reasons - nothing found,
-// or nothing measured - and only one of them is good news. A silent section, or a cost of
+// Every one of these sections is empty for two completely different reasons (nothing found,
+// or nothing measured), and only one of them is good news. A silent section, or a cost of
 // zero, would report an unmeasured workspace as a cheap safe change.
 func TestImpactEmptyFormsSayNobodyLooked(t *testing.T) {
 	lines := impactLines(diffImpact{})
@@ -502,8 +502,8 @@ func TestPrintDiffTextAppendsImpactAboveTheConsoleLink(t *testing.T) {
 // TestImpactCostRefusesToPriceAnUnmeasuredReach pins the one number this section must never
 // print.
 //
-// forecast always answers PredictDuration - it falls back to a workspace percentile and then to
-// a compiled-in constant - so a total is computable for a workspace nobody has ever timed. That
+// forecast always answers PredictDuration (it falls back to a workspace percentile and then to
+// a compiled-in constant), so a total is computable for a workspace nobody has ever timed. That
 // total is a fabrication wearing a duration, and quoting it would teach a reader to trust every
 // later one.
 func TestImpactCostRefusesToPriceAnUnmeasuredReach(t *testing.T) {
@@ -675,7 +675,7 @@ func viewedDigests(ops []diffSessionOp) []string {
 // TestDiffBridgeQueueKeepsTheNewestCursor pins which end of a full queue is dropped.
 //
 // A backlog means the daemon stopped keeping up, and the only cursor still worth sending is the
-// last one - every entry behind it names somewhere the reader has already walked past. A plain
+// last one: every entry behind it names somewhere the reader has already walked past. A plain
 // non-blocking send drops the arriving op, which keeps exactly the stale ones and throws away
 // the only true one.
 func TestDiffBridgeQueueKeepsTheNewestCursor(t *testing.T) {
@@ -806,8 +806,8 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 
 // TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the report.
 //
-// This report is what a reader meets when the viewer stood aside - piped, redirected, in CI,
-// or asked for with --no-tui - and it is the surface with the most readers. It used to name
+// This report is what a reader meets when the viewer stood aside (piped, redirected, in CI,
+// or asked for with --no-tui), and it is the surface with the most readers. It used to name
 // the console and nothing else, so every other way of reading a changeset existed only in
 // `-h` prose and the man page: the best teaching in the product sat furthest from the door.
 //
@@ -825,7 +825,7 @@ func TestDiffNextStepLinesTeachTheWorkflow(t *testing.T) {
 }
 
 // Wiring magus as GIT_EXTERNAL_DIFF used to dead-end on "takes at most one patch argument, got
-// 7" - accurate, and useless to the person who just tried the integration. The refusal has to
+// 7", accurate, and useless to the person who just tried the integration. The refusal has to
 // name the working setting, because reaching it means they are configuring git right now.
 func TestGitExternalDiffIsRefusedWithTheSettingThatWorks(t *testing.T) {
 	t.Setenv("GIT_DIFF_PATH_TOTAL", "2")
@@ -846,7 +846,7 @@ func TestGitExternalDiffIsRefusedWithTheSettingThatWorks(t *testing.T) {
 }
 
 // A VCS colorizes when it believes it is writing to a terminal, which is precisely the case
-// when magus is its pager - so the first patch a reader ever hands over through the wiring in
+// when magus is its pager, so the first patch a reader ever hands over through the wiring in
 // docs/guides/integrations/git.md is a colorized one. Its headers sit behind an escape
 // sequence and no longer begin a line, so nothing parses, and "no headers magus can read" is
 // true but sends them looking in the wrong place.
@@ -986,7 +986,7 @@ func TestEarnedSyncMintsNothingForAFileItCannotRead(t *testing.T) {
 }
 
 // The terminal writes the watermark through the SAME store call the console's session route
-// makes. Until it did, a reader who works entirely in `magus diff` marked nothing seen - and
+// makes. Until it did, a reader who works entirely in `magus diff` marked nothing seen, and
 // check-review reads an empty watermark as a workspace nobody has ever reviewed in and returns
 // without asking the forge anything, so the bell could never ring for them at all.
 func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
@@ -1131,7 +1131,7 @@ func TestImpactEvidenceGapsReadDifferently(t *testing.T) {
 		impactEvidenceLines(nil, trail.ConsultGapNoQuestions))
 }
 
-// The scanner used to report its own constant - `const compatMarker = "compat(until: "` -
+// The scanner used to report its own constant (`const compatMarker = "compat(until: "`)
 // as a decision governing the reader's change, alongside its own test fixtures, rendering
 // a line whose condition was a bare quote character. The file comment claimed the marker's
 // trailing space prevented this; it cannot, because the constant contains that space too.
@@ -1221,7 +1221,7 @@ const brokenAdvisor = `fun main() > void !> any {
 // local mode.
 //
 // The base is one no remote can resolve. In CI mode fetchBase runs the refspec fetch,
-// git fails to find the ref, and fetchBase throws - so merely reaching publish is the
+// git fails to find the ref, and fetchBase throws, so merely reaching publish is the
 // proof that the local-mode gate returned before any git ran.
 const staleBaseAdvisor = `import "advice";
 
@@ -1309,7 +1309,7 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 
 // A warning from an advisor that RAN is not the reader's business.
 //
-// These are lint diagnostics about the advisor's own source - magus's shipped scripts, not
+// These are lint diagnostics about the advisor's own source: magus's shipped scripts, not
 // anything in the changeset. Printing them unconditionally is what made a one-line docs fix
 // draw ~40 lines of BZZ3001/BZZ3002 about merge-conflict.buzz and doctor.buzz; four
 // personas hit it independently and the drive-by contributor named it as the point they
@@ -1357,7 +1357,7 @@ func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
 // the merge base is this code's decision and the only part worth pinning.
 func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 	// The advisors run git against the process working directory, which under `go test` is
-	// this package inside magus's own repository - a real clone with a real history.
+	// this package inside magus's own repository, a real clone with a real history.
 	out, err := exec.Command("git", "merge-base", "origin/main", "HEAD").Output()
 	if err != nil {
 		t.Skip("origin/main is not in this clone, which is the fallback path below, not this one")
@@ -1382,8 +1382,8 @@ func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 }
 
 // TestLocalModeReadsAStaleBaseWithoutFetching pins the rule that a local advice run stays
-// off the network. `magus diff` is a read-only report on a working tree - it may run
-// offline, and under --watch it re-fires on every save - so fetching, and writing
+// off the network. `magus diff` is a read-only report on a working tree (it may run
+// offline, and under --watch it re-fires on every save), so fetching, and writing
 // refs/remotes/ while doing it, is a report mutating what it reports on.
 func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
 	dir := stubAdviceDir(t, map[string]string{"stale.buzz": staleBaseAdvisor})
@@ -1401,8 +1401,8 @@ func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
 		t.Fatalf("sections = %+v, want exactly one", sections)
 	}
 	// The advisor saw the driver's base rather than a pull request's. Saying that the base
-	// went unfetched is the DRIVER's line, once for the whole set - see
-	// TestImpactBaseSeparatesOldFromAbsent - so no section carries the disclaimer.
+	// went unfetched is the DRIVER's line, once for the whole set (see
+	// TestImpactBaseSeparatesOldFromAbsent), so no section carries the disclaimer.
 	if body := sections[0].Body; body != "main" {
 		t.Errorf("Body = %q, want the local base the driver supplied", body)
 	}
@@ -1468,14 +1468,14 @@ type adviceStep struct {
 // A LINE SCAN rather than a YAML decode, which is a judgment worth recording. Decoding
 // would mean modeling enough of the composite-action schema to reach `runs.steps[].env`
 // and `.run`, and `run` would still be a shell string this test has to pick a script path
-// out of by hand - so the schema buys nothing and the sub-parse remains either way. It
+// out of by hand, so the schema buys nothing and the sub-parse remains either way. It
 // would also put a YAML dependency in package main to serve one test. The scan reads the
 // same two facts a human reads, off a file whose indentation the action schema fixes:
 // steps open at `    - name:`, step keys sit at six spaces, env keys at eight.
 //
 // The scan is allowed to be wrong in one direction only. A step it fails to recognize
 // drops out of the returned set and then surfaces as a mismatch against localAdvisors,
-// which is a red test naming the file - never a quietly shorter list.
+// which is a red test naming the file, never a quietly shorter list.
 func parseAdviceSteps(t *testing.T) []adviceStep {
 	t.Helper()
 	src, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "action.yml"))
@@ -1543,8 +1543,8 @@ func TestLocalAdvisorsMatchActionYML(t *testing.T) {
 	// A step carrying FIX_LABEL is a WRITER. That variable is the per-change consent the
 	// two fixers and the label-settler each read before touching the branch, so it is a
 	// structural signal action.yml already carries, rather than a second hand-kept list of
-	// writers that could drift exactly the way localAdvisors can. FIX_LABEL_OFFER - which
-	// the read-only merge-conflict advisor sets - is a different key and does not match.
+	// writers that could drift exactly the way localAdvisors can. FIX_LABEL_OFFER (which
+	// the read-only merge-conflict advisor sets) is a different key and does not match.
 	var readOnly []string
 	writers := 0
 	for _, s := range steps {
@@ -2015,7 +2015,7 @@ func TestChangedPathsFromPatchReadsTheHeaders(t *testing.T) {
 	assert.Empty(t, changedPathsFromPatch(""))
 }
 
-// A header with no a//b prefixes is not malformed - it is what `git diff --no-prefix` emits,
+// A header with no a//b prefixes is not malformed; it is what `git diff --no-prefix` emits,
 // and diff.noPrefix is a setting plenty of people turn on. This used to be pinned the other
 // way, as a line to skip, so such a patch reported ZERO changed files at exit 0. The reader
 // falls back to a whitespace split there, which cannot handle a path containing spaces but
@@ -2209,7 +2209,7 @@ func diffFiles(n int) types.Diff {
 }
 
 // TestReviewPromptHintFiresOnlyOnALargeChangeset. A flag nobody knows about is a feature
-// nobody has, which is why the hint exists - but one printed on every diff is one the reader
+// nobody has, which is why the hint exists, but one printed on every diff is one the reader
 // stops seeing by the third time, which is exactly when it starts to matter. Both halves are
 // the feature, so both are pinned.
 func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
@@ -2311,7 +2311,7 @@ func TestReviewedContentDigestsTheRevisionNotTheCheckout(t *testing.T) {
 }
 
 // A file absent at the revision has nothing anyone can have read, and must not become a receipt
-// against "" - which Covers would otherwise satisfy for every unreadable file forever.
+// against "", which Covers would otherwise satisfy for every unreadable file forever.
 func TestReviewedContentYieldsNothingForAFileAbsentAtTheRevision(t *testing.T) {
 	c := reviewedContent{
 		root: t.TempDir(),
@@ -2416,7 +2416,7 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 //
 // A note anchors a bare SCIP key, the diff reports its changed symbols as knowledge-graph node
 // ids, and this is the only layer where both spellings are in scope. It shipped comparing them
-// directly, so symbol anchors - the form the store's own template tells authors to prefer -
+// directly, so symbol anchors (the form the store's own template tells authors to prefer)
 // never matched, and the impact report said no note anchored what you had changed.
 func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
 	const key = "m internal/cache/Store#Put()."

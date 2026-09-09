@@ -13,7 +13,7 @@ import (
 // A target that never replays is the most expensive kind of misconfiguration, because
 // nothing about it looks wrong: every run passes, the cache reports no error, and the
 // only symptom is that the build is slower than it should be. It is invisible per-run
-// and obvious only in aggregate - which is why it is read back out of the invocation
+// and obvious only in aggregate, which is why it is read back out of the invocation
 // journals rather than detected live.
 //
 // The thresholds keep this quiet until acting on it is worthwhile. A handful of runs
@@ -38,7 +38,7 @@ type Stalled struct {
 	Project string
 	// ProjectPath is the raw workspace-relative key the journal recorded ("." for the
 	// root). Carried alongside the display form so a caller can look the project up in
-	// the workspace - doctor matches these against per-target policy to tell a target
+	// the workspace: doctor matches these against per-target policy to tell a target
 	// that CANNOT replay by design from one that merely does not.
 	ProjectPath string
 	Target      string
@@ -60,7 +60,7 @@ func (s Stalled) AvgMs() int64 {
 // It reads the invocation journals magus already writes (<cacheDir>/runs/*.jsonl), so it
 // costs no new bookkeeping: every target result is recorded there with a status of
 // "cached" (replayed) or "pass"/"fail" (executed). A pair with many executions and no
-// replays at all is not a cold cache, it is a cache that cannot work - almost always
+// replays at all is not a cold cache, it is a cache that cannot work: almost always
 // because the target's footprint includes inputs it does not read, so ordinary edits
 // keep busting a key that had no reason to change.
 //

@@ -115,12 +115,12 @@ func magnitude(n int) string {
 // WriteTargetGraphMarkdown renders a workspace's MAGUS.md: a routing index, not a
 // catalog. It leads with the knowledge-graph "query first" section, then lists
 // every project's targets with a one-line summary each, and points the reader at
-// the two commands that expand any entry - `magus describe target <name>` for a
+// the two commands that expand any entry: `magus describe target <name>` for a
 // target's fully-evaluated dispatch plan, `magus describe mcp-tools` for the agent
 // tool list. The per-target dispatch plan and the Mermaid graphs deliberately do
 // not live here: their bulk made the file useless as in-context routing, and both
 // are one command (or the Graph Explorer link) away. It is engine- and
-// repo-agnostic - `magus describe graph -o markdown` produces it for any magus
+// repo-agnostic: `magus describe graph -o markdown` produces it for any magus
 // workspace, which is how a project's MAGUS.md is generated and drift-checked.
 // Output is deterministic (no timestamps) so it can back a drift gate.
 func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing *types.KnowledgeRouting, explorerURL string, defaultCharms []string) error {
@@ -131,13 +131,13 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing 
 
 	// Staleness contract, right under the header: this file is a generated snapshot,
 	// only as fresh as the last `generate`. When its counts look stale, the live
-	// query tools - not this file - are the source of truth.
+	// query tools (not this file) are the source of truth.
 	//
 	// NO catalog fingerprint here, deliberately. It named the build that wrote the
 	// file, meant to make a cross-branch regeneration legible as that rather than as
 	// an ordinary change. It did the opposite: this file is drift-gated, the
 	// fingerprint is a property of the BINARY rather than of the content, and two
-	// builds of the same source produced different values - so a regeneration that
+	// builds of the same source produced different values, so a regeneration that
 	// changed nothing at all still rewrote the line and failed the gate, with the
 	// fingerprint as the entire diff. Content-identical output must not touch the
 	// file. The fingerprint still rides the JSON export (magus graph export), which
@@ -159,7 +159,7 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing 
 		"stays in lockstep with how the project actually builds.")
 
 	// Route by question, front-loaded as the first section: an agent lands on the
-	// exact command before scrolling any table. Static routing text - none of it is
+	// exact command before scrolling any table. Static routing text: none of it is
 	// derived from the graph.
 	b.Heading(2, "Route by question")
 	b.Table([]string{"To find out", "Run"}, []md.Align{md.Left, md.Left}, [][]string{
@@ -231,8 +231,8 @@ func firstDocLine(doc string) string {
 // links that open the Graph Explorer pre-seeded with that query (#q=...).
 func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	b.Heading(2, "Query first")
-	// Deliberately NOT the node and edge totals. They move on almost every commit -
-	// a doc, a file, a function is enough - so a committed, drift-gated file carrying
+	// Deliberately NOT the node and edge totals. They move on almost every commit
+	// (a doc, a file, a function is enough), so a committed, drift-gated file carrying
 	// them churns on changes that have nothing to do with what this section says.
 	// `magus graph stats` reports the live counts to anyone who wants them, and it is
 	// right there in the block below. The schema version stays: it changes when the
@@ -251,8 +251,8 @@ func writeRouting(b *md.Builder, r types.KnowledgeRouting, explorerURL string) {
 	// Magnitude, not an exact count. An exact count moved whenever any node was added
 	// anywhere, which churned this file constantly and buried real changes; it also
 	// contradicted the header two lines above, which tells the reader to trust `magus
-	// query` over this file. Magnitude keeps the one thing worth reading - whether a kind
-	// holds ten things or a thousand - while its boundaries are exponentially spaced, so
+	// query` over this file. Magnitude keeps the one thing worth reading (whether a kind
+	// holds ten things or a thousand), while its boundaries are exponentially spaced, so
 	// crossings are exponentially rarer than increments. Empty kinds are already omitted
 	// upstream, so a row's presence is the "is there anything here" signal.
 	kindRows := make([][]string, 0, len(r.Kinds))

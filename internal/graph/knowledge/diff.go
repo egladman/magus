@@ -10,13 +10,13 @@ import (
 
 // Diffing is comparison, not analysis: given the base graph and the current graph
 // (both already assembled), it reports the node/edge deltas. Nodes are keyed by ID,
-// edges by (source, target, relation) - the same identities the store and merge use -
+// edges by (source, target, relation), the same identities the store and merge use,
 // so the diff mirrors what a rebuild would change. Deterministic: every slice is
 // sorted, so the same pair of graphs always yields byte-identical output.
 //
 // Nodes get field-level change tracking (changedNodeFields); edges do not. Edge
 // identity IS (source, target, relation), so a re-scored or re-provenanced edge that
-// keeps those three is intentionally not reported - tracking edge-attribute drift
+// keeps those three is intentionally not reported: tracking edge-attribute drift
 // would be dominated by reference-edge line-number churn and swamp the real topology
 // signal this artifact exists to surface. The contract is stated in
 // KnowledgeGraphDiffDefinition; TestDiffGraphsEdgeAttrChangeIgnored locks it in.

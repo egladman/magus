@@ -62,7 +62,7 @@ func (c *Cache) evictOldest(ctx context.Context, limit int64) {
 	// snapshotted, so it has no manifest and the loop below can never reach it. Those
 	// bytes still count toward the cap, so without this pass a workspace with failures
 	// would evict every manifest chasing a floor it cannot reach. Oldest first, and
-	// only while over the limit - recent failures are the ones worth keeping.
+	// only while over the limit: recent failures are the ones worth keeping.
 	total -= c.evictOrphanOutputs(ctx, entries, total, limit)
 
 	for _, e := range entries {
@@ -194,7 +194,7 @@ func (c *Cache) scanManifests() (int64, []manifestEntry) {
 
 // evictOrphanOutputs removes output dirs no manifest claims, oldest first, until the
 // cap is met or none are left, and reports the bytes freed. An orphan is the residue
-// of a run that stored output but no entry - overwhelmingly a FAILURE, since a failing
+// of a run that stored output but no entry: overwhelmingly a FAILURE, since a failing
 // run is never snapshotted. They are the one part of the store nothing else collects.
 func (c *Cache) evictOrphanOutputs(ctx context.Context, entries []manifestEntry, total, limit int64) int64 {
 	if total <= limit {

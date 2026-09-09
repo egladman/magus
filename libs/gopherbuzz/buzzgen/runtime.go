@@ -30,7 +30,7 @@ type RuntimeOptions struct {
 // per type, turning a Go value into the named map the VM reads.
 //
 // The methods contain ordinary field reads, so the host binary never pays for reflection
-// when a value crosses at run time - the reflection happens here, once, at generate time.
+// when a value crosses at run time: the reflection happens here, once, at generate time.
 func RuntimeMethods(types []reflect.Type, opts RuntimeOptions) ([]byte, error) {
 	var methods bytes.Buffer
 	r := runtimeRenderer{b: &methods, opts: opts}
@@ -126,7 +126,7 @@ func (r *runtimeRenderer) value(value, path string, t reflect.Type) (string, err
 	switch t.Kind() {
 	case reflect.String:
 		// A NAMED string keeps its own Go type inside the map[string]any, and a decoder
-		// type-switches on IDENTITY - so `case string` does not match it and the field
+		// type-switches on IDENTITY, so `case string` does not match it and the field
 		// crosses as null. Convert here; a plain string is emitted bare rather than as
 		// string(s), which is the redundant conversion unconvert exists to catch.
 		if t != reflect.TypeOf("") {
@@ -192,8 +192,8 @@ func (r *runtimeRenderer) value(value, path string, t reflect.Type) (string, err
 // says what it holds: itemsAffectedProjects, not items61.
 //
 // path is always an exported field name, extended with Item/Value per nesting level, so
-// it needs no case fixing. That is not quite a uniqueness proof - a field Foo [][]X and a
-// sibling literally named FooItem derive the same temporary - but nesting puts the inner
+// it needs no case fixing. That is not quite a uniqueness proof (a field Foo [][]X and a
+// sibling literally named FooItem derive the same temporary), but nesting puts the inner
 // one inside the loop's braces, and a genuine same-scope collision is a Go redeclaration
 // error in generated code, not a silent miscompile.
 func tempName(prefix, path string) string { return prefix + path }

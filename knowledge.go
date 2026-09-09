@@ -86,7 +86,7 @@ func buildRegisteredWorkspace(ctx context.Context, root string, refresh bool, lo
 
 // workspaceName is the qualifier for a workspace root: its basename. Collisions
 // (two repos with the same directory name) merge in the union view, which is
-// acceptable - the alternative (full paths) makes node IDs unreadable.
+// acceptable: the alternative (full paths) makes node IDs unreadable.
 func workspaceName(root string) string {
 	return filepath.Base(filepath.Clean(root))
 }
@@ -292,7 +292,7 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 
 // loadKnowledgeCoverage reads the local Go coverage profile (best-effort) into per-file
 // coverage for the observed @coverage overlay. The profile is coverage.out at the
-// workspace root - what `magus run coverage` writes - and its lines are module-qualified,
+// workspace root (what `magus run coverage` writes), and its lines are module-qualified,
 // so the module path from go.mod is stripped to recover the workspace-relative paths the
 // file/symbol nodes use. A missing profile, an unreadable go.mod, or a profile with no
 // data yields no coverage, so the attrs are simply absent, never an error: a workspace
@@ -311,7 +311,7 @@ func loadKnowledgeTimings(ctx context.Context, cfg config.Config) []types.Knowle
 func loadKnowledgeNotesAt(root, declared string, scope notes.Scope) []types.KnowledgeNote {
 	dir, err := notes.Dir(root, scope, declared)
 	if err != nil {
-		return nil // not declared, or declared badly - notes verify says so
+		return nil // not declared, or declared badly: notes verify says so
 	}
 	return loadKnowledgeNotes(root, dir, string(scope))
 }
@@ -323,12 +323,12 @@ func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
 	}
 	// A shared store is inside the checkout, so its notes get a workspace-relative path
 	// that @vcs can attribute to an author. A private store may be anywhere, so there is
-	// no relative path and no attribution to be had - the absolute path is the honest
+	// no relative path and no attribution to be had: the absolute path is the honest
 	// Source, and a blank author is the honest answer rather than a fabricated one.
 	//
 	// Taken from each note's own file rather than rebuilt from its name: a note that
 	// declares an id is identified by that id and not by where the file sits, so a rebuilt
-	// path stops naming a real file the moment someone renames the note - and @vcs then
+	// path stops naming a real file the moment someone renames the note, and @vcs then
 	// attributes nothing, because no such path was ever committed.
 	relPath := func(p string) string {
 		r, rerr := filepath.Rel(root, p)
@@ -375,7 +375,7 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 	return knowledge.ParseCoverage(profile, module)
 }
 
-// declaredSpellSet is the union of every project's declared `spells:` list - the spells
+// declaredSpellSet is the union of every project's declared `spells:` list, the spells
 // this workspace opts into, as opposed to the compiled-in builtins that are merely
 // available. It tags spell nodes so the orphan lens flags only a declared-but-unused
 // spell (genuinely dead) and never a builtin no project here declares. Nil when empty.
@@ -395,8 +395,8 @@ func declaredSpellSet(projects types.ProjectsOutput) map[string]bool {
 // loadKnowledgeOutputRefs reads the local output store (best-effort) for each target's
 // most recent captured-output reference, so the @runtime shard can fold last_output_ref
 // and last_run_ok onto the target node. The forecast timing history is cache-safety-locked
-// and records no refs, so the output store - which already persists one OutputDescriptor
-// per execution - is the source. A missing or unreadable store yields no refs, so the
+// and records no refs, so the output store (which already persists one OutputDescriptor
+// per execution) is the source. A missing or unreadable store yields no refs, so the
 // attrs are simply absent, never an error. The store already sorts by project:target, so
 // assembly stays deterministic.
 func loadKnowledgeOutputRefs(cacheDir string) []types.KnowledgeOutputRef {
@@ -435,7 +435,7 @@ func MergeWorkspaceSymbols(ctx context.Context, ws types.Inspector, root string,
 
 // MergeWorkspaceSymbolsForRef merges symbols into g for `magus refs`, targeting only
 // the shards that mention ref (via the xref routing index) when ref is an exact symbol
-// ID - the scale-safe reverse lookup - or all symbol shards when ref is a fuzzy name
+// ID (the scale-safe reverse lookup), or all symbol shards when ref is a fuzzy name
 // whose exact ID is not yet known.
 func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root string, cfg config.Config, g *knowledge.Graph, ref string, log *slog.Logger) error {
 	store := symbolStore(ws, root, cfg, log)
@@ -451,11 +451,11 @@ func MergeWorkspaceSymbolsForRef(ctx context.Context, ws types.Inspector, root s
 // loadKnowledgeSymbols reads each project's SCIP index (best-effort) into per-project
 // symbol records for the @symbols shards. Ingestion is AUTOMATIC: every project bound to
 // a symbol-capable spell (one exposing the reserved `scip` op) is read from that
-// project's cached index, so importing a language's spells is the only opt-in - no
+// project's cached index, so importing a language's spells is the only opt-in: no
 // per-project config. The index lives under the cache dir, not the tree: `magus run
 // <project>::scip` produces it there. An index that has not been built yet (its scip
 // target has not run) or an unreadable/undecodable one is skipped with a debug log,
-// never an error - symbol ingestion is optional enrichment, so a bad index degrades to
+// never an error: symbol ingestion is optional enrichment, so a bad index degrades to
 // "no symbols for that project" rather than failing every graph query.
 func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string][]types.KnowledgeSymbol {
 	log := in.log
@@ -479,7 +479,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 		syms, err := symbols.ParseIndex(ctx, data, decl.project, decl.language)
 		if err != nil {
 			// An index that exists but will not decode is a real problem (corrupt output),
-			// not a benign miss - surface it.
+			// not a benign miss; surface it.
 			log.WarnContext(ctx, "knowledge: cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
 			continue
 		}
@@ -529,7 +529,7 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 // SymbolOccurrences returns every exact source range where the symbol keyed by key
 // appears, with each range verified against the file on disk. It reads the SAME declared
 // indexes the graph is built from, so it can never disagree with `magus refs` about which
-// projects were searched - but it goes back to the index rather than to the graph, because
+// projects were searched, but it goes back to the index rather than to the graph, because
 // the graph edge stores a MaxRefLines-capped line list with no columns. Those are storage
 // decisions that are right for a shard and unusable for an edit.
 //
@@ -540,8 +540,8 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 // opens nothing. That is what lets a read verb call it.
 //
 // The returned names are the spellings the ranges may hold, taken from the index itself;
-// names[0] is the identifier a rename targets. An empty set verifies nothing - see
-// symbols.Verify - which is the conservative outcome for an index that names the symbol
+// names[0] is the identifier a rename targets. An empty set verifies nothing (see
+// symbols.Verify), which is the conservative outcome for an index that names the symbol
 // nowhere.
 func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger, key string) (read SymbolOccurrenceRead, ok bool) {
 	if log == nil {
@@ -574,7 +574,7 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 	}
 	// An index that exists but cannot be read or decoded is a HOLE, not a zero. Skipping it
 	// quietly would drop a whole project's sites from a list whose entire contract is
-	// completeness, under a verdict that says magus searched everywhere - so it is recorded
+	// completeness, under a verdict that says magus searched everywhere, so it is recorded
 	// and the caller turns it into an unknown verdict.
 	//
 	// SymbolGaps cannot cover this one: it deliberately does a single Stat per declared
@@ -601,7 +601,7 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 		data, err := os.ReadFile(decl.path)
 		if err != nil {
 			// A not-yet-built index is the expected case, and SymbolGaps already reports it
-			// from its own Stat - so it stays quiet here rather than being counted twice.
+			// from its own Stat, so it stays quiet here rather than being counted twice.
 			// Any OTHER read error is a hole SymbolGaps cannot see.
 			if !errors.Is(err, fs.ErrNotExist) {
 				log.WarnContext(ctx, "knowledge: cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
@@ -629,7 +629,7 @@ func symbolOccurrences(ctx context.Context, in symbolIngestInputs, key string) (
 	// Each index contributes its own files, so the merged list needs re-sorting to stay
 	// deterministic across the declaration order, and entries two indexes both produced for
 	// one path have to be folded together. Two blocks for one file would double its count
-	// and, worse, hand a caller the same edit twice - the once-per-file read guarantee and
+	// and, worse, hand a caller the same edit twice: the once-per-file read guarantee and
 	// the "files are independent" contract both assume one entry per path. No overlap exists
 	// in this repo (every nested Go project has its own module), so this holds the contract
 	// rather than fixing an observed break.
@@ -674,7 +674,7 @@ func mergeOccurrenceFiles(in []types.SymbolOccurrenceFile) []types.SymbolOccurre
 //
 // Unreadable is the field that keeps the result honest. The occurrence list claims to be
 // complete, so an index magus could not decode has to travel WITH the sites rather than be
-// dropped on the way - a caller folds it into the coverage gaps, which turns the verdict
+// dropped on the way: a caller folds it into the coverage gaps, which turns the verdict
 // from "searched everywhere" into "unknown, not absent" and names the project to rebuild.
 // The sites that WERE read are still returned: a partial answer plus an accurate account
 // of what is missing beats discarding both.
@@ -723,7 +723,7 @@ func (m *Magus) SymbolGaps(ctx context.Context) ([]types.KnowledgeSymbolGap, boo
 
 // SymbolOccurrences returns every verified source range where the symbol keyed by key
 // appears. Method form of the package-level SymbolOccurrences, for callers that already
-// hold a Magus - the pairing SymbolGaps keeps, since the two answers are read together.
+// hold a Magus: the pairing SymbolGaps keeps, since the two answers are read together.
 func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurrenceRead, bool) {
 	return SymbolOccurrences(ctx, m, m.Root(), m.cfg, slog.Default(), key)
 }
@@ -734,7 +734,7 @@ func (m *Magus) SymbolOccurrences(ctx context.Context, key string) (SymbolOccurr
 // language is carried because an indexer may not report one. SCIP makes Document.Language
 // optional and scip-typescript sets it on nothing, so trusting the index alone leaves
 // every TypeScript symbol unlabeled and `magus query language:typescript` empty. It comes
-// from the project's spells, which is authoritative and free - and it is resolved for a
+// from the project's spells, which is authoritative and free, and it is resolved for a
 // knowledge.symbols override too, since such a project is still bound to spells even
 // though the override names a path rather than one.
 type resolvedSymbolIndex struct {
@@ -759,7 +759,7 @@ type symbolIngestInputs struct {
 // derived entry and an explicit override for the same project cannot both fire. It
 // derives one for every project bound to a symbol-capable spell (one exposing the
 // reserved `scip` op), pointing at that project's cached index (symbols.IndexPath, the
-// same location the op writes to) - the zero-config path. Explicit knowledge.symbols
+// same location the op writes to), the zero-config path. Explicit knowledge.symbols
 // entries are then merged in and win on the same project, pointing instead at a
 // workspace-relative path in the tree for a project whose indexer writes somewhere
 // non-standard. The result is sorted by project for deterministic ingestion.
@@ -775,8 +775,8 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 	// The language a project's symbols are written in, resolved from its spells rather
 	// than from the index: SCIP makes Document.Language optional and scip-typescript sets
 	// it on nothing. Prefer the symbol-capable spell, but fall back to any bound spell so
-	// a knowledge.symbols OVERRIDE - which names a path, not a spell, and so never reaches
-	// the capable branch below - still labels its symbols.
+	// a knowledge.symbols OVERRIDE (which names a path, not a spell, and so never reaches
+	// the capable branch below) still labels its symbols.
 	languageOf := func(p types.ProjectEntry) string {
 		bound := p.Spells
 		if len(bound) == 0 && p.Spell != "" {
@@ -889,8 +889,8 @@ const vcsHistoryFormat = 2
 // loadKnowledgeVCSCached returns the per-file history, walking it only when the cached scan
 // does not match the current input.
 //
-// A hit and a miss must be indistinguishable downstream - every consumer gets the same full
-// slice either way - which is the property that makes caching this safe at all.
+// A hit and a miss must be indistinguishable downstream (every consumer gets the same full
+// slice either way), which is the property that makes caching this safe at all.
 //
 // refresh forces the walk and still rewrites the cache, so distrusting it costs one walk
 // rather than every walk. Best-effort throughout: an unreadable file or a failed write just
@@ -909,7 +909,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 	}
 	entries := loadKnowledgeVCS(ctx, cfg, root, log)
 	// An empty scan is not worth a file, and writing one would cache "no history" against a
-	// real HEAD - so a transient git failure would persist as an answer.
+	// real HEAD, so a transient git failure would persist as an answer.
 	if fp == "" || len(entries) == 0 || cacheImmutable(cfg) {
 		return entries
 	}
@@ -926,7 +926,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 // vcsInputFingerprint identifies the history the scan reads: where it starts, how far back
 // it walks, and the format it is cached in.
 //
-// Uncommitted work is deliberately excluded - the scan reads committed history only, so
+// Uncommitted work is deliberately excluded: the scan reads committed history only, so
 // folding the dirty set in busted the cache on every add or delete of a tracked file for no
 // gain. Empty (always walk) when VCS is off or no revision resolves.
 func vcsInputFingerprint(ctx context.Context, cfg config.Config, root string) string {
@@ -959,7 +959,7 @@ func vcsMaxCommits(cfg config.Config) int {
 // workspace root is nested below the VCS root, so aggregateFileHistory can strip it to
 // workspace-relative paths that match file-node Sources. It walks up from root for a VCS
 // claim marker (rather than asking the driver for its root), so both paths share the same
-// symlink representation and filepath.Rel stays clean - the driver's root can be
+// symlink representation and filepath.Rel stays clean: the driver's root can be
 // canonicalized (e.g. /private/var vs /var on macOS) and would yield a bogus prefix.
 // Empty when root is the VCS root (the common case) or no marker is found. Mirrors
 // project.vcsRootPrefix (same walk-up-for-marker algorithm); keep the two in sync.
@@ -1112,7 +1112,7 @@ func (m *Magus) KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Gr
 
 // KnowledgeGraphWithSymbols returns a graph that INCLUDES the lazily-loaded @symbols
 // shards, for a symbol-seeded MCP query (magus_query on symbols, magus_refs). It
-// builds cache-first into a FRESH graph - not the shared warm graph - and merges
+// builds cache-first into a FRESH graph (not the shared warm graph) and merges
 // symbols into it, so the warm graph the other MCP tools answer from is never
 // polluted with a workspace's (potentially huge) symbol set.
 func (m *Magus) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {

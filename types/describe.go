@@ -10,7 +10,7 @@ import (
 //
 // Naming rule for this file: a type carries the `Entry` suffix (CharmEntry -> now
 // Charm is the exception that PROVES it; see below) only when a bare name of that
-// type already exists and would collide - ProjectEntry (types.Project),
+// type already exists and would collide: ProjectEntry (types.Project),
 // TargetEntry (types.Target), WorkspaceEntry (types.Workspace), and FileEntry
 // (types.File is reserved for a future promoted path type). Where no such collision
 // exists, the bare name wins: Spell, Charm,
@@ -47,7 +47,7 @@ type Spell struct {
 	// "magus/spell/go", for `import "magus/spell/go"`. See spells.ModulePath.
 	//
 	// Named for Buzz because Language below already means something else on this
-	// record - the language the spell ADAPTS (go, typescript). This one is the
+	// record: the language the spell ADAPTS (go, typescript). This one is the
 	// language you write the import IN. Unqualified "module" left a reader to guess
 	// which of the two it meant.
 	//
@@ -64,7 +64,7 @@ type Spell struct {
 	// (`import "spells/github/actions" as github`), registered when the magusfile
 	// evaluated. Both end up in the same registry, so a listing that did not
 	// distinguish them showed `github-actions` beside `go` as though a reader could
-	// import it by handle and find it documented - they cannot, on either count.
+	// import it by handle and find it documented; they cannot, on either count.
 	BuiltIn bool     `json:"built_in"          yaml:"built_in"`
 	Sources []string `json:"sources,omitempty" yaml:"sources,omitempty"`
 	Outputs []string `json:"outputs,omitempty" yaml:"outputs,omitempty"`
@@ -78,7 +78,7 @@ type Spell struct {
 	// VersionProbe reports whether the spell declares a toolchain-version command
 	// (mgs_getVersionProbe). Its OUTPUT is mixed into every cache key for the
 	// project (run.go's toolVersionsByProject), making it one of the few cache
-	// inputs that is not a file - so "why did this key change" is unanswerable from
+	// inputs that is not a file, so "why did this key change" is unanswerable from
 	// the spell inventory without it. Reported as a bool rather than the argv
 	// because the argv survives only inside the probe closure; the descriptor keeps
 	// it, and `magus describe spell <name>` docs render it from there.
@@ -93,7 +93,7 @@ type Spell struct {
 	// anything: VersionProbe above says a probe exists, which cannot tell you that the
 	// toolchain on this machine has drifted from what the project pins, even though
 	// that value is in every cache key. On the model rather than in a print helper so
-	// every output format carries it - an agent reading -o json needs it most.
+	// every output format carries it: an agent reading -o json needs it most.
 	Versions []SpellVersion `json:"versions,omitempty" yaml:"versions,omitempty"`
 	// TargetDocs maps a target name to its handler's doc comment, where one
 	// exists. Populated only for workspace-local Buzz spells (built-in docs are
@@ -168,8 +168,8 @@ type TargetGraphNode struct {
 	Name string `json:"name" yaml:"name"`
 	// Declared is the target's raw, as-written name when it differs from the normalized
 	// Name (Name "go-build" declared as "goBuild" or "go_build"); empty when they match.
-	// Name is the identity every edge and lookup keys on - the normalizer maps any
-	// spelling to it - so Declared is provenance only: it conveys how the author wrote
+	// Name is the identity every edge and lookup keys on (the normalizer maps any
+	// spelling to it), so Declared is provenance only: it conveys how the author wrote
 	// the target, surfaced as the knowledge graph's declared_as attr.
 	Declared     string   `json:"declared,omitempty"     yaml:"declared,omitempty"`
 	Doc          string   `json:"doc,omitempty"          yaml:"doc,omitempty"`
@@ -178,7 +178,7 @@ type TargetGraphNode struct {
 	// Spells are the spell ops the target's body invokes, captured statically from
 	// the bracket (`go["go-test"]()`) and dotted (`md.markdownlint()`) call forms,
 	// grouped by spell in first-appearance order. It shows which toolchain a
-	// composite target drives - the part `deps` (sibling targets) omits.
+	// composite target drives: the part `deps` (sibling targets) omits.
 	Spells []TargetSpellUse `json:"spells,omitempty" yaml:"spells,omitempty"`
 	// CrossDependencies are dependencies on specific targets in *other* projects,
 	// declared via a project import (<alias>.<target>). Unlike Dependencies (same-project
@@ -187,14 +187,14 @@ type TargetGraphNode struct {
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
 	// Chain is the target's composition IN INVOCATION ORDER: the DISTINCT steps the
 	// body names, in the order it first names them, across every ctx.needs call the
-	// target makes. A step named twice appears once, at its first invocation - the
+	// target makes. A step named twice appears once, at its first invocation: the
 	// second mention adds no ordering the first has not already fixed.
 	// Dependencies and CrossDependencies answer "what does this compose"
 	// as two sets keyed by locality; Chain answers "in what order", which is the one
 	// fact the source carries and neither set preserves once the graph merges them.
 	// Empty for a target that composes nothing.
 	//
-	// DIRECT steps only - one level, never a recursive flattening. A step that itself
+	// DIRECT steps only: one level, never a recursive flattening. A step that itself
 	// chains is described by ITS own record; expanding it here would print a plan the
 	// magusfile never writes, and the pool (not this list) decides how a transitive
 	// dependency actually schedules.
@@ -211,9 +211,9 @@ type TargetGraphNode struct {
 	// cross-project input only; a same-project one seeds by directory containment), and
 	// the consumes edge to the file node in the owning project.
 	ReadsFiles []InputRef `json:"reads_files,omitempty" yaml:"reads_files,omitempty"`
-	// ReadsSecrets records that the target body reaches for a credential - magus\secret's
+	// ReadsSecrets records that the target body reaches for a credential: magus\secret's
 	// read, grant or endpoint. A resolved credential contributes NOTHING to the cache key
-	// - deliberately, since hashing one would write it into cache metadata - so rotating
+	// (deliberately, since hashing one would write it into cache metadata), so rotating
 	// or revoking it invalidates nothing. A cacheable target that uses one therefore
 	// becomes a replay that reports success without ever contacting the provider, which is
 	// worst for exactly the authentication targets the `-login` convention encourages,
@@ -242,7 +242,7 @@ type TargetGraphNode struct {
 	// snapshot/replay set instead of inheriting project-wide and spell outputs.
 	WritesFiles []OutputRef `json:"writes_files,omitempty" yaml:"writes_files,omitempty"`
 	// ModifiesExistingFiles are the per-target ctx.modifiesExistingFiles(...) refs: existing files the target edits in place
-	// rather than produces. Deliberately NOT unioned into the snapshot/replay set - see
+	// rather than produces. Deliberately NOT unioned into the snapshot/replay set; see
 	// UpdateRef for why magus must neither delete nor restore one.
 	//
 	ModifiesExistingFiles []UpdateRef `json:"modifies_existing_files,omitempty" yaml:"modifies_existing_files,omitempty"`
@@ -250,7 +250,7 @@ type TargetGraphNode struct {
 	// via ctx.withEnv / ctx.withCwd, as "env:K=V" / "cwd:V" strings in declaration
 	// order (hash.go sorts a copy at hash time; nothing sorts the stored value). They fold into the target's
 	// CACHE KEY: a derived env changes what the tool does, so two runs differing only by
-	// it must not share an entry. Read statically for the same reason inputs are - the
+	// it must not share an entry. Read statically for the same reason inputs are: the
 	// key is computed before the body runs, so a purely runtime derivation could never
 	// reach it. A non-literal derive sets DynamicIO and is rejected at load.
 	ExecOverrides []string `json:"exec_overrides,omitempty" yaml:"exec_overrides,omitempty"`
@@ -265,8 +265,8 @@ type TargetGraphNode struct {
 	// Observations are the external facts this target declares via ctx.observes, as
 	// canonical "key=value" strings in declaration order (hash.go sorts a copy at hash
 	// time; nothing sorts the stored value). An observation is a fact the answer depends
-	// on that the tree does not contain - a vulnerability feed's id, a remote schema's
-	// revision - so the target can key on it instead of opting out of the cache with
+	// on that the tree does not contain (a vulnerability feed's id, a remote schema's
+	// revision), so the target can key on it instead of opting out of the cache with
 	// skip_cache. Both halves are literals, hashed directly as ExecOverrides are, which
 	// makes this ExecOverrides' mechanical twin; what differs is that an observation
 	// changes nothing about HOW the target runs, only what its answer is a function of.
@@ -278,8 +278,8 @@ type TargetGraphNode struct {
 	// Not serialized: it is a load-time validation signal, not part of the graph.
 	DynamicIO bool `json:"-" yaml:"-" buzz:"-"`
 	// DynamicExec is the execution-side counterpart: a ctx.withEnv / ctx.withCwd whose
-	// argument is not a literal. It is NOT a load error - the override still takes effect
-	// at run time, and a genuinely derived environment cannot be written literally - so it
+	// argument is not a literal. It is NOT a load error (the override still takes effect
+	// at run time, and a genuinely derived environment cannot be written literally), so it
 	// only records that ExecOverrides is an incomplete view of what the target will run
 	// with. Not serialized, same as DynamicIO.
 	DynamicExec bool `json:"-" yaml:"-" buzz:"-"`
@@ -293,7 +293,7 @@ type CrossTargetRef struct {
 	Target  string `json:"target"  yaml:"target"`
 }
 
-// Ref spells the reference the way the CLI takes a target ref, "project:target" - the
+// Ref spells the reference the way the CLI takes a target ref, "project:target", the
 // same method ChainStep carries, so a caller printing either kind of reference asks for
 // it the same way. Project is never empty on this type (a cross-project ref names
 // another project by definition), so there is no bare-name form.
@@ -303,7 +303,7 @@ func (r CrossTargetRef) Ref() string {
 
 // ChainStep is one target a composed target invokes, in source order. Project is empty
 // for a same-project step (the common case, `ctx.needs(build)`) and carries the other
-// project's path for a cross-project one (`ctx.needs(<alias>.build)`) - the same
+// project's path for a cross-project one (`ctx.needs(<alias>.build)`), the same
 // empty-means-this-project convention InputRef uses, and it stays empty here even after
 // resolution so a reader can tell the two apart at a glance. Deliberately its own type
 // rather than a reused CrossTargetRef: that one names a target in ANOTHER project by
@@ -358,9 +358,9 @@ type OutputRef struct {
 // type would let a caller pass one where the other belongs.
 //
 // An output is a file magus owns end to end, so magus may delete it (magus clean) and
-// restore it wholesale from a cache snapshot. An update is a file magus does NOT own -
-// a hand-written page with a generated region between markers, a lockfile a tool
-// rewrites in place - where only part of the content is the target's to produce.
+// restore it wholesale from a cache snapshot. An update is a file magus does NOT own
+// (a hand-written page with a generated region between markers, a lockfile a tool
+// rewrites in place), where only part of the content is the target's to produce.
 // Deleting one destroys authored content that regeneration cannot bring back, and
 // replaying one from a snapshot silently reverts edits made since. So an update is
 // never deleted and never replayed.
@@ -444,13 +444,13 @@ type ProjectEntry struct {
 	Path string `json:"path"                yaml:"path"`
 	// Name is the project's DECLARED name (magus.project's "name" key), empty when
 	// it declares none. Carried on the boundary because a consumer rendering a
-	// human label has to prefer it over the directory basename - without it,
+	// human label has to prefer it over the directory basename; without it,
 	// `magus ls` printed the checkout directory ("agent-harness-handoff-92f105" in
 	// a worktree) while MAGUS.md, built from the same workspace, printed "magus".
 	Name string `json:"name,omitempty"      yaml:"name,omitempty"`
 	// Origin is what put this project in the workspace: "magusfile", or
 	// "provider:<spell>" for one a workspace provider reported. It is on the boundary
-	// because a provided project has no file to open - without it, `magus describe
+	// because a provided project has no file to open; without it, `magus describe
 	// project libs/foo` describes a project whose declaration the reader cannot find.
 	//
 	// Plain string, not the ProjectOrigin the engine carries: a boundary record is
@@ -464,7 +464,7 @@ type ProjectEntry struct {
 	// the magusfile/spell). EvaluatedProject populates these same fields (via its
 	// embedded ProjectEntry) with the RESOLVED, workspace-rooted globs instead
 	// (joined against the project path, plus the magusfile's own globs folded into
-	// Sources) - the same name, a different representation, because the evaluated
+	// Sources), the same name, a different representation, because the evaluated
 	// view answers "what does the cache key actually see" rather than "what was
 	// written".
 	Sources   []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
@@ -473,7 +473,7 @@ type ProjectEntry struct {
 	Exclusive bool     `json:"exclusive,omitempty"  yaml:"exclusive,omitempty"`
 	// Manifests lists this project's spells' version-manifest candidates
 	// (spells.Spell.Manifests), filtered to the ones that actually exist in Dir and
-	// kept in declared order - so element 0, when present, is "the" manifest under
+	// kept in declared order, so element 0, when present, is "the" manifest under
 	// the first-existing-file-wins rule. A project with no manifest-declaring spell,
 	// or none of whose candidates exist, has an empty list: it carries no version of
 	// its own.
@@ -487,7 +487,7 @@ type ProjectEntry struct {
 	// These are WORKSPACE-RELATIVE, unlike Manifests, which are bare filenames. That
 	// asymmetry is the useful part rather than an inconsistency: a manifest is always
 	// in Dir, so its directory says nothing, while a lockfile may be hoisted to a
-	// workspace root several levels up to serve many projects - so which directory
+	// workspace root several levels up to serve many projects, so which directory
 	// holds it is the only thing resolving it determines. A pnpm workspace member
 	// reports "pnpm-lock.yaml" at the root here while its Manifests says
 	// "package.json" beside it.
@@ -591,15 +591,15 @@ type EvaluatedTarget struct {
 }
 
 // EvaluatedProject is the fully-resolved view of a project: every ProjectEntry
-// fact (Name and Spell included - embedding rather than restating them makes
+// fact (Name and Spell included; embedding rather than restating them makes
 // "evaluated = declared + resolution" a compile-time fact) plus the resolution
 // fields resolving it adds. ResolvedSpells is deliberately not named Spells: that
 // name means DECLARED spell names on ProjectEntry.Spells and would mean RESOLVED
-// spell steps here - one field name for two different facts.
+// spell steps here: one field name for two different facts.
 //
 // The embedded ProjectEntry's Sources/Outputs are populated with the RESOLVED,
 // workspace-rooted globs (see the field comment on ProjectEntry.Sources), not the
-// declared project-relative ones ListProjects reports - the one deliberate
+// declared project-relative ones ListProjects reports: the one deliberate
 // exception to "same values ListProjects builds" for the rest of the embed.
 type EvaluatedProject struct {
 	ProjectEntry
@@ -615,7 +615,7 @@ type EvaluatedProject struct {
 // allowlist and no std/ host method returns it today, so nothing calls this yet -
 // it exists to keep that latent trap from going live if one ever does. Neither
 // EvaluatedSpell nor Target (whose zero value serves double duty as a per-target
-// policy - see Target's identity-fields comment) has its own BuzzObject, so their
+// policy; see Target's identity-fields comment) has its own BuzzObject, so their
 // fields are read directly rather than through a promoted-in-the-same-way call.
 func (p EvaluatedProject) BuzzObject() BuzzObject {
 	m := BuzzObject{
@@ -705,9 +705,9 @@ type FileEntry struct {
 	// path prefixing the file), empty when no project dir contains it.
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	// Role summarizes the strongest claim: "output" (a declared output glob
-	// matches - the file is generated), "source" (a declared source glob
+	// matches; the file is generated), "source" (a declared source glob
 	// matches), "maintained" (no project declares it, but magus's own core writes
-	// it - see IsMagusMaintained), or "unclaimed" (no declared glob matches; it
+	// it; see IsMagusMaintained), or "unclaimed" (no declared glob matches; it
 	// invalidates no cache key and affects no target). An unclaimed path may
 	// still carry Claims: an in-place edit is a declaration none of these roles
 	// rank, and the Hint says so when that is what happened.
@@ -737,7 +737,7 @@ type FileEntry struct {
 	// unclaimed self.
 	Claims []FileClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
 	// DependsOn is the owning project's DIRECT declared dependencies, verbatim
-	// from Project.DependsOn - carried here so one classification call answers
+	// from Project.DependsOn, carried here so one classification call answers
 	// both "who owns this path" and "what does that owner run behind". It is not
 	// the transitive closure; `magus graph deps` computes that.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
@@ -747,7 +747,7 @@ type FileEntry struct {
 	// Exists reports whether the path is present on disk.
 	//
 	// Classification is pure glob matching, which is what makes "where would a new
-	// file land" answerable - so it cannot be an error for a path that is not there
+	// file land" answerable, so it cannot be an error for a path that is not there
 	// yet. Without this field it is also not DISTINGUISHABLE: a mistyped or invented
 	// path came back byte-identical to the real one beside it, declared and owned.
 	//
@@ -760,7 +760,7 @@ type FileEntry struct {
 // declared it, the target that did, and the workspace-rooted glob that matched.
 //
 // A cross-project write is attributed to the DECLARING project, not the tree it
-// lands in - the opposite of FileEntry.OutputOf, which follows Project.AllOutputs
+// lands in, the opposite of FileEntry.OutputOf, which follows Project.AllOutputs
 // and counts it on the owner. Both are true and neither is redundant: the owner
 // says whose tree the file appears in, the declarer says whose target puts it
 // there, and only the second one can regenerate it.
@@ -772,7 +772,7 @@ type FileClaim struct {
 	// Role is "output" (ctx.writesFiles or a project/spell output glob), "source"
 	// (ctx.readsFiles or a project/spell source glob), or "update"
 	// (ctx.modifiesExistingFiles). The first two are also FileEntry.Role values;
-	// "update" has no FileEntry.Role counterpart - see FileEntry.Claims.
+	// "update" has no FileEntry.Role counterpart; see FileEntry.Claims.
 	Role string `json:"role" yaml:"role"`
 	Glob string `json:"glob" yaml:"glob"`
 	// Paths is populated only on FileReport.Overlaps, where one claim is reported
@@ -794,7 +794,7 @@ type FileClaim struct {
 //
 // Deliberately NOT derived from the declared output globs: it is the inverse of
 // them. EnsureMergeDriver writes .gitattributes FROM every project's output globs,
-// so a project declaring it would be circular - the input to the derivation
+// so a project declaring it would be circular: the input to the derivation
 // claiming to be its own product.
 var magusMaintainedFiles = map[string]bool{
 	".gitattributes": true,
@@ -816,7 +816,7 @@ func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
 // ProjectsOutput / EvaluatedProjectsOutput. Both carry a real Workspace field, so
 // their envelope is not purely derivable the way {constant, len(), items} is, and
 // converting them would mean returning a slice plus an out-of-band workspace root.
-// TargetGraphOutput is a third shape again - it has no Count at all, and it is
+// TargetGraphOutput is a third shape again: it has no Count at all, and it is
 // json.Marshal'd straight onto the wire for the browser graph explorer.
 //
 // So: `Report` means "rebuilt at the render edge from a slice", `Output` means "the
@@ -824,7 +824,7 @@ func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
 //
 // They are deliberately not what the repository returns. Definition is a package
 // constant and Count is len(items), so carrying them on a domain type meant every
-// call site that filtered the slice had to reassign Count by hand - a
+// call site that filtered the slice had to reassign Count by hand: a
 // denormalization that a single forgotten line ships as a wrong count, and which
 // had grown a test (len(Spells) != Count) purely to catch itself.
 

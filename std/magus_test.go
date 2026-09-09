@@ -227,7 +227,7 @@ func TestInsightNeedsAWorkspace(t *testing.T) {
 // TestInsightRejectsAnUnknownOption keeps a mistyped key from being ignored:
 // silently dropping `comits` would quietly answer the 500-commit question instead.
 // Asserted through the exported entry point, which is the only way a caller reaches
-// the decoder - an earlier version tested a flag parser production could not reach.
+// the decoder: an earlier version tested a flag parser production could not reach.
 func TestInsightRejectsAnUnknownOption(t *testing.T) {
 	t.Parallel()
 
@@ -322,7 +322,7 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 }
 
 // TestLedgerNeedsACacheDir covers the workspace that answers the reading verbs
-// (ls, affected, ...) but was never given a cache directory - a test double, not the
+// (ls, affected, ...) but was never given a cache directory: a test double, not the
 // real *magus.Magus.
 func TestLedgerNeedsACacheDir(t *testing.T) {
 	t.Parallel()
@@ -351,7 +351,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
-// silently ignored - internal/ledger.Merge is what enforces this, and this pins that
+// silently ignored; internal/ledger.Merge is what enforces this, and this pins that
 // the Buzz binding does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	t.Parallel()

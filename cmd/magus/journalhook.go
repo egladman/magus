@@ -24,7 +24,7 @@ import (
 // It also covers the DAEMON, without a second wiring site: the daemon executes an
 // adopted run by calling runTarget/affected itself (main.go's dispatchAdopted), so a
 // forwarded run reaches this function in the daemon process. ctx is what tells the two
-// cases apart - see below.
+// cases apart; see below.
 func withSessionJournal(ctx context.Context, handlers []slog.Handler, root, verb string, args []string) []slog.Handler {
 	// The environment is read ONCE, here, and every fact this invocation writes carries that
 	// copy. Reading it per fact would let a mid-run environment change split one session's

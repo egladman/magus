@@ -107,7 +107,7 @@ var (
 )
 
 // loadMagus opens (once) the process's singleton workspace handle. extra Options apply only
-// to the first, memoizing call - the daemon serve path passes magus.WithMetricsCollection()
+// to the first, memoizing call: the daemon serve path passes magus.WithMetricsCollection()
 // so the bridge Magus feeds the /dashboard, while one-shot CLI callers pass none and stay a
 // true no-op.
 func loadMagus(ctx context.Context, rootOverride string, extra ...magus.Option) (*magus.Magus, error) {
@@ -215,7 +215,7 @@ func (e errSilent) ExitCode() int { return e.exitCode }
 // out as stated (an unresolvable `path` node, an ambiguous `where`, an `x` with no
 // terminal). Before this was unified, the same "you forgot the subcommand" situation
 // exited 0 from `config`, `self` and `merge-driver`, 1 from `man` and `completion`,
-// and 2 from `self <unknown>` - so nothing scripting magus could branch on it.
+// and 2 from `self <unknown>`, so nothing scripting magus could branch on it.
 //
 // 75 is EX_TEMPFAIL from sysexits.h, borrowed the same way. Two failures carry it: a
 // contended no-wait project lock (lockContendedExit) and a step the machine's build
@@ -277,14 +277,14 @@ func splitOnDashDash(args []string) (before, after []string) {
 // The separator is "--then" rather than "--" because "--" already forwards extra
 // args to spells (`magus run test -- -run TestFoo`), and it is a separator rather
 // than bare words because `magus run build web api` already takes trailing project
-// args - `magus run build file x` would otherwise be indistinguishable from a
+// args: `magus run build file x` would otherwise be indistinguishable from a
 // project named "file".
 // found distinguishes an ABSENT separator from one with no verb after it. Without
-// it, `magus run build --then` silently ran as a plain build - the same
+// it, `magus run build --then` silently ran as a plain build: the same
 // accepted-and-ignored failure this grammar exists to avoid.
 //
 // "--" is split off FIRST and outranks it, because everything after "--" is the
-// spell's verbatim argv - scanning the whole slice let `magus run test -- --then`
+// spell's verbatim argv: scanning the whole slice let `magus run test -- --then`
 // hijack an argument the spell was meant to receive. The "--" and its arguments are
 // re-attached to the run's own args, so `magus run test --then value -- -run TestFoo`
 // still forwards -run TestFoo.
@@ -304,7 +304,7 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 
 // hintCanonicalSpelling nudges toward the canonical name when the user typed
 // another one. The fact comes off the parsed Target (Declared/DeclaredCharms), so
-// this is presentation only - types.ParseTarget stays a pure function and the
+// this is presentation only: types.ParseTarget stays a pure function and the
 // daemon and MCP paths get the same information without inheriting stderr output.
 //
 // Silent on canonical input, and deduped by interactive.Emit, so it teaches once

@@ -17,7 +17,7 @@ import (
 // (subprocess output + target results) streams into it, and emits the invocation's opening
 // lifecycle event: a started event carrying the command lineage (subcommand/args/cwd/trigger) and
 // magus version. Folding the identity into the stream this way means both the durable file
-// and any live watcher learn which command produced the run from frame one - there is no
+// and any live watcher learn which command produced the run from frame one; there is no
 // separate metadata file. Extra handlers (e.g. a live SSE broadcaster) fan out from the same
 // logger.
 //
@@ -31,7 +31,7 @@ import (
 func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusVersion string, extra ...slog.Handler) (context.Context, func(error)) {
 	// Reuse an id already threaded onto ctx (the daemon mints it in proc.service.run so the
 	// adopted call's pool entry can carry its inv and deep-link to this run's live log);
-	// otherwise mint a fresh one - the plain CLI path.
+	// otherwise mint a fresh one: the plain CLI path.
 	id := journal.InvocationIDFromContext(ctx)
 	if id == "" {
 		id = journal.NewInvocationID()
@@ -79,7 +79,7 @@ func (m *Magus) BeginInvocation(ctx context.Context, cmd journal.Command, magusV
 }
 
 // withCaptureLogger attaches a capture logger fanning to handlers onto ctx (or leaves ctx
-// unchanged when there are none - the best-effort path where the durable file could not be
+// unchanged when there are none: the best-effort path where the durable file could not be
 // opened and no live watcher is attached).
 func withCaptureLogger(ctx context.Context, handlers []slog.Handler) context.Context {
 	if len(handlers) == 0 {
@@ -88,7 +88,7 @@ func withCaptureLogger(ctx context.Context, handlers []slog.Handler) context.Con
 	return journal.WithLogger(ctx, journal.NewLogger(handlers...))
 }
 
-// Command is a magus invocation's lineage - the caller-facing projection of
+// Command is a magus invocation's lineage: the caller-facing projection of
 // [journal.Command]. Field tags match it exactly for JSON wire compat.
 type Command struct {
 	Arguments []string `json:"arguments,omitempty"` // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
@@ -96,7 +96,7 @@ type Command struct {
 	Trigger   string   `json:"trigger,omitempty"`   // one of the journal.Trigger* constants
 }
 
-// Invocation is one magus command, launch to exit, read back from the journal - the
+// Invocation is one magus command, launch to exit, read back from the journal: the
 // caller-facing projection of [journal.Invocation]. See [Magus.InvocationByID]. Field
 // tags match journal.Invocation's exactly for JSON wire compat.
 type Invocation struct {
@@ -123,7 +123,7 @@ func newInvocation(inv journal.Invocation) Invocation {
 	}
 }
 
-// Event is one journal entry (output line, magus log line, or a run's result) - the
+// Event is one journal entry (output line, magus log line, or a run's result): the
 // caller-facing projection of [journal.Event]. See [Magus.InvocationEventsByID]. Field
 // tags match journal.Event's exactly for JSON wire compat.
 type Event struct {

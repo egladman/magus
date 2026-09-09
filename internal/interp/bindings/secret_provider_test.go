@@ -87,8 +87,8 @@ func (d *slowDriver) Invoke(ctx context.Context, _ spells.InvokeRequest) (spells
 
 // TestSpellSecretProviderFailsFastWithoutATerminal pins the policy that matters most in
 // CI: a provider that would prompt cannot prompt, so waiting is pointless. Without a TTY
-// magus gives it the SHORT budget and fails with a message naming the real problem -
-// "there is nobody to ask" - rather than "timed out", which invites a retry that will
+// magus gives it the SHORT budget and fails with a message naming the real problem
+// ("there is nobody to ask") rather than "timed out", which invites a retry that will
 // fail the same way. Go tests run without a terminal, so this is the non-interactive path
 // by construction.
 func TestSpellSecretProviderFailsFastWithoutATerminal(t *testing.T) {

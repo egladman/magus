@@ -17,8 +17,8 @@ import (
 )
 
 // captureWarnings installs a slog handler for the duration of fn and returns what it logged.
-// A producer here reports a fact it could not record through slog rather than an error - every
-// entry point is best-effort by contract - so the default logger is the only place to observe it.
+// A producer here reports a fact it could not record through slog rather than an error (every
+// entry point is best-effort by contract), so the default logger is the only place to observe it.
 func captureWarnings(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -185,7 +185,7 @@ func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 
 // TestAppendAgentSpawn_RecordsHandedContext is the lease-audit round trip: the event line
 // says who handed work to whom and which lease it belongs to, and the context itself is reachable
-// only through the blob - never inlined, because a lease prompt is routinely kilobytes.
+// only through the blob, never inlined, because a lease prompt is routinely kilobytes.
 func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	dir := t.TempDir()
 	handed := "lease: notes-store-6b\n\nAudit the notes store write boundary and report back."
@@ -253,7 +253,7 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 
 // TestLeaseFromContext pins the cooperative correlation marker: present, absent, and every shape
 // of malformed or misplaced. A marker that is not the first non-blank line yields no lease, and
-// neither does a malformed one - never a wrong one. The whole contract is that an uncorrelated
+// neither does a malformed one, never a wrong one. The whole contract is that an uncorrelated
 // spawn is the designed outcome.
 func TestLeaseFromContext(t *testing.T) {
 	for name, tc := range map[string]struct {
@@ -272,7 +272,7 @@ func TestLeaseFromContext(t *testing.T) {
 		"wrong key":            {"leases: MGS1021", ""},
 		"illegal characters":   {"lease: MGS1021!", ""},
 		// The reason the marker has to LEAD: both of these carry a well-formed marker that
-		// this handoff did not write - one quoted below the prompt's own opening line, one
+		// this handoff did not write: one quoted below the prompt's own opening line, one
 		// pushed out of the head by a pathological first line. A wrong join is worse than none.
 		"below the first line": {"do this\nlease: a.b:c_d-1\n", ""},
 		"past the head cap":    {strings.Repeat(" ", leaseScanBytes) + "lease: MGS1021", ""},
@@ -309,7 +309,7 @@ func TestLeaseFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 }
 
 // A hook observes a command, not a lease, so the environment is the only channel that can
-// attribute one - and it is what lights up the console drawer's lease column for runs.
+// attribute one, and it is what lights up the console drawer's lease column for runs.
 func TestAppendAgentCommand_LeaseFallsBackToTheEnvironment(t *testing.T) {
 	t.Setenv(EnvBaggage, BaggageLease+"=fleet/f3")
 	dir := t.TempDir()
@@ -432,7 +432,7 @@ func TestRotate_CapsEventsAndGCsOrphanBlobs(t *testing.T) {
 
 // TestGCBlobs_ProtectsPendingBlob reproduces the T-1 window: WriteBlob finalizes a blob
 // before the producer's Append writes the event referencing it. A rotate landing in that
-// gap sees a fresh, unreferenced blob - exactly what gcBlobs must not collect. Bounded and
+// gap sees a fresh, unreferenced blob: exactly what gcBlobs must not collect. Bounded and
 // deterministic: no sleep, the blob's real age (just-created) is what protects it.
 func TestGCBlobs_ProtectsPendingBlob(t *testing.T) {
 	dir := t.TempDir()
@@ -518,8 +518,8 @@ func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 // TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an
 // hourly schedule affordable: a trail too small to hold maxEvents events is not read at all.
 //
-// The bound must stay SOUND rather than approximate - it may only skip when trimming is
-// impossible - so this asserts the arithmetic that makes it so: a full cap's worth of the
+// The bound must stay SOUND rather than approximate (it may only skip when trimming is
+// impossible), so this asserts the arithmetic that makes it so: a full cap's worth of the
 // smallest event magus can serialize still exceeds the threshold, meaning no reachable trail is
 // ever skipped while over cap.
 func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
@@ -535,8 +535,8 @@ func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
 
-	// The floor is not a guess: the smallest event that can reach the file - every
-	// no-omitempty field empty - must still be at least minEventBytes, or the skip could
+	// The floor is not a guess: the smallest event that can reach the file (every
+	// no-omitempty field empty) must still be at least minEventBytes, or the skip could
 	// fire on a trail that genuinely needed trimming.
 	line, err := json.Marshal(Event{})
 	require.NoError(t, err)
@@ -549,7 +549,7 @@ func TestRotate_EmptyBaseIsNoop(t *testing.T) {
 
 // TestSelectKept_ReservesAFloorForEveryKind is the governance guarantee: a loud kind must not be
 // able to evict a quiet one. Before the floor, rotation kept the newest N lines blind to kind, so
-// a burst of agent reads pushed every sandbox_denial out of the window - and gcBlobs then deleted
+// a burst of agent reads pushed every sandbox_denial out of the window, and gcBlobs then deleted
 // their payloads, which is not recoverable.
 func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	var lines []string
@@ -577,7 +577,7 @@ func TestSelectKept_ReservesAFloorForEveryKind(t *testing.T) {
 	}
 	assert.Equal(t, 3, denials, "every sandbox_denial survives: there are fewer of them than the floor")
 
-	// Order is preserved - the file is append-ordered and ReadRecent/LastRun depend on it.
+	// Order is preserved: the file is append-ordered and ReadRecent/LastRun depend on it.
 	assert.True(t, strings.Contains(kept[0], string(KindSandboxDenial)), "kept output stays oldest-first")
 }
 
@@ -621,7 +621,7 @@ func TestReadRecent_SkipsCorruptLines(t *testing.T) {
 
 // TestTrailRedactsThroughContext is the reason these functions grew a ctx parameter.
 // The trail is DURABLE and append-only, so a credential landing here sits on disk until
-// someone deletes the file - strictly worse than the same value reaching a terminal.
+// someone deletes the file, strictly worse than the same value reaching a terminal.
 // Blobs are the sharpest edge: an MCP request/response pair is a whole tool payload,
 // persisted verbatim, and nothing else on that path scrubs it.
 //
@@ -633,7 +633,7 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 	res := secret.New()
 	t.Setenv("TRAIL_TEST_TOKEN", credential)
 	ctx := secret.ContextWithResolver(t.Context(), res)
-	// Reading is what marks the value as a secret - provenance, not shape.
+	// Reading is what marks the value as a secret: provenance, not shape.
 	got, err := res.Read(ctx, "TRAIL_TEST_TOKEN")
 	require.NoError(t, err)
 	require.Equal(t, credential, got.Reveal())
@@ -678,7 +678,7 @@ func TestTrailRedactsThroughContext(t *testing.T) {
 
 // TestTrailKeepsStructuralFields: redaction must not shred the fields the activity view
 // filters on by exact match. Those are enumerated values, identities and content
-// addresses - a credential cannot occupy them, and masking them would break the reader
+// addresses; a credential cannot occupy them, and masking them would break the reader
 // to protect nothing.
 func TestTrailKeepsStructuralFields(t *testing.T) {
 	base := t.TempDir()

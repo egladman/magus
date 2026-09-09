@@ -11,7 +11,7 @@ func reach(n int) *int { return &n }
 
 // The failure this whole shape exists to prevent: with no symbol index every reach is
 // unmeasured, the reach comparator goes inert, and the deterministic path tiebreak becomes the
-// only discriminator - so the output is alphabetical while the header still claims a ranking.
+// only discriminator, so the output is alphabetical while the header still claims a ranking.
 // Ranked is what a renderer checks to refuse that claim.
 func TestRankedIsFalseWhenNothingWasMeasured(t *testing.T) {
 	unmeasured := Diff{Files: []DiffFile{
@@ -90,7 +90,7 @@ func TestAttachChurnMarksUnseenFilesAndReorders(t *testing.T) {
 	assert.False(t, d.Files[1].NoHistory)
 }
 
-// A lens that never ran must not mark every file unseen - that is "nobody looked" wearing the
+// A lens that never ran must not mark every file unseen: that is "nobody looked" wearing the
 // label for "nothing has touched this".
 func TestAttachChurnWithNoHistoryAtAllMarksNothing(t *testing.T) {
 	d := Diff{Files: []DiffFile{{Path: "a.go", Role: DiffRoleSource}}}

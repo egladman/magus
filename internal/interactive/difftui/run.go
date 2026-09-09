@@ -15,7 +15,7 @@ import (
 //
 // There is deliberately no read side. A cursor coming BACK from the session would be some
 // other client moving this reader's viewport, and a viewport that moves on its own is the
-// one thing the whole suggestion design exists to prevent - see types.DiffSuggestion. An
+// one thing the whole suggestion design exists to prevent; see types.DiffSuggestion. An
 // agent suggests; only the person at the keyboard navigates.
 //
 // No method reports an error, and that is the contract rather than an omission: a
@@ -26,7 +26,7 @@ type Sync interface {
 	// SetThreadsSeen records that these of the host's review threads have been in front of the
 	// reader, which is the watermark deciding what still counts as NEW. A workspace whose
 	// watermark nobody ever advances is one the forge-watching job reads as never reviewed in,
-	// and it then reports no colleague's remark at all - so a terminal reader has to write it
+	// and it then reports no colleague's remark at all, so a terminal reader has to write it
 	// for the same reason a browser one does.
 	SetThreadsSeen(ids []string)
 }
@@ -39,7 +39,7 @@ type Options struct {
 	Out   io.Writer
 	Probe tty.Probe
 	Input Input
-	// Sync is nil when nothing is listening - no daemon, no console, no agent.
+	// Sync is nil when nothing is listening: no daemon, no console, no agent.
 	Sync Sync
 	// Summary is the one line left behind in the scrollback when the reader quits, so the
 	// session records what was read rather than vanishing without a trace. It is called at that
@@ -49,7 +49,7 @@ type Options struct {
 }
 
 // defaultHeight is what a terminal that will not report its size is assumed to be. The CLI's
-// gate refuses a stdout that is not a terminal at all - the same descriptor this is drawn on -
+// gate refuses a stdout that is not a terminal at all (the same descriptor this is drawn on),
 // so what reaches here is a terminal whose size query failed, and a viewer that drew nothing
 // would be indistinguishable from a hang.
 const defaultHeight = 24
@@ -65,7 +65,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	m := New(opts.Input)
 	// Ordered so the terminal is handed back before anything is printed on it, and so both
-	// happen on EVERY exit path - a return, a cancelled context, or a panic unwinding through
+	// happen on EVERY exit path: a return, a cancelled context, or a panic unwinding through
 	// here. Leaving raw mode set would hand the reader a shell with no echo.
 	defer func() {
 		if opts.Summary != nil {
@@ -80,7 +80,7 @@ func Run(ctx context.Context, opts Options) error {
 		opts.Sync.SetCursor(m.cursor())
 	}
 
-	// Asked once: nothing it reads - the descriptor, TERM, NO_COLOR - changes while the viewer
+	// Asked once: nothing it reads (the descriptor, TERM, NO_COLOR) changes while the viewer
 	// holds the terminal, and this is the single gate for every escape the frame carries.
 	color := tty.WantsColor(opts.Out, opts.Probe)
 
@@ -100,7 +100,7 @@ func Run(ctx context.Context, opts Options) error {
 		ev, err := input.Read(ctx)
 		if err != nil {
 			// A cancelled context is the reader ending the session with Ctrl-C at the shell,
-			// which is what they asked for rather than a failure - the same reading `magus diff
+			// which is what they asked for rather than a failure: the same reading `magus diff
 			// --watch` takes of its own interrupt.
 			if ctx.Err() != nil {
 				return nil
@@ -124,8 +124,8 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 	if ev.Kind != tty.EventKey {
 		// The wheel scrolls, which is a DELIBERATE divergence from the picker: that surface leaves
 		// the wheel to the terminal so a reader keeps their own scrollback, and it can afford to
-		// because it is open for seconds. This one holds the terminal - and therefore the
-		// scrollback the wheel would otherwise reach - for as long as it takes to read a
+		// because it is open for seconds. This one holds the terminal (and therefore the
+		// scrollback the wheel would otherwise reach) for as long as it takes to read a
 		// changeset, so refusing the gesture does not preserve scrolling, it removes it.
 		//
 		// Every other mouse event is dropped rather than guessed at: they are reported only
@@ -196,7 +196,7 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 }
 
 // viewportRows is how many changeset rows fit, leaving the frame strictly shorter than the
-// terminal - a block as tall as the screen has nowhere to walk back to and would eat the
+// terminal: a block as tall as the screen has nowhere to walk back to and would eat the
 // transcript above it on the next redraw.
 func viewportRows(out io.Writer, p tty.Probe, chrome int) int {
 	height := defaultHeight

@@ -49,7 +49,7 @@ type obj interface {
 
 // decodeManifests reads the manifests field, which is a list of records rather than
 // the list of strings every other path-bearing field decodes to (see
-// contractEntry.Shape). Each record is a Manifest - the file dependencies are declared
+// contractEntry.Shape). Each record is a Manifest: the file dependencies are declared
 // in, plus the lockfiles its ecosystem might resolve them into.
 //
 // A record carrying only .value decodes as a manifest with no lock candidates, which
@@ -140,7 +140,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 			}
 			// Canonicalize the key. The charset above admits '_' and uppercase, but
 			// every request reaching dispatchOp has already been kebab-normalized by
-			// ParseTarget, and dispatch is a plain map hit - so an op authored as
+			// ParseTarget, and dispatch is a plain map hit, so an op authored as
 			// go_build was stored under go_build, looked up as go-build, missed, and
 			// swallowed as a fan-out skip at debug level. Declared and unreachable,
 			// with no error anywhere. Normalizing on the way in is the other half of
@@ -149,7 +149,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 			// Collapsing keys means two spellings can now land on one, so the
 			// collision is checked rather than resolved: `go-build` and `goBuild` in
 			// one spell used to be two ops (one of them unreachable) and would
-			// otherwise become a last-write-wins overwrite - the same silent loss this
+			// otherwise become a last-write-wins overwrite: the same silent loss this
 			// normalization exists to end, just moved to the other side. Which one
 			// survives depends on map iteration, so it is a load error naming both.
 			canonical := types.Normalize(op)
@@ -182,7 +182,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 				// Secrets on a service op are rejected here, not silently dropped
 				// later: the supervised path rebuilds the command without its env,
 				// so a declared secret would reach a foregrounded service and
-				// vanish from a supervised one - the same op behaving differently
+				// vanish from a supervised one: the same op behaving differently
 				// by how it was reached. Until the supervisor threads env through,
 				// refusing at load is the only honest answer.
 				if len(cmd.Secrets) > 0 {
@@ -191,7 +191,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 				// Hints are refused on a service op for the same reason and with the
 				// same shape of answer. Reached as a dependency the op is handed to
 				// the supervisor and never runs through runCommand, so its advice
-				// could not fire; run directly it foregrounds and would fire - on
+				// could not fire; run directly it foregrounds and would fire, on
 				// every Ctrl-C shutdown, since that is how a foregrounded service
 				// ends. Advice that depends on how the op was reached, and that
 				// mostly fires on a normal exit, is worse than none.
@@ -273,7 +273,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 
 // validEnvName reports whether s is usable as an environment variable name:
 // letters, digits and underscores, not starting with a digit. The POSIX portable
-// set - anything looser differs by platform, and a secret landing under a
+// set: anything looser differs by platform, and a secret landing under a
 // misparsed name fails somewhere far from the declaration.
 func validEnvName(s string) bool {
 	if s == "" {
@@ -345,7 +345,7 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 		secrets = nil
 	}
 	c.Secrets = secrets
-	// Failure advice, in declaration order - that order IS the precedence, so it must
+	// Failure advice, in declaration order; that order IS the precedence, so it must
 	// survive decode unsorted. A half-written rule is rejected rather than dropped: a
 	// rule with no `contains` matches every string and would advise on every failure of
 	// this command, and one with no `advise` would consume the match and print nothing,
@@ -405,7 +405,7 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 func validateTools(m spells.Descriptor) error {
 	for _, tool := range slices.Sorted(maps.Keys(m.Tools)) {
 		// A malformed bound is knowable without running anything, and a window nobody
-		// can parse protects nobody - the same reasoning magus.yaml's required_version
+		// can parse protects nobody, the same reasoning magus.yaml's required_version
 		// applies to its own floor. Rejecting here is what keeps Check's VerdictUnknown
 		// a backstop for authored input rather than its normal path.
 		// A slice, not a map: two bad bounds on one tool must always name the same one

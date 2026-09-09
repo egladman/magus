@@ -47,7 +47,7 @@ type targetInfo struct {
 // registers projects, discovers targets from exported functions, and probes each
 // target body once under the tracing host to capture depends_on edges and host ops.
 // For a SPELL buffer (one exporting mgs_listTargets) it instead resolves the spell's
-// ops - the returned []spellOp is non-nil and []targetInfo is empty. Host effects
+// ops: the returned []spellOp is non-nil and []targetInfo is empty. Host effects
 // are inert, so probing never cascades into running dependencies.
 func evalAndProbe(ctx context.Context, src string, charms []string, spells map[string][]string) (tr *Tracer, targets []targetInfo, ops []spellOp, isSpellBuf bool, diag *Diag) {
 	tr = newTracer()
@@ -114,7 +114,7 @@ func discoverTargets(sess *buzz.Session) []targetInfo {
 
 // LoadMagusfile evaluates src to its project/target/edge graph, handling both a
 // magusfile and a SPELL buffer: a spell's ops become the Targets and Graph.Spell is
-// set. Charms are off (empty) for a structural load - the graph is charm-independent.
+// set. Charms are off (empty) for a structural load: the graph is charm-independent.
 // A ward on a spell op (e.g. MGS5002) is NOT a load diagnostic: the op still lists
 // here, and the ward surfaces via Run.
 func LoadMagusfile(ctx context.Context, src string) Graph {

@@ -2,8 +2,8 @@
 // mutating sibling of the read-only activity/status/viewer handlers. Its RPCs submit background
 // maintenance jobs (graph sync, activity-trail rotate, cache clear) through the same
 // fire-and-forget, coalescing proc mechanism the CLI's `server job` uses, so a double-click never
-// starts a second copy. Each response carries a metadata snapshot - the job's running state, its
-// last completed run (from the activity trail), and the current size of what it maintains - so a
+// starts a second copy. Each response carries a metadata snapshot: the job's running state, its
+// last completed run (from the activity trail), and the current size of what it maintains, so a
 // caller renders a job's state in one round trip. The daemon mounts it behind the bearer guard;
 // it is never served unauthenticated.
 package job
@@ -80,7 +80,7 @@ func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJob
 
 // RunJob submits the named job. An unregistered name is NotFound rather than a SubmitState:
 // the enum reports how a valid submission resolved, and a name nobody registered never became
-// one. That is also why this is the only RPC that can reject its input - the four verbs it
+// one. That is also why this is the only RPC that can reject its input: the four verbs it
 // replaced took no argument, so they had nothing to get wrong.
 func (s *Service) RunJob(ctx context.Context, req *connect.Request[jobv1.RunJobRequest]) (*connect.Response[jobv1.RunJobResponse], error) {
 	id := strings.TrimPrefix(req.Msg.GetName(), jobsPrefix)
@@ -146,7 +146,7 @@ func (s *Service) job(j jobs.Job, running map[string]string) *jobv1.Job {
 
 // lastRun maps a trail job Event to the wire JobRun. The trail records the run's start (Ts) and
 // duration, so end_time is Ts+duration. The trail carries no invocation id or per-run delta,
-// so those fields stay zero - additive to fill in later.
+// so those fields stay zero, additive to fill in later.
 func lastRun(e trail.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
 		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),

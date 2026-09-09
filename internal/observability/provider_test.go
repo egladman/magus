@@ -211,7 +211,7 @@ func TestCacheRunOptions_HitAndMissFireProviderHooks(t *testing.T) {
 //
 // The producing run sleeps past a millisecond deliberately. Manifest.DurationMs has millisecond
 // resolution, so a target that finishes inside one records zero saved and CacheRunOptions skips
-// it - which would make this assertion pass or fail on timing rather than on the wiring.
+// it, which would make this assertion pass or fail on timing rather than on the wiring.
 func TestCacheRunOptions_HitRecordsSavedTime(t *testing.T) {
 	root, c := newCache(t)
 	srcDir := filepath.Join(root, "p")

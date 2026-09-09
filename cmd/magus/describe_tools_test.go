@@ -13,7 +13,7 @@ import (
 
 // A probe can come back six ways and only three of them are a comparison. The other three
 // used to render identically as an empty version and "not found", which is a claim about
-// a binary that may well be installed - so every one of them is pinned here.
+// a binary that may well be installed, so every one of them is pinned here.
 func TestBuildToolRowSeparatesEveryProbeOutcome(t *testing.T) {
 	tool := func(sup spells.VersionBounds) spells.Tool {
 		return spells.Tool{Probe: spells.Command{Bin: "node"}, Supported: sup}

@@ -107,11 +107,11 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 	assert.Equal(t, "ab", v.Reveal(), "the value is returned; only its protection is declined")
 
 	// Unregistered, so ordinary output containing those letters survives intact. This is
-	// a documented hole, not an accident - see minRedactLen.
+	// a documented hole, not an accident; see minRedactLen.
 	assert.Equal(t, "grab a table", string(r.Redact([]byte("grab a table"))))
 
 	// And NO encoded derivative of it is registered either. Encoding inflates, so
-	// base64("ab") is "YWI=" and hex("ab") is "6162" - both clear minRedactLen on their
+	// base64("ab") is "YWI=" and hex("ab") is "6162"; both clear minRedactLen on their
 	// own. Registering those would contradict the MGS2011 notice this value just fired
 	// AND put a 4-character needle into every future log line.
 	for _, form := range []string{"YWI=", "YWJh", "6162"} {
@@ -121,7 +121,7 @@ func TestReadDoesNotRegisterValuesTooShortToMask(t *testing.T) {
 }
 
 // TestReadWarnsWhenAValueIsTooShortToMask pins MGS2011. Declining to redact is correct;
-// declining in SILENCE was the hole - the caller treats the value as protected and has no
+// declining in SILENCE was the hole: the caller treats the value as protected and has no
 // way to find out it is not. The notice is the entire mitigation available here.
 func TestReadWarnsWhenAValueIsTooShortToMask(t *testing.T) {
 	var sink bytes.Buffer
@@ -202,7 +202,7 @@ func TestReadReReadsWhenTheProviderChanges(t *testing.T) {
 }
 
 // TestReadCollapsesConcurrentReadsOfOneReference pins the singleflight. Without it, N
-// targets reading one reference at once means N provider invocations - for an
+// targets reading one reference at once means N provider invocations; for an
 // interactive backend, N unlock prompts.
 func TestReadCollapsesConcurrentReadsOfOneReference(t *testing.T) {
 	ctx, r := withResolver(t)
@@ -270,8 +270,8 @@ type providerFunc func(context.Context, string) (Value, error)
 func (f providerFunc) Fetch(ctx context.Context, ref string) (Value, error) { return f(ctx, ref) }
 
 // withOpener installs an opener for one test and restores the previous one after.
-// RegisterProviderOpener panics on a second call - correct for its real once-at-init
-// contract, unusable across several tests - so this reaches the variable directly rather
+// RegisterProviderOpener panics on a second call (correct for its real once-at-init
+// contract, unusable across several tests), so this reaches the variable directly rather
 // than relaxing that contract for production callers.
 func withOpener(t *testing.T, fn func(context.Context, string) (Provider, error)) {
 	t.Helper()
@@ -288,7 +288,7 @@ func withOpener(t *testing.T, fn func(context.Context, string) (Provider, error)
 
 // TestRedactingHandlerCoversNonPrettyFormats is the regression for a FOURTH leak path,
 // found only by review: redaction lived in one handler's print funnel, so
-// `--log-format=json` sent run.exec's argv - documented as able to carry a credential -
+// `--log-format=json` sent run.exec's argv (documented as able to carry a credential)
 // to stderr untouched. Wrapping the handler covers every format, including one added later.
 func TestRedactingHandlerCoversNonPrettyFormats(t *testing.T) {
 	ctx, _ := withResolver(t)
@@ -299,7 +299,7 @@ func TestRedactingHandlerCoversNonPrettyFormats(t *testing.T) {
 	var sink bytes.Buffer
 	h := NewRedactingHandler(slog.NewJSONHandler(&sink, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	// Attr shapes mirror exec.go's run.exec line exactly: argv arrives as a []string, and an
-	// earlier version of this test passed it as a plain string - which the string-only filter
+	// earlier version of this test passed it as a plain string, which the string-only filter
 	// did redact, so the test passed while the real call site leaked.
 	slog.New(h).DebugContext(ctx, "run.exec tok=ghp_never_json_me",
 		"cmd", "sh", "args", []string{"-p", "ghp_never_json_me"}, "dir", ".")
@@ -345,7 +345,7 @@ func TestRedactCoversCommonEncodings(t *testing.T) {
 }
 
 // TestRedactingHandlerCoversNestedAndWrappedValues guards the carriers that are not a
-// KindString: a group, an error, and a []byte. The []byte case is the sharp one - fmt
+// KindString: a group, an error, and a []byte. The []byte case is the sharp one; fmt
 // renders it as decimal bytes while encoding/json base64s it, so a redactor comparing
 // against the fmt rendering sees no match and ships a recoverable token.
 func TestRedactingHandlerCoversNestedAndWrappedValues(t *testing.T) {
@@ -378,8 +378,8 @@ func TestRedactingHandlerIsAPassthroughWithoutAResolver(t *testing.T) {
 
 func TestRegisterProviderOpenerRejectsASecondRegistration(t *testing.T) {
 	// The panic-on-second-call branch had zero coverage because every other test reaches
-	// providerOpener directly. It is a real contract - two openers would mean the second
-	// silently shadowing the first - so it is worth exercising through the exported door.
+	// providerOpener directly. It is a real contract (two openers would mean the second
+	// silently shadowing the first), so it is worth exercising through the exported door.
 	openerMu.Lock()
 	prev := providerOpener
 	providerOpener = nil
@@ -396,7 +396,7 @@ func TestRegisterProviderOpenerRejectsASecondRegistration(t *testing.T) {
 }
 
 func TestWithTimeoutsKeepsDefaultsForZeroFields(t *testing.T) {
-	// A partially-specified magus.yaml section must not zero the other budget - a zero
+	// A partially-specified magus.yaml section must not zero the other budget: a zero
 	// timeout would make every provider read fail instantly.
 	assert.Equal(t, DefaultTimeouts, New().Timeouts(), "no options means the built-ins")
 
@@ -425,7 +425,7 @@ func TestPackageLevelRedactorsFollowTheContext(t *testing.T) {
 	// are the paths log handlers and the capture tap take on an ordinary build.
 	assert.Equal(t, "a=pkg-level-token", RedactString(context.Background(), "a=pkg-level-token"))
 	// A nil context reaches these from log handlers that have none to hand them, and
-	// ctx.Value on a nil interface panics - so the nil guard is the contract, not caution.
+	// ctx.Value on a nil interface panics, so the nil guard is the contract, not caution.
 	// Held in a variable because staticcheck rightly rejects a nil ctx literal at a call.
 	var nilCtx context.Context
 	assert.NotPanics(t, func() {

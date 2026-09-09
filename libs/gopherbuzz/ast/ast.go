@@ -93,8 +93,9 @@ type WhileStmt struct {
 
 // ForStmt: for (init; cond; post) body. Cond may be nil, and Init/Post may be
 // empty. Both clauses are lists because upstream allows several comma-separated
-// declarations and assignments in each (`for (i: int = 0, j: int = 9; ...; i = i
-// + 1, j = j - 1)`); they share the loop's scope, so they are not a BlockStmt.
+// declarations and assignments in each
+// (`for (i: int = 0, j: int = 9; ...; i = i + 1, j = j - 1)`); they share the
+// loop's scope, so they are not a BlockStmt.
 type ForStmt struct {
 	Pos
 	Init  []Node
@@ -138,7 +139,7 @@ type FunDecl struct {
 	// IsExtern marks a body-less `extern fun name(...) > T;` forward declaration:
 	// the signature is declared here, the implementation comes from the host. It
 	// is how upstream Buzz types its native stdlib (src/lib/*.buzz), and it emits
-	// no code - the name must already be bound at runtime. Body is nil.
+	// no code: the name must already be bound at runtime. Body is nil.
 	IsExtern    bool
 	Name        string
 	Params      []string
@@ -258,7 +259,7 @@ type UnaryExpr struct {
 	Operand Node
 }
 
-// TypeExpr: `<[str]>` - a TYPE written where a value goes. Annot is the type as
+// TypeExpr: `<[str]>` (a TYPE written where a value goes). Annot is the type as
 // spelled in source; the compiler canonicalizes it before emitting the constant.
 type TypeExpr struct {
 	Pos
@@ -296,7 +297,7 @@ type MatchBranch struct {
 	Body  Node
 }
 
-// TypeOfExpr: `typeof x`. Buzz's typeof is STATIC - it yields the type the
+// TypeOfExpr: `typeof x`. Buzz's typeof is STATIC: it yields the type the
 // checker inferred for Operand, not a probe of the runtime value, which is why
 // `final list = []` gives `[any]` while `final slist: [str] = []` gives `[str]`
 // for the same empty list. Resolved is filled in by the checker with the
@@ -403,7 +404,7 @@ type MapExpr struct {
 	Anon bool
 	// ObjectName is set by the checker on an Anon literal whose expected type is
 	// a named object, and names that object. The compiler then builds a real
-	// instance - with the object's methods and field defaults - instead of a map.
+	// instance (with the object's methods and field defaults) instead of a map.
 	// Empty when the literal has no object to fill, which stays a map.
 	ObjectName string
 	// Tuple marks the positional form `.{ a, b }`, whose keys are the elements'
@@ -496,7 +497,7 @@ type RangeExpr struct {
 // EnumCaseExpr is the inferred enum-case shorthand: a leading-dot case with no
 // receiver, as in `fun f(c: Suit = .one)` or `final l: [Locale] = [.fr, .it]`.
 // Enum is empty at parse time and filled by the checker from the type expected at
-// the use site, which is the only place that information exists - the expression
+// the use site, which is the only place that information exists: the expression
 // itself names no enum.
 type EnumCaseExpr struct {
 	Pos

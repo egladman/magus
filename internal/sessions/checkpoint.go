@@ -79,7 +79,7 @@ func RecordCheckpoint(dir string, c Checkpoint, start SessionStart) (stored Chec
 	session := checkpointSessionID(checkpointKey(c))
 	// One file, not the whole store. Every checkpoint for this line of work is in the
 	// file checkpointSessionID names and nowhere else, so folding the store would
-	// decode a 30-day history to answer a question one file holds - on every turn of
+	// decode a 30-day history to answer a question one file holds, on every turn of
 	// every session, which is when this runs.
 	records, _, _ := readFile(filepath.Join(dir, session+fileExt))
 	if prev, ok := latestCheckpoint(records); ok && prev == c {
@@ -130,7 +130,7 @@ func LatestCheckpoints(fold Fold) []CheckpointRecord {
 // checkpointKey identifies one line of work.
 //
 // A host session is the identity when there is one, so refiring a hook supersedes
-// rather than accumulates. With no host - a person who ran the command - the identity
+// rather than accumulates. With no host (a person who ran the command), the identity
 // is the branch IN a workspace. Keying everything on the host session would fold every
 // checkpoint a person ever took into a single record, which is the shape that makes a
 // feature work only when a tool drives it; keying on the branch alone would then

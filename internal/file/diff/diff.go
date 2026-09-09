@@ -128,7 +128,7 @@ func hashFileInto(snap ContentSnap, path string) {
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		// A partial hash would read as non-determinism on the next pass, which is now a hard
-		// failure - drop the entry instead and let the missing path speak.
+		// failure; drop the entry instead and let the missing path speak.
 		return
 	}
 	var sum [32]byte
@@ -183,7 +183,7 @@ func GlobBaseDirs(root string, globs []string) []string {
 			dir = filepath.Dir(filepath.Join(root, g))
 		} else {
 			// Has wildcard: the directory is everything before the wildcard's path
-			// SEGMENT, not just before the wildcard character itself - a mid-segment
+			// SEGMENT, not just before the wildcard character itself; a mid-segment
 			// wildcard like "gen/index*.html" has cut mid-filename, and g[:cut]
 			// ("gen/index") is not a directory at all.
 			prefix := g[:cut]

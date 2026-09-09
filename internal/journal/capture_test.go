@@ -14,7 +14,7 @@ import (
 )
 
 // TestFileHandlerAppendsJSONL writes events through the file handler and reads them back as
-// one JSON object per line - the on-disk schema the store and proto mapper depend on.
+// one JSON object per line, the on-disk schema the store and proto mapper depend on.
 func TestFileHandlerAppendsJSONL(t *testing.T) {
 	var buf bytes.Buffer
 	fh := NewFileHandler(&buf)

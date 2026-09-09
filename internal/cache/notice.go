@@ -98,7 +98,7 @@ func failureExcerpt(data []byte, limit int) (excerpt []byte, omitted int) {
 	// Spend the budget by tier, and within a tier keep the LAST lines: a tool prints
 	// its setup before it prints what went wrong, so filling from the top spends the
 	// budget on whatever merely looked diagnostic early on and drops the actual
-	// failure - the one line the reader opened the output for.
+	// failure: the one line the reader opened the output for.
 	keep := make([]bool, len(lines))
 	room := limit
 	for _, tier := range []int{structuralFailure, keywordMatch} {
@@ -139,7 +139,7 @@ var diagnosticLine = regexp.MustCompile(
 
 // structuralFailureLine matches a test tool's own STRUCTURAL failure marker, as
 // opposed to diagnosticLine's loose keyword match. `go test` writes these for
-// exactly this purpose - "this is the one that failed" - so unlike an incidental
+// exactly this purpose ("this is the one that failed"), so unlike an incidental
 // "fail"/"cause" elsewhere in the log, a match here is never budget-evicted; see
 // failureExcerpt. Anchored to (indented) line start so it cannot fire mid-sentence,
 // and covers a top-level or nested subtest ("--- FAIL: ", indented under its

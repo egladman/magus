@@ -18,7 +18,7 @@ import (
 //
 // It reads GIT's extended unified format, a superset of the POSIX one: the `diff --git` line
 // and its `old mode` / `new file` / `rename from` / `index` headers carry facts a `---`/`+++`
-// pair alone cannot express - a rename, a pure mode change, a binary file. hg and jj wrap the
+// pair alone cannot express: a rename, a pure mode change, a binary file. hg and jj wrap the
 // same unified body in their own header lines; an unrecognized header is SKIPPED rather than
 // rejected, so those patches land on the same shape with the git-only extras left unset.
 
@@ -57,7 +57,7 @@ type Row struct {
 	// Emph is which PART of this line changed, for a row paired with its counterpart across a
 	// rewrite. Nil where there is nothing to mark, which is most rows.
 	//
-	// Offsets are UTF-16 code units, indexing Text - what a JavaScript string is indexed by,
+	// Offsets are UTF-16 code units, indexing Text, what a JavaScript string is indexed by,
 	// because the browser is this field's consumer. A Go caller slicing bytes converts with
 	// byteSpan.
 	Emph *Span `json:"emph,omitempty"`
@@ -73,14 +73,14 @@ type Hunk struct {
 	Header string `json:"header"`
 	// Declaration is the enclosing declaration git named in Header: the text after the second
 	// @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {". Empty where git
-	// named none - the top of a file, or a language it has no funcname pattern for.
+	// named none: the top of a file, or a language it has no funcname pattern for.
 	//
 	// Parsed HERE rather than by each surface, for the reason the digest and the intra-line
 	// emphasis are: two readers of one header is two chances to disagree about what a hunk is
 	// called, and nothing would ever report the disagreement.
 	Declaration string `json:"declaration,omitempty"`
 	// Display is Lines with the characters a renderer obeys but a reader cannot see escaped, or
-	// NIL when no line carried one - which is every ordinary hunk, so this costs nothing to ship
+	// NIL when no line carried one, which is every ordinary hunk, so this costs nothing to ship
 	// and nothing to hold.
 	//
 	// Computed here so the two surfaces cannot disagree about it. A sanitizer in the terminal and
@@ -103,7 +103,7 @@ type Hunk struct {
 
 // File is one changed file, fully described.
 type File struct {
-	// Path is what the file is called NOW - the new path for a rename, the old path for a
+	// Path is what the file is called NOW: the new path for a rename, the old path for a
 	// deletion, where there is no new one. A sidebar lists it and an anchor names it, so it
 	// is never "/dev/null".
 	Path string `json:"path"`
@@ -134,7 +134,7 @@ func Parse(patch string) []File {
 	p := &parser{}
 	// Drop the ONE empty element a trailing newline leaves behind. It is an artifact of the
 	// split, not a line of the patch, and the hunk reader treats a bare "" as an empty context
-	// line - so leaving it appends a phantom row to whatever hunk ends the patch, shifting
+	// line, so leaving it appends a phantom row to whatever hunk ends the patch, shifting
 	// every count and line number derived from it, and changing that hunk's digest. Exactly
 	// one is removed, so a patch genuinely ending in a blank context line keeps it.
 	lines := strings.Split(strings.TrimSuffix(patch, "\n"), "\n")
@@ -207,7 +207,7 @@ func (p *parser) openFile(oldPath, newPath string) {
 }
 
 // applyDevNull reads the added/deleted fact out of the ---/+++ pair. A patch with no git
-// extended headers - every POSIX and Mercurial one - carries it nowhere else.
+// extended headers (every POSIX and Mercurial one) carries it nowhere else.
 func (p *parser) applyDevNull(oldSide, newSide string) {
 	if p.cur == nil {
 		return
@@ -384,7 +384,7 @@ func RawLineEmphasis(h Hunk) []Span {
 //
 // The conversion happens on THIS side because the wire's consumer is JavaScript, and because
 // Go is the side holding both the bytes and the runes. A browser handed byte offsets would
-// slice a line containing one accented character in the wrong place - and would do it only on
+// slice a line containing one accented character in the wrong place, and would do it only on
 // the lines nobody thinks to test.
 func utf16Span(text string, s Span) *Span {
 	if s.Empty() {
@@ -436,7 +436,7 @@ const devNull = "/dev/null"
 //
 // It splits on " b/" rather than on whitespace, because a path may CONTAIN spaces and a naive
 // split puts half a filename in each field. That still cannot disambiguate a path holding the
-// literal " b/", which no format can without quoting - so the a//b prefixes are the tiebreak
+// literal " b/", which no format can without quoting, so the a//b prefixes are the tiebreak
 // and the LAST occurrence wins, matching git's own reader.
 func gitHeaderPaths(line string) (oldPath, newPath string) {
 	rest := strings.TrimPrefix(line, "diff --git ")
@@ -454,7 +454,7 @@ func gitHeaderPaths(line string) (oldPath, newPath string) {
 
 // stripPathPrefix removes the a/ or b/ prefix and any trailing tab-delimited timestamp POSIX
 // diff appends. The tab is what makes a path containing spaces readable at all, so the cut is
-// on that and never on whitespace. /dev/null passes through untouched - callers key on it.
+// on that and never on whitespace. /dev/null passes through untouched; callers key on it.
 func stripPathPrefix(raw string) string {
 	p := strings.TrimSpace(raw)
 	if tab := strings.IndexByte(p, '\t'); tab >= 0 {
@@ -476,7 +476,7 @@ type FileHunks struct {
 }
 
 // sanitizeRows escapes the deceptive characters in each row's text, which is what the browser
-// draws - Lines is what the terminal draws, and both have to be covered or one surface renders a
+// draws; Lines is what the terminal draws, and both have to be covered or one surface renders a
 // deception the other caught.
 //
 // AFTER markEmphasis, and the row's emphasis is DROPPED where the text changed. Emph is an offset
@@ -543,8 +543,8 @@ func HunkCounts(patch string) map[string]int {
 // is the same and we simply looked again".
 //
 // A session holds a changeset computed at some past moment. Without this, a client that joins
-// later cannot tell a current answer from a frozen one, and the party least able to notice -
-// an agent, which cannot see the tree - is the one served the stale copy.
+// later cannot tell a current answer from a frozen one, and the party least able to notice
+// (an agent, which cannot see the tree) is the one served the stale copy.
 func PatchDigest(patch string) string {
 	sum := sha256.Sum256([]byte(patch))
 	return hex.EncodeToString(sum[:16])

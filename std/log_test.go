@@ -53,7 +53,7 @@ func TestLogGoesToTheDefaultLogger(t *testing.T) {
 	assert.Equal(t, "hello", recs[0]["msg"])
 	assert.Equal(t, "INFO", recs[0]["level"])
 	// Attributes arrive as real structured fields, not interpolated into the
-	// message - that is what makes them queryable in the run log.
+	// message; that is what makes them queryable in the run log.
 	assert.Equal(t, "build", recs[0]["target"])
 }
 

@@ -174,7 +174,7 @@ func TestTSRequiredGlobsCoverModuleVariants(t *testing.T) {
 
 // TestBuiltinTargetNamesAreCanonical guards a hole the decode-time normalization
 // does not cover. Op keys authored in Buzz are canonicalized by Decode, but
-// spells.WithTargets takes whatever a Go caller hands it - and it cannot call
+// spells.WithTargets takes whatever a Go caller hands it, and it cannot call
 // types.Normalize, because types imports spells and the reverse would cycle.
 //
 // A non-canonical name here is not a style problem: every request reaching
@@ -225,8 +225,8 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		require.NoError(t, err)
 		return v
 	}
-	// norm collapses both shapes - the host's spells.Charm and the Buzz Charm object's
-	// field map - through spells.Charm, so the comparison ignores whether an empty
+	// norm collapses both shapes (the host's spells.Charm and the Buzz Charm object's
+	// field map) through spells.Charm, so the comparison ignores whether an empty
 	// value/fromPtr key is present (the object carries all fields; the host omits
 	// empties) and pins only the RFC 6902 content.
 	norm := func(v any) spells.Charm {
@@ -361,7 +361,7 @@ func TestSpellsWithoutReadinessAreUngated(t *testing.T) {
 // The end-to-end check the enum was adopted for: a built-in spell writes
 // `VersionKey{upTo = VersionComponent.patch}` in Buzz, and it must arrive in Go as
 // VersionPatch. An enum case is a heap object rather than a string, so before the
-// adapter unwrapped it this decoded as absent - silently, which is exactly the failure
+// adapter unwrapped it this decoded as absent, silently, which is exactly the failure
 // a bare string invited and the enum was meant to end.
 func TestBuiltinSpellsDecodeVersionKeyFromEnum(t *testing.T) {
 	reg := Builtins()

@@ -64,7 +64,7 @@ func workspaceReplCandidates(ctx context.Context, cwd string) func() []string {
 			return cached
 		}
 		// Host modules come from the binary, not the workspace, so they are always
-		// available - and they are what a workspace REPL is mostly for. Each
+		// available, and they are what a workspace REPL is mostly for. Each
 		// module contributes its own name plus every `mod.method`, which is the
 		// difference between completing "fs" and completing "fs.writeFile".
 		for _, mod := range hostmodules.Describe("") {

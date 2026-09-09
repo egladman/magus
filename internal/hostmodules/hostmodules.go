@@ -7,12 +7,12 @@
 // std itself: std/encoding imports std for the Module vocabulary (Module,
 // Method, Arg, Ret, TypeTag), so std importing std/encoding back to collect
 // its nine modules would cycle. This package imports both and is the ONLY
-// place that does - see std.Register's doc and std/encoding/register.go's
+// place that does; see std.Register's doc and std/encoding/register.go's
 // package doc for the two ends of that constraint.
 //
-// Every caller that needs "every host module magus has" - the CLI's describe
+// Every caller that needs "every host module magus has" (the CLI's describe
 // command, magus\modules()/module(), the knowledge graph, the docs and
-// bindings codegen, the manpage/manifest generators - reads through here
+// bindings codegen, the manpage/manifest generators) reads through here
 // rather than std.All()/std.Get() directly, so std.All() staying scoped to
 // std's own 24 does not silently narrow what any of those surfaces reports.
 package hostmodules

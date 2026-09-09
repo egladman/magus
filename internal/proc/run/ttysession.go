@@ -18,7 +18,7 @@ import (
 //
 // [Exec] with TTY set cannot do this. It buffers all of stdin up front and hands
 // back the transcript at the end, which is right for capturing a tool's output
-// and useless for recording an interactive one - a picker fed its keystrokes in
+// and useless for recording an interactive one: a picker fed its keystrokes in
 // a single write processes them faster than it draws, so the capture holds the
 // final state and none of the moments worth showing.
 //

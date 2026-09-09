@@ -19,7 +19,7 @@ import (
 
 // TestSplitVCSVerb pins that the subcommand is found past a leading flag. Reading args[0]
 // alone let `magus vcs -q merge-driver ...` miss the merge-driver dispatch profile, which
-// keeps a workspace load - and its .gitattributes write - out of git's index
+// keeps a workspace load (and its .gitattributes write) out of git's index
 // manipulation.
 func TestSplitVCSVerb(t *testing.T) {
 	tests := []struct {
@@ -110,7 +110,7 @@ func TestSplitMaintained(t *testing.T) {
 func TestFilterStageable(t *testing.T) {
 	dir := initGitRepo(t)
 
-	// tracked.txt is committed, then deleted from disk without `git rm` - the "old half
+	// tracked.txt is committed, then deleted from disk without `git rm`, the "old half
 	// of a rename" case: gone from disk, still tracked.
 	trackedPath := filepath.Join(dir, "tracked.txt")
 	require.NoError(t, os.WriteFile(trackedPath, []byte("x"), 0o644))
@@ -118,7 +118,7 @@ func TestFilterStageable(t *testing.T) {
 	runGit(t, dir, "commit", "-m", "seed")
 	require.NoError(t, os.Remove(trackedPath))
 
-	// present.txt exists on disk and was never committed - the ordinary new-file case.
+	// present.txt exists on disk and was never committed: the ordinary new-file case.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
 
 	// stale.txt is a declared output that never existed on disk and was never tracked -
@@ -229,7 +229,7 @@ func TestSplitExplainedOutputsGeneratedFileCannotExplainItself(t *testing.T) {
 }
 
 // TestProjectKeyIsPathNotLabel pins the contract settledPaths depends on: the rebuild set
-// is keyed by project PATH, and for the ROOT that key is "." - never the display label,
+// is keyed by project PATH, and for the ROOT that key is ".", never the display label,
 // which Display renders as the directory basename. Keying one side by label was a real
 // bug: the set held "." while the lookup asked for "magus" (or a worktree's own directory
 // name), so it missed every time and every root-owned regenerated output was left
@@ -283,7 +283,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 // fired on the two most ordinary workflows: committing the source and then the generated
 // output, and pulling and then regenerating. In both, the source change is already in a
 // commit, so a check that reads only the working tree calls the output unaccounted for
-// and refuses to stage it - on a commit that is entirely correct.
+// and refuses to stage it, on a commit that is entirely correct.
 func TestSplitExplainedOutputsCountsCommittedSources(t *testing.T) {
 	// Only the output is dirty; the source that produced it is already committed.
 	files := []types.FileEntry{

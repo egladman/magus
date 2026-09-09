@@ -2,7 +2,7 @@
 // parses into, and the matcher ListEvents and StreamEventsRequest.filter are defined in terms of.
 //
 // It lives HERE rather than in internal/service/console, where it started, because ListEvents has
-// to apply it and console already imports this package for EncodeJournalFragment - importing back
+// to apply it and console already imports this package for EncodeJournalFragment; importing back
 // would be a cycle. The viewer's own grammar over the viewer's own fields belongs with the viewer
 // wire anyway.
 
@@ -22,12 +22,12 @@ import (
 // case-insensitive. Field filters are include-only (they mirror the filter-menu checkboxes);
 // negation ("-word") is supported only on free text. `status` is single-valued (a result has
 // one status), so a second status: clause replaces the first. The time window is NOT parsed
-// from the DSL - the filter menu sets EventQuery.Time programmatically (date pickers), and
+// from the DSL: the filter menu sets EventQuery.Time programmatically (date pickers), and
 // ApplyEventQuery honors it. This is the viewer's OWN grammar over the log's own fields; it
 // deliberately does not reuse the knowledge-graph query parser (whose fields differ).
 func ParseEventQuery(s string) *viewerv1.EventQuery {
 	q := &viewerv1.EventQuery{}
-	// The repeated field keys and where each value appends - the single source of truth for the
+	// The repeated field keys and where each value appends, the single source of truth for the
 	// viewer's field set. `status` is the one scalar field; anything else is free text.
 	lists := map[string]*[]string{
 		"project": &q.Projects,

@@ -14,7 +14,7 @@ import (
 // The regression this guards is a silent one: the probe used to fall straight through to
 // resolveDaemonAddr, which never consults the setting, so an invocation that had opted
 // out of the daemon still reached whatever daemon the host happened to be running. It
-// surfaced as a testscript failure - the suite sets MAGUS_DAEMON_ENABLED=false to stay
+// surfaced as a testscript failure: the suite sets MAGUS_DAEMON_ENABLED=false to stay
 // hermetic, and `magus doctor` then probed the real socket and reported on a bridge the
 // test never asked about. It reproduced only where a daemon was actually up (CI), which
 // is what made it hard to see.
@@ -23,7 +23,7 @@ import (
 // without any discovery, so asserting SockAddr stays EMPTY proves the short-circuit fires
 // ahead of address resolution. Without it the field is populated even when nothing
 // answers, which is exactly the assertion that fails if the guard is removed. Testing it
-// this way needs no live daemon, so the test discriminates on any machine - unlike a
+// this way needs no live daemon, so the test discriminates on any machine, unlike a
 // Reachable-only assertion, which passes vacuously wherever discovery finds nothing.
 func TestBuildDaemonInfoRespectsDaemonDisabled(t *testing.T) {
 	saved := globalCfg

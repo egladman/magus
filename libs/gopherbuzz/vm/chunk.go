@@ -4,7 +4,7 @@ package vm
 //
 // C is the compile-time destination register for 3-address ops:
 //   - C == 0 (zero value): result goes to the operand stack (stack form)
-//   - C > 0:  result goes to stack[frame.base + C - 1] (register form; C-1 is the slot)
+//   - C > 0:  result goes to `stack[frame.base + C - 1]` (register form; C-1 is the slot)
 //
 // The +1 bias lets the zero value keep the old push-to-stack semantics so every
 // Instr literal that omits C defaults to stack form with no migration work.

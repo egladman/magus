@@ -128,7 +128,7 @@ func registryChildren(t *testing.T, path ...string) []string {
 // TestDispatchSubCoversKnownSubcommands: every child a per-command dispatcher
 // switches on must have a matching entry in that command's registry.Children,
 // and vice versa. exempt lists case labels that are deliberately NOT registry
-// children - old names kept alive only to print "this moved" - which would
+// children (old names kept alive only to print "this moved"), which would
 // teach the reader nothing new by appearing in Children too.
 func TestDispatcherChildrenAreDeclared(t *testing.T) {
 	tests := []struct {

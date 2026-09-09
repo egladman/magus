@@ -110,7 +110,7 @@ func decodeSpellOp(name string, mv vm.Value) spellOp {
 // A declared Sources is appended as its SourcesPlaceholder token rather than
 // expanded: this preview has no project directory to walk (a SPELL buffer has
 // no Target of its own), so it cannot run the runner's real expansion the way
-// runCommand does at execution time - see spells.Command.Sources.
+// runCommand does at execution time; see spells.Command.Sources.
 func (o spellOp) renderCommand(activeNames []string) (string, error) {
 	args, err := spellruntime.ApplyCharms(o.cmd.Args, o.cmd.Charms, activeNames)
 	if err != nil {
@@ -144,7 +144,7 @@ func wardDetail(d *types.DiagnosticError) string {
 // "ward" op per kind-coherence diagnostic raised for it (e.g. MGS5002 for a detached
 // service). A spell op has no dependency closure, so the order is just the op itself.
 // An unknown op name, an undecodable command, or a charm patch that fails to apply is
-// a diagnostic - the last two so the sandbox refuses exactly what the engine would
+// a diagnostic, the last two so the sandbox refuses exactly what the engine would
 // rather than showing a wrong command.
 func dryRunSpell(ops []spellOp, opName, output string, charms []string) Result {
 	var op *spellOp

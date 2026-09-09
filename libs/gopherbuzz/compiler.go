@@ -1224,7 +1224,7 @@ func (c *compiler) compileDoUntil(v *ast.DoStmt) error {
 // value and jumps to the end. Falling off the end without an out yields null.
 //
 // Statements leave the stack balanced, so the only value live at an out is the
-// one it just pushed - which is what makes jumping straight out safe.
+// one it just pushed, which is what makes jumping straight out safe.
 func (c *compiler) compileBlockExpr(v *ast.BlockExpr) error {
 	c.blockExprs = append(c.blockExprs, nil)
 	c.enterBlock()
@@ -2098,7 +2098,7 @@ func (c *compiler) compileUnary(v *ast.UnaryExpr) error {
 // when it is null the whole hop yields null instead of running. emitHop emits
 // the hop's own opcodes with the (non-null) receiver already on the stack.
 //
-// It reuses OpJumpIfNull, which peeks and - on null - pops and falls through,
+// It reuses OpJumpIfNull, which peeks and (on null) pops and falls through,
 // so no new opcode enters the Exec switch (a new case regresses every benchmark;
 // see the README gotcha).
 func (c *compiler) compileOptionalHop(recv ast.Node, emitHop func() error) error {

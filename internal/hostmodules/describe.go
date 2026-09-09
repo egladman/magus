@@ -19,7 +19,7 @@ import (
 // This lived as std.DescribeModules until std/encoding split nine modules out
 // of std's own registry: std's internal All() could no longer answer "every
 // module" by itself (see this package's doc for why), so the function moved
-// to the layer that can - every caller listed there already reads through
+// to the layer that can; every caller listed there already reads through
 // here for the same reason.
 func Describe(name string) []types.ModuleEntry {
 	// Go modules and Buzz modules are ONE surface here, deliberately. This

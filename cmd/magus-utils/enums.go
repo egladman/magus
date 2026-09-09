@@ -14,8 +14,8 @@ import (
 //
 // Go has no enum type: a defined string accepts any string forever, so the only
 // enforcement available is a predicate plus a call at the boundary where external
-// input arrives. Both halves were hand-written before this - a switch listing the
-// cases, and prose listing them again in the error - which is two copies of the case
+// input arrives. Both halves were hand-written before this (a switch listing the
+// cases, and prose listing them again in the error), which is two copies of the case
 // list that drift from the constants and from each other.
 //
 // Generating them from the SAME registry that emits the Buzz enum means a new case is

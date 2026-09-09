@@ -39,7 +39,7 @@ type listOutput struct {
 	Projects  []listProject `json:"projects"  yaml:"projects"`
 }
 
-// lsNouns is the noun ls actually routes on, in both spellings - the dispatcher's
+// lsNouns is the noun ls actually routes on, in both spellings: the dispatcher's
 // own accept-list, the way graphSubs is graphCmd's, so a drift test can read the
 // router's data instead of the registry's mirror of it. The project noun is absent
 // because it names the DEFAULT view: anything ls does not route here lists projects.
@@ -49,7 +49,7 @@ var lsNouns = []string{"target", "targets"}
 // to describe, not a duplicate of it: describe leads with a definition and teaches
 // a concept, ls answers "what is actually here". Keeping enumeration on one verb is
 // also what stops the surface growing a `magus targets`, then a `magus spells`, then
-// a `magus charms` - one rule to learn, and a new noun costs no new subcommand.
+// a `magus charms`: one rule to learn, and a new noun costs no new subcommand.
 //
 // The noun is optional and defaults to projects, so the long-standing bare
 // `magus ls` keeps its meaning.
@@ -95,8 +95,8 @@ func lsProjects(ctx context.Context, root string) error {
 
 	projects := ws.All()
 	// Targets come from the same graph `ls targets` reads. They are what makes a
-	// bare `magus ls` answer the question people actually open it with - "what is
-	// here and what can I run" - instead of a screen of source globs.
+	// bare `magus ls` answer the question people actually open it with ("what is
+	// here and what can I run") instead of a screen of source globs.
 	targetsByPath := map[string][]string{}
 	if graph, gErr := ws.TargetGraph(ctx); gErr == nil {
 		for _, gp := range graph.Projects {
@@ -143,7 +143,7 @@ func lsProjects(ctx context.Context, root string) error {
 	//
 	// A reader runs `magus ls` to see what is here and what they can run, so the
 	// line carries the project, its toolchain, and its targets. Declared sources
-	// and outputs are cache machinery - real, but not what anyone opens a listing
+	// and outputs are cache machinery: real, but not what anyone opens a listing
 	// for, and this repo's root project alone declares 15 source globs, which
 	// buried the targets underneath them. They are not lost: `magus describe
 	// project <path>` is the full record and always was, and `magus where` gives
@@ -171,7 +171,7 @@ func lsProjects(ctx context.Context, root string) error {
 	// Name the neighbors once, so the boundary between the verbs is discoverable
 	// from the command itself rather than only from the docs. Rendered through
 	// hint's command registry (not hand-written) so a subcommand rename cannot leave a hint here
-	// pointing at a command that no longer exists - the drift test walks these.
+	// pointing at a command that no longer exists; the drift test walks these.
 	fmt.Printf("what a target does:   %s\n", hint.LsTargets.With("<project>"))
 	fmt.Printf("one project in full:  %s\n", hint.DescribeProject.With("<project>"))
 	return nil
@@ -295,7 +295,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 // targetSummary is the one-line right-hand column: the target's doc when it has
 // one, else the spell ops its body drives. Most targets in practice carry no doc
 // comment, and for those "which toolchain does this actually invoke" is the next
-// most useful thing a reader can be told - falling back to it beats a blank column.
+// most useful thing a reader can be told; falling back to it beats a blank column.
 func targetSummary(t types.TargetGraphNode) string {
 	if t.Doc != "" {
 		return t.Doc

@@ -51,7 +51,7 @@ func TestStoreRoundTrip(t *testing.T) {
 			},
 			want: []types.Lease{
 				// The replacement carries no owned paths, so the row's paths were
-				// released by it - see TestStorePutRecordsReleasedPaths.
+				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
 					ID: "a", Goal: "revised", State: types.StatePass,
 					Releases: []types.LeaseRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
@@ -134,7 +134,7 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 }
 
 // TestStoreUpdateMergesUnderOneLock is what Update exists for. Two writers advancing
-// different fields of one row - a state machine and a checkpoint recorder - each
+// different fields of one row (a state machine and a checkpoint recorder) each
 // read-modify-write the same file, and a merge that reads with List and writes with Put
 // releases the lock in between: the second write then reverts the first one's field.
 func TestStoreUpdateMergesUnderOneLock(t *testing.T) {

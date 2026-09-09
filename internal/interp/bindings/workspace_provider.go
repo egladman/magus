@@ -22,7 +22,7 @@ func init() {
 }
 
 // buildWorkspaceNS assembles magus.workspace for a magusfile. Today it exposes
-// provider(), which wires an imported spell as a workspace provider - a spell that
+// provider(), which wires an imported spell as a workspace provider: a spell that
 // supplies the workspace's project set because another tool already owns it:
 //
 //	import "spells/nx"
@@ -69,7 +69,7 @@ const providerDeadline = 2 * time.Minute
 
 // runWorkspaceProvider invokes spellName's list_projects contract and decodes what
 // it returns. It runs at WORKSPACE scope (Dir is the root), unlike an ordinary op,
-// which runs in a project directory - a provider is answering what the projects
+// which runs in a project directory: a provider is answering what the projects
 // ARE, so there is no project to run it in yet. root also travels in Params, which
 // is what reaches the contract's cb callback; Dir only reaches it as target.projectPath.
 func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells.ProvidedProject, error) {

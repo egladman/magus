@@ -6,16 +6,16 @@ import (
 )
 
 // The tool-page RPCs (ViewerService, StatusService) are meant to be reachable only from
-// the local machine - they expose a workspace's run output and live process state, which
+// the local machine: they expose a workspace's run output and live process state, which
 // must never be served to the network. Binding the server to 127.0.0.1 is the first
 // line; this handler-level guard is the second (defense in depth), so a misconfigured
 // bind can't leak the RPCs. It belongs here, not in protovalidate: protovalidate checks
-// message FIELDS, and the caller's network origin is not a field - it is a transport
+// message FIELDS, and the caller's network origin is not a field; it is a transport
 // property, enforced by an interceptor around the handlers.
 
 // isLoopbackAddr reports whether a "host:port" (or bare host) address is on the local
 // loopback interface (127.0.0.0/8 or ::1). A hostname that does not parse as a literal
-// loopback IP is treated as NOT loopback - "localhost" is deliberately rejected because
+// loopback IP is treated as NOT loopback: "localhost" is deliberately rejected because
 // it can be re-pointed via /etc/hosts; require the literal IP, matching the browser
 // bridge's loopback rule.
 func isLoopbackAddr(addr string) bool {

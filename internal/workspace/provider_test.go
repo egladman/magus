@@ -231,7 +231,7 @@ func TestAddProvidedProjectsOptionErrorNamesTheProvider(t *testing.T) {
 	ws := newWorkspace(t, []string{"libs/foo"})
 	withRunner(t, func(context.Context, string, string) ([]spells.ProvidedProject, error) {
 		// An absolute dependency path is rejected by WithDependsOn's own resolver, and
-		// an unregistered spell by WithRegisteredSpell's - the provider's answer walks
+		// an unregistered spell by WithRegisteredSpell's: the provider's answer walks
 		// the same validation a hand-authored project does.
 		return []spells.ProvidedProject{{Path: "libs/foo", DependsOn: []string{"/absolute"}}}, nil
 	})

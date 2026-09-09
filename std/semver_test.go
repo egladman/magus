@@ -50,7 +50,7 @@ func TestSemverIsValid(t *testing.T) {
 	}
 }
 
-// Input stays lenient - matching parse - while output is always canonical, so two
+// Input stays lenient (matching parse) while output is always canonical, so two
 // results are directly comparable.
 func TestSemverCanonicalLenientInStrictOut(t *testing.T) {
 	ctx := context.Background()

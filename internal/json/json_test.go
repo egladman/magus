@@ -67,7 +67,7 @@ func TestDurationRoundTrips(t *testing.T) {
 // TestNoDirectEncodingJSONImport is the whole-tree rule: every Go file marshals through
 // this package, so which codec magus uses is one decision in one place.
 //
-// The allowlist is the codecs themselves - they are what wraps encoding/json - and nothing
+// The allowlist is the codecs themselves (they are what wraps encoding/json) and nothing
 // else. Test files are deliberately in scope: a test that marshals through the stdlib is
 // asserting the behaviour of a codec the binary does not use, which is how a GOEXPERIMENT
 // this package exists to absorb (see TestDurationRoundTrips) passes its tests and breaks

@@ -1,7 +1,7 @@
 // Package symbols distills a SCIP index file into the language-agnostic
 // types.KnowledgeSymbol shape the knowledge graph ingests. It is the ONE place that
-// imports the SCIP bindings: magus never parses source code itself - a per-language
-// indexer (scip-go, scip-typescript, ...) emits the index, and this reads it - so
+// imports the SCIP bindings: magus never parses source code itself (a per-language
+// indexer (scip-go, scip-typescript, ...) emits the index, and this reads it), so
 // adding a language is a build-config change, never a magus code change. Keeping the
 // scip dependency here leaves internal/graph/knowledge a types-only leaf.
 package symbols
@@ -46,8 +46,8 @@ func isCallableSuffix(suffix scip.Descriptor_Suffix) bool {
 //
 // optimization: maxEnd is the greatest End among this entry and every earlier one, filled
 // as a running prefix maximum after the sort. It bounds the backward walk in enclosingKey:
-// without it, an occurrence that sits inside no body at all - a package-level var, an
-// import - scans back through every definition in the document, making the parse
+// without it, an occurrence that sits inside no body at all (a package-level var, an
+// import) scans back through every definition in the document, making the parse
 // O(occurrences x definitions). Most occurrences are that case, so the guard is what keeps
 // attribution proportional to nesting depth rather than to document size.
 // measured: BenchmarkParseIndex/enclosing=on funcsPerDoc 8 -> 512 (benchstat, n=10).
@@ -66,7 +66,7 @@ type enclosingDef struct {
 //
 // Positions are compared in full (line and character), never on the collapsed line
 // occurrenceLine returns. A line-granular test is wrong wherever a body starts or ends on
-// a line it shares with another - impossible for a Go top-level func, routine for a
+// a line it shares with another: impossible for a Go top-level func, routine for a
 // one-line TypeScript arrow function.
 func enclosingKey(encl []enclosingDef, pos scip.Position) (string, bool) {
 	// The first entry starting strictly after pos bounds the candidates: everything that
@@ -128,7 +128,7 @@ func sortedEnclosing(buf []enclosingDef, doc *scip.Document) []enclosingDef {
 	return dst
 }
 
-// ParseIndex decodes a SCIP index (protobuf bytes) into per-symbol records - it does
+// ParseIndex decodes a SCIP index (protobuf bytes) into per-symbol records; it does
 // no I/O, the caller supplies the bytes. Occurrence granularity is collapsed to per
 // (file, symbol): one Defs/Refs entry per file, with a count and a capped line list,
 // so a hot symbol yields at most one edge per file rather than one per occurrence.
@@ -181,8 +181,8 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 	// result independent of occurrence order within a document.
 	//
 	// It therefore buffers callees the workspace does not define, which sortedCalls drops
-	// at output. Filtering earlier is not possible - a callee's own definition may appear
-	// in a later document - and measured on this repo's index the buffering is 34728 pairs
+	// at output. Filtering earlier is not possible (a callee's own definition may appear
+	// in a later document), and measured on this repo's index the buffering is 34728 pairs
 	// held to keep 12909, roughly 1-2 MB against a parse that already allocates 14 MB. A
 	// two-pass restructure would halve that and double the document walk; the numbers do
 	// not justify it.
@@ -282,7 +282,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 	// byKey iteration is unordered; the sort is what makes the output deterministic.
 	slices.SortFunc(out, func(x, y types.KnowledgeSymbol) int { return cmp.Compare(x.Key, y.Key) })
 	if skipped > 0 {
-		// Dropping a dependency document is normal scip-go output, not a fault - but an
+		// Dropping a dependency document is normal scip-go output, not a fault, but an
 		// index filtered to nothing looks exactly like a scip target that never ran, and
 		// the caller logs nothing for an empty result. The count is what tells those
 		// apart when an indexer's root does not match what magus assumed.
@@ -303,7 +303,7 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 // here and nowhere downstream.
 //
 // ok is false for a document outside the workspace and the caller drops it. Indexers
-// routinely emit those - scip-go records occurrences in the packages it resolved - and a
+// routinely emit those (scip-go records occurrences in the packages it resolved), and a
 // committed graph once carried 93 nodes pointing into one laptop's go-build cache. The
 // graph is committed, published and shared, so dropping is the whole answer.
 //
@@ -348,7 +348,7 @@ type monikerInfo struct {
 
 // parseMoniker turns a SCIP moniker into a stable, version-free node key and a display
 // label. The key is the package manager and name plus the descriptor path, deliberately
-// excluding the package VERSION so a dependency bump does not rename every symbol - but
+// excluding the package VERSION so a dependency bump does not rename every symbol, but
 // including the manager so two ecosystems that share a package name (npm foo vs gomod
 // foo) do not collide. A local or unparsable moniker yields ok=false (the caller skips it).
 //
@@ -372,7 +372,7 @@ func parseMoniker(moniker string) (info monikerInfo, ok bool) {
 
 // occurrenceLine returns the 1-based start line of an occurrence, or 0 when absent.
 // It reads SourceRange (which resolves both the modern typed_range and the deprecated
-// packed range) - reading the deprecated field alone would report 0 for every
+// packed range); reading the deprecated field alone would report 0 for every
 // occurrence a current indexer emits. A negative start (malformed index) clamps to 0.
 func occurrenceLine(occ *scip.Occurrence) int {
 	r, ok := occ.SourceRange()

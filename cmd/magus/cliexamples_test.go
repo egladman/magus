@@ -27,7 +27,7 @@ func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path [
 // resolveRegistryPath walks args down the registry tree from the top,
 // matching each leading command-word token against a Children name, and
 // returns every command reached along the way (root first) plus whether a
-// top-level command was found at all - false means args names something
+// top-level command was found at all: false means args names something
 // this registry does not know, which is worth failing on rather than
 // silently skipping.
 //
@@ -35,15 +35,15 @@ func walkRegistryCommands(cmds []cli.Command, prefix []string, visit func(path [
 // (query's "output" and "invocation", for one) can declare no Flags of its
 // own while the real dispatcher parses the whole family's flags in one
 // flag.FlagSet at the PARENT (queryCmd calls cmdParse once, then matches
-// "output"/"invocation" positionally against the already-parsed result) - so
+// "output"/"invocation" positionally against the already-parsed result), so
 // a flag documented as "output <ref>: ..." lives on queryCommand.Flags, not
 // on the "output" child. Binding every node on the path, root to leaf, is
 // the one strategy that is correct for both shapes without hardcoding which
 // dispatcher scopes flags where.
 //
 // A GLOBAL flag may precede the command word ("magus --daemon-address <addr>
-// server start" is a documented example), so globalFS - already bound with
-// the config and display flags, before any node's own - is consulted to skip
+// server start" is a documented example), so globalFS (already bound with
+// the config and display flags, before any node's own) is consulted to skip
 // over those (and their value, if they take one) while searching for the
 // next command word, the same interspersed-flag tolerance reorderFlagsFirst
 // gives the real CLI. A token that is neither a known global flag nor a
@@ -108,9 +108,9 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 
 // TestRegistryExamplesParse dry-parses every EXAMPLES entry in the CLI
 // registry (internal/cli/registry.go and every command's Children) against
-// the flag set its own resolved command actually binds - the same three
+// the flag set its own resolved command actually binds: the same three
 // binders cmdParse composes (config flags, display flags, the command's own
-// declared Flags) - so a bogus or misspelled flag in a documented example is
+// declared Flags), so a bogus or misspelled flag in a documented example is
 // a build-time failure instead of something a reader discovers by pasting it.
 //
 // It reuses parseGuardCommands (guard_shellparse.go) for the shell parsing:
@@ -120,7 +120,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 // (many examples end in "> file.json", which is not an argument to magus).
 //
 // This catches a structurally invalid example (undefined flag, wrong value
-// type) - not a semantically wrong one, like a valid flag holding a value
+// type), not a semantically wrong one, like a valid flag holding a value
 // magus rejects at runtime (the events --type diagnostic.emitted class of
 // bug); that needs running the command, which a registry-only test cannot do
 // without a live workspace.

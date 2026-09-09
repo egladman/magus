@@ -66,7 +66,7 @@ type Spawn struct {
 	ParentSpanID string
 	Flags        string
 	// Lease is the ledger lease the process acts as, from the magus.lease
-	// baggage member, percent-decoded and validated by [types.ValidLeaseID] - the same
+	// baggage member, percent-decoded and validated by [types.ValidLeaseID], the same
 	// rule every lease channel shares, and what keeps the trail's redaction exemption
 	// honest.
 	Lease string
@@ -116,7 +116,7 @@ func NewSpanID() string {
 const traceparentVersion = "00"
 
 // parseTraceparent reads `00-<32 hex trace-id>-<16 hex parent-span-id>-<2 hex flags>`. An
-// all-zero trace or span id is invalid per the spec - it is the wire's way of spelling "absent" -
+// all-zero trace or span id is invalid per the spec (it is the wire's way of spelling "absent"),
 // and so is any hex outside lowercase, which the spec fixes so two encodings of one id cannot
 // exist.
 func parseTraceparent(v string) Spawn {
@@ -167,7 +167,7 @@ const maxBaggageLen = 8192
 
 // parseBaggage extracts the two magus members from a W3C baggage list: comma-separated
 // `key=value` members, each optionally carrying `;`-delimited properties that are ignored, with
-// percent-encoded values. Every other member is left untouched - baggage is a shared channel,
+// percent-encoded values. Every other member is left untouched: baggage is a shared channel,
 // and magus is one tenant of it.
 //
 // A member magus cannot read is skipped rather than failing the list: a value this process did

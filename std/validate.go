@@ -71,8 +71,8 @@ func validateField(f Field) error {
 func validateMethod(meth Method) error {
 	if meth.Extern {
 		// Declared here, bound at run time elsewhere: there is no Impl to reflect over,
-		// and everything below this point reflects. Args/Returns still matter - they are
-		// what the generated declaration is built from - but nothing here can check them
+		// and everything below this point reflects. Args/Returns still matter (they are
+		// what the generated declaration is built from), but nothing here can check them
 		// against a Go signature that does not exist.
 		if meth.Impl != nil {
 			return fmt.Errorf("method is Extern but carries an Impl; it is one or the other")

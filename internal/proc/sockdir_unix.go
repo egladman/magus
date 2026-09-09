@@ -40,7 +40,7 @@ func sockDir() string {
 // current user, and carrying no group/other permission bits.
 //
 // This exists because os.MkdirAll(dir, 0o700) is a silent no-op when dir
-// already exists - it neither chmods nor checks ownership. The fallback path
+// already exists: it neither chmods nor checks ownership. The fallback path
 // is $TMPDIR/magus-$UID, and both the parent (/tmp, world-writable; the
 // sticky bit only stops deleting someone else's files, not creating new
 // ones) and the name (UIDs are enumerable) are attacker-reachable: another
@@ -48,13 +48,13 @@ func sockDir() string {
 // symlink, before magus ever runs, and have magus bind its daemon/MCP socket
 // inside a directory they control.
 //
-// The ordinary case - a directory this or an earlier magus version created
-// with MkdirAll(dir, 0o700), owned by us - always passes silently: that is
+// The ordinary case (a directory this or an earlier magus version created
+// with MkdirAll(dir, 0o700), owned by us) always passes silently: that is
 // exactly the shape checked for below, so an upgrade never refuses to start
 // over a pre-existing directory of its own making. It also reports nil (not
 // an error) when dir does not exist at all, so an unrelated MkdirAll failure
-// upstream (e.g. a read-only TMPDIR) keeps failing the way it always did -
-// at bind time - rather than becoming a new failure mode here.
+// upstream (e.g. a read-only TMPDIR) keeps failing the way it always did
+// (at bind time) rather than becoming a new failure mode here.
 func verifySockDir(dir string) error {
 	fi, err := os.Lstat(dir)
 	if err != nil {

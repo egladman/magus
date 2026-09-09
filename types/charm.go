@@ -41,7 +41,7 @@ const CharmCD = "cd"
 const CharmGHA = "gha"
 
 // CharmRelock is a reserved built-in charm: the grant to rewrite dependency state (a
-// lockfile, or go.mod/go.sum) rather than verify it. Deliberately not part of rw - rw
+// lockfile, or go.mod/go.sum) rather than verify it. Deliberately not part of rw: rw
 // regenerates derived output from this tree and so is reproducible, while a dependency
 // refresh reads a registry and yields different bytes on different days. Folded into rw,
 // a workspace with default_charms: [rw] would re-resolve dependencies during an unrelated

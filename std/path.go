@@ -17,7 +17,7 @@ func init() { Register(Path) }
 // Path is the "path" host module: pure path-string math (no filesystem access).
 // fs.* already covers dirname/basename/join/glob; these are the remaining
 // computations a spell otherwise has to shell out to `realpath`/`readlink -f`
-// for - absolute/relative resolution, lexical cleaning, and ~ expansion. Nothing
+// for: absolute/relative resolution, lexical cleaning, and ~ expansion. Nothing
 // here touches disk, so no sandbox check applies; reading/writing the resolved
 // path still goes through the sandbox-aware fs.* calls.
 var Path = Module{
@@ -89,7 +89,7 @@ var Path = Module{
 }
 
 // PathAbs returns the cleaned absolute form of path, resolved against the
-// context working directory (see resolvePath), not the process cwd - a target
+// context working directory (see resolvePath), not the process cwd: a target
 // running in another project's directory would otherwise get an answer for the
 // wrong place (see vcsDir in vcs.go for the same bug class).
 func PathAbs(ctx context.Context, path string) (string, error) {

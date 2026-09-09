@@ -80,7 +80,7 @@ func TestGitConflicts(t *testing.T) {
 // surfaces as a phantom conflict at "ls/x.txt".
 //
 // The real command masks this with --no-renames, which is why the parser is tested
-// directly - a test through the flag alone passes with the parser broken.
+// directly: a test through the flag alone passes with the parser broken.
 func TestParseConflictsRenameHazard(t *testing.T) {
 	// "R  Utils/y.txt" followed by its original path, then a genuine conflict.
 	out := "R  Utils/y.txt\x00Utils/x.txt\x00UU gen.txt\x00"
@@ -203,7 +203,7 @@ func TestGitRemoveConflictsToleratesAlreadyGone(t *testing.T) {
 
 // TestGitIgnoredPaths pins the --no-index semantics resolution depends on. Every
 // conflicted path is tracked, and check-ignore's default consults the index and calls
-// anything tracked not-ignored - which makes a generated file one side STOPPED tracking
+// anything tracked not-ignored, which makes a generated file one side STOPPED tracking
 // look like one still under version control, reverting the deletion every merge.
 func TestGitIgnoredPaths(t *testing.T) {
 	dir := conflictRepo(t)

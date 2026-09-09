@@ -35,7 +35,7 @@ func TestMarshalKeepsNilCollectionsNull(t *testing.T) {
 // would have failed, and the one nothing made before: v1's Marshal rewrites <, > and & to
 // their \u00XX form and v2 writes them as typed.
 //
-// It reads as a triviality about three characters. It is not - it is the byte-for-byte
+// It reads as a triviality about three characters. It is not: it is the byte-for-byte
 // contract for everything this package writes, and the two spellings are how the v0.4.3
 // release index shipped 336 lines of gen/knowledge-graph.json that the next gate read as
 // drift with no source change behind it. Every heading in the doc graph carrying a `>` is

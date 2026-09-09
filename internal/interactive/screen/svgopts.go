@@ -30,8 +30,8 @@ func (o SVGOptions) withDefaults() SVGOptions {
 	}
 	if o.CellWidth == 0 {
 		// 0.6 em is the advance of essentially every monospace face at this
-		// size. Getting it wrong does not misalign the text - each run is
-		// positioned absolutely - it only leaves the columns loose or tight.
+		// size. Getting it wrong does not misalign the text (each run is
+		// positioned absolutely); it only leaves the columns loose or tight.
 		o.CellWidth = 8
 	}
 	if o.LineHeight == 0 {
@@ -126,8 +126,8 @@ func VariantPath(path, suffix string) string {
 // resolve turns one run's attributes into the fill, background, weight and
 // opacity that draw it.
 //
-// Reverse video is drawn as a real swap - a filled rectangle behind
-// background-colored text - because it marks the selected row of an
+// Reverse video is drawn as a real swap (a filled rectangle behind
+// background-colored text) because it marks the selected row of an
 // interactive band and has to read as selected in a picture, not merely as
 // differently colored.
 func (t Theme) resolve(st sgrState) (fill, bg, weight, opacity string) {
@@ -171,7 +171,7 @@ func (t Theme) resolve(st sgrState) (fill, bg, weight, opacity string) {
 // simply not run.
 //
 // Frames must share a size; the first one sets it. A frame is shown for its own
-// hold time, and the whole sequence loops - a terminal recording that stops on
+// hold time, and the whole sequence loops: a terminal recording that stops on
 // the last frame reads as a page that failed to load.
 func Animate(frames []*Screen, holds []float64, opts SVGOptions) (string, error) {
 	if len(frames) == 0 {
@@ -211,7 +211,7 @@ func Animate(frames []*Screen, holds []float64, opts SVGOptions) (string, error)
 		// the first paint is not a flash of all of them stacked.
 		fmt.Fprintf(&b, `<g opacity="0">%s`, f.svgBody(opts))
 		// calcMode="discrete" is load-bearing, not decoration. The default is
-		// linear, which INTERPOLATES between key times - so a frame does not
+		// linear, which INTERPOLATES between key times, so a frame does not
 		// switch off at the end of its window, it fades out across everything
 		// after it, and all the frames end up superimposed at partial opacity.
 		// Discrete switches, which is what a sequence of stills needs.

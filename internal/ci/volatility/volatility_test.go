@@ -192,7 +192,7 @@ func TestLastPassTime(t *testing.T) {
 }
 
 // TestBuildReportEmptyPath returns just the configured threshold, no error, when no
-// history file is configured - "no history yet" is a valid empty state.
+// history file is configured; "no history yet" is a valid empty state.
 func TestBuildReportEmptyPath(t *testing.T) {
 	t.Parallel()
 	report, err := BuildReport(context.Background(), "", Config{Threshold: 0.2})
@@ -253,7 +253,7 @@ func TestBuildReport(t *testing.T) {
 // where no target opts in recorded nothing, leaving the forecaster to predict a
 // flat default for every project. Retrying must stay opted-in, or widening the
 // recorder would silently turn auto-retry on for every target in every
-// workspace - a behaviour change nobody asked for, hidden inside a metrics fix.
+// workspace: a behaviour change nobody asked for, hidden inside a metrics fix.
 func TestRuntimeRecordsWithoutRetryingWhenNotOptedIn(t *testing.T) {
 	t.Parallel()
 	h := &forecast.History{}
@@ -331,7 +331,7 @@ func TestRecordOutcomeIgnoresAnUnmeasuredRun(t *testing.T) {
 	}
 }
 
-// Merge resolves collisions on LastUpdated, which recordOutcome never set - so every
+// Merge resolves collisions on LastUpdated, which recordOutcome never set, so every
 // shard's entry compared equal and merge-history kept whichever file it read first,
 // silently discarding the rest of the run.
 func TestMergeKeepsTheNewerShardsOutcomes(t *testing.T) {
@@ -365,8 +365,8 @@ func TestOutcomeResultsKeepTheirWireSpelling(t *testing.T) {
 	assert.Equal(t, "volatile", string(forecast.OutcomeVolatile))
 }
 
-// A result this magus does not recognize - a newer writer's vocabulary, or a hand-edited
-// file - must move no counter. Counting it as a pass or a fail would score a target on a
+// A result this magus does not recognize (a newer writer's vocabulary, or a hand-edited
+// file) must move no counter. Counting it as a pass or a fail would score a target on a
 // verdict nothing here can read.
 func TestRecordIgnoresAnUnrecognizedResult(t *testing.T) {
 	t.Parallel()

@@ -54,7 +54,7 @@ func (noopMetrics) RecordSandboxEnvDropped(context.Context, string, int64)     {
 // and compares it against the rule string as written, so an unresolved rule matches nothing
 // and every call falls through to ErrDenied plus its fmt.Errorf. On macOS TempDir sits under
 // /var, itself a symlink to /private/var, so omitting it benchmarks the DENY path here while
-// benchmarking the allow path on Linux - the same benchmark name reporting two different
+// benchmarking the allow path on Linux, the same benchmark name reporting two different
 // algorithms by OS. See TestUnnormalizedRulePathMatchesNothing.
 //
 // None of the fixed rules may be an ancestor of the temp root, or which rule matches (and at
@@ -96,8 +96,8 @@ func benchPaths(b *testing.B, p *Policy, root string, n int, create bool) []stri
 		}
 	}
 	// A benchmark that measures the deny path reports a number unrelated to its own name and
-	// says nothing while doing it. Both branches here must be ALLOWED - absence selects
-	// normalizePath's ancestor walk, not a denial - so assert it instead of trusting the
+	// says nothing while doing it. Both branches here must be ALLOWED (absence selects
+	// normalizePath's ancestor walk, not a denial), so assert it instead of trusting the
 	// ruleset and the path builder to keep agreeing.
 	require.NoError(b, p.CheckRead(paths[0]), "benchmark paths must be inside the allowlist")
 	return paths
@@ -124,7 +124,7 @@ func benchMissingPaths(b *testing.B, p *Policy, root string, n int) []string {
 // BenchmarkCheckReadCtx is the per-call cost of the binding-layer read check, split by which
 // normalizePath branch the path takes. fs.glob calls this once per match (std/fs.go), so a
 // large glob pays the "existing" number per file and anything added here is multiplied by
-// the match count - which is what makes it the baseline for read attribution.
+// the match count, which is what makes it the baseline for read attribution.
 //
 // Sub-benchmarks rather than two flat names: benchstat compares a shared prefix, and the
 // existing/missing pair is the comparison these exist to support.
@@ -182,7 +182,7 @@ func TestDenialLandsOnTheTrail(t *testing.T) {
 	if events[0].Kind != trail.KindSandboxDenial {
 		t.Errorf("kind = %q, want %q", events[0].Kind, trail.KindSandboxDenial)
 	}
-	// The console renders this as "Sandbox denied <action>." - it has to name what was
+	// The console renders this as "Sandbox denied <action>."; it has to name what was
 	// refused, or the notification says only that something somewhere was blocked.
 	if want := "write of /definitely/not/allowed/f"; events[0].Action != want {
 		t.Errorf("action = %q, want %q", events[0].Action, want)

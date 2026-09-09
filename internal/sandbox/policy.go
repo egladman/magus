@@ -82,7 +82,7 @@ func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
 	return err
 }
 
-// recordDenial records a refused access on the run's trail - the producer trail.KindSandboxDenial
+// recordDenial records a refused access on the run's trail, the producer trail.KindSandboxDenial
 // was declared for, and which the console's bell-tier notification has had no source for since.
 //
 // It sits behind these three wrappers rather than at each deny site because this is where the
@@ -95,7 +95,7 @@ func (p *Policy) CheckExecCtx(ctx context.Context, path string) error {
 // which is the only denial anything in this process can witness.
 //
 // Allows are dropped. A read check fires once per glob match, and a durable append-only file is
-// the wrong place for a hot loop's happy path - a denial ends the operation, so it is rare by
+// the wrong place for a hot loop's happy path: a denial ends the operation, so it is rare by
 // construction.
 func recordDenial(ctx context.Context, access, path string, err error) {
 	if err == nil {

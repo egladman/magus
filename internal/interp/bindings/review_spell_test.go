@@ -18,7 +18,7 @@ import (
 //
 // The name is derived from the test and a counter because the registry panics on a duplicate
 // and every case here needs its own answer. `answer` receives the op, so one provider can
-// succeed on a lookup and refuse a publish - which no real spell can be made to do on demand.
+// succeed on a lookup and refuse a publish, which no real spell can be made to do on demand.
 func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
 	t.Helper()
 	fakeSpellSeq++
@@ -81,7 +81,7 @@ func TestReviewThreadsDecodesEveryFieldAndDefaultsTheHunkToUnplaced(t *testing.T
 		ID: "t1", Path: "a.go", Line: 12, Hunk: -1, Author: "priya", Body: "why",
 	}, got[0])
 	// -1, not 0. The zero value is a VALID hunk index, so a thread nothing placed would
-	// otherwise render against the first hunk of its file - the wrong code, stated confidently.
+	// otherwise render against the first hunk of its file: the wrong code, stated confidently.
 	assert.Equal(t, -1, got[0].Hunk)
 }
 
@@ -165,7 +165,7 @@ func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	assert.Equal(t, map[string]any{"path": "a.go", "line": 4, "body": "why"}, sent[0])
 }
 
-// State is optional, and a spell that says nothing about it reads as open - which is what keeps
+// State is optional, and a spell that says nothing about it reads as open, which is what keeps
 // a provider written before the field existed working unchanged. Merged is separate from Open on
 // purpose: a review that landed still has a conversation worth reading.
 func TestFindReviewCarriesTheStateAndTreatsSilenceAsOpen(t *testing.T) {
@@ -220,7 +220,7 @@ func TestReplyReviewTreatsAnyNonTrueAnswerAsARefusal(t *testing.T) {
 }
 
 // Every row is attempted. Returning at the first malformed one drops the threads AFTER it, so
-// a provider with one bad remark near the top renders as a conversation nobody had - and the
+// a provider with one bad remark near the top renders as a conversation nobody had, and the
 // reader has no way to tell that from silence.
 func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
@@ -244,8 +244,8 @@ func TestReviewThreadsKeepsReadingPastAMalformedRow(t *testing.T) {
 // a diff, where latency is the product. The cache is what keeps a "whose review is this" question
 // off that path; the flag is what lets the spell skip the call it would otherwise always make.
 func TestFindReviewAsksWhoTheCredentialIsOnlyOnce(t *testing.T) {
-	// The cache is process-global, so a run under -count=2 - or any later test that answers with
-	// a viewer - would otherwise start this one with the cache already warm and see the first
+	// The cache is process-global, so a run under -count=2 (or any later test that answers with
+	// a viewer) would otherwise start this one with the cache already warm and see the first
 	// call skip the ask. Establish the state rather than assuming it.
 	rememberViewer("")
 	t.Cleanup(func() { rememberViewer("") })
@@ -310,7 +310,7 @@ func capturedVerdict(t *testing.T, at types.ReviewTarget, want types.ReviewVerdi
 }
 
 // TestPublishSendsTheResolvedVerdictNotTheRequestedOne. The resolver could be perfectly correct
-// and the feature still broken, if the requested verdict were the one that travelled - so this
+// and the feature still broken, if the requested verdict were the one that travelled, so this
 // asserts on what the provider received rather than on what the resolver returned.
 func TestPublishSendsTheResolvedVerdictNotTheRequestedOne(t *testing.T) {
 	sent, published := capturedVerdict(t, types.ReviewTarget{ID: "1", Author: "ada", Viewer: "ada"}, types.VerdictApprove)

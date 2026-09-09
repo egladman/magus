@@ -284,7 +284,7 @@ const denyingCanaryStub = "#!/bin/sh\necho deny\nexit 2\n"
 
 // testCanaryBudget is far above the shipped guardCanaryBudget on purpose.
 // These subtests exec a real child process, and this repo is developed across
-// many concurrent worktrees - a machine busy enough to push a trivial exec
+// many concurrent worktrees: a machine busy enough to push a trivial exec
 // past the production budget would make this suite flaky for a reason that
 // says nothing about the check. The production value stays 5s; only the test
 // waits longer.
@@ -529,7 +529,7 @@ func TestFileRecordsCommit(t *testing.T) {
 
 // TestDeclaredOutputFiles proves the expansion reads AllOutputs (project-wide PLUS
 // per-target), since this workspace declares almost everything per-target with
-// ctx.writesFiles - reading only p.Outputs would scan nothing here and report clean.
+// ctx.writesFiles; reading only p.Outputs would scan nothing here and report clean.
 func TestDeclaredOutputFiles(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "gen"), 0o755))
@@ -555,8 +555,8 @@ func TestDeclaredOutputFiles(t *testing.T) {
 
 // TestSelfStalingSkipsWithoutTrackedReporter is the guard that keeps this check honest on a
 // backend that cannot answer "is this tracked?". Reporting on those would flag the FIXED
-// state - a generator still writes the same hash into the same files once they are
-// untracked - so the check has to skip instead of guess.
+// state (a generator still writes the same hash into the same files once they are
+// untracked), so the check has to skip instead of guess.
 func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
@@ -684,7 +684,7 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 
 // TestUnmatchableSourceGlobsIgnoresExactPaths is the half that must not regress. A
 // wildcard-free declaration names ONE file and is resolved by stat rather than the
-// walk, so it reaches the cache key from inside a pruned tree normally - reporting it
+// walk, so it reaches the cache key from inside a pruned tree normally; reporting it
 // would tell the author to fix something that already works.
 func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}

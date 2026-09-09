@@ -16,8 +16,8 @@ import (
 )
 
 // The engine's verbs are tested in internal/graph/knowledge. What is unverified here is the
-// MAPPING - which domain field lands on which wire field, and which "not found" is an error
-// versus an answer - so these assert that and lean on a small hand-built graph.
+// MAPPING (which domain field lands on which wire field, and which "not found" is an error
+// versus an answer), so these assert that and lean on a small hand-built graph.
 func fixture() *knowledge.Graph {
 	g := knowledge.NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "project:pkg/a", Kind: types.KindProject, Label: "pkg/a"})
@@ -246,7 +246,7 @@ func TestFindDependentsIgnoresNonDependsOnEdges(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetIds(), "a spell is used, never depended on")
 }
 
-// An unresolvable name must not read as "nothing rebuilds" - that is the same shape as a real
+// An unresolvable name must not read as "nothing rebuilds"; that is the same shape as a real
 // answer and the caller cannot tell them apart.
 func TestFindDependentsUnresolvableIsNotFound(t *testing.T) {
 	_, err := newService().FindDependents(context.Background(),

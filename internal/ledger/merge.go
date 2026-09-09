@@ -14,8 +14,8 @@ import (
 // state without erasing the row an earlier put declared, and a key present with an
 // empty value is an explicit clear.
 //
-// It is the ONE decoder both write doors call - internal/handler/mcp/ledger.go and
-// std/magus.go's MagusPutLedger - so a client typing either surface gets the same
+// It is the ONE decoder both write doors call (internal/handler/mcp/ledger.go and
+// std/magus.go's MagusPutLedger), so a client typing either surface gets the same
 // accepted fields and the same rejections, rather than two hand-maintained lists that
 // can silently drift apart.
 //

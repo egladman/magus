@@ -15,7 +15,7 @@ import (
 //
 // It exists so the daemon-free showcase does not need a second parser. The console used to
 // read a patch itself, that reader drifted from the Go one, and consolidating on Go left the
-// demo as the only consumer with no daemon to ask - it renders offline, from a fixture, which
+// demo as the only consumer with no daemon to ask; it renders offline, from a fixture, which
 // is the whole point of it. Generating the fixture with the SAME parser keeps one reader
 // without making the showcase a special case that could quietly diverge from what a real
 // changeset looks like.

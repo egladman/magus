@@ -47,7 +47,7 @@ func TestAssembleIO(t *testing.T) {
 		assert.NotEqual(t, "target:docs:ghost", e.Source, "an unmatched output glob mints no edge")
 	}
 
-	// The over-broad `**/*.md` glob is dropped whole - no produces edges from `wide`.
+	// The over-broad `**/*.md` glob is dropped whole: no produces edges from `wide`.
 	for _, e := range out.Links {
 		assert.NotEqual(t, "target:docs:wide", e.Source, "a glob over the fan-out cap is dropped, not fanned out")
 	}
@@ -82,7 +82,7 @@ func TestAssembleIOCrossInputs(t *testing.T) {
 }
 
 // TestRoleFromRel pins the universal, workspace-agnostic filename conventions the doc
-// role is derived from - never a magus-specific name.
+// role is derived from, never a magus-specific name.
 func TestRoleFromRel(t *testing.T) {
 	cases := map[string]string{
 		"README.md":                      "readme",

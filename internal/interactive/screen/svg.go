@@ -59,7 +59,7 @@ func (s *Screen) svgBody(opts SVGOptions) string {
 			// textLength pins the run to the same cell grid the rect above is sized
 			// from. Without it the run is laid out at whatever advance the viewer's
 			// font happens to have, and a rune the font draws wider than CellWidth
-			// pushes the tail of the run past its own highlight - where a reversed
+			// pushes the tail of the run past its own highlight, where a reversed
 			// run, drawn in the background color, becomes invisible. The box-drawing
 			// and arrow runes this package uses are East Asian AMBIGUOUS width, so
 			// that is the common case rather than the exotic one.

@@ -42,7 +42,7 @@ var global globalFlags
 // template[=<body>]: a body renders a Go template; bare "-o template" lists the
 // output's fields (the json keys usable in -o json and -o template).
 // outputFormatHelp names the bare -o template form explicitly, because that is how a
-// caller discovers which field names a template may use - they are the -o json keys
+// caller discovers which field names a template may use: they are the -o json keys
 // (.name), not the Go field names (.Name), and nothing else advertises that.
 var outputFormatHelp = "Output format (" + JoinFormats(CommonFormats, "|") +
 	"|template[=<go-template>]); default: text. Bare -o template lists the available " +
@@ -86,12 +86,12 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 //
 // -o is bound into EVERY FlagSet (bindDisplayFlags), because it is a global flag that
 // may precede or follow the subcommand. A verb that never consults it therefore accepted
-// `-o json`, printed prose, and exited 0 - the accepted-and-ignored failure that costs
+// `-o json`, printed prose, and exited 0: the accepted-and-ignored failure that costs
 // most in a pipe, since the caller's parse fails somewhere else entirely.
 //
 // Declared rather than derived: deriving it needs a check AFTER the verb has had its
 // chance to consult -o, which is a post-dispatch hook this file cannot reach. A wrong
-// entry here is loud rather than silent - the verb's own `-o json` tests fail - which is
+// entry here is loud rather than silent (the verb's own `-o json` tests fail), which is
 // what makes the list safe to keep by hand.
 var commandsWithoutOutput = map[string]bool{
 	"affected --bisect":        true,
@@ -116,8 +116,8 @@ var commandsWithoutOutput = map[string]bool{
 //
 // It asks the FlagSet whether -o was typed on THIS invocation rather than reading
 // global.output, which is ambient: bindDisplayFlags seeds each flag's default from the
-// live global, so a value left there by an earlier dispatch on the same process - one
-// adopted run in the daemon, one testscript command - would otherwise fail the next
+// live global, so a value left there by an earlier dispatch on the same process (one
+// adopted run in the daemon, one testscript command) would otherwise fail the next
 // command for a flag nobody passed it.
 func checkOutputSupported(name string, fs *flag.FlagSet) error {
 	if !commandsWithoutOutput[name] {
@@ -173,7 +173,7 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 	return flags, positionals
 }
 
-// splitTargetFromArgs finds the target - the first positional - even when recognized
+// splitTargetFromArgs finds the target (the first positional) even when recognized
 // global/display flags precede it, so `magus run --dry-run build` sees "build" as the
 // target instead of mistaking the flag for it. It hoists global/display flags out first,
 // then returns the first positional as the target and the remaining flags+positionals for
@@ -183,7 +183,7 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // value-taking local flag as a bool: with the flag unknown here its value is hoisted out
 // as a positional, so `--skip api --skip web` reorders to `--skip --skip api web` and the
 // first flag swallows the second as its value. A command that passes nil accepts that
-// limit - one such flag survives it by luck of ordering, two do not.
+// limit: one such flag survives it by luck of ordering, two do not.
 func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
 	gen.BindFlags(fs, &globalCfg)
@@ -213,8 +213,8 @@ func outputOptionsOrDefault() (OutputOptions, error) {
 // isFlagNamed and flagValueOf recognize a flag the way Go's flag package does,
 // for the few readers that scan a raw argument tail instead of a FlagSet.
 //
-// Go accepts all FOUR spellings of every flag - `-f v`, `--f v`, `-f=v`,
-// `--f=v` - so every magus flag does too, for free, everywhere cmdParse is used.
+// Go accepts all FOUR spellings of every flag (`-f v`, `--f v`, `-f=v`,
+// `--f=v`) so every magus flag does too, for free, everywhere cmdParse is used.
 // A hand-rolled scanner only accepts the spellings its author happened to write,
 // and the resulting gap is invisible until someone types the missing one:
 //
@@ -254,8 +254,8 @@ func flagValueOf(arg, name string) string {
 // the cost of touching every command. This is the cheaper half of that trade and it buys
 // the part that matters: the copy stays, but it can no longer drift SILENTLY. cmdParse is
 // the single funnel every command's flags pass through, so recording there yields each
-// command's real, fully-bound flag set - config flags, display flags and local ones alike
-// - and TestManpageFlagsMatchTheCLI compares that against the registry.
+// command's real, fully-bound flag set (config flags, display flags and local ones alike)
+// and TestManpageFlagsMatchTheCLI compares that against the registry.
 //
 // Recording is unconditional rather than test-gated. It is one map write per invocation
 // of one command, and a record that only exists under a test hook is a record that can be
@@ -287,7 +287,7 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 	flagRecord.byCommand[name] = flags
 }
 
-// globalFlagNames is the set every command gets for free - the config flags generated
+// globalFlagNames is the set every command gets for free: the config flags generated
 // from the config schema plus the display flags. The man page documents these once,
 // centrally, so they are subtracted from both sides of the comparison rather than
 // guessed at: --dry-run reads like an undocumented command flag to a source scanner and

@@ -158,7 +158,7 @@ func TestJITBadExitReturnsInterpreterAnswer(t *testing.T) {
 // The chunk has to both READ and WRITE the local for this to test anything: one
 // that only reads it is unaffected by a missing restore, and one that writes
 // before reading overwrites whatever the restore did. `x = x + 1` distinguishes
-// them - 6 when the entry value came back, 7 when the native run's 6 was left in
+// them: 6 when the entry value came back, 7 when the native run's 6 was left in
 // place and incremented a second time.
 func TestJITBadExitRestoresEntryLocals(t *testing.T) {
 	jitTest(t, func(t *testing.T) {
@@ -452,7 +452,7 @@ func TestJITRejectsMalformedChunk(t *testing.T) {
 
 // TestJITAcceptsBoundaryOperands is the other half of the validation: the checks
 // must not reject the LAST valid value of each range. An off-by-one here would not
-// break a program, it would silently stop compiling one - which is why the
+// break a program, it would silently stop compiling one, which is why the
 // differential suite asserts engagement rather than just answers.
 func TestJITAcceptsBoundaryOperands(t *testing.T) {
 	jitTest(t, func(t *testing.T) {

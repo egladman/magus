@@ -146,7 +146,7 @@ type VM struct {
 	//
 	// heapLastLen is SEEDED at construction rather than left at zero. Zero would
 	// make a fresh VM's first sample compute grown = the entire process heap and
-	// charge all of it to whichever line the tick happened to land on - and the
+	// charge all of it to whichever line the tick happened to land on, and the
 	// heap is process-global and never shrinks, so under the daemon that is every
 	// object every earlier run allocated, attributed to an innocent line.
 	heapTick    uint64
@@ -967,7 +967,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 						// top-level frame has f.fun == nil, and the top-level compiler never records
 						// an upvalue (resolveUpvalue bails when parent == nil), so this is
 						// unreachable. Leaving the slot as the zero Value would put a NON-CELL in
-						// Upvals, which OpGetUpvalue derefs unconditionally - a wild read under
+						// Upvals, which OpGetUpvalue derefs unconditionally: a wild read under
 						// buzz_unsafe. Fail loudly instead of corrupting.
 						return Null, fmt.Errorf("buzz: internal error: transitive upvalue %d captured from a frame with no closure", i)
 					} else {
@@ -1346,7 +1346,7 @@ func (vm *VM) Exec() (retVal Value, rerr error) {
 			} else if state.strBytes != nil {
 				// Yields one-BYTE strings, not codepoints: upstream's foreach.buzz
 				// interpolates each element back together and compares to the original,
-				// which bytes satisfy as well as runes did - and unlike runes they
+				// which bytes satisfy as well as runes did, and unlike runes they
 				// survive arbitrary binary rather than decoding it to U+FFFD.
 				if state.idx < len(state.strBytes) {
 					if wantKey {
@@ -2049,14 +2049,14 @@ func errUncaught(v Value) error { return fmt.Errorf("buzz: uncaught error: %s", 
 // caughtValue renders a host error as the value a `catch` binds.
 //
 // An ordinary error becomes its message, which is what upstream Buzz does and what this
-// package's conformance fixtures pin - a host failure surfaces as a str. Changing that for
+// package's conformance fixtures pin: a host failure surfaces as a str. Changing that for
 // every error would make this VM disagree with the language it implements, for the
 // convenience of one embedder.
 //
 // An error implementing StructuredError becomes a MAP instead. That is the embedder's
 // opt-in: it decides which of its errors carry identity worth branching on, and gets a
 // value a caller can index rather than a sentence to substring-match. An embedder wanting
-// EVERY error indexable makes every error implement the interface - that uniformity is its
+// EVERY error indexable makes every error implement the interface; that uniformity is its
 // policy to set, not this VM's.
 //
 // "message" is filled from Error() when the embedder omits it, so a caught map is always
@@ -2358,7 +2358,7 @@ func (vm *VM) raiseHostError(err error) bool {
 	// Filter control-flow sentinels first: a fiber yield or a context cancellation
 	// must keep propagating to the embedder and is not a fault. (Reordered ahead of
 	// the catch-stack check below; both branches still return false, so the raise
-	// decision is unchanged - only the fault hook now sees genuine host errors.)
+	// decision is unchanged: only the fault hook now sees genuine host errors.)
 	if _, ok := err.(*yieldSignal); ok {
 		return false
 	}
@@ -2394,7 +2394,7 @@ func (vm *VM) buzzIsType(v Value, typeName string) bool {
 	switch typeName {
 	case "any":
 		// Every value inhabits `any`, so `x is any` and `catch (e: any)` hold
-		// unconditionally - null included, since `any` is not an optional type.
+		// unconditionally, null included, since `any` is not an optional type.
 		return true
 	case "null":
 		return v.tag() == tagNull

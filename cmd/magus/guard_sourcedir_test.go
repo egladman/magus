@@ -30,7 +30,7 @@ func TestAdviseNewSourceDirFiresOnTheFirstFile(t *testing.T) {
 
 // The host sends an ABSOLUTE path, and this repo is routinely checked out under
 // .claude/worktrees/<name>. Scanning the absolute form finds `.claude`, calls it
-// hidden, and disables the rule in the layout the repo's own workflow uses - which
+// hidden, and disables the rule in the layout the repo's own workflow uses, which
 // is how this shipped inert while every test here passed.
 func TestAdviseNewSourceDirHandlesTheAbsolutePathTheHostSends(t *testing.T) {
 	root := t.TempDir()

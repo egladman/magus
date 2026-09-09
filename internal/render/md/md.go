@@ -1,12 +1,12 @@
 // Package md is a small typed Markdown builder for magus's generated docs
 // (MAGUS.md, the insight report). It replaces hand-concatenated markdown with
-// block-level primitives - headings, paragraphs, tables, code fences, lists -
+// block-level primitives (headings, paragraphs, tables, code fences, lists)
 // so table pipes, fence closing, and block spacing are written once here
 // instead of at every call site. Every block method leaves exactly one blank
 // line after itself, so blocks compose without callers tracking spacing.
 //
 // It is a builder, not a renderer: output goes wherever the caller writes it
-// (emit, never render). Cell and label text is taken verbatim - inputs are
+// (emit, never render). Cell and label text is taken verbatim: inputs are
 // sanitized at graph ingest, and generated docs deliberately embed inline
 // markdown (backticks, bold) in cells.
 package md
@@ -199,7 +199,7 @@ func (b *Builder) Details(summary string, body func(*Builder)) {
 	b.buf.WriteString("</details>\n\n")
 }
 
-// Raw writes s verbatim - the escape hatch for shapes the primitives don't
+// Raw writes s verbatim, the escape hatch for shapes the primitives don't
 // cover. Callers own the trailing blank line.
 func (b *Builder) Raw(s string) { b.buf.WriteString(s) }
 

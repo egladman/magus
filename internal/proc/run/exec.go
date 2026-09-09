@@ -131,7 +131,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if project, target, ok := journal.StepFromContext(ctx); ok {
 		// The argv can contain a credential when a magusfile passes one as an argument
 		// (`-p <token>`) instead of on stdin. journal.Emit redacts Text for every event
-		// kind, so this site does not repeat it - that centralization is the point.
+		// kind, so this site does not repeat it; that centralization is the point.
 		journal.Emit(ctx, journal.Event{
 			Kind: journal.KindExec, Project: project, Target: target, Text: commandLine(name, args),
 		})
@@ -287,7 +287,7 @@ func childEnv(ctx context.Context, policy *sandbox.Policy, overrides []string) (
 	}
 	env = withoutEnvVars(root, DaemonForwardVars)
 	// The ancestry is dropped from the base first, so a value inherited from whatever
-	// started THIS process can never outlive the invocation that set it - which matters in
+	// started THIS process can never outlive the invocation that set it, which matters in
 	// the daemon, where the process env belongs to nobody's invocation.
 	env = withoutEnvVars(env, []string{AncestorsEnvVar})
 	env = append(env, SelfVars(ctx)...)
@@ -321,7 +321,7 @@ func hasEnvVar(env []string, name string) bool {
 
 // AncestorsEnvVar names the variable that carries an invocation's ancestry to every child
 // process, oldest first. Inherited like MAGUS_LEVEL, so a magus reached through a shell
-// script - or through several - still knows which invocations it is running underneath.
+// script (or through several) still knows which invocations it is running underneath.
 const AncestorsEnvVar = "MAGUS_INVOCATION_ANCESTORS"
 
 // SelfVars returns the binary path, recursion depth, and invocation ancestry for child

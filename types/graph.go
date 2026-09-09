@@ -90,7 +90,7 @@ func (g *Graph) Project(path string) *Project      { return g.projects[path] }
 // DAG flattened to plain data a magusfile can walk.
 //
 // Nodes are in topological order, so a caller that just iterates gets a valid
-// build order without sorting anything itself - which is the question a magusfile
+// build order without sorting anything itself, which is the question a magusfile
 // asks the graph most often. dependsOn is the direct-predecessor set per node, so
 // the caller can still reconstruct the edges.
 type GraphView struct {

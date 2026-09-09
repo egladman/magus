@@ -14,7 +14,7 @@ import (
 
 // TestTermWantsColorIsFalseWithoutATerminal: the test binary's stderr is a pipe,
 // so styled output is off and colorize is pass-through. A caller reads this only
-// to make a WIDER rendering choice - a box-drawing table versus a plain one.
+// to make a WIDER rendering choice: a box-drawing table versus a plain one.
 func TestTermWantsColorIsFalseWithoutATerminal(t *testing.T) {
 	got, err := TermWantsColor(context.Background())
 	require.NoError(t, err)
@@ -22,8 +22,8 @@ func TestTermWantsColorIsFalseWithoutATerminal(t *testing.T) {
 }
 
 // TestTermNotifyNeverRaises is the whole contract: a notification is a VIEW, so
-// every way it can fail to be shown - no terminal, no room, an empty message, a
-// recording pass - is a silent drop. Making a magusfile guard it would be a tax
+// every way it can fail to be shown (no terminal, no room, an empty message, a
+// recording pass) is a silent drop. Making a magusfile guard it would be a tax
 // paid at every call site for a condition no author can act on.
 func TestTermNotifyNeverRaises(t *testing.T) {
 	ctx := context.Background()

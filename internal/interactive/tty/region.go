@@ -42,8 +42,8 @@ const (
 //
 // That last property is what lets one type serve a logging caller and an
 // interactive one: neither can tolerate a repaint that parks the cursor in
-// the region - the log lands in the footer, or the user types over their
-// own status line - and neither should need to know the geometry.
+// the region (the log lands in the footer, or the user types over their
+// own status line), and neither should need to know the geometry.
 //
 // The corollary is a rule about the cursor-save register: it is a single
 // global slot, so it is taken and released within ONE write and never held
@@ -134,7 +134,7 @@ func (r *region) isEnabled() bool { return r.enabled }
 // and the caller falls back to plain output.
 //
 // It leaves the caller's cursor exactly where it found it relative to the
-// caller's output - the contract this type keeps (see [region]). That is what
+// caller's output: the contract this type keeps (see [region]). That is what
 // the opening index sequences are for: moving down height rows and stepping
 // back up guarantees the rows exist without moving the cursor relative to the
 // text. At the bottom the screen scrolls; mid-screen nothing does and the step
@@ -183,14 +183,14 @@ func (r *region) reserve() error {
 }
 
 // paint wraps one region write so the caller's cursor is saved, the region
-// row is addressed, and the cursor is put back - all in a single write to
+// row is addressed, and the cursor is put back, all in a single write to
 // the terminal.
 //
 // Every write into the zone goes through this, which is what makes painting
 // invisible: a caller mid-line, or holding a prompt, sees nothing move. The
 // save register is taken and released inside this one sequence and is never
-// held across calls, because it is a single global slot - the terminal has
-// exactly one - and treating it as ownable for the life of the region is
+// held across calls, because it is a single global slot (the terminal has
+// exactly one), and treating it as ownable for the life of the region is
 // what previously made a repaint and a teardown fight over it.
 func (r *region) paint(row int, body func()) error {
 	r.buf = r.buf[:0]
@@ -215,8 +215,8 @@ const (
 
 // Span is one styled, aligned segment of a row.
 //
-// Spans exist because a row often carries two unrelated things - what is
-// happening on the left, and how to get out of it on the right - and a single
+// Spans exist because a row often carries two unrelated things (what is
+// happening on the left, and how to get out of it on the right), and a single
 // string cannot express that. The alignment is resolved at PAINT time rather
 // than by the caller, because only the region knows the terminal's width, and a
 // caller padding to a width it guessed is a caller that is wrong after the
@@ -241,8 +241,8 @@ type Span struct {
 //
 // Text and Style are shorthand for the overwhelmingly common single-span row;
 // Spans is the general form and wins when both are set. They are not two code
-// paths - [Line.spans] normalizes the shorthand into a one-element list and the
-// renderer only ever sees spans - so the convenience cannot drift from the
+// paths ([Line.spans] normalizes the shorthand into a one-element list and the
+// renderer only ever sees spans), so the convenience cannot drift from the
 // general case.
 type Line struct {
 	Text  string
@@ -253,7 +253,7 @@ type Line struct {
 // SpansCopy returns this line's spans as a fresh slice, normalizing the
 // Text+Style shorthand on the way.
 //
-// Exported for a caller COMPOSING onto an existing line - the band appends a
+// Exported for a caller COMPOSING onto an existing line: the band appends a
 // divider and a second column to rows it has already built. Doing that by hand
 // means re-implementing the shorthand normalization, and the copy is what stops
 // an append from writing into a slice the line still shares.
@@ -288,7 +288,7 @@ func (r Line) equal(o Line) bool {
 // Cols is the display width of s, escape sequences excluded.
 //
 // Exported because internal/cache composes rows for this package's layout, so
-// it has to measure them the same way - and measuring them its own way is
+// it has to measure them the same way, and measuring them its own way is
 // exactly how this bug reached four copies.
 func Cols(s string) int { return cols(s) }
 
@@ -299,12 +299,12 @@ func Cols(s string) int { return cols(s) }
 // carried box-drawing: a tree branch is three bytes and one column, so a
 // byte budget spends three columns on it and the row is clipped to a third of
 // its width, leaving the box's right edge ragged. This has now been the same
-// bug three times - the border, the accent bar, and the title - so the counting
+// bug three times (the border, the accent bar, and the title), so the counting
 // lives in one place.
 func cols(s string) int {
 	// Escape sequences are SKIPPED, not counted. Some callers hand us text that
-	// already carries its own SGR - a status glyph colored at the point it is
-	// composed - and counting those bytes as columns padded the row short,
+	// already carries its own SGR (a status glyph colored at the point it is
+	// composed), and counting those bytes as columns padded the row short,
 	// putting the box's right border nine columns in from the edge on exactly
 	// the rows that had a glyph.
 	// Through escapeLen rather than a second scanner: this one recognized CSI
@@ -328,7 +328,7 @@ func cols(s string) int {
 // fit shortens text to width DISPLAY COLUMNS, marking the cut.
 //
 // ClipCols gets the widths right, which is what keeps the box square, but it
-// cuts silently - and a row that was truncated must say so, or a reader takes a
+// cuts silently, and a row that was truncated must say so, or a reader takes a
 // half value for the whole one. So the mark is put back here, inside the same
 // budget, rather than by going back to the byte-counting Clip that put it there
 // before.
@@ -357,7 +357,7 @@ type spanExtent struct {
 // RIGHT-ALIGNED SPANS ARE LAID OUT FIRST AND KEPT; the left side is clipped to
 // whatever remains. That order is the policy, not an implementation detail: the
 // things that sit on the right are the ones that must not vanish when the
-// window is narrow - the way out of a prompt, the state of a run - while the
+// window is narrow (the way out of a prompt, the state of a run), while the
 // left is a description that degrades usefully. Doing it the other way round is
 // how an 80-column terminal ends up hiding the only key that closes a prompt.
 func layout(spans []Span, width int) []byte {
@@ -370,7 +370,7 @@ func layout(spans []Span, width int) []byte {
 // One function rather than a renderer plus a parallel column calculator: the
 // clipping, the right-alignment gap and the budget are the arithmetic that
 // decides both answers, and two copies of it would agree until the first time
-// they did not - at which point a click would land on the wrong action with
+// they did not, at which point a click would land on the wrong action with
 // nothing on screen to suggest why.
 func layoutExtents(spans []Span, width int) ([]byte, []spanExtent, int) {
 	if width <= 0 {
@@ -448,7 +448,7 @@ func appendStyled(b []byte, text string, sgr SGR) []byte {
 // The whole zone is drawn every time, which is what lets an entry VANISH: rows
 // past the end of the slice are erased, so a list that shrank leaves no residue.
 //
-// Rows beyond the zone's height are DROPPED rather than scrolled - only the
+// Rows beyond the zone's height are DROPPED rather than scrolled: only the
 // caller knows whether the newest or the oldest is worth keeping.
 //
 // A disabled region drops the call rather than printing the rows: a repainted
@@ -476,7 +476,7 @@ func (r *region) render(rows []Line) error {
 	// rows, and would leave the cursor parked mid-zone in between.
 	//
 	// Only CHANGED rows are addressed and redrawn. A zone repainted on a timer
-	// - a status line ticking, a notification expiring - is mostly unchanged
+	// (a status line ticking, a notification expiring) is mostly unchanged
 	// from frame to frame, and rewriting every row costs bytes on the wire and
 	// shows as flicker where the terminal repaints faster than it composites.
 	// That is affordable for a six-row failure region and is not for a tall
@@ -499,7 +499,7 @@ func (r *region) render(rows []Line) error {
 		changed++
 		r.buf = append(r.buf, fmt.Sprintf(cupFmt, r.firstRow()+i, 1)...)
 		// EL from column 1 erases the whole row, so a row that is now shorter
-		// than its predecessor - or empty - cannot leave a tail behind.
+		// than its predecessor (or empty) cannot leave a tail behind.
 		r.buf = append(r.buf, el...)
 		switch i {
 		case 0:
@@ -557,7 +557,7 @@ func (r *region) render(rows []Line) error {
 //
 // Which is why the margin reset sits INSIDE the cursor-transparent write. DECSTBM
 // homes the cursor, so a reset emitted after the restore undoes it and parks the
-// cursor at row 1 - the shell then draws its prompt at the top and its first
+// cursor at row 1: the shell then draws its prompt at the top and its first
 // redraw erases everything below, which looks like the output flashed up and
 // vanished.
 func (r *region) release() error {
@@ -591,10 +591,10 @@ func (r *region) innerWidth() int { return r.width - 1 - 2*borderCols }
 //
 // Box-drawing because these runes JOIN: "+---+" is a row of separate marks that
 // the eye reads as decoration, while a real rectangle reads as an edge, which is
-// the whole job - saying which rows hold still and which scroll away.
+// the whole job: saying which rows hold still and which scroll away.
 //
 // Unconditionally because one look everywhere beats the case it gives up. They
-// are multi-byte, so a non-UTF-8 locale shows mojibake - but the border is only
+// are multi-byte, so a non-UTF-8 locale shows mojibake, but the border is only
 // drawn when [CanRender] says there is an interactive terminal, and the
 // environments still running non-UTF-8 locales are the ones where output is
 // piped and no border is drawn. Choosing per locale would also make a committed
@@ -606,8 +606,8 @@ func (r *region) innerWidth() int { return r.width - 1 - 2*borderCols }
 const (
 	boxH = "\u2500"
 	boxV = "\u2502"
-	// ROUNDED corners. Square ones (U+250C and friends) read as a table cell -
-	// a form to be filled in - while the arc reads as a panel, which is what
+	// ROUNDED corners. Square ones (U+250C and friends) read as a table cell
+	// (a form to be filled in) while the arc reads as a panel, which is what
 	// this is. It is the single cheapest change that makes a terminal surface
 	// look designed rather than drawn, and it costs the same one column.
 	boxTL = "\u256d"
@@ -618,7 +618,7 @@ const (
 
 // dim styles a border glyph, or leaves it bare when the terminal does not want
 // color. The border is drawn by this type rather than composed by a caller, so
-// the caller's color decision cannot reach it - it has to ask.
+// the caller's color decision cannot reach it; it has to ask.
 func (r *region) dim(s string) string {
 	if !WantsColor(r.w, r.probe) {
 		return s
@@ -635,7 +635,7 @@ func (r *region) dim(s string) string {
 func (r *region) setTitle(left, right string) {
 	// UNCHANGED is the common case and must cost nothing. The caption is set on
 	// every repaint, so invalidating unconditionally threw away the frame diff
-	// entirely - every pool sample re-addressed and rewrote all four rows of the
+	// entirely: every pool sample re-addressed and rewrote all four rows of the
 	// zone, which is precisely what the diff exists to avoid.
 	if r.titleL == left && r.titleR == right {
 		return
@@ -767,7 +767,7 @@ func ClipBytes(msg string, nBytes int) string {
 //
 // It runs on every exit path, including commands that never opened a region, so
 // it must be inert on a terminal it did not touch. DECSTBM homes the cursor, so
-// a bare reset is not inert - on `magus help` it left the cursor at row 1 for the
+// a bare reset is not inert: on `magus help` it left the cursor at row 1 for the
 // shell to draw its prompt over the help text. Hence the save/restore bracket,
 // taken and released inside one write, per the register rule in [region].
 //
@@ -775,7 +775,7 @@ func ClipBytes(msg string, nBytes int) string {
 //
 // Gated on CanRender rather than on a bare descriptor check, which is what its own doc
 // asks for: this MOVES the cursor, and TERM=dumb is a real terminal that renders the
-// sequence as literal garbage. Nothing is lost by skipping it there - no component that
+// sequence as literal garbage. Nothing is lost by skipping it there: no component that
 // reserves rows will run under TERM=dumb either, so there is no margin left to reset.
 func ResetScrollMargins(w io.Writer, p Probe) error {
 	if !CanRender(w, p) {

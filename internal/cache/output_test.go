@@ -56,8 +56,8 @@ func TestOutputStorePersistLookupRoundTrip(t *testing.T) {
 
 // TestOutputStorePersistNeverExposesPartialBlob verifies a reader racing Persist never
 // observes a half-written .out blob. newestAttemptBlob falls back to modtime for a
-// descriptor-less (orphan) blob - exactly the state a fresh Persist is in while its
-// write is in flight - so a concurrent reader that resolves through it and reads the
+// descriptor-less (orphan) blob (exactly the state a fresh Persist is in while its
+// write is in flight), so a concurrent reader that resolves through it and reads the
 // file must see either nothing yet or the full content, never a short read. Before the
 // fix, Persist wrote the blob in place with plain os.WriteFile: the file existed (named,
 // zero or partial length) as soon as it was created, well before the write completed.
@@ -139,7 +139,7 @@ func TestOutputStorePersistRevisionRoundTrip(t *testing.T) {
 
 // TestOutputStoreV2DescriptorResolvesWithEmptyRevision pins backward compatibility for
 // schema v3: a v2 descriptor (portable refs, but written before Revision/Dirty existed)
-// keeps resolving, and reads back with an empty Revision - "unknown", not an error.
+// keeps resolving, and reads back with an empty Revision: "unknown", not an error.
 // Mirrors TestPrePortableStoreResolves, one schema generation later.
 func TestOutputStoreV2DescriptorResolvesWithEmptyRevision(t *testing.T) {
 	dir := t.TempDir()
@@ -355,8 +355,8 @@ func TestVolatileFailuresAccumulateAttemptsUnderOneRef(t *testing.T) {
 
 // TestPrePortableStoreResolves pins backward compatibility: a store written before
 // portable refs (execution-unique 8-hex file stems, v1 descriptors with no schema/key
-// fields) keeps resolving - by its old ref exactly, and at the step level once the key
-// directory is addressed - and Attempts backfills the attempt id from the file stem.
+// fields) keeps resolving (by its old ref exactly, and at the step level once the key
+// directory is addressed), and Attempts backfills the attempt id from the file stem.
 func TestPrePortableStoreResolves(t *testing.T) {
 	dir := t.TempDir()
 	const key = "0123456789abcdef0123456789abcdef"
@@ -426,7 +426,7 @@ func TestLatestRefsByTargetEmpty(t *testing.T) {
 func TestListDescriptors(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	// Two executions of the same target under one cache key (both retained by keep-last-K), a second
-	// target, and a target-less project-scoped run - all four must appear.
+	// target, and a target-less project-scoped run: all four must appear.
 	r1 := mustPersist(t, s, "k1", []byte("old build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 100})
 	r2 := mustPersist(t, s, "k1", []byte("new build\n"), OutputDescriptor{Project: "pkg/a", Target: "build:rw", TimestampMs: 300})
 	r3 := mustPersist(t, s, "k2", []byte("test\n"), OutputDescriptor{Project: "pkg/a", Target: "test", TimestampMs: 200})
@@ -550,7 +550,7 @@ func TestInvocationEventsByID(t *testing.T) {
 
 // TestInvocationReadsRefuseTraversal: the daemon's viewer RPCs pass a caller-supplied name
 // straight to these two readers, so an id that is not shaped like one must be refused before
-// it is joined onto the runs dir - otherwise "inv/../../<path>" serves any .jsonl on the
+// it is joined onto the runs dir; otherwise "inv/../../<path>" serves any .jsonl on the
 // machine over the Connect API.
 func TestInvocationReadsRefuseTraversal(t *testing.T) {
 	dir := t.TempDir()
@@ -585,7 +585,7 @@ func TestInvocationReadsRefuseTraversal(t *testing.T) {
 
 // TestInvocationEventsFromTailsCompleteLines covers reading a journal that is still being written:
 // a resumed read returns only what arrived since, and a torn final line is held back rather than
-// dropped - the offset must stop at the last newline, so the rest of that line arrives whole on the
+// dropped: the offset must stop at the last newline, so the rest of that line arrives whole on the
 // next read instead of being skipped as unparsable.
 func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 	dir := t.TempDir()
@@ -639,7 +639,7 @@ func TestInvocationEventsFromTailsCompleteLines(t *testing.T) {
 // TestListRunLogsReadsHeadAndTailOnly is the run browser's feed: the invocation list has to come off
 // bounded reads, because a journal holds every output line its run captured and listing hundreds of
 // them by parsing each in full would read hundreds of megabytes to paint a sidebar. The padding here
-// is what makes that observable - it is larger than the tail window, so a whole-file read would be
+// is what makes that observable: it is larger than the tail window, so a whole-file read would be
 // the only way to reach the started event from the end, and a whole-file parse the only way to reach
 // the finished event from the start.
 func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
@@ -707,7 +707,7 @@ func fileSize(t *testing.T, path string) int64 {
 }
 
 // A journal whose first line is not a started event has no command lineage to report, but it is
-// still a run that happened - listing it without an argv beats hiding it.
+// still a run that happened; listing it without an argv beats hiding it.
 func TestListRunLogsKeepsAJournalWithNoStartedEvent(t *testing.T) {
 	dir := t.TempDir()
 	runs := filepath.Join(dir, RunsDir)
@@ -722,7 +722,7 @@ func TestListRunLogsKeepsAJournalWithNoStartedEvent(t *testing.T) {
 }
 
 // TestLooksLikeInvocationID pins the recognizer that keeps a pasted invocation id out of the
-// graph grammar, where it matched nothing and reported `matches: 0` - which reads as "no such
+// graph grammar, where it matched nothing and reported `matches: 0`, which reads as "no such
 // run" rather than "wrong command".
 func TestLooksLikeInvocationID(t *testing.T) {
 	for _, s := range []string{"invmsm3vcou1", "inv123", "invabc0z9"} {
@@ -730,7 +730,7 @@ func TestLooksLikeInvocationID(t *testing.T) {
 	}
 	// "invoke"/"invalid" are the collisions that matter: they are plausible free-text search
 	// terms, and stealing them from the graph grammar would be a regression in itself. They
-	// are lowercase alphanumeric, so they DO match the shape - the router only reaches this
+	// are lowercase alphanumeric, so they DO match the shape; the router only reaches this
 	// check for a single positional, and a miss reports a missing run log rather than
 	// searching. Pin the shapes that must never match at all.
 	for _, s := range []string{"inv", "INV123", "inv-123", "inv 123", "kind:spell", "out1a2b3c", ""} {
@@ -792,7 +792,7 @@ func TestIsMintedRef(t *testing.T) {
 }
 
 // TestRunPersistsOutputRef drives the real Run path and confirms captured output is
-// persisted as records - and reconstructed by ref - for a passing miss and a failure.
+// persisted as records (and reconstructed by ref) for a passing miss and a failure.
 func TestRunPersistsOutputRef(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
@@ -910,7 +910,7 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 // The contracts in this file are the ones portable refs REST ON. Each is cheap to
 // break by accident from a long way away (the hit path, the resolver, a shape
 // constant, a consumer's regexp) and expensive to notice, because the system keeps
-// working locally - refs simply stop meaning the same thing on two machines. Line
+// working locally: refs simply stop meaning the same thing on two machines. Line
 // coverage does not protect any of them; these assertions do.
 
 // realRefShape is what a run actually prints: the prefix plus exactly refHexLen hex.
@@ -947,8 +947,8 @@ func TestRefShapeContract(t *testing.T) {
 
 // TestCacheKeyUnaffectedByPlatform pins that Manifest.Platform (the replay-time
 // gate added alongside portable refs) is NOT a key input. The key is what an
-// output ref truncates, and a ref must be identical on every machine - that is
-// the whole portable-ref feature - so platform must only ever be consulted after
+// output ref truncates, and a ref must be identical on every machine (that is
+// the whole portable-ref feature), so platform must only ever be consulted after
 // the key is computed, never folded into hashStepInputs. Two Cache instances that
 // differ ONLY in platform must hash the same step to the same key.
 func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
@@ -972,8 +972,8 @@ func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
 
 // TestCacheHitReusesTheSameRef is THE portability contract, and the easiest one to
 // break from far away: a hit must answer with the ref the miss printed. If a hit ever
-// minted a fresh id, every existing test would still pass while two machines - or the
-// same machine twice - silently stopped agreeing on what a run is called.
+// minted a fresh id, every existing test would still pass while two machines (or the
+// same machine twice) silently stopped agreeing on what a run is called.
 func TestCacheHitReusesTheSameRef(t *testing.T) {
 	root, cdir, c := newMutableCache(t)
 	writeMain(t, root, "package main")
@@ -1026,7 +1026,7 @@ func TestFailingRunRefResolves(t *testing.T) {
 
 // TestConcurrentPersistsShareRefWithDistinctAttempts: the store advertises safety for
 // concurrent Persist. Two executions of one step must agree on the ref and disagree on
-// the attempt - if attempts ever collided, one run's output would overwrite another's.
+// the attempt: if attempts ever collided, one run's output would overwrite another's.
 func TestConcurrentPersistsShareRefWithDistinctAttempts(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	const key = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
@@ -1089,7 +1089,7 @@ func TestOldRefStillResolvesAfterUpgrade(t *testing.T) {
 // works rather than trusting the comment that says it does.
 
 // TestCollidingRefsListDistinguishableCandidates: two cache keys sharing their first
-// refHexLen hex render the SAME portable ref. Asking for it must not dead-end - the
+// refHexLen hex render the SAME portable ref. Asking for it must not dead-end: the
 // ambiguity error has to name candidates that are distinct AND that actually resolve,
 // or the user has no way back (they cannot see the full keys to lengthen the prefix
 // themselves).
@@ -1110,7 +1110,7 @@ func TestCollidingRefsListDistinguishableCandidates(t *testing.T) {
 	require.NotEqual(t, amb.Candidates[0], amb.Candidates[1],
 		"candidates must differ; two identical strings leave the user no way to disambiguate")
 
-	// Every listed candidate must resolve on its own - the error is only useful if
+	// Every listed candidate must resolve on its own: the error is only useful if
 	// what it prints can be pasted straight back in.
 	got := map[string]string{}
 	for _, cand := range amb.Candidates {
@@ -1131,8 +1131,8 @@ func TestCollidingRefsListDistinguishableCandidates(t *testing.T) {
 }
 
 // TestDescriptorByRefSkipsTheBlob: the identity views want metadata only. It must
-// agree with ByRef's descriptor, and - unlike ByRef, which still has bytes to hand
-// back - it must ERROR when the descriptor is unreadable rather than quietly
+// agree with ByRef's descriptor, and (unlike ByRef, which still has bytes to hand
+// back) it must ERROR when the descriptor is unreadable rather than quietly
 // returning a zero-valued record that reads as a real run.
 func TestDescriptorByRefSkipsTheBlob(t *testing.T) {
 	dir := t.TempDir()
@@ -1166,7 +1166,7 @@ func TestDescriptorByRefSkipsTheBlob(t *testing.T) {
 }
 
 // TestRefNotFoundNamesTheStoresConsulted: "not found" is only actionable if the
-// reader learns WHERE magus looked - a never-published foreign ref and a typo are
+// reader learns WHERE magus looked: a never-published foreign ref and a typo are
 // otherwise the same message. It must also keep matching fs.ErrNotExist so the CLI's
 // existing MGS8001 path still fires.
 func TestRefNotFoundNamesTheStoresConsulted(t *testing.T) {

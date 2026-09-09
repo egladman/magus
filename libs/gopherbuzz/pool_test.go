@@ -120,7 +120,7 @@ func TestDispatchKeepsSiblingAncestorsPrivate(t *testing.T) {
 // under real contention: every caller of one target either starts it or parks on its
 // entry, so the target runs once and every caller sees that run's result. The existing
 // memo coverage dispatches sequentially, where the second call always resolves an
-// already-CLOSED entry - the cheap half of the path, and the half a cache hit would
+// already-CLOSED entry: the cheap half of the path, and the half a cache hit would
 // hide.
 func TestMemoSubscribersShareOneRun(t *testing.T) {
 	const callers = 8

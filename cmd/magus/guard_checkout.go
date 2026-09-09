@@ -21,7 +21,7 @@ import (
 // pure rules already reached.
 //
 // An existing deny wins: that line has a second thing wrong with it, and one block
-// is enough. An ADVISE does not - guardCdMagusRe fires on exactly these lines, and
+// is enough. An ADVISE does not: guardCdMagusRe fires on exactly these lines, and
 // "name the project instead" badly understates a command pointed at another tree.
 func rankSiblingCheckout(v bashGuardVerdict, reason string) bashGuardVerdict {
 	if reason == "" || v.Deny != "" {
@@ -61,7 +61,7 @@ func denySiblingCheckout(command string) string {
 }
 
 // gitCheckout resolves dir to the checkout containing it: the working tree's root,
-// and the repository's common git directory - the one every checkout of a
+// and the repository's common git directory, the one every checkout of a
 // repository shares, and so the thing that makes two of them compare equal.
 //
 // ok is false when dir is in no checkout, or when anything about it cannot be
@@ -72,8 +72,8 @@ func gitCheckout(dir string) (root, common string, ok bool) {
 	if err != nil {
 		return "", "", false
 	}
-	// Both sides get symlinks resolved, so /var and /private/var - or a worktree
-	// reached through a symlinked parent - compare as one place rather than as two
+	// Both sides get symlinks resolved, so /var and /private/var (or a worktree
+	// reached through a symlinked parent) compare as one place rather than as two
 	// repositories that merely look alike.
 	if real, err := filepath.EvalSymlinks(abs); err == nil {
 		abs = real
@@ -103,7 +103,7 @@ func gitCheckout(dir string) (root, common string, ok bool) {
 // A worktree's file points into `<common>/worktrees/<name>`; trimming that suffix
 // is the whole trick, because it is what leaves two checkouts of one repository
 // holding the same string. A submodule's points straight at its own git dir with
-// no worktrees segment, and that dir IS its common one - a submodule is its own
+// no worktrees segment, and that dir IS its common one: a submodule is its own
 // repository, so it correctly compares unequal to its parent.
 func gitFileCommonDir(gitFile string) (string, bool) {
 	data, err := os.ReadFile(gitFile)

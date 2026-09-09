@@ -14,8 +14,8 @@ import (
 // whole point of keeping notes in the checkout. Its content is committed, so it is
 // deterministic, shared by everyone who clones the repo, and remote-exportable like any
 // other extracted shard. There is deliberately no local-shard exclusion here: the hazard
-// that justifies one for @memory - leaking a developer's private journal into a shared
-// cache - cannot arise for content that is already in the repository.
+// that justifies one for @memory (leaking a developer's private journal into a shared
+// cache) cannot arise for content that is already in the repository.
 const sharedNotesShardName = "@notes/shared"
 
 // privateNotesShardName holds the reader's OWN notes, which may live anywhere on disk.
@@ -23,7 +23,7 @@ const sharedNotesShardName = "@notes/shared"
 // It is a separate shard from @notes for one non-negotiable reason: it is never exported
 // to the remote cache. @notes is safe to share because its content is already committed to
 // the repository everyone clones; personal notes are not in the repo at all, so pushing
-// that shard would leak private content into a shared cache - the same hazard @memory's
+// that shard would leak private content into a shared cache, the same hazard @memory's
 // exclusion exists to prevent, and the reason a looser knowledge.notes.path would have
 // been the wrong way to support this.
 const privateNotesShardName = "@notes/private"

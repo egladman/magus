@@ -17,8 +17,8 @@ import (
 )
 
 // builtin is probed IN ORDER by autodetect, so the most specific marker has to come
-// first. `jj git init` writes both .jj and .git - git is jj's storage backend, not a
-// second VCS - so a colocated repo satisfies git's claim too. With git first, every
+// first. `jj git init` writes both .jj and .git (git is jj's storage backend, not a
+// second VCS), so a colocated repo satisfies git's claim too. With git first, every
 // colocated jj workspace resolved to git, and the revision magus recorded was git's
 // HEAD, which lags jj's working-copy commit (@) until jj syncs refs. That put a
 // revision on an output ref describing a tree other than the one built, and
@@ -87,7 +87,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 			}
 		}
 		if v == nil {
-			// Nothing claimed the directory. The default is git - named explicitly
+			// Nothing claimed the directory. The default is git, named explicitly
 			// rather than taken as builtin[0], which now heads a list ordered by
 			// marker specificity rather than by which VCS is the sane fallback.
 			v = gitVCS{}
@@ -220,7 +220,7 @@ func repoPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, p
 // backends that speak Mercurial's pathspec syntax (hg and sl).
 //
 // It is a silent-wrong-answer fix, not a nicety. An hg pathspec defaults to the "relpath"
-// kind - a literal path - so a caller-supplied GLOB matches nothing, and hg reports that by
+// kind (a literal path), so a caller-supplied GLOB matches nothing, and hg reports that by
 // writing "gen/**: No such file or directory" to STDERR while exiting 0 with empty stdout.
 // The drivers read stdout, so the answer came back "no files changed". Callers pass globs:
 // magus.diagnoseDrift hands DirtyFiles a project's declared output globs verbatim, so under
@@ -296,7 +296,7 @@ func parseTags(out, pattern string) ([]types.VCSTag, error) {
 // version: "libs/gopherbuzz/v0.1.0" -> ("libs/gopherbuzz/", 0.1.0), "v0.3.0"
 // -> ("", 0.3.0). A name with no "/" has an empty prefix. A version portion
 // that fails to parse (an annotated tag like "checkpoint", or a namespaced
-// non-release tag the pattern filter let through) is not an error - it
+// non-release tag the pattern filter let through) is not an error; it
 // leaves Version at its zero value. Parses with Masterminds/semver, the same
 // library std/semver.go's SemverParse uses; the two can't share a call
 // because vcs can't import std (std already imports vcs).

@@ -21,7 +21,7 @@ func TestLoadWorkspaceConfigFallsBackWhenTheFileIsAbsent(t *testing.T) {
 }
 
 // The failure this exists to prevent: a magus.yaml that asked for sandboxing but does not
-// parse used to collapse into Defaults(), which disables it - so the workspace joined the
+// parse used to collapse into Defaults(), which disables it, so the workspace joined the
 // daemon's union unsandboxed and nothing said so.
 func TestLoadWorkspaceConfigRefusesAMalformedFile(t *testing.T) {
 	t.Parallel()

@@ -75,7 +75,7 @@ func click(row, clicks int) tty.Event {
 // nobody may end up unable to leave.
 //
 // Ctrl-C is the one people reach for when they feel stuck, and in raw mode it
-// arrives as a BYTE rather than a signal - so a loop that forgot to handle it
+// arrives as a BYTE rather than a signal, so a loop that forgot to handle it
 // would leave that key doing nothing, which is exactly the experience that ends
 // with someone killing the terminal.
 func TestFailurePromptEscapesEveryWayAUserMightTry(t *testing.T) {
@@ -195,7 +195,7 @@ func TestFailurePromptHoverNeverActsOnItsOwn(t *testing.T) {
 
 func TestFailurePromptHoverOffTheBandKeepsTheHighlight(t *testing.T) {
 	// Crossing the band on the way somewhere else must not clear the
-	// selection - that reads as flicker, and it would strand a keyboard user
+	// selection: that reads as flicker, and it would strand a keyboard user
 	// who had already chosen a row.
 	b := newFakeBand()
 	sel := 0
@@ -211,7 +211,7 @@ func TestFailurePromptHoverOffTheBandKeepsTheHighlight(t *testing.T) {
 // The interesting case is the one that was broken. Every other thing this
 // package draws is a view, and a view that cannot be pinned is correctly
 // dropped; this is not a view, it is the only statement of how to get out, and
-// a refused grant is ordinary - a short window, or a run that already pinned
+// a refused grant is ordinary: a short window, or a run that already pinned
 // failures and a notification, leaves nothing for it.
 func TestHintIsAlwaysVisible(t *testing.T) {
 	t.Run("pinned when the zone has room", func(t *testing.T) {
@@ -265,7 +265,7 @@ func (f fakeHints) HitSpan(_, col int) (string, bool) {
 // TestFailurePromptClicksTheHintActions is the parity guarantee: every action
 // the hint row NAMES can be taken with the mouse, not just with the key it
 // names. Without it the row printed "[esc] done" at a spot that ignored clicks,
-// which is worse than printing nothing - it draws a target that does not work.
+// which is worse than printing nothing: it draws a target that does not work.
 func TestFailurePromptClicksTheHintActions(t *testing.T) {
 	hintRow := 30
 	click := func(col int) tty.Event {
@@ -327,7 +327,7 @@ func TestSanitizeLogLineFlattensWhatWouldBreakTheBox(t *testing.T) {
 }
 
 // TestTabTogglesWhichViewIsLarge: the golden ratio gives the focused view the
-// major share, so focus has to be reachable - by the tab key and by clicking
+// major share, so focus has to be reachable: by the tab key and by clicking
 // the hint that names it.
 func TestTabTogglesWhichViewIsLarge(t *testing.T) {
 	b, sel := newFakeBand(), 0

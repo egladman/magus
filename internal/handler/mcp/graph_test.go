@@ -289,7 +289,7 @@ func TestPagedRefsCoverageGapIsUnknownResult(t *testing.T) {
 }
 
 // A resolved symbol with referencing files is found, and the verdict must survive paging
-// unchanged - an agent reading page three sees the same coverage statement as page one.
+// unchanged: an agent reading page three sees the same coverage statement as page one.
 func TestPagedRefsVerdictSurvivesPaging(t *testing.T) {
 	g := refsGraph(5)
 	cursor := ""

@@ -16,7 +16,7 @@ func init() { Register(Strings) }
 // Strings is the "strings" host module: the string operations Buzz's builtins
 // lack. Buzz strings already do upper/lower/trim/split/replace/sub, but two
 // classes of work fall outside that. Codegen and naming tasks need to re-case an
-// identifier (snake↔camel↔kebab↔Pascal) or split prose into words - operations
+// identifier (snake↔camel↔kebab↔Pascal) or split prose into words: operations
 // with fiddly edge cases (acronyms, separators) that are easy to get subtly
 // wrong in script; those delegate to samber/lo so the behavior matches a
 // well-tested Go implementation. The rest are the primitives a magusfile reaches
@@ -253,7 +253,7 @@ func StringsPadRight(_ context.Context, s string, length int, pad string) (strin
 // padding builds the fill that brings s up to length runes, truncated to land
 // exactly on the boundary when pad is multi-rune. Width is counted in runes, not
 // bytes, so padding a column of non-ASCII labels aligns as it reads. An empty pad
-// is the one input with no sensible answer - repeating it can never reach length,
+// is the one input with no sensible answer: repeating it can never reach length,
 // so it raises rather than looping or silently returning s.
 func padding(s string, length int, pad string) (string, error) {
 	if pad == "" {

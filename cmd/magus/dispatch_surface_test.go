@@ -17,7 +17,7 @@ import (
 // script (all derived from subcommands / knownSubcommands) never mentioned it.
 // dispatchSub's switch and knownSubcommands are two separate declarations that can
 // drift exactly the way the three copies surface.go's own doc comment already
-// describes - this closes that gap mechanically instead of relying on someone
+// describes; this closes that gap mechanically instead of relying on someone
 // remembering to update both.
 //
 // It reads dispatchSub's case labels out of main.go's source with go/parser rather
@@ -83,7 +83,7 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 
 	// help and version are routed in runCLI before dispatchSub is ever called (see
 	// runCLI's own switch on res.sub), so they belong in knownSubcommands and are
-	// deliberately absent from dispatchSub's case set - not a gap to flag.
+	// deliberately absent from dispatchSub's case set, not a gap to flag.
 	got := append(cases, "help", "version")
 	slices.Sort(got)
 

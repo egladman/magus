@@ -157,7 +157,7 @@ func TestExecBytecode(t *testing.T) {
 }
 
 // TestUnmarshalChunkTruncated sweeps every proper prefix of a valid blob through
-// the decoder. Each must return an error - never panic, never a (chunk, nil)
+// the decoder. Each must return an error: never panic, never a (chunk, nil)
 // success from partial data. The fuzz target explores mutated bytes; this sweep
 // is the deterministic, always-on floor for the most common corruption
 // (truncation), and it runs every length rather than sampled ones.

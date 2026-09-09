@@ -116,7 +116,7 @@ func runSpells(args []string) error {
 		return fmt.Errorf("no built-in spells found under %s", *spellsDir)
 	}
 	// Remove stale blobs (a renamed spell, a removed source dir) so the embedded set
-	// is exactly the current built-ins - the .bo names are runtime names, not dirs.
+	// is exactly the current built-ins; the .bo names are runtime names, not dirs.
 	keep := make(map[string]bool, len(built))
 	for _, n := range built {
 		keep[n] = true

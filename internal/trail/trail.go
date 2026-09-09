@@ -1,5 +1,5 @@
 // Package trail is the magus activity trail: a durable, append-only record of consequential
-// actions taken against the daemon - who did what, and did it succeed - kept next to the
+// actions taken against the daemon (who did what, and did it succeed) kept next to the
 // execution journal under a base directory. It is the store behind the magus.activity.v1alpha1
 // "activity view"; producers (the MCP handler, agent hooks, and background jobs today; config
 // and token lifecycle later) append events and store payload blobs, and the console's
@@ -8,7 +8,7 @@
 // It is the governance sibling of internal/journal (which records what a build executed) and
 // mirrors its Event/JSONL shape: a hand-rolled Event struct, snake_case json, one json.Marshal
 // line per event, plus a content-addressed blob store for large payloads. The magus.activity.v1alpha1
-// proto is the WIRE format only; the handler maps Event to it - this package never depends on
+// proto is the WIRE format only; the handler maps Event to it; this package never depends on
 // the proto or the handler stack.
 //
 // Every operation is a stateless free function taking the trail's base directory. Writes are
@@ -49,18 +49,18 @@ const refHexLen = 16
 
 // maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
 // blobs no kept event references. Rotate runs at daemon start and thereafter on the daemon's
-// rotate-activities schedule - never per append, because the trail is stateless and lock-free by
+// rotate-activities schedule, never per append, because the trail is stateless and lock-free by
 // design (append is a bare POSIX append; there is no long-lived handle to hang a count on), so a
 // write-triggered rotate would have to re-scan the whole file per write.
 //
 // The overshoot between scheduled runs is therefore bounded by the SCHEDULE, not by a counter.
 // That is the honest shape: a counter can only ever bound the one producer that owns it, and the
-// producers that most need bounding - short-lived agent hooks - have nowhere to keep one.
+// producers that most need bounding (short-lived agent hooks) have nowhere to keep one.
 const maxEvents = 10000
 
 // Kind names an action's source; the values map to the magus.activity.v1alpha1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
-// so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted - the
+// so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted; the
 // param is type-checked against these consts. MCP tool calls, agent hooks, and jobs have producers today;
 // the rest name the governance sources the envelope is built to hold, so a reader can switch on kind and a
 // producer adds one without a schema change.
@@ -89,7 +89,7 @@ const (
 	// only when the handed context carries the documented marker (see leaseFromContext): its
 	// FIRST non-blank line reading "lease: <id>". An orchestrator that wants the join writes the
 	// marker; one that does not gets an event with an empty Lease, which is a missing join rather
-	// than a wrong one - and a "lease:" line quoted deeper in a prompt stamps nothing, because a
+	// than a wrong one, and a "lease:" line quoted deeper in a prompt stamps nothing, because a
 	// wrong join is worse than none.
 	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
@@ -100,7 +100,7 @@ const (
 	// KindNotes is the console NotesService door onto the workspace's human-authored notes.
 	// Every event under it is a READ, because that service has no write path: a note's whole
 	// value is the guarantee that a person wrote it, so the browser never becomes an author.
-	// Reads are audited for one reason the shared store does not supply on its own - this is
+	// Reads are audited for one reason the shared store does not supply on its own: this is
 	// the only surface that can serve the PRIVATE store, which is not in any repository and
 	// which nothing else attributes.
 	KindNotes Kind = "notes"
@@ -114,7 +114,7 @@ const (
 	// makes a credential spendable, this is the event that connects the two. Without it
 	// the activity log shows the tool call and not its consequence.
 	//
-	// It carries the REFERENCE, the host and the header - never the value, which is not
+	// It carries the REFERENCE, the host and the header, never the value, which is not
 	// resolved at declaration time and must not be resolved to log it.
 	KindCredentialGrant Kind = "credential_grant" //nolint:gosec // G101: an event-kind discriminator whose name contains "credential", not a credential
 )
@@ -330,7 +330,7 @@ type agentSpawnRequest struct {
 // to fail the lease it observes.
 //
 // NOTE ON GROWTH: this producer runs in the short-lived hook process, which has no append counter
-// to drive RotateOnCount, so nothing it writes triggers a rotate - only the daemon's boot-time
+// to drive RotateOnCount, so nothing it writes triggers a rotate; only the daemon's boot-time
 // Rotate bounds the trail. That was already true of AppendAgentCommand; it bites harder here
 // because a spawn blob is a whole lease prompt rather than one command line.
 func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
@@ -407,8 +407,8 @@ const leaseMarker = "lease:"
 //	the FIRST non-blank line of the handed context, trimmed, reading exactly
 //	"lease: <id>"
 //
-// First line, not anywhere in the head: a lease prompt routinely quotes things - a
-// ledger listing, a file, another agent's transcript - and a marker line lifted from any
+// First line, not anywhere in the head: a lease prompt routinely quotes things (a
+// ledger listing, a file, another agent's transcript), and a marker line lifted from any
 // of them would stamp the event with a lease that has nothing to do with this
 // handoff. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
 // not; the position is the only thing that separates them. Leading blank lines are
@@ -417,8 +417,8 @@ const leaseMarker = "lease:"
 // The id itself has to satisfy [types.ValidLeaseID], which is where the charset and
 // its reasoning live.
 //
-// Anything else - no marker, an empty id, an id carrying spaces or punctuation outside
-// the set, a marker below the first line - yields "". Correlation is cooperative: a
+// Anything else (no marker, an empty id, an id carrying spaces or punctuation outside
+// the set, a marker below the first line) yields "". Correlation is cooperative: a
 // missing join is the designed outcome, never an error.
 func leaseFromContext(handed string) string {
 	head := handed
@@ -452,7 +452,7 @@ func blobsPath(base string) string  { return filepath.Join(base, dir, blobsSubDi
 //
 // ctx carries the run's secret resolver, and every free-text field goes through it first. The
 // trail is DURABLE and append-only, so a credential that lands here is on disk until someone
-// deletes the file - strictly worse than the same value reaching a terminal. It took a ctx
+// deletes the file, strictly worse than the same value reaching a terminal. It took a ctx
 // parameter for no other reason.
 func Append(ctx context.Context, base string, e Event) {
 	if base == "" {
@@ -532,8 +532,8 @@ func ReadBlob(base, ref string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(blobsPath(base), ref))
 }
 
-// LastRun returns the most recent KIND_JOB event whose Action equals action - the space-joined
-// worker argv recorded for a background job (e.g. "graph build") - and whether one was found.
+// LastRun returns the most recent KIND_JOB event whose Action equals action (the space-joined
+// worker argv recorded for a background job, e.g. "graph build") and whether one was found.
 // It is how a caller shows a job's last outcome. Scans the retained trail newest-first; a job
 // that has not run within it is (zero, false).
 func LastRun(base, action string) (Event, bool) {
@@ -549,7 +549,7 @@ func LastRun(base, action string) (Event, bool) {
 // Stat reports the trail's current on-disk footprint under base: total bytes (the events file
 // plus every payload blob) and the number of recorded events. It is what a caller shows to
 // judge whether a rotate is worth running. Best-effort and read-only: a missing or empty trail
-// is (0, 0), and an unreadable directory is skipped rather than erroring - a size readout is
+// is (0, 0), and an unreadable directory is skipped rather than erroring: a size readout is
 // never a precondition for anything.
 func Stat(base string) (bytes int64, count int64) {
 	if base == "" {
@@ -635,8 +635,8 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 // acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
 //
 // It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
-// daemon's maintenance schedule be the single owner of rotation. A second, write-triggered path -
-// a rotate driven off a producer's own append counter - can only cover that one producer: an agent
+// daemon's maintenance schedule be the single owner of rotation. A second, write-triggered path
+// (a rotate driven off a producer's own append counter) can only cover that one producer: an agent
 // hook is a short-lived process with nowhere to keep a counter, so a hook-fed trail would be
 // write-bounded by nothing at all. One trigger that every producer shares beats two that disagree
 // about who is covered.
@@ -645,15 +645,15 @@ func Rotate(base string) { rotate(base, maxEvents) }
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
 // file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
 // Actor, Action and Outcome have no omitempty, so even an all-empty event marshals to about 65
-// bytes plus a newline. Rounding down to 64 keeps the check conservative - it can only ever decide
+// bytes plus a newline. Rounding down to 64 keeps the check conservative: it can only ever decide
 // to look when it did not need to, never to skip when it did.
 const minEventBytes = 64
 
 // perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
 // its neighbors are.
 //
-// Plain recency is the wrong policy for a record with kinds this uneven. One chatty producer -
-// an agent hook wired to a read tool is the obvious one, but MCP tool calls do it too - can push
+// Plain recency is the wrong policy for a record with kinds this uneven. One chatty producer
+// (an agent hook wired to a read tool is the obvious one, but MCP tool calls do it too) can push
 // every sandbox_denial and config_change out of the window and, because gcBlobs then unlinks
 // whatever no kept line references, DELETE their payloads. The rare kinds are exactly the ones
 // worth keeping: nobody consults this file to find out that a read happened.
@@ -667,7 +667,7 @@ const perKindFloor = 500
 // events, and whatever budget remains goes to the newest events of any kind. Order is preserved,
 // because the file is append-ordered and every reader (ReadRecent, LastRun) depends on that.
 //
-// Kind is read with a narrow decode rather than a full Event unmarshal - this runs over the whole
+// Kind is read with a narrow decode rather than a full Event unmarshal: this runs over the whole
 // file, and the only field the policy needs is the kind. A line that fails to decode has no kind
 // to reserve against and competes on recency alone, which is the same treatment ReadRecent gives
 // a corrupt line.
@@ -693,7 +693,7 @@ func selectKept(lines []string, max int) []string {
 
 	// The reservation is the floor OR an equal share of the window, whichever is smaller.
 	// Without the share, a floor larger than the window lets the first pass spend the whole
-	// budget on whichever kind happens to be newest - which is precisely the eviction this
+	// budget on whichever kind happens to be newest, which is precisely the eviction this
 	// policy exists to prevent, reintroduced by the policy itself.
 	reserve := perKindFloor
 	if len(present) > 0 && max/len(present) < reserve {
@@ -738,7 +738,7 @@ func rotate(base string, max int) {
 	}
 	path := eventsPath(base)
 	// A stat before the read is what makes a frequent schedule affordable. Without it, every
-	// check reads the whole trail - fine at a 30-day cadence, wasteful at an hourly one, and
+	// check reads the whole trail: fine at a 30-day cadence, wasteful at an hourly one, and
 	// worst exactly when the file has grown large enough to matter.
 	if info, err := os.Stat(path); err == nil && info.Size() < int64(max)*minEventBytes {
 		return
@@ -782,7 +782,7 @@ func rotate(base string, max int) {
 // references it yet. WriteBlob finalizes (renames) a blob before its producer's Append
 // writes the event that references it; a rotate landing in that gap would otherwise see
 // the blob as unreferenced by the snapshot it just read and delete it out from under the
-// still-pending event - the event survives, the payload is gone. Every producer in this
+// still-pending event: the event survives, the payload is gone. Every producer in this
 // tree calls WriteBlob immediately followed by Append on the same goroutine (wrap() in
 // internal/handler/mcp, AppendAgentCommand above), so the real gap is microseconds; this
 // window is deliberately generous to also absorb scheduler preemption, without adding a
@@ -834,7 +834,7 @@ func blobRef(prefix string, data []byte) string {
 	return prefix + hex.EncodeToString(sum[:])[:refHexLen]
 }
 
-// validPrefix accepts 2 to 8 lowercase letters - a short provenance tag like "mcp".
+// validPrefix accepts 2 to 8 lowercase letters, a short provenance tag like "mcp".
 func validPrefix(prefix string) bool {
 	if len(prefix) < 2 || len(prefix) > 8 {
 		return false
@@ -848,7 +848,7 @@ func validPrefix(prefix string) bool {
 }
 
 // validRef matches the GetPayload wire pattern: a valid prefix followed by exactly refHexLen hex
-// chars. The hash is a FIXED-length suffix, so the split is len-refHexLen - a greedy letter-scan
+// chars. The hash is a FIXED-length suffix, so the split is len-refHexLen; a greedy letter-scan
 // would misfire because hex digits a-f are also lowercase letters. It rejects any separator or
 // dot, so ReadBlob cannot escape the blob dir.
 func validRef(ref string) bool {
@@ -872,9 +872,9 @@ func validRef(ref string) bool {
 // The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
 // Workspace, Lease and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
-// them would break the activity view to protect nothing - the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret. Lease is the one of those derived from free text - a
-// lease prompt, or the BAGGAGE environment channel - rather than supplied by a caller,
+// them would break the activity view to protect nothing, the same reasoning that leaves slog
+// attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a
+// lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
 // which is why every channel that can stamp one runs it through [types.ValidLeaseID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
@@ -886,8 +886,8 @@ func redactEvent(ctx context.Context, e Event) Event {
 
 type baseKey struct{}
 
-// ContextWithBase carries the trail's base directory so a producer deep in the run - a
-// magusfile binding, say - can record an event without being handed the path.
+// ContextWithBase carries the trail's base directory so a producer deep in the run (a
+// magusfile binding, say) can record an event without being handed the path.
 //
 // Every other producer receives its base as an argument, which is the better shape when
 // the call site is a handler constructed with it. A magusfile binding is not: it runs

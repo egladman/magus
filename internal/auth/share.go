@@ -12,7 +12,7 @@ import (
 // for the "share to phone" feature. Unlike the retrievable cli token (token.go) and
 // the persisted connector tokens (connector.go), a share token lives only in the
 // running daemon's memory and only for as long as the ephemeral LAN listener it
-// guards - it is never written to disk. It reuses the mgs_ wire format so a leak
+// guards; it is never written to disk. It reuses the mgs_ wire format so a leak
 // scanner still catches it, but carries a distinct read-only SCOPE.
 //
 // The scope is enforced structurally, not by convention. NEITHER loopback verifier

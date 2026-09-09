@@ -116,7 +116,7 @@ func TestSkillTarIsReproducibleAndExtracts(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, body)
 
-	// Piping to tar -xf - -C <dir> is the supported install path; simulate it
+	// Piping to `tar -xf - -C <dir>` is the supported install path; simulate it
 	// by writing body to a tempfile and extracting with archive/tar.
 	tmp := filepath.Join(dir, "skills.tar")
 	require.NoError(t, os.WriteFile(tmp, body, 0o644))
@@ -333,7 +333,7 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 		assert.Equal(t, wantFull.Body, twin.Body,
 			"%s must carry the same body a full install writes for %s", twin.Name, def.Name)
 		// The stamp is keyed off the entry's own Variant, so a twin inside a
-		// FormBoth install must still stamp itself full - otherwise a reader
+		// FormBoth install must still stamp itself full: otherwise a reader
 		// grading provenance sees "short" on the copy it was handed BECAUSE
 		// it needed full.
 		assert.Contains(t, string(agentSkills.StampSkill(twin.Name, agentSkills.RenderSkill(twin), twin.Variant)),
@@ -354,7 +354,7 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 // TestInstallTargetHonorsGlobal pins the fix for a flag that never worked:
 // --global documents "allow absolute destination paths", the command let one
 // past its own guard, and Catalog.WriteSkillTree then refused it
-// unconditionally - so the error told the caller to pass the flag they had just
+// unconditionally, so the error told the caller to pass the flag they had just
 // passed.
 //
 // The split is what makes it work without weakening the catalog: an absolute
@@ -369,7 +369,7 @@ func TestInstallTargetHonorsGlobal(t *testing.T) {
 }
 
 // TestInstallTargetLeavesRelativeAlone: without --global, and for a relative
-// destination with it, the pair is unchanged - the catalog keeps enforcing
+// destination with it, the pair is unchanged: the catalog keeps enforcing
 // containment against the repo dir.
 func TestInstallTargetLeavesRelativeAlone(t *testing.T) {
 	base, leaf := installTarget("repo", ".claude/skills", false)

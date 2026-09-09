@@ -144,7 +144,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	}
 
 	// The hardening invariant: both /mcp and the /api bridge are header-only, so a
-	// valid token in the URL is rejected on each - the token never rides in a URL.
+	// valid token in the URL is rejected on each: the token never rides in a URL.
 	assert.Equal(t, http.StatusUnauthorized, queryStatus("/mcp", cli), "/mcp must reject a query-param token")
 	assert.Equal(t, http.StatusUnauthorized, queryStatus("/api/v1/graph", cli), "/api must reject a query-param token")
 

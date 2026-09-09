@@ -39,8 +39,8 @@ func TestMagusSurfaceMatchesBindings(t *testing.T) {
 
 // TestCtxDeclarationsMatchAcrossHosts is TestMagusSurfaceMatchesBindings one surface
 // down, over the ctx a target receives. Three places enumerate its members
-// independently - buildTargetContext, the magus\Exec refusal list beside it, and this
-// package's buildCtx - and each omission fails differently and quietly: an Exec that
+// independently (buildTargetContext, the magus\Exec refusal list beside it, and this
+// package's buildCtx), and each omission fails differently and quietly: an Exec that
 // does not know a member answers "no such member" instead of naming where to declare
 // it, and a dry host that does not bind one cannot trace a body that calls it. A
 // declaration that reaches the cache key while one of the two copies has never heard
@@ -109,7 +109,7 @@ func keySet(m vm.Value) map[string]bool {
 // TestPlaygroundChecksHostCallTypes is the point of registering the magus
 // declarations beside the stub module: a dry run must reject a snippet the real
 // runtime would reject. Before them this host was untyped, so a probe could return
-// the wrong type from a host call and the playground reported success - a Run button
+// the wrong type from a host call and the playground reported success; a Run button
 // that validates less than the language does teaches worse than none.
 func TestPlaygroundChecksHostCallTypes(t *testing.T) {
 	run := func(body string) Result {
@@ -554,7 +554,7 @@ export fun mgs_listTargets() > any { return {"svc": svc}; }
 }
 
 // TestRun_charmBranchElseViaCtx re-confirms the ctx.hasCharm path branches on the
-// active charm set - exercising traceHasCharm's true and false returns through the
+// active charm set, exercising traceHasCharm's true and false returns through the
 // ctx form rather than the global.
 func TestRun_charmBranchViaCtx(t *testing.T) {
 	const src = `
@@ -577,7 +577,7 @@ export fun image_build(ctx: magus\Context, args: [str]) > void {
 
 // TestRun_insightLensesAreShaped guards a failure that reports success. Field
 // access on a Buzz null returns null, and the member call after it aborts the target
-// body - but the dry run still comes back OK with a truncated trace, so a stub that
+// body, but the dry run still comes back OK with a truncated trace, so a stub that
 // hands back null for a lens the mirror declares non-optional silently swallows every
 // op after the first read of it. The trailing marker is the assertion: it is only
 // traced if the body survived the whole chain.

@@ -20,7 +20,7 @@ func TestSectionWithOnlyANoteDoesNotRender(t *testing.T) {
 }
 
 // TestSectionRendersItsNoteOnceItHasContent: the note is not dead weight, it is the sentence that
-// tells a reader how to weigh what follows - so it appears exactly when there is something to
+// tells a reader how to weigh what follows, so it appears exactly when there is something to
 // weigh.
 func TestSectionRendersItsNoteOnceItHasContent(t *testing.T) {
 	out := New("Title", Short).
@@ -145,7 +145,7 @@ func TestConsecutiveBulletsAreNotSeparated(t *testing.T) {
 }
 
 // TestSectionsChainInOrder. The chain is the readable part of the API, and it has to produce the
-// order it was written in - a caller reading top to bottom is describing the document.
+// order it was written in: a caller reading top to bottom is describing the document.
 func TestSectionsChainInOrder(t *testing.T) {
 	out := New("T", Short).
 		Section("First").Bullet("1").

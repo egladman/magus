@@ -31,7 +31,7 @@ func TestTermPickRejectsAnEmptyList(t *testing.T) {
 }
 
 func TestTermPickIsSkippedInRecordMode(t *testing.T) {
-	// A dry run must never block on a human, and must not raise either - it
+	// A dry run must never block on a human, and must not raise either: it
 	// reports a plausible answer the way fs.temp_dir names a path it did not
 	// create.
 	idx, err := TermPick(types.WithTrace(context.Background()), []string{"a", "b"}, "", "", 0, 0)

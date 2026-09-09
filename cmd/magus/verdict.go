@@ -30,8 +30,8 @@ import (
 // It observes; knowledge.Answer judges. That split is what keeps this surface and the MCP
 // tools from reaching different verdicts about the same graph.
 //
-// Both probes are skipped entirely when the symbol layer could not have held the answer -
-// `kind:author` returning nothing has no bearing on a missing or stale symbol index - so an
+// Both probes are skipped entirely when the symbol layer could not have held the answer
+// (`kind:author` returning nothing has no bearing on a missing or stale symbol index), so an
 // ordinary domain query pays nothing for the verdict.
 func symbolCoverage(ctx context.Context, root, input string, seeded, indexOnly bool) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded, IndexOnly: indexOnly}
@@ -122,14 +122,14 @@ func exitForVerdict(v types.KnowledgeVerdict) error {
 	return errSilent{exitCode: 2}
 }
 
-// exitForQuery maps a search's answer to the process status: 0 when query can answer -
-// matches, or a verified absence - and 1 when it cannot.
+// exitForQuery maps a search's answer to the process status: 0 when query can answer
+// (matches, or a verified absence) and 1 when it cannot.
 //
 // absent staying 0 is the documented rule and the reason query never adopted the split
 // above: an empty result set is a legitimate answer to a SEARCH, and every script running
 // `magus query` would break if it became a failure. `unknown` is not an answer at all,
 // and it is the one a caller mistakes for "not in the graph" before falling back to a text
-// search - the habit the graph exists to replace. It is also the fixable one, by
+// search: the habit the graph exists to replace. It is also the fixable one, by
 // hint.GraphBuild. query never exits 2: it takes terms, not a name that must resolve.
 //
 // The empty-result condition is load-bearing rather than shorthand for the verdict. A

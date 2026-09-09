@@ -160,7 +160,7 @@ func TestRegionReleaseIsIdempotent(t *testing.T) {
 // TestRegionReserveDisablesWhenTerminalShrank covers the resize case: the
 // window is large at construction but too small by the time the first paint
 // arrives. Applying the original margins would emit an inverted range, so the
-// region stands down. What the caller prints instead is its own call - see
+// region stands down. What the caller prints instead is its own call; see
 // TestZoneReportsNotRenderedWhenTheWindowShrinks.
 func TestRegionReserveDisablesWhenTerminalShrank(t *testing.T) {
 	t.Parallel()
@@ -332,8 +332,8 @@ func TestRegionReleasesRowsWhenAResizeMakesItUnviable(t *testing.T) {
 
 // balancedSaves reports how the save/restore register is used across out: how many
 // times it is taken, and whether it was ever taken twice without an intervening
-// release. Nesting is the specific failure this type had - a repaint taking the
-// slot a reservation was still holding - so it is asserted directly rather than
+// release. Nesting is the specific failure this type had (a repaint taking the
+// slot a reservation was still holding), so it is asserted directly rather than
 // inferred from a byte comparison.
 func balancedSaves(t *testing.T, out string) (saves int, nested bool) {
 	t.Helper()
@@ -360,7 +360,7 @@ func balancedSaves(t *testing.T, out string) (saves int, nested bool) {
 // depends on: which row the cursor is on.
 //
 // It exists because the other tests here assert byte ORDER within one method, and
-// that is exactly the shape of assertion the DECSTBM bug slipped past - the old
+// that is exactly the shape of assertion the DECSTBM bug slipped past: the old
 // Release emitted a correct-looking save/CUP/restore and then appended the margin
 // reset, which was "last" as its test demanded and homed the cursor anyway. Order
 // is a proxy; the contract is the cursor's final position. This measures that.
@@ -457,7 +457,7 @@ func csiParam(t *testing.T, params string, n, def int) int {
 //
 // A caller is mid-transcript at some row; after ANY region operation it must still
 // be there, or the shell prompt lands somewhere it did not write and its next
-// redraw erases the run's output - which reads as output that flashed up and
+// redraw erases the run's output, which reads as output that flashed up and
 // vanished. Each operation is fed to a fresh model at a known row and checked.
 //
 // Run against the pre-fix code this fails twice: Release ends at row 1 (margin
@@ -499,7 +499,7 @@ func TestEveryRegionOperationLeavesTheCursorWhereItFoundIt(t *testing.T) {
 		})
 	}
 
-	// The process-exit path is the one `magus help` hits - a command that opens no
+	// The process-exit path is the one `magus help` hits, a command that opens no
 	// region at all, where this was the ONLY escape emitted for the whole run.
 	t.Run("ResetScrollMargins", func(t *testing.T) {
 		var buf ttyBuf
@@ -574,7 +574,7 @@ func TestPaintingIsCursorTransparent(t *testing.T) {
 }
 
 // TestReleaseGivesTheRowsBackWithoutRepositioning pins the teardown. Nothing moved
-// the caller's cursor, so it already sits after the caller's last line - which is
+// the caller's cursor, so it already sits after the caller's last line, which is
 // where the shell prompt belongs. Restoring a position saved when the region opened
 // (the old behaviour) put the prompt back into the middle of the transcript.
 func TestReleaseGivesTheRowsBackWithoutRepositioning(t *testing.T) {
@@ -696,7 +696,7 @@ func TestRegionRenderAlignsSpansToBothEdges(t *testing.T) {
 func TestRegionRenderKeepsTheRightSpanWhenNarrow(t *testing.T) {
 	t.Parallel()
 	// The policy, and the bug it fixes: as one string the prompt's hint row was
-	// 86 columns and an 80-column terminal clipped it to "...[esc] do" - the
+	// 86 columns and an 80-column terminal clipped it to "...[esc] do", the
 	// only key that closes the prompt, gone at the width most people have.
 	var buf ttyBuf
 	r := newRegion(&buf, 1+borderRows, terminal(40, 24))
@@ -803,7 +803,7 @@ func TestColsSkipsHyperlinkURI(t *testing.T) {
 // Both resets run on every exit path, including commands with no interactive component at
 // all, and both gated on a bare descriptor check. A pty with TERM=dumb IS a terminal, so
 // plain `magus diff` under Emacs shell-mode opened and closed with
-// `^[7^[[r^[8^[[?1006l^[[?1003l^[[?1000l` rendered as literal garbage - the exact
+// `^[7^[[r^[8^[[?1006l^[[?1003l^[[?1000l` rendered as literal garbage, the exact
 // artifacting CanRender exists to prevent, and the one gap left after hyperlinks were
 // fixed.
 //

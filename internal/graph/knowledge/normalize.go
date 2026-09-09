@@ -10,8 +10,8 @@ import "github.com/egladman/magus/internal/file"
 // a backslash escapes and path.Clean would silently corrupt the pattern, so reFields is
 // never touched; kind, language, role and relation values are enumerations, not paths.
 //
-// Applied in Resolve, which every surface reaches - the CLI verbs, the MCP tools, and
-// GraphService all answer through Graph methods that funnel there - so no caller has to
+// Applied in Resolve, which every surface reaches (the CLI verbs, the MCP tools, and
+// GraphService all answer through Graph methods that funnel there), so no caller has to
 // remember to normalize, and none can reach a different answer about one graph.
 func (g *Graph) normalizePaths(q parsedQuery) parsedQuery {
 	// parseQuery mints these slices per call, so rewriting in place shares nothing.

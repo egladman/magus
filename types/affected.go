@@ -15,8 +15,8 @@ type AffectedResult struct {
 	// any cache key: the run is real work whose result was already correct.
 	//
 	// Carried rather than recomputed because every consumer of FilesBySeed asks the
-	// same follow-up - `--impact` qualifies its "seeded by N changed files" with it,
-	// and MGS1028 reports it - and the declarations it is derived from are not in
+	// same follow-up (`--impact` qualifies its "seeded by N changed files" with it,
+	// and MGS1028 reports it), and the declarations it is derived from are not in
 	// reach once the result has crossed out of the workspace.
 	UndeclaredBySeed map[string][]string
 }

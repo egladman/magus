@@ -42,7 +42,7 @@ func CanonicalSurfacePath(seg string) (string, bool) {
 }
 
 // LogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded
-// output ride the URL fragment (after #), which the browser NEVER transmits to a server - so
+// output ride the URL fragment (after #), which the browser NEVER transmits to a server, so
 // nothing about the run, not even its ref id, ever leaves the machine. The payload is a
 // magus.viewer.v1alpha1 Journal (protobuf, gzip+base64url) of the ref's events; the browser decodes
 // it and renders pretty from structure (the generated JS client, bundled in).
@@ -83,7 +83,7 @@ type KeyClassDigest struct {
 // KeyDigestsParam renders per-class key digests as one compact fragment value:
 // "class:digest,class:digest", in the classes' key order. The rendering is
 // deliberately trivial to parse in the browser (split on "," then ":") and carries no
-// key CONTENT - a digest names that a class differs, never what is in it.
+// key CONTENT: a digest names that a class differs, never what is in it.
 func KeyDigestsParam(digests []KeyClassDigest) string {
 	parts := make([]string, 0, len(digests))
 	for _, d := range digests {
@@ -114,8 +114,8 @@ type FragmentParam struct {
 
 // Link assembles a console surface's daemon-origin deep link:
 // http://<host>/console/<surface>/#[<directives>&]token=<token>. Under the daemon-origin grammar
-// the ORIGIN names which daemon - the daemon serves both the console shell (over its loopback
-// /console/) and the data API - so nothing but content state and the bearer token rides the
+// the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback
+// /console/) and the data API, so nothing but content state and the bearer token rides the
 // fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
 // surface URL: the daemon serves the shell for it (SPA fallback) and the console's boot router
 // opens that surface from the path. The token rides the fragment (never transmitted on the

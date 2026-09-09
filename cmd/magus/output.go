@@ -90,7 +90,7 @@ const jsonlPrimaryTag = "jsonl"
 //
 // Which collection that is must be DECLARED (`jsonl:"primary"`) once a type carries more
 // than one. The rule used to be "the only slice field", which silently degraded to
-// printing the whole object as a single line the day a type grew a second list - so
+// printing the whole object as a single line the day a type grew a second list, so
 // -o jsonl became -o json, at exit 0, for the consumer least able to notice. An
 // undeclared ambiguity is an error naming the candidates instead.
 func writeJSONL(w io.Writer, v any) error {
@@ -221,7 +221,7 @@ func flagWasSet(fs *flag.FlagSet, name string) bool {
 func writeTemplate(w io.Writer, v any, body string) error {
 	// missingkey=error, because the data is a map keyed by JSON TAG and the default
 	// is to render a misspelled key as "<no value>" and exit 0. A caller who writes
-	// {{.Name}} instead of {{.name}} - the Go field name rather than the wire name -
+	// {{.Name}} instead of {{.name}} (the Go field name rather than the wire name)
 	// otherwise gets empty output and a success status, which is the worst outcome for
 	// the machine-readable format an agent scripts against.
 	t, err := template.New("output").Funcs(templateFuncs()).Option("missingkey=error").Parse(body)
@@ -281,7 +281,7 @@ func templateFuncs() template.FuncMap {
 	}
 	// Preserve magus's original bindings; magus's list-first join wins over sprig's
 	// reversed (sep-first) join. templateJoin (not strings.Join) so it also handles
-	// the []any that json-normalization produces for list fields - see writeTemplate.
+	// the []any that json-normalization produces for list fields; see writeTemplate.
 	f["join"] = templateJoin
 	f["upper"] = strings.ToUpper
 	f["lower"] = strings.ToLower
@@ -290,9 +290,9 @@ func templateFuncs() template.FuncMap {
 }
 
 // templateJoin joins a list's elements with sep, keeping magus's list-first arg order
-// ({{join .list ","}}). Unlike strings.Join it accepts ANY slice/array - []string
+// ({{join .list ","}}). Unlike strings.Join it accepts ANY slice/array ([]string
 // from sprig helpers, and the []any that -o template's json-normalized data yields
-// for list fields - stringifying each element. Non-slices stringify whole.
+// for list fields), stringifying each element. Non-slices stringify whole.
 func templateJoin(list any, sep string) string {
 	if list == nil { // an absent/null list field joins to empty, like strings.Join(nil, sep)
 		return ""
@@ -309,7 +309,7 @@ func templateJoin(list any, sep string) string {
 }
 
 // writeTemplateFields prints the fields available to -o template / -o json for v,
-// instead of rendering v: what bare "-o template" (no body) produces - the template
+// instead of rendering v: what bare "-o template" (no body) produces, the template
 // surface documenting itself. It REFLECTS v's type directly (the same approach config
 // uses in collectSchema), so it works for ANY output type without a curated set, and
 // lists each exported field by its json-tag key (the vocabulary -o json and -o
@@ -320,7 +320,7 @@ func writeTemplateFields(w io.Writer, v any) error {
 	rt := structType(reflect.TypeOf(v))
 	if rt == nil {
 		// A command whose whole output is a list (or a map of records) still has fields
-		// worth listing - the ELEMENT's, which are what a template body ranges over.
+		// worth listing: the ELEMENT's, which are what a template body ranges over.
 		// Refusing there left `describe target -o template` with nothing to read the
 		// field names off, which is the one thing bare -o template exists for.
 		rt = structType(elemType(reflect.TypeOf(v)))
@@ -495,12 +495,12 @@ func ResolveOutput(input string, extra ...Format) (OutputOptions, error) {
 	}
 	if body, ok := strings.CutPrefix(input, "template="); ok {
 		// An empty body ("-o template=") means "list the fields", same as bare
-		// "-o template" below - not an error. A non-empty body renders.
+		// "-o template" below, not an error. A non-empty body renders.
 		return OutputOptions{Format: FormatTemplate, Template: body}, nil
 	}
 	if input == "template" {
 		// Bare "-o template" (no body): print the output's templatable fields
-		// instead of rendering - the self-documentation of the template surface.
+		// instead of rendering: the self-documentation of the template surface.
 		return OutputOptions{Format: FormatTemplate, Template: ""}, nil
 	}
 	for _, v := range CommonFormats {

@@ -13,7 +13,7 @@ import (
 // readable so external consumers and agent memory can key on it. The project
 // path is embedded in target/op-adjacent IDs so an edge crossing projects names
 // exactly the shard to load next (the routing key). No invented
-// vocabulary - kinds and separators only.
+// vocabulary: kinds and separators only.
 
 func projectID(path string) string { return types.KindProject + ":" + path }
 
@@ -25,8 +25,8 @@ func spellID(name string) string { return types.KindSpell + ":" + name }
 
 func opID(spell, op string) string { return types.KindOp + ":" + spell + ":" + op }
 
-// toolID keys the workspace-scoped node for a tool - the program an op runs (argv[0]
-// basename) - shared by every op and spell that runs it, so `explain tool:go` lists
+// toolID keys the workspace-scoped node for a tool, the program an op runs (argv[0]
+// basename), shared by every op and spell that runs it, so `explain tool:go` lists
 // every op that runs go. A tool is an ENTITY (the program), distinct from an op (the
 // operation that runs it), hence its own kind.
 func toolID(tool string) string { return types.KindTool + ":" + tool }
@@ -71,8 +71,8 @@ func symbolID(key string) string { return types.KindSymbol + ":" + key }
 
 // noteID mints a note's node ID, namespaced by scope.
 //
-// The two stores share a name space on disk - nothing stops a private note being called
-// the same thing as a shared one - so an unqualified ID would let them collide. Node
+// The two stores share a name space on disk (nothing stops a private note being called
+// the same thing as a shared one), so an unqualified ID would let them collide. Node
 // merging is first-writer-wins, and shared is assembled first, so the collision would not
 // error: the private note would silently vanish and its edges would be re-attributed to
 // the team's note of the same name. The CLI already refuses that ambiguity for a reader;
@@ -89,12 +89,12 @@ func noteID(scope, name string) string {
 // anchor names a note in the SAME store: a private note referring to "auth" means its own,
 // not the team's.
 //
-// One home for a mapping with three callers across two process phases - assembly (which
+// One home for a mapping with three callers across two process phases: assembly (which
 // turns an anchor into an edge), resolution (which asks whether an anchor still names
 // something live), and the console handler. Two hand-kept copies existed and had already
 // diverged on exactly the case a reader is least likely to notice: the resolver's copy took
 // no scope, so it looked up a private note's note-anchor in the SHARED namespace, reported
-// it dangling, and told the author to re-anchor a note that was never broken - while
+// it dangling, and told the author to re-anchor a note that was never broken, while
 // assembly had minted the edge correctly all along.
 func AnchorNodeID(kind, target, scope string) string {
 	switch kind {
@@ -165,7 +165,7 @@ const (
 	// each of its targets so a target card names its engine without walking to the
 	// project node.
 	AttrEngine = "engine"
-	// AttrTargetCount is a project's target count - its size at a glance, without
+	// AttrTargetCount is a project's target count, its size at a glance, without
 	// counting contains edges.
 	AttrTargetCount = "target_count"
 	// attrTitle is a doc page's frontmatter title (its human name, distinct from the
@@ -173,11 +173,11 @@ const (
 	attrTitle = "title"
 	// attrTags is a doc page's frontmatter tags, comma-joined.
 	attrTags = "tags"
-	// attrArgv is an op node's base argv, space-joined - the command line the op runs
+	// attrArgv is an op node's base argv, space-joined: the command line the op runs
 	// with an empty charm set. It rides an attr, so a target reaches "what it runs" via
 	// target->op without a second describe. Absent for a function-op (no static argv).
 	attrArgv = "argv"
-	// attrTool is an op node's tool - argv element 0, the executable the op runs.
+	// attrTool is an op node's tool: argv element 0, the executable the op runs.
 	attrTool = "tool"
 	// attrDeclared marks a spell node a workspace project declares in its `spells:` list
 	// (value "true"), distinct from a compiled-in builtin that is merely available. The
@@ -185,13 +185,13 @@ const (
 	attrDeclared = "declared"
 	// attrDeclaredAs is a target's raw, as-written name when the normalizer rewrote it
 	// (node "go-build" declared_as "goBuild"). The node ID/label stay the normalized
-	// name - the identity edges and lookups key on - so this just conveys the author's
+	// name (the identity edges and lookups key on), so this just conveys the author's
 	// spelling on the card, making the normalization visible rather than hidden. Absent
 	// when the declared name already equals the normalized one.
 	attrDeclaredAs = "declared_as"
 	// attrRole classifies a doc node by what the markdown file IS, from a universal
 	// filename convention (readme, agent, changelog, contributing, license), or "doc"
-	// for anything else. It is workspace-agnostic - no magus-specific filenames - so
+	// for anything else. It is workspace-agnostic (no magus-specific filenames), so
 	// `query "kind=doc role=agent"` finds the agent-instruction files in any repo.
 	attrRole = "role"
 	// attrSection is a doc page's top-level section under docs/ (guides, concepts,
@@ -216,12 +216,12 @@ const (
 	AttrDurationP75Ms = "duration_p75_ms"
 	// attrCacheHitRate is a target's rolling cache hit rate, formatted "0.NN".
 	attrCacheHitRate = "cache_hit_rate"
-	// attrRunSamples is how many timed runs back the duration percentile - the
+	// attrRunSamples is how many timed runs back the duration percentile, the
 	// confidence behind duration_p75_ms.
 	attrRunSamples = "run_samples"
 	// AttrLastOutputRef is the output reference id (the "out1a2b3c" token) of the
 	// target's most recent captured execution, so an agent can jump from a target node
-	// straight to its last output with `magus query output <ref>` - the query -> target
+	// straight to its last output with `magus query output <ref>`, the query -> target
 	// -> output two-hop. Sourced from the output store (the timing history carries no
 	// refs); absent when the store holds no execution for the target.
 	AttrLastOutputRef = "last_output_ref"
@@ -260,25 +260,25 @@ var historyAttrs = []string{
 func IsHistoryAttr(key string) bool { return slices.Contains(historyAttrs, key) }
 
 // Directory aggregate keys. These roll up from a directory's files (transitively) so a
-// dir node reads as a subsystem summary - the granularity agent memory anchors to and
+// dir node reads as a subsystem summary, the granularity agent memory anchors to and
 // dir-level coupling/churn queries read against. All are deterministic and OS-agnostic
 // (git commit counts, extension-derived languages, slash-relative paths), so the
 // @dirs shard is remote-shareable like @registry and @vcs.
 const (
 	// AttrDirFiles is how many path-bearing files/docs the directory holds transitively.
 	AttrDirFiles = "dir_files"
-	// AttrDirCommits is the summed git churn (commit counts) across those files - where a
+	// AttrDirCommits is the summed git churn (commit counts) across those files, where a
 	// subsystem's change activity concentrates.
 	AttrDirCommits = "dir_commits"
 	// AttrDirLanguages is the sorted, comma-joined set of languages present under the
 	// directory, derived from file extensions. Distinct from a file node's single-valued
-	// "language" attr - a directory spans languages, so this is a dir-scoped set.
+	// "language" attr: a directory spans languages, so this is a dir-scoped set.
 	AttrDirLanguages = "dir_languages"
 )
 
-// Coverage attribute keys. Like the runtime keys these are OBSERVED - parsed from the
+// Coverage attribute keys. Like the runtime keys these are OBSERVED, parsed from the
 // local Go coverage profile magus produces (`magus run coverage`), not from workspace
-// sources - so they ride an isolated, lazily-loaded @coverage shard that folds onto the
+// sources, so they ride an isolated, lazily-loaded @coverage shard that folds onto the
 // file and symbol nodes SCIP already minted. They answer "which code lacks coverage"
 // straight off a node. Absent when no profile covers the file/symbol.
 const (
@@ -287,7 +287,7 @@ const (
 	attrCoverage = "coverage"
 	// AttrCoveredStmts is how many statements the profile recorded at least one hit for.
 	AttrCoveredStmts = "covered_stmts"
-	// AttrTotalStmts is the instrumented statement count backing the ratio - the
+	// AttrTotalStmts is the instrumented statement count backing the ratio, the
 	// denominator, so a 0/0 file is distinguishable from a small sample.
 	AttrTotalStmts = "total_stmts"
 )

@@ -47,7 +47,7 @@ type gapProbe func() ([]types.KnowledgeSymbolGap, bool)
 //
 // These tools used to reach their own verdict, and it disagreed with the CLI's on the same
 // graph: MCP set symbols-not-loaded on any unseeded query, CLI first asked whether the
-// layer was relevant. Neither derives one now - both observe and call knowledge.Answer.
+// layer was relevant. Neither derives one now: both observe and call knowledge.Answer.
 func coverageFor(input string, seeded bool, probe gapProbe) knowledge.Coverage {
 	cov := knowledge.Coverage{Seeded: seeded}
 	if knowledge.CouldMatchLazyLayer(input) {
@@ -56,7 +56,7 @@ func coverageFor(input string, seeded bool, probe gapProbe) knowledge.Coverage {
 	return cov
 }
 
-// knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation - the warm
+// knowledgeGraph resolves the DOMAIN knowledge graph for a tool invocation, the warm
 // graph, which excludes the lazily-loaded @symbols shards. explain/path/stats use it.
 // A symbol-seeded magus_query and magus_refs instead use KnowledgeGraphWithSymbols,
 // which merges symbols into a fresh graph so the shared warm graph is never polluted.
@@ -137,7 +137,7 @@ func (t *refsTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 
 // pagedRefs resolves the symbol and pages its referencing files. A refs list is the
 // first result set that genuinely overflows an agent's budget, so the same stateless
-// cursor as pagedQuery windows it - offset plus a query hash and graph fingerprint so
+// cursor as pagedQuery windows it: offset plus a query hash and graph fingerprint so
 // a stale cursor fails loudly. Defs and the totals reflect the whole set; only Refs
 // is the page. Split from Invoke so it is testable with a hand-built graph.
 func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, probe gapProbe) (paginatedRefs, error) {
@@ -196,8 +196,8 @@ func pagedRefs(g *knowledge.Graph, symbol string, limit int, cursor string, prob
 
 // pagedQuery runs a (possibly paged) query against g. With no limit and no cursor
 // it is the plain query (every match, no fingerprint cost). Otherwise it validates
-// the cursor against the query and the current graph fingerprint - failing loudly
-// on a mismatch - returns the requested page, and attaches a next_cursor when more
+// the cursor against the query and the current graph fingerprint (failing loudly
+// on a mismatch), returns the requested page, and attaches a next_cursor when more
 // matches remain. Split from Invoke so it is testable with a hand-built graph. The
 // unpaged result is wrapped too (with an empty, omitted NextCursor) so the return
 // type is always concrete.
@@ -256,7 +256,7 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 		// as a fact about the workspace; the channel is text because that is this tool's
 		// channel for everything.
 		// explain runs against the symbol-free warm graph, so a code symbol was never in
-		// scope - but only say so when the query could have named one. `kind=author` with
+		// scope, but only say so when the query could have named one. `kind=author` with
 		// a typo has nothing to do with the symbol layer, and an absent verdict there is a
 		// fact worth asserting, which is why this is not hardcoded.
 		ans := knowledge.Answer(node, false, coverageFor(node, false,

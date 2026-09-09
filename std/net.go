@@ -23,8 +23,8 @@ func init() { Register(Net) }
 const netDefaultWaitMs = 30_000
 
 // netDialTimeout bounds ONE connection attempt inside the wait loop. Without it a
-// host that accepts the SYN and then goes silent - a firewall that drops rather
-// than rejects is the usual cause - would hang the attempt for the OS default,
+// host that accepts the SYN and then goes silent (a firewall that drops rather
+// than rejects is the usual cause) would hang the attempt for the OS default,
 // which on Linux is over two minutes, blowing past the caller's own timeout.
 const netDialTimeout = 2 * time.Second
 
@@ -39,11 +39,11 @@ const netPollInterval = 100 * time.Millisecond
 // http already covers requests. What was missing is the pair of things every
 // target that starts a service needs and had to shell out for:
 //
-//   - "is it up yet?" - a dev server, a database container, a mock backend. The
+//   - "is it up yet?": a dev server, a database container, a mock backend. The
 //     shell form is a `until nc -z localhost 3000; do sleep 0.1; done` loop, which
 //     is unportable (nc's flags differ across BSD, GNU and busybox), silently
 //     infinite when the service never starts, and invisible to magus.
-//   - "give me a port nobody is using" - so two targets running in parallel, or
+//   - "give me a port nobody is using", so two targets running in parallel, or
 //     two workspaces on one machine, do not collide on a hardcoded 3000.
 var Net = Module{
 	Name: "net",
@@ -106,8 +106,8 @@ func NetIsPortOpen(ctx context.Context, host string, port int) (bool, error) {
 }
 
 // netDialOnce makes one bounded connection attempt, reporting only whether it
-// succeeded. The error is deliberately dropped: every failure mode here -
-// refused, unreachable, timed out - is the same answer to "is it up", and
+// succeeded. The error is deliberately dropped: every failure mode here
+// (refused, unreachable, timed out) is the same answer to "is it up", and
 // surfacing them separately would invite a caller to branch on text.
 func netDialOnce(ctx context.Context, addr string) bool {
 	d := net.Dialer{Timeout: netDialTimeout}

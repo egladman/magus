@@ -12,8 +12,8 @@ import (
 // typo? A miss that offers nothing back reads as "not in the graph" and sends
 // the reader to grep, which is the habit the graph surface exists to replace.
 //
-// Matching itself is untouched. Nothing here can put a node into a result set -
-// these run only after a lookup has already reported nothing - because a near
+// Matching itself is untouched. Nothing here can put a node into a result set
+// (these run only after a lookup has already reported nothing) because a near
 // miss admitted as a match would turn "0 matches" from a fact into a maybe, and
 // the verdict is only worth printing while it means what it says.
 
@@ -38,7 +38,7 @@ func (g *Graph) NearestNode(input string) string {
 	})
 }
 
-// NearestSymbol is NearestNode restricted to code symbols, for refs - which
+// NearestSymbol is NearestNode restricted to code symbols, for refs, which
 // resolves nothing else, so suggesting a target or a doc there would name
 // something refs would miss a second time.
 func (g *Graph) NearestSymbol(ref string) string {
@@ -48,8 +48,8 @@ func (g *Graph) NearestSymbol(ref string) string {
 // nearest scans every node kindOK admits and returns the id of the closest by
 // edit distance, "" when none is within hint's threshold.
 //
-// Ties break the way resolution already breaks them - kindRank first, then the
-// lower id - so a domain entity outranks a doc heading that happens to repeat
+// Ties break the way resolution already breaks them (kindRank first, then the
+// lower id), so a domain entity outranks a doc heading that happens to repeat
 // its name, and the answer is stable across runs whatever order the node map
 // yields. Without the kind bias `explain buld` named a markdown anchor called
 // "build" instead of the target.

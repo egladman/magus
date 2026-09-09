@@ -169,7 +169,7 @@ func TestNewLeaseReportNormalizesTheEmptyLedger(t *testing.T) {
 // forgets aliases the store's own array. Every field here carries SPARE CAPACITY, which is
 // the shape the ledger actually stores (RecordUnattributedWrite sizes its slice for one
 // more than it fills): an append then lands in place, and the damage is invisible to the
-// appender - it shows up as the NEXT reader's append overwriting the first one's row. So
+// appender: it shows up as the NEXT reader's append overwriting the first one's row. So
 // this asserts across two clones rather than back at the original, which is the only form
 // of the check that can fail.
 func TestLeaseCloneCopiesEverySliceField(t *testing.T) {

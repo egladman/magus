@@ -161,7 +161,7 @@ func TestLexer_DocComments(t *testing.T) {
 
 // TestKindStringExhaustive drives Kind.String across every declared kind, Ident
 // through EOF. An unnamed kind surfaces in parse errors as a bare integer, which
-// is exactly the message quality regression this guards against - and iterating
+// is exactly the message quality regression this guards against, and iterating
 // the full range means a kind added without a String case fails here instead of
 // in a user's error message.
 func TestKindStringExhaustive(t *testing.T) {

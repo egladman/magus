@@ -1,7 +1,7 @@
 // Package impact computes the forensic blast radius of a changeset: the changed
 // files, the projects that directly contain them (seeds), and the transitive set of
 // projects and targets a change ripples out to via the dependency-graph reverse
-// closure. It is read-only - it names what a change touches, it never executes a
+// closure. It is read-only: it names what a change touches, it never executes a
 // target.
 //
 // The engine is deliberately framed against the narrow types.WorkspaceRepository
@@ -25,7 +25,7 @@ import (
 //
 // Its types are declared HERE rather than reused from internal/graph/knowledge. That
 // package is internal, so naming its types in this exported interface made the
-// interface unimplementable by anyone outside the module - which is precisely the reuse
+// interface unimplementable by anyone outside the module, which is precisely the reuse
 // the doc promised. An interface that cannot be satisfied by its stated audience is a
 // concrete dependency wearing an interface's clothes.
 type SymbolStore interface {
@@ -66,7 +66,7 @@ type Coverage struct {
 }
 
 // GraphStore adapts the concrete knowledge graph to SymbolStore. It names an internal
-// type, so only in-module callers can reach it - which is correct: an outside caller
+// type, so only in-module callers can reach it, which is correct: an outside caller
 // implements SymbolStore directly rather than going through the graph.
 func GraphStore(g *knowledge.Graph) SymbolStore { return graphStore{g: g} }
 

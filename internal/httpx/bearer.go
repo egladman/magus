@@ -21,7 +21,7 @@ type verifier func(presented string) bool
 // endpoint, plain fetch() clients): a bearer token must not travel in the URL,
 // where it leaks into access logs, proxy logs, and browser history (RFC 6750
 // section 2.3). For the browser-EventSource endpoints that genuinely cannot set
-// a header, use [BearerGuardWithQueryToken] instead - an explicit opt-in, so a
+// a header, use [BearerGuardWithQueryToken] instead: an explicit opt-in, so a
 // new mount is header-only unless it deliberately widens the carrier.
 //
 // verify is called on every request, so a rotate, create, or revoke takes effect

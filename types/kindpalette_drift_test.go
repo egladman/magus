@@ -7,7 +7,7 @@ package types
 // the graph that happens to be loaded, so a kind the demo does not emit is invisible until a
 // workspace that does emit it shows up. The palette drifted to 14 entries against 17 emitted
 // kinds that way, and dir/package/tool/note drew as one anonymous grey mass a quarter of the
-// graph wide - nothing was red, and the graph just looked washed out.
+// graph wide: nothing was red, and the graph just looked washed out.
 //
 // Both console files are checked because they fail differently: tokens.css missing an entry
 // means no color exists, graph.css missing the alias means main.ts reads an undefined property
@@ -88,7 +88,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 // 18 of 20 kinds sat below 3:1 on white and owner was 1.72:1 on the dark ground.
 //
 // The floor is WCAG 2.1 SC 1.4.11, 3:1 for a graphical object you must see to understand the
-// content - which a node whose color IS its kind plainly is.
+// content, which a node whose color IS its kind plainly is.
 func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
 	t.Helper()
 

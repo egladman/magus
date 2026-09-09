@@ -91,7 +91,7 @@ func TestMergeFreeRange(t *testing.T) {
 }
 
 // TestGateDeltaLines pins the per-file rendering the refusal prints: every
-// path, its class word, and the fact behind it - never a summary.
+// path, its class word, and the fact behind it, never a summary.
 func TestGateDeltaLines(t *testing.T) {
 	d := GateDelta{Paths: []ClassifiedPath{
 		{Path: "gen/a.go", Class: ClassGenerated, Why: "a declared output glob claims it"},
@@ -261,7 +261,7 @@ func classifierWith(scopes []ProseScope) ChangeClassifier {
 // paths by role, prose by the default globs, comment-only Go, Buzz and
 // declared-syntax Python by content, and the code remainder including every
 // failure to read or lex. The Why strings are asserted whole because the
-// refusal prints them verbatim - they are how a reader traces each verdict
+// refusal prints them verbatim; they are how a reader traces each verdict
 // back to the declaration or mechanism behind it.
 func TestClassifyChanges(t *testing.T) {
 	c := classifierWith(ProseScopes([]*types.Project{{Path: "."}}))
@@ -335,7 +335,7 @@ func TestClassifyWithoutReaders(t *testing.T) {
 }
 
 // testSyntax mirrors the mgs_getCommentSyntax declarations in the built-in
-// spells (spells/golang, spells/buzz, spells/python) - the spells are the
+// spells (spells/golang, spells/buzz, spells/python); the spells are the
 // source of truth, and TestBuiltinCommentSyntax in internal/spellruntime pins
 // the decoded declarations, so drift between the two is caught there.
 var testSyntax = map[string]spells.CommentSyntax{
@@ -515,7 +515,7 @@ var inheritHistory = []types.Commit{
 
 // TestInheritProbeFires pins the whole hit: the finding, and both reports it
 // publishes. The report text is spelled out rather than derived, because an
-// inherited verdict is only defensible if a reader can reconstruct it - a
+// inherited verdict is only defensible if a reader can reconstruct it; a
 // change that thins the report has to fail here.
 func TestInheritProbeFires(t *testing.T) {
 	p := inheritProbeFor("green0123456789", true, inheritHistory, []string{"docs/x.md"})

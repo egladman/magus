@@ -163,7 +163,7 @@ func TestParseConfigFlagsErrors(t *testing.T) {
 
 // TestWriteRendersParsableGoForEveryArtifact is the generator's real contract:
 // four files, each valid Go. emit.Go gofmts before writing, so an unparsable
-// template fails Write - but nothing checks that the RIGHT binder reached each
+// template fails Write, but nothing checks that the RIGHT binder reached each
 // field, which is what the per-kind assertions below do.
 func TestWriteRendersParsableGoForEveryArtifact(t *testing.T) {
 	out := t.TempDir()

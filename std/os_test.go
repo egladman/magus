@@ -248,10 +248,10 @@ func TestFsCopyDir(t *testing.T) {
 }
 
 // TestFsCopyDirChecksReadOnDeniedSubtree pins that a source directory the sandbox
-// denies read on stops the copy - it must not be silently enumerated and have its
+// denies read on stops the copy: it must not be silently enumerated and have its
 // layout recreated in dest. The bug: the WalkDir callback only called checkRead
 // for FILE entries, never for a directory entry (nor the src root itself), so a
-// src tree with no files at all - just a denied subdirectory - copied "clean"
+// src tree with no files at all (just a denied subdirectory) copied "clean"
 // with no error and no read check ever firing.
 func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
 	root := t.TempDir()
@@ -259,7 +259,7 @@ func TestFsCopyDirChecksReadOnDeniedSubtree(t *testing.T) {
 	dst := filepath.Join(root, "dst")
 	require.NoError(t, os.MkdirAll(filepath.Join(src, "secret"), 0o755))
 
-	// Grants write under dst but no read rule covers src at all - not even a
+	// Grants write under dst but no read rule covers src at all, not even a
 	// directory-shaped one. Rule.Path must be pre-normalized the way policy-build
 	// time does (ResolveRulePath), or the write grant silently fails to match on a
 	// machine whose TMPDIR sits under a symlink (macOS: /var -> /private/var).
@@ -329,7 +329,7 @@ func TestOsExecutable(t *testing.T) {
 	assert.Positive(t, info.Mtime, "stat mtime must be non-zero to be usable as a staleness stamp")
 	assert.False(t, info.IsDir, "os.executable must not be a directory")
 
-	// Symlinks are resolved, so calling twice is stable - a stamp that changed on its
+	// Symlinks are resolved, so calling twice is stable: a stamp that changed on its
 	// own would make the watcher's tripwire fire spuriously on every tick.
 	again, err := OsExecutable(ctx)
 	require.NoError(t, err)

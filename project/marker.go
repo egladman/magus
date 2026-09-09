@@ -7,24 +7,24 @@ import (
 
 // IgnoreDirs lists non-dot directory names skipped by discovery and watch
 // (matched at any depth). Dot-directories are skipped separately by IsIgnoreDir
-// without being listed here - see there.
+// without being listed here; see there.
 //
 // SCOPE: this is the PRE-resolution default. Discovery and watch run before any
 // spell is known, so they cannot ask a project's spells which dirs are noise; this
 // list is the standing answer for the big build/dependency trees that must be
 // pruned fast on every walk. Language spells ALSO declare their ecosystem's dirs via
 // mgs_listIgnoreDirs (go->vendor, ts->node_modules, ...), which the POST-resolution
-// input-hashing walk unions on top - so vendor/node_modules/target appear in both
+// input-hashing walk unions on top, so vendor/node_modules/target appear in both
 // places on purpose. Do NOT remove a dependency dir here on the theory that "the spell
 // owns it now": the spell only reaches the hash walk, and dropping it here would make
 // discovery descend into that tree for every project the spell does not resolve.
 // The two sets are not nested (this one carries gen, which no spell declares; the
-// python spell declares __pycache__, deliberately left out here - missing it costs
+// python spell declares __pycache__, deliberately left out here: missing it costs
 // only a little discovery-walk time, and adding it would change hash keys for broad-
 // glob projects that sit near a __pycache__).
 // These names also prune the cache-key expansion walk (internal/cache.expandSources),
 // which is the sharper edge: a target CAN legitimately declare a file inside one of
-// these trees - a generated descriptor another project produces is a real input - and a
+// these trees (a generated descriptor another project produces is a real input), and a
 // walk that skips the directory would drop it from the key while `describe target` went
 // on listing it under sources. So an EXACT, wildcard-free declaration is resolved by
 // stat instead and reaches the key normally. A PATTERN gets no such exemption, because

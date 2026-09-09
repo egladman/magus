@@ -8,7 +8,7 @@
 // graph does not derive from the workspace, so nothing here corroborates it later and its
 // only provenance is the person who wrote it. A browser write would put an unattributable
 // author on that store and undoing it would not restore the guarantee, so this handler has no
-// write path at all - the CLI's `magus notes edit` opens an editor, and that stays the way in.
+// write path at all: the CLI's `magus notes edit` opens an editor, and that stays the way in.
 //
 // A note's body is UNTRUSTED in the ordinary sense that it is prose from a file: clients must
 // render it as text, never as trusted HTML. The distinction from memory is about provenance,
@@ -75,7 +75,7 @@ func (s *Service) stores() []scopedDir {
 		dir, err := store.Dir(s.ws.Root(), scope, declared)
 		if err != nil {
 			// Undeclared (ErrDisabled) and misdeclared both land here. Both mean this store
-			// contributes nothing, and the console renders that as "not set up" - the CLI is
+			// contributes nothing, and the console renders that as "not set up"; the CLI is
 			// where a misdeclaration gets its full diagnostic.
 			out = append(out, scopedDir{scope: scope, pbScope: pb})
 			return
@@ -91,8 +91,8 @@ func (s *Service) stores() []scopedDir {
 // wired in the contract but the store returns all notes today (bounded by its own scan cap),
 // so next_page_token is always empty.
 //
-// A graph that will not load is NOT a failure here. The structural read - what notes exist,
-// what they say, where they live - stands on its own, and a console that shows nothing
+// A graph that will not load is NOT a failure here. The structural read (what notes exist,
+// what they say, where they live) stands on its own, and a console that shows nothing
 // because the symbol index is cold is worse than one that shows the notes and admits it could
 // not check them. Every anchor then reports UNVERIFIED, which is a distinct answer from
 // "fine".
@@ -229,7 +229,7 @@ func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *
 }
 
 // notePath renders where the note lives. Workspace-relative for a shared note, absolute for a
-// private one - the same distinction the scope carries, and the reason a private note is
+// private one, the same distinction the scope carries, and the reason a private note is
 // never staleness-annotated (the VCS index is keyed by workspace-relative path).
 //
 // The path comes from the note rather than from its name: a note that declares an id is
@@ -266,7 +266,7 @@ func anchorToProto(ctx context.Context, a store.Anchor, res *knowledge.NoteResol
 		return out
 	}
 	// The anchor resolves, so the easy question is answered. The harder one is whether the
-	// thing it points at still SAYS what the note claims - the case a reader cannot see and an
+	// thing it points at still SAYS what the note claims, the case a reader cannot see and an
 	// existence check cannot catch.
 	//
 	// Both empty cases are silence, not drift: no stored digest means the note was never
@@ -306,7 +306,7 @@ func anchorToProto(ctx context.Context, a store.Anchor, res *knowledge.NoteResol
 }
 
 // staleness reads the divergence the graph folded onto the note's node. An absent node or an
-// absent attr is UNMEASURED, which is not "fresh" - every private note lands here today,
+// absent attr is UNMEASURED, which is not "fresh"; every private note lands here today,
 // because staleness is keyed by workspace-relative path and a private note's source is
 // absolute.
 func staleness(nodes map[string]types.KnowledgeNode, nodeID string) (notesv1.Staleness, int32) {

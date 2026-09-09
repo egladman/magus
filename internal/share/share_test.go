@@ -355,7 +355,7 @@ func getUA(t *testing.T, url, token, ua string) int {
 
 // TestShareConnectRecordsOncePerDevice proves the first authenticated request from a
 // remote device records exactly one "share link opened" activity event (carrying the
-// UA and remote IP), and that a second request from the same device records none - so
+// UA and remote IP), and that a second request from the same device records none, so
 // a page's many requests do not spam the trail.
 func TestShareConnectRecordsOncePerDevice(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -457,7 +457,7 @@ func waitClosed(t *testing.T, url string) {
 
 // serveGuarded drives a sessionGuard.admit-wrapped handler with a synthetic
 // RemoteAddr, returning the response status and body. It bypasses the real listener so
-// a test can present arbitrary remote hosts - impossible over a single loopback IP -
+// a test can present arbitrary remote hosts (impossible over a single loopback IP)
 // and thereby exercise the device-binding reject path end to end.
 func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
 	h := g.admit(okHandler)
@@ -475,7 +475,7 @@ func serveGuarded(g *sessionGuard, remoteAddr string) (int, string) {
 // the guard boundary: the first remote host to present a valid token is served and
 // binds the share; that same host keeps being served; a DIFFERENT host with the (by
 // construction already-verified) token is rejected 403 with the bound-device body; and
-// a fresh guard - what a supersede builds - starts unbound so a new first device binds.
+// a fresh guard (what a supersede builds) starts unbound so a new first device binds.
 func TestSessionGuardBindsFirstDeviceRejectsOthers(t *testing.T) {
 	m := NewManager(context.Background(), time.Minute, nil)
 	g := newSessionGuard(m)

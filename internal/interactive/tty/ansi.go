@@ -12,23 +12,23 @@ import (
 // instead of "\x1b[2K" and a wrong sequence is a compile error in one
 // place rather than a rendering bug in three.
 const (
-	cupFmt       = "\x1b[%d;%dH" // CUP - cursor position (row, col).
-	el           = "\x1b[K"      // EL - erase from cursor to end of line.
-	el2          = "\x1b[2K"     // EL - erase the whole line, cursor unmoved.
-	ed           = "\x1b[J"      // ED - erase from cursor to end of screen.
-	cuu1         = "\x1b[1A"     // CUU - cursor up one row.
-	cuuFmt       = "\x1b[%dA"    // CUU - cursor up n rows.
-	cudFmt       = "\x1b[%dB"    // CUD - cursor down n rows.
-	home         = "\x1b[H"      // CUP with no args - cursor to row 1, col 1.
-	ed2          = "\x1b[2J"     // ED - erase the entire screen.
-	decstbmFmt   = "\x1b[%d;%dr" // DECSTBM - set scroll margins (top, bottom).
+	cupFmt       = "\x1b[%d;%dH" // CUP: cursor position (row, col).
+	el           = "\x1b[K"      // EL: erase from cursor to end of line.
+	el2          = "\x1b[2K"     // EL: erase the whole line, cursor unmoved.
+	ed           = "\x1b[J"      // ED: erase from cursor to end of screen.
+	cuu1         = "\x1b[1A"     // CUU: cursor up one row.
+	cuuFmt       = "\x1b[%dA"    // CUU: cursor up n rows.
+	cudFmt       = "\x1b[%dB"    // CUD: cursor down n rows.
+	home         = "\x1b[H"      // CUP with no args: cursor to row 1, col 1.
+	ed2          = "\x1b[2J"     // ED: erase the entire screen.
+	decstbmFmt   = "\x1b[%d;%dr" // DECSTBM: set scroll margins (top, bottom).
 	decstbmReset = "\x1b[r"      // DECSTBM reset (whole screen scrollable).
-	// DECSC / DECRC - save and restore the cursor. Deliberately the ESC 7 / ESC 8
+	// DECSC / DECRC: save and restore the cursor. Deliberately the ESC 7 / ESC 8
 	// forms rather than the CSI s / CSI u ones this package used to emit.
 	//
 	// CSI s / CSI u are the ANSI.SYS (SCO) spelling, and they are not universally
 	// implemented: emacs `term` ignores both, so every "cursor-transparent" repaint
-	// silently was not - the cursor stayed wherever the paint left it. Worse, xterm
+	// silently was not: the cursor stayed wherever the paint left it. Worse, xterm
 	// reads CSI s as DECSLRM (set left/right margin) once margin mode is on, and
 	// this package is in the business of setting margins, so the one sequence meant
 	// to protect the cursor could instead reconfigure the terminal.
@@ -39,14 +39,14 @@ const (
 	// CSI pair claimed to do.
 	cursorSave    = "\x1b7"
 	cursorRestore = "\x1b8"
-	// IND - index: move down one row, scrolling at the bottom margin, and leave
+	// IND (index): move down one row, scrolling at the bottom margin, and leave
 	// the COLUMN alone.
 	//
 	// This is what reserves rows, rather than the "\n" it used to be. A cooked
 	// terminal has ONLCR set, so a newline is carriage-return-plus-line-feed
 	// and silently returns the caller's cursor to column 1. region promises the
-	// caller's cursor never moves, and for a caller mid-line - a REPL holding a
-	// prompt, anything writing a partial line - that promise was broken by the
+	// caller's cursor never moves, and for a caller mid-line (a REPL holding a
+	// prompt, anything writing a partial line), that promise was broken by the
 	// one sequence meant to be invisible. IND is the VT100 original with
 	// exactly the semantics wanted here, and needs no mode to behave.
 	ind      = "\x1bD"
@@ -54,7 +54,7 @@ const (
 	sgrReset = "\x1b[0m"
 )
 
-// SGR is a set of Select Graphic Rendition parameters - the part of
+// SGR is a set of Select Graphic Rendition parameters: the part of
 // "\x1b[1;31m" between the bracket and the m.
 //
 // A named type rather than a bare string because the calls that carry one also
@@ -105,7 +105,7 @@ const (
 )
 
 // Hyperlink makes text a real clickable link to uri, for terminals that
-// support OSC 8 - iTerm2, kitty, VTE, WezTerm, Windows Terminal - and returns
+// support OSC 8 (iTerm2, kitty, VTE, WezTerm, Windows Terminal), and returns
 // text unchanged for everything else.
 //
 // It is worth having where a mouse cannot reach: the reserved zone can be
@@ -130,7 +130,7 @@ func Hyperlink(text, uri string) string {
 // [Clip] counts bytes, which is exact for the plain text it was written for and
 // catastrophic for text that is already styled. A single colored cell is one
 // column and about fifteen bytes, so a byte budget cuts a colored row long
-// before it is actually too wide - in the middle of an escape - after which the
+// before it is actually too wide (in the middle of an escape), after which the
 // terminal reads the following text as parameters and swallows it. That is a
 // corrupted screen, repainted several times a second.
 //
@@ -157,7 +157,7 @@ func ClipCols(s string, cols int) string {
 	// Sequences sitting immediately after the last visible column are the ones
 	// that CLOSE it, so they come along: stopping at the budget would otherwise
 	// cut before the reset and bleed the last style into whatever is written
-	// next. Only closers - copying whatever escape happens to be next would
+	// next. Only closers: copying whatever escape happens to be next would
 	// pick up the OPENING of the cell that did not fit.
 	for i < len(s) {
 		n := escapeLen(s[i:])

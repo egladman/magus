@@ -67,7 +67,7 @@ func TestWithDefaultCharms(t *testing.T) {
 
 // TestMergeDriverRefreshSuppression pins the guard that keeps the merge driver from
 // rewriting the tracked .gitattributes. loadMagus refreshes the merge-driver registration
-// on the memoizing path, and that write lands in the working tree - which, when the caller
+// on the memoizing path, and that write lands in the working tree, which, when the caller
 // IS the merge driver running inside the VCS's index manipulation, is the dirty-tree
 // failure that stops `git rebase --continue`. Every other caller must still refresh.
 func TestMergeDriverRefreshSuppression(t *testing.T) {
@@ -199,7 +199,7 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 // TestMachineBusyRidesTheExitCodeSeam pins that a machine-budget refusal needs no
 // branch of its own in exitCodeOf. The local path and the daemon now ask the error the
 // same question, so the refusal must answer it rather than be recognised by type or by
-// diagnostic code - which is what lets one seam serve both this and a contended lock.
+// diagnostic code, which is what lets one seam serve both this and a contended lock.
 func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	// The refusal is built inside the cache, so stand in for it with an error carrying
 	// the same two properties the real one does (machine_test.go pins that it does).

@@ -13,13 +13,13 @@ import (
 //
 // The read list is the part no other review tool has. A guard hook sees every path an agent
 // reaches, so magus can say what an agent was LOOKING AT immediately before it wrote
-// something - which is the closest thing to "why is this change shaped like this" that any
+// something, which is the closest thing to "why is this change shaped like this" that any
 // tool can produce without asking the author. "It changed this because it had just read that"
 // is a sentence a forge cannot say.
 type Touch struct {
 	// Host is the agent host's own label for itself, empty when its wrapper passed none.
 	Host string `json:"host,omitempty" yaml:"host,omitempty"`
-	// Session is the host's own session id - the thing that groups these events.
+	// Session is the host's own session id, the thing that groups these events.
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Transcript points at the host's record of the session. A POINTER, never content: magus
 	// never opens it, so the trail stays a record of paths and timings while the expensive and
@@ -38,8 +38,8 @@ type Touch struct {
 	// raw command line makes the trail a verbatim record of everything an agent typed: an
 	// `op=state` response was observed carrying a live daemon bearer token in a
 	// `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
-	// commit messages. Transcript one field up states the rule that breaks - "A POINTER, never
-	// content ... the expensive and sensitive detail stays where the host already put it" -
+	// commit messages. Transcript one field up states the rule that breaks ("A POINTER, never
+	// content ... the expensive and sensitive detail stays where the host already put it"),
 	// and a review payload is read by every MCP client, so an agent asked to summarize it
 	// reproduces whatever is in there. The program name is the part that explains the edit;
 	// anyone who needs the argument list opens the host's own transcript.
@@ -57,7 +57,7 @@ const (
 // replayReadCap and replayRanCap bound what one Touch carries.
 //
 // Small on purpose. The question this answers is "what was it looking at just before it wrote
-// this", and the answer is the last few things - a hundred paths is a session transcript, not
+// this", and the answer is the last few things; a hundred paths is a session transcript, not
 // an explanation, and the transcript pointer is right there for anyone who wants that.
 const (
 	replayReadCap = 6
@@ -87,8 +87,8 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 	//
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
 	// chronology; Ts is a lossy shadow of it, stamped in whole milliseconds. A burst of hook
-	// observations - which is the normal shape, since an agent reads several files and then
-	// writes one, all inside a millisecond - lands on identical timestamps, and a stable sort
+	// observations (which is the normal shape, since an agent reads several files and then
+	// writes one, all inside a millisecond) lands on identical timestamps, and a stable sort
 	// over ties preserves whatever order it was handed. ReadRecent hands back newest-first, so
 	// sorting by Ts silently walks the whole thing backwards and every read looks like it
 	// happened after the write it explained.
@@ -168,7 +168,7 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 }
 
 // relativize turns a recorded path into the workspace-relative form a review speaks. A path
-// already relative, or one outside the workspace entirely, is returned unchanged - the latter
+// already relative, or one outside the workspace entirely, is returned unchanged; the latter
 // then simply matches nothing, which is the honest outcome for a file this review is not about.
 func relativize(root, p string) string {
 	if p == "" || root == "" || !strings.HasPrefix(p, root) {
@@ -181,7 +181,7 @@ func relativize(root, p string) string {
 // within limit.
 //
 // It exists for one question a fleet cannot answer any other way: is the observer actually
-// RECORDING? An absent observer is silent by design - a per-read interruption would be worse -
+// RECORDING? An absent observer is silent by design (a per-read interruption would be worse),
 // so a hook that is wired but writing nothing looks exactly like an agent that read nothing,
 // and both look like a human wrote the file. This repository has already paid for that: 3252
 // events, not one read, correct wiring, and a green doctor, because the hook resolved a PATH
@@ -222,7 +222,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 // argument. See Touch.Ran for why the arguments cannot be kept.
 //
 // Leading VAR=value assignments are skipped rather than reported, because they are the single
-// likeliest place for a credential to sit - the observed leak was literally `T=<token> curl -H
+// likeliest place for a credential to sit; the observed leak was literally `T=<token> curl -H
 // "Authorization: Bearer $T"`, whose first token IS the secret. Only the shape a shell would
 // treat as an assignment counts, so a path that happens to contain "=" is still a program.
 //

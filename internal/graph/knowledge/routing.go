@@ -57,8 +57,8 @@ var binarySuppliedKinds = map[string]bool{
 // plan calls god nodes; ties break by ID so the summary is deterministic.
 //
 // Two inputs are excluded because MAGUS.md is committed and drift-gated. Runtime edges,
-// so the table does not rank on which diagnostics THIS machine tripped. And git history -
-// the author kind and its `authored` edges - because that varies by COMMIT: a contributor
+// so the table does not rank on which diagnostics THIS machine tripped. And git history
+// (the author kind and its `authored` edges), because that varies by COMMIT: a contributor
 // appearing under a second identity moved the author count and rewrote a committed file
 // that no source change had touched. Degree is what makes the second one subtle, since
 // authored edges also decide which nodes each row lists as anchors.
@@ -69,7 +69,7 @@ var binarySuppliedKinds = map[string]bool{
 //
 // `magus graph stats` keeps all of them on purpose: an interactive query wants local
 // context, so its EdgeCount and god nodes differ from these. Independence from the MACHINE
-// is still not claimed - the @docs/@buzz filesystem walks feed this table.
+// is still not claimed: the @docs/@buzz filesystem walks feed this table.
 func (g *Graph) Routing() types.KnowledgeRouting {
 	type scored struct {
 		label string

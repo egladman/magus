@@ -27,7 +27,7 @@ import (
 //
 // A probe forks a process. At op dispatch that cost is already paid because the version
 // keys the cache, but a console page has no build to piggyback on, so rendering this view
-// would otherwise fork once per declared tool per page load - and a dashboard that
+// would otherwise fork once per declared tool per page load, and a dashboard that
 // refreshes is a fork loop. A tool's version changes when someone installs one, which is
 // rare on the timescale of a page, so a minute of staleness buys the whole cost back.
 //
@@ -140,7 +140,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 // version, not an error: an absent tool is not a violation.
 //
 // Failures are cached too. Absent tools are the population this view exists to show, so
-// caching only successes left exactly them re-forking every request - the fork loop
+// caching only successes left exactly them re-forking every request, the fork loop
 // probeTTL exists to prevent.
 func (s *Service) probeVersion(ctx context.Context, sp *spells.Spell, bin, dir string) probe {
 	// Keyed by spell as well as (bin, dir), because the argv comes from the spell: two

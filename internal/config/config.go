@@ -40,7 +40,7 @@ type Config struct {
 	// across a pair of flags: 1 is fail-fast, 3 tolerates three before giving up.
 	//
 	// Keeping going is the default because a gate over many projects is asked "what
-	// is broken", and stopping at the first failure answers "something is" - one
+	// is broken", and stopping at the first failure answers "something is", one
 	// failure per invocation, each fix costing another full run to find the next.
 	//
 	// Projects that depended on a failure still stop. That is not this setting's
@@ -55,7 +55,7 @@ type Config struct {
 	// CI runner that hit one.
 	//
 	// It bounds the WHOLE target, subprocesses included. Set it ABOVE your
-	// slowest legitimate target, not near it - off by default because a wrong
+	// slowest legitimate target, not near it; off by default because a wrong
 	// value here fails builds that were fine.
 	TargetTimeout time.Duration `json:"target_timeout" yaml:"target_timeout"`
 
@@ -96,16 +96,16 @@ type Config struct {
 	// constraint (">= 0.4.0", "^0.4"). Empty means no floor.
 	//
 	// The binary that hits the problem is the OLD one, and it cannot be told which
-	// release added the key it is choking on - it has never heard of that release. A
+	// release added the key it is choking on: it has never heard of that release. A
 	// declared minimum is the only thing it can evaluate against a future it does not
 	// know, which is why Terraform's required_version and Go's `go` directive take
 	// this shape. Checked before any magusfile is evaluated; see MGS1021.
 	//
-	// cli:"-" - magus.yaml ONLY, deliberately. Config layering exists to let a caller
+	// cli:"-": magus.yaml ONLY, deliberately. Config layering exists to let a caller
 	// override the workspace, and a floor is the one field where that is backwards:
 	// it protects the caller from a binary too old to read the workspace, so an
 	// override switches off a check whose job is to stop you. An env var would be
-	// worse than a flag - one MAGUS_REQUIRED_VERSION exported in a CI environment
+	// worse than a flag: one MAGUS_REQUIRED_VERSION exported in a CI environment
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
 }
@@ -114,12 +114,12 @@ type Config struct {
 type Diff struct {
 	// Tui opens the interactive viewer when the terminal can draw it. nil = default true.
 	//
-	// Default ON because the viewer is the same report plus navigation - it renders the same
-	// annotation lines, from the same diffFileFacts the text mode uses - and a reader who has
+	// Default ON because the viewer is the same report plus navigation (it renders the same
+	// annotation lines, from the same diffFileFacts the text mode uses), and a reader who has
 	// to know a flag exists before they can step through a changeset mostly never does.
 	//
 	// Turning it off is a preference, not a workaround: `magus diff --no-tui` for one run, this
-	// for every run. Neither is needed to make the command scriptable - the viewer already
+	// for every run. Neither is needed to make the command scriptable: the viewer already
 	// stands aside on its own for anything that is not a person at a terminal.
 	Tui *bool `json:"tui" yaml:"tui"`
 }
@@ -233,7 +233,7 @@ type Cache struct {
 
 // CacheWrite gates writing entries: the local snapshot and the remote push alike.
 //
-// One flag covers both because they are one decision today - a run either produces
+// One flag covers both because they are one decision today: a run either produces
 // entries or it does not. Restoring is deliberately NOT gated: a read-only run still
 // populates its local cache from a remote hit, so a pull request replays the shared
 // cache at full speed while publishing nothing to it.
@@ -300,8 +300,8 @@ type CI struct {
 	//
 	// It is the break-glass switch for the one exception in history.go's cache-safety
 	// notice. That log is the only part of the history carrying a commit id or a
-	// branch name, so a workspace whose policy forbids either leaving the repository -
-	// however scoped the CI cache is - turns this off and gives up only the last-passed
+	// branch name, so a workspace whose policy forbids either leaving the repository
+	// (however scoped the CI cache is) turns this off and gives up only the last-passed
 	// base, keeping every timing and volatility field. Off, magus records nothing and
 	// `--base last-passed` says so loudly rather than resolving to something arbitrary.
 	RecordRuns bool `json:"record_runs" yaml:"record_runs"`
@@ -325,7 +325,7 @@ type Watch struct {
 // Secret bounds how long magus waits on a secret provider.
 //
 // Two budgets rather than one, because they answer different questions. Interactive is
-// "how long will you hold the build open for a person to complete an unlock" - long
+// "how long will you hold the build open for a person to complete an unlock", long
 // enough to find your phone. Unattended is "how long before concluding nobody is coming",
 // and it is short on purpose: with no terminal a provider that would prompt cannot, so
 // waiting past the point where a cached session would have answered only delays a failure
@@ -357,7 +357,7 @@ type Daemon struct {
 	// The shared daemon is the one from `magus server start`; with Enabled false an
 	// invocation never discovers or adopts it and hosts its own per-process pool.
 	// Recursive magus calls still forward over a per-process socket to share the
-	// concurrency budget - only the SHARED daemon is opted out of.
+	// concurrency budget; only the SHARED daemon is opted out of.
 	Enabled bool `json:"enabled" yaml:"enabled"`
 	// Address is the unix:// socket the parent listens on; empty auto-generates one.
 	Address string `json:"address" yaml:"address" validate:"omitempty,magus_endpoint"`
@@ -422,11 +422,11 @@ type Knowledge struct {
 	// MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When
 	// exceeded after a build, least-recently-used shard files are evicted; an evicted
 	// shard is restored from the remote cache or rebuilt on the next query. 0
-	// (default) is unlimited - the store self-reconciles deleted projects, so a cap
+	// (default) is unlimited: the store self-reconciles deleted projects, so a cap
 	// mainly bounds transient bloat.
 	MaxSizeMB int `json:"max_size_mb" yaml:"max_size_mb" validate:"gte=0"`
 	// Symbols overrides symbol ingestion for specific projects. Ingestion is normally
-	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust - any
+	// AUTOMATIC: every project bound to a symbol-capable spell (go, ts, py, rust; any
 	// spell exposing the reserved `scip` op) is ingested from its cached index with no
 	// config here. Each entry below instead points a named project at a
 	// workspace-relative .scip path your own build emits, for a project whose index does
@@ -465,20 +465,20 @@ type Knowledge struct {
 // notes location.
 //
 // A note is prose a PERSON wrote about the code, anchored to graph entities but derived
-// from none of them - the one node class magus cannot regenerate, because its only
+// from none of them, the one node class magus cannot regenerate, because its only
 // provenance is the author. Both locations are DECLARED rather than assumed: magus judges
 // writes to them, and a rule fired on a guessed location would act on a workspace that
 // never opted in.
 type NotesConfig struct {
 	// Shared is the workspace-relative directory holding notes the TEAM has: committed,
 	// so git attributes each one to whoever wrote it and review sees every change.
-	// Empty disables it entirely - no shard, no verification, no guard rule.
+	// Empty disables it entirely: no shard, no verification, no guard rule.
 	//
 	// It must stay inside the workspace. That is not a restriction so much as what the
 	// word means here: a note outside the checkout is not shared with anyone.
 	Shared string `json:"shared" yaml:"shared"`
 	// Private is a SECOND notes location, yours rather than the team's, and it may sit
-	// anywhere on disk - a vault, a scratch directory, somewhere outside any repository.
+	// anywhere on disk: a vault, a scratch directory, somewhere outside any repository.
 	//
 	// It is a separate key rather than a looser Path because the two carry different
 	// TRUST, and one key would have silently collapsed the difference. A note under Path
@@ -490,19 +490,19 @@ type NotesConfig struct {
 	//
 	// Consequences that follow from that and are enforced rather than documented: its
 	// shard is never exported to the remote cache (the same rule @memory lives under, for
-	// the same reason - private content must not leak into a shared cache), and its nodes
+	// the same reason: private content must not leak into a shared cache), and its nodes
 	// carry a scope attr so the distinction is visible wherever they surface.
 	//
 	// Agents still may not write here. That is the point: it is the vault case.
 	//
-	// compat(until: `magus notes promote` has replaced this in practice - no workspace here
+	// compat(until: `magus notes promote` has replaced this in practice: no workspace here
 	// or in the wild sets knowledge.notes.private, and `magus memory` carries the drafting
 	// tier instead): SUPERSEDED, still read, no longer the recommended shape.
 	//
 	// Line the three stores up by property rather than by who types into them and this one
 	// has no column of its own: private notes and `magus memory` are both uncommitted,
 	// unattributed, unreviewed and unrecoverable. The only thing separating them was who
-	// wrote the file, which is a field rather than a store - and one the guard cannot
+	// wrote the file, which is a field rather than a store, and one the guard cannot
 	// actually enforce, since a person pasting an agent's prose into $EDITOR passes it
 	// cleanly. What private bought that memory did not was ANCHORS; `notes promote` closes
 	// that by deriving a note's anchors from a record's node refs, so the drafting tier can

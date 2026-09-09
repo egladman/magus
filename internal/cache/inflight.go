@@ -20,7 +20,7 @@ import (
 // magus already reports a target that fails and a run that is cancelled. The case with
 // no reporter is the run that is KILLED: SIGKILL cannot be trapped, so a magus the OOM
 // killer takes leaves no last words and a CI job simply stops mid-log. That happened
-// here - a shard died after "[pass] magus lint" with nothing after it, and the only way
+// here: a shard died after "[pass] magus lint" with nothing after it, and the only way
 // to learn what it had been doing was to guess.
 //
 // A live snapshot cannot answer that, because it dies with the process. So this writes
@@ -30,7 +30,7 @@ import (
 //
 // ONE FILE PER PID, not one shared file. Several magus processes share a cache dir
 // routinely (a recursive magus\run, the daemon serving two dispatches, an agent beside a
-// human), and a shared file means each rewrite erases the others - which would delete
+// human), and a shared file means each rewrite erases the others, which would delete
 // exactly the record a peer is about to need. Per-pid also makes every write single-writer,
 // so a reader never sees a torn set.
 type inflight struct {
@@ -96,8 +96,8 @@ func (i *inflight) start(project, target string) func() {
 // releasing it around the write let a stale snapshot land after a fresh one, so a clean
 // exit could leave a file claiming a target was still running.
 //
-// Errors are dropped on purpose - a run must not fail because its post-mortem breadcrumb
-// could not be written - but the drop is why the caller logs at debug when it matters.
+// Errors are dropped on purpose (a run must not fail because its post-mortem breadcrumb
+// could not be written), but the drop is why the caller logs at debug when it matters.
 func (i *inflight) flushLocked() {
 	targets := make([]inflightTarget, 0, len(i.running))
 	for _, u := range i.running {

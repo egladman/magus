@@ -244,8 +244,8 @@ var surfaceLockPath = filepath.Join("testdata", "magus-api.lock")
 // magusSurfaceNames flattens the magusfile-surface magus namespace to dotted member
 // names, two levels deep: the top-level members plus the members of each namespace
 // member (project, cache, ci, secret, workspace). Two levels is what the removal
-// history needs - `magus.project.register` and `magus.target.literal` were both
-// nested - and going deeper would snapshot returned data rather than the surface.
+// history needs (`magus.project.register` and `magus.target.literal` were both
+// nested), and going deeper would snapshot returned data rather than the surface.
 func magusSurfaceNames(t *testing.T) []string {
 	t.Helper()
 	ctx := context.Background()

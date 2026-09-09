@@ -1,6 +1,6 @@
 // Package httpx owns the loopback-only HTTP server core and the DNS-rebind
 // guard shared by magus's daemon-facing HTTP surfaces. The server binds
-// 127.0.0.1 exclusively - serving to a network interface is never allowed, so
+// 127.0.0.1 exclusively: serving to a network interface is never allowed, so
 // the bind host is not configurable; only the port is taken from the caller's
 // address.
 package httpx
@@ -67,7 +67,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	}
 }
 
-// Addr is the loopback address actually bound - the real port even when the
+// Addr is the loopback address actually bound: the real port even when the
 // caller requested port 0.
 func (s *Server) Addr() netip.AddrPort {
 	tcp, ok := s.ln.Addr().(*net.TCPAddr)

@@ -3,11 +3,11 @@
 //
 // "emit" is the compiler-pipeline term for this step (parse, analyze, emit), and it is
 // deliberately narrower than a name like codegen: this package generates nothing, it
-// WRITES what a generator produced - idempotently, and formatted when the artifact is
+// WRITES what a generator produced, idempotently, and formatted when the artifact is
 // Go. The reading half lives beside each source of truth.
 //
 // Build-time only. Nothing in the magus binary imports it and nothing should, so
-// internal/ keeps it unimportable from outside the module - the right shape for code
+// internal/ keeps it unimportable from outside the module, the right shape for code
 // whose whole job is producing checked-in files.
 //
 // Note the directory vocabulary this fits into: a gen/ directory holds generated
@@ -71,7 +71,7 @@ func GoTemplate(path string, tmpl *template.Template, data any) error {
 
 // Marker names a generated region inside an otherwise hand-maintained file.
 //
-// Some artifacts are mostly hand-written with one generated list in them - the shell
+// Some artifacts are mostly hand-written with one generated list in them: the shell
 // completion scripts are four dialects of stable hand-written logic wrapped around a
 // subcommand list that drifted. Owning the whole file would mean maintaining four
 // shell templates to fix a problem that is entirely about one list.

@@ -21,8 +21,8 @@ import (
 // every time it refuses; that is the one verdict the caller cannot see past.
 //
 // Only the kinds enrolled below are held to one firing, and enrolling one is deliberate.
-// The rest correct the command in front of the reader - a `cd` before magus, a `time`
-// wrapper, a chained run - so a second firing reports a second mistake rather than
+// The rest correct the command in front of the reader (a `cd` before magus, a `time`
+// wrapper, a chained run), so a second firing reports a second mistake rather than
 // repeating a standing fact.
 
 // advisoryKind names one repeatable notice. It is also a filename component, so the
@@ -54,7 +54,7 @@ const (
 	// A host that reports no session leaves nothing to tell this run from the next, so
 	// that marker expires on a clock instead: long enough to cover a working session,
 	// short enough that tomorrow's session is told the fact again. A host that DOES
-	// report one needs no window - the id is the session, and its return is the same
+	// report one needs no window: the id is the session, and its return is the same
 	// session.
 	advisoryAnonWindow = 2 * time.Hour
 

@@ -167,7 +167,7 @@ func TestHTTPFail(t *testing.T) {
 
 // TestHTTPFailCarriesTheStatus is what lets a Buzz caller tell a 404 from a 500.
 // The thrown value used to be a message and nothing else, so branching on the
-// status meant substring-matching prose - the one part of an error nobody promises
+// status meant substring-matching prose, the one part of an error nobody promises
 // to keep stable.
 func TestHTTPFailCarriesTheStatus(t *testing.T) {
 	t.Parallel()
@@ -496,7 +496,7 @@ func TestHTTPDoesNotRetryByDefault(t *testing.T) {
 	defer srv.Close()
 
 	// A 500 is squarely in the retryable set. With no policy it must still be
-	// requested exactly once - that is the default this asserts.
+	// requested exactly once; that is the default this asserts.
 	_, err := HTTPGet(context.Background(), srv.URL, nil, nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&calls), "no policy must mean one attempt")

@@ -10,7 +10,7 @@ import (
 )
 
 // A lookup that searched everything it could and found nothing is a verified absence,
-// and it carries no reason and no gap list - there is nothing to act on.
+// and it carries no reason and no gap list: there is nothing to act on.
 func TestAnswerAbsent(t *testing.T) {
 	assert.Equal(t, KnowledgeAnswer{Verdict: VerdictAbsent}, ClassifyAnswer(false, "", nil))
 }

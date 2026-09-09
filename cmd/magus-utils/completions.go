@@ -11,7 +11,7 @@ import (
 )
 
 // The completion scripts are hand-written shell in four dialects, and the LOGIC in
-// them is stable - what drifted was the data. So this generator owns only the marked
+// them is stable; what drifted was the data. So this generator owns only the marked
 // list regions and leaves the surrounding shell alone:
 //
 //	# magus-utils:subcommands:begin

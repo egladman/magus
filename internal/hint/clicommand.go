@@ -1,7 +1,7 @@
 package hint
 
 // This file is the single source of truth for magus command paths that appear
-// inside user-facing OUTPUT - hints, error messages, and examples that point
+// inside user-facing OUTPUT: hints, error messages, and examples that point
 // the reader at another command to run.
 //
 // Hardcoding these strings let them drift from the real command surface: a
@@ -12,8 +12,8 @@ package hint
 //
 // Not every emitter does yet: usage blocks and doc tables still carry the path as a
 // literal, and those are the ones that can silently go stale. A Command declared for
-// a path nothing renders buys nothing though - it drifts just as quietly, with no
-// output depending on it - so declare one when an emitter starts using it.
+// a path nothing renders buys nothing though (it drifts just as quietly, with no
+// output depending on it), so declare one when an emitter starts using it.
 
 import "strings"
 
@@ -23,7 +23,7 @@ import "strings"
 // Where a parent command routes to a subcommand by positionally matching a token
 // (for example `query` matching "output" to reach `query output`), the
 // dispatcher should compare against Leaf rather than a bare string literal, so
-// the accepted form and the printed hint share one source of truth - the exact
+// the accepted form and the printed hint share one source of truth, the exact
 // drift that shipped the wrong ref hint.
 type Command struct {
 	tokens []string
@@ -47,7 +47,7 @@ func (c Command) With(args ...string) string {
 // one cmd/magus's dispatchSub switches on. The drift test asserts it is real.
 func (c Command) Head() string { return c.tokens[0] }
 
-// Leaf is the last token of the path (e.g. "output" for "query output") - the
+// Leaf is the last token of the path (e.g. "output" for "query output"), the
 // positional a parent command matches to route here. Compare against this in a
 // dispatcher instead of a bare literal to keep it tied to the hint.
 func (c Command) Leaf() string { return c.tokens[len(c.tokens)-1] }

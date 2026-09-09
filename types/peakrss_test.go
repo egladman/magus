@@ -28,7 +28,7 @@ func TestPeakRSSDistinguishesUnmeasuredFromZero(t *testing.T) {
 	t.Parallel()
 
 	// The whole reason PeakRSS returns a bool. Windows and wasm cannot report
-	// this, and a process that never started reports nothing either - all of
+	// this, and a process that never started reports nothing either, all of
 	// which arrive as 0. A planner that reads 0 as "cheap" would co-schedule
 	// precisely the targets it knows least about.
 	ctx := WithPeakRSS(context.Background())

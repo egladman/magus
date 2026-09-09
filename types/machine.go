@@ -30,8 +30,8 @@ type MachineClaim struct {
 
 // MachineClaimant is one step's hold on, or place in the queue for, the machine budget.
 //
-// One type for both because a reader asks the same question of each - who is this, and
-// where - and the only difference is which list it appears in. Since is when the claim
+// One type for both because a reader asks the same question of each (who is this, and
+// where), and the only difference is which list it appears in. Since is when the claim
 // was granted, or when the waiter first asked.
 type MachineClaimant struct {
 	Project  string    `json:"project" yaml:"project"`

@@ -13,7 +13,7 @@ import (
 // TestCLICommandHeadsAreRealSubcommands guards against the drift that shipped a
 // hint for a command that no longer exists. Every canonical command referenced
 // from user-facing output (hint.AllCommands) must have a head token that dispatchSub
-// actually routes - knownSubcommands is that switch's own accept-list. Rename or
+// actually routes: knownSubcommands is that switch's own accept-list. Rename or
 // remove a subcommand and forget to update hint's command registry, and this fails.
 func TestCLICommandHeadsAreRealSubcommands(t *testing.T) {
 	for _, c := range hint.AllCommands {
@@ -92,7 +92,7 @@ func TestCLICommandLsNounsAreDocumented(t *testing.T) {
 
 // TestCLIDescribeNounsAreAccepted holds the same line for describe, in the direction
 // that can mislead a reader: a documented noun describeAlias does not accept is a man
-// page for a command that exits 2. The reverse is deliberately not asserted - the alias
+// page for a command that exits 2. The reverse is deliberately not asserted: the alias
 // map carries both spellings of every noun, and documenting each twice would say the
 // same thing on two rows.
 func TestCLIDescribeNounsAreAccepted(t *testing.T) {

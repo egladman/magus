@@ -10,7 +10,7 @@ import (
 )
 
 // Pagination for magus_query is stateless: the cursor is an opaque token the
-// client echoes back, carrying only the next offset plus two guards - a hash of
+// client echoes back, carrying only the next offset plus two guards: a hash of
 // the query and the graph's fingerprint at issue time. On the next page both are
 // re-checked, so a cursor reused against a different query, or against a graph that
 // changed underneath it (a warm-graph rebuild between pages), fails loudly instead

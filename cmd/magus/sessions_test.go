@@ -114,7 +114,7 @@ func TestSessionParentResolvesOnlyWhatTheStoreHolds(t *testing.T) {
 }
 
 // The listing answers "what happened", but its reader is often looking for "what needs
-// me" - so an open queue gets one cross-reference line, and a quiet queue gets silence
+// me", so an open queue gets one cross-reference line, and a quiet queue gets silence
 // rather than a reassurance nobody asked for.
 func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())

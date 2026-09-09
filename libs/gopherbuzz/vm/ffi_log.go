@@ -44,8 +44,8 @@ const FFILevelTrace = slog.LevelDebug - 4
 var ffiLogger atomic.Pointer[slog.Logger]
 
 // ffiLogCtx is the context handed to the installed handler. It is Background and not
-// a caller's ctx because the reporting sites are package-level functions - the layout
-// calculators and the allocator - which take none and cannot without changing their
+// a caller's ctx because the reporting sites are package-level functions (the layout
+// calculators and the allocator), which take none and cannot without changing their
 // exported signatures. Passing a literal nil would also work, since slog substitutes
 // Background, but it hides the decision. A context-aware handler therefore gets no
 // correlation from this seam; wiring one is a signature change worth making
@@ -57,8 +57,8 @@ var ffiLogCtx = context.Background()
 //
 // What is reported: the zdef bind at slog.LevelDebug (once per zdef call), and struct
 // and union layout decisions plus each alloc and free at FFILevelTrace (once per
-// operation). NOTHING is emitted at INFO or above - choosing what an operator sees is
-// the host's call - and an error this package returns is never also logged.
+// operation). NOTHING is emitted at INFO or above (choosing what an operator sees is
+// the host's call), and an error this package returns is never also logged.
 func SetFFILogger(l *slog.Logger) { ffiLogger.Store(l) }
 
 // ffiLog reports one FFI event, and is a no-op when no logger is installed or the

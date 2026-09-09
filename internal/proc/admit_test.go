@@ -53,7 +53,7 @@ func TestBudgetRoundTrip(t *testing.T) {
 }
 
 // TestBudgetExcusesAnAncestorAcrossTheSocket is the path the CI break took. An SDK
-// consumer inside a magus process tree gets the DaemonAdmitter, not the local one - its
+// consumer inside a magus process tree gets the DaemonAdmitter, not the local one; its
 // workspace was never handed a budget, so it dials the daemon the parent run started.
 // The excusal therefore happens server-side, keyed on the Ancestors the claim carries,
 // and it only works if that field survives the wire.
@@ -181,7 +181,7 @@ func TestBudgetDropRetiresAWaiter(t *testing.T) {
 }
 
 // TestBudgetCallIsBoundedByItsTimeout is B3. A daemon whose accept queue is full is not
-// dead - the socket file is there and the connection never completes - so a dial
+// dead (the socket file is there and the connection never completes), so a dial
 // outside the bound hangs the caller for as long as the daemon stays sick. For a
 // release that runs inside the defer holding a local limiter slot, that is a stalled
 // run rather than a slow one.
@@ -256,8 +256,8 @@ func TestStatusOmitsTheBudgetWithoutOne(t *testing.T) {
 }
 
 // TestIdleForCountsHeldClaimsAsBusy pins what the admission self-exit reads. A daemon
-// holding claims is serving runs that are not talking to it - they took their claim,
-// went quiet for the length of a build, and will come back to release it - so exiting
+// holding claims is serving runs that are not talking to it (they took their claim,
+// went quiet for the length of a build, and will come back to release it), so exiting
 // under them would drop every claim on the machine.
 func TestIdleForCountsHeldClaimsAsBusy(t *testing.T) {
 	budget := cache.NewMachineBudget(10_000, 8)

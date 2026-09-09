@@ -14,7 +14,7 @@ import (
 
 // TestValueMasksEveryRenderingPath is the whole point of the type. Redact-at-write
 // compares against what fmt renders while a handler emits what its ENCODER produces, and
-// those differ - which is how a []byte attr reached stdout base64'd and decodable. A
+// those differ, which is how a []byte attr reached stdout base64'd and decodable. A
 // value that masks itself needs no interceptor to guess the encoder.
 //
 // Delete any single method on Value and the matching row here fails.
@@ -46,7 +46,7 @@ func TestValueMasksEveryRenderingPath(t *testing.T) {
 	t.Run("json", func(t *testing.T) {
 		// The path that defeated the redacting handler: a value whose fmt form looks
 		// clean while its marshalled form carries the credential. Through magus's own
-		// shared JSON package, which is what the binary actually marshals with - and
+		// shared JSON package, which is what the binary actually marshals with, and
 		// which TestNoDirectEncodingJSONImport requires over encoding/json.
 		b, err := json.Marshal(struct {
 			Token Value `json:"Token"`

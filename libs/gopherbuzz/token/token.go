@@ -617,7 +617,7 @@ func (l *lexer) nextToken(r rune, size int) (Token, error) {
 		return simple(Backslash, size), nil
 	case '@':
 		// Free (raw) identifier: @"any text" names a binding, field, or member
-		// whose spelling the ordinary identifier rules would reject - including a
+		// whose spelling the ordinary identifier rules would reject, including a
 		// reserved word or a name with punctuation in it.
 		if l.peekByte() == '"' {
 			l.pos++ // '@'
@@ -662,7 +662,7 @@ func (l *lexer) peekByteAt(n int) byte {
 
 // lexString scans a double-quoted string, splitting on {expr} interpolation.
 // lexChar scans a character literal ('A', '\n', '\”) and emits it as an Int token
-// holding the rune's codepoint - upstream compares them against integers directly
+// holding the rune's codepoint; upstream compares them against integers directly
 // (`'\” == 39`), so a char IS an int and needs no distinct token kind, no distinct
 // value tag, and no VM support at all.
 func (l *lexer) lexChar(line, col int) (Token, error) {
@@ -837,7 +837,7 @@ func (l *lexer) lexRawString(line, col int) (Token, error) {
 	for l.pos < len(l.src) {
 		c := l.src[l.pos]
 		// A raw string needs a way to write a literal brace, since it interpolates;
-		// upstream spells that \{. Nothing else is unescaped - that is what "raw" means,
+		// upstream spells that \{. Nothing else is unescaped: that is what "raw" means,
 		// and a regex or Windows path inside one must survive intact. Handled before the
 		// switch so an escaped brace never opens an interpolation.
 		if c == '\\' && l.pos+1 < len(l.src) && (l.src[l.pos+1] == '{' || l.src[l.pos+1] == '}') {
@@ -1012,13 +1012,13 @@ func (l *lexer) captureInterpExpr(line, col int) (string, error) {
 //   - Binary ints:              0b1010, 0b1100_1010          (lowercase prefix only)
 //
 // Underscores are permitted between digits as a readability separator, but
-// must not appear at the start or end of the digit run - upstream rejects
+// must not appear at the start or end of the digit run; upstream rejects
 // those with "'_' must be between digits". Upstream has NO octal prefix
 // (0o) and NO float exponent syntax (e/E); this lexer matches that.
 // Leading zero on a decimal stays decimal (no implicit-octal C footgun).
 func (l *lexer) lexNumber(line, col int) (Token, error) {
 	start := l.pos
-	// Non-decimal prefix: 0x (hex) or 0b (binary). Lowercase only - upstream
+	// Non-decimal prefix: 0x (hex) or 0b (binary). Lowercase only: upstream
 	// dispatches on '0' followed by literal 'x' / 'b'.
 	if l.pos+1 < len(l.src) && l.src[l.pos] == '0' {
 		switch l.src[l.pos+1] {

@@ -127,7 +127,7 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	})
 
 	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
-		// A daemon's own cwd (unrelated to workspace B) must not scope B's run - it
+		// A daemon's own cwd (unrelated to workspace B) must not scope B's run: it
 		// falls through to the full fan-out, not a mis-scoped or empty result.
 		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/tmp/daemon-cwd"})
 		require.NoError(t, err)
@@ -218,8 +218,8 @@ func TestResolveTargetsSkip(t *testing.T) {
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}, {Path: "web", Name: "test"}}, targets)
 	})
 
-	// A real project outside an explicit selection is not a contradiction - it was
-	// never going to run - so it subtracts nothing and stays silent.
+	// A real project outside an explicit selection is not a contradiction (it was
+	// never going to run), so it subtracts nothing and stays silent.
 	t.Run("skipping an unselected project is a no-op", func(t *testing.T) {
 		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
 			runSelection{projects: []string{"api"}, skips: []string{"web"}, cwd: "/ws/other"})
@@ -369,7 +369,7 @@ func TestApplyTargetFilter(t *testing.T) {
 //
 // It lives here rather than beside the root package's cross-output tests because it needs
 // a magusfile body to actually run, and the interpreter is a pack only cmd/magus wires in
-// (packs_interp.go) - the root test binary registers shim spells that collide with it.
+// (packs_interp.go): the root test binary registers shim spells that collide with it.
 func TestCrossProjectOutputReplaysFromCache(t *testing.T) {
 	root := t.TempDir()
 	write := func(rel, content string) {
@@ -486,7 +486,7 @@ func TestWithoutDetachFlagStripsEverySpelling(t *testing.T) {
 //
 // --detach left in would make the daemon detach again, handing the work to
 // itself forever. --wait left in would be acted on by a run that is not
-// detaching, where it is a usage error - so a valid local invocation would
+// detaching, where it is a usage error, so a valid local invocation would
 // arrive at the daemon as an invalid one.
 func TestLocalOnlyFlagsNeverReachTheDaemon(t *testing.T) {
 	got := withoutDetachFlag([]string{
@@ -573,7 +573,7 @@ func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
 	// An unknown flag and an unparseable value are both no-ops rather than failures:
 	// the environment is not the caller's invocation, so it must not abort one.
 	// Unparseable is REPORTED to the caller (see the test below) but still applies
-	// nothing here - which of the two the caller does is the caller's decision.
+	// nothing here; which of the two the caller does is the caller's decision.
 	fs = newFS()
 	envDefault(fs, "nosuchflag", "x")
 	envDefault(fs, "max", "not-a-number")
@@ -583,7 +583,7 @@ func TestEnvDefaultRewritesTheDefaultNotTheValue(t *testing.T) {
 // The dropped Set error left the flag at its zero with nothing said. For the shard
 // pair that is a wrong ANSWER, not a lost convenience: NShards 0 means "do not
 // shard", so every matrix job ran the whole selection and exited 0. An unknown flag
-// stays silent - that is wiring, not something a user set.
+// stays silent: that is wiring, not something a user set.
 func TestEnvDefaultReportsAValueTheFlagCannotParse(t *testing.T) {
 	fs := flag.NewFlagSet("t", flag.ContinueOnError)
 	fs.Int("max", 4, "")

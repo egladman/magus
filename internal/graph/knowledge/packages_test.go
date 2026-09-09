@@ -43,7 +43,7 @@ func TestAssemblePackages_SharesANodeBetweenProjects(t *testing.T) {
 // TestAssemblePackages_ManagerSeparatesNamespaces pins the collision packageID exists to
 // prevent. The npm package and the Go module are unrelated things that share a name, and
 // folding them onto one node would report one ecosystem's version for the other's
-// dependency - parseMoniker keys on the manager for exactly this reason.
+// dependency; parseMoniker keys on the manager for exactly this reason.
 func TestAssemblePackages_ManagerSeparatesNamespaces(t *testing.T) {
 	t.Parallel()
 	s := assemblePackages(map[string][]types.KnowledgePackage{

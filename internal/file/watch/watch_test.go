@@ -17,7 +17,7 @@ import (
 // for fsnotify tests: there is no portable signal that an OS watch is "hot" after Add()
 // returns, so a single trigger can drop in the establishment gap (and stay dropped) under
 // load. Re-firing recovers it once the watch goes live. The ticker interval sits ABOVE the
-// tests' debounce window on purpose - re-triggering faster than the debounce would keep
+// tests' debounce window on purpose: re-triggering faster than the debounce would keep
 // resetting the timer and starve the flush, so a batch would never emit.
 func awaitEventFor(t *testing.T, w *Watcher, wantPath string, trigger func()) {
 	t.Helper()

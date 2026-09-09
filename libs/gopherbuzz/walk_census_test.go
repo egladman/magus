@@ -10,7 +10,7 @@ import (
 )
 
 // TestInspectKitchenSink drives ast.Inspect over a REAL parse of a program using
-// most statement and expression forms, then asserts the node census - which
+// most statement and expression forms, then asserts the node census: which
 // kinds were visited and that traversal reached inside each construct. The
 // hand-built trees in ast/walk_test.go verify the visitor mechanics; this pins
 // the traversal switch against what the parser actually produces, so a node
@@ -67,7 +67,7 @@ fun main() > void {
 	}
 
 	// Every construct the source spells must have been VISITED, and the counts
-	// for the unambiguous ones must be exact - an off-by-one there means Inspect
+	// for the unambiguous ones must be exact: an off-by-one there means Inspect
 	// double-visited or skipped a nesting level.
 	wantExact := map[string]int{
 		"*ast.FunDecl":     3, // helper, main, and Point.sum

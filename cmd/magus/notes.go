@@ -33,7 +33,7 @@ import (
 // A note's only provenance is the person who wrote it: nothing in the repo can corroborate
 // it, now or in a year. That is exactly why the write path is a human in an editor and not
 // an API. `put` is the affordance an agent reaches for first, so its absence is the design,
-// not an omission - `edit` opens $EDITOR and gets out of the way.
+// not an omission: `edit` opens $EDITOR and gets out of the way.
 func notesCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		notesUsage()
@@ -224,7 +224,7 @@ func noteModified(n store.Note, reproducible bool) *time.Time {
 }
 
 // notePath renders where a note lives: workspace-relative for a shared note, absolute for a
-// private one. The split follows the scope - a private store sits outside the workspace, so a
+// private one. The split follows the scope: a private store sits outside the workspace, so a
 // relative path would be a lie about a file the reader still has to find.
 //
 // The path is the one the note was READ from (store.Note.Path), never one rebuilt from its
@@ -238,7 +238,7 @@ func notePath(root string, st notesStore, n store.Note) string {
 }
 
 // relativeToRoot renders a path inside the workspace as workspace-relative, and leaves one
-// outside it alone - a private store sits anywhere on disk, and a ../../.. walk out of the
+// outside it alone: a private store sits anywhere on disk, and a ../../.. walk out of the
 // checkout names the file no more usefully than the absolute path does.
 func relativeToRoot(root, path string) string {
 	rel, err := filepath.Rel(root, path)
@@ -402,8 +402,8 @@ func notesGet(root string, args []string) error {
 // notesEdit opens the note in the author's own editor, the way `git commit` does.
 //
 // This is the entire "no text editor" story. Notes are markdown files at real paths, so the
-// tool that edits them is the one the author already uses - vim, VS Code, Obsidian, anything
-// - and magus writes no editing surface of its own.
+// tool that edits them is the one the author already uses (vim, VS Code, Obsidian, anything)
+// and magus writes no editing surface of its own.
 func notesEdit(ctx context.Context, root string, args []string) error {
 	var editShared, editPrivate *bool
 	var anchors stringList
@@ -437,8 +437,8 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// making easy and a private note is the deliberate exception.
 	target := stores[0]
 	// existing is the file the note was READ from, and using it is what makes "edited where
-	// it already lives" true. store.Path answers a different question - where a note of this
-	// name WOULD go - and for a note whose declared id no longer matches its filename the two
+	// it already lives" true. store.Path answers a different question (where a note of this
+	// name WOULD go), and for a note whose declared id no longer matches its filename the two
 	// answers differ, so editing one opened a blank scaffold at the id's path and left the
 	// real note untouched beside it.
 	var existing string
@@ -464,7 +464,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	}
 	// A pipe is the non-interactive way to author a note: `pg_dump ... | magus notes edit`
 	// is the same act as opening the editor, just without a terminal to open one in. It is
-	// still a PERSON writing - an agent reaching for this is denied by the command guard,
+	// still a PERSON writing: an agent reaching for this is denied by the command guard,
 	// which is where the write boundary is enforced for the command surface (the path rule
 	// only sees file writes, and a pipe is not one).
 	if !stdinIsTerminal() {
@@ -493,7 +493,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 		// An editor that never started (a bad $EDITOR, a missing binary) would otherwise
 		// leave the placeholder behind: listed by `notes ls`, assembled into the graph,
 		// and swept up by the next `git add`. Only a scaffold this run created is removed,
-		// and only while it is still untouched - an unreadable write-back leaves len 0, which
+		// and only while it is still untouched: an unreadable write-back leaves len 0, which
 		// removes nothing, because a file magus cannot prove is a placeholder is the author's.
 		if len(scaffolded) != 0 {
 			if body, rerr := os.ReadFile(path); rerr == nil && bytes.Equal(body, scaffolded) {
@@ -521,7 +521,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// accepting a drift flag would be the same failure wearing a human's name.
 	res, err := notesResolver(ctx, root)
 	if err != nil {
-		// The note IS saved - that write already succeeded and is not undone by this. What
+		// The note IS saved: that write already succeeded and is not undone by this. What
 		// failed is the re-attestation, and reporting it as success would leave the author
 		// believing their note is fingerprinted against today's code when it is not. So it
 		// is a real error, with the saved path named so nobody goes looking for lost work.
@@ -544,7 +544,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 	_, err := cmdParse("notes verify", args, func(fs *flag.FlagSet) {
 		vShared, vPrivate = notesScopeFlags(fs)
 		// Dangling only, and never drift. A dangling anchor is unambiguous, always fixable,
-		// and its cause is in the diff that broke it - the properties a gate needs. Drift is
+		// and its cause is in the diff that broke it: the properties a gate needs. Drift is
 		// a judgment call whose base rate is low, and gating on judgment calls is how a
 		// check earns a permanent `|| true`.
 		fs.BoolVar(&strict, "strict", false,
@@ -628,7 +628,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 //
 // It reports HEAD even when the tree is dirty, deliberately. A note is normally written
 // alongside the very work it describes, so demanding a clean tree would leave the provenance
-// empty in the common case - and HEAD-at-review is still the right base: it is the parent of
+// empty in the common case, and HEAD-at-review is still the right base: it is the parent of
 // the commit that will carry both the note and the change, so diffing from it shows the
 // author exactly the work they were looking at. Empty when there is no resolvable VCS, which
 // omits the provenance rather than blocking the write.
@@ -772,7 +772,7 @@ func printNotesIssues(issues []store.Issue, strict bool) error {
 // drift finding asks a person to re-read prose against code and decide, and a gate that
 // blocks a merge pending a judgment call is one people route around permanently. The only
 // actively-maintained tool in this space is a CI check that fails a pull request when covered
-// files move - the gate is the mechanism that works, and keeping it narrow is what keeps it.
+// files move: the gate is the mechanism that works, and keeping it narrow is what keeps it.
 // notesIssueSubjects names what each issue is about, for `-o name`.
 func notesIssueSubjects(issues []store.Issue) []string {
 	out := make([]string, 0, len(issues))
@@ -817,7 +817,7 @@ func notesIssuesError(issues []store.Issue, strict bool) error {
 // It exists because a review thread is otherwise scattered. The changeset store persists the
 // unsent remarks a person wrote, and the forge holds what colleagues said back; nothing joins
 // them into one readable record that outlives the review. A running daemon holds MORE than the
-// store does - an agent's remarks, and remarks already published - and capture says so when it
+// store does (an agent's remarks, and remarks already published), and capture says so when it
 // had to read the store instead, because a transcript quietly missing half a conversation is
 // worse than no transcript.
 
@@ -892,7 +892,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes capture: %w", err)
 	}
 	// Read back rather than reporting the value just written. notePath needs Note.Path, which
-	// is observed on read and empty on a note that was built - printing the built one names
+	// is observed on read and empty on a note that was built; printing the built one names
 	// the store directory instead of the file. The round trip also proves the transcript
 	// parses as a note, which is worth one stat for something nothing can recreate.
 	saved, err := store.Get(target.dir, noteName)
@@ -916,14 +916,14 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	// Named for the same reason. The store keeps your unsent remarks and nothing else, so a
 	// capture taken without a daemon is missing anything an agent said and anything already
-	// published to the review - and the reader has to be told which record they are holding.
+	// published to the review, and the reader has to be told which record they are holding.
 	if !fromDaemon {
 		fmt.Println("Read from the local review store, so this holds your unsent remarks. A running daemon would also carry an agent's remarks and any already published.")
 	}
 
 	// Fingerprint the anchored files, exactly as a written note is fingerprinted on save. It
 	// matters MORE here: a transcript is about code as it stood during one review, so the
-	// question a reader will have later is whether it has moved since - and only a recorded
+	// question a reader will have later is whether it has moved since, and only a recorded
 	// digest lets `notes verify` answer it. Without this the capture reports "unverified"
 	// forever, which is the one verdict that means nothing was ever checked.
 	res, err := notesResolver(ctx, root)
@@ -942,7 +942,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 
 // captureFromSession maps a review session onto the store's source-agnostic capture shape.
 // The mapping lives here rather than in internal/notes so the store never has to know what a
-// diff is - and so a second source can be added without it learning.
+// diff is, and so a second source can be added without it learning.
 //
 // threads are the remarks already on the host's review, and they are captured ALONGSIDE the
 // session's own. A transcript holding only your half of a conversation is not a transcript of
@@ -1039,7 +1039,7 @@ func captureName(sess *types.DiffSession) string {
 // already published to the review, neither of which the store keeps. But the store keeps the
 // unsent human ones, which is what a person writing alone in `magus diff` produces, so the
 // absence of a daemon is a smaller transcript rather than no transcript. The caller says which
-// one it got - see notesCapture's output.
+// one it got; see notesCapture's output.
 func captureSession(ctx context.Context, m *magus.Magus) (*types.DiffSession, bool) {
 	if sess := daemonDiffSession(ctx); sess != nil {
 		return sess, true
@@ -1066,7 +1066,7 @@ func storedDiffSession(cacheDir, patch string) *types.DiffSession {
 // no token, or nothing attached. Every failure is nil rather than an error: the caller has one
 // message to print for all of them, and it is about the session rather than the transport.
 //
-// /api/v1/diff/session, NOT /api/v1/diff. The latter is the annotated changeset - it loads the
+// /api/v1/diff/session, NOT /api/v1/diff. The latter is the annotated changeset: it loads the
 // symbol shards and walks a reverse closure, and it wants the paths under review. This one
 // hands back the attached session as it stands, which is all a transcript needs, and answers
 // 409 when nothing is attached.
@@ -1148,7 +1148,7 @@ func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, rea
 	}
 	if body.ID == "" {
 		// No review open. The reason names which ordinary situation that is, and none of them
-		// is worth a line during a capture - there is simply no second half.
+		// is worth a line during a capture: there is simply no second half.
 		return nil, "", true
 	}
 	return body.Threads, body.Reason, true
@@ -1159,7 +1159,7 @@ func daemonReviewThreads(ctx context.Context) (threads []types.ReviewThread, rea
 // working tree, and a caller showing some other patch has to place them against that one.
 //
 // The origin and the cache dir are passed rather than a workspace, so a test can answer them
-// without a repository - the narrowing the daemon's own review source uses.
+// without a repository, the narrowing the daemon's own review source uses.
 func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewThread, string) {
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
@@ -1179,7 +1179,7 @@ func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir s
 		}
 	}
 	if err != nil {
-		// The threads that DID decode still travel, and the reason rides beside them - the
+		// The threads that DID decode still travel, and the reason rides beside them: the
 		// handler's posture, for the handler's reason.
 		return threads, err.Error()
 	}
@@ -1190,8 +1190,8 @@ func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir s
 // of them, or "" when none of it is new to them.
 //
 // Printed rather than written into the note, which is the whole reason it is a line and not a
-// field. New belongs to the READER's history with the review and not to the conversation - see
-// types.ReviewThread.New - so in a transcript a colleague reads next year it would describe
+// field. New belongs to the READER's history with the review and not to the conversation (see
+// types.ReviewThread.New), so in a transcript a colleague reads next year it would describe
 // somebody else's morning. Said to the person taking the capture, it is the one moment it is
 // worth knowing.
 func newRemarkLine(threads []types.ReviewThread) string {
@@ -1229,8 +1229,8 @@ func (t *tagList) Set(v string) error {
 // A note costs a person a deliberate act of composition, and the evidence is that they do not
 // pay it: across 921 GitHub projects carrying architecture decision records, about half of
 // those that adopt the shape at all end up with between one and five entries. This repository
-// has one. The same knowledge - what bit us, what was rejected, what is invisible in the
-// resulting code - accumulated by the hundreds of files in an agent-written store instead.
+// has one. The same knowledge (what bit us, what was rejected, what is invisible in the
+// resulting code) accumulated by the hundreds of files in an agent-written store instead.
 // That is not a demand failure; it is capture cost landing on the party that collects none of
 // the benefit, which Grudin published in 1996 and nothing since has repealed.
 //

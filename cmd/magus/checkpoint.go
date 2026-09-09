@@ -23,8 +23,8 @@ import (
 //
 // It is one command with two callers and no branch between them. A person runs it with
 // a --note before putting something down; an agent host's stop hook pipes its event
-// envelope in. Both produce the same record, because what a reader needs - which
-// revision, which branch, whether the tree is dirty, and a sentence about it - does not
+// envelope in. Both produce the same record, because what a reader needs (which
+// revision, which branch, whether the tree is dirty, and a sentence about it) does not
 // depend on who stopped working.
 //
 // It records the same thing `magus vcs checkpoint` computes, and keeps it. magus reads
@@ -74,8 +74,8 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 	}
 
 	// A tree with no revision to report still gets a record. Three ordinary states
-	// reach here - a repository before its first commit, a directory under no VCS at
-	// all, and VCS disabled by config - and this runs as a stop hook on every
+	// reach here (a repository before its first commit, a directory under no VCS at
+	// all, and VCS disabled by config), and this runs as a stop hook on every
 	// documented host, so failing would mean the hook errors every turn and files
 	// nothing in exactly the trees where "where was I" is hardest to answer.
 	if res, err := vcs.Resolve(ctx, wsRoot, "", vcsOpts); err == nil {

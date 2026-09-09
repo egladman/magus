@@ -136,7 +136,7 @@ func TestCryptoHmacChainsAsAwsSigV4Does(t *testing.T) {
 	ctx := context.Background()
 
 	// The shape spells/aws/s3-cache builds: each raw digest keys the next call.
-	// This is why hmac_sha256 returns BYTES and not a str - a rune-oriented
+	// This is why hmac_sha256 returns BYTES and not a str: a rune-oriented
 	// string would not survive an arbitrary digest.
 	kDate, err := CryptoHmacSha256(ctx, []byte("AWS4secret"), []byte("20260811"))
 	require.NoError(t, err)

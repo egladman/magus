@@ -91,7 +91,7 @@ func TestAssembleDirs(t *testing.T) {
 
 // TestDirNodeStructuralAndAggregateMerge proves the structural dir node (from
 // containsChain, carrying Label/Source) and the aggregate dir node (from assembleDirs,
-// carrying attrs) fold into ONE node on merge - the same partial-node pattern the
+// carrying attrs) fold into ONE node on merge, the same partial-node pattern the
 // runtime shard uses for targets.
 func TestDirNodeStructuralAndAggregateMerge(t *testing.T) {
 	structuralNodes, structuralEdges := containsChain(".", "internal/interp/a.go", "file:internal/interp/a.go")

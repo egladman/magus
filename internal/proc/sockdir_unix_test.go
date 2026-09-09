@@ -54,7 +54,7 @@ func TestVerifySockDirRejectsSymlink(t *testing.T) {
 
 // TestVerifySockDirMissingIsNotAnError: a directory that does not exist yet
 // (MkdirAll failed upstream, e.g. a read-only TMPDIR) is not this function's
-// problem to report - the bind that follows fails safely on its own, exactly
+// problem to report: the bind that follows fails safely on its own, exactly
 // as it did before this check existed.
 func TestVerifySockDirMissingIsNotAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")

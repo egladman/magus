@@ -27,7 +27,7 @@ var guardDecisions = []string{"pass", "advise", "deny"}
 // guardSurfaces is every input the guard judges: a shell command, or a file
 // path an edit is about to write (`magus session hook --path`). A host wires each
 // surface to a different one of its events, and a host that cannot wire one
-// covers less - which is a coverage difference to record, not to hide.
+// covers less, which is a coverage difference to record, not to hide.
 var guardSurfaces = []string{"command", "path"}
 
 // GuardTemplateVersion is the revision of the hook templates a reader installs
@@ -47,7 +47,7 @@ var guardSurfaces = []string{"command", "path"}
 // customization and be switched off within a week; a marker survives editing and
 // still answers the only question worth asking: is this copy older than the fix?
 //
-// Bump it whenever a template's BEHAVIOR changes - not for a comment or a
+// Bump it whenever a template's BEHAVIOR changes, not for a comment or a
 // rewording. TestShippedTemplatesCarryTheCurrentVersion makes the bump total:
 // every template must be re-stamped or the build fails.
 //
@@ -60,19 +60,19 @@ var guardSurfaces = []string{"command", "path"}
 //
 // 3: that flag is now --agent-name (was --host, which read as a network host)
 // and the templates' variable is GUARD_AGENT_NAME (was GUARD_HOST). A copy
-// still passing the old spelling degrades rather than breaks - the retry that
-// version 2 added drops attribution and keeps the verdict - so an unbumped
+// still passing the old spelling degrades rather than breaks (the retry that
+// version 2 added drops attribution and keeps the verdict), so an unbumped
 // copy loses the activity trail's host label, not its guard.
 //
 // 4: two changes, neither released before this. The path surface learned to render a
-// deny arm - it handled only advise, so a deny rendered EMPTY while magus exited 2, and
+// deny arm: it handled only advise, so a deny rendered EMPTY while magus exited 2, and
 // both scripts read empty-output-plus-nonzero as a broken guard and exit 0, which every
 // host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
 // binary does not fail when it lacks a rule, it reads the config key that ARMS the rule
 // as unknown and answers pass, so the guard enforces nothing at exit 0.
 //
 // 7: the advise arm is now suppressible. A host whose pre-tool-use hook REJECTS
-// the context key - treating it as an error and then failing OPEN - was not merely
+// the context key (treating it as an error and then failing OPEN) was not merely
 // ignoring an advisory, it was disarmed by one for that call. A copy that predates
 // this keeps sending it and keeps failing open, which no verdict anywhere reveals.
 // Suppression is opt-in per host (GUARD_NO_ADVISE), so the rendered response for a
@@ -82,13 +82,13 @@ var guardSurfaces = []string{"command", "path"}
 // 8: the templates find the binary by walking UP to the magusfile instead of testing
 // `./magus` in the process's own directory. A hook runs in the host's SESSION
 // directory, which is not always the workspace root, and every copy that predates
-// this silently judges with PATH's binary there - or, where PATH's copy cannot load
-// the workspace, does not judge at all. Version 4 established preferring the
+// this silently judges with PATH's binary there (or, where PATH's copy cannot load
+// the workspace, does not judge at all). Version 4 established preferring the
 // workspace's binary; this is the half of it that was only true from the root.
 //
 // 9: the notice a template prints when the binary is found but cannot judge now names
-// the evidence - which binary path it resolved, that binary's version, and the error it
-// actually printed - instead of guessing. The wording it replaces blamed "too old for
+// the evidence (which binary path it resolved, that binary's version, and the error it
+// actually printed) instead of guessing. The wording it replaces blamed "too old for
 // session hook, or cannot load this workspace", and the second half is not a cause: the
 // deny rules need no workspace, so a reader who took the sentence at its word went looking
 // for a workspace problem that was never there. A copy that predates this keeps sending

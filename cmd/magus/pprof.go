@@ -23,7 +23,7 @@ import (
 // the environment of a slow run.
 //
 // A CPU profile attributes straight through to the Buzz VM's opcode handlers, since
-// the interpreter runs in this process - which is what makes it the right tool for a
+// the interpreter runs in this process, which is what makes it the right tool for a
 // slow magusfile, not just for slow Go. A `mem` profile is the heap at exit, which is
 // what to reach for when a run's `sys` time is dominated by allocator churn rather
 // than by work.

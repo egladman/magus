@@ -67,7 +67,7 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 
 // TestCleanOutputsCoversPerTargetOutputs verifies that a per-target
 // magus.outputs declaration is cleaned by `magus clean --outputs`, not just
-// project-wide outputs - AllOutputs unions the per-target globs back in.
+// project-wide outputs: AllOutputs unions the per-target globs back in.
 func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -124,7 +124,7 @@ func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 
 // findProducer runs m.FindOutputProducer on a workspace-relative path and returns the
 // project path it resolved to, or "" for no match. m.Root() is symlink-resolved by
-// project.Discover, so query paths are built on it rather than the raw t.TempDir - the
+// project.Discover, so query paths are built on it rather than the raw t.TempDir: the
 // two differ by /private on macOS.
 func findProducer(t *testing.T, m *Magus, relPath string) string {
 	t.Helper()
@@ -163,7 +163,7 @@ func TestFindOutputProducerReturnsWriterNotOwner(t *testing.T) {
 // into a SIBLING project's tree. It returns the opened workspace and the absolute path of
 // the file producer generates inside site.
 //
-// The body never runs here - the interpreter is a pack only the CLI wires in, so these
+// The body never runs here: the interpreter is a pack only the CLI wires in, so these
 // tests exercise the static half (the derived edge, the glob views, clean). The
 // execution half is cmd/magus's TestCrossProjectOutputReplaysFromCache, which has it.
 func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
@@ -199,7 +199,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // TestCrossProjectOutputInvertsDependency asserts the edge a cross-project output
 // implies runs OPPOSITE to a cross-project input's: producer WRITES into site, so site
 // consumes producer and must build after it. Getting this backwards would not fail
-// loudly - it would silently order the build wrong and hand site a stale tree.
+// loudly: it would silently order the build wrong and hand site a stale tree.
 func TestCrossProjectOutputInvertsDependency(t *testing.T) {
 	m, _ := writeCrossOutputWorkspace(t)
 
@@ -215,8 +215,8 @@ func TestCrossProjectOutputInvertsDependency(t *testing.T) {
 }
 
 // TestCleanOutputsCoversCrossProjectOutputs asserts `magus clean` reaches an output one
-// project declares into ANOTHER project's tree. The writer cannot surface it - its own
-// globs are relative to its own root, and this one is not - so it is filed on the OWNER
+// project declares into ANOTHER project's tree. The writer cannot surface it (its own
+// globs are relative to its own root, and this one is not), so it is filed on the OWNER
 // at load, as InboundOutputs. Without that hand-off nothing would clean the file: the
 // writer's view excludes it and the owner never declared it.
 func TestCleanOutputsCoversCrossProjectOutputs(t *testing.T) {
@@ -233,7 +233,7 @@ func TestCleanOutputsCoversCrossProjectOutputs(t *testing.T) {
 
 // TestInboundOutputsLandOnTheOwner pins the hand-off AllOutputs depends on: a
 // cross-project glob is filed on the project it lands IN, keyed by the WRITER, and
-// relative to the OWNER's root - which is why AllOutputs can union it without
+// relative to the OWNER's root, which is why AllOutputs can union it without
 // re-anchoring. The writer's own view must not claim it, or every caller that joins
 // AllOutputs to a project dir would resolve it against the wrong root.
 func TestInboundOutputsLandOnTheOwner(t *testing.T) {
@@ -290,7 +290,7 @@ func TestOutputReadsAreConcurrencySafe(t *testing.T) {
 
 // TestAllOutputsNeverAliasesProjectOutputs guards the exported result against a caller
 // that appends to it. p.Outputs carries spare capacity from AttachSpell, so returning the
-// live backing array would let one append reach into the project record - and the hazard
+// live backing array would let one append reach into the project record, and the hazard
 // would be invisible in any workspace whose content happened to take a copying branch.
 func TestAllOutputsNeverAliasesProjectOutputs(t *testing.T) {
 	p := &types.Project{Path: "api", Outputs: make([]string, 1, 8)}
@@ -363,7 +363,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 
 // TestTwoWritersClaimingOnePathAreRejected is the cache-poisoning guard. Verified before
 // the check existed: both writers ran concurrently, last write won, and BOTH snapshotted
-// the file - so the loser's cache entry held the winner's bytes, and replaying the loser
+// the file, so the loser's cache entry held the winner's bytes, and replaying the loser
 // alone reproduced content it had never produced.
 //
 // The pre-existing MGS4002 advisory cannot cover this. It is run-scoped, so it needs both
@@ -426,7 +426,7 @@ func TestDistinctPathsIntoOneTreeAreAllowed(t *testing.T) {
 
 // TestCrossOutputGlobEscapingOwnerIsRejected pins the glob half of a cross-project
 // output to the owner's subtree. Before this, the pattern was accepted, the target RAN,
-// and the failure surfaced only at snapshot - or, worse, in `magus clean`, which expands
+// and the failure surfaced only at snapshot, or, worse, in `magus clean`, which expands
 // every project's globs in one loop and so aborted the whole workspace over one project's
 // bad declaration.
 func TestCrossOutputGlobEscapingOwnerIsRejected(t *testing.T) {
@@ -505,7 +505,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // ctx.modifiesExistingFiles: `magus clean docs` deleted docs/concepts/spells.md, 355 lines of
 // hand-written prose carrying a 13-line generated table between markers, because the
 // whole file was declared in ctx.writesFiles. A file magus only EDITS is not magus's to
-// delete - regeneration rewrites the marked region, not the prose around it.
+// delete: regeneration rewrites the marked region, not the prose around it.
 func TestCleanSkipsUpdates(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun generate(ctx: magus\Context, args: [str]) > void {

@@ -32,7 +32,7 @@ import (
 // concurrent use.
 type RemoteBackend interface {
 	// Name identifies the backend to a human: the spell that provides it ("s3", "gha").
-	// It must not probe or dial - the run header calls it before any work, precisely so
+	// It must not probe or dial: the run header calls it before any work, precisely so
 	// the header cannot be what makes a run hang.
 	Name() string
 	// Active reports whether the backend is usable in the current environment.
@@ -354,7 +354,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	tw := tar.NewWriter(gz)
 
 	// Content hash of every extra (non-manifest, non-cas, non-signature) member, in
-	// cache-relative path form - exactly what the signature commits to. cas blobs are
+	// cache-relative path form: exactly what the signature commits to. cas blobs are
 	// omitted: the manifest already names each by its content address.
 	members := map[string]string{}
 
@@ -418,7 +418,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 
 	// The manifest is the one file redacted on the way out rather than on the way in.
 	// Its Return field is replayed verbatim into a cache HIT (see cache.go's
-	// RecordReturn), so masking it on disk would make a hit differ from a miss - the
+	// RecordReturn), so masking it on disk would make a hit differ from a miss: the
 	// invariant types/returns.go exists to hold. Export crosses into a SHARED store,
 	// which is the trust boundary that actually warrants the scrub, so it happens here
 	// and the local entry stays replayable.
@@ -483,7 +483,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 	}
 
 	// Signed LAST, once every member's digest is known: the signature covers the
-	// manifest bytes actually shipped above (not the on-disk file - a verifier checks
+	// manifest bytes actually shipped above (not the on-disk file; a verifier checks
 	// what it received, and the shipped manifest is redacted) plus the member map, so
 	// one signature authenticates the whole artifact. No signing key -> unsigned,
 	// which no verifying consumer will accept.
@@ -516,7 +516,7 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 // wantProject and wantHash are the (project, key) the artifact was REQUESTED for.
 // Every path it writes is checked against them, and the parsed manifest must name
 // them too, so a signed artifact fetched for one key can never file itself under
-// another - the check that makes a signature mean "this entry", not merely "some
+// another: the check that makes a signature mean "this entry", not merely "some
 // trusted producer signed something".
 func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wantHash string) error {
 	gz, err := gzip.NewReader(r)
@@ -698,14 +698,14 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 	// Bind the signed bytes to the identity they are being filed under. Without this
 	// a signature only says "a trusted key signed some JSON": an output bundle's
 	// metadata, re-tarred as a manifest, unmarshals to an all-zero Manifest with no
-	// outputs, passes every remaining check, and replays as a successful entry - so a
+	// outputs, passes every remaining check, and replays as a successful entry, so a
 	// published FAILING run would become a teammate's cached pass.
 	if m.ProjectPath != wantProject || m.Hash != wantHash {
 		return fmt.Errorf("importArtifact: manifest names %q/%s but was served for %q/%s",
 			m.ProjectPath, shortHash(m.Hash), wantProject, shortHash(wantHash))
 	}
 	// The remote store is shared across machines and CI is Linux while local dev
-	// may not be - src: lines are content hashes, so two platforms compute the
+	// may not be; src: lines are content hashes, so two platforms compute the
 	// SAME digest for the same commit, and this is the only gate stopping one
 	// platform's pass from being imported and replayed as a pass for code the
 	// importing platform never compiled. Same empty-matches-anything convention
@@ -725,7 +725,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, wantProject, wa
 	}
 	// Commit the authenticated extras first, then the manifest: the manifest landing
 	// is what makes the entry replayable, so everything it implies must already be in
-	// place. A failed extra rename is not fatal - the entry still replays, it just
+	// place. A failed extra rename is not fatal: the entry still replays, it just
 	// resolves under a locally-minted ref.
 	for _, e := range extras {
 		if err := os.MkdirAll(filepath.Dir(e.final), 0o755); err != nil {

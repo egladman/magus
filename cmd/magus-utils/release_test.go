@@ -88,7 +88,7 @@ func TestReleaseIndexSignAndVerify(t *testing.T) {
 // TestBuildIndexEmitsOnlyTheServedSchema pins the exact bytes of the file
 // `magus self update` downloads, and pins them BYTEWISE rather than semantically.
 // A signature covers bytes, so an encoder difference is a real defect here even
-// when the JSON means the same thing - which is how omitempty on Yanked was caught
+// when the JSON means the same thing, which is how omitempty on Yanked was caught
 // emitting `"yanked":false` under GOEXPERIMENT=jsonv2 and nothing without it.
 //
 // The manifest's prose must not reach the file either: every client fetches it on
@@ -159,7 +159,7 @@ func mustLoadShippedManifests(t *testing.T) []ReleaseManifest {
 // only ever report.
 //
 // The rebuild reuses the served file's own key_id and expires_at. Those are not
-// functions of the manifests - one is who signed, the other is a clock reading - so
+// functions of the manifests (one is who signed, the other is a clock reading), so
 // asserting them here would only assert that time had not passed.
 func TestServedIndexMatchesTheManifests(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(servedIndexDir, "index.json"))
@@ -174,8 +174,8 @@ func TestServedIndexMatchesTheManifests(t *testing.T) {
 }
 
 // TestServedIndexIsSignedByTheRing proves the published pair is one a shipped binary
-// can verify - the failure that made `magus self update` exit 1 for every user of
-// v0.3.0 - and that it names the key that actually signed it. Only a tag build (or the
+// can verify (the failure that made `magus self update` exit 1 for every user of
+// v0.3.0) and that it names the key that actually signed it. Only a tag build (or the
 // release-index workflow) holds the key, so the signature arrives after the index; the
 // skip is that window and nothing else.
 func TestServedIndexIsSignedByTheRing(t *testing.T) {
@@ -225,7 +225,7 @@ func TestShippedManifestsPinEveryArtifact(t *testing.T) {
 
 // TestLoadManifestsOrdersPrereleasesBelowTheirRelease covers the defect directly:
 // the hand-rolled parser stopped at the first non-digit, so v0.4.0-rc.1 compared
-// equal to v0.4.0 and their order fell out of an unstable sort - into bytes that
+// equal to v0.4.0 and their order fell out of an unstable sort, into bytes that
 // get signed.
 func TestLoadManifestsOrdersPrereleasesBelowTheirRelease(t *testing.T) {
 	dir := t.TempDir()
@@ -604,7 +604,7 @@ func TestRunCut_ImmutabilityGuard(t *testing.T) {
 
 // TestRunCut_FailedChangelogClearIsRetryable: the manifest used to be written
 // before the changelog was cleared, so a failure in the second step left an
-// immutable manifest on disk and [Unreleased] still populated - every retry then
+// immutable manifest on disk and [Unreleased] still populated; every retry then
 // died on "already exists" and the release could only proceed by hand.
 func TestRunCut_FailedChangelogClearIsRetryable(t *testing.T) {
 	if os.Geteuid() == 0 {
@@ -633,7 +633,7 @@ func TestRunCut_FailedChangelogClearIsRetryable(t *testing.T) {
 // manifest when the artifacts directory contains no recognized release assets.
 func TestRunCut_NoArtifactsGuard(t *testing.T) {
 	artifactsDir := t.TempDir()
-	// Only an unrelated file - no tarballs or SHA256SUMS.
+	// Only an unrelated file: no tarballs or SHA256SUMS.
 	require.NoError(t, os.WriteFile(filepath.Join(artifactsDir, "README.txt"), []byte("ignore me"), 0o644))
 
 	changelogPath := filepath.Join(t.TempDir(), "CHANGELOG.md")
@@ -728,7 +728,7 @@ func writeManifestFile(t *testing.T, dir string, m ReleaseManifest) {
 
 // The asset naming scheme changed at v0.4.0: releases up to v0.3.0 wrote `-static` and
 // `-cgo`, later ones write `_static`. platformFromName has to read both, or every asset
-// already published gets a platform like "darwin/arm64-static" - which is not a platform,
+// already published gets a platform like "darwin/arm64-static", which is not a platform,
 // and is what the release index would then advertise.
 func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
 	for _, tc := range []struct{ name, version, want string }{

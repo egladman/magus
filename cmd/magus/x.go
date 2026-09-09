@@ -134,8 +134,8 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 // This is what makes `x` graph-aware rather than a list filter: the graph knows
 // files, symbols, docs, targets and spells, so typing "hasher" finds the project
 // that defines it, not just the projects whose PATH happens to contain those
-// letters. Everything the picker already does - the mouse, the inline drawing,
-// the way out - is unchanged; only where the candidates come from moves.
+// letters. Everything the picker already does (the mouse, the inline drawing,
+// the way out) is unchanged; only where the candidates come from moves.
 //
 // Degrades to nil rather than failing. A workspace whose graph has never been
 // built, or a daemon that is not running, still gets the path filter it always
@@ -144,7 +144,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 func graphLookup(ctx context.Context, root string, byPath map[string]*types.Project) func(string) []string {
 	// Loaded in the BACKGROUND, because loading it takes most of a second and
 	// the picker has to be on screen before then. Blocking the open on a search
-	// index means typing `magus x` and watching nothing happen - which is worse
+	// index means typing `magus x` and watching nothing happen, which is worse
 	// than searching less, and is the exact input lag this surface exists to
 	// avoid.
 	//
@@ -331,7 +331,7 @@ var outputRefShape = regexp.MustCompile(`^out[0-9a-f]{8,}$`)
 // reproduceRef re-runs the invocation an output ref recorded.
 //
 // The ref is the whole point: it comes off a CI log, names a run on a machine you
-// do not have, and the descriptor carries what it takes to run it here - project,
+// do not have, and the descriptor carries what it takes to run it here: project,
 // target (charms folded in by reproTarget), and the revision its inputs were read
 // at. When the artifact is in reach the cache replays it; when it is not, this runs
 // the same invocation rather than a similar one.
@@ -360,7 +360,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 	}
 
 	// Said before running, not after: reproduction that cannot be exact should say so
-	// while you can still act on it. Neither condition blocks the run - a rebuild at
+	// while you can still act on it. Neither condition blocks the run: a rebuild at
 	// the wrong revision is still often what you want, and deciding otherwise for you
 	// would make the ref useless the moment it is a day old.
 	if d.Dirty {

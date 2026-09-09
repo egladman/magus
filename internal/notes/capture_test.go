@@ -176,7 +176,7 @@ func TestHunkLocatorDropsAnAbsentHunk(t *testing.T) {
 }
 
 // Captured is the moment the transcript was taken and must not drift with the file's mtime,
-// so it is stored rather than observed - and stored normalized, or the same capture taken in
+// so it is stored rather than observed, and stored normalized, or the same capture taken in
 // two timezones reads as two different times.
 func TestCaptureTimeIsNormalizedToUTC(t *testing.T) {
 	c := validCapture()

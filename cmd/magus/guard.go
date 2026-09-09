@@ -77,14 +77,14 @@ type guardVerdict struct {
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
-	// LOOKS - no rule judges a read, so running the write rules over one would only
+	// LOOKS: no rule judges a read, so running the write rules over one would only
 	// ever manufacture a false advisory about editing a file the agent opened
 	// read-only. Which of a host's tools merely look is the wrapper's knowledge,
 	// never magus's: see the tool-label constants and
 	// TestNoHostSpecificBehaviorInCode.
 	//
 	// The attribution flags name WHO produced the observation, and the guard's
-	// verdict never reads them. Every one is optional and unvalidated - including
+	// verdict never reads them. Every one is optional and unvalidated, including
 	// the host name, which is an opaque label the caller chooses rather than a set
 	// magus knows, because a magus that enumerated hosts would need a release per
 	// host. A wrapper that cannot extract a session id must still get a verdict;
@@ -102,7 +102,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	_ = envDefault(fset, flagHookLease, trail.LeaseFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
-	// is the reason for the rule - a flag accepted on most commands teaches
+	// is the reason for the rule: a flag accepted on most commands teaches
 	// callers it is unreliable everywhere.
 	bindDisplayFlags(fset)
 	fset.Usage = func() { hookUsage(os.Stderr) }
@@ -125,7 +125,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
 	// which is what the manpage promises: deny and unreadable input share the code,
 	// so a host that blocks on 2 fails closed in both cases. --observe is exempt
-	// because it carries no verdict - there is nothing to fail closed about, and the
+	// because it carries no verdict: there is nothing to fail closed about, and the
 	// documented contract is that it always exits 0.
 	if readErr != nil && !hf.Observe {
 		verdict := guardVerdict{
@@ -147,8 +147,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// a wrapper that passed them meant them.
 	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
 		if req.NothingToJudge {
-			// A host envelope whose tool_input carries no command, path or prompt - a todo
-			// list, a search - has nothing any rule can read. Falling through judged the raw
+			// A host envelope whose tool_input carries no command, path or prompt (a todo
+			// list, a search) has nothing any rule can read. Falling through judged the raw
 			// JSON as a shell line, so a denied command merely NAMED inside a todo blocked
 			// the tool call that wrote the todo.
 			return writeGuardVerdict(out, opts,
@@ -247,7 +247,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			}
 		}
 		// Both of these name paths and a target belonging to magus's own checkout, and
-		// both are inert anywhere else - see magusOwnSourceTree. They sit above the
+		// both are inert anywhere else; see magusOwnSourceTree. They sit above the
 		// new-directory rule because a new skill directory is both, and which method to
 		// load is the more useful of the two answers.
 		if verdict.Decision == "pass" && !spoken {
@@ -312,12 +312,12 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// just the ones that matched a rule.
 	//
 	// A deny most of all. That is the verdict the caller cannot see past, so a block
-	// from rules they have already changed is the case this rule exists for - and the
+	// from rules they have already changed is the case this rule exists for, and the
 	// first version of it skipped exactly that arm. The reason comes first, because
 	// the block has to be explained before it can be doubted.
 	//
 	// It is the loudest of the repeated advisories and so the one held to once per
-	// session - EXCEPT on a deny, where it is appended every time and spends no firing.
+	// session, EXCEPT on a deny, where it is appended every time and spends no firing.
 	// A denial explains itself in full whenever it refuses, and this is the sentence that
 	// says the refusal may be coming from rules the caller has already changed.
 	if notice := staleGuardNotice(); notice != "" && !hf.Observe {
@@ -335,7 +335,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
 	// Recording the pass verdict here would have every read claim the guard ran and cleared
 	// it, which is exactly the conflation --observe exists to remove. The WIRE verdict is
-	// unchanged - a host still needs a decision it can parse, and "pass" is the true one.
+	// unchanged: a host still needs a decision it can parse, and "pass" is the true one.
 	record := verdict
 	if hf.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
@@ -349,7 +349,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 
 // guardDenyExitCode is what a denied command exits with.
 //
-// A hook that reports a deny and exits 0 blocks NOTHING - the host sees success
+// A hook that reports a deny and exits 0 blocks NOTHING: the host sees success
 // and runs the command anyway, so the guard looks enforced and is not. 2 rather
 // than 1 is what the dominant host reads as "block and show the reason to the
 // model". The collision with the usage code is harmless: a guard that could not
@@ -432,7 +432,7 @@ type hookEnvelope struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
 		// A spawn: the context an orchestrator is about to hand a sub-agent, plus
-		// whatever the host calls the callee. Field PATHS, not a host name - the same line
+		// whatever the host calls the callee. Field PATHS, not a host name: the same line
 		// the two fields above already draw. magus does not know which tool produces them
 		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
 		Prompt       string `json:"prompt"`
@@ -442,15 +442,15 @@ type hookEnvelope struct {
 }
 
 // The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
-// which flags the wrapper passed - never a host's tool name.
+// which flags the wrapper passed, never a host's tool name.
 //
 // That division is the whole design: only the wrapper knows that its host calls a read
 // "Read" or "read_file", and mapping those names here would be a per-host branch, so the
 // next change to any host would mean a magus release. The matcher in a host's own config is
 // where the host's vocabulary lives.
 //
-// TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" - a
-// per-host branch in everything but spelling - passes it untouched.
+// TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" (a
+// per-host branch in everything but spelling) passes it untouched.
 // TestGuardDoesNotBranchOnHostToolVocabulary is the layer that catches that one: a host's
 // word for a tool may not appear as a string literal in guard code at all, so a lookup
 // table is no cheaper than a switch. These three constants are what it leaves room for.
@@ -472,8 +472,8 @@ const (
 // question, so the envelope decides that too: a caller that pipes real JSON should not
 // also have to know which flag its shape implies.
 //
-// The envelope cannot tell a read from a write on its own - both arrive carrying a
-// file_path - so it does not try. --observe is what separates them, and only the wrapper
+// The envelope cannot tell a read from a write on its own (both arrive carrying a
+// file_path), so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
 // A payload carrying a PROMPT rather than either is a spawn handoff: it is RECORDED and
@@ -483,7 +483,7 @@ const (
 // judged.
 //
 // Anything that is not an object with a usable tool_input is left alone and judged as the
-// literal text it is - the bare-command form keeps working exactly as before.
+// literal text it is: the bare-command form keeps working exactly as before.
 func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
@@ -520,8 +520,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// the raw JSON to the shell rules, which read a denied command quoted inside a todo
 		// or a search string as the command about to run and blocked it.
 		//
-		// Keyed on the envelope's OWN fields, so a bare `{"tool_input":{}}` - which names no
-		// host event and could be anything - still falls through to the literal form.
+		// Keyed on the envelope's OWN fields, so a bare `{"tool_input":{}}` (which names no
+		// host event and could be anything) still falls through to the literal form.
 		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" {
 			return hookRequest{}, false
 		}
@@ -531,7 +531,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
-// path rather than a command, and who reported it. A spawn asks for nothing to be judged - it
+// path rather than a command, and who reported it. A spawn asks for nothing to be judged: it
 // carries the handed context and the callee's label, and is recorded rather than evaluated.
 type hookRequest struct {
 	Value  string

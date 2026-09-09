@@ -15,8 +15,8 @@ import (
 )
 
 // TestStoreDigestRefusesWhatItCannotHash covers the paths digest must not hash. Each of
-// them used to answer "absent", which says the releaser DELETED the file - the one
-// reading that sends the next agent looking in the wrong place - and the fifo did not
+// them used to answer "absent", which says the releaser DELETED the file (the one
+// reading that sends the next agent looking in the wrong place), and the fifo did not
 // answer at all.
 //
 // Unix-only because it needs a fifo and a symlink; the rules they prove are not.
@@ -74,7 +74,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 }
 
 // A symlink INSIDE the root is ordinary content, so resolving links must not turn every
-// link into an escape - including the one every macOS temp dir is reached through, where
+// link into an escape, including the one every macOS temp dir is reached through, where
 // the root itself resolves to a different path than it was given.
 func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	t.Parallel()

@@ -23,7 +23,7 @@ func TestRoffPages(t *testing.T) {
 }
 
 // TestInitCommandHasSynopsis pins that magus-init.1's SYNOPSIS section actually names
-// the command, rather than emitting a bare ".B " line - which happens whenever a
+// the command, rather than emitting a bare ".B " line, which happens whenever a
 // Command carries no Usage field (renderCommandRoff has nothing to escape and print).
 func TestInitCommandHasSynopsis(t *testing.T) {
 	pages := RoffPages("2026-07-26", "v1.2.3")

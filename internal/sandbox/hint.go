@@ -63,7 +63,7 @@ var shimMarkers = []struct {
 }
 
 // detectShimSuspect reports the PATH-shim manager whose shim directory is still on
-// PATH while the var it needs to resolve a tool version was dropped by policy - the
+// PATH while the var it needs to resolve a tool version was dropped by policy, the
 // combination MGS2006 names, since the shim binary stays reachable and fails
 // silently (falling back to a system tool) instead of erroring loudly. ok is false
 // when policy is nil (sandbox off) or neither marker matches.

@@ -129,7 +129,7 @@ func TestProjectOptionSince(t *testing.T) {
 }
 
 // The engine and the dry-run host must reject against the same set. They were two
-// hand-maintained slices and had already drifted - the dry copy was missing a key the
+// hand-maintained slices and had already drifted: the dry copy was missing a key the
 // engine accepted, so a magusfile could pass a real run and fail a preview.
 func TestProjectOptionKeysCoverEveryOption(t *testing.T) {
 	keys := types.ProjectOptionKeys()
@@ -156,8 +156,8 @@ func floorCheck(t *testing.T, requiredVersion string) types.DoctorCheck {
 
 // A floor set INSIDE the previous series is the case this check exists for and the one
 // it used to miss. "tools" needs 0.4.0; ">= 0.3.5" admits 0.3.5 through 0.3.9, none of
-// which can load the file. The old probe asked only whether 0.3.0 was admitted - it is
-// not - and reported OK.
+// which can load the file. The old probe asked only whether 0.3.0 was admitted (it is
+// not) and reported OK.
 //
 // The consequence is not a cosmetic warning. An unknown magus.project key aborts
 // workspace load, which takes down every command including the one that would build a
@@ -190,7 +190,7 @@ func TestSchemaFloorAdvisesWhenNoFloorIsDeclared(t *testing.T) {
 }
 
 // A constraint this check cannot evaluate is reported as such rather than silently
-// passing - an unparseable floor is not a covered one.
+// passing: an unparseable floor is not a covered one.
 func TestSchemaFloorReportsAnUnevaluableConstraint(t *testing.T) {
 	got := floorCheck(t, "not-a-constraint")
 	assert.Equal(t, types.DoctorAdvice, got.Status)

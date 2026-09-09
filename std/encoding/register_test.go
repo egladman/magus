@@ -13,7 +13,7 @@ import (
 // (internal/interp/bindings/gen) already runs for the hand-maintained
 // Modules registry there: leafSets is hand-maintained too (see its doc), and
 // this is what turns "added a leaf package, forgot the line in leafSets" (or
-// the reverse - a stale entry for a directory that no longer exists) into a
+// the reverse: a stale entry for a directory that no longer exists) into a
 // failing test instead of a module that compiles clean and never binds.
 func TestModulesMatchDirectories(t *testing.T) {
 	entries, err := os.ReadDir(".")

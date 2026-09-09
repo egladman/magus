@@ -80,7 +80,7 @@ func TestLeafScore_DenserOnShorterLeaf(t *testing.T) {
 
 // outputRefShape decides which of x's two modes an argument selects, so a filter
 // mistaken for a ref would skip the picker and a ref mistaken for a filter would hit
-// the TTY gate and be refused - the bug that made `magus x <ref>` report "requires an
+// the TTY gate and be refused: the bug that made `magus x <ref>` report "requires an
 // interactive terminal" before this existed.
 func TestOutputRefShapeSelectsTheReproduceMode(t *testing.T) {
 	for _, ref := range []string{

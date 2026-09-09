@@ -5,7 +5,7 @@
 // `magus\affectedImpact(base)` from an Unknown-typed call into a checked one.
 //
 // Without it every host call typed as Unknown, so a magusfile could read a field
-// no return carries and only find out at run time - which is the gap Ret.Object was
+// no return carries and only find out at run time, which is the gap Ret.Object was
 // added to close and, until now, only the docs consumed.
 
 package main
@@ -55,8 +55,8 @@ func runModuleDecls(args []string) error {
 		fmt.Fprintln(&b)
 		b.WriteString(src)
 		// Parse what we are about to write. A declaration source that does not parse is
-		// not a loud failure at run time - SetModuleDecls drops it and the module simply
-		// goes back to being untyped - so without this check a typo silently un-types a
+		// not a loud failure at run time (SetModuleDecls drops it and the module simply
+		// goes back to being untyped), so without this check a typo silently un-types a
 		// whole module and every call through it stops being verified. That is exactly
 		// how KnowledgeGodNode shipped an unparsable `in:` field: nothing parsed it.
 		// Codegen is the right place to fail, for the same reason checkObjectDecls fails
@@ -128,8 +128,8 @@ func renderModuleDecls(mod std.Module) (string, error) {
 					continue
 				}
 				// externDecl renders a TOP-LEVEL declaration, which carries `export`.
-				// Inside an object there is no export modifier - membership is what makes
-				// it reachable - so drop it and mark the method static instead.
+				// Inside an object there is no export modifier (membership is what makes
+				// it reachable), so drop it and mark the method static instead.
 				fmt.Fprintf(&b, "    static %s\n", strings.TrimPrefix(line, "export "))
 			}
 		}
@@ -149,7 +149,7 @@ func sortedNamespaceMethods(ns std.Namespace) []std.Method {
 // externDecl renders one method as `export extern fun name(params) > ret;`.
 //
 // A variadic method gets a COMMENT instead of a declaration. Buzz has no variadic
-// parameter, and the call it has to accept - fs\join("a", "b", "c") - cannot be
+// parameter, and the call it has to accept (fs\join("a", "b", "c")) cannot be
 // spelled with a fixed parameter list. Declaring it as a list parameter would reject
 // every existing call site, so the method keeps today's untyped behavior and says so
 // in the generated output rather than going silently missing.
@@ -161,7 +161,7 @@ func externDecl(m std.Method) (string, error) {
 	for _, a := range m.Args {
 		if a.Variadic {
 			// Declared as a VALUE, not a fun. Buzz has no variadic parameter, so no
-			// `extern fun` can accept fs\join("a", "b", "c") - a list parameter would
+			// `extern fun` can accept fs\join("a", "b", "c"); a list parameter would
 			// reject every existing call site. Declaring it `any` keeps the call
 			// untyped, which is what this always did, while still putting the NAME in
 			// the namespace: emitting only a comment left the member undeclared, and an
@@ -202,7 +202,7 @@ func externDecl(m std.Method) (string, error) {
 	}
 	// A raising Method emits `!> any`, not a specific error type: every host error
 	// crosses the VM boundary through gen.HostError, which wraps it in a map
-	// (StructuredError.BuzzError()) rather than a plain str - see
+	// (StructuredError.BuzzError()) rather than a plain str; see
 	// internal/interp/bindings/gen/runtime.go. `any` is the honest declared shape,
 	// and it is also what an untyped `catch (e)` already binds to, so it costs
 	// existing call sites nothing.
@@ -258,7 +258,7 @@ func buzzArgType(t std.TypeTag) (string, error) {
 // the same value.
 //
 // It dispatches on the DECLARED TypeTag, not on the default's dynamic Go type. Those
-// can disagree - std does not cross-check them - and dispatching on the dynamic type
+// can disagree (std does not cross-check them), and dispatching on the dynamic type
 // renders the disagreement faithfully instead of catching it: {Type: TypeFloat,
 // Default: 1} would emit `x: double = 1`. That parses, so the codegen parse gate waves
 // it through, and the checker then rejects correct call sites against a declaration
@@ -312,7 +312,7 @@ func buzzDefault(a std.Arg) (string, error) {
 // not the zero of any tag and is not even assignable to the annotations the unmapped
 // tags produce: an optional TypeFunc arg would emit `fn: Function = null` against a
 // non-nullable Function. Nothing declares one today, so this only ever fires the moment
-// someone adds the first - which is exactly when a silent `null` would be worst.
+// someone adds the first, which is exactly when a silent `null` would be worst.
 func buzzZero(t std.TypeTag) (string, error) {
 	switch t {
 	case std.TypeString:
@@ -339,7 +339,7 @@ func buzzZero(t std.TypeTag) (string, error) {
 		return "{<str: any>}", nil
 	case std.TypeAny:
 		// The one tag whose zero really is null: `any` is nullable, so `x: any = null`
-		// annotates cleanly. That is not true of the tags still falling through - a
+		// annotates cleanly. That is not true of the tags still falling through: a
 		// TypeFunc arg would emit `fn: Function = null` against a non-nullable Function.
 		return "null", nil
 	default:
@@ -349,8 +349,8 @@ func buzzZero(t std.TypeTag) (string, error) {
 
 // buzzReturnType renders a method's Buzz return annotation.
 //
-// Several returns marshal to a LIST, not a tuple - os.platform crosses as
-// [goos, goarch, arch] and magusfile.buzz reads os\platform()[1] - so the
+// Several returns marshal to a LIST, not a tuple (os.platform crosses as
+// [goos, goarch, arch] and magusfile.buzz reads os\platform()[1]), so the
 // annotation follows the wire shape, using the element type when the returns agree
 // and [any] when they do not (env.lookup is (str, bool)).
 func buzzReturnType(m std.Method) (string, error) {
@@ -388,7 +388,7 @@ func buzzReturnType(m std.Method) (string, error) {
 // An unresolvable name is an ERROR, not a skip. Skipping was the original shape and it
 // defeated the point: a Ret.Object naming a type no registry row claims produced a
 // module whose mirror was missing while the extern still referenced it by name, which
-// parses fine (buzz.Parse is syntax-only) and is then rejected at check time - dropping
+// parses fine (buzz.Parse is syntax-only) and is then rejected at check time, dropping
 // the module's declarations wholesale, with no codegen error to say why.
 func mirrorsFor(mod std.Module) ([]string, error) {
 	seen := map[string]bool{}
@@ -437,7 +437,7 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 	}
 	// A Namespace member's Args/Returns reference objects the same way a top-level
 	// method's do (magus\ledger.list returns LeaseReport), so it needs the same
-	// declare-before-use walk - otherwise the object never gets emitted and the
+	// declare-before-use walk; otherwise the object never gets emitted and the
 	// namespace's extern signature points at an undeclared type.
 	for _, ns := range mod.Namespaces {
 		for _, m := range sortedNamespaceMethods(ns) {
@@ -506,7 +506,7 @@ func renderBuzzEnumDecl(e boundaryEnum) []byte {
 
 // sortedMethods orders a module's methods by name. Both the mirror walk and the extern
 // emission read it, so reordering two methods in a std module cannot rewrite the
-// generated file - generated drift is a CI gate here, and a no-op diff wastes it.
+// generated file: generated drift is a CI gate here, and a no-op diff wastes it.
 func sortedMethods(mod std.Module) []std.Method {
 	methods := slices.Clone(mod.Methods)
 	slices.SortFunc(methods, func(a, b std.Method) int { return strings.Compare(a.Name, b.Name) })

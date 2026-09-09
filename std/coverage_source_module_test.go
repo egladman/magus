@@ -123,7 +123,7 @@ func TestSourceModuleImportPath(t *testing.T) {
 
 // TestSourceModulesAsModules covers the projection that lets a docs or manifest
 // renderer walk both kinds of module through one code path. Impl is nil on every
-// derived Method - the module IS Buzz, so there is no Go function to name.
+// derived Method: the module IS Buzz, so there is no Go function to name.
 func TestSourceModulesAsModules(t *testing.T) {
 	var lcov Module
 	for _, m := range SourceModulesAsModules() {

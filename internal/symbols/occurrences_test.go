@@ -82,8 +82,8 @@ func TestParseOccurrencesRangesRolesAndOrder(t *testing.T) {
 }
 
 // TestParseOccurrencesSkipsOtherSymbolsAndOutsideDocuments keeps the read scoped. A
-// document outside the workspace is dropped for the same reason ParseIndex drops it - it
-// describes code this workspace does not own - and an occurrence of a different symbol
+// document outside the workspace is dropped for the same reason ParseIndex drops it (it
+// describes code this workspace does not own), and an occurrence of a different symbol
 // must not ride along into a rewrite plan.
 func TestParseOccurrencesSkipsOtherSymbolsAndOutsideDocuments(t *testing.T) {
 	other := occAt(0, 0, 3)
@@ -179,7 +179,7 @@ func TestVerifyReportsUnreadableSites(t *testing.T) {
 // TestVerifyRejectsAMultiLineRange covers the UTF-16 hazard by its observable shape. magus
 // reads SCIP positions as byte offsets; a document encoded in UTF-16 offsets with
 // non-ASCII text before the symbol resolves somewhere else entirely, and can span a line
-// break. An identifier never does, so the name comparison catches it - the point being
+// break. An identifier never does, so the name comparison catches it, the point being
 // that a wrong encoding assumption degrades to a refusal, not to a wrong edit.
 func TestVerifyRejectsAMultiLineRange(t *testing.T) {
 	files := []types.SymbolOccurrenceFile{{
@@ -194,7 +194,7 @@ func TestVerifyRejectsAMultiLineRange(t *testing.T) {
 
 // TestVerifyWithNoNamesVerifiesNothing pins the conservative default. An index that names
 // the symbol nowhere leaves nothing to compare against, and "no expectation" must not
-// collapse into "everything matches" - that would verify every site by vacuum, which is
+// collapse into "everything matches"; that would verify every site by vacuum, which is
 // the exact failure this design exists to prevent.
 func TestVerifyWithNoNamesVerifiesNothing(t *testing.T) {
 	files := []types.SymbolOccurrenceFile{{
@@ -261,7 +261,7 @@ func TestVerifyLeavesAGoodFileUnmarked(t *testing.T) {
 // report as stale. A package's SymbolInformation display name is its full import path,
 // which appears ONLY in the import statement; every call site holds the bare identifier.
 // Verifying against the display name alone rejected 8025 of 8501 real sites on this repo's
-// own index, so both spellings have to survive the parse - identifier first, because that
+// own index, so both spellings have to survive the parse, identifier first, because that
 // is the one a rename targets.
 func TestParseOccurrencesKeepsBothSpellingsOfAPackage(t *testing.T) {
 	const pkgMoniker = "scip-go gomod github.com/stretchr/testify v1 `github.com/stretchr/testify/assert`/"
@@ -305,7 +305,7 @@ func TestVerifyRejectsAnUnrelatedSpelling(t *testing.T) {
 
 // TestParseOccurrencesReadsTheDisplayNameFromAnyDocument pins the fix for a scan that sat
 // below the workspace filter. A package's SymbolInformation can be recorded only in a
-// dependency document, which is dropped for its occurrences - but dropping its NAME too
+// dependency document, which is dropped for its occurrences, but dropping its NAME too
 // costs the full-path spelling, and then every import statement in the workspace reads as
 // a mismatch and condemns its file as stale. The name is a fact about the symbol, not
 // about the document that happened to carry it.

@@ -44,7 +44,7 @@ import (
 // what they can break.
 //
 // It is the TERMINAL client of the same annotation join the console's Diff surface reads
-// and an agent joins over MCP. One computation, three transports - so a person reviewing in a
+// and an agent joins over MCP. One computation, three transports, so a person reviewing in a
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
 func diffCmd(ctx context.Context, root string, args []string) error {
@@ -57,12 +57,12 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
-	// The source itself is always a flag - --rev, --patch, or the working tree by default -
+	// The source itself is always a flag (--rev, --patch, or the working tree by default),
 	// and one rule for what a word means beats two.
 	//
 	// This is also what retires --ack's overload. It used to claim the positionals for itself
-	// because reading happens in whatever the reader already uses - vim, magit, a pager, an
-	// IDE - and magus has no business requiring its own viewer to record that it happened. It
+	// because reading happens in whatever the reader already uses (vim, magit, a pager, an
+	// IDE), and magus has no business requiring its own viewer to record that it happened. It
 	// no longer needs to claim anything: the paths mean the same thing to the ack and to the
 	// view, which is why the ack can now narrow a range review too.
 	scopePaths, err := scopeFromArgs(rest)
@@ -91,7 +91,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if rf.Ack && !src.addressable() {
 		// A receipt fingerprints content magus can name, and a patch describes files that may
 		// not be here at all. Accepting one would record receipts against whatever the working
-		// tree happens to hold - an acknowledgement of something nobody read.
+		// tree happens to hold: an acknowledgement of something nobody read.
 		//
 		// A revision range IS nameable, so it is admitted: its receipts fingerprint the file at
 		// that revision, never the reader's own checkout.
@@ -102,7 +102,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	}
 	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
 	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
-	// life, while a changeset ack is written daily and becomes a form field - teaching the
+	// life, while a changeset ack is written daily and becomes a form field, teaching the
 	// reader to type something they do not mean.
 	//
 	// The two controls that hold are the ones nobody can satisfy by typing faster: the agent
@@ -162,7 +162,7 @@ type diffInput struct {
 //
 // The working tree and a revision range are both tree states magus can re-derive and re-digest; a
 // patch on stdin and a patch in a file are bytes somebody handed over, describing files that may
-// not exist here at all. That is the line --ack has always drawn - it was just spelled "is this the
+// not exist here at all. That is the line --ack has always drawn; it was just spelled "is this the
 // working tree" back when the working tree was the only addressable source.
 func (in diffInput) addressable() bool {
 	return in.kind == inputWorkingTree || in.kind == inputRevRange
@@ -171,8 +171,8 @@ func (in diffInput) addressable() bool {
 // revRangeFromFlag resolves --rev, which is written base...head the way git and the branch-overlap
 // reader already spell a symmetric difference.
 //
-// Two dots are REFUSED rather than quietly accepted as three. They are a different question - what
-// head has that base has, including everything base gained meanwhile - and a reviewer who typed the
+// Two dots are REFUSED rather than quietly accepted as three. They are a different question (what
+// head has that base has, including everything base gained meanwhile), and a reviewer who typed the
 // git spelling out of habit would get a diff padded with commits the branch author never wrote.
 func revRangeFromFlag(rev string) (diffInput, error) {
 	base, head, ok := strings.Cut(rev, "...")
@@ -202,7 +202,7 @@ func scopeFromArgs(rest []string) ([]string, error) {
 	// Checked FIRST, because git hands an external differ seven positionals and every one of
 	// them is path-shaped. Once positionals are paths this no longer dead-ends on an arity
 	// error, so without this the integration would silently narrow the changeset to git's
-	// temp-file arguments and render nothing - which reads as "no changes" rather than as a
+	// temp-file arguments and render nothing, which reads as "no changes" rather than as a
 	// misconfiguration.
 	if err := gitExternalDiffRefusal(rest); err != nil {
 		return nil, err
@@ -226,7 +226,7 @@ func scopeFromArgs(rest []string) ([]string, error) {
 // diffSourceFromFlags decides which changeset is being read. Exactly one flag may name it.
 //
 // A ref used to be refused here with a message teaching the pipe, because swallowing one printed a
-// plausible list of the reader's OWN uncommitted edits under exit 0 - the worst possible failure,
+// plausible list of the reader's OWN uncommitted edits under exit 0: the worst possible failure,
 // since the output looks exactly like an answer to the question they asked. --rev is that message's
 // successor: the ref has a door now, so the refusal became a feature.
 func diffSourceFromFlags(rf *gen.DiffFlags) (diffInput, error) {
@@ -250,7 +250,7 @@ func diffSourceFromFlags(rf *gen.DiffFlags) (diffInput, error) {
 //
 // git calls an external diff once PER FILE with seven arguments, because the contract is for a
 // program that renders one file's diff. Almost everything magus has to say is a property of the
-// whole changeset - which projects rebuild, who owns them, what it costs, what to read first -
+// whole changeset (which projects rebuild, who owns them, what it costs, what to read first),
 // so honoring that contract would mean printing the report once per file or not at all.
 //
 // git's pager is the same integration without the mismatch: it hands over the entire diff on
@@ -301,7 +301,7 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	switch {
 	case rf.NoTui, !enabled:
 		return false
-	// All three END in output the viewer has nowhere to put - a receipt count, a report, and a
+	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
 	// prompt to copy. They are requests for an answer rather than for somewhere to read.
 	case rf.Ack, rf.Impact, rf.Prompt:
 		return false
@@ -335,7 +335,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus, paths []strin
 	case inputRevRange:
 		// The BASE side, because every reader of types.Diff.Base labels it "compared against".
 		// Returning the head made the prompt say a branch was compared against itself, which is
-		// not a wrong-looking value a reader would question - it is a sentence that parses.
+		// not a wrong-looking value a reader would question; it is a sentence that parses.
 		p, err := m.RangeDiff(ctx, in.base, in.head, paths)
 		if err != nil {
 			return "", "", fmt.Errorf("magus diff: %w", err)
@@ -373,14 +373,14 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 
 	paths := changedPathsFromPatch(patch)
-	// Bytes went in and no file came out, so this is not an empty changeset - it is a patch
+	// Bytes went in and no file came out, so this is not an empty changeset; it is a patch
 	// magus could not read, and the two must never print the same thing. Reporting "0 files to
 	// read" at exit 0 is the worst available answer: a reader checking whether they had
 	// anything left to review is told no, and believes it.
 	//
 	// Scoped to a patch the caller handed us. A working tree's patch and a revision range's both
 	// come from whichever VCS adapter is active, and refusing there would turn "a backend spells
-	// its headers a third way" into a hard failure of the whole command - a worse bug than the
+	// its headers a third way" into a hard failure of the whole command: a worse bug than the
 	// one being fixed.
 	if len(paths) == 0 && !src.addressable() {
 		if strings.Contains(patch, "\x1b[") {
@@ -474,13 +474,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 // hintSinceLastReview tells a reader who has been here before what they can skip.
 //
 // The exhausting part of a second pass is not the reading, it is that nothing separates what moved
-// from what you already weighed - so you re-read the whole change, find the same things, and learn
+// from what you already weighed, so you re-read the whole change, find the same things, and learn
 // to rubber-stamp the next one. Every review tool that solved this did it the same way, by naming
 // the revision you last got through and diffing from there; the one everybody uses did not, which
 // is why the habit of re-reading everything feels normal.
 //
 // It NAMES the command rather than narrowing the changeset itself. Silently showing a subset of
-// what was asked for would be the one failure this surface cannot afford - a reader who was shown
+// what was asked for would be the one failure this surface cannot afford: a reader who was shown
 // less than they asked for, and not told, concludes they have seen a file they have not.
 //
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
@@ -516,8 +516,8 @@ const promptHintFiles = 10
 // hintReviewPrompt mentions `--prompt` on a changeset big enough to want a second reader.
 //
 // It exists because a flag nobody knows about is a feature nobody has. `agent install` settled the
-// same question the same way - it prints the managed AGENTS.md block only when the reader's file
-// is missing it or carrying a stale one - and this is that discipline applied to the other place
+// same question the same way (it prints the managed AGENTS.md block only when the reader's file
+// is missing it or carrying a stale one), and this is that discipline applied to the other place
 // magus hands a person text to carry somewhere itself refuses to go.
 //
 // stderr, so a piped or redirected report is unchanged, and only where hints are enabled at all.
@@ -537,7 +537,7 @@ const branchOverlapLimit = 20
 
 // annotateDiff computes the annotated changeset for a set of changed paths.
 //
-// One definition, because the TUI and the one-shot renderer must show the same facts - two
+// One definition, because the TUI and the one-shot renderer must show the same facts: two
 // callers folding on their own overlays is how "the console said 12 files reference this and
 // the CLI said nothing" happens.
 func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base string) (types.Diff, error) {
@@ -549,7 +549,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// The churn lenses, from a fresh scan. The daemon serves these from a warm cache; a
 	// one-shot CLI has none, so it pays the bounded git-log walk here. Best-effort: a
 	// workspace with no history simply reports no churn rather than failing the diff.
-	// Files: true is required - without it the lens ranks PROJECTS and the per-file list is
+	// Files: true is required; without it the lens ranks PROJECTS and the per-file list is
 	// empty, so every file would silently report no churn.
 	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
 		var projects []types.TrendEntry
@@ -569,7 +569,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	}
 	// Where the reader left off. Attached HERE rather than computed at the point it is rendered,
 	// so the terminal, the console and `-o json` are reading one answer instead of three lookups
-	// that can disagree - the same rule that moved the parser and the thread placement inward.
+	// that can disagree: the same rule that moved the parser and the thread placement inward.
 	if store, serr := review.Load(m.CacheDir()); serr == nil {
 		rev.AttachReviewed(store.ReviewedAt(paths))
 	}
@@ -640,8 +640,8 @@ func watchDiff(ctx context.Context, m *magus.Magus, render func() error) error {
 // themselves, and this surface prints nothing BUT paths. delta has had OSC 8 links for years
 // and they are the cheapest legibility win available here.
 //
-// The gate is tty.WantsHyperlinks, which already refuses a pipe, TERM=screen, and - the
-// subtle one - an SSH session, where a file:// URL names a path on the remote machine that
+// The gate is tty.WantsHyperlinks, which already refuses a pipe, TERM=screen, and (the
+// subtle one) an SSH session, where a file:// URL names a path on the remote machine that
 // the local terminal would resolve against the wrong filesystem. Keeping that decision in one
 // place is what preserves the property that piped output carries no escape sequences at all.
 func pathLinker(root string) func(string) string {
@@ -661,7 +661,7 @@ func pathLinker(root string) func(string) string {
 //
 // This is what makes "three clients, one session" true for a terminal. `magus diff` already
 // shared the COMPUTATION with the console and the MCP surface; what it did not share was the
-// coordination - where the reader is, what they have read, what an agent has asked them to
+// coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
 func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
 	rev, sess, sync, err := attachDiffSession(ctx, m, content, patch, base, paths)
@@ -673,8 +673,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
 	sync = earned
-	// Closed here rather than inside the viewer: how a Sync gets its writes out - inline, or over a
-	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
+	// Closed here rather than inside the viewer: how a Sync gets its writes out (inline, or over a
+	// goroutine that has to be drained) is this file's business, and the viewer stays ignorant
 	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
 	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
 	// loses the queue along with the restored terminal.
@@ -708,7 +708,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 		// would describe a session nobody had.
 		// The counts the reader left in, plus what their reading EARNED. Receipts were minted
 		// silently, so `v` read as a session bookmark and the receipt vocabulary in `--impact`
-		// arrived later with no referent - the reader had done the work and never been told
+		// arrived later with no referent: the reader had done the work and never been told
 		// it counted. Said at quit, once, naming where to see it.
 		Summary: func(unfolded bool) string {
 			line := diffCountsLine(rev, unfolded)
@@ -722,7 +722,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 
 // attachDiffSession joins the shared review, daemon first.
 //
-// With a daemon running its session is the ONE session - the console tab and the agent are
+// With a daemon running its session is the ONE session: the console tab and the agent are
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
@@ -747,7 +747,7 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 // diffTUIFiles joins the annotations to the patch: one is ordered by consequence, the other
 // by whatever the VCS emitted, and the reader wants the first order with the second's text.
 //
-// The annotation order is authoritative and is never recomputed here - types.Diff.
+// The annotation order is authoritative and is never recomputed here: types.Diff.
 // SortForReading is the single definition of review order.
 func diffTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.File {
 	byPath := make(map[string][]changeset.Hunk, len(parsed))
@@ -790,7 +790,7 @@ func displayOr(h changeset.Hunk) []string {
 }
 
 // diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
-// differently - one to a local file, one over a goroutine that has to be drained - and the
+// differently (one to a local file, one over a goroutine that has to be drained), and the
 // viewer must not have to know which it was handed.
 type diffSync interface {
 	difftui.Sync
@@ -825,13 +825,13 @@ func (diffStoreSync) close() {}
 // hand back a session it had not attached would be a client of nothing.
 //
 // Writes leave on sends rather than on the caller's stack: every one of them is provoked by a
-// KEYPRESS - a cursor move, a read mark - and an inline post would put a network round trip
+// KEYPRESS (a cursor move, a read mark), and an inline post would put a network round trip
 // between the key and the screen moving, up to the full diffBridgeWrite deadline against a
 // daemon that has stopped answering.
 //
 // The two kinds of write get two queues, because they fail in opposite directions. A cursor is
-// idempotent by REPLACEMENT - the newest one says where the reader is and everything behind it
-// says where they no longer are - so that queue evicts to stay current. A read mark is
+// idempotent by REPLACEMENT (the newest one says where the reader is and everything behind it
+// says where they no longer are), so that queue evicts to stay current. A read mark is
 // replaceable by nothing: the bridge is the only writer of it on this path, so a dropped
 // `viewed` is a hunk the reader read that no client will ever be told about. Its queue is deep,
 // waited on, and drained in full at close.
@@ -850,8 +850,8 @@ type diffBridge struct {
 	cancel context.CancelFunc
 }
 
-// diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route -
-// symbol shards and a reverse closure - so this is generous; the alternative on a slow answer
+// diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route
+// (symbol shards and a reverse closure), so this is generous; the alternative on a slow answer
 // is not a faster one, it is computing the same thing locally.
 const diffBridgeAttach = 10 * time.Second
 
@@ -862,7 +862,7 @@ const diffBridgeWrite = time.Second
 
 // diffBridgeQueue bounds the CURSOR writes waiting to leave. Small on purpose: a backlog means
 // the daemon has stopped keeping up, and at that point the newest cursor is the only one worth
-// having - the ones behind it describe somewhere the reader no longer is.
+// having: the ones behind it describe somewhere the reader no longer is.
 const diffBridgeQueue = 8
 
 // diffBridgeMarks bounds the read marks waiting to leave. Deep rather than small, because
@@ -876,13 +876,13 @@ const diffBridgeMarks = 64
 const diffBridgeClose = 3 * time.Second
 
 // dialDiffBridge attaches to the daemon's session, or returns nil when there is nothing to
-// join - no token, no listener, a daemon with no workspace. Every one of those is an ordinary
+// join: no token, no listener, a daemon with no workspace. Every one of those is an ordinary
 // state rather than an error: the terminal reads the diff on its own and says nothing about
 // a daemon the reader never asked for.
 //
 // asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
 // the daemon computed its changeset from the same bytes. Without that check a daemon serving
-// a different workspace - the main checkout while this is a worktree - answers confidently
+// a different workspace (the main checkout while this is a worktree) answers confidently
 // about a tree the reader is not looking at, and the coordinate every comment and every
 // viewed mark is keyed by would silently mean something else.
 func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridge {
@@ -944,14 +944,14 @@ type diffSessionOp struct {
 	Hunk   int    `json:"hunk,omitempty"`
 	Digest string `json:"digest,omitempty"`
 	On     bool   `json:"on,omitempty"`
-	// IDs are the host thread ids of a `seen` op - the only op that carries a set rather than
+	// IDs are the host thread ids of a `seen` op, the only op that carries a set rather than
 	// one coordinate, because the watermark advances by what a frame showed.
 	IDs []string `json:"ids,omitempty"`
 }
 
 // SetCursor publishes where the reader is looking. The reply is discarded on purpose: it
 // carries the session's own cursor, and applying that would let another client move this
-// reader's viewport - which is the one thing the paired-review design forbids.
+// reader's viewport, which is the one thing the paired-review design forbids.
 func (b *diffBridge) SetCursor(c types.DiffCursor) {
 	b.queueCursor(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
 }
@@ -975,7 +975,7 @@ func (b *diffBridge) SetThreadsSeen(ids []string) {
 // A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
 // the reader has already walked past and throws away the only one still true.
 //
-// Evicting and sending are two steps, and deliver can take the head between them - which is why
+// Evicting and sending are two steps, and deliver can take the head between them, which is why
 // this retries rather than assuming the receive made room. Each iteration ends with a slot free
 // whichever way that race went, and stop short-circuits both selects once close has run.
 func (b *diffBridge) queueCursor(op diffSessionOp) {
@@ -997,7 +997,7 @@ func (b *diffBridge) queueCursor(op diffSessionOp) {
 }
 
 // queueMark hands a read mark to the sender. It never evicts, because there is nothing to
-// replace a mark with - see diffBridge.
+// replace a mark with; see diffBridge.
 //
 // A full queue is waited on rather than dropped, and the wait is bounded at diffBridgeWrite
 // because an unbounded one would DEADLOCK the quit path: close runs after the key loop returns,
@@ -1021,7 +1021,7 @@ func (b *diffBridge) queueMark(op diffSessionOp) {
 	}
 }
 
-// deliver posts queued mutations one at a time, in order, until close stops it - then drains
+// deliver posts queued mutations one at a time, in order, until close stops it, then drains
 // what is left behind. It is the only receiver on either queue and it returns on every path: the
 // loop leaves on stop, and the drain is bounded by the depth it measured on entry.
 func (b *diffBridge) deliver(ctx context.Context) {
@@ -1040,7 +1040,7 @@ func (b *diffBridge) deliver(ctx context.Context) {
 }
 
 // drain posts what was waiting when close ran, marks first because those are the writes that
-// cannot be reconstructed, and never more than were queued at that moment - a send racing close
+// cannot be reconstructed, and never more than were queued at that moment: a send racing close
 // is not worth extending the shell's exit for.
 func (b *diffBridge) drain(ctx context.Context) {
 	for n := len(b.marks) + len(b.cursors); n > 0; n-- {
@@ -1092,7 +1092,7 @@ func (b *diffBridge) drainBudget() time.Duration {
 }
 
 // post sends one mutation, best-effort. A coordination write that fails is a pairing that
-// went quiet, not a review that has to stop - and there is nothing useful to say about it to
+// went quiet, not a review that has to stop, and there is nothing useful to say about it to
 // somebody in the middle of reading a diff.
 //
 // ctx is the SENDER's, never the session's: a cancelled read must not turn the last write into a
@@ -1192,7 +1192,7 @@ const diffHistoryCommits = 500
 // asking "what was this agent looking at" is asking about recent work by construction.
 const diffReplayEvents = 2000
 
-// diffTouches adapts the trail's Touch to the diff's - a rename across a boundary types
+// diffTouches adapts the trail's Touch to the diff's, a rename across a boundary types
 // must not cross, since types imports nothing internal and the trail is internal.
 func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
 	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
@@ -1258,7 +1258,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 
 	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
 	// note it arrived after the reader had already read the first entry as the most dangerous
-	// one, and it named the missing overlays rather than the missing order - so three separate
+	// one, and it named the missing overlays rather than the missing order, so three separate
 	// readers concluded the ranking had considered churn and rejected it. Say the one thing
 	// that changes how the next twelve lines should be read, first.
 	if !rev.Ranked() && len(primary) > 1 {
@@ -1433,7 +1433,7 @@ func diffFileFacts(f types.DiffFile) []string {
 }
 
 // capSlice bounds a list for display, reporting the remainder rather than truncating in
-// silence - a list that stops without saying so reads as the whole answer.
+// silence: a list that stops without saying so reads as the whole answer.
 func capSlice(xs []string, n int) []string {
 	if len(xs) <= n {
 		return xs
@@ -1576,7 +1576,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// The configured VCS base ref, never rev.Base: the working diff's base is a STATE
 	// label ("working"), and the advisors compare git revisions (`origin/<base>`), so the
 	// label would send them fetching a branch that does not exist. Their section
-	// therefore describes committed state against the base branch - the most a rev-based
+	// therefore describes committed state against the base branch, the most a rev-based
 	// advisor can measure, per the documented limit on runLocalAdvisors.
 	base := m.VCSOptions().BaseRef
 	if base == "" {
@@ -1608,7 +1608,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 // impactReachOf renders what types.Diff has carried since the impact join landed and
 // nothing has ever printed: which projects were edited, and which merely rebuild.
 //
-// nil when the closure is empty, which is a real state - a change entirely outside every
+// nil when the closure is empty, which is a real state: a change entirely outside every
 // project directory seeds nothing.
 func impactReachOf(rev types.Diff) *impactReach {
 	if len(rev.AffectedProjects) == 0 {
@@ -1729,7 +1729,7 @@ func diffSymbolIDs(rev types.Diff) []string {
 // impactLines renders the report, one claim per line, in the same count-then-list shape
 // the file list above it uses.
 //
-// Lines rather than prints, so every empty form is testable without a terminal - and the empty
+// Lines rather than prints, so every empty form is testable without a terminal, and the empty
 // forms are the half that matters. Each one says what was not measured and what would measure
 // it, because a silent section reads as a clean bill of health.
 func impactLines(p diffImpact) []string {
@@ -1745,7 +1745,7 @@ func impactLines(p diffImpact) []string {
 		impactReviewLines(p.Review),
 	}
 	for _, s := range sections {
-		// A section may render nothing - REVIEW says nothing about a small change nobody
+		// A section may render nothing: REVIEW says nothing about a small change nobody
 		// has disturbed. Skipping it here rather than emitting its blank separator is what
 		// keeps that silence from reading as a section that broke.
 		if len(s) == 0 {
@@ -1817,7 +1817,7 @@ func impactCostLines(c *impactCost) []string {
 // impactAdvisorBaseOf dates this clone's copy of the ref the advisors compared against.
 //
 // nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
-// revision. A ref the clone does not HAVE is not that case - it resolves to a
+// revision. A ref the clone does not HAVE is not that case; it resolves to a
 // impactAdvisorBase with no Tip, because "you have never fetched this" is the single most
 // useful thing the report can say about why nine advisors went quiet.
 func impactAdvisorBaseOf(ctx context.Context, m *magus.Magus, base string) *impactAdvisorBase {
@@ -1893,7 +1893,7 @@ func impactAdvisorLines(sections []adviceSection, failed []string, base *impactA
 	if len(sections) == 0 && len(failed) == 0 {
 		return append(out, "ADVISORS: nothing to report")
 	}
-	// An empty Body is a RETRACTION - that advisor ran and found nothing - so it is not a
+	// An empty Body is a RETRACTION (that advisor ran and found nothing), so it is not a
 	// finding, and counting sections rather than findings reported ten of them where there
 	// was one, each rendered as a title with nothing underneath. A reader who learns the
 	// headline overstates by an order of magnitude stops reading the section.
@@ -1921,7 +1921,7 @@ func impactAdvisorLines(sections []adviceSection, failed []string, base *impactA
 			len(clear), strings.Join(clear, ", ")))
 	}
 	// Named rather than counted: which advisor went quiet is what a reader needs to decide
-	// whether the silence above it means anything. Printed verbatim - each note already
+	// whether the silence above it means anything. Printed verbatim: each note already
 	// says whether it is a warning or a "could not run" failure, and only collectAdvice
 	// can tell the two apart.
 	for _, f := range failed {
@@ -1941,7 +1941,7 @@ func impactAnchorLines(hits []anchorHit) []string {
 		if h.Drift != "" {
 			// An unmeasured anchor is marked too, and deliberately not with its wire code:
 			// rendered as "ungraded-anchor" it scans as a fourth kind of drift verdict, when
-			// what it says is that no verdict was reached. Bare would be worse - that reads
+			// what it says is that no verdict was reached. Bare would be worse: that reads
 			// as clean, which is the one thing nobody checked it for.
 			marker := h.Drift
 			if h.Drift == string(notes.StatusUngraded) {
@@ -1984,7 +1984,7 @@ func impactDuration(ms int64) string {
 // changedPathsFromPatch lists the files a patch touches, in patch order.
 //
 // It defers to the session parser rather than reading headers itself. This file used to carry
-// its own copy, and the copy is how a GNU `diff -u` patch - no `diff --git` line anywhere -
+// its own copy, and the copy is how a GNU `diff -u` patch (no `diff --git` line anywhere)
 // reported zero changed files and exited 0. Two readers of the same bytes will drift, and when
 // they do the annotations describe different files than the hunks a reader is marking.
 func changedPathsFromPatch(patch string) []string {
@@ -2005,7 +2005,7 @@ type anchorHit struct {
 	Note  string `json:"note"            yaml:"note"`
 	Title string `json:"title,omitempty" yaml:"title,omitempty"`
 	// Pos is the anchor's index in its note, and Matched the changed thing that pulled the
-	// note in - a symbol node id or a file path. Both are carried rather than dropped because
+	// note in: a symbol node id or a file path. Both are carried rather than dropped because
 	// a note with several anchors is otherwise reported without saying WHICH of them fired.
 	Pos     int              `json:"pos"             yaml:"pos"`
 	Kind    notes.AnchorKind `json:"kind"            yaml:"kind"`
@@ -2075,7 +2075,7 @@ func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.Resolv
 //
 // This is the receipt worth trusting. `--ack` is a claim made about files in bulk and pays
 // for that with a reason on the record; this one is minted from what the reader actually
-// did - every hunk of the file marked read, one keypress at a time, in a viewer only a
+// did: every hunk of the file marked read, one keypress at a time, in a viewer only a
 // person can drive. Nothing is inferred: the marks were already explicit, and all this adds
 // is that they now outlive the session.
 //
@@ -2089,7 +2089,7 @@ type earnedSync struct {
 	root, cacheDir string
 	// fileOf maps a hunk digest to the file it belongs to, and hunksOf counts how many a
 	// file has. A receipt is per FILE, so a file is earned only once every hunk it
-	// contributes is marked - reading four hunks of six is not reading the file.
+	// contributes is marked; reading four hunks of six is not reading the file.
 	fileOf map[string]string
 	// hunksOf counts DISTINCT hunk digests per file, for the reason changeset.Store.TrackHunks
 	// gives: counting occurrences sets a total the marked set can never reach.
@@ -2108,8 +2108,8 @@ type earnedSync struct {
 	// viewed set is a plain unauthenticated JSON file whose hunk digests are computable
 	// from `magus diff` output, so anything with write access can forge a complete reading;
 	// without this, opening the viewer once would launder that forgery into durable
-	// receipts. Requiring a live mark keeps the seed doing its real job - resuming a
-	// reading across sittings - while making it worth nothing on its own.
+	// receipts. Requiring a live mark keeps the seed doing its real job (resuming a
+	// reading across sittings) while making it worth nothing on its own.
 	live map[string]bool
 	now  func() time.Time
 }
@@ -2244,7 +2244,7 @@ const rationaleShown = 8
 //
 // FILE-level, not hunk-level, and the wording says so. Deciding whether a marker sits inside
 // a changed region needs the hunk ranges, and a marker fifty lines from your edit still
-// governs the code you are in - claiming otherwise would be a precision this does not have.
+// governs the code you are in; claiming otherwise would be a precision this does not have.
 //
 // Generated files are skipped: a marker there was written by whatever produced the file.
 func collectRationale(root string, rev types.Diff) []rationaleHit {
@@ -2287,7 +2287,7 @@ func compatMarkersIn(root, rel string) []rationaleHit {
 // inAComment reports whether the text preceding a marker opens a comment.
 //
 // The convention writes this marker in a comment beside the code it explains, so a match
-// anywhere else is a mention of the convention rather than a use of it - this file's own
+// anywhere else is a mention of the convention rather than a use of it: this file's own
 // constant, and the fixtures in its test, both of which reported themselves as decisions
 // governing the reader's change.
 //
@@ -2386,8 +2386,8 @@ func impactEvidenceGapLines(gap trail.ConsultGap) []string {
 }
 
 // adviceSection is one advisor's finding: the section it owns in the pull-request
-// comment, rendered for a local reader instead. An EMPTY Body is a retraction - the
-// advisor ran and found nothing - and is a section like any other, not an absence.
+// comment, rendered for a local reader instead. An EMPTY Body is a retraction (the
+// advisor ran and found nothing) and is a section like any other, not an absence.
 type adviceSection struct {
 	Name  string `json:"name"  yaml:"name"`
 	Title string `json:"title" yaml:"title"`
@@ -2440,7 +2440,7 @@ var localAdvisors = []string{
 // base is a BRANCH name, not a rev: the advisors compare against `origin/<base>`, the
 // same way they use PR_BASE in CI.
 //
-// An advisor that raises produces a note and never an error - one broken advisor must not
+// An advisor that raises produces a note and never an error: one broken advisor must not
 // take the other nine down, because the caller is showing a reader what magus knows and
 // nine tenths of that is still worth showing. The error return is for a failure that
 // makes the whole set meaningless.
@@ -2485,7 +2485,7 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 			// BZZ3001 above a crash is usually the explanation for it.
 			//
 			// ONLY when it crashed. These are lint diagnostics about the advisor's own
-			// source - magus's shipped scripts, not the reader's change - so printing them
+			// source (magus's shipped scripts, not the reader's change), so printing them
 			// unconditionally buries a one-line docs fix under tens of lines about magus's
 			// own files, which reads as "you broke something". That lint belongs in magus's
 			// own lint run.
@@ -2508,7 +2508,7 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 // not a knob. Setting either by hand puts the advisors into local mode with no driver
 // reading their stdout, and both names may change with this file in one commit. advice.buzz
 // pins the same three strings in a test block of its own, because nothing at runtime
-// couples its copy to this one - rename one side alone and every advisor fails with
+// couples its copy to this one; rename one side alone and every advisor fails with
 // "nowhere to publish" instead of saying anything.
 const (
 	adviceModeEnv       = "MAGUS_INTERNAL_ADVICE_MODE"
@@ -2546,9 +2546,9 @@ func setAdviceEnv(base string) (func(), error) {
 // its compilation raised, and the error that ended it. Nothing here writes or exits: all
 // three are the caller's to report.
 //
-// The session is built as `magus buzz <file>` builds one - same module surface, same
+// The session is built as `magus buzz <file>` builds one (same module surface, same
 // strict parse mode, warnings drained at the same point, `fun main() > int` read rather
-// than discarded - so an advisor cannot behave one way in CI and another way here. Two
+// than discarded), so an advisor cannot behave one way in CI and another way here. Two
 // differences remain, both deliberate:
 //
 //   - std.print goes to a buffer, not stdout. That IS the transport: a section is a line
@@ -2581,7 +2581,7 @@ func runAdvisor(ctx context.Context, dir, file string) (string, []string, error)
 	}
 	// Drained where `magus buzz` drains them: after Exec, before main. These are parse and
 	// check diagnostics (BZZ3001 unused import, and the rest), so Exec is where all of them
-	// are produced, and it never fails on one - which is exactly why they need collecting
+	// are produced, and it never fails on one, which is exactly why they need collecting
 	// rather than trusting a green run. An advisor whose imports have rotted is the kind of
 	// thing a reader wants told, not left to read as an advisor with nothing to say.
 	var warnings []string
@@ -2734,7 +2734,7 @@ func bulkReasons(cacheDir string, rev types.Diff) []string {
 //
 // It reads DiffFile.ReadState rather than consulting the store a second time, so the
 // terminal report and the console's review surface cannot disagree about which files
-// somebody has read - they are looking at one join.
+// somebody has read: they are looking at one join.
 //
 // nil when no file carries a state at all, which the renderer states as unmeasured rather
 // than as unread. Those are opposite claims and only one of them accuses.
@@ -2825,7 +2825,7 @@ type reviewedContent struct {
 
 // digest fingerprints one path, or returns "" where there is nothing to attest to.
 //
-// "" is the answer for a file that is absent - deleted in the working tree, or not present at the
+// "" is the answer for a file that is absent: deleted in the working tree, or not present at the
 // revision. Recording a receipt against it would satisfy Covers for every unreadable file forever.
 func (c reviewedContent) digest(path string) string {
 	if c.at.Revision == "" {
@@ -2841,8 +2841,8 @@ func (c reviewedContent) digest(path string) string {
 // contentOf says which tree a receipt minted for this source should attest to.
 //
 // A source magus cannot address yields the working tree, which is what every caller did before
-// this existed. That is safe only because the two gates that mint receipts - --ack and the viewer
-// - both refuse an unaddressable source outright, so the fallback is unreachable rather than
+// this existed. That is safe only because the two gates that mint receipts (--ack and the viewer)
+// both refuse an unaddressable source outright, so the fallback is unreachable rather than
 // merely unlikely. If either ever accepts a patch on stdin, this has to refuse instead.
 func contentOf(ctx context.Context, m *magus.Magus, src diffInput) reviewedContent {
 	c := reviewedContent{
@@ -2896,7 +2896,7 @@ func ackChangeset(content reviewedContent, cacheDir string, rev types.Diff, reas
 // this is the only place it is said.
 //
 // TODO: teach the viewer stale state, so a reader stepping through sees which files moved
-// under them. That is additive - it is not a reason to drop the only telling of it here.
+// under them. That is additive; it is not a reason to drop the only telling of it here.
 func impactReviewLines(r *impactReview) []string {
 	if r == nil {
 		return []string{"REVIEW: read receipts unavailable; step a file through in `" + hint.Diff.String() + "` to earn one"}

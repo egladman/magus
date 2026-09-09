@@ -11,7 +11,7 @@ import (
 // into per-line events (splitOutputLines), each stamped with the run's identity and timestamp,
 // then a trailing result event carrying its outcome. The stdout/stderr split and per-line
 // timestamps the live capture had are gone from the interleaved blob, so every line is stdout at
-// the run's timestamp and the result shares it - a render aid, never a source of truth. The
+// the run's timestamp and the result shares it: a render aid, never a source of truth. The
 // verbatim blob (cache.OutputStore.ByRef) stays the source of truth; these events exist only so
 // the handler can map them onto the wire proto the viewer renders.
 func StitchDisplayEvents(output []byte, d cache.OutputDescriptor) []journal.Event {

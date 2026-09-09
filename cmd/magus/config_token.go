@@ -4,7 +4,7 @@ package main
 // and the only one that may manage other tokens.
 //
 // It lives at `magus config token`, NOT under `config mcp`, because it is not an MCP
-// credential - internal/auth/guard.go calls it "the OPERATOR tier and nothing else",
+// credential: internal/auth/guard.go calls it "the OPERATOR tier and nothing else",
 // and it opens the console just as much as it opens /mcp. It sat under `config mcp`
 // only because MCP was the first surface that needed it, and every reader who met it
 // there learned that the daemon has one "MCP token", which is the conflation the
@@ -12,7 +12,7 @@ package main
 //
 // compat(until: no install still carries the pre-rename file): the on-disk path stays
 // <state>/magus/mcp_token. Moving it would strand an existing token behind a rename
-// for no user-visible gain - the file is not something anyone types - so only the
+// for no user-visible gain (the file is not something anyone types), so only the
 // command moved. Observe it is safe to rename by checking that no state dir in the
 // wild still holds mcp_token; auth.Path is the one place that would change.
 

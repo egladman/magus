@@ -9,7 +9,7 @@
 //     not `describe tools`, not daemon start, not a console page load. Ever.
 //  3. Staleness is computed locally from the signed generated_at, never from when
 //     the fetch happened. Age measured from the fetch means a frozen endpoint reads
-//     as permanently fresh - and a cron that quietly stopped is the likely failure
+//     as permanently fresh, and a cron that quietly stopped is the likely failure
 //     for a one-person project, not a hypothetical one.
 package registry
 
@@ -58,7 +58,7 @@ const registryURLEnv = "MAGUS_REGISTRY_URL"
 // shared. See internal/dropin for when that shape earns its keep.
 //
 // This is CONFIGURATION, not policy. Where the facts come from is a machine and
-// network question - which is why it is user-global and why it may differ between
+// network question, which is why it is user-global and why it may differ between
 // two people working on the same repository. What version range a project accepts
 // is policy, stays in the workspace, and is not here.
 type Source struct {
@@ -78,7 +78,7 @@ type Source struct {
 	PubKey string `yaml:"pubkey"`
 	// Builtin marks the source magus ships rather than one a file declared.
 	Builtin bool `yaml:"-"`
-	// Enabled false declines this source entirely - the column reads a state word
+	// Enabled false declines this source entirely: the column reads a state word
 	// and doctor stays quiet. Without it, someone who declined on purpose would be
 	// told to sync forever, which is the nag this design exists to avoid.
 	Enabled *bool `yaml:"enabled"`
@@ -174,7 +174,7 @@ func parseSource(e dropin.Entry) (Source, error) {
 	// would be trusting whoever currently answers on that hostname.
 	//
 	// The one exception is a file named for the BUILT-IN source, which inherits the
-	// pinned ring - that is what makes pointing the default at a mirror a URL change
+	// pinned ring; that is what makes pointing the default at a mirror a URL change
 	// rather than a key-management exercise, since a mirror serves the same signed
 	// bytes we published.
 	if src.PubKey == "" && src.Name != builtinSourceName {
@@ -208,7 +208,7 @@ func requireHTTPS(raw string) error {
 // already free of port and IPv6 brackets) names the local machine only.
 // A prefix check like strings.HasPrefix(host, "127.") also matches
 // "127.evil.example", a name an attacker registers and points DNS at
-// whatever they want - so this parses host as an IP and asks net for the
+// whatever they want, so this parses host as an IP and asks net for the
 // real answer instead of pattern-matching the text.
 func isLoopback(host string) bool {
 	if host == "localhost" {

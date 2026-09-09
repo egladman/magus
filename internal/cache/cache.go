@@ -87,7 +87,7 @@ type Cache struct {
 
 	// platform is runtime.GOOS+"/"+runtime.GOARCH, stamped onto every manifest this
 	// Cache writes and checked against every manifest it reads (readManifest,
-	// importArtifact) - see Manifest.Platform. Set from runtime.* in Open; a test-only
+	// importArtifact); see Manifest.Platform. Set from runtime.* in Open; a test-only
 	// Option overrides it so both branches of the guard are reachable without two
 	// machines.
 	platform string
@@ -101,7 +101,7 @@ type Stats struct {
 	Miss  int
 	Error int
 	// SavedMs is the summed recorded duration of the runs those hits replayed. Measured, not
-	// modeled - each figure is how long that exact target took on this machine when it last ran.
+	// modeled: each figure is how long that exact target took on this machine when it last ran.
 	// Understates when entries predate Manifest.DurationMs, and never overstates.
 	SavedMs int64
 }
@@ -112,7 +112,7 @@ type Step struct {
 	Sources     []string // doublestar globs (relative to WorkspaceRoot) for the cache key
 	// IgnoreDirs are the non-source dir names this project's resolved spells generate
 	// (vendor, node_modules, ...); pruned from the source walk so they are never hashed.
-	// The field itself is not written into the key - only the resulting file set is, so
+	// The field itself is not written into the key; only the resulting file set is, so
 	// two ignore sets that yield the same files hash identically.
 	IgnoreDirs []string
 	EnvAllow   []string // env var names whose values contribute to the key
@@ -121,11 +121,11 @@ type Step struct {
 	// derived override's value lives in the magusfile, so it is hashed directly.
 	ExecOverrides []string
 	// Observations are per-target ctx.observes declarations ("key=value"): facts OUTSIDE
-	// the tree that the target's answer depends on and no other key input can see - a
+	// the tree that the target's answer depends on and no other key input can see: a
 	// vulnerability feed's id, a remote schema's revision. Hashed directly like
 	// ExecOverrides, since both halves are written in the magusfile; unlike
 	// ExecOverrides they change nothing about how the target runs, so they get their own
-	// line class rather than reusing exec:. The value is opaque here - magus compares it
+	// line class rather than reusing exec:. The value is opaque here: magus compares it
 	// and never interprets it.
 	Observations []string
 	Outputs      []string // globs snapshotted into cache and replayed on hit
@@ -134,7 +134,7 @@ type Step struct {
 	// project's build order depends on (a cross-project output), where producing nothing
 	// is a build failure rather than an empty result: the manifest would omit the file
 	// and later cache hits would replay a partial output set into a tree this target does
-	// not own. Ordinary outputs stay lenient - a glob that legitimately matches nothing
+	// not own. Ordinary outputs stay lenient: a glob that legitimately matches nothing
 	// is common, and only a total miss is suspicious.
 	RequiredOutputs []string
 
@@ -143,8 +143,8 @@ type Step struct {
 	// the target broke its promise.
 	//
 	// Inherited globs routinely match nothing: binding the typescript spell contributes
-	// `dist/**` to every target on the project, so a check-only target like a test - which
-	// produces no files at all - would otherwise fail its snapshot for a glob it never claimed.
+	// `dist/**` to every target on the project, so a check-only target like a test (which
+	// produces no files at all) would otherwise fail its snapshot for a glob it never claimed.
 	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
 	// targets always replayed.
 	OutputsDeclared bool
@@ -189,7 +189,7 @@ type Step struct {
 	IncludeOS   bool
 	IncludeArch bool
 	NoCache     bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success - a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	SkipReplay  bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
 	Exclusive   bool // RunAll only: when true, runs alone; no other batch step runs concurrently (ignored by Run, which has no batch)
 	Slots       int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
@@ -208,7 +208,7 @@ type Step struct {
 	// Revision and Dirty are the VCS state the run's inputs were read at, resolved ONCE
 	// per invocation by the caller (a per-target probe would spawn a VCS subprocess per
 	// step) and copied onto every step. Display-only provenance for the output
-	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
+	// descriptor (recordOutput), never hashed, so a run before vs. after a commit still
 	// shares a cache entry when the tree content is unchanged.
 	// VCSName is the provider the two above came from ("git", "hg", "sl", "jj"). Recorded
 	// because a bare hash does not identify its own kind: a git SHA and an hg node id
@@ -230,7 +230,7 @@ type Result struct {
 	Ref         string   // per-execution output reference id (see recordOutput); "" when the output store is absent or persistence failed
 	// Saved is the per-hit half of [Stats.SavedMs]: the duration the entry recorded when it
 	// was written, which this hit replayed instead of running. Zero on a miss, and zero for
-	// an entry written before the manifest carried a duration - the same understatement
+	// an entry written before the manifest carried a duration: the same understatement
 	// SavedMs carries, for the same reason.
 	Saved time.Duration
 }
@@ -381,7 +381,7 @@ func (c *Cache) Dir() string { return c.dir }
 
 // IsCached reports whether step s would replay from cache rather than run: its inputs hash
 // to a manifest already present locally. It is Run's hash-and-lookup without the
-// execution or the remote fetch - a read-only "is this up to date?" probe (e.g. status
+// execution or the remote fetch: a read-only "is this up to date?" probe (e.g. status
 // reporting whether a project's symbol index reflects current sources). A missing
 // manifest is "not fresh", not an error; only a hashing failure returns one.
 func (c *Cache) IsCached(ctx context.Context, s Step) (bool, error) {
@@ -471,7 +471,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// NoCache targets (e.g. a long-running fs.watch loop) never consult the cache:
 	// skip the replay path so they always run, and the snapshot below is skipped
 	// too, so a re-run re-executes instead of replaying a stale success. SkipReplay
-	// (magus run --no-cache) skips only this read path - the snapshot below still
+	// (magus run --no-cache) skips only this read path; the snapshot below still
 	// runs on success, so the forced rebuild refreshes the entry instead of leaving
 	// it stale for the next ordinary run.
 	if !s.NoCache && !s.SkipReplay {
@@ -698,7 +698,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	// Push AFTER recordOutput, never before: the artifact ships this run's output
 	// descriptor and key inputs, and recordOutput is what writes them. Pushing first
 	// exported an entry with no descriptor at all (or, on a repeat miss, a previous
-	// attempt's), so a consumer could not resolve the producer's ref - the whole
+	// attempt's), so a consumer could not resolve the producer's ref: the whole
 	// point of shipping them.
 	if c.mutable && !s.NoCache {
 		if c.remote != nil {
@@ -777,7 +777,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		} else {
 			ref = stored.Ref
 		}
-		// Persist the key's pre-hash lines beside the attempts - the explanation
+		// Persist the key's pre-hash lines beside the attempts: the explanation
 		// `--identity` and `describe target --cache --against` diff. Recomputed (cheap:
 		// source hashing is mtime-cached) rather than threaded from Run, and only
 		// written when the recomputed key still equals the one being recorded, so a
@@ -1115,7 +1115,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 	// A failing step does NOT cancel its peers by default. errgroup cancels the group
 	// on the first non-nil error a goroutine returns, which is fail-fast for the whole
-	// batch - so one project's failure killed every INDEPENDENT project mid-flight, and
+	// batch, so one project's failure killed every INDEPENDENT project mid-flight, and
 	// a run reported one failure per invocation no matter how many were really there.
 	// Dependents are a different matter and are already handled without any of this:
 	// waitForDeps reads the upstream's recorded error from the barrier, so the things
@@ -1146,7 +1146,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// whether its upstream succeeded. Collapsing them (the named-return form this
 			// replaced) would tell every dependent its upstream passed.
 			var stepErr error
-			// ran distinguishes a step that reached fn from one that never started - a
+			// ran distinguishes a step that reached fn from one that never started: a
 			// dependency failed, or the batch was already cancelled. Only the first kind
 			// is an independent finding, so only it spends the failure budget and only it
 			// appears in the joined error; the rest are consequences already explained by
@@ -1235,7 +1235,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 
 			// Re-check after the slot, not just before it. A step that is failing releases
 			// its slot in a DEFER, and that defer runs strictly before errgroup observes
-			// its error and cancels the group - so a waiter can be admitted in the window
+			// its error and cancels the group, so a waiter can be admitted in the window
 			// between those two moments and would otherwise start work the batch has
 			// already given up on. At concurrency 1 that window is every time: the waiter
 			// is always parked on exactly the slot the failing step is about to release.
@@ -1268,7 +1268,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 	c.mtimes.flush(context.WithoutCancel(ctx))
 	// The steps' own failures are the answer when there are any: every one of them, in
 	// batch order, rather than whichever happened to be first. waitErr is what is left
-	// for the cases the tally deliberately does not hold - the parent context being
+	// for the cases the tally deliberately does not hold: the parent context being
 	// cancelled (a Ctrl-C, a timeout), which is not a step's verdict about anything.
 	if joined := errors.Join(stepErrs...); joined != nil {
 		return results, joined
@@ -1469,8 +1469,8 @@ func (c *Cache) Import(ctx context.Context, r io.Reader) error {
 			// is stored under, so a poisoned archive cannot slip content that never
 			// hashes to its address into the store (replay never re-hashes on read).
 			// This matches importArtifact's CAS check. Manifests are NOT authenticated
-			// here: `magus config cache import` is an explicit operator action - the
-			// operator vouches for the archive by running it - and replay-side path
+			// here: `magus config cache import` is an explicit operator action (the
+			// operator vouches for the archive by running it), and replay-side path
 			// containment bounds where any imported manifest can write.
 			rel, err := filepath.Rel(c.dir, clean)
 			if err != nil {
@@ -1632,7 +1632,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// os/exec drives stdout and stderr from separate goroutines, so both taps write to the log
 	// file concurrently; guard it so lines never interleave mid-write in the durable log. The
 	// same guarded stream is tee'd into rawBuf so captureRun returns the VERBATIM bytes (what
-	// the process wrote, in write order) - the output store keeps these as-is, no reconstruction.
+	// the process wrote, in write order); the output store keeps these as-is, no reconstruction.
 	var rawBuf bytes.Buffer
 	safeLogF := &syncWriter{w: io.MultiWriter(logF, &rawBuf)}
 	var stdoutTap, stderrTap *lineTap
@@ -1642,7 +1642,7 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	} else {
 		// Both live copies go to STDERR, including the target's stdout. Stdout
 		// belongs to the structured answer (-o json|yaml|jsonl|template) and to
-		// nothing else - every other thing magus prints, from the status lines to
+		// nothing else: every other thing magus prints, from the status lines to
 		// failure dumps to notices, is already on stderr.
 		//
 		// Streaming a target's stdout to os.Stdout interleaved a subprocess's

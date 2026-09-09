@@ -11,7 +11,7 @@
 // These are self-contradictions, not style preferences, so they are ERRORS with no
 // flag-level suppression: the fix is to change the op's kind (a detached service is
 // a command op; a watch is a service op), not to silence the check. Because a bare
-// flag like -d is tool-specific (dnsmasq -d means the opposite - stay in the
+// flag like -d is tool-specific (dnsmasq -d means the opposite: stay in the
 // foreground), each check scopes itself to the tools where the flag has the
 // asserted meaning, keyed off the command's bin rather than matched universally.
 //

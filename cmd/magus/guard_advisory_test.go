@@ -45,7 +45,7 @@ func TestAdvisoryGateSpeaksAgainInAFreshSession(t *testing.T) {
 
 // TestAdvisoryGateExpiresTheAnonymousMarker covers the surface with no session identity.
 // A host that reports none leaves nothing to tell this run from the next, so that marker
-// expires on a clock instead - otherwise the first session on such a host would silence
+// expires on a clock instead; otherwise the first session on such a host would silence
 // every session after it, permanently.
 func TestAdvisoryGateExpiresTheAnonymousMarker(t *testing.T) {
 	base := t.TempDir()
@@ -191,7 +191,7 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 }
 
 // TestHookCmdRepeatsEveryDenial is the exemption, and it is the more important half. A
-// refusal explains itself every time it refuses - it is the one verdict the caller cannot
+// refusal explains itself every time it refuses: it is the one verdict the caller cannot
 // see past, and a second identical `git stash` blocked with no reason is a dead end.
 func TestHookCmdRepeatsEveryDenial(t *testing.T) {
 	base, root := t.TempDir(), t.TempDir()

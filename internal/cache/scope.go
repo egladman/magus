@@ -20,7 +20,7 @@ func (c *Cache) LogScope(ctx context.Context, label, source string) {
 
 // LogCharms emits the active-charm header (the charms mixed into this run, e.g. the
 // magus.yaml default_charms like `rw`) so the reader sees up front what state the run
-// executes under - and can tell at a glance whether a default charm actually took
+// executes under, and can tell at a glance whether a default charm actually took
 // effect. Routed through the cache logger like LogScope so every format receives it.
 func (c *Cache) LogCharms(ctx context.Context, charms string) {
 	c.log.InfoContext(ctx, "cache.charms", slog.String("charms", charms))
@@ -31,12 +31,12 @@ func (c *Cache) LogCharms(ctx context.Context, charms string) {
 //
 // Always printed, including the boring case, because the value is in never having to
 // wonder. "Why was nothing cached" and "am I even talking to the remote" were previously
-// answerable only by reading config and env, and the answer differs per event - a pull
+// answerable only by reading config and env, and the answer differs per event: a pull
 // request reads the shared cache but must not publish to it, which is invisible unless
 // something says so.
 //
 // It names the backend rather than probing it. Active() is a spell op on the real
-// implementation - arbitrary Buzz, with the whole host surface - and calling it here put
+// implementation (arbitrary Buzz, with the whole host surface), and calling it here put
 // that on the path before the first line of output, where a slow probe stalls the run
 // with nothing on screen to explain the pause. Presence and name are known without
 // asking; whether the backend engages is the run's business, not the header's.
@@ -61,7 +61,7 @@ func (c *Cache) LogCache(ctx context.Context) {
 // charms headers, because it is the third input that decides what runs: the same command
 // against a different base is a different build.
 //
-// base already reads "git diff vs origin/main" - the VCS name in front of the ref, rather
+// base already reads "git diff vs origin/main": the VCS name in front of the ref, rather
 // than a git:// URI, because no such scheme is standard across git, Mercurial and jj and
 // inventing one would put a magus-only string where a reader expects a ref they can paste
 // straight back into their own VCS. vcs is accepted for a caller that has the two apart.
@@ -114,7 +114,7 @@ func (c *Cache) LogDry(ctx context.Context, project, label, target string) {
 //
 // It is the same event on purpose. A dry run previously just stopped after its last
 // [dry] line, so the one shape a reader had learned to look for at the bottom of a
-// run - the summary - was missing exactly when they were checking a plan. Reusing
+// run (the summary) was missing exactly when they were checking a plan. Reusing
 // cache.summary also means every output format (json, jsonl, template) keeps
 // reporting a footer rather than only the text renderer growing one.
 //

@@ -19,8 +19,8 @@ import (
 // unit-testable with no graph to build, and it is why the resolver lives here rather than
 // beside the store it serves.
 //
-// It lives in a package rather than at a composition root because it now has two callers -
-// `magus notes verify` and the console's NotesService - and the previous arrangement, one
+// It lives in a package rather than at a composition root because it now has two callers
+// (`magus notes verify` and the console's NotesService), and the previous arrangement, one
 // copy per caller, is exactly how the anchor-to-id mapping silently diverged.
 type NoteResolver struct {
 	root string
@@ -30,7 +30,7 @@ type NoteResolver struct {
 	// the note stores no location at all.
 	node map[string]types.KnowledgeNode
 	// scope is the store whose notes this resolver is checking. It changes the answer for
-	// exactly one anchor kind - note-to-note, which names a note in the SAME store - so a
+	// exactly one anchor kind (note-to-note, which names a note in the SAME store), so a
 	// resolver shared across both stores looks a private note's anchor up in the team's
 	// namespace and calls it dangling.
 	scope string
@@ -107,7 +107,7 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 		}
 		return notes.Digest(strings.Split(string(src), "\n")), nil
 	default:
-		// project/target/note have no content of their own to fingerprint - their existence
+		// project/target/note have no content of their own to fingerprint: their existence
 		// IS the whole signal. Nothing to say, and nothing wrong.
 		return "", nil
 	}
@@ -118,7 +118,7 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 //
 // Symbols only. A file anchor's declaration is the file, so grading it against itself would
 // answer nothing; project, target and note anchors have no content at all. Both return ""
-// with a nil error - an ungraded finding, never a second complaint about the same anchor.
+// with a nil error: an ungraded finding, never a second complaint about the same anchor.
 func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, error) {
 	if a.Kind != notes.AnchorSymbol {
 		return "", nil

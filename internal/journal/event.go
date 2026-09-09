@@ -1,14 +1,14 @@
-// Package journal captures one magus invocation as a structured stream of events - the
+// Package journal captures one magus invocation as a structured stream of events, the
 // journal a run produces. Events are emitted through the standard library's slog: an
 // invocation runs under a capture *slog.Logger threaded on ctx, whose handlers persist the
 // JSONL run log and fan the stream out to any live viewers. Using slog.Handler as the
 // transport (rather than a bespoke sink) keeps capture composable with the wider slog
-// ecosystem - including an OpenTelemetry logs bridge, since a slog.Record maps onto an OTel
+// ecosystem, including an OpenTelemetry logs bridge, since a slog.Record maps onto an OTel
 // LogRecord (message->Body, attrs->Attributes, our kind->EventName).
 //
 // The typed [Event] is the schema: it is what the JSONL store persists and what
 // internal/handler maps onto the magus.viewer.v1alpha1 wire contract. This package is a leaf
-// (stdlib-only), compiled into the default binary - every run captures.
+// (stdlib-only), compiled into the default binary: every run captures.
 package journal
 
 import (
@@ -31,7 +31,7 @@ const (
 	KindResult = "result" // a target finished (pass/fail/cached), with its ref + duration
 	KindScope  = "scope"  // the run's project scope header
 	KindWarn   = "warn"   // a magus warning
-	// KindSecret records that a credential was READ - the reference and the provider
+	// KindSecret records that a credential was READ, the reference and the provider
 	// that served it, never the value. A secret read is an auditable act: it is the
 	// moment a build reached for something privileged, and "which references did this
 	// run touch, through which backend" is the question an audit answers. The value is
@@ -53,7 +53,7 @@ const (
 	StatusCached = "cached"
 )
 
-// Event is one line of a structured invocation log - the atom of the stream. It serializes
+// Event is one line of a structured invocation log, the atom of the stream. It serializes
 // to a single compact JSON object (one JSONL line); empty fields are omitted so output
 // lines stay small.
 type Event struct {
@@ -80,7 +80,7 @@ type Event struct {
 var invSeq atomic.Uint64
 
 // NewInvocationID mints a short, process-unique invocation id (time + counter). It is
-// opaque - used only to group and address one run command's events.
+// opaque, used only to group and address one run command's events.
 func NewInvocationID() string {
 	return "inv" + strconv.FormatInt(nowMillis(), 36) + strconv.FormatUint(invSeq.Add(1), 36)
 }

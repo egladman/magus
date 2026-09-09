@@ -70,7 +70,7 @@ func TestStatusIsReadFromTheExtendedHeaders(t *testing.T) {
 }
 
 // A pure mode change produces no hunks at all, so without the modes it renders as an empty
-// entry - a script becoming executable is a real reviewable event.
+// entry; a script becoming executable is a real reviewable event.
 func TestAPureModeChangeIsCapturedWithNoHunks(t *testing.T) {
 	files := Parse("diff --git a/run.sh b/run.sh\nold mode 100644\nnew mode 100755\n")
 	require.Len(t, files, 1)
@@ -89,7 +89,7 @@ func TestABinaryFileIsFlaggedRatherThanShownEmpty(t *testing.T) {
 }
 
 // The marker describes the PRECEDING line and is a line of neither file, so it must consume no
-// line number on either side - counting it shifts every number below it.
+// line number on either side; counting it shifts every number below it.
 func TestTheNoNewlineMarkerIsMetaAndConsumesNoLineNumber(t *testing.T) {
 	files := Parse("diff --git a/a.txt b/a.txt\n@@ -1,2 +1,2 @@\n-old\n\\ No newline at end of file\n+new\n")
 	require.Len(t, files, 1)
@@ -131,7 +131,7 @@ func TestSeveralFilesEachKeepTheirOwnHunks(t *testing.T) {
 }
 
 // The identity view: paths, hunk digests and the whole-patch digest, without the
-// rendering detail. Same reader, projected - see ParseHunks.
+// rendering detail. Same reader, projected; see ParseHunks.
 
 const twoFilePatch = `diff --git a/a.go b/a.go
 index 111..222 100644
@@ -173,7 +173,7 @@ func TestParseHunksSplitsFilesAndHunks(t *testing.T) {
 
 // The digest is the identity a viewed mark survives a rebase by, and the console computes it
 // independently in TypeScript. If the two ever disagree, a hunk marked read in the browser is
-// invisible to the CLI and to an agent - silently, and only for some hunks.
+// invisible to the CLI and to an agent, silently, and only for some hunks.
 //
 // The expectation below was computed with the CONSOLE's algorithm, in node, over the same
 // bytes: sha256(path || 0x00 || each line + "\n"), first 16 hex characters. It is pinned as a
@@ -189,7 +189,7 @@ func TestHunkDigestMatchesTheConsoleImplementation(t *testing.T) {
 }
 
 // A patch ends in a newline. Splitting on it yields a trailing empty element that is not a
-// line of the diff, and letting it reach the body would change the last hunk's digest - which
+// line of the diff, and letting it reach the body would change the last hunk's digest, which
 // unmarks the final hunk of every changeset for whoever had marked it.
 func TestTrailingNewlineDoesNotChangeTheLastDigest(t *testing.T) {
 	withNewline := ParseHunks(twoFilePatch)
@@ -230,7 +230,7 @@ func TestParseHunksOnEmptyOrHeaderOnlyPatch(t *testing.T) {
 
 // A patch from GNU `diff -u` or from `patch` carries no `diff --git` line at all. Reading only
 // git's dialect made these parse to zero files, which the CLI then reported as an empty
-// changeset at exit 0 - the shape of a right answer wrapped around a wrong one.
+// changeset at exit 0: the shape of a right answer wrapped around a wrong one.
 const gnuPatch = "--- old/a.go\t2026-08-25 09:00:00.000000000 -0400\n" +
 	"+++ new/a.go\t2026-08-25 09:01:00.000000000 -0400\n" +
 	"@@ -1,3 +1,3 @@\n" +
@@ -268,7 +268,7 @@ func TestHeaderPathsSurviveSpacesAndTimestamps(t *testing.T) {
 }
 
 // A deletion names /dev/null on the new side, so the old side is the only name the patch
-// carries - and a sidebar cannot list "/dev/null".
+// carries, and a sidebar cannot list "/dev/null".
 func TestADeletionIsNamedByItsOldPath(t *testing.T) {
 	files := Parse("--- a/gone.go\t2026-01-01\n+++ /dev/null\t2026-01-01\n@@ -1 +0,0 @@\n-bye\n")
 	require.Len(t, files, 1)
@@ -340,7 +340,7 @@ func TestAPatchMixingBothDialectsKeepsEveryFile(t *testing.T) {
 }
 
 // Intra-line emphasis: which PART of a changed line changed. Computed once, here, and shipped
-// to both surfaces - these cases came from the terminal viewer's own test when the second
+// to both surfaces; these cases came from the terminal viewer's own test when the second
 // implementation was removed, and they are the behavior both readers now share.
 //
 // The table names what each line's span SELECTS rather than its offsets, because the offsets
@@ -399,7 +399,7 @@ func TestEmphasisMarksOnlyThePairedRewrite(t *testing.T) {
 }
 
 // The renderer slices the raw line with these numbers, so a span counted in RUNES would not
-// merely highlight the wrong word - it would cut a rune in half and hand the terminal invalid
+// merely highlight the wrong word; it would cut a rune in half and hand the terminal invalid
 // UTF-8. Three two-byte runes sit ahead of the change, so byte and rune offsets differ.
 func TestEmphasisSpansAreByteOffsetsIntoTheRawLine(t *testing.T) {
 	files := Parse("diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n" +

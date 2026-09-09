@@ -28,7 +28,7 @@ func TestClassifyCommandLine(t *testing.T) {
 		// A repo-wide grep whose pattern is a real (mixed-case) identifier is a refs candidate.
 		{"grep -rn HandleFoo internal/", "search-source", "HandleFoo"},
 		// A repo-wide grep for a lowercase word is still a source search, but NOT a symbol
-		// candidate - refs would never resolve "error".
+		// candidate: refs would never resolve "error".
 		{"grep -rn error internal/", "search-source", ""},
 		// A search naming a .md is prose, routed to docsection.
 		{"grep -rn setup docs/guide.md", "search-prose", ""},
@@ -61,8 +61,8 @@ func TestAnalyzeAdoptionRatioAndTotals(t *testing.T) {
 		"", // blank lines are skipped
 		"magus run test .",
 	})
-	// The WHOLE report, so a line mis-filed into a column nobody names - Other and
-	// SearchOfProse were the unwatched ones - shows up as a diff rather than passing.
+	// The WHOLE report, so a line mis-filed into a column nobody names (Other and
+	// SearchOfProse were the unwatched ones) shows up as a diff rather than passing.
 	// HandleFoo grepped twice ranks above parseQuery grepped once.
 	require.Equal(t, adoptionReport{
 		Total:          6, // the blank line is not counted

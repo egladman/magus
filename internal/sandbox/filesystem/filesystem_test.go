@@ -62,7 +62,7 @@ func TestCheckHonoursThePerRuleGrants(t *testing.T) {
 
 // TestSiblingSharingAPathPrefixIsNotUnderTheRule guards the containment check.
 // "under" compares strings, so without the separator it appends, a rule on
-// /ws/allowed would also grant /ws/allowed-evil - a sibling directory the policy
+// /ws/allowed would also grant /ws/allowed-evil, a sibling directory the policy
 // never mentioned. This is the single most consequential line in the package.
 func TestSiblingSharingAPathPrefixIsNotUnderTheRule(t *testing.T) {
 	t.Parallel()
@@ -103,7 +103,7 @@ func TestCheckExecRequiresReadNotExec(t *testing.T) {
 
 // TestUnnormalizedRulePathMatchesNothing is why ResolveRulePath exists. A checked
 // path is symlink-resolved before comparison, so a rule carrying the unresolved
-// form compares against a different string and silently matches nothing - the
+// form compares against a different string and silently matches nothing: the
 // policy looks configured and grants none of what it names. On macOS the temp dir
 // sits under /var, itself a symlink to /private/var, which makes this reproducible.
 func TestUnnormalizedRulePathMatchesNothing(t *testing.T) {
@@ -147,8 +147,8 @@ func TestTraversalIsNormalizedBeforeTheAllowlistCheck(t *testing.T) {
 // nearest ancestor that does, resolves that, and re-attaches the missing tail.
 //
 // The second case is the regression. Resolving only the IMMEDIATE parent left the
-// whole path lexical whenever that parent was also missing - creating a file in a
-// directory this run has yet to make - so any symlink above it went unresolved and
+// whole path lexical whenever that parent was also missing (creating a file in a
+// directory this run has yet to make), so any symlink above it went unresolved and
 // could never match a resolved rule path. On macOS every temp dir is under such a
 // symlink (/var -> /private/var), so nested creates were denied outright.
 func TestWriteToANonExistentPathResolvesItsNearestRealAncestor(t *testing.T) {

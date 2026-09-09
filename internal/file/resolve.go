@@ -25,8 +25,8 @@ const workspaceScheme = "workspace://"
 // and a generically-named exported entry point is the one every caller reaches
 // for by default: that is how an import path, which has no workspace-relative
 // mode, silently mis-anchored and broke graph builds. Callers go through the
-// entry point named for the surface their string came from - ResolveDependsOn,
-// ResolveProject, or ResolveImport - so the mode is chosen by the name, once.
+// entry point named for the surface their string came from (ResolveDependsOn,
+// ResolveProject, or ResolveImport), so the mode is chosen by the name, once.
 // Only ResolveProject takes a ctx: it is the one that logs (the deprecation
 // warning above); the siblings gain one when they gain a reason.
 func resolveAmbiguous(input, anchor string) (string, error) {
@@ -55,7 +55,7 @@ func resolveAmbiguous(input, anchor string) (string, error) {
 // repo-relative ("libs/foo") and dot-relative ("../foo") both work.
 //
 // This is the one surface that wants that ambiguity. A path produced by magus
-// itself - a project import, a CLI reference - has exactly one correct reading
+// itself (a project import, a CLI reference) has exactly one correct reading
 // and uses the entry point named for it.
 func ResolveDependsOn(input, anchor string) (string, error) {
 	return resolveAmbiguous(input, anchor)
@@ -88,15 +88,15 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 	}
 	if rest, found := strings.CutPrefix(input, workspaceScheme); found {
 		// compat(until: no shipped docs or skills teach workspace://): supports a ref
-		// written against the scheme - an older script, a saved command, a doc page
-		// read before it was retired - so it keeps resolving rather than failing as a
+		// written against the scheme (an older script, a saved command, a doc page
+		// read before it was retired), so it keeps resolving rather than failing as a
 		// bare relative path with a stray "workspace:" segment.
 		//
 		// Observe dropping it is safe when the deprecation notes themselves have aged
 		// out: `grep -rn --exclude-dir=gen "workspace://" docs/ CONTRIBUTING.md
 		// internal/agent/skills/` finds nothing (docs/gen is rendered output and follows the
 		// sources). Today it finds exactly two, both saying the scheme is deprecated and
-		// a bare path replaced it - that pair IS the window this branch covers. The
+		// a bare path replaced it; that pair IS the window this branch covers. The
 		// hits under types/ are a different thing: the OUTPUT rendering
 		// (types.WorkspaceRef), which this branch does not serve.
 		suggest := rest

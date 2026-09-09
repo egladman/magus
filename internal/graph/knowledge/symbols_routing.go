@@ -27,7 +27,7 @@ const symbolsRoutingFile = "@symbols.routing.json"
 // symbolRouting is the persisted index plus the key that binds it to the exact symbol
 // shards it was built from. On read, a ShardsKey that does not match the current
 // manifest means the shards moved since the file was written (a swallowed write, an
-// immutable run, or a crash between the manifest and this file) - it is stale and
+// immutable run, or a crash between the manifest and this file): it is stale and
 // ignored, so a stale file degrades to load-all rather than an under-load.
 type symbolRouting struct {
 	// ShardsKey hashes the current symbol shards' (name, fingerprint); the Index is
@@ -45,7 +45,7 @@ func symbolRefKey(symbolID string) string {
 }
 
 // symbolShardsKey hashes the sorted (name, fingerprint) of every symbol shard in the
-// manifest - the identity the routing index is bound to. Empty when there are none.
+// manifest, the identity the routing index is bound to. Empty when there are none.
 func symbolShardsKey(man *manifest) string {
 	if man == nil {
 		return ""
@@ -142,8 +142,8 @@ func (s *Store) readXref() *symbolRouting {
 
 // MergeSymbolShardsByID merges only the @symbols shards that mention the given symbol
 // IDs into g, for a scale-safe reverse lookup (`magus refs S` on an exact ID loads a
-// handful of shards, not all). It falls back to a FULL symbol load - never an
-// under-load - whenever the routing index cannot be trusted to be both fresh and
+// handful of shards, not all). It falls back to a FULL symbol load (never an
+// under-load) whenever the routing index cannot be trusted to be both fresh and
 // helpful: absent, corrupt, stale (its ShardsKey no longer matches the manifest), or
 // yielding no shards for these ids (a fuzzy symbol:-prefixed ref, or an unknown id).
 func (s *Store) MergeSymbolShardsByID(ctx context.Context, g *Graph, symbolIDs []string) error {
@@ -181,6 +181,6 @@ func (s *Store) MergeSymbolShardsByID(ctx context.Context, g *Graph, symbolIDs [
 		}
 	}
 	// The coverage overlay is a single small shard, so load it whenever symbols are
-	// pulled in - the routed subset still gets the ratio on the nodes it merged.
+	// pulled in: the routed subset still gets the ratio on the nodes it merged.
 	return s.mergeCoverageShard(ctx, g, man)
 }

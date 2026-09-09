@@ -61,7 +61,7 @@ func withDeclaredCeiling(ctx context.Context, dir, target string) (context.Conte
 // the project CONTAINING a path and deliberately never returns the root, because a
 // file under the root that no nested project claims is not the root's. Here the dir
 // is a magusfile's own directory, and the root declares targets like any other
-// project - skipping it would leave every root-declared ceiling inert.
+// project; skipping it would leave every root-declared ceiling inert.
 //
 // The symlink pass is the fallback rather than the rule so the common case costs no
 // syscalls; it exists because a temp dir reaches this resolved on some hosts and

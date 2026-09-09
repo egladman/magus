@@ -95,7 +95,7 @@ func main() {
 	// Both kinds of stdlib module, so the docs site cannot tell a Buzz-implemented
 	// one from a Go-implemented one. std.SourceModulesAsModules derives the method
 	// list from the Buzz source, which is the same shape writeModule already
-	// renders - the alternative was a second template nobody would keep in step.
+	// renders; the alternative was a second template nobody would keep in step.
 	// hostmodules.All(), not std.All(): std/encoding's nine leaf modules do not
 	// self-register into std's own registry (see hostmodules's doc for why).
 	modules := append(hostmodules.All(), std.SourceModulesAsModules()...)
@@ -231,7 +231,7 @@ func renderModule(m std.Module) string {
 		// URL alive with a redirect so inbound links and bookmarks still land.
 		Aliases: []string{"modules/" + m.Name},
 		// Every module page is many-to-one with the host source tree (a module can be
-		// Go- or Buzz-implemented, and its methods can be spread across files) - the
+		// Go- or Buzz-implemented, and its methods can be spread across files); the
 		// overview page carries the real source link(s) instead of guessing one here.
 		GeneratedFrom: "reference/buzz/",
 		Tags:          []string{m.Name, "module", "stdlib", "magusfile"},

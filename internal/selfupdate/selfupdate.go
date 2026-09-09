@@ -91,7 +91,7 @@ func checkKeys(ring Keyring) error {
 // what the install script already demands of curl (`--proto '=https' --proto-redir
 // '=https' --tlsv1.2`, docs/gen/install), so the two paths that can install magus agree
 // about what they will speak. Without this the client inherited Go's default, which is
-// reasonable and unstated - not the same thing as chosen.
+// reasonable and unstated: not the same thing as chosen.
 func (o Options) httpClient() *http.Client {
 	if o.HTTPClient != nil {
 		return o.HTTPClient
@@ -122,7 +122,7 @@ func (o Options) httpClient() *http.Client {
 //
 // Loopback is exempt, the same carve-out Docker, pip and the Go module proxy make. A
 // packet that never leaves the host has no network attacker to protect it from, and the
-// exemption is what lets a local mirror - and this package's own tests - exercise the
+// exemption is what lets a local mirror (and this package's own tests) exercise the
 // real code path instead of a weakened copy of it.
 func requireHTTPS(rawURL string) error {
 	u, err := url.Parse(rawURL)
@@ -166,7 +166,7 @@ type ReleaseIndex struct {
 	// payload, so it is compared against the key that actually verified.
 	KeyID string `json:"key_id"`
 	// Revoked lists fingerprints no signature may come from. It is only believed when
-	// the index carrying it was itself signed by a key not on the list - which is what
+	// the index carrying it was itself signed by a key not on the list, which is what
 	// a standby key buys, and what makes a revocation an attacker cannot forge.
 	Revoked []string `json:"revoked,omitzero"`
 	// ExpiresAt bounds the one hole revocation cannot close: an attacker holding a
@@ -209,8 +209,8 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	}
 	sigURL := indexURL + ".sig"
 
-	// Signature FIRST. It cannot be verified without the artifact - a detached signature is
-	// computed over those bytes - but fetching it first fails cheap when it is missing
+	// Signature FIRST. It cannot be verified without the artifact (a detached signature is
+	// computed over those bytes), but fetching it first fails cheap when it is missing
 	// rather than after pulling the whole index, and the artifact host is not contacted
 	// until the expected signature is already pinned locally.
 	sigBytes, err := FetchLimited(ctx, sigURL, MaxSig, opts)
@@ -237,7 +237,7 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 		return nil, fmt.Errorf("release index says it was signed by key %s but key %s is what verified it", idx.KeyID, signer.ID)
 	}
 	// A revoked key cannot vouch for its own standing. Refusing here is what forces a
-	// real revocation to be signed by a DIFFERENT key - the standby one - which is the
+	// real revocation to be signed by a DIFFERENT key (the standby one), which is the
 	// only version of this an attacker holding the compromised key cannot produce.
 	if slices.Contains(idx.Revoked, signer.ID) {
 		return nil, fmt.Errorf("release index is signed by key %s, which the index itself revokes", signer.ID)
@@ -382,7 +382,7 @@ func FetchAndVerifyManifest(ctx context.Context, sumsURL, sigURL string, opts Op
 	if err != nil {
 		return nil, fmt.Errorf("download SHA256SUMS: %w", err)
 	}
-	// SHA256SUMS names no signer - it is a sha256sum(1)-compatible file and stays one -
+	// SHA256SUMS names no signer (it is a sha256sum(1)-compatible file and stays one),
 	// so the ring is tried. The caller has already narrowed it by the index's revoked[],
 	// which is what stops a revoked key vouching for the artifact hashes.
 	if _, err := opts.Keys.Verify(sumsBytes, sigBytes); err != nil {

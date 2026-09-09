@@ -16,7 +16,7 @@ import (
 // StatusReply.DaemonVersion): display stays friendly, only the gate uses the fingerprint.
 //
 // The problem it solves: an unstamped dev build carries a fixed placeholder version
-// (devVersionSentinel), so the daemon gate - a plain string equality - treats EVERY dev
+// (devVersionSentinel), so the daemon gate (a plain string equality) treats EVERY dev
 // build as identical to every other. A stale dev daemon left running from an old, since-
 // deleted binary would then adopt runs from an unrelated newer dev client and execute
 // them with the wrong code. Fingerprinting each dev build from its embedded VCS stamp
@@ -39,13 +39,13 @@ const devVersionSentinel = "unknown"
 var devUnverifiable = "dev-unverifiable-" + randomToken()
 
 // binaryIdentity identifies a MODIFIED-tree build by the executable file it runs from:
-// its resolved path plus size and mtime, hashed. Same file, same identity - so a daemon
-// and the nested magus it forked still adopt each other in a dirty tree - while a
+// its resolved path plus size and mtime, hashed. Same file, same identity (so a daemon
+// and the nested magus it forked still adopt each other in a dirty tree), while a
 // rebuilt, replaced, or borrowed binary mismatches and the caller runs locally instead.
 //
 // Captured at process start, not lazily: a daemon whose executable is rebuilt underneath
 // it must keep the identity of the file it actually loaded, or it would stat the NEW
-// file, match the new client, and execute the run with the old code - the exact stale
+// file, match the new client, and execute the run with the old code: the exact stale
 // adoption this identity exists to refuse.
 var binaryIdentity = computeBinaryIdentity()
 
@@ -71,8 +71,8 @@ func randomToken() string {
 	b := make([]byte, 8)
 	if _, err := rand.Read(b); err != nil {
 		// rand.Read essentially never fails; if it somehow did, returning a constant would
-		// make distinct unverifiable builds compare equal and adopt each other - the exact
-		// bug this guards against - so fail loudly instead.
+		// make distinct unverifiable builds compare equal and adopt each other (the exact
+		// bug this guards against), so fail loudly instead.
 		panic("proc: read random bytes for build identity: " + err.Error())
 	}
 	return hex.EncodeToString(b)
@@ -100,7 +100,7 @@ func randomToken() string {
 // Embedding the fingerprint IN the version string (rather than adding a new wire field) is
 // deliberate and load-bearing: a stale PRE-FIX daemon compares the string it receives
 // against its own stored "unknown" and correctly mismatches, refusing the call. A new wire
-// field would be silently ignored by that old daemon and fail OPEN - the very failure mode
+// field would be silently ignored by that old daemon and fail OPEN: the very failure mode
 // this fix exists to close.
 func adoptionIdentity(displayVersion string) string {
 	if displayVersion == "" {
@@ -123,7 +123,7 @@ func adoptionIdentity(displayVersion string) string {
 // 1.18+). ok is false only when no build info is available at all (e.g. a binary built
 // with -ldflags that strips it in an unusual way); rev and modified are the vcs.revision
 // and vcs.modified settings, which are absent ("" / false) when the build carried no VCS
-// info at all - built with -buildvcs=false, or outside a VCS work tree. A var so tests
+// info at all: built with -buildvcs=false, or outside a VCS work tree. A var so tests
 // can pin the build state instead of inheriting whatever tree built the test binary.
 var buildVCS = func() (rev string, modified bool, ok bool) {
 	bi, ok := debug.ReadBuildInfo()

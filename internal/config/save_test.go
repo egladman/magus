@@ -12,7 +12,7 @@ import (
 )
 
 // Save validates what it writes with validateAfterMerge, which layers the file
-// with yaml.Unmarshal - where a written `false` DOES land. Load merges with
+// with yaml.Unmarshal, where a written `false` DOES land. Load merges with
 // mergeConfig instead, and the two disagreed: `magus config set daemon.enabled
 // false` accepted the value, wrote it, and then loaded back as enabled. The round
 // trip through both code paths is the only thing that catches that divergence.
@@ -60,7 +60,7 @@ func TestSave_AllValueTypes(t *testing.T) {
 	assert.Equal(t, "ro", got.Mode)
 }
 
-// TestKnownKeys checks that the reflection-derived key set is well-formed - non-empty,
+// TestKnownKeys checks that the reflection-derived key set is well-formed: non-empty,
 // sorted, no duplicates, no empty segments. It deliberately does NOT assert an exact
 // hardcoded key list: that would mirror the Config struct (the single source of truth,
 // and already surfaced in the drift-gated docs/config.md), forcing a manual test edit

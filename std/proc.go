@@ -15,12 +15,12 @@ func init() { Register(Proc) }
 // are synonyms in English, in one namespace, differing on whether a failure is SILENT, is
 // a trap.
 //
-// Renaming inside os would only be safe until upstream picked another name - Buzz is at
+// Renaming inside os would only be safe until upstream picked another name: Buzz is at
 // 0.6.0-dev, and the day it ships proc.exec the collision is back. A module magus owns
 // cannot collide with a language magus does not control.
 //
 // What lives here answers "what process is about to run, and under what constraints".
-// What stayed in os is the machine itself - platform, CPU count, hostname.
+// What stayed in os is the machine itself: platform, CPU count, hostname.
 var Proc = Module{
 	Name: "proc",
 	Doc:  "Run other processes. proc.exec is the one verb that runs anything: it streams output live, captures it, honors the sandbox, and raises on failure instead of handing back a code to check. Needing a shell is not a second verb - proc.shell builds the {bin, args} to hand it, so which shell ran stays visible at the call site instead of hidden inside it. Distinct from Buzz's own os.execute, which returns an exit code and stays silent when you do not read it.",

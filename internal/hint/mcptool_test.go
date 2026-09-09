@@ -106,7 +106,7 @@ func TestFollowUpSuccess(t *testing.T) {
 		})
 	}
 
-	// A plain success from a read tool earns nothing - output bytes are the
+	// A plain success from a read tool earns nothing: output bytes are the
 	// agent's context cost, so silent successes stay lean.
 	for _, tool := range []ToolName{ToolQuery, ToolExplain, ToolStats, ToolDescribe, ToolWhere} {
 		assert.Empty(t, FollowUpSuccess(tool, ""), "no follow-up for a plain %s success", tool)
@@ -139,7 +139,7 @@ func TestFollowUpEmpty(t *testing.T) {
 // against a second hand-written list: the hand-written version is forgotten in
 // both places at once, which is exactly what forgetting looks like, and the
 // counts stay equal. clicommand_test.go's twin records the incident that taught
-// this - ServerReload was declared, routed on, and outside the guard for as long
+// this: ServerReload was declared, routed on, and outside the guard for as long
 // as it existed.
 //
 // Go cannot enumerate its own package-level consts at runtime, so the source is

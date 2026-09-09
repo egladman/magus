@@ -21,7 +21,7 @@ var fixedNow = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 // marshalling a fixture, because the fixture-based lock below can only see fields
 // the fixture happens to set. A field added with `omitempty` and left unpopulated
 // there emits no JSON key at all, so the allowlist assertion never runs against it
-// and the whole lock passes while the new field ships unreviewed - which is exactly
+// and the whole lock passes while the new field ships unreviewed, which is exactly
 // how `runs` first slipped in.
 //
 // This one is not fixture-dependent: every json tag on the structs is checked
@@ -124,7 +124,7 @@ func TestHistorySchemaLock(t *testing.T) {
 		"setup":                 true, // []int64 of per-shard setup observations
 		"alpha":                 true, // []int64 of fitted α observations
 		"workspace_fallback_ms": true, // int64 workspace-wide p75
-		"runs":                  true, // []Run - commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
+		"runs":                  true, // []Run: commit ids and ref names, the ONE exception; see the cache-safety notice in history.go
 	}
 	for k := range top {
 		assert.Truef(t, allowed[k], "unexpected History JSON key %q — add to allowed map with a safety justification, or remove the field", k)
@@ -278,7 +278,7 @@ func TestHistory_PredictDuration_hitRateDiscount(t *testing.T) {
 	require.Positive(t, st.HitRate, "expected positive hit rate")
 
 	got := h.PredictDuration("svc", "ci", nil)
-	// Expected: p75 * (1 - hit_rate). p75 = 60s, hit_rate ≈ 0.9 → ~6s.
+	// Expected: `p75 * (1 - hit_rate)`. p75 = 60s, hit_rate ≈ 0.9 → ~6s.
 	// Allow ±20% tolerance for integer arithmetic in the rolling window.
 	assert.Less(t, got, 60*time.Second, "hit-rate discount should be applied")
 	assert.GreaterOrEqual(t, got, time.Millisecond, "stability floor")
@@ -699,7 +699,7 @@ func TestUpdate_shardSampleNonPositiveResidual(t *testing.T) {
 	t.Parallel()
 
 	h := History{}
-	// TotalMs barely above setup so residual = 30_100 - 30_000 - (200/2) = 0.
+	// TotalMs barely above setup so `residual = 30_100 - 30_000 - (200/2) = 0`.
 	h.Update(fixedNow, nil, []ShardSample{
 		{SetupMs: 5_000, TotalMs: 30_100, WorkMs: 200, NShards: 2},
 	})

@@ -9,7 +9,7 @@ import (
 
 // TestCompletableCommandsAreUnique pins the dedup. ls, graph, run and version
 // exist both as playground verbs and as real subcommands, and a duplicate makes
-// the completer treat a name as ambiguous against itself - `ru` stopped
+// the completer treat a name as ambiguous against itself: `ru` stopped
 // completing to `run ` when this regressed.
 func TestCompletableCommandsAreUnique(t *testing.T) {
 	seen := map[string]int{}
@@ -34,7 +34,7 @@ func TestCompletableCommandsCoverTheRealCLI(t *testing.T) {
 }
 
 // TestCompleteCLIOffersDeclaredFlags: flags come from the registry, and only
-// flags - a positional would be a guess at a path this page cannot see.
+// flags: a positional would be a guess at a path this page cannot see.
 func TestCompleteCLIOffersDeclaredFlags(t *testing.T) {
 	got := completeCLI("run", "--no-")
 	require.NotEmpty(t, got, "run declares --no-cache and --no-default-charms")

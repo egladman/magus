@@ -17,7 +17,7 @@ import (
 
 // saplingVCS drives Sapling (https://sapling-scm.com), whose CLI is `sl`.
 //
-// Sapling is a Mercurial fork, so most of hgVCS's shapes carry over verbatim - the
+// Sapling is a Mercurial fork, so most of hgVCS's shapes carry over verbatim: the
 // template language, `status`'s one-column output, `resolve`'s state machine, and the
 // [merge-tools]/[merge-patterns]/[hooks] config sections. Everything below was verified
 // against Sapling 0.2.20260811-150444 rather than inferred from that lineage, because the
@@ -26,7 +26,7 @@ import (
 //
 //   - `sl tags` is a deprecated no-op, and git tags are invisible even in a git-backed
 //     clone, so Tags and Describe report nothing (see their docs).
-//   - `sl debugignore` says "not ignored", which CONTAINS "ignored" - hg's substring test
+//   - `sl debugignore` says "not ignored", which CONTAINS "ignored"; hg's substring test
 //     would report every path as ignored.
 //   - `sl debugmergestate` records a deletion as a null other-side node, not as hg's
 //     `merge-removal-candidate` extra.
@@ -46,7 +46,7 @@ func (v saplingVCS) Claims() []string { return []string{".sl"} }
 // Base is the remote bookmark Sapling clones track. Sapling has no branches: `sl clone`
 // creates `remote/main`, and remotenames.selectivepulldefault ("main,master") is the list
 // it will pull. "remote/main" is the direct analogue of git's "origin/main" and hg's
-// "default" - a fixed name for the mainline, rather than a pointer at whatever commit is
+// "default": a fixed name for the mainline, rather than a pointer at whatever commit is
 // newest locally, which after any commit of your own is your own.
 func (v saplingVCS) Base() string { return "remote/main" }
 
@@ -60,7 +60,7 @@ func (v saplingVCS) ParentRef() string { return "p1(.)" }
 
 // IsSecondaryCheckout always reports false: Sapling has no second-checkout concept to
 // detect. Mercurial's `share`, git's linked worktree, and `jj workspace add` all have no
-// counterpart in the CLI - `sl clone` takes no --shared, and `sl help commands` lists
+// counterpart in the CLI: `sl clone` takes no --shared, and `sl help commands` lists
 // nothing that produces a second working copy over one store.
 //
 // The binary still carries Mercurial's "sharedpath" string, so this may need revisiting if
@@ -82,7 +82,7 @@ func (v saplingVCS) ChangedFiles(ctx context.Context, dir, base string) ([]strin
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	// --root-relative: see DirtyFiles. Without it this is worse than cwd-relative - a
+	// --root-relative: see DirtyFiles. Without it this is worse than cwd-relative; a
 	// sibling of the cwd comes back as "../root.txt", a path that escapes the directory
 	// the caller is reasoning about.
 	cmd := vcsExec(ctx, "sl", "status", "--root-relative",
@@ -148,7 +148,7 @@ func (v saplingVCS) Bisect(ctx context.Context, dir string, opts types.BisectOpt
 
 // saplingRefTemplate names the movable pointer at a revision. Sapling has no branches, so
 // the answer is a bookmark: the ACTIVE one when the working copy is on it, else any
-// bookmark pointing here. Empty is ordinary rather than an error - a fresh `sl clone` has
+// bookmark pointing here. Empty is ordinary rather than an error: a fresh `sl clone` has
 // no local bookmark at all, the same way jj's working copy is usually anonymous.
 //
 // {remotenames} is deliberately not the fallback: it would report "remote/main" for every
@@ -197,7 +197,7 @@ func (v saplingVCS) Dirty(ctx context.Context, dir string, paths []string) (bool
 //
 // During an unfinished merge Sapling appends a "# The repository is in an unfinished
 // *merge* state" banner naming every conflicted path. That block is written to STDERR, and
-// vcsOutputRaw reads only stdout, so it never reaches this parse - a detail worth stating
+// vcsOutputRaw reads only stdout, so it never reaches this parse, a detail worth stating
 // because the banner's lines would otherwise arrive here looking exactly like status
 // entries and turn into phantom paths.
 func (v saplingVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
@@ -237,7 +237,7 @@ func (v saplingVCS) Describe(_ context.Context, _ string) (string, error) {
 // `sl tags` and `sl tag` are deprecated no-ops that exit non-zero with "the tags command
 // has been deprecated", there is no tag() revset, and {latesttag} is empty. Verified that
 // this holds for a git-backed clone too: after `sl clone` of a repository carrying v0.1.0
-// and v0.2.0, neither name resolves as a revision and {latesttag} is still empty - so
+// and v0.2.0, neither name resolves as a revision and {latesttag} is still empty, so
 // there is no route to the underlying git tags either.
 //
 // Per the VCSDriver contract a backend that genuinely lacks the concept returns none
@@ -284,12 +284,12 @@ func (v saplingVCS) History(ctx context.Context, dir string, limit int) ([]types
 // subset of those pathspecs the repository tracks.
 //
 // Exit status 1 means "no pathspec in this batch matched a tracked file" and is a RESULT,
-// not a failure - the same trap git's `check-ignore` sets, handled the same way two
+// not a failure: the same trap git's `check-ignore` sets, handled the same way two
 // methods down. It is what makes this need its own exec instead of vcsOutput, which treats
 // any non-zero exit as an error. Getting it wrong would fail the most ordinary answer this
 // method gives ("none of these are tracked"), and only for SOME inputs: the call is
 // batched, so a long path list would fail exactly when one chunk happened to contain no
-// tracked path. Measured on Sapling 0.2.x - git's ls-files exits 0 in the same case, so
+// tracked path. Measured on Sapling 0.2.x: git's ls-files exits 0 in the same case, so
 // this is a real divergence and not a shared convention.
 func (v saplingVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	var tracked []string
@@ -323,7 +323,7 @@ func (v saplingVCS) TrackedFiles(ctx context.Context, dir string, paths []string
 // the way git's pair does: `sl debugignore` reports on the RULES whether or not a path is
 // tracked, so a tracked-but-now-ignored file is reported ignored here. git's IgnoredFiles
 // answers the narrower index-aware question and its IgnoredPaths the rules one, which is a
-// real cross-backend divergence - see the note on collapsing that pair.
+// real cross-backend divergence; see the note on collapsing that pair.
 func (v saplingVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	ignored, err := v.IgnoredPaths(ctx, dir, paths)
 	if err != nil {
@@ -351,12 +351,12 @@ func (v saplingVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 }
 
 // DefaultRef implements types.DefaultRefReporter. Sapling names its primary lines of
-// development in remotenames.selectivepulldefault - "main,master" out of the box - and
+// development in remotenames.selectivepulldefault ("main,master" out of the box) and
 // exposes them as remote bookmarks ("remote/main"). The first entry that actually resolves
 // here is the repo's default, returned WITHOUT the "remote/" prefix so the value matches
 // what git's DefaultRef gives ("main", not "origin/main") and can be used as a plain name.
 //
-// A repository where none resolves - no remote, or an unfetched one - yields
+// A repository where none resolves (no remote, or an unfetched one) yields
 // ErrVCSUnsupported so callers fall back rather than linking to a ref that is not there.
 func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	out, err := vcsOutput(ctx, dir, "sl", "config", "remotenames.selectivepulldefault")
@@ -379,14 +379,14 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 }
 
 // saplingChurnTemplate opens each commit with its NUL-separated hash, author and record
-// date, then lists that commit's files as git-shaped --name-status lines - the same stream
+// date, then lists that commit's files as git-shaped --name-status lines, the same stream
 // shape parseChangesByCommit reads from git, minus git's leading NUL sentinel, which is
 // supplied here by the template's own leading \0.
 //
 // The file half is hgChurnFileTail verbatim, shared rather than restated for the reason
-// hgCommitTemplate is: Sapling kept Mercurial's template language. Its rationale - why the
+// hgCommitTemplate is: Sapling kept Mercurial's template language. Its rationale (why the
 // status letter comes from which keyword emitted the path, and why renames arrive as a
-// delete plus an add - lives at that constant.
+// delete plus an add) lives at that constant.
 const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` + hgChurnFileTail
 
 // ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
@@ -403,7 +403,7 @@ const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` +
 //
 // reverse() is load-bearing and is the one thing here that does not read like hg. A bare
 // `sl log` is newest-first, but `sl log -r <revset>` follows the REVSET's order, and
-// ancestors() is ascending - so without it `-l N` would return the N OLDEST commits while
+// ancestors() is ascending, so without it `-l N` would return the N OLDEST commits while
 // the interface promises the newest, and a churn heatmap would describe the repository's
 // first week forever.
 //
@@ -448,7 +448,7 @@ func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int
 }
 
 // saplingArchivalMeta is the provenance file `sl archive` injects into every export. It is
-// not part of the revision, so ExportRevision excludes it - leaving it in would put a file
+// not part of the revision, so ExportRevision excludes it; leaving it in would put a file
 // in the exported tree that no commit contains, which a graph diff would read as a change.
 const saplingArchivalMeta = ".sl_archival.txt"
 
@@ -457,7 +457,7 @@ const saplingArchivalMeta = ".sl_archival.txt"
 // Two Sapling behaviors shape this, both verified:
 //
 //   - A whole-tree include is REFUSED ("this repository has a very large working copy and
-//     requires an explicit set of files to be archived") - and it fires on a four-file
+//     requires an explicit set of files to be archived"), and it fires on a four-file
 //     repository, so it is a guard against an unqualified include rather than a size limit.
 //     `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
 //   - The archive is repo-rooted and ignores cwd for PATHING. Running it in a subdirectory
@@ -505,7 +505,7 @@ func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string)
 		return err
 	}
 	// A revision predating dir yields no subtree in the export. That is an empty tree, not
-	// a failure - git's ExportRevision reports the same case as "everything was added" -
+	// a failure (git's ExportRevision reports the same case as "everything was added"),
 	// so an absent staging subtree is left for WalkDir to skip rather than raised.
 	staged := filepath.Join(staging, filepath.FromSlash(prefix))
 	if _, err := os.Stat(staged); os.IsNotExist(err) {
@@ -702,7 +702,7 @@ func (v saplingVCS) EnsureMergeDriver(ctx context.Context, root string, outputGl
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller: it registers Sapling's `update`
-// hook (fires after the working copy moves - `sl goto`, a pull-update) to run command. It
+// hook (fires after the working copy moves: `sl goto`, a pull-update) to run command. It
 // shares replaceManagedSection with the merge-driver install, under its own markers so the
 // two managed sections coexist in .sl/config. Returns the hook label.
 func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) ([]string, error) {
@@ -727,7 +727,7 @@ func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) 
 }
 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
-// so the mapping is close - but two behaviors differ from hg and the methods below note
+// so the mapping is close, but two behaviors differ from hg and the methods below note
 // where they bite.
 //
 // The assertions are compile-time on purpose: both interfaces are reached by type assertion
@@ -758,7 +758,7 @@ func runSaplingBatched(ctx context.Context, root string, args []string, paths []
 // line is a path this command (or the user) already settled and must not be re-resolved.
 //
 // Every U starts as ConflictKindContent because the list does not distinguish a content
-// conflict from a modify/delete - the same limitation hg's has. saplingDeletedPaths refines
+// conflict from a modify/delete, the same limitation hg's has. saplingDeletedPaths refines
 // it from the merge state afterwards.
 func parseSaplingConflicts(out string) []types.Conflict {
 	var conflicts []types.Conflict
@@ -778,7 +778,7 @@ func parseSaplingConflicts(out string) []types.Conflict {
 }
 
 // parseSaplingRemovalCandidates reads `sl debugmergestate` and returns the conflicted paths
-// whose OTHER side carries no content - the modify/delete a regeneration cannot settle and
+// whose OTHER side carries no content: the modify/delete a regeneration cannot settle and
 // no merge tool is invoked for.
 //
 // Sapling records it differently from Mercurial, which is why hg's parser is not reused:
@@ -791,7 +791,7 @@ func parseSaplingConflicts(out string) []types.Conflict {
 //	  other path: gone.txt (node null)
 //
 // Keyed on the null other-side node rather than the record type because it states the fact
-// directly - there is no content on that side - where the type code is an internal
+// directly (there is no content on that side) where the type code is an internal
 // classification that could gain new values.
 //
 // debugmergestate is a DEBUG command, so its output is not a stability promise. A parse that
@@ -869,7 +869,7 @@ func (v saplingVCS) Conflicts(ctx context.Context, root string) ([]types.Conflic
 // KeepIncoming implements types.ConflictResolver. `:other` is the internal merge tool that
 // takes the incoming side wholesale, the counterpart of git's `checkout --theirs`.
 //
-// UNLIKE hg, Sapling MARKS the path resolved as a side effect of running the tool - hg
+// UNLIKE hg, Sapling MARKS the path resolved as a side effect of running the tool; hg
 // leaves it unresolved for a later `resolve --mark`. That is harmless for the caller's
 // sequence (KeepIncoming, regenerate, MarkResolved): Sapling has no index, so the content
 // recorded is whatever sits in the working copy when the merge is committed, and the
@@ -922,7 +922,7 @@ func (v saplingVCS) RemoveConflicts(ctx context.Context, root string, paths []st
 // reported by `status --ignored`, so that command cannot answer it.
 //
 // The match is on ": ignored by rule" and NOT on a bare "ignored", because Sapling's
-// negative answer is "<path>: not ignored" - which contains the word. Both spellings exit 0,
+// negative answer is "<path>: not ignored", which contains the word. Both spellings exit 0,
 // so the exit status cannot be used to tell them apart either. (Mercurial phrases the
 // positive answer as "<path> is ignored", so hg's test does not transfer.)
 func (v saplingVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {

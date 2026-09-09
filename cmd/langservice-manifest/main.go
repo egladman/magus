@@ -13,7 +13,7 @@
 //	go run ./cmd/langservice-manifest    # from the repo root; -out overrides
 //
 // internal/hostmodules is the union of std's self-registered modules and
-// std/encoding's explicitly aggregated ones - see its doc for why the union
+// std/encoding's explicitly aggregated ones; see its doc for why the union
 // has to be computed there rather than read straight off std.
 package main
 
@@ -57,8 +57,8 @@ func run(out string) error {
 
 // render builds the manifest source without writing it, so a drift test can compare
 // it against the committed file. The manifest had gone stale by eleven modules with
-// nothing to catch it - completion and hover simply did not know base64, csv, hex,
-// ini, url, log, math, net, sort, term or diff existed - which is what the split is
+// nothing to catch it: completion and hover simply did not know base64, csv, hex,
+// ini, url, log, math, net, sort, term or diff existed, which is what the split is
 // for: the generator and the gate now read the same function.
 func render() (src []byte, emitted int, err error) {
 	// The list view names every module; the detail view (per name) is the only one

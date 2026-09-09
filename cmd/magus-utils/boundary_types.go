@@ -19,7 +19,7 @@ import (
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
 	// Manifest's fields are a str and a [str], so it references no other mirror and
-	// its position here is free - but it is kept beside Path because a spell authors
+	// its position here is free, but it is kept beside Path because a spell authors
 	// the two together in mgs_listManifests, and Path is what Manifest replaced there.
 	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
@@ -57,8 +57,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "CompressResult", Type: reflect.TypeFor[types.CompressResult](), RuntimeObject: true},
 	{Name: "HttpResponse", Type: reflect.TypeFor[types.HTTPResponse](), RuntimeObject: true},
 	{Name: "TermSize", Type: reflect.TypeFor[types.TermSize](), RuntimeObject: true},
-	// NOT a RuntimeObject: HttpRetry only ever crosses INBOUND - a magusfile hands
-	// one in and the Impl receives the plain map - so nothing on the Go side has to
+	// NOT a RuntimeObject: HttpRetry only ever crosses INBOUND (a magusfile hands
+	// one in and the Impl receives the plain map), so nothing on the Go side has to
 	// encode one back out. Registering it here is purely so its declaration travels
 	// with the http module's signatures.
 	{Name: "HttpRetry", Type: reflect.TypeFor[types.HTTPRetry]()},
@@ -117,7 +117,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
 	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
 	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
-	// one as a typed return - moduledecls.go's KnowledgeGodNode comment is the fossil
+	// one as a typed return; moduledecls.go's KnowledgeGodNode comment is the fossil
 	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
 	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},
@@ -149,7 +149,7 @@ var boundaryTypes = []boundaryType{
 // rather than as a bare `str`.
 //
 // The cases are listed here rather than derived because reflect cannot enumerate a
-// named type's constants - it sees only the underlying kind. That is the whole reason
+// named type's constants: it sees only the underlying kind. That is the whole reason
 // a registry exists: without it every one of these crosses as an untyped string, and a
 // magusfile typo is a silent miss instead of a compile error.
 //
@@ -287,7 +287,7 @@ type boundaryType struct {
 // buzzNameFor returns the BUZZ name a Go type mirrors as, which is the registry key
 // and not always the Go type's own name: types.ProjectsOutput is `Projects`,
 // types.StatusTargetRun is `TargetRun`. A struct-valued field must reference the Buzz
-// name, so the registry is what resolves it - falling back to the Go name only for a
+// name, so the registry is what resolves it, falling back to the Go name only for a
 // type no entry claims, which the caller then reports as undeclared.
 func buzzNameFor(rt reflect.Type) string {
 	for _, entry := range boundaryTypes {

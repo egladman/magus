@@ -65,7 +65,7 @@ func (s *Service) GetInvocation(_ context.Context, req *connect.Request[viewerv1
 	return connect.NewResponse(invocationToProto(header)), nil
 }
 
-// GetJournal returns one run whole - header plus every event.
+// GetJournal returns one run whole: header plus every event.
 func (s *Service) GetJournal(_ context.Context, req *connect.Request[viewerv1.GetJournalRequest]) (*connect.Response[viewerv1.Journal], error) {
 	inv, err := s.resolveInvocation(req.Msg.GetName())
 	if err != nil {
@@ -119,7 +119,7 @@ func (s *Service) ListEvents(_ context.Context, req *connect.Request[viewerv1.Li
 // The filter runs BEFORE each send, as ListEvents applies it before paging, so a narrow filter
 // makes a quiet stream rather than a stream of dropped frames. filter.time.since doubles as the
 // resume cursor: the replay skips events older than it. That boundary is inclusive, so a caller
-// resuming from the last event it saw receives that event again - at-least-once, which is the
+// resuming from the last event it saw receives that event again, at-least-once, which is the
 // honest guarantee when the cursor is a millisecond timestamp several events can share.
 //
 // A slow client cannot slow anything but itself: each stream owns its file offset and reads on the
@@ -208,7 +208,7 @@ func (s *Service) ListInvocations(_ context.Context, req *connect.Request[viewer
 
 	out := &viewerv1.ListInvocationsResponse{NextPageToken: next}
 	for _, l := range logs[from:to] {
-		// A RunLog carries no cwd - the header is read without opening the journal - so Command
+		// A RunLog carries no cwd (the header is read without opening the journal), so Command
 		// holds the argv and the trigger only.
 		out.Invocations = append(out.Invocations, &viewerv1.Invocation{
 			Id: l.Inv,

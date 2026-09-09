@@ -61,7 +61,7 @@ type GateRecord struct {
 }
 
 // LatestGate returns the newest gate VERDICT for (ref, target): a pass or a
-// fail. The newest verdict wins on purpose - a fail recorded after a pass
+// fail. The newest verdict wins on purpose: a fail recorded after a pass
 // means the branch is red, and a redundancy check must see that rather than
 // the stale green behind it. Deferral records are skipped: a deferral is not a
 // verdict on the inputs, and letting one shadow the green gate it points at

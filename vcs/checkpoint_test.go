@@ -31,7 +31,7 @@ func writeFile(t *testing.T, dir, rel, content string) {
 }
 
 // TestCheckpointCleanTree pins the whole record for the ordinary case: a resolved
-// revision, the branch carrying it, not dirty, and NO digest - the digest is the one
+// revision, the branch carrying it, not dirty, and NO digest: the digest is the one
 // field whose absence is meaningful, since a clean tree has no patch to fingerprint.
 func TestCheckpointCleanTree(t *testing.T) {
 	dir, res := checkpointRepo(t)
@@ -51,7 +51,7 @@ func TestCheckpointCleanTree(t *testing.T) {
 
 // TestCheckpointDirtyTree covers the properties a ledger actually relies on: the digest
 // exists, is the agreed width, does not move when nothing moved, and DOES move when the
-// patch does. The last two are the whole point - a digest that drifted on its own could
+// patch does. The last two are the whole point: a digest that drifted on its own could
 // not answer "did these two workers see the same tree", and one that did not change with
 // the patch would answer it wrong.
 func TestCheckpointDirtyTree(t *testing.T) {
@@ -81,7 +81,7 @@ func TestCheckpointDirtyTree(t *testing.T) {
 //
 // Detached HEAD: git's own --abbrev-ref answer is the literal "HEAD", and that is what
 // is recorded. Normalizing it to "" would be git knowledge inside a backend-agnostic
-// function, and the place to fix it - if it is ever worth fixing - is gitVCS.Metadata,
+// function, and the place to fix it (if it is ever worth fixing) is gitVCS.Metadata,
 // where every other caller would see it too.
 //
 // Untracked-only: the tree is dirty (status --porcelain sees the file) while the patch
@@ -112,8 +112,8 @@ func TestCheckpointWithoutAResolvedVCS(t *testing.T) {
 }
 
 // TestPatchDigest is the golden vector. The value is the first 16 BYTES of
-// sha256("--- a/x\n+++ b/x\n") in hex - 32 characters, the exact shape
-// internal/diff.PatchDigest produces - computed independently of this package, so a
+// sha256("--- a/x\n+++ b/x\n") in hex (32 characters, the exact shape
+// internal/diff.PatchDigest produces), computed independently of this package, so a
 // change to the algorithm (a different hash, a different width, hashing something
 // other than the raw patch text) fails here rather than silently producing
 // identities that no longer match the review session's.

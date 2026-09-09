@@ -56,7 +56,7 @@ func NearDuplicates(projects []*types.Project, charms []string) []identity.Clust
 
 // UnusedDistinct returns the "path:target" names of services marked distinct whose
 // suppression no longer silences any near-duplicate (see
-// identity.UnusedDistinct) - stale reasons to prune.
+// identity.UnusedDistinct): stale reasons to prune.
 func UnusedDistinct(projects []*types.Project, charms []string) []string {
 	return identity.UnusedDistinct(collectMembers(projects, charms))
 }

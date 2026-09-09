@@ -11,13 +11,13 @@ import (
 // generated Buzz trampoline turns into the corresponding map. The Buzz `object`
 // mirrors are generated from these structs by cmd/magus-utils types (go:generate)
 // and shipped with the host module that returns each one (os, fs, http, encoding,
-// semver, vcs - see internal/spellruntime/hosttypes.go), so the Go struct stays the
+// semver, vcs; see internal/spellruntime/hosttypes.go), so the Go struct stays the
 // single source of truth and struct, BuzzObject, and mirror can't drift.
 
 // BuzzObject is the Buzz `object` a host method's return crosses the boundary
 // as: the map a magusfile sees when it annotates a result (`> FileInfo`,
 // `> HttpResponse`, ...). Named in Buzz's OWN vocabulary, not magus-internal
-// jargon - Buzz's type system has ObjectType, and cmd/magus-utils types emits
+// jargon: Buzz's type system has ObjectType, and cmd/magus-utils types emits
 // `export object Foo` for each mirror, so a Buzz author never has to translate
 // what they typed into some other word this codebase prefers. Named rather
 // than a bare map[string]any so every signature says which projection it is -
@@ -40,7 +40,7 @@ type FileInfo struct {
 // (sorted) and their total uncompressed size.
 //
 // Files are Paths based at the destination directory, which is where uncompress actually
-// wrote them - so a caller can open one without first remembering which of the two
+// wrote them, so a caller can open one without first remembering which of the two
 // directories it passed in the entries were measured from.
 type UncompressResult struct {
 	Files []Path
@@ -54,7 +54,7 @@ type UncompressResult struct {
 // asked for, while uncompressing has only one size to report. Sharing a type would mean a
 // bytes field that means different things depending on which call produced it.
 type CompressResult struct {
-	// Files are based at the SOURCE directory - the files that went in - where
+	// Files are based at the SOURCE directory (the files that went in), where
 	// UncompressResult's are based at the destination. Each is based where it exists.
 	Files    []Path
 	BytesIn  int `buzz:"bytes_in"`
@@ -104,7 +104,7 @@ type SemverVersion struct {
 // is the raw text as the user wrote the tag/version string, so it round-trips
 // things String() normalizes away (a leading zero like "v1.02.3", a missing
 // "v", metadata the canonical form still carries). The leading "v" matches how
-// this codebase already writes versions everywhere else - git tags ("v0.3.0"),
+// this codebase already writes versions everywhere else: git tags ("v0.3.0"),
 // the linker-stamped build version (-X main.version=v0.1.0), and selfupdate's
 // target version handling.
 func (v SemverVersion) String() string {

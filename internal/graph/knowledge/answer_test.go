@@ -22,7 +22,7 @@ var verdictCorpus = []string{
 
 // The safety property behind every `absent`: relevance is a strict SUPERSET of seeding.
 // If it ever inverts, a query loads the lazy layer while being classified as one the layer
-// could not have held - which is the state that lets a skipped shard set report a verified
+// could not have held, which is the state that lets a skipped shard set report a verified
 // absence.
 func TestSeedsLazyLayerImpliesCouldMatchLazyLayer(t *testing.T) {
 	for _, in := range verdictCorpus {

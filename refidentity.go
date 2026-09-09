@@ -13,7 +13,7 @@ import (
 
 // projectTargets returns the target names project p can actually key: those declared
 // directly in its magusfile plus every target its resolved spells provide. This is the
-// candidate space IdentifyRef sweeps - not every workspace target name crossed with
+// candidate space IdentifyRef sweeps, not every workspace target name crossed with
 // every project. buildStep will happily key a target name a project never declared,
 // but no real run ever mints a ref under that combination, so sweeping it would only
 // waste cycles and manufacture false positives.
@@ -38,14 +38,14 @@ func projectTargets(p *types.Project) []string {
 }
 
 // IdentifyRef inverts a ref back to the workspace target(s) that could have minted it.
-// A ref cannot be decoded - it is a truncated hash, not an encoding - so identification
+// A ref cannot be decoded (it is a truncated hash, not an encoding), so identification
 // works by PREDICTION instead: key every candidate target exactly as a run would (via
 // ComputeTargetKey) and compare its PortableRef against ref. This is the whole point of
 // the method: it exists for the moment someone pastes a ref from a teammate's terminal
 // or a CI log and asks "what is this", with no other metadata to go on.
 //
-// Each target is tried under two charm sets - the workspace's configured default charms
-// and the empty set, deduped - because CI runs `--no-default-charms` and CI is the peer
+// Each target is tried under two charm sets (the workspace's configured default charms
+// and the empty set, deduped) because CI runs `--no-default-charms` and CI is the peer
 // whose refs most often get pasted into a local terminal: a ref minted by the bare CI
 // variant must still resolve even though this workspace's local runs always carry the
 // configured defaults. The defaults are read from m.cfg.DefaultCharms rather than taken
@@ -55,17 +55,17 @@ func projectTargets(p *types.Project) []string {
 // ref may be a full portable ref or a unique prefix of one, mirroring the resolver in
 // internal/cache/output.go: matches are ref-as-prefix-of-full-ref, not equality, so a
 // shortened ref still finds its target. A ref that is not shaped like a ref, or that
-// matches nothing, yields a nil slice and no error - "nothing matched" is a finding
+// matches nothing, yields a nil slice and no error: "nothing matched" is a finding
 // here, not a failure. A single target that fails to key (an unresolved project, a
 // malformed step) is skipped rather than aborting the sweep, since this runs on a
-// best-effort error path. The one exception is types.ErrNoCache, checked up front -
-// mirroring computeTargetKey's own first line - rather than left to surface from deep
+// best-effort error path. The one exception is types.ErrNoCache, checked up front
+// (mirroring computeTargetKey's own first line) rather than left to surface from deep
 // in the sweep: a cache-free (Inspect) workspace can mint no keys at all, so the whole
 // method is meaningless without a cache, and there is no point walking every project
 // and probing every spell's tool version first only to discover that.
 //
-// Both nil-slice cases - ref not shaped like a ref, and a well-formed ref matching
-// nothing - render identically to a caller, which would be misleading for a garbage
+// Both nil-slice cases (ref not shaped like a ref, and a well-formed ref matching
+// nothing) render identically to a caller, which would be misleading for a garbage
 // string. That is deliberate here rather than a gap: cmd/magus/query.go's queryCmd
 // and internal/handler/mcp's outputTool.Invoke both reject a non-ref-shaped ref with
 // cache.LooksLikeRef up front, before either reaches a code path that calls
@@ -92,14 +92,14 @@ func (m *Magus) IdentifyRef(ctx context.Context, ref string) ([]types.RefMatch, 
 	// Sweep-scoped only: buildStep gives most targets in a project the SAME
 	// Sources baseline (see run.go's buildStep doc), so without this memo every
 	// target/charm combination re-walks and re-hashes an identical file set. Safe
-	// here because IdentifyRef only predicts - it executes nothing between calls -
+	// here because IdentifyRef only predicts (it executes nothing between calls),
 	// and the memo is discarded the moment this sweep returns. See
 	// cache.SourceMemo's doc for the full safety argument.
 	memo := cache.NewSourceMemo()
 
 	// Resolved ONCE for the whole workspace, for the same reason: every probe spawns
 	// a subprocess, and computeTargetKey's own memo lives only as long as one call.
-	// Probing per target dominated the sweep - see computeTargetKey's doc.
+	// Probing per target dominated the sweep; see computeTargetKey's doc.
 	projects := m.All()
 	reuse := &sweepReuse{memo: memo, toolVersions: m.toolVersionsByProject(ctx, projects)}
 

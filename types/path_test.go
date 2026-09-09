@@ -14,7 +14,7 @@ func TestPathResolveUsesItsOwnBase(t *testing.T) {
 	assert.Equal(t, filepath.Join("/repo", "src/main.go"), resolved.Value)
 	assert.False(t, resolved.IsDir)
 	// An absolute path is measured from nothing, so it keeps no base to be
-	// re-resolved against later - Resolve is idempotent.
+	// re-resolved against later; Resolve is idempotent.
 	assert.Empty(t, resolved.Base, "an absolute result carries no base")
 	assert.Equal(t, resolved, resolved.Resolve(), "resolving twice changes nothing")
 

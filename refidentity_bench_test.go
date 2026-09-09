@@ -17,7 +17,7 @@ import (
 // newIdentitySweepWorkspace builds a cache-backed workspace sized to reproduce the
 // shape measured on this repo: nProjects projects, each with targetsPerProject
 // targets from one spell (all sharing the SAME step.Sources baseline, as buildStep
-// gives every target absent a TargetInputs override - see run.go:334) and
+// gives every target absent a TargetInputs override; see run.go:334) and
 // filesPerProject source files on disk. At nProjects=9, targetsPerProject=11,
 // filesPerProject=340 this lands at ~99 targets and ~3060 files, matching the
 // ~94-target, ~3000-file, 36.7s-sweep measurement behind this benchmark. defaultCharms
@@ -65,7 +65,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 	return m
 }
 
-// BenchmarkIdentifyRefSweep measures a full no-match sweep - the shape `magus query
+// BenchmarkIdentifyRefSweep measures a full no-match sweep: the shape `magus query
 // output <ref-not-found>` hits on the error path IdentifyRef exists for. "outdeadbeef" is
 // ref-shaped (so LooksLikeRef doesn't short-circuit it) but matches no live key, so every
 // candidate target/charm combination is tried and none returns early.

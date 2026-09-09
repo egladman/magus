@@ -8,7 +8,7 @@ import "context"
 type Origin struct {
 	// Agent is the client identifier captured from the MCP initialize
 	// handshake's clientInfo, e.g. "someclient/0.7.2". This names the
-	// host application, not the model driving it - MCP carries no model field.
+	// host application, not the model driving it; MCP carries no model field.
 	Agent string
 	// UserAgent is the raw HTTP User-Agent header of the client, captured on
 	// the Streamable-HTTP transport only (empty over stdio). It is a second,

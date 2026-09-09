@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNewDefaultsLogger checks New(serve, nil) never leaves Log nil - it falls back to
+// TestNewDefaultsLogger checks New(serve, nil) never leaves Log nil: it falls back to
 // slog.Default() so handlers can always log.
 func TestNewDefaultsLogger(t *testing.T) {
 	b := New(func(http.ResponseWriter, *http.Request) {}, nil)

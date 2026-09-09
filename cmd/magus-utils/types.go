@@ -1,16 +1,16 @@
 // Subcommand `types` emits the Buzz `object` mirror of a Go value type in
 // github.com/egladman/magus/types, so the Go struct stays the single source of
 // truth and the two shapes can never drift. The emitted file is shipped as part
-// of the declarations for whichever host import path returns the type - os for
+// of the declarations for whichever host import path returns the type: os for
 // ExecResult, vcs for Tag, magus for TargetGraph, and so on (see internal/spellruntime
-// and internal/interp/bindings/modules.go) - so importing that path already
+// and internal/interp/bindings/modules.go), so importing that path already
 // brings the type into a magusfile's or spell's scope for annotations and
 // literals, with no separate import required.
 //
 // The rendering itself lives in libs/gopherbuzz/buzzgen: what an object declaration
 // looks like, which identifiers are reserved, how a Go shape maps to a Buzz type. None
 // of that is magus's to know, and this file used to reach into gopherbuzz for every one
-// of those facts - the usual sign a boundary sits in the wrong place. What stays here is
+// of those facts, the usual sign a boundary sits in the wrong place. What stays here is
 // what IS magus's: which types cross (boundaryTypes), which named-string types are
 // registered enums (boundaryEnums), and what each is called on the far side
 // (buzzNameFor), handed over as the Namer and EnumType.
@@ -57,7 +57,7 @@ func runTypes(args []string) error {
 
 // mirrorOptions is magus's configuration of the shared renderer: resolve a struct
 // field's object name through the boundary registry, and mirror a timestamp as a string.
-// The Namer is what keeps a RENAMED mirror referenceable - types.StatusTargetRun declares
+// The Namer is what keeps a RENAMED mirror referenceable: types.StatusTargetRun declares
 // as TargetRun, and emitting the Go name would reference an object nothing declares.
 func mirrorOptions() buzzgen.Options {
 	opts := buzzgen.DefaultOptions()
@@ -83,7 +83,7 @@ func renderBuzzMirror(name string, rt reflect.Type) ([]byte, error) {
 	// and a header that names a type the reader cannot find defeats its purpose.
 	// PkgPath for the same reason: the mirrored types live in types AND in spells,
 	// and hardcoding one package pointed half of them at a type that does not exist
-	// there - Project being the case where the wrong path names a REAL other type.
+	// there, Project being the case where the wrong path names a REAL other type.
 	fmt.Fprintf(&b, "// Buzz mirror of %s.%s, bundled into\n", rt.PkgPath(), rt.Name())
 	fmt.Fprintln(&b, "// whichever module owns it (magus/spell, or the host module that returns it -")
 	fmt.Fprintln(&b, "// see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun")

@@ -58,7 +58,7 @@ func TestAffectedFromPathsHappyPath(t *testing.T) {
 //
 // The reaching declaration is a per-target ctx.readsFiles ref, which is the form whose
 // owner is resolved to a workspace-relative path at load. A project-wide "../proto/**"
-// source says the same thing - types.RootGlob roots both by cleaning the join, so the
+// source says the same thing: types.RootGlob roots both by cleaning the join, so the
 // cache key and attribution move together either way; see the test below for that
 // spelling. A concatenated rooting would give "api/../proto/**", which matches nothing,
 // and attribution claiming that one seeds would be claiming a key movement that did not
@@ -96,7 +96,7 @@ func TestSeedsForFileContainmentBeatsAReachingGlob(t *testing.T) {
 
 // TestSeedsForFileGlobRedirectsOutsideEveryTree is the redirect the seam exists for: a
 // file no project directory contains, that a project reads through a reaching glob,
-// seeds the project whose cache key it actually moves - not the root project that
+// seeds the project whose cache key it actually moves, not the root project that
 // merely sits above it.
 func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
 	t.Parallel()
@@ -110,7 +110,7 @@ func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
 // TestSeedsForFileProjectWideReachingGlobRedirects is the redirect above spelled the
 // other documented way: a project-wide "../proto/**" source instead of a per-target
 // ctx.readsFiles. Both are declarations of the same input and both must seed. The
-// rooting is what makes them equal - a concatenated "api/../proto/**" matches nothing,
+// rooting is what makes them equal: a concatenated "api/../proto/**" matches nothing,
 // leaving the file to the root catch-all, which is exactly the undeclared-seeding
 // hazard MGS1028 reports.
 func TestSeedsForFileProjectWideReachingGlobRedirects(t *testing.T) {
@@ -149,7 +149,7 @@ func reachedProtoWorkspace(protoSources ...string) *types.Workspace {
 // TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner is the case a containment-only
 // answer swallows: a file inside proto/ moves docs/'s cache key through its reaching glob, so
 // BOTH seed. Answering with the owner alone leaves docs building against a stale key, and
-// reports the file as declared without checking whether the owner declares anything - the two
+// reports the file as declared without checking whether the owner declares anything, the two
 // halves of the same short circuit.
 func TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner(t *testing.T) {
 	t.Parallel()
@@ -162,7 +162,7 @@ func TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner(t *testing.T) {
 
 // TestSeedsForFileUndeclaredOwnerFlagsBesideAReachingGlob pins which project the
 // declared answer is about. docs reaching the file does not give PROTO a cache key for
-// it, and proto is the project that reruns on containment alone - so MGS1028 still has
+// it, and proto is the project that reruns on containment alone, so MGS1028 still has
 // something to report even though the file is declared somewhere.
 func TestSeedsForFileUndeclaredOwnerFlagsBesideAReachingGlob(t *testing.T) {
 	t.Parallel()
@@ -191,8 +191,8 @@ func TestSeedsForFileContainmentOnlyStillFlags(t *testing.T) {
 }
 
 // TestSeedsForFileUndeclaredKeepsTheCatchAll pins the fail-safe. The catch-all is
-// load-bearing - a config nobody declares still changes what a build MEANS, and
-// seeding is the only reason editing one reruns anything - so it is REPORTED rather
+// load-bearing (a config nobody declares still changes what a build MEANS, and
+// seeding is the only reason editing one reruns anything), so it is REPORTED rather
 // than narrowed.
 func TestSeedsForFileUndeclaredKeepsTheCatchAll(t *testing.T) {
 	t.Parallel()
@@ -753,7 +753,7 @@ func captureSlogWarnings(t *testing.T) *bytes.Buffer {
 // TestGraphNoWarnWhenDepsResolve verifies that a workspace where all deps
 // resolve produces no warnings.
 func TestGraphNoWarnWhenDepsResolve(t *testing.T) {
-	// No t.Parallel() - mutates global slog default.
+	// No t.Parallel(): mutates global slog default.
 	buf := captureSlogWarnings(t)
 
 	ws := buildWorkspace(t, [][]string{

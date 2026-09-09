@@ -13,7 +13,7 @@ import (
 // TestProbeBinsNameRealReplacements pins the advisory table rather than the warning
 // itself: the warning is a sync.Once on stderr, so a test that captured it would pass or
 // fail depending on whether an earlier test in this package had already tripped it. What
-// is worth pinning is that each entry names a REAL alternative - an entry pointing back at
+// is worth pinning is that each entry names a REAL alternative: an entry pointing back at
 // another shell-out is advice that sends the reader in a circle, and nothing else catches
 // that.
 func TestProbeBinsNameRealReplacements(t *testing.T) {
@@ -33,7 +33,7 @@ func TestProbeBinsNameRealReplacements(t *testing.T) {
 // TestOsSleepCancellable verifies a cancelled context interrupts os.sleep
 // instead of blocking for the full requested duration. Regression coverage
 // for the pre-fix osSleep, which discarded ctx and always ran a plain
-// time.Sleep - a cancelled run could not be interrupted until the full sleep
+// time.Sleep: a cancelled run could not be interrupted until the full sleep
 // elapsed.
 func TestOsSleepCancellable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

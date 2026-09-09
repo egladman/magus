@@ -75,7 +75,7 @@ func (st *bufferState) ensurePinned() (uintptr, error) {
 		return st.addr, nil
 	}
 	// A buffer written through the byte/Zig API and only THEN handed to C has no
-	// declared capacity - upstream's ffi.buzz calls a bare Buffer.init(), fills it
+	// declared capacity: upstream's ffi.buzz calls a bare Buffer.init(), fills it
 	// with writeZ, and passes ptr() to a foreign function. Sizing the block to what
 	// has actually been written makes that work, and keeps the explicit
 	// Buffer.init(capacity) form (an out-parameter a callee fills) exactly as it was.
@@ -238,7 +238,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	}))
 
 	// empty() CLEARS the buffer. Note it is not the negation of isEmpty(), which
-	// only reports - upstream names them that way and both are kept as upstream has
+	// only reports; upstream names them that way and both are kept as upstream has
 	// them rather than renamed for symmetry.
 	m.MapSet("empty", fn("Buffer.empty", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		*buf = (*buf)[:0]
@@ -403,7 +403,7 @@ func makeBufferValue(st *bufferState) vm.Value {
 	}))
 
 	// writeStruct / readStruct move whole foreign structs through the buffer, laid
-	// out exactly as C would - which is what lets a script stage an array of them
+	// out exactly as C would, which is what lets a script stage an array of them
 	// and hand the pointer to a callee.
 	m.MapSet("writeStruct", fn("Buffer.writeStruct", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) < 2 || !args[1].IsList() {
@@ -639,7 +639,7 @@ func foreignLayoutOf(v vm.Value) (types []string, offsets []int, size int, err e
 // A POINTER field is stored as a real address: upstream writes a struct into a
 // buffer and reads it back expecting the string to survive, which only works if the
 // bytes carry a pointer to it. The C string is allocated here and owned by the
-// BUFFER - freed by collect() - because the image may outlive the value it came
+// BUFFER (freed by collect()) because the image may outlive the value it came
 // from. An image written by one process and read by another would of course hold a
 // dangling pointer; that is inherent to putting a C struct in a byte buffer.
 func encodeField(st *bufferState, dst []byte, ctype string, v vm.Value) {

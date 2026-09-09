@@ -6,7 +6,7 @@ package std
 // That was not laziness: root magus imports internal/interp, which imports this package,
 // so std importing root is an import cycle and the API was genuinely out of reach. The
 // fork bought the answer at the cost of a process, a second workspace load, and a
-// serialization round trip - and it made a CLI subcommand load-bearing for a surface that
+// serialization round trip, and it made a CLI subcommand load-bearing for a surface that
 // has nothing to do with the CLI.
 //
 // A STRUCTURAL interface sidesteps the cycle. The workspace is ALREADY on the context
@@ -24,7 +24,7 @@ import (
 
 // Analyzer is the workspace's codebase-analytics surface: the VCS-history lenses plus the
 // two that read the knowledge graph. Deliberately the narrow set the report needs rather
-// than the whole of *Magus - a wide interface here would re-couple std to the shape of the
+// than the whole of *Magus: a wide interface here would re-couple std to the shape of the
 // package it cannot import.
 type Analyzer interface {
 	Hotspots(ctx context.Context, opts types.InsightOptions) (types.HotspotOutput, error)

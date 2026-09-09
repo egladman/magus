@@ -351,7 +351,7 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	t.Run("an output restated alongside one the baseline lacks is required, not redundant", func(t *testing.T) {
 		// ctx.writesFiles REPLACES the baseline, so this target's snapshot is exactly what
 		// it names. Reporting "gen/**" as a duplicate would advise dropping the only thing
-		// keeping it in that snapshot - the check would be arguing for silent data loss.
+		// keeping it in that snapshot: the check would be arguing for silent data loss.
 		p := &types.Project{Path: "proto", Outputs: []string{"gen/**"},
 			TargetOutputs: map[string][]types.OutputRef{"generate": {
 				{Project: "proto", Glob: "gen/**"},
@@ -505,7 +505,7 @@ func TestCheckEnvVars(t *testing.T) {
 
 	// magus reads these itself (subprocess recursion depth and invocation ancestry, CI
 	// shard inputs, the cache-signing seed) without them being config fields, so they can
-	// never appear in KnownEnvVars - runtimeEnvVars is the allowlist that keeps this
+	// never appear in KnownEnvVars; runtimeEnvVars is the allowlist that keeps this
 	// check from calling magus's own documented setup a typo.
 	t.Run("runtime env vars recognized", func(t *testing.T) {
 		for _, name := range []string{

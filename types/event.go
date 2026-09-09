@@ -1,8 +1,8 @@
 package types
 
 // Event is the canonical record something emits when it needs a human's
-// attention. It is shared across magus surfaces - the notify CLI, the activity
-// trail, doctor reports, self-update notices, hints - so every consumer
+// attention. It is shared across magus surfaces (the notify CLI, the activity
+// trail, doctor reports, self-update notices, hints), so every consumer
 // reasons over the same shape.
 //
 // The fields are categorical, one piece of information each:
@@ -16,7 +16,7 @@ package types
 // The categorical split mirrors HTTP status classes (1xx/2xx/3xx/4xx/5xx)
 // and Unix exit codes (0/1/2/126/127/128+N): one field carries the high-level
 // class, another carries the specific code within it. The renderer can
-// reason over each axis independently - title from outcome, icon from
+// reason over each axis independently: title from outcome, icon from
 // severity, deep-link from source+where.
 //
 // logger levels are deliberately NOT a part of this type. slog levels filter
@@ -37,7 +37,7 @@ type Event struct {
 // changes; additive optional fields do not require a bump.
 const EventSchemaVersion = 1
 
-// EventOutcome names the situation class - WHAT KIND of attention is needed.
+// EventOutcome names the situation class: WHAT KIND of attention is needed.
 // Seven canonical values; an unrecognized outcome falls through to other.
 type EventOutcome string
 
@@ -58,7 +58,7 @@ const (
 	OutcomeOther EventOutcome = "other"
 )
 
-// EventSeverity names the urgency tier - HOW URGENT is the attention.
+// EventSeverity names the urgency tier: HOW URGENT is the attention.
 // Four canonical tiers; aligned by name with slog's info/warning (those
 // overlap intentionally) and adding notice (between info and warning) and
 // critical (above error) which have no slog equivalent.
@@ -88,12 +88,12 @@ type EventSource struct {
 	ID string `json:"id,omitempty"`
 }
 
-// EventLocation is the actionable context - WHERE did this happen? Every
+// EventLocation is the actionable context: WHERE did this happen? Every
 // field is optional; the renderer uses what is present.
 //
 // Workspace is the repo root (always a directory). Project names the
 // workspace-relative project the event pertains to, when narrower than the
-// whole workspace. Files names the relevant files - "the file X had a
+// whole workspace. Files names the relevant files: "the file X had a
 // problem" reads differently from "the directory Y had a problem", and
 // Path.IsDir carries that distinction.
 type EventLocation struct {
@@ -118,7 +118,7 @@ type FileRef struct {
 // work with Path can move between the two without a helper at every site.
 //
 // Field-by-field, not a struct conversion. The two types happened to share a layout, so
-// Path(r) compiled - and that made every future field on Path a silent compile break
+// Path(r) compiled, and that made every future field on Path a silent compile break
 // here, which is exactly what adding Path.Base did. A FileRef is an event payload naming
 // a file; a Path is a lexical reference measured from a base. They are not the same idea
 // and should not be coupled by their field order.
@@ -133,7 +133,7 @@ func (r FileRef) PathFromRef() Path {
 // types.Path in hand and need to emit a FileRef.
 //
 // Resolve first: a FileRef has nowhere to put a base, so emitting p.Value raw would ship
-// a relative path stripped of what it was relative to - readable, and wrong.
+// a relative path stripped of what it was relative to: readable, and wrong.
 func FileRefFromPath(p Path) FileRef {
 	abs := p.Resolve()
 	return FileRef{Value: abs.Value, IsDir: abs.IsDir}

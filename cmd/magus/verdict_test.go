@@ -95,7 +95,7 @@ func TestExitForQueryFailsOnlyOnAnEmptyUnknown(t *testing.T) {
 }
 
 // The condition that keeps the rule usable. A bare free-text query never loads the symbol
-// layer, so its answer is `unknown` even when it matched twelve nodes - and failing there
+// layer, so its answer is `unknown` even when it matched twelve nodes, and failing there
 // would make an ordinary lookup exit non-zero.
 func TestExitForQueryIgnoresUnknownWhenSomethingMatched(t *testing.T) {
 	ans := knowledge.Answer("lint", true, knowledge.Coverage{Probed: true})
@@ -136,7 +136,7 @@ func TestPrintVerdictCoverageUnknownDoesNotAssertAbsence(t *testing.T) {
 
 // The caveat where it is the whole explanation. `magus refs <real name>` on an index built
 // before that definition existed printed a verdict byte-identical to `magus refs <typo>`,
-// while the stale-index line showed up only under answers that FOUND something - the one
+// while the stale-index line showed up only under answers that FOUND something: the one
 // case where it did not change what to do.
 func TestPrintVerdictIndexStaleNamesTheProjectsAndTheRefresh(t *testing.T) {
 	got := renderVerdict(knowledge.Answer("adoptionRun", false, knowledge.Coverage{

@@ -9,8 +9,8 @@ import (
 
 // Symbol ingestion is EXTRACTED, never inferred: the symbol nodes and their
 // defines/references edges come straight from a SCIP index a per-language indexer
-// produced. This assembler is types-only - the SCIP parsing lives in internal/symbols
-// and reaches here as neutral types.KnowledgeSymbol records - so internal/graph/knowledge
+// produced. This assembler is types-only (the SCIP parsing lives in internal/symbols
+// and reaches here as neutral types.KnowledgeSymbol records), so internal/graph/knowledge
 // stays free of the SCIP dependency. Per the scale plan, symbol shards are per
 // project and, once wired, loaded lazily; this file only builds the shard.
 
@@ -21,7 +21,7 @@ const symbolsShardSuffix = "@symbols"
 // symbolsShardName returns the shard name for a project's ingested symbols.
 func symbolsShardName(project string) string { return project + symbolsShardSuffix }
 
-// isSymbolsShard reports whether a shard name is a per-project symbol shard - the
+// isSymbolsShard reports whether a shard name is a per-project symbol shard, the
 // shards excluded from the default (non-symbol-seeded) load path.
 func isSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsShardSuffix) }
 
@@ -29,12 +29,12 @@ func isSymbolsShard(name string) bool { return strings.HasSuffix(name, symbolsSh
 // symbol node per record, a `defines` edge from each defining file, a
 // `references` edge from each using file (one per file, carrying the occurrence
 // count and capped lines in its provenance), and a `calls` edge to each callee the
-// record's body invokes. A callee always has a node in THIS shard - the call was found
+// record's body invokes. A callee always has a node in THIS shard (the call was found
 // through a reference occurrence in this project's index, so the parse minted a record
-// for it and the node loop above emitted it - which is what lets the derived xref route
+// for it and the node loop above emitted it), which is what lets the derived xref route
 // call queries with no changes of its own. It also materializes a `file` node for
-// every path the index touched - so a SCIP-indexed source file is a browsable node
-// the def/ref edges land on, not a dangling ID - and links each to the project that
+// every path the index touched (so a SCIP-indexed source file is a browsable node
+// the def/ref edges land on, not a dangling ID) and links each to the project that
 // owns it (longest-prefix over the full project list, so a cross-project reference
 // file is parented to its own project, not this shard's). File nodes and their
 // project links ride in this lazy shard, so they surface on symbol-seeded queries;
@@ -75,7 +75,7 @@ func assembleSymbols(project string, syms []types.KnowledgeSymbol, projects []ty
 		// Tested-by lens: how many referencing files are tests. Derived from the same
 		// SCIP reference edges (no new data), so it rides this deterministic shard rather
 		// than the observed coverage overlay. Absent (0) means no test directly names the
-		// symbol - a coverage-independent hint that a symbol may be under-tested.
+		// symbol, a coverage-independent hint that a symbol may be under-tested.
 		if n := testRefCount(sym.Refs); n > 0 {
 			attrs[attrTestRefs] = strconv.Itoa(n)
 		}
@@ -120,7 +120,7 @@ func testRefCount(refs []types.KnowledgeSymbolRef) int {
 // refProvenance encodes a reference's occurrence count and capped line list into the
 // edge provenance string, e.g. "scip count=3 lines=10,20". KnowledgeEdge has only a
 // flat Provenance string (no attr map), so `magus refs` reads the count/lines back
-// with parseRefProvenance - the two are kept together so the format has one home
+// with parseRefProvenance; the two are kept together so the format has one home
 // rather than being defined implicitly at the write site.
 const refProvenancePrefix = "scip "
 

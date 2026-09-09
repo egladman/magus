@@ -16,7 +16,7 @@ import (
 // large heap without saying where leaves the reader bisecting a magusfile by
 // hand, which is the whole reason this exists.
 //
-// The program allocates LINEARLY - one slot per append. An earlier version used
+// The program allocates LINEARLY: one slot per append. An earlier version used
 // the pathological `kept = kept + line` shape instead, which drove this one test
 // binary to a 13.5GB peak and killed a CI shard. That is an absurd price for a
 // test about a diagnostic, and the diagnostic only needs a hot loop that grows.
@@ -66,7 +66,7 @@ grow();
 
 // Every reported site must name a line a reader can actually open. A chunk with no
 // line data used to surface as "<main>:?" and, on a runner, outranked the real
-// loop - a ranking led by an entry nobody can act on is worse than a shorter one.
+// loop; a ranking led by an entry nobody can act on is worse than a shorter one.
 func TestHeapHotSitesNamesOnlyRealLines(t *testing.T) {
 	vm.ResetHeapStats()
 

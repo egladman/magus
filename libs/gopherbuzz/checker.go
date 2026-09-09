@@ -68,7 +68,7 @@ type scopeEntry struct {
 	read          bool
 	// optional records that the DECLARATION spelled a trailing `?`. The type system
 	// erases optionality (ParseAnnot consumes the `?`), so this is the only place it
-	// survives - deliberately narrow, and only consulted where a null would be a
+	// survives: deliberately narrow, and only consulted where a null would be a
 	// hard error rather than a value.
 	optional bool
 	pos      ast.Pos
@@ -90,7 +90,7 @@ type checker struct {
 	retOptional bool
 	yieldTyp    types.Type // non-nil when inside a function with a *> yield annotation
 	// raiseDeclared is true while checking the body of a function that declared
-	// !> - a call to a raising function is legal there without a surrounding
+	// !>; a call to a raising function is legal there without a surrounding
 	// try/catch, because the caller's own caller must handle it (or itself
 	// propagate). Set per-FunDecl in checkFunDecl, alongside retTyp/yieldTyp.
 	raiseDeclared bool
@@ -238,7 +238,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				// A flat or selective import binds members UNPREFIXED, so their signatures
 				// have to be defined under their bare names. The session already splats the
 				// values into the env, so without this the names resolve but carry no
-				// parameter types - and an inferred enum case in an argument (`hash(.Md5,
+				// parameter types, and an inferred enum case in an argument (`hash(.Md5,
 				// ...)`) has nothing to resolve against.
 				wanted := map[string]bool{}
 				for _, n := range v.Only {
@@ -267,7 +267,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				for _, fd := range fds {
 					nt.Fields[fd.Name] = c.funDeclType(fd)
 				}
-				// An exported final/var is a member too. The TYPE is best-effort - an
+				// An exported final/var is a member too. The TYPE is best-effort: an
 				// unannotated one stays Unknown rather than being inferred, since its
 				// initializer may name things private to the defining module. Recording
 				// the NAME is the point.
@@ -280,7 +280,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 				}
 				// An exported TYPE is reachable through the namespace too, as the type value
 				// itself, so `io\File.open(...)` resolves the same static method a bare
-				// `File.open(...)` does - and `io\FileMode.read` the same case.
+				// `File.open(...)` does, and `io\FileMode.read` the same case.
 				for _, d := range decls {
 					switch v := d.(type) {
 					case *ast.ObjectDecl:
@@ -389,7 +389,7 @@ func (c *checker) buildObjectType(v *ast.ObjectDecl) *types.ObjectType {
 	}
 	// Static fields share the instance field map. The object type is the type of
 	// both the type value (Foo.next) and an instance, so one map answers both, at
-	// the cost of letting an instance name a static too - the same latitude the
+	// the cost of letting an instance name a static too: the same latitude the
 	// enum member path already takes.
 	for _, f := range v.StaticFields {
 		ot.Fields[f.Name] = types.ParseAnnot(f.TypeAnnot)
@@ -547,7 +547,7 @@ func (c *checker) checkStmt(n ast.Node) {
 		// A direct throw is NOT held to propagate-or-catch, though a CALL to a raising
 		// function is. That asymmetry is deliberate and measured (2026-08-11): applying
 		// the rule closes upstream's fiber-error-location.buzz and nothing else, while
-		// breaking seven of magus's own suites - its spells, tour files and scripts
+		// breaking seven of magus's own suites: its spells, tour files and scripts
 		// throw from functions that declare no !>. Closing it is a corpus-wide
 		// annotation migration for one file, so it is a decision rather than an
 		// oversight.
@@ -660,7 +660,7 @@ func (c *checker) checkReturn(v *ast.ReturnStmt) {
 	_, retIsFibType := c.retTyp.(*types.FibType)
 	// A non-optional return cannot yield a possibly-null value. Optionality is
 	// erased in the type system, so this reads the declared `?` recorded on the
-	// scope entry - see possiblyNullName.
+	// scope entry; see possiblyNullName.
 	if v.Value != nil && !c.retOptional && c.retTyp != nil && c.retTyp != types.Void && c.retTyp != types.Any && c.retTyp != types.Unknown {
 		if name, isNull := c.possiblyNullName(v.Value); isNull {
 			c.errorfc(ast.NodePos(v.Value), TypeMismatch, "return value may be null: %q is optional but %s declares a non-optional return", name, "this function")
@@ -710,7 +710,7 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 // flagStringAccumulation warns on `s = s + part` inside a loop. Every iteration copies the
 // whole string built so far, and on the default nanbox build each intermediate is pinned in
 // the global object heap for the life of the process, so none of those copies is ever
-// reclaimed - the cost is quadratic in time and unbounded in memory. Collecting the parts in
+// reclaimed: the cost is quadratic in time and unbounded in memory. Collecting the parts in
 // a list and joining once is the fix.
 //
 // Deliberately narrow: only a bare `+` spine with the target as one of its operands counts,
@@ -792,7 +792,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	c.define(fd.Name, ft, true)
 	c.checkMainSig(fd, ft)
 
-	// An extern declaration IS the signature and nothing else - there is no body to
+	// An extern declaration IS the signature and nothing else: there is no body to
 	// descend into. Defining the type above is the whole point of it: every call
 	// site now checks against a real signature instead of Unknown.
 	if fd.IsExtern {
@@ -841,7 +841,7 @@ func (c *checker) checkFunDecl(fd *ast.FunDecl) {
 	}
 	// Not checkBlock: this function opened its own scope above so the parameters are
 	// visible, so the unreachable pass has to be invoked directly. Without this a
-	// dead statement was only ever reported inside a nested block - a `return`
+	// dead statement was only ever reported inside a nested block: a `return`
 	// followed by more code at the TOP level of a function went unnoticed.
 	c.checkUnreachable(fd.Body)
 	c.checkFunReturns(fd)
@@ -1009,10 +1009,10 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// typeof is STATIC: resolve the operand's inferred type here, once, and
 		// record its canonical spelling for the compiler to emit as a constant. The
 		// operand is never evaluated at runtime, which is what lets `typeof` tell
-		// `final list = []` ([any]) from `final slist: [str] = []` ([str]) - the same
+		// `final list = []` ([any]) from `final slist: [str] = []` ([str]): the same
 		// empty list, distinguishable only before it runs.
-		// Naming a TYPE yields `<type>`, not that type. `typeof A{}` is `<A>` - the
-		// type of an instance - but `typeof A` asks after the type VALUE itself, whose
+		// Naming a TYPE yields `<type>`, not that type. `typeof A{}` is `<A>` (the
+		// type of an instance), but `typeof A` asks after the type VALUE itself, whose
 		// type is `type`. Upstream's types-as-value.buzz asserts both, and the two read
 		// identically here otherwise: a type name is bound in scope carrying its own
 		// type, so inferring the operand answered `<A>` for either spelling.
@@ -1187,7 +1187,7 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// known divergence: upstream rejects it twice over (compile_errors/
 		// yield-location.buzz "Can't yield here", and yield-without-annotation.buzz,
 		// where the absent annotation means void). Requiring it here was tried on
-		// 2026-08-11 and reverted - the dismissal is documented on ast.YieldExpr and
+		// 2026-08-11 and reverted: the dismissal is documented on ast.YieldExpr and
 		// pinned by TestYieldOutsideFiberDismissed, ~18 of this package's own fiber
 		// fixtures omit the annotation, and so does magus's s3-cache spell
 		// (`fun listing() > any !> any` yields without one). Closing it is a dialect
@@ -1294,7 +1294,7 @@ func (c *checker) inferBinary(v *ast.BinaryExpr) types.Type {
 		// Map merge: {K: V} + {K: V} → {K: V}, the map counterpart of list
 		// concatenation (upstream tests/behavior/composite-assign.buzz). The right
 		// operand wins on a duplicate key, which is why the result takes the LEFT
-		// type only when it is a map - a merge cannot widen the key or value type.
+		// type only when it is a map: a merge cannot widen the key or value type.
 		if _, ok := left.(*types.MapType); ok {
 			return left
 		}
@@ -1391,8 +1391,8 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	if ok {
 		// Propagate-or-catch: a call to a function that declared !> (or, for a
 		// host extern, is authored as raising in std.Method) is only legal when
-		// the enclosing function also declared !> - so the error keeps
-		// propagating outward - or the call sits inside a try/catch or `catch`
+		// the enclosing function also declared !> (so the error keeps
+		// propagating outward) or the call sits inside a try/catch or `catch`
 		// expression that handles it right here. Neither means the error can
 		// reach a caller with no way to know it might.
 		if ft.Raises && !c.raiseDeclared && c.catchDepth == 0 {
@@ -1406,7 +1406,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// deep-yield-wrong-intermediate-type).
 		//
 		// This does NOT fire for `&f()`: FiberExpr infers its own callee and
-		// arguments rather than routing through here, which is exactly right - wrapping
+		// arguments rather than routing through here, which is exactly right: wrapping
 		// the call in a fiber is what CONSUMES the yield instead of propagating it.
 		if ft.Yield != nil {
 			switch {
@@ -1425,7 +1425,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		// A plain NAME whose type is known and is not a function can never be called.
 		//
 		// Restricted to an identifier callee on purpose. A built-in collection or
-		// string method is not modelled as a FuncType at all - inferMember answers
+		// string method is not modelled as a FuncType at all: inferMember answers
 		// with the method's RESULT type, so `xs.len()` arrives here with an int
 		// callee and would read as uncallable. Nine upstream behavior files failed
 		// exactly that way before this narrowing. Any/Unknown stay silent as
@@ -1462,7 +1462,7 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	if v.TypeArg != "" {
 		// The hint only helps when it names a type this checker knows. A call inside a
 		// generic function passes its own type PARAMETERS through (`lambda::<A, B>()`),
-		// and those are erased - resolving them yields an opaque named type that then
+		// and those are erased: resolving them yields an opaque named type that then
 		// fails against the declared return. Fall through to the callee's signature in
 		// that case, which is the honest answer.
 		t := c.resolveAnnot(v.TypeArg)
@@ -1497,8 +1497,8 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 // declares a `typeName: str` parameter, when the call itself left that slot empty.
 //
 // gopherbuzz ERASES type arguments, so a generic assertion helper cannot inspect
-// `T` at run time the way upstream's can. But the spelling is known STATICALLY -
-// the parser already captures it onto CallExpr.TypeArg - so a helper can opt into
+// `T` at run time the way upstream's can. But the spelling is known STATICALLY:
+// the parser already captures it onto CallExpr.TypeArg, so a helper can opt into
 // receiving it by name. That is what lets upstream source written as
 // `t.assertOfType::<int>(value)` run here unchanged against a signature of
 // `assertOfType(value: any, typeName: str, ...)`.
@@ -1653,8 +1653,8 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 			return mt
 		}
 		if t.IsNamespace {
-			// A namespace's members are collected in full now - funs, objects, enums,
-			// AND exported finals/vars - so a miss is a real error rather than an
+			// A namespace's members are collected in full now (funs, objects, enums,
+			// AND exported finals/vars), so a miss is a real error rather than an
 			// untracked export. This returned Unknown before, which meant a call to a
 			// member that does not exist type-checked and failed at RUN time.
 			c.errorfc(v.Pos, UnknownMember, "module %s has no member %q", t.Name, v.Name)
@@ -1698,7 +1698,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 		case "value":
 			// A str-backed enum's case value is its NAME, not an ordinal. This
 			// returned Int unconditionally, so `StrEnum.one.value` typed as int while
-			// the VM answered a string - a silently wrong answer that nothing
+			// the VM answered a string: a silently wrong answer that nothing
 			// compared against until comparison typing surfaced it.
 			if t.Backing == "str" {
 				return types.Str
@@ -1713,7 +1713,7 @@ func (c *checker) inferMember(v *ast.MemberExpr) types.Type {
 
 // listSelfMethods and mapSelfMethods name the built-in collection methods whose
 // return type is the RECEIVER's own collection type, so their result carries the
-// receiver's mutability - upstream builds each one's signature from `obj_list` /
+// receiver's mutability; upstream builds each one's signature from `obj_list` /
 // `obj_map` itself (src/obj.zig). The clone family is the exception that makes the
 // mutability visible: it re-types the copy, which is what `typeof
 // list.cloneMutable() == <mut [int]>` is asking about.
@@ -1774,7 +1774,7 @@ func (c *checker) inferIndex(v *ast.IndexExpr) types.Type {
 	case *types.ListType:
 		// A list index must be a non-null int, and `?[` is the form that tolerates
 		// one. Optionality is erased in the type system, so this reads the narrow
-		// record kept on the declaration instead - enough for the case that bites
+		// record kept on the declaration instead: enough for the case that bites
 		// (an `int?` local used directly as a subscript) without claiming the
 		// checker tracks optionals generally.
 		if !v.Optional {
@@ -1968,7 +1968,7 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 		// happily took an immutable `[]`, which Compat rejects everywhere else.
 		// An unresolved NamedType is a generic parameter (`value: T`). Type arguments
 		// are ERASED here, so there is nothing to compare against and any answer would
-		// be invented - the same reason inferMember returns Unknown rather than
+		// be invented: the same reason inferMember returns Unknown rather than
 		// erroring on one.
 		if _, unresolved := want.(*types.NamedType); unresolved {
 			continue
@@ -1981,8 +1981,8 @@ func (c *checker) inferObjectLit(v *ast.ObjectLit) types.Type {
 }
 
 // canonicalTypeName is the SINGLE source of the spelling a type value carries.
-// Both sides of `typeof x == <T>` route through it - the checker for the typeof
-// operand, the compiler for the literal's annotation - so the two can never
+// Both sides of `typeof x == <T>` route through it (the checker for the typeof
+// operand, the compiler for the literal's annotation), so the two can never
 // disagree over spacing or an alias. It follows upstream's rendering: a map is
 // `{key: val}` with the space, which types.MapType.TypeName omits.
 func canonicalTypeName(t types.Type) string {
@@ -2000,7 +2000,7 @@ func canonicalTypeName(t types.Type) string {
 	if t == types.Unknown || t == nil {
 		return "any"
 	}
-	// `typeof null` is `<void>` upstream, not `<null>` - types-as-value.buzz asserts
+	// `typeof null` is `<void>` upstream, not `<null>`; types-as-value.buzz asserts
 	// it outright. Only the SPELLING of a type value changes here; types.Null stays a
 	// distinct type everywhere else, which is what keeps null assignable to a
 	// nullable target while void is not.
@@ -2012,8 +2012,8 @@ func canonicalTypeName(t types.Type) string {
 
 // mutSpelling renders the `mut ` modifier for canonicalTypeName. It duplicates
 // types.mutPrefix rather than exporting it because the two renderers answer
-// different questions - canonicalTypeName follows upstream's spacing, TypeName
-// follows the compact annotation form - and a shared helper would tie them
+// different questions (canonicalTypeName follows upstream's spacing, TypeName
+// follows the compact annotation form), and a shared helper would tie them
 // together in the one place they are allowed to differ.
 func mutSpelling(mut bool) string {
 	if mut {
@@ -2249,7 +2249,7 @@ func (c *checker) checkMatchCondReachable(s matchCondShape, seen []matchCondShap
 //
 // Upstream rejects a statement that can never run ("Code will never be reached"),
 // the second-largest cluster in tests/compile_errors. Everything here rests on one
-// question - does this statement transfer control away unconditionally? - so the
+// question (does this statement transfer control away unconditionally?), so the
 // answer is computed once, in terminates, and both callers read it.
 
 // terminates reports whether n unconditionally transfers control away from the
@@ -2277,7 +2277,7 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 		return true
 	case *ast.OutStmt:
 		// `out` leaves the enclosing `from { }` with a value, so it ends that block
-		// the way a return ends a function - which is what makes a second `out`, or
+		// the way a return ends a function, which is what makes a second `out`, or
 		// any statement after one, dead code.
 		return true
 	case *ast.ExprStmt:
@@ -2299,7 +2299,7 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 		return (s.Cond == nil || isConstTrueCond(s.Cond)) && !loopHasEscapingBreak(s.Body, s.Label)
 	case *ast.DoStmt:
 		// `do { ... } until (cond)` runs its body at least once, so a body that
-		// transfers control away means the loop never completes normally - which is
+		// transfers control away means the loop never completes normally, which is
 		// what makes the statement after upstream's labeled `continue outer` dead.
 		//
 		// A break exiting the do lands after it, as for While and For. A do carries
@@ -2329,7 +2329,7 @@ func terminatesWith(n ast.Node, tryCounts bool) bool {
 	return false
 }
 
-// isConstTrueCond reports a literal `true` condition - the only infinite loop this
+// isConstTrueCond reports a literal `true` condition: the only infinite loop this
 // analysis claims to recognize. A condition that is merely always true in practice
 // (`1 == 1`, a constant final) is left alone rather than folded.
 func isConstTrueCond(n ast.Node) bool {
@@ -2372,7 +2372,7 @@ func loopHasEscapingBreak(body *ast.BlockStmt, label string) bool {
 				break
 			}
 			// A LABELED break unwinds through every loop between here and its target,
-			// so it exits this one whatever it names - matching it against this loop's
+			// so it exits this one whatever it names; matching it against this loop's
 			// own label would miss `break outer` from an inner loop. It also covers the
 			// label that resolves to no loop at all: that is a separate error, and
 			// backing off here lets that better diagnostic be the one reported.
@@ -2421,8 +2421,8 @@ func (c *checker) checkUnreachable(b *ast.BlockStmt) {
 //
 // This is the one check in this file that reads terminates in the UNSAFE direction:
 // an incomplete answer here invents an error on a correct function, rather than
-// merely missing one. It is therefore narrowed hard - only an explicit,
-// non-nullable, non-void annotation qualifies - so every case it fires on is a
+// merely missing one. It is therefore narrowed hard (only an explicit,
+// non-nullable, non-void annotation qualifies), so every case it fires on is a
 // function that plainly promised a value.
 func (c *checker) checkFunReturns(fd *ast.FunDecl) {
 	// No annotation is not a promise, and `void` promises nothing to return.
@@ -2430,7 +2430,7 @@ func (c *checker) checkFunReturns(fd *ast.FunDecl) {
 		return
 	}
 	// A nullable return (`> int?`) is satisfied by falling through, which yields
-	// null - upstream's own missing-return test annotates a non-optional `> int`.
+	// null; upstream's own missing-return test annotates a non-optional `> int`.
 	if strings.HasSuffix(fd.RetAnnot, "?") {
 		return
 	}
@@ -2444,7 +2444,7 @@ func (c *checker) checkFunReturns(fd *ast.FunDecl) {
 // runtime itself calls. They are not ordinary methods: `collect` is the finalizer
 // hook and `toString` is what string conversion reaches for, so both are invoked
 // with a fixed shape no call site can adapt to. Declaring either with a different
-// signature compiles today and then fails - or is silently skipped - at the moment
+// signature compiles today and then fails (or is silently skipped) at the moment
 // the runtime tries to use it.
 func (c *checker) checkReservedMethodSig(m *ast.FunDecl, ft *types.FuncType) {
 	switch m.Name {
@@ -2471,7 +2471,7 @@ func (c *checker) checkMainSig(fd *ast.FunDecl, ft *types.FuncType) {
 	}
 	// The element type is deliberately not pinned: upstream's own diagnostic spells
 	// it `[int]` where the runtime passes strings, so the checkable part is that the
-	// parameter is a LIST at all - which is what rejects `fun main(args: int)`.
+	// parameter is a LIST at all, which is what rejects `fun main(args: int)`.
 	if len(ft.Params) == 1 {
 		if _, isList := c.resolveType(ft.Params[0]).(*types.ListType); !isList {
 			c.errorf(fd.Pos, "expected `main` signature to be `fun main([args: [str]]) > void|int`")
@@ -2485,7 +2485,7 @@ func (c *checker) checkMainSig(fd *ast.FunDecl, ft *types.FuncType) {
 
 // checkMutableDefault reports a default value on a slot whose declared type is
 // mutable. A default is evaluated ONCE and shared by every call or instance that
-// omits it, so a mutable one is aliased state everybody can write through - the
+// omits it, so a mutable one is aliased state everybody can write through: the
 // classic shared-mutable-default bug. Upstream states it as "default value must be
 // constant", which is the same rule from the other side: a mutable collection is
 // not a constant.
@@ -2501,7 +2501,7 @@ func (c *checker) checkMutableDefault(pos ast.Pos, what, name, annot string, def
 
 // listMutators and mapMutators name the built-in collection methods that mutate the
 // receiver IN PLACE, so calling one on an immutable collection cannot work. The sets
-// mirror the VM's own guards exactly (vm/operators.go, `errImmutable`) - the runtime
+// mirror the VM's own guards exactly (vm/operators.go, `errImmutable`); the runtime
 // already refuses these, so this only moves a guaranteed failure from run time to
 // compile time. Keep the two in step: a mutator added there and missed here silently
 // loses the static check.
@@ -2560,7 +2560,7 @@ func (c *checker) checkProtocolConformance(v *ast.ObjectDecl, ot *types.ObjectTy
 //
 // Shadowing a GLOBAL stays legal, which is why scopes[0] is skipped: upstream
 // allows it and TestConformance_LocalShadowsGlobal pins it here. So does redeclaring
-// in a sibling block, since neither is visible from the other - only a name still
+// in a sibling block, since neither is visible from the other; only a name still
 // live at the point of declaration counts.
 //
 // It stops at the enclosing function too: a nested closure may reuse an outer name.
@@ -2594,8 +2594,8 @@ func (c *checker) markAssigned(name string) {
 }
 
 // checkUnassignedVars reports every `var` in the scope about to be popped that was
-// never written to. Upstream states it from the other side - "declared `var` but is
-// never assigned" - and the fix is to declare it `final`.
+// never written to. Upstream states it from the other side ("declared `var` but is
+// never assigned"), and the fix is to declare it `final`.
 func (c *checker) checkUnassignedVars() {
 	scope := c.scopes[len(c.scopes)-1]
 	unassigned := make([]scopeEntry, 0, len(scope))
@@ -2682,7 +2682,7 @@ func (c *checker) checkUnusedLocals() {
 }
 
 // inferUnannotatedReturns fills in the return type of a function or method that
-// declares none but whose whole body is `return expr` - upstream's arrow sugar,
+// declares none but whose whole body is `return expr`: upstream's arrow sugar,
 // `fun prepare() => this.prepareRaw()`.
 //
 // It runs as its OWN pass, after every type is registered and before any body is
@@ -2694,8 +2694,8 @@ func (c *checker) checkUnusedLocals() {
 //
 // Errors are discarded here. This pass evaluates expressions out of order purely
 // to learn their types; anything genuinely wrong is reported when the body is
-// checked for real, and reporting it twice - or reporting a spurious ordering
-// error - is worse than staying quiet.
+// checked for real, and reporting it twice (or reporting a spurious ordering
+// error) is worse than staying quiet.
 func (c *checker) inferUnannotatedReturns(prog *ast.Program) {
 	saved, savedWarnings := c.errors, c.warnings
 	defer func() { c.errors, c.warnings = saved, savedWarnings }()
@@ -2761,8 +2761,8 @@ func (c *checker) fillReturn(fd *ast.FunDecl, ft *types.FuncType, recv types.Typ
 // possiblyNullName reports whether n can evaluate to a value that was DECLARED
 // optional, naming it when so.
 //
-// It looks through the forms that pass a value straight out - a match or inline-if
-// arm - because that is how upstream's arrow-return-match-optional.buzz smuggles an
+// It looks through the forms that pass a value straight out (a match or inline-if
+// arm) because that is how upstream's arrow-return-match-optional.buzz smuggles an
 // `int?` parameter out of a `> int` function. It deliberately does NOT look through
 // `??`, a force-unwrap, or anything computed: those produce a new value whose
 // nullability this narrow record cannot speak to.

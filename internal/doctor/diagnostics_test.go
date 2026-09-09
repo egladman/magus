@@ -201,7 +201,7 @@ func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 
 // TestDiagnosticCatalogPassesItsOwnCheck runs the check against the real catalog and the
 // real pages, which is the only run that grades the doctrine claim it exists to enforce.
-// A code shipped without a page, or with a page naming no next step, fails here - there is
+// A code shipped without a page, or with a page naming no next step, fails here; there is
 // no allowlist, because the remedy for a listed code is to write the section.
 //
 // The message is asserted too: DoctorOK is also what the out-of-scope skip returns, so a

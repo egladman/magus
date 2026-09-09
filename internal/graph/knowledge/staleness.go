@@ -11,7 +11,7 @@ import (
 //
 // The signal is NOT calendar age. A doc written three years ago about a subsystem nobody
 // has touched since is perfectly current, and decaying it by age would flag it for no
-// reason - which is how a signal earns the right to be ignored. What is measured instead
+// reason, which is how a signal earns the right to be ignored. What is measured instead
 // is DIVERGENCE: the prose was last touched, and then the thing it describes moved on
 // without it. That is a fact about two commit dates, not a heuristic about age.
 const (
@@ -37,7 +37,7 @@ const (
 // It runs as a POST-PASS because it needs edges across shards: the prose node comes from
 // @docs or @notes, its subject from @buzz or @symbols, and the git dates from the VCS
 // input. Nothing is annotated when VCS history is unavailable (knowledge.vcs.enabled is
-// off by default), and that silence is deliberate - inventing a staleness signal from no
+// off by default), and that silence is deliberate: inventing a staleness signal from no
 // data would be worse than having none.
 //
 // Both directions of missing data are silence, never a verdict: prose git history absent,
@@ -134,7 +134,7 @@ func outrunDays(prose, subject time.Time) int {
 //   - Elapsed days measure calendar time, not divergence. A note and its subject both
 //     untouched for 400 days are settled, not stale.
 //   - The prose whose subject is GONE is often the only surviving evidence that the thing
-//     existed and why it went - the "we rejected this and here is why" note. Ranking it down
+//     existed and why it went, the "we rejected this and here is why" note. Ranking it down
 //     buries it exactly when nothing else can answer the question.
 //
 // Both mature systems that solved this in production converged on labeling instead: Guru
@@ -147,7 +147,7 @@ func outrunDays(prose, subject time.Time) int {
 // across the four. They shipped it as an opt-in sort, never the default. Their flagging study
 // also found no strong relationship between age and being outdated, which is the assumption a
 // day count encodes. If ranking on this is ever revisited, those are the terms: gentle,
-// opt-in, and measured - not a flat penalty applied to every query.
+// opt-in, and measured, not a flat penalty applied to every query.
 //
 // An unmeasured node (no attr) gets no label; absence of evidence is not evidence.
 func stalenessLabel(attrs map[string]string) (verdict string, days int) {

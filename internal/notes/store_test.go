@@ -190,7 +190,7 @@ func TestIdSurvivesARename(t *testing.T) {
 }
 
 // The id is the identity, and the FILE is somewhere else. Every caller that wanted to name
-// the file rebuilt it from the identity, which is correct only while the two agree - so this
+// the file rebuilt it from the identity, which is correct only while the two agree, so this
 // pins the observed path against the rebuilt one, on a note where they cannot agree.
 func TestPathNamesTheFileNotTheId(t *testing.T) {
 	dir := t.TempDir()
@@ -274,7 +274,7 @@ func TestMissingDirectoryIsValid(t *testing.T) {
 
 func TestInspectReportsInvalidEntries(t *testing.T) {
 	dir := t.TempDir()
-	// Declares anchors, so it IS addressed to magus - and is broken. That is the only
+	// Declares anchors, so it IS addressed to magus, and is broken. That is the only
 	// shape that earns an error; see TestForeignFilesAreNotNotes for what does not.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "broken.md"),
 		[]byte("---\nmagus:\n  title: T\n  anchors:\n    - kind: nonsense\n      target: x\n---\n\nprose\n"), 0o644))
@@ -370,7 +370,7 @@ func TestGetRefusesTraversal(t *testing.T) {
 
 // TestSaveKeepsForeignFrontmatter is the coexistence guarantee. magus rewrites a note when
 // it records an anchor fingerprint, so a naive re-marshal would silently delete the
-// author's tags, aliases, and plugin metadata from their own vault - turning a read-mostly
+// author's tags, aliases, and plugin metadata from their own vault, turning a read-mostly
 // integration into one that quietly damages what it touches.
 func TestSaveKeepsForeignFrontmatter(t *testing.T) {
 	dir := t.TempDir()
@@ -407,7 +407,7 @@ func TestSaveKeepsForeignFrontmatter(t *testing.T) {
 
 // TestSyncConflictsAreNotNotes: a file-sync tool leaves a byte-for-byte copy of a note
 // beside it, magus block and all. Loading one mints a second note competing with the
-// original - and where the original declares an id, a duplicate of that id.
+// original, and where the original declares an id, a duplicate of that id.
 func TestSyncConflictsAreNotNotes(t *testing.T) {
 	dir := t.TempDir()
 	note := "---\nmagus:\n  id: cache-pairing\n  title: Two caches\n  anchors:\n    - kind: project\n      target: .\n---\n\nProse.\n"

@@ -7,7 +7,7 @@ import (
 
 // outputSource is the narrow repository contract the run-browser RPCs need: list the stored run
 // descriptors, and read one run's captured bytes by ref. Satisfied by *cache.OutputStore, so the
-// handler package never grows its own store logic - it just serves what the store already knows.
+// handler package never grows its own store logic: it just serves what the store already knows.
 type outputSource interface {
 	ListDescriptors() []cache.OutputDescriptor
 	ByRef(ref string) ([]byte, cache.OutputDescriptor, error)

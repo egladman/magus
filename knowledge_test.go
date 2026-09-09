@@ -97,7 +97,7 @@ func writeSCIP(t *testing.T, path string) {
 }
 
 // goWorkspace describes a workspace whose "go" spell is symbol-capable (it exposes the
-// reserved scip op) and one project bound to it - the auto-enable inputs, no config.
+// reserved scip op) and one project bound to it: the auto-enable inputs, no config.
 func goWorkspace(project string) (types.ProjectsOutput, []types.Spell) {
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
 		{Path: project, Spell: "go", Spells: []string{"go"}},
@@ -156,7 +156,7 @@ func TestSymbolGapsEmptyWhenBuilt(t *testing.T) {
 // A present-but-corrupt index reads as COVERED, and that is a deliberate trade rather
 // than an oversight. Detecting it means a full protobuf unmarshal plus symbol
 // accumulation per lookup, on a path taken every time a query comes back empty, to catch
-// a case that barely occurs - while a never-built index, the case that occurs constantly,
+// a case that barely occurs, while a never-built index, the case that occurs constantly,
 // costs one Stat. The graph build logs the corrupt one when it tries to ingest it.
 //
 // This test exists so the trade is a decision on the record: if the probe ever grows a
@@ -174,7 +174,7 @@ func TestSymbolGapsTreatsCorruptIndexAsPresent(t *testing.T) {
 
 // TestSymbolGapsLogsWhenTheProbeCannotRun pins that the package-level SymbolGaps
 // (the (nil, false) probe-failed path) no longer discards the underlying error
-// from ListSpells/ListProjects - it must at least be logged, since (nil, false) on
+// from ListSpells/ListProjects: it must at least be logged, since (nil, false) on
 // its own gives a caller no way to learn WHY the probe could not run.
 func TestSymbolGapsLogsWhenTheProbeCannotRun(t *testing.T) {
 	root := t.TempDir()
@@ -316,8 +316,8 @@ func gitHeadFull(t *testing.T, dir string) string {
 }
 
 // TestLoadKnowledgeVCSHistory drives the whole opt-in path against a real repo (routed
-// through the VCS abstraction): per-file commit counts, most-recent-commit, and - locking
-// in the core.quotePath fix - a non-ASCII filename that must come through raw to match.
+// through the VCS abstraction): per-file commit counts, most-recent-commit, and, locking
+// in the core.quotePath fix, a non-ASCII filename that must come through raw to match.
 func TestLoadKnowledgeVCSHistory(t *testing.T) {
 	root := t.TempDir()
 	gitRun(t, root, "init", "-q")
@@ -400,7 +400,7 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	assert.Equal(t, first, churn(), "a cached scan must publish what the walk published")
 
 	// And the second build really did take the cached path, rather than agreeing by walking
-	// twice - otherwise this test would still pass with the cache silently broken.
+	// twice: otherwise this test would still pass with the cache silently broken.
 	assert.FileExists(t, filepath.Join(root, ".magus", "knowledge", "inputs", "vcs.json"))
 }
 
@@ -522,7 +522,7 @@ func TestShortRevision(t *testing.T) {
 // TestSymbolOccurrencesReportsACorruptIndexAsAGap is the completeness half of the
 // occurrence read. An index that exists but will not decode contributes no sites, and
 // dropping it quietly would present a short list under a verdict saying magus searched
-// everywhere - the exact failure a rewrite driven off that list cannot survive.
+// everywhere: the exact failure a rewrite driven off that list cannot survive.
 //
 // Note what this does NOT change: TestSymbolGapsTreatsCorruptIndexAsPresent still pins the
 // probe's Stat-only behavior. The trade recorded there is about not paying a full decode on
@@ -580,8 +580,8 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 		"the range holds Foo, so the site is editable")
 }
 
-// TestVCSHistoryFormatKeysTheCache: a shape change is invisible to the rest of the key -
-// the same HEAD and window hash the same - so without the format version an old file would
+// TestVCSHistoryFormatKeysTheCache: a shape change is invisible to the rest of the key
+// (the same HEAD and window hash the same), so without the format version an old file would
 // match, decode with the renamed field absent, and hand every consumer a zero timestamp.
 // That is the exact silent-zero failure this cache was rebuilt to eliminate, arriving
 // through the cache's own front door.

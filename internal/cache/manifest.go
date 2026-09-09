@@ -20,9 +20,9 @@ type Manifest struct {
 	Outputs     []OutputRecord `json:"outputs"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	// Platform is runtime.GOOS+"/"+runtime.GOARCH at the time this entry was
-	// produced (e.g. "darwin/arm64"). It is NOT part of the cache key - the key
+	// produced (e.g. "darwin/arm64"). It is NOT part of the cache key: the key
 	// must stay platform-free so an output ref (a truncated key) is identical on
-	// every machine - so it lives here instead, as a replay-time gate. src: lines
+	// every machine. So it lives here instead, as a replay-time gate. src: lines
 	// are content hashes, so darwin and linux compute the SAME digest for the
 	// same commit; without this field a Linux CI pass could replay on a darwin
 	// laptop as a pass for code darwin never compiled (or vice versa), and worse
@@ -31,19 +31,19 @@ type Manifest struct {
 	// mismatch check in readManifest for how that is treated.
 	Platform string `json:"platform,omitempty"`
 	// DurationMs is how long the run that produced this entry took. A cache HIT replays that run's
-	// result, so this is exactly the work the hit avoided - a measured figure for this target on
+	// result, so this is exactly the work the hit avoided: a measured figure for this target on
 	// this machine, not an average over targets that never ran. Cache.Stats sums it across hits.
 	//
 	// Absent (zero) on every manifest written before this field, and on an entry whose run was not
 	// timed. Those hits count toward Hit and contribute nothing to Saved, so the total understates
-	// rather than invents - which is why the console labels it as saved THIS SESSION rather than
+	// rather than invents, which is why the console labels it as saved THIS SESSION rather than
 	// implying it covers the cache's whole history.
 	DurationMs int64 `json:"durationMs,omitempty"`
 	// Return is what the target returned (str or [str]), stored so a cache HIT can
 	// replay it. A hit never invokes the target, so without this a target would
 	// print its result on the first run and nothing on the second. Absent for the
 	// `> void` targets that are the overwhelming majority, and absent from every
-	// manifest written before returns existed - which read back as no value, the
+	// manifest written before returns existed, which read back as no value, the
 	// same as a void target, so old entries stay valid.
 	Return any `json:"return,omitempty"`
 }
@@ -104,7 +104,7 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 	// Same permissive-on-absence convention as the two checks above: an empty
 	// Platform means "written before this field existed" and is treated as a
 	// match rather than a refusal. The alternative (empty never matches) would
-	// invalidate every entry already on disk the moment this field ships - every
+	// invalidate every entry already on disk the moment this field ships: every
 	// local manifest in existence today has no Platform recorded. A local
 	// manifest empty or not was necessarily built BY this machine (it is only
 	// ever written by snapshot, never copied in except through importArtifact,
@@ -124,8 +124,8 @@ func (c *Cache) readManifest(projectPath, hash string) (*Manifest, error) {
 
 // checkOutputRecords rejects a manifest whose records would resolve outside the tree they
 // address: Path is joined onto the workspace root by replay, Blob names a file under cas/.
-// A manifest body can arrive from a remote store - importArtifact writes it verbatim once the
-// signature and identity gates pass - so nothing before this inspects the records inside.
+// A manifest body can arrive from a remote store (importArtifact writes it verbatim once the
+// signature and identity gates pass), so nothing before this inspects the records inside.
 func checkOutputRecords(m *Manifest, hash string) error {
 	for _, out := range m.Outputs {
 		if !relativeToRoot(out.Path) {

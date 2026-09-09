@@ -146,7 +146,7 @@ func TestRunWorkspaceProviderUnregisteredSpell(t *testing.T) {
 // TestDecodeCoversEveryProvidedProjectField is the drift guard for the one seam this
 // decoder cannot type-check: the record crosses from Buzz as a plain map, so a field
 // renamed on spells.ProvidedProject (and duly regenerated into the Buzz mirror) would
-// otherwise decode to its zero value in silence - a provider's dependency edges or
+// otherwise decode to its zero value in silence: a provider's dependency edges or
 // source globs vanishing with no error, which is exactly the failure the explicit
 // decoding exists to prevent.
 func TestDecodeCoversEveryProvidedProjectField(t *testing.T) {
@@ -161,7 +161,7 @@ func TestDecodeCoversEveryProvidedProjectField(t *testing.T) {
 		if key == "" {
 			// The generator lowerCamels an untagged field name, which equals its
 			// lowercase form only for a single word. A multi-word field must therefore
-			// carry an explicit tag - DependsOn crossing as "dependsOn" while the
+			// carry an explicit tag: DependsOn crossing as "dependsOn" while the
 			// decoder read "depends_on" is precisely the drift this guards.
 			require.Equalf(t, strings.ToLower(f.Name), strings.ToLower(f.Name[:1])+f.Name[1:],
 				"spells.ProvidedProject.%s is multi-word and needs an explicit buzz tag", f.Name)

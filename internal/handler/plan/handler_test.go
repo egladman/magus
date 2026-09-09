@@ -152,7 +152,7 @@ func TestPlanHandler_IdleIsTheDefaultState(t *testing.T) {
 }
 
 // The stored outcome and its ref come from the same descriptor list /api/v1/outputs serves.
-// The charm suffix on a repro target ("build:rw") must not break the join - with default
+// The charm suffix on a repro target ("build:rw") must not break the join: with default
 // charms configured every local run carries one, so an exact match would find nothing.
 func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
 	outputs := fakePlanOutputs{ // newest first, as the store returns
@@ -284,7 +284,7 @@ func TestPlanHandler_AnchorDefaultsToCI(t *testing.T) {
 }
 
 // `magus x <ref>` is in the pool but is not a target, so it must not serve an empty plan
-// while a build is visibly in flight - the derived candidate falls through instead.
+// while a build is visibly in flight; the derived candidate falls through instead.
 func TestPlanHandler_UndefinedDerivedAnchorFallsThrough(t *testing.T) {
 	src := fakePlanSource{
 		graph: planFixture(),
@@ -329,7 +329,7 @@ func TestPlanHandler_UnknownExplicitTargetIs400(t *testing.T) {
 	}
 }
 
-// An empty plan is a shape the console renders, so it must serialize as [] - a null would
+// An empty plan is a shape the console renders, so it must serialize as []: a null would
 // make every reader branch before it could iterate.
 func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
 	h := NewHandler(fakePlanSource{graph: types.TargetGraphOutput{}}, fakePlanOutputs{}, "", nil)

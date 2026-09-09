@@ -39,7 +39,7 @@ type Registry struct {
 	// new binaries need one file rather than two. That URL stays frozen and
 	// unchanged for as long as anything in the wild reads it.
 	Releases []Release `json:"releases,omitzero"`
-	// EOL is keyed by UPSTREAM PRODUCT SLUG - "nodejs", not "node" and not a magus
+	// EOL is keyed by UPSTREAM PRODUCT SLUG: "nodejs", not "node" and not a magus
 	// spell name. That is what lets someone mirror this file while knowing nothing
 	// about magus, and the mapping to a tool lives where the tool is declared.
 	EOL map[string]Product `json:"eol,omitzero"`
@@ -139,7 +139,7 @@ type Cached struct {
 	Path string
 }
 
-// Load reads every enabled source's cached copy. It NEVER fetches - that is rule 2,
+// Load reads every enabled source's cached copy. It NEVER fetches: that is rule 2,
 // and it is why a build, a console page load, and a daemon start can all call this.
 //
 // A missing cache is not an error. It is StateNeverSynced, which the caller renders

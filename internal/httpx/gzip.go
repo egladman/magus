@@ -11,7 +11,7 @@ import (
 // drops any Content-Length the inner handler set (the compressed length differs). Only 200
 // responses are compressed; a bodyless status (304/204) passes through untouched, so a
 // conditional GET still returns an empty 304. An inner handler that already set an ETag keeps
-// it - the tag is computed over the uncompressed body and is identical for both encodings.
+// it: the tag is computed over the uncompressed body and is identical for both encodings.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !acceptsGzip(r) {

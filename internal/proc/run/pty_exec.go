@@ -23,7 +23,7 @@ import (
 //
 //  1. Start the child. It now owns the slave.
 //  2. Close OUR slave handle. If the parent keeps one open the master never sees
-//     EOF, the copy blocks forever, and the whole run hangs - the classic pty
+//     EOF, the copy blocks forever, and the whole run hangs: the classic pty
 //     deadlock, and the reason this is not three lines.
 //  3. Copy master -> writers until EIO, which is how a pty master reports "the
 //     slave side is gone" and is the normal end of a session rather than a fault.
@@ -111,7 +111,7 @@ var ptyDrainDelay = 5 * time.Second
 //
 // The copy has no end of its own: a pty master reports EOF only once the LAST
 // writer closes the slave, and a grandchild that outlived the child still holds
-// one - so an unbounded read hangs the build for as long as that grandchild
+// one, so an unbounded read hangs the build for as long as that grandchild
 // lives. Killing the group is what actually ends it; the deadline before it lets
 // a well-behaved tail of output finish first, and the deadline after it covers a
 // read the kill did not free.

@@ -56,7 +56,7 @@ func appendHint(result *mcplib.CallToolResult, s string) {
 
 // matchedNothing reports whether a successful result is a knowledge-graph answer
 // that found nothing: its payload carries match_count and it is zero. A payload
-// without the field is not empty, it is a different shape - so a result this
+// without the field is not empty, it is a different shape, so a result this
 // cannot read stays undecorated rather than gaining a footer it did not earn.
 //
 // Decoding the field rather than scanning for a substring: `"match_count":0` and

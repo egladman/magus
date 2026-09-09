@@ -75,7 +75,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { go["x"](); }
 
 // TestCtxFormCharms checks that a ctx-form target's ctx.hasCharm reads are extracted
 // too, so the static charm inventory (the doctor's charm/target-collision and
-// has_charm-typo checks) sees them - the receiver is ctx, not magus, but the charm
+// has_charm-typo checks) sees them; the receiver is ctx, not magus, but the charm
 // name is a real read all the same.
 func TestCtxFormCharms(t *testing.T) {
 	g := Extract(`import "magus";
@@ -90,7 +90,7 @@ export fun release(ctx: magus\Context, args: [str]) > void {
 // TestHasCharmBothReceivers pins that has_charm is read through BOTH receivers: the
 // still-live magus.hasCharm global query and the ctx.hasCharm form. Unlike
 // needs/inputs/outputs (ctx-only now), has_charm keeps its global, so a target reading
-// either must contribute the same charm to the static inventory - or the doctor charm
+// either must contribute the same charm to the static inventory, or the doctor charm
 // checks and the MAGUS.md listing would silently miss a magus.hasCharm read.
 func TestHasCharmBothReceivers(t *testing.T) {
 	viaCtx := Extract(`import "magus";
@@ -177,7 +177,7 @@ func TestReadsWritesDynamic(t *testing.T) {
 // TestExecOverrideDynamic pins the other half of the split: a computed ctx.withEnv /
 // ctx.withCwd sets DynamicExec, NOT DynamicIO, so the load path lets it through. The two
 // flags have to stay apart because the load path cannot tell the cases apart any other
-// way - see describe.flagDynamic.
+// way; see describe.flagDynamic.
 func TestExecOverrideDynamic(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
@@ -210,7 +210,7 @@ func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 // TestObservesExtraction pins the static read of ctx.observes: literal (key, value)
 // pairs are canonicalized for the key, and anything the read cannot pair is a load
 // error rather than a silently dropped observation. Dropping one is the failure the
-// declaration exists to prevent - the target would key as though the external fact
+// declaration exists to prevent: the target would key as though the external fact
 // were not there and replay a stale answer, which is exactly what it was reaching
 // past skip_cache to avoid.
 func TestObservesExtraction(t *testing.T) {
@@ -259,7 +259,7 @@ func TestObservesExtraction(t *testing.T) {
 
 // TestUnreachedIO pins orphan detection: a ctx.readsFiles/writesFiles reached from a target
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
-// unreferenced helper or used as a value IS - it would never enter a cache key.
+// unreferenced helper or used as a value IS; it would never enter a cache key.
 func TestUnreachedIO(t *testing.T) {
 	orphans := UnreachedIO(`export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**");
@@ -423,7 +423,7 @@ export fun real(ctx: magus\Context, args: [str]) > void { go["x"](); }
 //
 // Sorted, not pattern order. The static extractor, the dry-run tracer, and the runtime
 // dispatch now share one matcher (types.MatchTargetPatterns), and runtime has always
-// sorted - it iterates a Go map, so anything else would vary between runs. Describing
+// sorted: it iterates a Go map, so anything else would vary between runs. Describing
 // edges in a different order than they dispatch is the drift this consolidation removes.
 func TestNeedsGlobMultiPattern(t *testing.T) {
 	g := Extract(`export fun all(ctx: magus\Context, args: [str]) > void {
@@ -493,7 +493,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 // TestChainInterleavesCrossSteps: a chain that mixes local and cross-project steps keeps
 // them in ONE list in written order. Dependencies and CrossDependencies split them by
-// locality, so neither can answer this on its own - the reason Chain is built from the
+// locality, so neither can answer this on its own, the reason Chain is built from the
 // argument list rather than folded from those two afterwards.
 func TestChainInterleavesCrossSteps(t *testing.T) {
 	g := Extract(`import "project/../lib" as lib;
@@ -564,7 +564,7 @@ export fun setup(ctx: magus\Context, args: [str]) > void { go["x"](); }
 }
 
 // TestCrossFileInputs: ctx.readsFiles(<alias>.file("lit")) and a sibling bare string
-// literal land on the SAME Inputs list in one shape - the literal a same-project input
+// literal land on the SAME Inputs list in one shape: the literal a same-project input
 // (empty Project), the alias.file a cross-project input (raw dep path + rel); the
 // recognized cross-file arg does NOT trip DynamicIO, and the .file member mints no
 // phantom cross-dependency. Same-project entries come first (arg order), cross after.
@@ -643,7 +643,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 // not have at describe time and would not print if it did.
 //
 // It also pins the two limits. An endpoint takes an object, usually a `final` declared
-// elsewhere, so its reference is not at the call site - the use is recorded, the name is
+// elsewhere, so its reference is not at the call site; the use is recorded, the name is
 // not. And a read behind a helper the static walk cannot reach is invisible, which
 // under-reports rather than over-reports.
 func TestSecretRefsAreExtracted(t *testing.T) {
@@ -699,7 +699,7 @@ export fun plain(ctx: magus\Context, args: [str]) > void { http\get("https://exa
 // uncacheable. That is a worse hazard than the one the check was built for: with a grant
 // the magusfile never holds the value, so switching the ref from staging to production
 // changes nothing the cache can see and the target replays its old output against a
-// different credential - a wrong build, not a stale login.
+// different credential, a wrong build, not a stale login.
 func TestReadsSecretsCoversTheWholeSecretSurface(t *testing.T) {
 	g := Extract(`import "magus";
 export fun reads(ctx: magus\Context, args: [str]) > void {

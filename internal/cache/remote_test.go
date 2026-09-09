@@ -25,8 +25,8 @@ import (
 
 // TestExportArtifactStreamsBlobsWithoutFullyBuffering verifies exportArtifact
 // does not hold a whole CAS blob in memory before writing it to the tar. Before
-// the fix, addFile read each blob wholly via os.ReadFile - a single allocation
-// the size of the blob - on the push path that runs at the end of every
+// the fix, addFile read each blob wholly via os.ReadFile (a single allocation
+// the size of the blob) on the push path that runs at the end of every
 // cacheable miss. TotalAlloc (cumulative bytes allocated, unaffected by GC
 // timing) is measured across one export of a large blob and must stay well
 // under the blob's size; a full-buffer implementation cannot avoid allocating

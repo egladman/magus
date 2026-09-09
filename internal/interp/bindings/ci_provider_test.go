@@ -26,7 +26,7 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 
 // A provider whose handler raises must say so. The error was discarded here, so
 // a spell that failed on every annotation reported success for the life of the
-// build - and the adapter is the only layer that can tell the two apart.
+// build, and the adapter is the only layer that can tell the two apart.
 func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	boom := errors.New("handler raised")
 	a := &spellAnnotator{drv: &stubDriver{err: boom}}

@@ -103,7 +103,7 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 }
 
 // TestLastRecordedRun_KeyComesFromTheFilename: readManifest accepts an empty Hash as
-// valid - the permissive-on-absence convention that keeps pre-field entries usable - so
+// valid (the permissive-on-absence convention that keeps pre-field entries usable), so
 // the body cannot be trusted for the key. The filename IS the key, and a RecordedRun that
 // took the body's word for it reports Key "" and compares against nothing.
 func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {

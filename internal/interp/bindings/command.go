@@ -80,16 +80,16 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// Warn on the real execution path only (not the describe/render path, which
 	// resolveCharmArgs also serves and which surfaces conflicts in its own output).
 	warnCharmConflicts(ctx, tgt.Args, tgt.Charms)
-	// Explicit call-site args replace the declared defaults; anything else -
-	// including `magus run <t> -- <extra>` forwarding, which arrives with
-	// hasArgs unset - keeps them. See spells.Command.DefaultArgs.
+	// Explicit call-site args replace the declared defaults; anything else
+	// (including `magus run <t> -- <extra>` forwarding, which arrives with
+	// hasArgs unset) keeps them. See spells.Command.DefaultArgs.
 	if !opts.hasArgs {
 		args = append(args, tgt.DefaultArgs...)
 	}
 	args = append(args, opts.args...)
 	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
 	// internal/spellruntime/resolve.go), so it cannot compute a value only the
-	// runner knows (its own binary path, a per-run cache destination) - which is
+	// runner knows (its own binary path, a per-run cache destination), which is
 	// why a spell used to shell out to `sh -c` just to let the shell expand a
 	// variable magus itself set ($MAGUS et al). Resolving a bare $NAME token here,
 	// against exactly what the runner controls for this invocation, replaces that
@@ -163,13 +163,13 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// happened.
 	if outTail != nil && res.Started && res.Code != 0 && ctx.Err() == nil {
 		// Each stream is matched on its own; see the tee comment above. res.Stdout/Stderr
-		// are deliberately NOT consulted - a capturing op streams through these same tees
+		// are deliberately NOT consulted: a capturing op streams through these same tees
 		// (run.Exec buffers on top of the writers rather than instead of them), so reading
 		// the result too would only add a duplicate and an unbounded copy of the whole log.
 		if advice := adviceFor(tgt.Hints, outTail.String(), errTail.String()); advice != "" {
 			// Through the run's own stderr writer, not os.Stderr. That writer is the tap
 			// that mirrors into the persisted log and the output ref, so advice printed
-			// around it is invisible to exactly the reader it is for - someone reading a
+			// around it is invisible to exactly the reader it is for: someone reading a
 			// CI failure after the fact. It also keeps the advice attributed and ordered
 			// with the target's own output when several projects run at once.
 			_, stderr := run.OutputWriters(ctx)
@@ -180,7 +180,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 }
 
 // runnerRefPattern matches a Bin or Args token that is a REFERENCE to a
-// runner-computed value: a bare $NAME with no other characters - the same
+// runner-computed value: a bare $NAME with no other characters, the same
 // $VAR syntax a spell already wrote inside an `sh -c` one-liner, just without
 // the shell to expand it. It deliberately does NOT match ${NAME} or a $NAME
 // embedded inside a longer string ("--output=$NAME"): Buzz's own string
@@ -191,13 +191,13 @@ var runnerRefPattern = regexp.MustCompile(`^\$[A-Za-z_][A-Za-z0-9_]*$`)
 
 // runnerRefs returns the values a static op's Bin/Args may reference via a bare
 // $NAME token (see resolveRunnerRefs): run.SelfVars for this invocation (MAGUS,
-// MAGUS_LEVEL, the ancestor chain - the same values every spell subprocess
+// MAGUS_LEVEL, the ancestor chain; the same values every spell subprocess
 // already receives in its own environment) plus whatever opts.refs adds
 // explicitly for one op (e.g. the per-run cache destination dispatchOp sets for
 // the scip op via MAGUS_SYMBOL_INDEX). It is NOT the process environment or
 // the sandbox's BaseEnv, and it is NOT commandOpts.env: env can carry a
 // resolved Secret (runCommand's tgt.Secrets), and Secrets exists precisely so
-// that value never reaches Args - folding env in here would defeat that the
+// that value never reaches Args: folding env in here would defeat that the
 // moment a spell wrote $A_SECRET_NAME.
 func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
 	refs := make(map[string]string, len(opts.refs)+2)
@@ -216,7 +216,7 @@ func runnerRefs(ctx context.Context, opts commandOpts) map[string]string {
 // with its value in refs. A token that is not shaped like a reference passes
 // through unchanged. A token that IS shaped like one but is absent from refs is
 // a hard error naming the op and the reference: this is deliberately not "" on
-// a miss - a silently empty substitution would turn `--output` (its value
+// a miss: a silently empty substitution would turn `--output` (its value
 // dropped) into a confusing downstream tool failure instead of a diagnosis
 // naming the actual problem, right where the mistake was made.
 //
@@ -253,7 +253,7 @@ func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string
 
 // hintTailBytes bounds the output kept per stream for classification. A tool's failure
 // explanation is the last thing it prints, and holding a whole build log in memory to
-// classify one exit code is the wrong trade - so this keeps the tail and forgets the rest.
+// classify one exit code is the wrong trade, so this keeps the tail and forgets the rest.
 const hintTailBytes = 8 << 10
 
 // adviceFor returns the Advise of the first declared hint whose Contains appears in any of
@@ -286,7 +286,7 @@ func adviceFor(hints []spells.Hint, sources ...string) string {
 // bytes rather than growing, and reports every write as fully accepted so the MultiWriter
 // it sits in never short-circuits the real output stream on its account.
 //
-// The bytes it holds are pre-redaction - the capture tap redacts inside its own Write, and
+// The bytes it holds are pre-redaction: the capture tap redacts inside its own Write, and
 // MultiWriter hands each writer the same original slice. Nothing here is ever printed (only
 // the spell author's own Advise text is), and the buffer dies with the call, but it is a
 // window where resolved secrets exist outside the redaction boundary and that is worth
@@ -346,8 +346,8 @@ var charmConflictWarned sync.Map // signature string -> struct{}
 
 // warnCharmConflicts emits a one-time soft warning when two active charms edit the
 // same argv position and one silently overrides the other (the winner decided by
-// alphabetical name, so the loser has no effect). It never blocks the run - the
-// command still resolves deterministically - but an author almost never means to
+// alphabetical name, so the loser has no effect). It never blocks the run (the
+// command still resolves deterministically), but an author almost never means to
 // declare a charm whose edit is thrown away, so magus says so.
 func warnCharmConflicts(ctx context.Context, base []string, charms map[string]spells.Charm) {
 	var activeNames []string
@@ -377,7 +377,7 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 }
 
 // directMagusBinaryWarnOnce is process-global so the "use magus.cmd/..." hint fires
-// at most once per process, not once per command - avoids log spam in a wide run.
+// at most once per process, not once per command: avoids log spam in a wide run.
 var directMagusBinaryWarnOnce sync.Once
 
 // execCommand runs cmd with args in dir, inheriting stdio and sandbox policy. When
@@ -411,7 +411,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	}
 	// A cancelled run kills this child, and a killed process has no verdict of its
 	// own: ExitCode() reports -1, which the floor below would turn into "<cmd> exited
-	// 1" - indistinguishable from the tool genuinely failing, printed with a
+	// 1": indistinguishable from the tool genuinely failing, printed with a
 	// `reproduce:` line that does not reproduce it and (because a killed child writes
 	// no stderr) no diagnostic to explain it. run.Exec already joins ctx.Err() for
 	// exactly this; propagate it instead of blaming the tool. A child that reached a
@@ -424,7 +424,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 	}
 	if !res.Started {
 		if err != nil {
-			// A process that never started has no exit code of its own - fabricating
+			// A process that never started has no exit code of its own: fabricating
 			// "%s exited %d" here would discard run.Exec's classified error (e.g. the
 			// MGS3003 tool-not-on-PATH diagnostic) and print a verdict on a tool that
 			// never ran. Mirrors the cancellation branch above: propagate, don't invent.
@@ -461,7 +461,7 @@ const sourcesBatchLimit = 256
 // skip-is-not-a-failure convention.
 //
 // Every batch still runs after an earlier one exits non-zero, so a check across many
-// files reports every failure in one run - but the FIRST error is what the caller sees,
+// files reports every failure in one run, but the FIRST error is what the caller sees,
 // so the op still fails overall. A process that never started (bad exec, sandbox denial)
 // or a cancelled run stops the loop immediately: every remaining invocation would fail
 // identically, or should not proceed.

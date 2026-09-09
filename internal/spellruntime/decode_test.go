@@ -180,7 +180,7 @@ func TestDecode_CommandDefaultArgs(t *testing.T) {
 }
 
 // TestDecode_CommandSecrets verifies a record op's `secrets` map (env var name ->
-// provider reference) decodes onto Op.Secrets untouched  -  no resolution happens at
+// provider reference) decodes onto Op.Secrets untouched: no resolution happens at
 // decode time, only at spawn.
 func TestDecode_CommandSecrets(t *testing.T) {
 	src := mapObj{
@@ -201,8 +201,8 @@ func TestDecode_CommandSecrets(t *testing.T) {
 }
 
 // TestDecode_CommandSecretsAbsentOrEmptyIsNil pins that a command with no `secrets`
-// key, and one with an explicitly empty map, both decode Op.Secrets to nil - not an
-// empty non-nil map - so a command with nothing to inject looks identical either way.
+// key, and one with an explicitly empty map, both decode Op.Secrets to nil (not an
+// empty non-nil map), so a command with nothing to inject looks identical either way.
 func TestDecode_CommandSecretsAbsentOrEmptyIsNil(t *testing.T) {
 	absent := mapObj{
 		"name": "myspell",
@@ -227,7 +227,7 @@ func TestDecode_CommandSecretsAbsentOrEmptyIsNil(t *testing.T) {
 
 // TestDecode_CommandSecretsWrongTypeErrorsLoudly pins that a `secrets` field of the
 // wrong shape is a load-time error naming the spell and op, matching decodeCommand's
-// existing charm error style - not a silently dropped declaration that would leave a
+// existing charm error style, not a silently dropped declaration that would leave a
 // spawn with no secret and no signal why.
 func TestDecode_CommandSecretsWrongTypeErrorsLoudly(t *testing.T) {
 	src := mapObj{
@@ -301,7 +301,7 @@ func TestDecode_CharmAddOp(t *testing.T) {
 }
 
 // TestDecode_CharmRootRejected checks that a root-path op (whole-argv replace)
-// is rejected  -  element-level only.
+// is rejected: element-level only.
 func TestDecode_CharmRootRejected(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
@@ -349,7 +349,7 @@ func TestDecode_NeedsResolved(t *testing.T) {
 
 // TestDecode_IgnoreDirs verifies the ignore_dirs field (mgs_listIgnoreDirs) is read
 // into spells.Descriptor.IgnoreDirs, and that an absent field decodes to nil (not a panic or
-// empty-slice surprise) - the path a spell that declares no ignore dirs takes.
+// empty-slice surprise), the path a spell that declares no ignore dirs takes.
 func TestDecode_IgnoreDirs(t *testing.T) {
 	src := mapObj{
 		"name":        "myspell",
@@ -368,7 +368,7 @@ func TestDecode_IgnoreDirs(t *testing.T) {
 // admits '_' and uppercase, but every request reaching dispatchOp has already been
 // kebab-normalized by ParseTarget and dispatch is a plain map hit. An op authored as
 // go_build was therefore stored under go_build, looked up as go-build, missed, and
-// swallowed as a fan-out skip at debug level - declared, and reachable by nothing.
+// swallowed as a fan-out skip at debug level: declared, and reachable by nothing.
 func TestDecode_OpNameIsNormalized(t *testing.T) {
 	src := mapObj{
 		"name": "myspell",
@@ -434,7 +434,7 @@ func TestDecodeToolsAbsent(t *testing.T) {
 }
 
 // Everything magus knows about one binary arrives in one entry, keyed by the bin an op
-// already names - which is what replaced five parallel declarations.
+// already names, which is what replaced five parallel declarations.
 func TestDecodeToolsCarriesProbeKeyAndReady(t *testing.T) {
 	m, err := Decode(mapObj{
 		"name": "docker",
@@ -521,7 +521,7 @@ func TestDecodeToolsRejectsUnknownComponent(t *testing.T) {
 // A bound is validated with the parser that later COMPARES it. The two used to
 // differ: the validator (Masterminds, coercing by default) accepted a leading
 // zero that the comparison (x/mod/semver) rejects, so the spell loaded and then
-// every Check against it degraded to VerdictUnknown - a declared window that
+// every Check against it degraded to VerdictUnknown: a declared window that
 // silently constrained nothing.
 func TestDecodeToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
 	for _, field := range []string{"min", "below"} {
@@ -543,8 +543,8 @@ func TestDecodeToolsRejectsABoundTheComparisonCannotRead(t *testing.T) {
 	}
 }
 
-// The forms authors actually write - a partial version, a full one, either with
-// or without the v Go spells - keep loading.
+// The forms authors actually write (a partial version, a full one, either with
+// or without the v Go spells) keep loading.
 func TestDecodeToolsAcceptsAuthoredBoundForms(t *testing.T) {
 	for _, bound := range []string{"1.21", "25", "2.0.0", "v1.21.0", "1.0.0-rc1"} {
 		m, err := Decode(mapObj{
@@ -578,7 +578,7 @@ func TestDecodeToolsCarriesDiagnosticsFormat(t *testing.T) {
 }
 
 // An unrecognized format is a spell-authoring bug caught at decode, the same place a
-// bad key.upTo lands - not a silent fall back to scraping prose.
+// bad key.upTo lands, not a silent fall back to scraping prose.
 func TestDecodeToolsRejectsUnknownDiagnosticsFormat(t *testing.T) {
 	_, err := Decode(mapObj{
 		"name": "docker",
@@ -628,7 +628,7 @@ func TestDecodeCommandHints(t *testing.T) {
 
 // TestDecodeCommandSources pins that Sources/SourcesEach decode from the Buzz
 // field names buzzgen derives for them (a plain lower-cased "sources" and the
-// camelCase "sourcesEach" for the two-word field - see FieldName in
+// camelCase "sourcesEach" for the two-word field; see FieldName in
 // libs/gopherbuzz/buzzgen/mirror.go), and that an ordinary Command with neither
 // key decodes to the unset default (nil, false): no behavior change for a
 // Command that does not declare Sources.

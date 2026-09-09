@@ -98,8 +98,8 @@ const downloadFallback = "playground.buzz"
 // ("magusfile.buzz" for the seeded example), so it is the name the visitor is
 // already looking at when they press Save.
 //
-// A label that could not be a plain filename - a path separator, a leading dot,
-// nothing at all - falls back rather than being repaired: the label is the page's
+// A label that could not be a plain filename (a path separator, a leading dot,
+// nothing at all) falls back rather than being repaired: the label is the page's
 // own text, so a shape it should never take means the page is not in a state to
 // name the file, and a guessed name is worse than the neutral one.
 func DownloadName(label string) string {

@@ -480,7 +480,7 @@ func (p *Pool) executeTarget(ctx context.Context, name string, ancestors []strin
 	// every name of one ctx.needs(a, b, ...) concurrently and hands each child the same
 	// ancestors slice header; when that slice has spare capacity, a plain append writes into
 	// the array the caller still owns. Every sibling then writes its own name to the same
-	// index and reads back whichever sibling won - a write/write race whose visible symptom is
+	// index and reads back whichever sibling won: a write/write race whose visible symptom is
 	// a CYCLE REPORTED FOR AN ACYCLIC GRAPH.
 	//
 	// Depth-gated by Go's append growth (0->1->2->4->8), so only a fan-out at depth 3, 5, 6, or
@@ -528,7 +528,7 @@ func (p *Pool) acquireWorker(ctx context.Context) (*poolWorker, error) {
 	}
 	p.mu.Unlock()
 	// No idle session: a cold checkout. Report the miss before warming; newWorker
-	// then reports the warm cost (idle is 0 - nothing was idle to leave behind).
+	// then reports the warm cost (idle is 0; nothing was idle to leave behind).
 	if obs := poolObserverFrom(ctx); obs != nil {
 		obs.SessionAcquire(ctx, false, 0)
 	}

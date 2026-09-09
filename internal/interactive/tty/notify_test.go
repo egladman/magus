@@ -112,7 +112,7 @@ func TestNotifierDropsTheOldestOnOverflow(t *testing.T) {
 	n.mu.Unlock()
 	assert.Equal(t, []string{"two", "three"}, got)
 	// The band GROWS to make room for the second notification, and growing
-	// rebuilds the region - which redraws every row it holds. So the buffer
+	// rebuilds the region, which redraws every row it holds. So the buffer
 	// carries the frame that was correct before the third arrived; what matters
 	// is the LAST frame, which is the one on screen.
 	last := buf.String()[strings.LastIndex(buf.String(), cursorSave):]
@@ -249,8 +249,8 @@ func TestNotifierPinUpdatesInPlaceAndClears(t *testing.T) {
 
 func TestNotifierSleepsWhenNothingCanExpire(t *testing.T) {
 	t.Parallel()
-	// The long-running property: a band holding only pinned conditions - which
-	// have no deadline by design - gives the sweeper nothing to wait for, so it
+	// The long-running property: a band holding only pinned conditions (which
+	// have no deadline by design) gives the sweeper nothing to wait for, so it
 	// arms no timer and wakes zero times. A TUI left open all afternoon must be
 	// as close to free as a process doing nothing.
 	var buf ttyBuf

@@ -107,7 +107,7 @@ func TestSpellMetadataAccessors(t *testing.T) {
 // TestSpellManifests covers WithManifests/Manifests: absent on a spell that
 // declares none, and returned in declared order (the first-existing-file-wins
 // contract lives in the caller that checks the filesystem, not here) for one
-// that does - Python's genuine multi-candidate case, ordered.
+// that does: Python's genuine multi-candidate case, ordered.
 func TestSpellManifests(t *testing.T) {
 	assert.Nil(t, NewSpell("docker").Manifests(), "a spell with no manifest declares nil")
 

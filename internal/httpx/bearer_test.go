@@ -49,7 +49,7 @@ func TestBearerGuard(t *testing.T) {
 	t.Run("valid bearer lowercase scheme", func(t *testing.T) { authorized(t, "bearer "+token, "") })
 	t.Run("valid bearer mixed-case scheme", func(t *testing.T) { authorized(t, "BeArEr "+token, "") })
 	// A query token is NOT a credential carrier for the header-only guard: a valid
-	// token in the URL must be rejected (RFC 6750 section 2.3 - keep secrets out of URLs).
+	// token in the URL must be rejected (RFC 6750 section 2.3: keep secrets out of URLs).
 	t.Run("valid query token rejected (header-only)", func(t *testing.T) { rejected(t, "", "token="+token) })
 	t.Run("header still wins with a bogus query token", func(t *testing.T) { authorized(t, "Bearer "+token, "token=wrong") })
 	// Rejections.

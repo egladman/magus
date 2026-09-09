@@ -7,7 +7,7 @@
 // and the page is served by that daemon from its own loopback /console/graph/. So
 // the link is http://<host>/console/graph/#<directives>, where <host> is the
 // daemon's loopback host:port; the browser loads the page and its graph DATA
-// (http://<host>/api/v1/graph) from the one same origin - nothing rides a hosted
+// (http://<host>/api/v1/graph) from the one same origin; nothing rides a hosted
 // static origin, and no #live= daemon param is needed (the origin already says
 // which daemon).
 //
@@ -58,10 +58,10 @@ type GraphLinkOpts struct {
 	// page honors blast, trace, critical, hubs, and orphans; unknown views are
 	// ignored by the page. A set View takes precedence over Query on the page.
 	View string
-	// Node, when set, is dropped into `node=` - the focus node for a blast/trace
+	// Node, when set, is dropped into `node=`, the focus node for a blast/trace
 	// view, or the node to select alongside a query.
 	Node string
-	// To, when set, is dropped into `to=` - the destination node for a trace view.
+	// To, when set, is dropped into `to=`, the destination node for a trace view.
 	To string
 }
 

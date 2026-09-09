@@ -397,7 +397,7 @@ func TestSnapshotOneBlobDedup(t *testing.T) {
 // and no diagnostic, so a declared output glob matching a stray pipe hung the
 // build; and a replay materializes every blob as a regular file, so a pipe could
 // never round-trip regardless. The old test fed a FIFO two write sessions to model
-// "the content changed between two reads" - which reader a writer paired with was
+// "the content changed between two reads"; which reader a writer paired with was
 // pure scheduling, so under load it deadlocked the package for its full ten-minute
 // timeout. The property it was really guarding, that a blob is named after the
 // bytes stored, is now structural: snapshotOne reads once and names from that pass.
@@ -578,7 +578,7 @@ func TestReplayRefusesSymlinkEscape(t *testing.T) {
 	require.NoError(t, os.MkdirAll(outside, 0o755))
 
 	// A real CAS blob, so a write that reaches replayBlob would actually escape.
-	// Without this the missing-blob error would mask the guard - the refusal must
+	// Without this the missing-blob error would mask the guard: the refusal must
 	// be the guard's, not a failed copy of a nonexistent blob.
 	src := filepath.Join(base, "payload")
 	require.NoError(t, os.WriteFile(src, []byte("attacker bytes"), 0o644))

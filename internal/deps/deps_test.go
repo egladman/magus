@@ -46,8 +46,8 @@ require golang.org/x/sys v0.30.0 // indirect
 
 // TestGoModule_ReplaceRecordsWhatBuilds pins the decision that a replaced module is
 // recorded at its REPLACEMENT's version. Recording the original requirement would
-// describe a version that is not on disk and never compiled - the precise flavour of
-// wrong this graph exists to prevent - so the node follows what builds and the Replaced
+// describe a version that is not on disk and never compiled (the precise flavour of
+// wrong this graph exists to prevent), so the node follows what builds and the Replaced
 // flag is what keeps that visible rather than silent.
 func TestGoModule_ReplaceRecordsWhatBuilds(t *testing.T) {
 	t.Parallel()
@@ -67,7 +67,7 @@ replace github.com/pkg/errors => github.com/pkg/errors v0.9.1
 
 // TestGoModule_LocalReplaceIsDropped covers the replacement form that has no version to
 // record at all. A directory replacement is how this repo wires libs/gopherbuzz and
-// libs/diagnostics, so it is the common case here, not an exotic one - and a local
+// libs/diagnostics, so it is the common case here, not an exotic one, and a local
 // module is a sibling project the graph already knows as a project node, not a
 // third-party package.
 func TestGoModule_LocalReplaceIsDropped(t *testing.T) {

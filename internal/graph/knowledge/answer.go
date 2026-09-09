@@ -7,7 +7,7 @@ import "github.com/egladman/magus/types"
 // It lives here, beside SeedsLazyLayer and CouldMatchLazyLayer, because the verdict is a claim
 // ABOUT them: `absent` asserts that everything which could have matched was consulted, and
 // only those predicates know what could have. The CLI, the MCP tools and the Connect
-// GraphService each used to assemble a reason themselves, and they drifted - for the same
+// GraphService each used to assemble a reason themselves, and they drifted: for the same
 // query against the same graph the CLI reported `absent` while MCP reported
 // `unknown / symbols-not-loaded`, because one gated on CouldMatchLazyLayer and the other did
 // not. None of them derives a verdict now; each reports what it observed and calls Answer.
@@ -19,7 +19,7 @@ import "github.com/egladman/magus/types"
 type Coverage struct {
 	// Seeded reports that the lazily-loaded @symbols shards were merged for this lookup.
 	Seeded bool
-	// Probed reports that the declared-index probe ran. False means Gaps says nothing - an
+	// Probed reports that the declared-index probe ran. False means Gaps says nothing: an
 	// empty gap list from a failed probe would read as verified coverage.
 	Probed bool
 	// Gaps are the projects whose declared symbol index could not be read.
@@ -30,7 +30,7 @@ type Coverage struct {
 	// index leaves a miss unverifiable. `magus refs` is the one: it resolves symbol nodes
 	// and consults nothing else. A general query reads many layers, and downgrading every
 	// empty one in an actively edited tree would make the verdict noise a caller learns to
-	// ignore - the same trap refs' -o name exit code documents.
+	// ignore, the same trap refs' -o name exit code documents.
 	IndexOnly bool
 }
 

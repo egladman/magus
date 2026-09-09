@@ -9,15 +9,15 @@ import (
 // produced it.
 //
 // Base is what makes this worth having over a bare string. Every path magus hands out
-// is relative to SOMETHING - a VCS status path to the repository root, a glob result to
-// the pattern's root, a footprint entry to the project directory - and a target's cwd is
+// is relative to SOMETHING (a VCS status path to the repository root, a glob result to
+// the pattern's root, a footprint entry to the project directory), and a target's cwd is
 // its project directory, not the workspace root. A []string forces every consumer to
 // know, out of band, which of those it was handed, and to be right; the failure is silent
 // and looks like a missing file. Carrying the base makes Resolve total: it needs no
 // argument, so there is no argument to get wrong.
 //
 // Base is empty when Value is already absolute, or when the producer genuinely does not
-// know - which is itself information a caller can test for, where a bare string offered
+// know, which is itself information a caller can test for, where a bare string offered
 // no way to ask.
 //
 // IsDir describes the intended filesystem kind when it is known. A directory is
@@ -75,7 +75,7 @@ func (p Path) RelativeTo(base string) (Path, error) {
 //
 // Base rides along deliberately. A Buzz caller that receives a path from vcs.status or a
 // glob needs to know what it is measured from to open it, and the object mirror carries
-// no methods - so the field is the only place that fact can live.
+// no methods, so the field is the only place that fact can live.
 func (p Path) BuzzObject() BuzzObject {
 	return BuzzObject{"value": p.Value, "base": p.Base, "isDir": p.IsDir}
 }

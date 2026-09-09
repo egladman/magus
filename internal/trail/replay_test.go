@@ -29,7 +29,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
 	// Most recent read first: this is the "what was it looking at" ordering.
 	assert.Equal(t, []string{"types/impact.go", "internal/cache/output.go"}, touches[0].Read)
-	// The PROGRAM, not the command line - see Touch.Ran. The argument list is dropped at
+	// The PROGRAM, not the command line; see Touch.Ran. The argument list is dropped at
 	// ingest, so this asserts the reduction rather than the recorded text.
 	assert.Equal(t, []string{"go"}, touches[0].Ran)
 }

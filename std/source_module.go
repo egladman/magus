@@ -13,9 +13,9 @@ import (
 // WHY THIS EXISTS. Every other module here is a Go implementation with a
 // generated Buzz trampoline, which means extending the standard library requires
 // writing Go, rebuilding the binary, and shipping a release. That is the right
-// trade for anything on a hot path - a Go binding beats an equivalent Buzz
+// trade for anything on a hot path (a Go binding beats an equivalent Buzz
 // implementation by 9-13x on string work and 2.2x even with no boundary to cross
-// (internal/interp/bindings/hostvsbuzz_bench_test.go) - and the wrong one for
+// (internal/interp/bindings/hostvsbuzz_bench_test.go)), and the wrong one for
 // everything else:
 //
 //   - POLICY that should be readable by the people it governs. tools/toolchain.buzz
@@ -26,7 +26,7 @@ import (
 //   - ITERATION without a rebuild.
 //
 // HOW IT WORKS, and why it needs almost nothing. gopherbuzz already executes a
-// declaration module that carries no native value - that is how `magus/spell`
+// declaration module that carries no native value: that is how `magus/spell`
 // gives spells their Command/Target types, and how upstream's own assert/suite/
 // testing modules are shipped. Real Buzz source, executed on import, exported
 // functions and object types, fully type-checked. The language side was already
@@ -103,8 +103,8 @@ func (m SourceModule) ImportPath() string {
 // describeSource parses a source module and derives its method list from the
 // exported functions the Buzz source declares.
 //
-// It reads the same three things a Go descriptor states by hand - the name, the
-// doc comment and the signature - straight off the AST, so the two can never
+// It reads the same three things a Go descriptor states by hand (the name, the
+// doc comment and the signature) straight off the AST, so the two can never
 // disagree. An `extern` is skipped: it is a forward declaration of something the
 // module does not implement.
 //
@@ -140,8 +140,8 @@ func describeSource(m SourceModule) ([]Method, error) {
 // sourceArgs renders a Buzz function's parameters as descriptor Args.
 //
 // The TYPE is carried as the annotation TEXT rather than mapped onto a TypeTag.
-// Buzz's type language is wider than the tag set - a function type, a nested map,
-// a declared object - so mapping would either lose information or reject a
+// Buzz's type language is wider than the tag set (a function type, a nested map,
+// a declared object), so mapping would either lose information or reject a
 // legitimate signature. Nothing generates marshaling code from these (the module
 // IS Buzz; there is no boundary to cross), so the text is the honest
 // representation and the one describe/docs should show.
@@ -187,8 +187,8 @@ func docSummary(doc string) string {
 }
 
 // SourceModulesAsModules projects every registered SourceModule into the Module
-// shape, so a consumer that renders modules - the docs generator, the langservice
-// manifest - handles both kinds through one code path instead of growing a second
+// shape, so a consumer that renders modules (the docs generator, the langservice
+// manifest) handles both kinds through one code path instead of growing a second
 // branch that drifts.
 //
 // The Methods are derived from the Buzz source; Impl is nil on every one, which is

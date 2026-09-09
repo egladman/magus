@@ -15,7 +15,7 @@ import (
 
 // TestLocalCollectSnapshot exercises the real provider path: a LocalCollect provider (telemetry
 // export OFF) records through the normal Provider methods, and Snapshot returns standard OTLP
-// protobuf carrying those values - the wire the /dashboard reads. No external export, no network.
+// protobuf carrying those values: the wire the /dashboard reads. No external export, no network.
 func TestLocalCollectSnapshot(t *testing.T) {
 	p, err := New(context.Background(), observability.Config{LocalCollect: true, ServiceName: "magus-test"})
 	require.NoError(t, err)

@@ -141,7 +141,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 	}
 
 	if s.immutable {
-		// Warn only when a prior store exists and diverges - a first-ever run
+		// Warn only when a prior store exists and diverges: a first-ever run
 		// under immutable mode is uninitialized, not stale.
 		if old != nil && (changed || old.prunable(present)) {
 			s.log.WarnContext(ctx, "magus: knowledge graph is stale but cache.write.enabled is false; serving a freshly assembled in-memory graph without persisting")
@@ -155,7 +155,7 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 
 	// optimization: on a no-op rebuild (nothing changed, nothing to prune) the
 	// on-disk manifest already matches, so skip rewriting it. This is the common
-	// steady-state path - every query rebuilds the graph - and it removes an
+	// steady-state path (every query rebuilds the graph), and it removes an
 	// atomic write (temp+rename) plus keeps the manifest's mtime stable.
 	//   measured: folded into the BenchmarkBuildNoop delta above; removes the
 	//             one guaranteed write from the otherwise write-free hot path.
@@ -204,7 +204,7 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 	// slice: AddNode and AddEdge are both FIRST-WRITER-WINS, so which shard supplies a
 	// node's Source (or which of two equally-confident edges survives) is decided by
 	// merge order. Ranging man.Shards directly took Go's randomized map order, which
-	// made the merged graph differ run to run - invisibly, because the output is sorted
+	// made the merged graph differ run to run, invisibly, because the output is sorted
 	// by ID afterward, so only the provenance fields moved and the node and edge counts
 	// never budged. That is what broke `magus run generate`'s drift gate: the committed
 	// gen/*.json and a freshly built one disagreed on "source" lines alone.
@@ -518,7 +518,7 @@ func (s *Store) removeShard(name string) error {
 // shardSlug maps a shard name to a filesystem-safe, collision-free filename:
 // a readable prefix plus a short hash of the full name. The name itself is
 // stored inside the file and keyed in the manifest, so the slug is never parsed
-// back - it only needs to be deterministic and unique.
+// back: it only needs to be deterministic and unique.
 func shardSlug(name string) string {
 	safe := strings.Map(func(r rune) rune {
 		switch {

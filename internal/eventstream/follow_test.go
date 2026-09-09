@@ -68,7 +68,7 @@ func TestFollowerReplayDoesNotRepeatOnFollow(t *testing.T) {
 
 // TestFollowerSkipsPartialLines is the property that makes reading a log while
 // magus writes it safe: an output-triggered page flush can split a line, and
-// half a JSON object must never reach a subscriber - nor be skipped once the
+// half a JSON object must never reach a subscriber, nor be skipped once the
 // rest of it lands.
 func TestFollowerSkipsPartialLines(t *testing.T) {
 	dir := t.TempDir()

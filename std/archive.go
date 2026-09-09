@@ -93,7 +93,7 @@ var Archive = Module{
 // The caller closes the handle.
 //
 // Read-only walks share this instead of archiveDispatch because dispatch is built
-// around extraction - every branch it selects takes a destination directory and
+// around extraction: every branch it selects takes a destination directory and
 // writes. Listing and reading one entry need the same format detection and none of
 // the writing.
 func archiveOpenRead(ctx context.Context, method, src string) (*os.File, []byte, error) {
@@ -116,8 +116,8 @@ func archiveOpenRead(ctx context.Context, method, src string) (*os.File, []byte,
 	return f, sniff[:n], nil
 }
 
-// archiveTarStream returns a tar reader over f's decompressed contents, or - when
-// the stream turns out to hold a single compressed file rather than a tar - a
+// archiveTarStream returns a tar reader over f's decompressed contents, or (when
+// the stream turns out to hold a single compressed file rather than a tar) a
 // reader over that file's bytes and the name it should carry. Exactly one of the
 // two is non-nil. closeFn releases the decompressor.
 //
@@ -127,7 +127,7 @@ func archiveTarStream(f *os.File, hdr []byte, threads int) (tr *tar.Reader, sing
 	noop := func() {}
 	base := strings.TrimSuffix(filepath.Base(f.Name()), filepath.Ext(f.Name()))
 
-	// Decompress by magic bytes, falling back to the extension - the same order
+	// Decompress by magic bytes, falling back to the extension, the same order
 	// archiveDispatch uses, so a read-only walk and an extraction never disagree
 	// about what an archive is.
 	var (
@@ -264,7 +264,7 @@ func ArchiveList(ctx context.Context, src string, opts map[string]any) ([]types.
 }
 
 // sortArchiveEntries orders entries by name so a listing is stable across formats
-// and across runs - zip preserves central-directory order and tar preserves write
+// and across runs: zip preserves central-directory order and tar preserves write
 // order, neither of which a caller should have to depend on.
 func sortArchiveEntries(entries []types.ArchiveEntry) {
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })

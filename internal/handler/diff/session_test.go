@@ -86,7 +86,7 @@ func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
 	}
 }
 
-// An empty `path=` must scope to NOTHING, not to the empty pathspec - every backend reads
+// An empty `path=` must scope to NOTHING, not to the empty pathspec; every backend reads
 // that as the whole repository, which is the opposite of what the caller asked for.
 func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
 	src := &fakePatchSource{}
@@ -291,7 +291,7 @@ func TestPublishingNothingIsNotAnError(t *testing.T) {
 
 // An AGENT's comment is never publishable. It reaches this session through MCP, and the set
 // sent is derived from the session rather than named by the request precisely so no caller can
-// widen it - an agent's remark going out under the human's name is the failure this prevents.
+// widen it: an agent's remark going out under the human's name is the failure this prevents.
 func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
@@ -316,7 +316,7 @@ func (fakeReview) ReviewOrigin(context.Context) types.ReviewOrigin {
 func (fakeReview) WorkingDiff(context.Context, []string) (string, error) { return "", nil }
 
 // With no provider wired there is no review, and that is a 200 with a reason rather than an
-// error. Every "cannot review here" - no provider, no pull request, an unreachable host -
+// error. Every "cannot review here" (no provider, no pull request, an unreachable host)
 // leaves the reader with the same options, and rendering any of them as a failure would
 // accuse them of something they did not do.
 func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
@@ -400,8 +400,8 @@ func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 // failure modes are the same mistake in different directions: 502 would hide a whole
 // conversation behind one bad remark, and silence would say a colleague said nothing.
 //
-// With no provider wired there is nothing to decode, so what this pins is the shape - threads
-// and reason travel together on one 200 - rather than the decode itself, which is pinned in
+// With no provider wired there is nothing to decode, so what this pins is the shape (threads
+// and reason travel together on one 200) rather than the decode itself, which is pinned in
 // internal/interp/bindings.
 func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
 	h := NewReviewHandler(fakeReview{}, nil)
@@ -433,7 +433,7 @@ func (f fakeReviewPatch) WorkingDiff(context.Context, []string) (string, error) 
 }
 
 // place resolves a thread onto the hunk holding its line, so both surfaces read one answer.
-// Exercised here because the route is where the patch and the threads meet - internal/diff
+// Exercised here because the route is where the patch and the threads meet; internal/diff
 // tests the arithmetic, and this tests that the route feeds it the right patch.
 func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 	h := NewReviewHandler(fakeReviewPatch{patch: "diff --git a/a.go b/a.go\n" +
@@ -483,7 +483,7 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 
 // withReviewProvider registers a fake provider for the whole review path, so the handler's
 // SUCCESS branches can be exercised. Without one, these routes could only ever be tested
-// failing - which left the reply and publish paths, where the real bugs were, uncovered.
+// failing, which left the reply and publish paths, where the real bugs were, uncovered.
 func withReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
 	name := "fake-status-review-" + t.Name()
@@ -707,7 +707,7 @@ func TestDiffBranchesWithNoWorkspaceIsAnEmptyArray(t *testing.T) {
 
 // Serving the conversation is not the same as the reader seeing it. The lookup marks threads new
 // by READING the watermark and must never advance it: an aborted fetch, a refresh mid-flight or a
-// second tab would otherwise consume the marks - and the notification with them, since the job
+// second tab would otherwise consume the marks, and the notification with them, since the job
 // that raises it compares against the same watermark. The surface says when it has drawn them,
 // through the session's `seen` op.
 func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {

@@ -38,12 +38,12 @@ type Explanations struct {
 //
 // Every input already existed and nothing joined them: the hotspot lens knows which files
 // absorb the most work, the notes store knows which code somebody wrote a reason down for,
-// and the gap between those two sets is where understanding has been deferred - the code
+// and the gap between those two sets is where understanding has been deferred: the code
 // most likely to be changed next by whoever knows least about it.
 //
 // It reports a RATIO rather than a list of shame. Naming ten files as unexplained in a
 // workspace that keeps no notes would be red on the first run and every run after, and a
-// check red by default is one people learn to skip - taking the real findings with it. The
+// check red by default is one people learn to skip, taking the real findings with it. The
 // advice fires only where it can mean something: a workspace that HAS notes, none of which
 // reach its hottest code.
 func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.DoctorCheck {
@@ -73,7 +73,7 @@ func (r *runner) checkUnexplainedHotspots(_ []*types.Project) types.DoctorCheck 
 	}
 	hot, err := analyzer.Hotspots(r.runCtx(), types.InsightOptions{Commits: unexplainedWindow, Files: true})
 	if err != nil || len(hot.Files) == 0 {
-		// No history is the common shape of this - a fresh clone, a non-git tree - and it
+		// No history is the common shape of this (a fresh clone, a non-git tree), and it
 		// is emphatically not "the hot code is all explained".
 		return types.DoctorCheck{
 			Name:     name,
@@ -125,7 +125,7 @@ func (r *runner) explanations() Explanations {
 // the hotspot lens reports.
 //
 // An absolute path compared against a relative one matches nothing, and the check would then
-// report every hot file as unexplained - a failure indistinguishable from a real finding.
+// report every hot file as unexplained: a failure indistinguishable from a real finding.
 func workspaceRelSet(root string, paths []string) map[string]bool {
 	out := make(map[string]bool, len(paths))
 	for _, p := range paths {

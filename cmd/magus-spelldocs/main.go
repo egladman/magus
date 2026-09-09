@@ -162,7 +162,7 @@ func main() {
 	// Renaming a spell used to leave its page behind, because this walked the registry
 	// and only ever wrote. `ts` became `typescript` (with py/rs/md) and the four stale
 	// pages stayed committed and still linked, so nothing looked wrong until a
-	// `magus clean docs` swept them - they are declared outputs - and the site's link
+	// `magus clean docs` swept them (they are declared outputs) and the site's link
 	// gate then failed on pages every checkout still had. Prune here so the rename in
 	// the registry is the only edit a rename needs.
 	if err := pruneUnregistered(*outDir, names); err != nil {
@@ -185,7 +185,7 @@ func main() {
 
 // resolvedArgv joins an op's command and arguments into the shell-free argv a
 // target forks (`go tool golangci-lint run ./...`). The declared defaults trail the
-// fixed args, as the runner appends them on a no-args invocation - the invocation
+// fixed args, as the runner appends them on a no-args invocation, the invocation
 // this page documents. Empty for a marker op with no command (an opaque spell's
 // aggregate target).
 func resolvedArgv(op spells.Op) string {
@@ -313,7 +313,7 @@ func renderSpell(d spells.Descriptor) string {
 
 // writeArgsSection emits the "Passing arguments to ops" reference: the options
 // map every op invocation accepts, keyed by type. invoker is the binding a caller
-// writes before the op index - a spell's own name on its page (`go["<op>"]`), or
+// writes before the op index: a spell's own name on its page (`go["<op>"]`), or
 // the generic `spell` on the index. One helper keeps the per-spell pages and the
 // index identical, mirroring the real contract in
 // internal/interp/bindings.spellOptsFromBuzz.

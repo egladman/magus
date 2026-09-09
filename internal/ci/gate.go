@@ -19,9 +19,9 @@
 //
 // A deferral is never a success: the command either fully runs, or refuses
 // with exit 75. There is no silent-skip-exit-0 state, and every refusal and
-// advisory prints the full decision - the green gate matched, every changed
+// advisory prints the full decision (the green gate matched, every changed
 // path with its class and the declaration that classified it, and the pool
-// state - so a reader can reconstruct and dispute it from the message alone.
+// state), so a reader can reconstruct and dispute it from the message alone.
 
 package ci
 
@@ -189,7 +189,7 @@ func (d GateDelta) LowRiskOnly() bool {
 	return !slices.ContainsFunc(d.Paths, func(v ClassifiedPath) bool { return v.Class == ClassCode })
 }
 
-// Lines renders one verdict line per path - every file, never a summary,
+// Lines renders one verdict line per path: every file, never a summary,
 // because the refusal's reader must be able to reconstruct the decision.
 func (d GateDelta) Lines() []string {
 	out := make([]string, len(d.Paths))
@@ -209,7 +209,7 @@ const ProseOriginDefault = "built-in default"
 
 // ProseScope is one source of prose globs: the built-in default set, or one
 // project's gate_low_risk declaration. Globs match the way review_required's
-// do - relative to the declaring project's directory - so an author names
+// do (relative to the declaring project's directory), so an author names
 // files the same way their sources and outputs already do.
 type ProseScope struct {
 	// Dir is the declaring project's workspace-relative path; "" or "." matches
@@ -319,7 +319,7 @@ func (c ChangeClassifier) classify(ctx context.Context, p, role, green string) (
 	// and every language gets it the same way: a syntax the language's SPELL
 	// declared (mgs_getCommentSyntax), consumed by one string-aware stripper -
 	// Go and Buzz included, so "comment-only" means one thing. A language
-	// whose spell declared nothing classifies as code - guessing delimiters
+	// whose spell declared nothing classifies as code: guessing delimiters
 	// would trade one false comment-only for trust in every refusal after it.
 	ext := strings.ToLower(path.Ext(p))
 	if syn, ok := c.Syntax[ext]; ok {
@@ -356,7 +356,7 @@ func quoteGlob(glob string) string { return `"` + glob + `"` }
 
 // CommentOnlyDeclared reports whether two sources of a declared language
 // differ only in comments: both strip to byte-identical text. No token-stream
-// normalization happens - whitespace may be semantics (Python indentation),
+// normalization happens: whitespace may be semantics (Python indentation),
 // so the only thing removed is the comment spans themselves. Reformatting a
 // code line therefore re-gates even in languages where it is inert, which is
 // the safe direction.
@@ -623,7 +623,7 @@ func (f InheritFinding) AnnotationText() string {
 
 // SummaryMarkdown renders the finding for the workflow's job summary, under
 // the same explicitness contract: every file, its class, and what classified
-// it - never a count.
+// it, never a count.
 func (f InheritFinding) SummaryMarkdown() string {
 	var b strings.Builder
 	b.WriteString("### Inherited verdict\n\n")

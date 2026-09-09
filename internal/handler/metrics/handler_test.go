@@ -79,7 +79,7 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 
 // A tick whose collection failed leaves the counters UNSET rather than zero. Zero is a
 // measurement, and in a cumulative series it reads downstream as a counter reset followed
-// by a spike - so this is the difference between "we did not look" and "nothing happened".
+// by a spike, so this is the difference between "we did not look" and "nothing happened".
 func TestSampleOnceLeavesFailedReadsUnset(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
 	svc := NewService(fakeCollector{err: errors.New("collect boom")}, fakeStatus{},

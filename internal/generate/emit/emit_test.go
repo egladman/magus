@@ -111,7 +111,7 @@ func TestRegionRefusesAmbiguity(t *testing.T) {
 // TestFileSurfacesAnUnreadablePath covers the read error that is neither nil nor
 // NotExist. The distinction matters: a missing file is the normal first-generation
 // case and must fall through to the write, while anything else means the path is
-// not a file this generator may own - and silently proceeding to WriteFile there
+// not a file this generator may own, and silently proceeding to WriteFile there
 // would report success for output that never landed.
 func TestFileSurfacesAnUnreadablePath(t *testing.T) {
 	dir := t.TempDir()
@@ -127,7 +127,7 @@ func TestFileSurfacesAnUnreadablePath(t *testing.T) {
 
 // TestGoTemplateNamesTheFailingKey covers the template-execution branch. missingkey
 // =error is what turned a misspelled field from a silent "<no value>" in shipped
-// output into a failure, so the error must name the lookup that failed - otherwise
+// output into a failure, so the error must name the lookup that failed; otherwise
 // the report is "template failed" over a template with fifty fields.
 func TestGoTemplateNamesTheFailingKey(t *testing.T) {
 	tmpl := template.Must(template.New("x").Option("missingkey=error").

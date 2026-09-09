@@ -37,7 +37,7 @@ func TestLocalSkillNameIsReserved(t *testing.T) {
 // or be shadowed by its own. The collision is silent: WriteSkillTree writes
 // whichever entry comes last, so one of the two skills simply vanishes from
 // the installed tree with nothing reporting it. Same hazard as
-// LocalSkillName, same fix - assert it rather than remember it.
+// LocalSkillName, same fix: assert it rather than remember it.
 func TestFullTwinNamesAreReserved(t *testing.T) {
 	shipped := make(map[string]bool, len(skillSources))
 	for _, source := range skillSources {
@@ -87,7 +87,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 
 // TestCheckStatusesIgnoresASkillMagusDidNotWrite pins the other half of the promise
 // LocalSkillName makes. A workspace is told to put its own rules in a skill beside the
-// installed ones, and that file carries no stamp - so grading it reported drift on every
+// installed ones, and that file carries no stamp, so grading it reported drift on every
 // run with a remedy that could not work, since install writes only the names magus ships
 // and would never stamp it.
 func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
@@ -115,9 +115,9 @@ func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 // TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote pins the deletion half of the
 // install contract, its opt-in, and the limit on it.
 //
-// Renaming a skill used to leave the old directory installed forever - still
+// Renaming a skill used to leave the old directory installed forever (still
 // stamped, still loaded by the host, still teaching whatever it said the day it
-// was orphaned - because install owned its writes and nothing owned its
+// was orphaned) because install owned its writes and nothing owned its
 // deletions. Pruning closes that. The stamp is what keeps it safe: a
 // hand-authored skill sits in the same folder (magus-skill-authoring here, a
 // workspace's own magus-local-development in a consuming repo) and is not
@@ -223,7 +223,7 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 // TestFormBothWritesTwinsStampedFull pins the mixed-batch property: one FormBoth
 // install produces entries of BOTH variants, so the stamp has to follow each
 // entry's own Variant rather than the form that was requested. Keying off the
-// request instead would stamp every twin "short" - mislabelling the copy a
+// request instead would stamp every twin "short", mislabelling the copy a
 // delegated model was handed precisely because it needed full.
 func TestFormBothWritesTwinsStampedFull(t *testing.T) {
 	catalog := testCatalog(t)
@@ -388,7 +388,7 @@ func TestSkillDigestIsPerSkill(t *testing.T) {
 	assert.NotEqual(t, first, second, "two skills must not share a digest, or one edit restamps both")
 
 	// A twin is rendered from its primary's body, so the two report the same
-	// value and go stale together - the invariant StampSkill's comment names.
+	// value and go stale together: the invariant StampSkill's comment names.
 	assert.Equal(t, first, catalog.SkillDigest(FullTwinName("magus-query")))
 
 	assert.Equal(t, "unreadable", catalog.SkillDigest("magus-not-a-skill"))

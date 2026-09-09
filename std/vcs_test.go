@@ -9,13 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The vcs accessors had no direct unit coverage at all - they were exercised only through
+// The vcs accessors had no direct unit coverage at all: they were exercised only through
 // interp integration tests, which run with a workspace on the context and a real checkout
 // under the process cwd. That left the branch that matters least tested and most recently
 // changed: what happens when there is NO VCS to ask.
 //
 // These pin the contract that replaced the empty-string sentinels: outside a checkout every
-// accessor RAISES rather than handing back "" - because "" is a value a branch name or a
+// accessor RAISES rather than handing back "", because "" is a value a branch name or a
 // subject line can legitimately hold, and a caller that forgot to test for it would
 // interpolate an empty commit into a version string with nothing to surface it.
 //
@@ -23,7 +23,7 @@ import (
 // resolveVCS picks a DRIVER (git is on PATH), so it resolves even in a bare temp dir, and
 // it is the git command that then fails. The v == nil branch needs git itself to be absent.
 // So these run against a real driver failing on a non-repo, which is the path a user
-// actually hits - building from a release tarball or a container context.
+// actually hits: building from a release tarball or a container context.
 
 // chdirOutsideAnyRepo moves the process into a bare temp dir for the duration of the test,
 // so nothing resolves a VCS by walking up from the magus checkout the tests run in.
@@ -73,7 +73,7 @@ func TestVcsHistoryRaisesWithNoVCS(t *testing.T) {
 }
 
 // TestVcsIsDirtyRaisesWhenTheProbeFails is the most important one here. is_dirty is the
-// drift-gate primitive - a generate target asks it "did my output change?" - and it used to
+// drift-gate primitive (a generate target asks it "did my output change?"), and it used to
 // answer false when the git status probe FAILED. That is a gate reporting clean after a
 // check that never ran, which is the one thing a gate must never do quietly.
 //
@@ -88,7 +88,7 @@ func TestVcsIsDirtyRaisesWhenTheProbeFails(t *testing.T) {
 }
 
 // TestVcsNameNeverRaises: name is the detection half of the pair and must stay answerable
-// without a catch - the same split as os.env and os.lookupEnv, and what lets the accessors
+// without a catch, the same split as os.env and os.lookupEnv, and what lets the accessors
 // above afford to raise.
 //
 // It reports the resolved DRIVER, so in this bare temp dir it is still "git": the driver
@@ -134,7 +134,7 @@ func TestOsWhichRaisesForAMissingCommand(t *testing.T) {
 	})
 
 	t.Run("raises for a missing one", func(t *testing.T) {
-		// Previously "" - so a caller that skipped the equality check passed the empty
+		// Previously "", so a caller that skipped the equality check passed the empty
 		// string straight into an exec or a path join.
 		got, err := OsWhich(ctx, "definitely-no-such-cmd-zzz")
 		require.Error(t, err)
@@ -166,6 +166,6 @@ func TestFsExistsDistinguishesAbsenceFromDenial(t *testing.T) {
 }
 
 // The per-backend prefix stripping lives in the drivers, where each one knows its own format
-// instead of being keyed on its NAME - a switch on the name silently gives any backend
+// instead of being keyed on its NAME: a switch on the name silently gives any backend
 // outside it git's parsing. vcs.TestParityDirtyFilesReturnsPaths pins the rule against every
 // real binary; there is nothing for std to strip.

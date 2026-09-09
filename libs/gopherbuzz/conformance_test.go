@@ -5,7 +5,7 @@ package buzz_test //nolint:testlayout // in-package would close a cycle: gopherb
 // behavior suite against gopherbuzz. This comment used to name a score, and the
 // score it named was wrong twice over: "13 of 84" came from a hand-count against
 // an UNPINNED upstream checkout, which is both the wrong file count (83 at the
-// pin) and the wrong result - README.md calls out that exact mistake. The count
+// pin) and the wrong result; README.md calls out that exact mistake. The count
 // belongs in one place only, testdata/upstream-behavior-allowlist.txt, which this
 // test enforces. TestUpstreamConformance makes that number a checked,
 // monotonic fact instead of an unverified claim: it fails if a passing file
@@ -33,7 +33,7 @@ const allowlistPath = "testdata/upstream-behavior-allowlist.txt"
 // upstreamCheckoutDir resolves the upstream buzz-language/buzz checkout: the
 // GOPHERBUZZ_UPSTREAM_DIR env var if set, else ~/Repos/buzz. It reports ok=false
 // (never an error) so the caller can t.Skip cleanly on a machine without the
-// checkout - this test must stay hermetic and green in that case.
+// checkout: this test must stay hermetic and green in that case.
 func upstreamCheckoutDir() (dir string, ok bool) {
 	if v := os.Getenv("GOPHERBUZZ_UPSTREAM_DIR"); v != "" {
 		dir = v
@@ -94,7 +94,7 @@ func TestUpstreamConformance(t *testing.T) {
 		case !allowed[name] && pass:
 			improvements = append(improvements, name)
 		case !allowed[name] && !pass:
-			// Not a failure - this file is known-red. Log WHY at -v so closing a
+			// Not a failure: this file is known-red. Log WHY at -v so closing a
 			// gap starts with a diagnosis instead of a hacked copy of this loop.
 			t.Logf("still failing (not allowlisted): %s: %s", name, detail)
 		}
@@ -102,7 +102,7 @@ func TestUpstreamConformance(t *testing.T) {
 
 	// An allowlist entry naming a file the upstream checkout no longer has is
 	// itself a regression signal (upstream renamed or removed a test we claimed
-	// to pass) - fold it into the same failure so it isn't silently ignored.
+	// to pass); fold it into the same failure so it isn't silently ignored.
 	for name := range allowed {
 		if !seen[name] {
 			regressions = append(regressions, fmt.Sprintf("%s: allowlisted but not found in %s", name, behaviorDir))
@@ -198,7 +198,7 @@ var upstreamRefSHA = regexp.MustCompile(`-g([0-9a-f]+)$`)
 // against the sha pinned in buzz.UpstreamRef, logging (never failing) a warning
 // on mismatch: the conformance numbers below are only meaningful measured
 // against that exact pinned commit, but a stale local checkout should not block
-// this test from running - it just means the result is against a different (and
+// this test from running: it just means the result is against a different (and
 // possibly non-comparable) upstream state.
 // skipIfUpstreamRefMismatch skips when the checkout is not at the pinned commit.
 //
@@ -209,7 +209,7 @@ var upstreamRefSHA = regexp.MustCompile(`-g([0-9a-f]+)$`)
 // improvements) and an older one removes files it lists (reported as regressions).
 // Either way the failure says nothing about gopherbuzz. Failing on it would also
 // make a plain `go test ./...` red for anyone who happens to keep a buzz checkout
-// at ~/Repos/buzz, which is the fallback path - a spurious failure on unrelated
+// at ~/Repos/buzz, which is the fallback path; a spurious failure on unrelated
 // work is worse than no measurement.
 func skipIfUpstreamRefMismatch(t *testing.T, dir string) {
 	t.Helper()
@@ -392,12 +392,12 @@ func TestUpstreamFuzzCorpusDoesNotPanic(t *testing.T) {
 // the checkout root (fs.buzz stats README.md, run-file.buzz runs
 // tests/utils/testing.buzz), so the working directory has to look like that root.
 // But os.buzz asserts `os\execute(["./zig-out/bin/buzz", "--version"]) == 0`, and
-// upstream drops its interpreter there from its own Zig build - a path this repo
+// upstream drops its interpreter there from its own Zig build: a path this repo
 // cannot create, because the checkout is shared and pinned and must stay pristine.
 //
 // Symlinking every top-level entry into a temp dir satisfies both: relative reads
 // resolve through to the real checkout, and zig-out is ours to populate. Nothing is
-// copied (the checkout is ~8M but that is beside the point - it is READ-ONLY to us)
+// copied (the checkout is ~8M but that is beside the point; it is READ-ONLY to us)
 // and nothing is written back.
 //
 // gopherbuzz's own interpreter stands in for upstream's, which is the honest

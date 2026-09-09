@@ -13,8 +13,8 @@ type PatchOp struct {
 	Value string      `json:"value,omitempty"`
 	// From is the move/copy source JSON Pointer. The Buzz field is named fromPtr
 	// because `from` is a reserved word in Buzz, so no mirror can declare it; the JSON
-	// stays "from" (RFC 6902). Everything on the Buzz side of the boundary - the charm
-	// constructors that emit it, the decoder that reads it back, and the mirror - uses
+	// stays "from" (RFC 6902). Everything on the Buzz side of the boundary (the charm
+	// constructors that emit it, the decoder that reads it back, and the mirror) uses
 	// fromPtr. They did not always agree: the constructors emitted "from", which the
 	// mirror said was called fromPtr, so an annotated charm would have read an empty
 	// field. Nothing caught it because nothing referenced the Buzz name.
@@ -62,12 +62,12 @@ type Command struct {
 	// Sources, when non-empty, are doublestar globs (relative to the project
 	// directory this command runs in) that the RUNNER expands into a file list
 	// at EXECUTION time, via the same walk that builds the cache key
-	// (cache.ExpandSources) - so a Sources-declaring op inherits the workspace's
+	// (cache.ExpandSources), so a Sources-declaring op inherits the workspace's
 	// declared ignore dirs (the core project.IgnoreDirs plus the issuing spell's
 	// own mgs_listIgnoreDirs) instead of hardcoding directory names.
 	//
 	// An op handler runs ONCE with a null Target and is reduced to a static
-	// {bin, args} record, so it cannot walk a project directory itself - which is
+	// {bin, args} record, so it cannot walk a project directory itself, which is
 	// why a spell used to shell out to `find | xargs`. Declaring Sources defers
 	// that walk to the runner, per project, with no shell involved.
 	//
@@ -94,8 +94,8 @@ type Command struct {
 	// It is the declarative escape hatch for the two shapes that cannot reach a
 	// magusfile body: a command op (static argv) and a provided project (no magusfile).
 	// Refs resolve through the same secret.Resolver at spawn and are injected into ONLY
-	// this child's environment - never into Args, never logged, never returned by
-	// `magus describe` - and Resolver.Read registers each value for redaction. Charms
+	// this child's environment (never into Args, never logged, never returned by
+	// `magus describe`), and Resolver.Read registers each value for redaction. Charms
 	// patch Args only. Refs are static data, so the op stays hashable and describable
 	// without ever holding a secret.
 	Secrets map[string]string `json:"secrets,omitempty"`
@@ -110,14 +110,14 @@ type Command struct {
 	//
 	// `json:"-"` is LOAD-BEARING. BuiltinsHash marshals the resolved registry into
 	// every project's SpellDefVersion, so a serialized field puts its contents in every
-	// cache key - rewording a sentence of advice would invalidate every target in every
+	// cache key; rewording a sentence of advice would invalidate every target in every
 	// project. Doc is excluded for the same reason. JSON is not used to transport an
 	// Op; the only marshal of the registry is the hash itself.
 	Hints []Hint `json:"-"`
 }
 
 // SourcesPlaceholder renders Sources as a single human-readable argv token, for a
-// renderer that cannot execute the runner's real expansion - `magus describe` and
+// renderer that cannot execute the runner's real expansion: `magus describe` and
 // the dry-run preview both render a Command outside any project directory, so
 // neither can walk Sources into real files the way runCommand does at execution
 // time. nil when Sources is unset, so an ordinary Command's rendered argv is
@@ -151,14 +151,14 @@ type Hint struct {
 	// streams would fire on output that appeared in neither.
 	Contains string `json:"contains"`
 	// Advise is the text magus prints. Write the command to run rather than the
-	// diagnosis - it is printed after the tool's own error, which already said what
+	// diagnosis; it is printed after the tool's own error, which already said what
 	// went wrong.
 	Advise string `json:"advise"`
 }
 
 // Op kinds. A kind lives on the op, not the spell: one spell freely mixes command
 // ops and service ops under one name. The kind is inferred from what the op handler
-// returns - a [Command] (OpKindCommand) or a [Service] (OpKindService) - so
+// returns, a [Command] (OpKindCommand) or a [Service] (OpKindService), so
 // authoring stays a single mgs_listTargets. Both are declarative data differing only
 // in lifecycle (run-to-completion vs long-running), not the imperative handler split
 // magus removed. An empty Op.Kind means OpKindCommand.
@@ -175,7 +175,7 @@ const (
 // learns the process is up and gates dependents on it), and Stop is a graceful-shutdown
 // command run instead of signaling the process (also replayed by the daemon's crash
 // reaper).
-// Like [Command] each is static data - inspectable, cache-keyable, charm-patchable. It
+// Like [Command] each is static data: inspectable, cache-keyable, charm-patchable. It
 // is a distinct return type (vs [Command]) so an op's kind is inferred from what it
 // returns. magus-utils types mirrors it to the Buzz `object Service` a service op returns.
 type Service struct {

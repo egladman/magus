@@ -33,7 +33,7 @@ type outputReader interface {
 }
 
 // outputTool (magus_output) retrieves one target execution's captured output by its
-// reference id - the MCP analog of `magus query output <ref>`. It is a dedicated tool,
+// reference id, the MCP analog of `magus query output <ref>`. It is a dedicated tool,
 // not a mode of magus_query, so a free-text graph query can never collide with a ref id.
 type outputTool struct {
 	reader outputReader
@@ -91,7 +91,7 @@ func (t *outputTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 // refNotFoundError renders the "no stored output" error for a ref OutputByRef could not
 // resolve. It best-effort-inverts the ref back to the target(s) that would produce it
 // (IdentifyRef) and folds the finding into the error message in the same three shapes
-// cmd/magus/query.go's printIdentifyRefSuggestion renders for the CLI - compacted to
+// cmd/magus/query.go's printIdentifyRefSuggestion renders for the CLI, compacted to
 // one sentence plus the command(s), since this is an agent-facing tool error rather
 // than a terminal layout. An MCP tool failure is still the right shape here (the
 // agent asked for bytes that do not exist), only the message gets richer.

@@ -14,10 +14,10 @@ import (
 // `MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}`, so it is
 // false on every PR run and true on a push to main. A write-disabled cache writes no
 // entry, so every test that runs a step twice and asserts the second is a HIT fails on
-// a PR and passes everywhere else - including locally, where the variable is unset.
+// a PR and passes everywhere else, including locally, where the variable is unset.
 //
 // Tests that care about a value still set it themselves with t.Setenv, which runs
-// after this and restores afterwards - defaults_test.go does exactly that for
+// after this and restores afterwards; defaults_test.go does exactly that for
 // MAGUS_CONCURRENCY and GITHUB_ACTIONS. Clearing here rather than per-test also keeps
 // t.Parallel available, which t.Setenv would forbid.
 // MAGUS_LEVEL and MAGUS_INVOCATION_ANCESTORS are cleared for the same reason and they
@@ -27,7 +27,7 @@ import (
 // against the harness's invocation rather than the one the test set up.
 //
 // Both, not one. Clearing only the level left the ancestry behind, and the test for a
-// run that has LOST its ancestry then found one - so it queued instead of refusing and
+// run that has LOST its ancestry then found one, so it queued instead of refusing and
 // hung the package for ten minutes. A test that wants either says so with t.Setenv.
 func TestMain(m *testing.M) {
 	for _, k := range []string{

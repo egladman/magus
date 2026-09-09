@@ -74,9 +74,9 @@ func registerWASMCompatibleMagusModules(ctx context.Context, sess *buzz.Session)
 // PlaygroundHostModules names every magus host module the browser playground makes
 // available: the WASM-compatible bare imports (registered above) plus "magus", which
 // installHost registers as a native module like the rest, so the playground is a
-// blank slate and every surface it offers is reached by an explicit import - the same
-// import a magusfile writes. It is the single truth for what runs in the playground - kept next to the
-// wiring so the two can't drift - and the langservice manifest diffs against it to
+// blank slate and every surface it offers is reached by an explicit import, the same
+// import a magusfile writes. It is the single truth for what runs in the playground (kept next to the
+// wiring so the two can't drift), and the langservice manifest diffs against it to
 // decide which modules are reference-only there. Because magus is listed here (it is
 // genuinely wired), it is never reported as excluded: no special-casing downstream.
 func PlaygroundHostModules() []string {
@@ -159,7 +159,7 @@ func WithCatalog(c SpellCatalog) EvalOption {
 //
 // With WithTracer, it instead runs src as a magusfile dry run:
 // the tracing magus/spell host is layered on, every target is probed once, and
-// the ordered host-op Trace those targets would perform is returned - so a spell
+// the ordered host-op Trace those targets would perform is returned, so a spell
 // example like `import "magus/spell/go"; go["go-build"]()` reports a `go build` op
 // instead of forking anything. A parse/compile failure returns a Diag; a target
 // that panics mid-probe still yields the ops traced up to the panic.
@@ -187,7 +187,7 @@ func Eval(ctx context.Context, src string, opts ...EvalOption) EvalResult {
 			for _, o := range ops {
 				// Charms are off in the docs tracer, so renderCommand cannot fail on a
 				// patch; a decode error would mean a malformed docs spell (constructor-built
-				// patches never are), rendering an empty command - fine for the preview.
+				// patches never are), rendering an empty command, fine for the preview.
 				detail, _ := o.renderCommand(nil)
 				trace = append(trace, Op{Target: o.name, Kind: o.kind, Name: o.name, Detail: detail})
 				for _, w := range o.wards {
@@ -275,7 +275,7 @@ func toDiag(err error) *Diag {
 // normal run"), so evaluating a snippet full of assertions here is a silent no-op:
 // OK is true, Output is empty, and a DELIBERATELY FAILING assertion looks exactly
 // like a passing one. A docs page nearly shipped with a Run button over such a
-// block - it would have rendered nothing while teaching that the assertions held.
+// block; it would have rendered nothing while teaching that the assertions held.
 //
 // Skipping them is correct; being quiet about it is not. The note goes in Output so
 // the playground shows it where the results would have been, and a docs author sees

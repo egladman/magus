@@ -121,7 +121,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		// held while a cause was always ONE error whose message happened to wrap.
 		// It stopped holding once errors.Join made a cause routinely carry several
 		// INDEPENDENT failures, because flattening then ran two unrelated ones into
-		// a single sentence with no boundary - see
+		// a single sentence with no boundary; see
 		// TestFailureCausesSplitsAndStripsPlumbing for the real string that produced.
 		// Scannability is now served by a hanging indent instead of by one line.
 		assert.Contains(t, out, "cause: compile failed:\n       undefined: Widget",
@@ -519,7 +519,7 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 		slog.String("error", "boom"),
 	)), "Handle cache.error")
 	// Everything the summary itself writes, isolated from what came before it.
-	// The band GROWS as failures arrive, and a grow rebuilds the region - which
+	// The band GROWS as failures arrive, and a grow rebuilds the region, which
 	// resets the margins on its way to setting new ones. Asserting over the
 	// whole transcript would see that earlier reset and read it as a teardown
 	// the summary did not perform.
@@ -628,7 +628,7 @@ func TestStatusLineRender(t *testing.T) {
 		// The blocked state deliberately does NOT appear here: it is announced
 		// once, as the pinned notification, which is bold and carries the
 		// remedy. Saying it in both places said the same facts twice for one
-		// event. The fields are still set - blockedMessage reads them.
+		// event. The fields are still set: blockedMessage reads them.
 		{"a blocked run does not repeat itself here", statusLine{capacity: 8, blocked: "web/api"}, "□ □ □ □ □ □ □ □ (0/8)"},
 		{"nor when the holder is known", statusLine{capacity: 8, blocked: ".", blockedBy: "pid 71557 (magus run serve)"}, "□ □ □ □ □ □ □ □ (0/8)"},
 		{
@@ -811,8 +811,8 @@ func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 
 // TestPrettyHandlerPrintsAfterCancellation pins that a cancelled context does NOT silence
 // a record. PrettyHandler is the DEFAULT handler, and it used to early-return on
-// ctx.Err(). That was inert for as long as it existed - every call site logged through
-// slog.Logger.Info, which passes context.Background() - so nothing noticed. When the run
+// ctx.Err(). That was inert for as long as it existed (every call site logged through
+// slog.Logger.Info, which passes context.Background()), so nothing noticed. When the run
 // path began passing its real context (so records could reach the secret resolver), the
 // check woke up and started eating output: in a concurrent run the first failure cancels
 // the errgroup, so every [pass]/[fail] line that finished afterwards, the [summary]
@@ -947,7 +947,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 // TestPrettyHandlerResetsPerRunStateAcrossRuns is the long-lived-process
 // property: this handler is per-PROCESS, but everything it shows is per-RUN.
 //
-// Anything that outlives a single run - a TUI left open, the daemon - drives
+// Anything that outlives a single run (a TUI left open, the daemon) drives
 // more than one through the same handler, and without the split the second run
 // reports the first one's failures and a clock that started before it did.
 func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
@@ -987,8 +987,8 @@ func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
 // TestNoEscapeSequencesEverReachAPipe is the CI persona's one demand, as a
 // gate rather than a promise.
 //
-// Everything this package gained - a pinned band, notifications, a selection
-// highlight, hyperlinked refs - emits escape sequences, and every one of them
+// Everything this package gained (a pinned band, notifications, a selection
+// highlight, hyperlinked refs) emits escape sequences, and every one of them
 // is supposed to be gated on the writer being a terminal. Gates are easy to add
 // and easy to forget, and the failure mode is not subtle: a CI log full of
 // \x1b[2m garbage, in the output people read when something is already broken.
@@ -1066,7 +1066,7 @@ func TestBandHonoursNoColor(t *testing.T) {
 //
 // A click resolves through tty.Zone's row arithmetic into this handler's band
 // layout. If those two ever disagree by one row, clicking a failure reruns a
-// DIFFERENT target than the one under the pointer - silently, and destructively,
+// DIFFERENT target than the one under the pointer, silently, and destructively,
 // since rerunning is an action. Both sides were tested against their own idea of
 // where the rows are; neither was tested against where the text actually landed.
 //
@@ -1143,7 +1143,7 @@ func TestRecordBoolSurvivesAWrongType(t *testing.T) {
 }
 
 // TestRecordDurAcceptsBothSpellings guards the silent zero. A caller reaching
-// for slog.Duration - the obvious constructor - used to get 0 back, because
+// for slog.Duration (the obvious constructor) used to get 0 back, because
 // only the Int64 spelling was accepted.
 func TestRecordDurAcceptsBothSpellings(t *testing.T) {
 	t.Parallel()
@@ -1157,7 +1157,7 @@ func TestRecordDurAcceptsBothSpellings(t *testing.T) {
 }
 
 // TestPrettyHandlerRefLegend covers the one line that makes a bare output ref
-// actionable to a reader who has never met one - most often an agent, in a fresh
+// actionable to a reader who has never met one: most often an agent, in a fresh
 // worktree, under a tool that installed no magus skills.
 func TestPrettyHandlerRefLegend(t *testing.T) {
 	t.Parallel()

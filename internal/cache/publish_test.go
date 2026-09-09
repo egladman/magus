@@ -20,7 +20,7 @@ import (
 
 // TestRemoteHitResolvesProducersRef is Phase 3's acceptance check: machine A builds
 // and pushes; machine B, with an EMPTY cache, gets a remote hit and resolves A's
-// exact ref to A's bytes - instead of minting a fresh local ref for identical inputs.
+// exact ref to A's bytes, instead of minting a fresh local ref for identical inputs.
 func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
 	require.NoError(t, err, "NewFSRemoteBackend")
@@ -61,7 +61,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 	require.NoError(t, err, "the key inputs travel too, so B can diff its key against A's")
 	assert.Equal(t, rA.Hash, hashOfLines(DigestEnvValues(lines)), "the imported lines re-derive the shared key")
 
-	// Ref equality alone proves nothing - refs are key-derived, so B would compute
+	// Ref equality alone proves nothing: refs are key-derived, so B would compute
 	// A's ref even if the artifact shipped no sidecars at all. Assert what actually
 	// crossed the wire.
 	names := tarMemberNames(t, findBackendArtifact(t, remote, "test__pkg"))
@@ -98,7 +98,7 @@ func tarMemberNames(t *testing.T, path string) []string {
 }
 
 // TestImportRejectsTamperedLog: the signature now covers every non-manifest member,
-// so flipping the build log inside an otherwise valid artifact fails the import - and
+// so flipping the build log inside an otherwise valid artifact fails the import, and
 // nothing from the rejected artifact is left on disk.
 func TestImportRejectsTamperedLog(t *testing.T) {
 	remote, err := NewFSRemoteBackend(t.TempDir())
@@ -122,7 +122,7 @@ func TestImportRejectsTamperedLog(t *testing.T) {
 	require.Error(t, err, "a tampered log must fail verification")
 	assert.Contains(t, err.Error(), "signature")
 
-	// The rejected artifact leaves nothing behind - not even the log it smuggled.
+	// The rejected artifact leaves nothing behind: not even the log it smuggled.
 	var found []string
 	_ = filepath.WalkDir(cB.dir, func(p string, d os.DirEntry, werr error) error {
 		if werr == nil && !d.IsDir() {
@@ -332,7 +332,7 @@ func rewriteTarMember(t *testing.T, path string, sel func(name string) bool, bod
 }
 
 // The cache is shared machine-wide, so two importers of one entry can stage
-// concurrently: a fixed staging name lets one clobber the other's temp file - and
+// concurrently: a fixed staging name lets one clobber the other's temp file, and
 // swap bytes under a commit the other already verified. Pinned by occupying the
 // fixed paths a predictable-name importer would have wanted.
 func TestImportDoesNotDependOnFixedStagingNames(t *testing.T) {

@@ -21,7 +21,7 @@ func BenchmarkEmitOutput(b *testing.B) {
 
 // BenchmarkEmitResult measures the per-target cost: one result event through the capture
 // logger to the file handler. It is the counterpart to BenchmarkEmitOutput and exists
-// because [FileHandler.Handle] treats the two differently - result events flush so a live
+// because [FileHandler.Handle] treats the two differently: result events flush so a live
 // follower sees them, output events stay buffered. Without this benchmark the flush is an
 // unmeasured claim on a path that runs once per target.
 func BenchmarkEmitResult(b *testing.B) {

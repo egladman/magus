@@ -23,7 +23,7 @@ import (
 // One file per version lives at releases/v<semver>.yaml in the repo root.
 // Files are append-only and immutable once merged.
 //
-// Schema version 1 fields; additive changes only - do not remove or rename.
+// Schema version 1 fields; additive changes only: do not remove or rename.
 type ReleaseManifest struct {
 	// Version is the semver tag, e.g. "v0.1.0".
 	Version string `yaml:"version" json:"version"`
@@ -83,13 +83,13 @@ type ReleaseIndex struct {
 const IndexValidity = 180 * 24 * time.Hour
 
 // IndexRelease is one release as the index publishes it: the version, and the
-// artifacts a client can name and pin. The manifest's prose - date, notes, body -
+// artifacts a client can name and pin. The manifest's prose (date, notes, body)
 // is deliberately absent. Nothing reads it here, it ships in the Atom feed and in
 // the release YAML, and every byte of this file is covered by index.json.sig.
 // omitzero, not omitempty: these bytes are signed, so they must not depend on how
 // the binary that wrote them was built. Under GOEXPERIMENT=jsonv2, omitempty means
 // "empty JSON value" and false is not one, so the same struct encodes to
-// `"yanked":false` there and to nothing under v1 - two different signatures for one
+// `"yanked":false` there and to nothing under v1, two different signatures for one
 // release. omitzero means the zero value in both.
 type IndexRelease struct {
 	Version   string            `json:"version"`
@@ -217,7 +217,7 @@ func runCut(args []string) error {
 
 	// Ordering matters: the artifacts are hashed before the changelog is read, so an
 	// already-cut version is recognised without consuming anything. On a rerun
-	// [Unreleased] is empty - this call emptied it - and the parse below would otherwise
+	// [Unreleased] is empty (this call emptied it), and the parse below would otherwise
 	// fail first, reporting a missing section when the work is simply already done.
 	//
 	// A rerun whose manifest names exactly these artifacts converges, because a publish
@@ -371,7 +371,7 @@ func runMigrate(args []string) error {
 
 // runReleaseIndex builds index.json from releases/*.yaml and signs those exact
 // bytes into index.json.sig. Both land in outDir, which is the tracked
-// docs/gen/public/release/ - the site render copies that directory out verbatim
+// docs/gen/public/release/; the site render copies that directory out verbatim
 // rather than regenerating it, so the signature covers the bytes a client
 // downloads.
 //
@@ -514,7 +514,7 @@ func runGenerateChangelog(args []string) error {
 	b.WriteString("The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n")
 	b.WriteString("and this project adheres to [Semantic Versioning](https://semver.org/).\n")
 	b.WriteString("\n")
-	// Unreleased section - preserved verbatim. The body already ends with "\n"
+	// Unreleased section: preserved verbatim. The body already ends with "\n"
 	// (the trailing empty line before the next section in the original file);
 	// we strip it here so the released-section separator ("\n## [...]") produces
 	// exactly one blank line between them, matching the original Keep-a-Changelog
@@ -526,8 +526,8 @@ func runGenerateChangelog(args []string) error {
 		b.WriteString(trimmed)
 		b.WriteString("\n")
 	}
-	// Released sections - generated from manifests (newest first).
-	// Format: blank line + "## [version] - date" + blank line + body.
+	// Released sections: generated from manifests (newest first).
+	// Format: blank line + `"## [version] - date"` + blank line + body.
 	// This matches Keep-a-Changelog convention and preserves the exact text that
 	// was in CHANGELOG.md before the inversion (body is already trimmed).
 	for _, m := range manifests {
@@ -627,7 +627,7 @@ func parseUnreleased(path string) (ReleaseNotes, string, error) {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "## ") {
 			if inUnreleased {
-				// Hit the next section - done.
+				// Hit the next section: done.
 				break
 			}
 			rest := line[3:]
@@ -773,8 +773,8 @@ func scanReleaseArtifacts(dir, version string) ([]ReleaseArtifact, error) {
 	// almost certainly a path mistake rather than a valid hollow release.
 	//
 	// magus-release.pem used to be appended here, sizeless and hashless. No release
-	// since v0.1.0 has published such an asset - release.yaml uploads the tarballs and
-	// the SHA256SUMS pair, nothing else - so the entry named a download that 404s, in a
+	// since v0.1.0 has published such an asset (release.yaml uploads the tarballs and
+	// the SHA256SUMS pair, nothing else), so the entry named a download that 404s, in a
 	// file whose whole purpose is telling a client what it may fetch.
 	if len(artifacts) == 0 {
 		return nil, fmt.Errorf("no release artifacts found in %s (expected *.tar.gz or SHA256SUMS)", dir)

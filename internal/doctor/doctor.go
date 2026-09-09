@@ -41,7 +41,7 @@ type DaemonInfo struct {
 	MCPEnabled bool
 	// Persistent is true when the process answering on the socket is a `magus server
 	// start` daemon rather than the per-process proc server any command may spin up.
-	// Only the persistent one starts the MCP HTTP server, so this - and not Reachable -
+	// Only the persistent one starts the MCP HTTP server, so this (and not Reachable)
 	// is what says a bridge is expected.
 	Persistent bool
 }
@@ -90,7 +90,7 @@ func WithExplanations(e Explanations) Option { return func(o *options) { o.expla
 //
 // Off by default, and that default is the design: doctor answers questions about the
 // workspace, so forking `docker info` to render a report would make a read-only command
-// depend on a daemon being up - the exact coupling readiness exists to make legible.
+// depend on a daemon being up, the exact coupling readiness exists to make legible.
 // Opting in is for the case that wants it, checking an environment before a long run
 // instead of finding out eight minutes in.
 func WithProbe() Option { return func(o *options) { o.probe = true } }

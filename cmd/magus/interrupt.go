@@ -125,9 +125,9 @@ func confirmInterrupts(
 				// disposition before returning. Nothing drains sigs once this
 				// goroutine is gone, so every later SIGINT/SIGTERM was
 				// swallowed: a supervisor's second SIGTERM did nothing, and a
-				// user hammering Ctrl+C through a slow teardown - or through
+				// user hammering Ctrl+C through a slow teardown (or through
 				// the end-of-run failure prompt, which blocks on a read that
-				// cannot be interrupted - had no escape at all.
+				// cannot be interrupted) had no escape at all.
 				release()
 				return
 			}

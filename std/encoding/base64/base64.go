@@ -1,7 +1,7 @@
 // Package base64 is the "encoding/base64" host module: base64 lives under
 // std/encoding rather than in std's own flat root because it, like its eight
 // siblings, uses none of std's shared sandbox/exec helpers (resolvePath,
-// checkRead, checkWrite, optStringDefault, ...) - every helper a text codec
+// checkRead, checkWrite, optStringDefault, ...): every helper a text codec
 // needs is local to its own file, so splitting it into its own package hides
 // nothing that std itself needs to reach back into. See std/encoding/register.go
 // for how this directory's Module reaches the rest of magus without std

@@ -26,7 +26,7 @@ type Frontmatter struct {
 	// point "Suggest an edit" at the real source instead of the generated .md. Either
 	// a repo-relative path/glob ("internal/config/config.go", one or more comma-joined
 	// globs) or an in-site section path ending in "/" ("reference/api/") for a page
-	// whose true source has no single file - the renderer tells the two apart by that
+	// whose true source has no single file; the renderer tells the two apart by that
 	// trailing slash. "" for a hand-written page.
 	GeneratedFrom string   `yaml:"generated_from"`
 	Aliases       []string `yaml:"aliases"` // old clean URLs that should redirect here (parity on a move)
@@ -37,7 +37,7 @@ type Frontmatter struct {
 // ParseFrontmatter reads a leading YAML frontmatter block (a "---" line, the YAML
 // body, then a closing "---" line) off a markdown document, returning the parsed
 // fields and ok=true. A document with no leading block, or one whose YAML does not
-// parse, yields a zero Frontmatter and ok=false - callers treat frontmatter as
+// parse, yields a zero Frontmatter and ok=false; callers treat frontmatter as
 // best-effort metadata, never a hard error. The two failure modes (no block present
 // vs. a present-but-malformed block) deliberately collapse to the same ok=false:
 // the sole caller wants the fields or nothing, and cares about neither reason. It is
@@ -81,7 +81,7 @@ func ParseFrontmatter(content string) (Frontmatter, bool) {
 }
 
 // StripFrontmatter returns content with any leading frontmatter block removed, so a caller
-// parsing the markdown body (heading extraction, rendering) never sees the YAML header - and
+// parsing the markdown body (heading extraction, rendering) never sees the YAML header, and
 // never mistakes the header's closing "---" for a setext-heading underline of the line above
 // it. Content with no valid block is returned unchanged. It shares ParseFrontmatter's fence
 // detection so the two agree on where the body begins.
@@ -148,7 +148,7 @@ func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 // yamlScalar renders s so a YAML parser reads back the identical string, double-quoting it
 // whenever the plain form would carry YAML meaning. Beyond the structural cases (a ": " opens
 // a mapping, a leading indicator starts a flow collection, tag, anchor, or comment, trailing
-// space is trimmed), a value that resolves as a NON-string scalar - a bare 404, true, or null -
+// space is trimmed), a value that resolves as a NON-string scalar (a bare 404, true, or null)
 // must be quoted too: unmarshaled into a string field it errors, and ParseFrontmatter then
 // drops the entire block, losing the page's title and tags silently.
 func yamlScalar(s string) string {
@@ -181,7 +181,7 @@ func yamlNeedsQuote(s string) bool {
 }
 
 // yamlResolvesNonString reports whether s is a plain scalar YAML's core schema would type as
-// something other than a string - a bool, null, or number - so it can be quoted back into one.
+// something other than a string (a bool, null, or number), so it can be quoted back into one.
 func yamlResolvesNonString(s string) bool {
 	switch strings.ToLower(s) {
 	case "null", "~", "true", "false", "yes", "no", "on", "off":

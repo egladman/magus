@@ -14,7 +14,7 @@ const digestLen = 16
 // Digest fingerprints the anchored source so a CHANGE is detectable, not merely a
 // deletion.
 //
-// The existence check answers the easy question - a rename or a delete, which the anchor
+// The existence check answers the easy question: a rename or a delete, which the anchor
 // itself already reports. This answers the harder and more common one: the code is still
 // there and quietly stopped meaning what the note says. That case is the reason the whole
 // store needs a gate, because it is invisible to a reader who trusts the note.
@@ -24,7 +24,7 @@ const digestLen = 16
 // an ignored gate is worse than no gate at all, because the store then looks checked. So:
 //
 //   - leading and trailing whitespace per line is dropped (re-indentation is free)
-//   - runs of internal whitespace collapse to one space (alignment is free - gofmt
+//   - runs of internal whitespace collapse to one space (alignment is free: gofmt
 //     realigning struct tags or trailing comments must not read as an edit)
 //   - blank lines are dropped entirely (spacing is free)
 //
@@ -32,7 +32,7 @@ const digestLen = 16
 // literal, or reordering statements all change the digest, because all of them can change
 // what the code means, and a note about it deserves a second look.
 //
-// The result is a whitespace-insensitive, token-sensitive fingerprint - the same trade
+// The result is a whitespace-insensitive, token-sensitive fingerprint, the same trade
 // Fiberplane's Drift makes with a tree-sitter AST hash, reached without a parser per
 // language. magus indexes any language SCIP can, so a parser-based fingerprint would work
 // for a few and silently do nothing for the rest.
@@ -47,7 +47,7 @@ func Digest(lines []string) string {
 		b.WriteByte('\n')
 	}
 	// No early return for empty input, deliberately. "" is reserved for "cannot compute",
-	// and content that is genuinely empty must hash like anything else - otherwise
+	// and content that is genuinely empty must hash like anything else; otherwise
 	// truncating an anchored file to nothing produces "", ResolveAnchors reads that as no
 	// opinion, and the single most destructive edit is the one drift can never see.
 	sum := sha256.Sum256([]byte(b.String()))
@@ -79,8 +79,8 @@ func DigestRange(src string, start, end int) string {
 	return Digest(lines[start-1 : end])
 }
 
-// DigestDecl fingerprints just the DECLARATION at the head of [start, end] - the first
-// non-blank line of the range - so a change to what the anchored thing IS can be told apart
+// DigestDecl fingerprints just the DECLARATION at the head of [start, end] (the first
+// non-blank line of the range), so a change to what the anchored thing IS can be told apart
 // from a change to how it does it.
 //
 // This exists because the body fingerprint alone reports far more than it should. Measured
@@ -93,11 +93,11 @@ func DigestRange(src string, start, end int) string {
 //
 // One line, and no parser, deliberately. magus fingerprints whatever SCIP can index, and a
 // per-language parser would grade a few languages precisely and silently do nothing for the
-// rest - which is the failure mode the body digest already avoided by normalizing whitespace
+// rest, which is the failure mode the body digest already avoided by normalizing whitespace
 // instead of parsing. A first non-blank line is a heuristic for a signature, not a parse: it
 // is right for C-family, Go, Java, TypeScript, Python and Rust declarations, and wrong for a
 // signature wrapped across lines or preceded by an attribute or decorator. Being wrong here
-// costs a grade, never a verdict - the body digest still detects the change either way.
+// costs a grade, never a verdict: the body digest still detects the change either way.
 func DigestDecl(src string, start, end int) string {
 	if start < 1 || end < start {
 		return ""

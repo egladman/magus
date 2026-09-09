@@ -217,7 +217,7 @@ fun caller() > int {
 `)
 
 	// A call inside a catch clause's OWN body is not shielded by the try it sits
-	// beside - it needs its own handling.
+	// beside; it needs its own handling.
 	checkErr(t, `
 fun risky() > int !> str { return 1; }
 fun caller() > int {
@@ -248,7 +248,7 @@ try {
 }
 
 // TestCheck_UnhandledRaise_ObjectMethod pins that an object METHOD threads
-// raiseDeclared the same way a free function does - checkObjectDecl has its own
+// raiseDeclared the same way a free function does: checkObjectDecl has its own
 // inline body-checking loop (it does not call checkFunDecl), which is exactly
 // the kind of second code path that silently misses a state save/restore.
 func TestCheck_UnhandledRaise_ObjectMethod(t *testing.T) {
@@ -625,7 +625,7 @@ export final tname = pick().name;
 // it rather than a plain `p.nodes`: joining the declared `[Node]` with an untyped
 // empty list literal needs the ELEMENT type resolvable. Unresolved, the join
 // collapses to any, the foreach binding degrades with it, and the failure finally
-// surfaces as "`any` is not field accessible" at the first field read - several
+// surfaces as "`any` is not field accessible" at the first field read: several
 // lines below, and in a different file from, the import that was actually wrong.
 func TestModuleDeclsReachAnAliasedSubSession(t *testing.T) {
 	// page.buzz is flat-imported BY the aliased module, not by the top-level chunk:
@@ -1083,8 +1083,8 @@ func TestConformance_GAP_ArrowLambda(t *testing.T) {
 // TestExternObjectMethod covers `extern fun` inside an object: a method the HOST
 // binds, declared with a semicolon where a body would be.
 //
-// It exists because Buzz has no nested namespace - `NamespaceStmt` carries a single
-// name - so a group of related host functions reached as `magus\cache.remote(...)`
+// It exists because Buzz has no nested namespace (`NamespaceStmt` carries a single
+// name), so a group of related host functions reached as `magus\cache.remote(...)`
 // is not a sub-module. It is an OBJECT held by the module, exactly as upstream's
 // `io\File.open(...)` is, and its members are static methods. Without extern here
 // the only way to declare one was to give it a body that never runs, which states
@@ -1104,7 +1104,7 @@ func TestExternObjectMethod(t *testing.T) {
 	// The signature is real, not a formality: arity is enforced like any other call.
 	checkErr(t, decl+`fun main() > void { cache.remote(); }`, "argument")
 
-	// An extern INSTANCE method (no `static`) is accepted too - the modifier is
+	// An extern INSTANCE method (no `static`) is accepted too: the modifier is
 	// orthogonal to where the implementation comes from.
 	checkOK(t, `export object handle {
     extern fun close() > void;
@@ -1143,8 +1143,8 @@ fun main() > void {
 	assert.NoError(t, err, "both owners' declarations must survive")
 
 	// NOT asserted here: that a wrong argument type is rejected. Measured while
-	// writing this - an extern's parameter types are not enforced at the call site
-	// today, merged or not - so asserting it would be testing a wish. That gap is
+	// writing this (an extern's parameter types are not enforced at the call site
+	// today, merged or not), so asserting it would be testing a wish. That gap is
 	// real and separate; this test's subject is only that neither owner's
 	// declarations are lost.
 }
@@ -1181,8 +1181,8 @@ func warningsOf(t *testing.T, src string) []typeError {
 }
 
 // TestStringAccumulationWarnsInEveryLoopForm covers the shape BZZ3002 exists for. Each
-// body rebuilds a str from itself, which copies the whole buffer per iteration and - on
-// the nanbox build - pins every copy for the life of the process.
+// body rebuilds a str from itself, which copies the whole buffer per iteration and (on
+// the nanbox build) pins every copy for the life of the process.
 func TestStringAccumulationWarnsInEveryLoopForm(t *testing.T) {
 	for _, tc := range []struct{ name, src string }{
 		{"while", `var s = ""; var i = 0; while (i < 3) { s = s + "x"; i = i + 1; }`},

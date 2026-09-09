@@ -59,7 +59,7 @@ func TestDefaultConcurrency_LocalDefault(t *testing.T) {
 }
 
 // TestClampConcurrency pins the ceiling. A configured concurrency travels in the repo, so
-// a number chosen on a big machine lands on a small one and thrashes it - which does not
+// a number chosen on a big machine lands on a small one and thrashes it, which does not
 // fail, it just makes everything slower, so nothing gets attributed to it.
 func TestClampConcurrency(t *testing.T) {
 	ceiling := MachineCeiling()

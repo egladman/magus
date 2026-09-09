@@ -39,7 +39,7 @@ func CaptureAnchor(hunks []Hunk, line int) types.CommentAnchor {
 // renders which one it got instead of presenting all three as the same answer.
 //
 // remembered is the line the remark was written on. It stops being the answer the moment the file
-// moves, and becomes the tie-breaker among equal matches - which is what makes a search for a
+// moves, and becomes the tie-breaker among equal matches, which is what makes a search for a
 // non-unique line land where the reader meant rather than on the file's first closing brace.
 func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, types.CommentAnchorRung) {
 	if a.Quote == "" {
@@ -84,7 +84,7 @@ func LocateAnchor(a types.CommentAnchor, hunks []Hunk, remembered int) (int, typ
 }
 
 // DeclarationOf is the enclosing declaration git named in a hunk header line: everything after
-// the second @@. Empty where git named none, which is ordinary - the top of a file, a language with
+// the second @@. Empty where git named none, which is ordinary: the top of a file, a language with
 // no funcname pattern, or a hunk that spans a declaration boundary.
 //
 // Exported because it is what a SURFACE renders in place of the raw header. The @@ coordinates are

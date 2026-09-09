@@ -18,9 +18,9 @@ import (
 
 // The fixture below stands in for the real descriptor set. It is hand-built
 // rather than compiled from .proto text because this generator's whole job is
-// reading a descriptor set, and the shapes worth pinning - a synthetic oneof
+// reading a descriptor set, and the shapes worth pinning (a synthetic oneof
 // behind proto3 `optional`, a map entry, a reserved range, a validate rule, a
-// cross-package reference, a package with no service - are all descriptor-level
+// cross-package reference, a package with no service) are all descriptor-level
 // facts that a fixture in .proto form would still have to be compiled into.
 const (
 	queryPath  = "magus/query/v1/query.proto"
@@ -315,7 +315,7 @@ func fieldNamed(t *testing.T, m message, name string) field {
 
 // TestNewAPIKeepsOnlyMagusContract pins the filter. The module pulls in
 // protovalidate and the well-known types, and documenting those would bury the
-// API in vendored schema - so a package outside magus.* is skipped, and a magus
+// API in vendored schema, so a package outside magus.* is skipped, and a magus
 // package that declares nothing gets no page of its own either.
 func TestNewAPIKeepsOnlyMagusContract(t *testing.T) {
 	a := fixtureAPI(t)
@@ -487,7 +487,7 @@ func TestMethodKind(t *testing.T) {
 
 // TestReachableFromWalksTransitivelyWithinOnePackage is the fix for a one-hop
 // walk documenting only inputs and outputs: the types those carry are the ones a
-// client most needs, and Mode - two hops down, through Token - is exactly what a
+// client most needs, and Mode (two hops down, through Token) is exactly what a
 // one-hop walk would leave undocumented while linking to it.
 func TestReachableFromWalksTransitivelyWithinOnePackage(t *testing.T) {
 	a := fixtureAPI(t)
@@ -638,7 +638,7 @@ func TestSourceLink(t *testing.T) {
 }
 
 // TestWriteAllRendersEveryPageAndPrunesTheRest: the drift gate only compares
-// files the generator writes, so a page it stops writing is invisible to it - a
+// files the generator writes, so a page it stops writing is invisible to it: a
 // deleted RPC's page would sit in the committed tree describing something the
 // daemon no longer serves.
 func TestWriteAllRendersEveryPageAndPrunesTheRest(t *testing.T) {
@@ -668,8 +668,8 @@ func generatedPage(title string) string {
 }
 
 // TestWriteAllPrunesOnlyItsOwnPages: the sweep used to remove every .md under -out
-// that the run did not write, so a hand-written page added to the API section - or
-// anything else pointed at by a mistaken -out - was deleted without a trace.
+// that the run did not write, so a hand-written page added to the API section (or
+// anything else pointed at by a mistaken -out) was deleted without a trace.
 func TestWriteAllPrunesOnlyItsOwnPages(t *testing.T) {
 	dir := t.TempDir()
 	handwritten := filepath.Join(dir, "guide.md")
@@ -791,7 +791,7 @@ func TestConstraintsStateWhatTheDaemonEnforces(t *testing.T) {
 
 // TestDescribeRulesWalksProtovalidateGenerically is why there is no case per
 // constraint: a rule this schema starts using tomorrow shows up without a code
-// change here, and only free-form CEL - which has no fixed shape - gets a
+// change here, and only free-form CEL (which has no fixed shape) gets a
 // fallback.
 func TestDescribeRulesWalksProtovalidateGenerically(t *testing.T) {
 	rules := &validate.FieldRules{
@@ -815,7 +815,7 @@ func TestDescribeRulesWalksProtovalidateGenerically(t *testing.T) {
 // TestConstraintLeavesRenderInFieldNumberOrder asserts the whole slice rather than
 // membership. Every other assertion here is a Contains, so when protoreflect's
 // undefined-order Range put two rules of one block in either order, this suite stayed
-// green while the generator wrote different bytes each run - only the docs drift gate
+// green while the generator wrote different bytes each run; only the docs drift gate
 // caught it, and a drift gate cannot say which run was right.
 func TestConstraintLeavesRenderInFieldNumberOrder(t *testing.T) {
 	rules := &validate.FieldRules{Type: &validate.FieldRules_Int32{Int32: &validate.Int32Rules{
@@ -894,7 +894,7 @@ func TestStreamingMethodsListsNothingWhenEveryMethodIsUnary(t *testing.T) {
 	}}}))
 }
 
-// TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn - without it a type
+// TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn: without it a type
 // declared there has nowhere to live, and every page referencing it would have
 // to duplicate it in full.
 func TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn(t *testing.T) {

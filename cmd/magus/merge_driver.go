@@ -140,7 +140,7 @@ func chooseInitVCS(ctx context.Context, root string, m *magus.Magus, vcsFlag str
 //
 // The globs derive from every project's declared outputs, so they move whenever a project
 // does. Wiring them once at init freezes them, and a clone that never ran `init --vcs` has
-// no registration at all - either way the next merge conflicts every generated file by
+// no registration at all; either way the next merge conflicts every generated file by
 // hand, which reads as a merge problem rather than a setup one.
 //
 // Best-effort by design: a read-only checkout, an unsupported VCS, or a workspace with no
@@ -173,7 +173,7 @@ func ensureMergeDriver(ctx context.Context, m *magus.Magus) {
 //
 // It deliberately does NOT regenerate. git runs a driver inside its own index
 // manipulation, once per conflicted file, while the owning project's generate target writes
-// every output that project declares - which mid-rebase left the tree dirty against what git
+// every output that project declares, which mid-rebase left the tree dirty against what git
 // had staged, so `git rebase --continue` refused. A loop by construction, at one full build
 // per conflicted file. Taking a side here and settling it with an explicit
 // `magus run generate` is what the merge guidance already tells a human to do.
@@ -188,8 +188,8 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	}
 
 	// Loading the workspace must not re-wire the merge driver: EnsureMergeDriver writes the
-	// TRACKED .gitattributes, and doing that here - inside the VCS's index manipulation, once
-	// per conflicted file - is the same dirty-tree failure this driver was changed to stop
+	// TRACKED .gitattributes, and doing that here (inside the VCS's index manipulation, once
+	// per conflicted file) is the same dirty-tree failure this driver was changed to stop
 	// causing.
 	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
 	if err != nil {
@@ -209,14 +209,14 @@ func mergeDriverRun(ctx context.Context, root string, args []string) error {
 	if !ok {
 		// Auto-resolving is only safe because an explicit run rebuilds the file afterwards.
 		// With no target that writes this exact path there is no such run, so keeping one
-		// side would silently drop the other's change - and the VCS only invokes a driver
+		// side would silently drop the other's change, and the VCS only invokes a driver
 		// when BOTH sides changed the file, so that change is never empty.
 		return fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
 			types.ProjectLabel(p.Path, p.Dir), relPath)
 	}
 
 	// %A already holds the current version and is the file the VCS reads back, so leaving it
-	// untouched IS the resolution - there is nothing to write.
+	// untouched IS the resolution: there is nothing to write.
 	slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
 		slog.String("path", relPath),
 		slog.String("regenerate", hint.Run.With(target, types.ProjectLabel(p.Path, p.Dir))))
@@ -268,12 +268,12 @@ func workspaceOutputGlobs(m *magus.Magus) []string {
 	return globs
 }
 
-// settleTarget returns the project's target that declares absPath among its OWN outputs -
-// the one command that rebuilds this exact file - and whether such a target exists.
+// settleTarget returns the project's target that declares absPath among its OWN outputs
+// (the one command that rebuilds this exact file) and whether such a target exists.
 //
 // It reads TargetOutputs rather than guessing a conventional name. Guessing consulted only
-// ResolvedSpells, which cannot see a target the magusfile itself exports - the magusfile
-// spell is one global instance whose Targets() is always empty - so every magusfile-declared
+// ResolvedSpells, which cannot see a target the magusfile itself exports (the magusfile
+// spell is one global instance whose Targets() is always empty), so every magusfile-declared
 // generate fell through to "build", printing `magus run build .` for a MAGUS.md conflict.
 //
 // Reporting false is load-bearing, not a fallback. A project-wide output glob with no

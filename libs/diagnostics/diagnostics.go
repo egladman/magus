@@ -1,13 +1,13 @@
 // Package diagnostics is the shared diagnostic-code framework: the reusable machinery a codebase uses to declare
 // its OWN stable, documented diagnostic codes and render them as errors that point at a lookup page. It is
-// deliberately code-namespace-AGNOSTIC. It owns the MECHANISM - the Code/Error types, the "[code] msg /
-// see: url" rendering, the errors.Is matching, and the run-time sink plumbing - but never a catalog of
+// deliberately code-namespace-AGNOSTIC. It owns the MECHANISM (the Code/Error types, the "[code] msg /
+// see: url" rendering, the errors.Is matching, and the run-time sink plumbing), but never a catalog of
 // codes. Each consumer instantiates a Domain with its own docs-URL layout and declares its own Code
 // constants; the namespaces are entirely separate, so no code is ever shared across consumers. magus
 // instantiates it for its MGS#### codes; gopherbuzz instantiates it separately for its BZZ#### codes.
 //
-// It is its own module (github.com/egladman/magus/libs/diagnostics, at libs/diagnostics) precisely so both magus and gopherbuzz -
-// which are separate Go modules - can each depend on it without depending on each other.
+// It is its own module (github.com/egladman/magus/libs/diagnostics, at libs/diagnostics) precisely so both magus and gopherbuzz,
+// which are separate Go modules, can each depend on it without depending on each other.
 package diagnostics
 
 import (
@@ -21,12 +21,12 @@ import (
 type Code string
 
 // Error lets a Code serve as an errors.Is sentinel, so `errors.Is(err, MGS2007)` matches an *Error
-// carrying that code - the idiomatic Go form (cf. syscall.Errno). The rendered text is the bare code; a
+// carrying that code: the idiomatic Go form (cf. syscall.Errno). The rendered text is the bare code; a
 // Code is an IDENTIFIER, not a message, so build an error that carries context with Domain.Errorf rather
 // than returning a bare Code.
 func (c Code) Error() string { return string(c) }
 
-// Error is a coded diagnostic error: a Code, a human message, and - when built through a Domain - the docs
+// Error is a coded diagnostic error: a Code, a human message, and (when built through a Domain) the docs
 // URL to render. A bare literal &Error{Code: X} carries no URL and is meant only as an errors.Is target.
 type Error struct {
 	Code  Code
@@ -40,8 +40,8 @@ type Error struct {
 //
 // Without it a caught error is just its rendered sentence, so a magusfile deciding what to
 // do about a failure has to substring-match prose that exists for humans and is free to be
-// reworded. The code is the stable identifier - it is already the thing docs, the knowledge
-// graph and `magus explain` key off - so it is what a caller should branch on:
+// reworded. The code is the stable identifier (it is already the thing docs, the knowledge
+// graph and `magus explain` key off), so it is what a caller should branch on:
 //
 //	catch (e) { if (e.code == "MGS2001") { ... } }
 //
@@ -90,8 +90,8 @@ func (e *Error) Is(target error) bool {
 func (e *Error) Unwrap() error { return e.cause }
 
 // Domain is one consumer's diagnostic namespace: how to build the docs URL for a Code in its family, and
-// the factory for that consumer's coded errors. "Domain" here is the NSError sense - a namespace of related
-// codes - not a network domain. A consumer creates one (magus for MGS, gopherbuzz for BZZ) and declares
+// the factory for that consumer's coded errors. "Domain" here is the NSError sense (a namespace of related
+// codes), not a network domain. A consumer creates one (magus for MGS, gopherbuzz for BZZ) and declares
 // its own Code constants alongside it.
 type Domain struct {
 	urlFn func(Code) string
@@ -112,7 +112,7 @@ func (d *Domain) Errorf(c Code, format string, args ...any) *Error {
 
 // Wrapf builds a coded *Error over an existing cause: it renders "[code] msg / see: url" (cause is NOT
 // spliced into the message) and Unwraps to cause, so errors.Is(err, cause) still matches. Use it when a
-// sentinel error must keep matching while the error also gains a lookupable code - e.g. adding a code to an
+// sentinel error must keep matching while the error also gains a lookupable code, e.g. adding a code to an
 // error whose sentinel already drives control flow.
 func (d *Domain) Wrapf(c Code, cause error, format string, args ...any) *Error {
 	e := d.Errorf(c, format, args...)

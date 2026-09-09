@@ -131,7 +131,7 @@ func TestLedgerTool(t *testing.T) {
 	// register is the worker's door: it reports the base it actually landed on and is
 	// told how that compares with the checkpoint the lease was handed. The comparison
 	// itself is covered in internal/ledger; what this asserts is that the tool answers
-	// with BOTH halves - the row for a reader, and Text for the worker, which is the only
+	// with BOTH halves: the row for a reader, and Text for the worker, which is the only
 	// op here that sets it.
 	t.Run("register records the reported base and returns the verdict", func(t *testing.T) {
 		invoke(t, map[string]any{"op": "put", "id": "lease-reg", "checkpoint": "aaaa1111", "state": "declared"})
@@ -237,8 +237,8 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 }
 
 // TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
-// writers advance different fields of one lease - an orchestrator moving the state, a
-// worker recording its checkpoint - and both have to survive. Reading the row with List
+// writers advance different fields of one lease (an orchestrator moving the state, a
+// worker recording its checkpoint) and both have to survive. Reading the row with List
 // and writing it back with Put releases the store's lock in between, so each writer
 // merges onto a row it read before the other wrote, and the second write reverts the
 // first one's field.
@@ -284,7 +284,7 @@ func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 }
 
 // TestLedgerDoorsAgreeOnAnEmptyLedger is the parity the constructor exists to guarantee.
-// The ledger has two read doors - this tool and the console's GET /api/v1/ledger - and an
+// The ledger has two read doors (this tool and the console's GET /api/v1/ledger), and an
 // unwritten ledger is the case they used to answer differently, one serving "leases":[]
 // because the route normalized it by hand and the other serving null.
 func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {

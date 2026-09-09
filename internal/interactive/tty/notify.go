@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Notifier renders a stack of expiring notifications - toasts - into a band of
+// Notifier renders a stack of expiring notifications (toasts) into a band of
 // a [Zone].
 //
 // A toast has to VANISH with nothing to replace it, which an append-only
@@ -18,7 +18,7 @@ import (
 // frame.
 //
 // Expiry is driven by a sweeper goroutine, because a toast that only expired
-// when the next one arrived would not be a toast - it would be a log that
+// when the next one arrived would not be a toast; it would be a log that
 // happens to be pinned. That goroutine is also why the [Zone] mutex matters:
 // the sweeper paints while the caller's own thread may be painting too.
 type Notifier struct {
@@ -28,7 +28,7 @@ type Notifier struct {
 	// then held: claiming them up front would cost every run three rows of
 	// scrolling area for a band that, under the rule that only actionable
 	// things are worth notifying about, most runs never fill. Holding them
-	// afterwards is the other half - releasing on an empty stack would make the
+	// afterwards is the other half: releasing on an empty stack would make the
 	// zone grow and shrink as notifications came and went, and every one of
 	// those is a visible reflow of the whole screen.
 	lease *Lease
@@ -57,7 +57,7 @@ type Notifier struct {
 const (
 	accentBar = "\u258c"
 	// accentCols is what the bar occupies on SCREEN. The rune is three bytes
-	// and one column, and every budget here is in columns - len() would spend
+	// and one column, and every budget here is in columns; len() would spend
 	// three of them on a glyph that takes one, which is the same byte-for-column
 	// mistake that clipped the region's border to a third of its width.
 	accentCols  = 1
@@ -71,7 +71,7 @@ const (
 // space is padded by marqueeHold at each end (see advance), and clamping into
 // the real range is what turns those ticks into a pause rather than a jump.
 func marquee(text string, off, width int) string {
-	// An unknown width means the band has not been built yet - Lease.Width has
+	// An unknown width means the band has not been built yet; Lease.Width has
 	// no region to measure until the first paint. Return the message WHOLE
 	// rather than nothing: scrolling is an enhancement, the layout clips to the
 	// real width anyway, and a toast that renders empty is strictly worse than
@@ -111,8 +111,8 @@ type toast struct {
 //
 // Nothing is claimed and no goroutine starts here. The band is taken on the
 // first notification and grows toward max only as more are actually showing, so
-// a process that never notifies - which, under the rule that only actionable
-// things are worth notifying about, is most of them - pays nothing at all.
+// a process that never notifies (which, under the rule that only actionable
+// things are worth notifying about, is most of them) pays nothing at all.
 //
 // A grant that is refused, on a pipe, in CI, or on a terminal with no room,
 // leaves every method a safe no-op, so callers write the same code either way.
@@ -135,7 +135,7 @@ func (n *Notifier) ensureLease() bool {
 	}
 	// Retried on a DISABLED lease, not just a nil one: Acquire refuses by
 	// handing back a disabled Lease rather than nil, so keying on nil alone
-	// left the notifier dark forever after a single refusal - the opposite of
+	// left the notifier dark forever after a single refusal, the opposite of
 	// what Pin promises for a condition recorded when there was no room. An
 	// enabled lease is kept, which is what the hold-its-rows test pins.
 	if n.lease == nil || !n.lease.Enabled() {
@@ -144,7 +144,7 @@ func (n *Notifier) ensureLease() bool {
 	if !n.lease.Enabled() {
 		// No band, so no sweeper. Starting one anyway parked a goroutine for
 		// the life of a process that has no terminal to draw on, which is every
-		// CI run - and NewNotifier promises it pays nothing at all there.
+		// CI run, and NewNotifier promises it pays nothing at all there.
 		return false
 	}
 	if !n.started && !n.stopped {
@@ -161,7 +161,7 @@ func (n *Notifier) ensureLease() bool {
 const notifyRows = 3
 
 // A mutex rather than a sync.Once, because ReleaseStderr reads this from the
-// exit path - including the signal-driven one - while another goroutine may
+// exit path (including the signal-driven one) while another goroutine may
 // still be reaching for the notifier. A Once orders its own callers and says
 // nothing about a reader outside it.
 var (
@@ -173,8 +173,8 @@ var (
 // creating it on first use.
 //
 // A singleton for the reason [StderrZone] is one, and more so: its three
-// consumers - magus's own run events, a term\notify call from a magusfile, and
-// a daemon background job - cannot see each other, run on different threads,
+// consumers (magus's own run events, a term\notify call from a magusfile, and
+// a daemon background job) cannot see each other, run on different threads,
 // and have different lifetimes. Toasts from all of them belong in ONE stack,
 // in arrival order, or the reader gets three competing bands.
 //
@@ -252,7 +252,7 @@ func (n *Notifier) Notify(text string, style SGR, ttl time.Duration) error {
 //
 // This is the shape most things worth notifying about actually have. A toast
 // earns its place only when the reader has to act, and something a reader must
-// act on is rarely a moment - it is a state that persists until they do
+// act on is rarely a moment; it is a state that persists until they do
 // something about it: a run stalled behind another process's lock, a daemon
 // that has gone away, credentials that have expired. Reporting those as
 // expiring notifications would be wrong twice over, since the message vanishes
@@ -267,8 +267,8 @@ func (n *Notifier) Pin(key, text string, style SGR) error {
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	// The lease is NOT a precondition for recording. A pin is a CONDITION - it
-	// is true until retracted - so the model has to hold it whether or not
+	// The lease is NOT a precondition for recording. A pin is a CONDITION (it
+	// is true until retracted), so the model has to hold it whether or not
 	// there is anywhere to draw it today; the band can gain rows later, when
 	// another lease releases or the window grows, and the pin must be there to
 	// appear. Returning early here dropped it outright, so a terminal too small
@@ -374,8 +374,8 @@ func (n *Notifier) Close() error {
 // process that is genuinely doing nothing.
 //
 // So the timer is armed to the NEAREST deadline and not armed at all when
-// nothing can expire. A band holding only pinned conditions - which have no
-// deadline, by design - wakes this goroutine zero times.
+// nothing can expire. A band holding only pinned conditions (which have no
+// deadline, by design) wakes this goroutine zero times.
 func (n *Notifier) sweepLoop() {
 	timer := time.NewTimer(time.Hour)
 	timer.Stop()
@@ -412,7 +412,7 @@ func (n *Notifier) untilNextDeadline() (time.Duration, bool) {
 		}
 	}
 	// A scrolling message needs a tick of its own. Deadlines are the only thing
-	// that used to arm this timer, and a PINNED condition has none - so the one
+	// that used to arm this timer, and a PINNED condition has none, so the one
 	// message in magus long enough to need scrolling (the lock wait) woke the
 	// sweeper zero times and never moved a column. The feature was dead in
 	// production while its unit tests passed, because they called the scroller
@@ -505,7 +505,7 @@ func (n *Notifier) style(s SGR) SGR {
 // did. Callers hold n.mu.
 //
 // Only what does not FIT moves. A toast that fits is static, which is nearly
-// all of them - so an idle band repaints not at all, and the motion appears
+// all of them, so an idle band repaints not at all, and the motion appears
 // exactly where a reader would otherwise be unable to read the end of a line.
 func (n *Notifier) advance(width int) bool {
 	if width <= 0 {
@@ -554,7 +554,7 @@ func (n *Notifier) paint() error {
 	height := n.lease.Rows()
 	rows := make([]Line, height)
 	// The band may hold fewer rows than the stack when a grow was refused.
-	// Choose what to SHOW by the same rule eviction uses, on a copy - the model
+	// Choose what to SHOW by the same rule eviction uses, on a copy: the model
 	// is not the view, and rendering must not destroy a pin the reader still
 	// needs.
 	shown := n.toasts
@@ -567,7 +567,7 @@ func (n *Notifier) paint() error {
 		// An accent bar in the toast's own color, then the message in BOLD.
 		//
 		// The message used to be a single plain span, which put it at the same
-		// weight as the dim chrome around it - so the one row on screen that
+		// weight as the dim chrome around it, so the one row on screen that
 		// exists because a person has to act on it read like everything else.
 		// The bar is the affordance every toast UI uses, and it survives
 		// NO_COLOR as a shape even when the color is dropped.
@@ -578,7 +578,7 @@ func (n *Notifier) paint() error {
 	}
 	// Content FIRST, then the grow. Growing first repaints the band at its new
 	// height while it still holds the OLD rows, so a toast that was just
-	// dropped is drawn once more before being overwritten - a flash of stale
+	// dropped is drawn once more before being overwritten: a flash of stale
 	// content on a surface whose whole promise is that it holds still. Setting
 	// first means the worst case is a row briefly absent rather than a row
 	// briefly wrong.

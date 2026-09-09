@@ -41,8 +41,8 @@ func TestAssembleNotes(t *testing.T) {
 }
 
 // TestAssembleNotes_UnresolvedAnchorEmitsNoEdge is the guard against putting a phantom in
-// the graph. An anchor that names nothing is a real condition - a renamed symbol, a deleted
-// file - and the honest report is `magus notes verify`, not an edge every consumer then has
+// the graph. An anchor that names nothing is a real condition (a renamed symbol, a deleted
+// file), and the honest report is `magus notes verify`, not an edge every consumer then has
 // to defend against.
 func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 	known := map[string]bool{"project:.": true}

@@ -42,7 +42,7 @@ func TestDiffUnifiedAgainstEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, got, "+a")
 	assert.Contains(t, got, "+b")
-	// No removed LINE - checked line-wise, since the "--- a" header legitimately
+	// No removed LINE, checked line-wise, since the "--- a" header legitimately
 	// starts with dashes.
 	for _, line := range strings.Split(got, "\n") {
 		if strings.HasPrefix(line, "---") {

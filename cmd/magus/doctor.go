@@ -87,7 +87,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 		}
 		// The report above described the workspace BEFORE the remedies ran, so its
 		// summary is no longer what is true. Re-run the checks for the count to gate on,
-		// rather than returning nil - which reported a still-broken workspace as healthy
+		// rather than returning nil, which reported a still-broken workspace as healthy
 		// to anything scripting `doctor --fix`. ws is reused: every remedy writes a file
 		// the checks re-read here, and none changes the shape magus.Inspect models.
 		out = doctor.Run(ctx, root, ws, wsErr, dopts...)
@@ -106,7 +106,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 // checking it.
 //
 // The name is printed alone on its line so the identifier is what a reader copies, and
-// the subject sits underneath rather than beside it - a name column wide enough for
+// the subject sits underneath rather than beside it: a name column wide enough for
 // "stale-spell-shadow-acknowledgments" pushes every subject past a terminal's width.
 func emitDoctorChecks(opts OutputOptions, checks []doctor.CheckInfo) error {
 	switch opts.Format {
@@ -240,8 +240,8 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	// daemon.enabled=false means this invocation is self-contained, so there is nothing
 	// to ask. Without this check the probe still discovers and dials whatever daemon the
 	// host happens to be running: doctor then reports on a process the caller opted out
-	// of, and the testscript suite - which sets MAGUS_DAEMON_ENABLED=false precisely to
-	// stay hermetic - reaches the real socket and fails wherever a daemon is up.
+	// of, and the testscript suite (which sets MAGUS_DAEMON_ENABLED=false precisely to
+	// stay hermetic) reaches the real socket and fails wherever a daemon is up.
 	if !globalCfg.Daemon.Enabled {
 		return di
 	}
@@ -281,8 +281,8 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 // It dispatches EXISTING magus subcommands, never a private repair routine, and that is
 // the safety property rather than an implementation detail: --fix can only do things you
 // could have typed yourself and can inspect afterwards. A finding whose remedy needs
-// judgment - narrow this over-wide glob, or accept that the key is deliberately volatile?
-// - declares no Fix and stays a report, which is why this can be blunt about running what
+// judgment (narrow this over-wide glob, or accept that the key is deliberately volatile?)
+// declares no Fix and stays a report, which is why this can be blunt about running what
 // it is given.
 //
 // Nothing here writes config directly either. A config-shaped remedy is spelled `config

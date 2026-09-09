@@ -22,7 +22,7 @@ import (
 // checkInterval is how often the scheduler wakes to look for a due job. It is deliberately coarse
 // and unrelated to the per-job intervals (hours to days): the tick only decides WHEN to look, and
 // a job runs at most once per its configured interval regardless. Keeping it coarse is what makes
-// the scheduler low-key - a quiet daemon does a cheap idle check four times an hour, not a poll.
+// the scheduler low-key: a quiet daemon does a cheap idle check four times an hour, not a poll.
 const checkInterval = 15 * time.Minute
 
 // unusable bounds runDue's "this scheduler will never run anything" warning to one line per

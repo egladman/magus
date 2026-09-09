@@ -21,7 +21,7 @@ type VCSDriver interface {
 	Base() string
 	// ParentRef names the parent of the checked-out commit in this backend's own
 	// revision syntax (git HEAD^, hg p1(.), jj @-). It is the fallback base for a
-	// ref that builds itself, where Base - that ref's own tip - would compare a
+	// ref that builds itself, where Base (that ref's own tip) would compare a
 	// commit against itself and report nothing affected.
 	ParentRef() string
 	// ReviewCommand names this backend's command for summarizing what is about to be
@@ -80,17 +80,17 @@ type VCSDriver interface {
 	// terms of this; callers that report *what* changed use these paths.
 	//
 	// Paths, not the backend's status lines, and the difference is the whole contract.
-	// Each backend prints a different shape - git porcelain's two status columns, hg
+	// Each backend prints a different shape (git porcelain's two status columns, hg
 	// and sl's one, jj's bare `diff --name-only` output, plus git's " -> " for a rename
-	// and its C-quoting for unusual bytes - and only the driver knows which it emits.
+	// and its C-quoting for unusual bytes), and only the driver knows which it emits.
 	// Returning lines pushed that knowledge outward, where it grew THREE parsers that
 	// disagreed: one keyed on the backend name, one that guessed the prefix from the
 	// line's own bytes, and a Buzz-boundary wrapper delegating to the first. The
 	// guessing one read a jj file named "A note.txt" as status "A " plus path
 	// "note.txt", so a legitimately-named file silently matched no glob.
 	//
-	// A per-entry status CODE is deliberately not modeled. It is not portable - jj
-	// reports none at all - which is the same reason types.Status carries paths only.
+	// A per-entry status CODE is deliberately not modeled. It is not portable (jj
+	// reports none at all), which is the same reason types.Status carries paths only.
 	// Reach for vcs.cmd when the codes matter.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 	// DirtyDiff is DirtyFiles with the CONTENT: the working tree's uncommitted changes
@@ -130,7 +130,7 @@ type VCSDriver interface {
 }
 
 // VCSTag is a VCS-agnostic release marker: a name pinned to a revision. Only the
-// facts every tagging backend agrees on are modeled - an annotated tag's tagger
+// facts every tagging backend agrees on are modeled: an annotated tag's tagger
 // and message are not, since a lightweight tag has neither. Reach for vcs.exe()
 // for backend-specific tag work.
 type VCSTag struct {
@@ -142,7 +142,7 @@ type VCSTag struct {
 	// no "/" in its name.
 	Prefix string
 	// Version is Name's version portion (Name with Prefix stripped) parsed as
-	// semver. It is the zero value - test Version.Original == "" - when Name
+	// semver. It is the zero value (test Version.Original == "") when Name
 	// (or its portion after Prefix) is not a semver-shaped tag at all, or when
 	// parsing it failed: an annotated tag like "checkpoint" or "release-2026"
 	// is a legitimate, non-error case, not a reason to carry a separate
@@ -213,7 +213,7 @@ type CommitAuthor struct {
 // return: the serializable, every-field-present view of a Commit. A magusfile
 // annotates `> Commit` to get compile-checked field access on a commit object;
 // the runtime value is the matching map (see Commit.BuzzObject), never this
-// struct directly - it exists so cmd/magus-utils types has something to
+// struct directly: it exists so cmd/magus-utils types has something to
 // reflect over. Date stays time.Time, same as Commit.Date: buzzType (in
 // cmd/magus-utils/types.go) special-cases time.Time to the Buzz `str` type
 // mirroring Commit.BuzzObject's RFC3339 formatting, so the two can share a
@@ -238,8 +238,8 @@ type VCSMeta struct {
 	// had two names in this file, and Commit.ID is the one that already said so.
 	Short string
 	ID    string
-	// Ref is the movable name pointing at this revision - a git branch, a
-	// Mercurial named branch, a Jujutsu bookmark - or "" when there is none
+	// Ref is the movable name pointing at this revision (a git branch, a
+	// Mercurial named branch, a Jujutsu bookmark), or "" when there is none
 	// (jj's working copy is usually an anonymous change, so empty is ordinary
 	// there). Named for the concept rather than for git's word for it, matching
 	// the vcs.ref() a magusfile already calls; "branch" is what two of the three
@@ -252,7 +252,7 @@ type VCSMeta struct {
 	// formats do not even agree with each other (hg's isodate filter omits
 	// seconds; git and jj include them). It is opaque, backend-provided
 	// display text meant for a build banner, not a value any caller parses
-	// back into a time - forcing one shared layout here would mean discarding
+	// back into a time: forcing one shared layout here would mean discarding
 	// or reformatting what the VCS itself chose to report.
 	CommitDate string
 	IsDirty    bool
@@ -301,7 +301,7 @@ type BisectOptions struct {
 // Culprit is the outcome of a successful VCSDriver.Bisect call.
 type Culprit struct {
 	// ID is the offending revision, matching Commit.ID and VCSMeta.ID. It was SHA,
-	// which is git's alone - hg reports a node, jj a commit id - and bisect is not a
+	// which is git's alone (hg reports a node, jj a commit id), and bisect is not a
 	// git-only operation (hg has its own).
 	ID   string
 	Info string // one-line subject, author, and date
@@ -353,8 +353,8 @@ type RemoteReporter interface {
 // feature branch or worktree generated them. Callers type-assert for it and degrade
 // gracefully when a backend lacks it.
 type DefaultRefReporter interface {
-	// DefaultRef returns the repo's primary line of development - git's default
-	// branch, hg's "default", jj's trunk() - for the repo containing dir, or ""
+	// DefaultRef returns the repo's primary line of development (git's default
+	// branch, hg's "default", jj's trunk()) for the repo containing dir, or ""
 	// with ErrVCSUnsupported when it cannot be determined.
 	DefaultRef(ctx context.Context, dir string) (string, error)
 }
@@ -370,7 +370,7 @@ type RevTimeReporter interface {
 	// RevTime returns the commit date of rev in the repository containing dir.
 	//
 	// found is false when rev names nothing in this clone, which is an ordinary
-	// state rather than an error - a base branch never fetched into a fresh clone
+	// state rather than an error: a base branch never fetched into a fresh clone
 	// resolves to nothing, and a caller reporting staleness has to tell "old" from
 	// "not here". err is reserved for a backend that answered something it cannot
 	// itself read back.
@@ -384,7 +384,7 @@ type RevTimeReporter interface {
 // separately: an ignored file and a clean tracked file both report nothing dirty, so
 // a caller that needs to tell a committed artifact from a build product cannot infer
 // it from cleanliness. Callers type-assert for it and skip the question when a
-// backend lacks it, rather than guessing - a wrong guess here misclassifies
+// backend lacks it, rather than guessing: a wrong guess here misclassifies
 // generated output as committed, or the reverse.
 type TrackedFileReporter interface {
 	// TrackedFiles returns the subset of paths that the VCS tracks, as given.
@@ -518,7 +518,7 @@ type RangeDiffReporter interface {
 	// to a caller and only one of them means "nothing changed".
 	//
 	// paths, when non-empty, narrows the answer to those repo-relative paths the way the
-	// backend's own pathspec does - at the SOURCE, so a caller never has to re-emit a filtered
+	// backend's own pathspec does, at the SOURCE, so a caller never has to re-emit a filtered
 	// patch and every count downstream is already scoped.
 	RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error)
 }
@@ -531,7 +531,7 @@ const (
 	// conflict markers into the working tree.
 	ConflictKindContent ConflictKind = "content"
 	// ConflictKindDeleted is one side deleting a file the other changed. No content
-	// merge is possible, and no VCS invokes a merge driver for it - which is why a
+	// merge is possible, and no VCS invokes a merge driver for it, which is why a
 	// driver alone never settles a workspace whose generated files moved.
 	ConflictKindDeleted ConflictKind = "deleted"
 	// ConflictKindBothDeleted is both sides deleting the file. No content on either
@@ -566,8 +566,8 @@ type ConflictResolver interface {
 	// Conflicts returns the unresolved paths of the in-progress operation. No
 	// operation in progress is not an error: it returns none.
 	Conflicts(ctx context.Context, root string) ([]Conflict, error)
-	// KeepIncoming clears the conflict markers by taking the INCOMING side wholesale -
-	// git's "theirs", the commit being replayed during a rebase - falling back to the
+	// KeepIncoming clears the conflict markers by taking the INCOMING side wholesale
+	// (git's "theirs", the commit being replayed during a rebase), falling back to the
 	// surviving side where the incoming side has none. The side is named here so two
 	// backends cannot disagree about which change survives.
 	//
@@ -596,14 +596,14 @@ type ConflictResolver interface {
 // conflict markers in the working copy, which is the only version of it guaranteed to parse.
 //
 // Callers type-assert and degrade when a backend lacks it, like every other capability
-// here - though every backend magus ships does implement it.
+// here, though every backend magus ships does implement it.
 type RevisionFileReader interface {
 	// ReadFileAt returns the content of a root-relative slash path at rev, EXACTLY as the
 	// revision holds it: no trimming, and a trailing newline is part of the file.
 	//
 	// rev is a backend-native revision expression. Empty means "the committed revision",
-	// which each backend spells its own way - HEAD for git, `.` for hg and Sapling, `@`
-	// for jj - so a caller that wants the committed side passes "" rather than picking a
+	// which each backend spells its own way (HEAD for git, `.` for hg and Sapling, `@`
+	// for jj), so a caller that wants the committed side passes "" rather than picking a
 	// spelling that is only correct for one of them.
 	//
 	// A path absent at that revision is an error, not empty content: the caller cannot
@@ -614,7 +614,7 @@ type RevisionFileReader interface {
 // RevisionExporter is an optional capability for VCSDriver implementations that can
 // materialize a revision's tracked files into a directory (a "checkout to a throwaway
 // tree" without touching the working copy). Callers type-assert for it and degrade
-// gracefully when a backend lacks it - either wrapping ErrVCSUnsupported (like the other
+// gracefully when a backend lacks it: either wrapping ErrVCSUnsupported (like the other
 // capabilities) or, for a user-facing command, surfacing a plain message. It powers
 // `magus graph diff --rev`, which builds a base knowledge graph from the exported tree.
 type RevisionExporter interface {
@@ -630,8 +630,8 @@ type RevisionExporter interface {
 //
 // It exists because conflict resolution was reactive-only: ConflictResolver.Conflicts
 // reads an operation already in progress, so settling a branch against its base meant the
-// caller ran the merge itself first. That put the tricky half - which merge, with what
-// flags, and how to back out - in whatever shell script was driving, which is exactly
+// caller ran the merge itself first. That put the tricky half (which merge, with what
+// flags, and how to back out) in whatever shell script was driving, which is exactly
 // where CI has no good place to put it.
 type MergeStarter interface {
 	// StartMerge begins a merge of ref into the working tree WITHOUT committing it,
@@ -647,7 +647,7 @@ type MergeStarter interface {
 
 // Status is the working tree's uncommitted state: whether it is clean, and which paths
 // changed. It replaces the pair of vcs.is_dirty / vcs.dirty_files at the Buzz boundary,
-// where the two answered the same question in two shapes - a bool and a list of the
+// where the two answered the same question in two shapes: a bool and a list of the
 // backend's own status lines, which a caller had to parse differently per VCS.
 //
 // Files are Paths, not strings, and each carries the repository root as its base: a VCS
@@ -660,7 +660,7 @@ type Status struct {
 	Clean bool
 	// Files are the changed paths, empty when Clean. Paths only: a per-entry status code
 	// is not portable (jj's diff --name-only reports none at all), and Commit's rule
-	// applies - a concept one backend lacks is not modeled here. Reach for vcs.exe() when
+	// applies: a concept one backend lacks is not modeled here. Reach for vcs.exe() when
 	// the codes matter.
 	Files []Path
 }
@@ -689,7 +689,7 @@ type StatusRecord struct {
 //
 // It lives in types (not std) for the same reason Commit does: the shape crosses the Buzz
 // boundary, so it needs a mirror. The FUNCTION that produces it belongs to the magus
-// module rather than vcs - deciding that unchanged inputs plus a dev build means MGS4005
+// module rather than vcs: deciding that unchanged inputs plus a dev build means MGS4005
 // is magus policy, and vcs only supplies the dirty-file probe underneath it.
 type DriftResult struct {
 	// Drifted is false with every other field zero when the outputs are clean, so a
@@ -715,7 +715,7 @@ func (d DriftResult) BuzzObject() BuzzObject {
 }
 
 // ClassifyDrift names the cause of a declared output that moved, and the sentence to
-// show for it - the one place that fork is decided, so the generate gate and
+// show for it: the one place that fork is decided, so the generate gate and
 // `magus vcs add` cannot describe one condition two ways.
 //
 // The fork is on WHY, not on how bad it is:
@@ -725,7 +725,7 @@ func (d DriftResult) BuzzObject() BuzzObject {
 //   - inputs unchanged, running a DEV build (MGS4005): the committed form is produced by
 //     the pinned release, so this is version skew and not the developer's change;
 //   - inputs unchanged, running a RELEASE build (MGS4003): same inputs, same generator
-//     version, different bytes - a reproducibility bug.
+//     version, different bytes: a reproducibility bug.
 //
 // magusVersion is the running binary's version, empty when unknown.
 func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string) {
@@ -753,7 +753,7 @@ func ClassifyDrift(inputDirty bool, magusVersion string) (DiagnosticCode, string
 // It backs both `magus vcs add` and doctor's generated-drift check. Classifying by
 // declared GLOB alone answers "is this path generated" and nothing else, so `vcs add`
 // staged whatever bytes sat at an output path while claiming to stage "the generated
-// outputs a source change produced" - a causal claim it never checked.
+// outputs a source change produced", a causal claim it never checked.
 //
 // An output is EXPLAINED when some project whose output glob claims it also has a dirty
 // declared SOURCE in this change. That is MGS4006's shape. An output with no dirty input
@@ -768,8 +768,8 @@ func SplitExplainedOutputs(files []FileEntry, alsoChangedIn map[string]bool) (ex
 	inputMoved := SourceProjects(files)
 	// A source change that is already COMMITTED explains its output just as well as a
 	// dirty one. Reading only the working tree missed both of the ordinary ways this
-	// happens - committing the source and then the generated output, and pulling and then
-	// regenerating - so magus reported drift it had itself just accounted for, and the
+	// happens (committing the source and then the generated output, and pulling and then
+	// regenerating), so magus reported drift it had itself just accounted for, and the
 	// only way past it was to override the check on a legitimate commit. A check people
 	// learn to override has stopped working.
 	for p := range alsoChangedIn {
@@ -789,14 +789,14 @@ func SplitExplainedOutputs(files []FileEntry, alsoChangedIn map[string]bool) (ex
 }
 
 // SourcesChangedSinceBase returns every project whose declared SOURCE changed in THIS
-// CHANGE - the branch measured against its base ref, not the working tree.
+// CHANGE: the branch measured against its base ref, not the working tree.
 //
 // Base-relative is the whole point, and the working tree cannot substitute for it: on a CI
 // runner the checkout is clean, so a dirtiness probe reports nothing and would report every
 // author innocent of everything. A source change that is already COMMITTED explains its
 // output exactly as well as an uncommitted one.
 //
-// nil means COULD NOT TELL - no VCS, no base, an unreadable diff - and is not the same
+// nil means COULD NOT TELL (no VCS, no base, an unreadable diff) and is not the same
 // answer as "nothing changed". A caller deciding whether to blame someone must treat it as
 // no evidence rather than as evidence of innocence.
 //
@@ -811,8 +811,8 @@ func SourcesChangedSinceBase(ctx context.Context, insp Inspector, res VCSResolut
 	if err != nil {
 		return nil
 	}
-	// A diff that read cleanly and named nothing is an ANSWER - "this branch changed no
-	// source" - and returning nil for it would hand a caller the could-not-tell verdict
+	// A diff that read cleanly and named nothing is an ANSWER ("this branch changed no
+	// source"), and returning nil for it would hand a caller the could-not-tell verdict
 	// for a set magus is certain about.
 	if len(paths) == 0 {
 		return map[string]bool{}
@@ -825,8 +825,8 @@ func SourcesChangedSinceBase(ctx context.Context, insp Inspector, res VCSResolut
 }
 
 // SourceProjects returns every project whose declared SOURCE glob claims one of these
-// paths. It is how both halves of the explained/unexplained question are computed - the
-// dirty set and the changed-since-base set - so the two cannot answer it differently.
+// paths. It is how both halves of the explained/unexplained question are computed (the
+// dirty set and the changed-since-base set), so the two cannot answer it differently.
 func SourceProjects(files []FileEntry) map[string]bool {
 	out := map[string]bool{}
 	for _, f := range files {
@@ -878,7 +878,7 @@ type StagingPlan struct {
 // what was true in this tree, at this moment, in a form a ledger can record and a
 // later reader can act on.
 //
-// It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file - a
+// It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file: a
 // checkpoint is a pure read, so nothing about it can be lost by not keeping it and
 // nothing about the tree changes by taking it. That is what makes it safe to take
 // one per lease, and it is why this is a plain value with no id of its own:
@@ -890,7 +890,7 @@ type StagingPlan struct {
 // can tell you, because a dirty tree's revision is the same one everybody else has.
 type VCSCheckpoint struct {
 	// Revision is the resolved head revision id (VCSMeta.ID): git SHA, hg node, jj
-	// commit_id. Full, never abbreviated - it is meant to be fed back to a VCS.
+	// commit_id. Full, never abbreviated: it is meant to be fed back to a VCS.
 	Revision string `json:"revision" yaml:"revision"`
 	// Branch is the movable name pointing at Revision, or empty where the backend has
 	// none. VCSMeta.Ref's value under the name a caller recording a handoff writes;

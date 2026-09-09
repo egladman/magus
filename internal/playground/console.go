@@ -218,7 +218,7 @@ func (s *Console) help() []Line {
 }
 
 // Banner is the terminal's opening message: a single build/runtime header line
-// (like a REPL's startup banner) - gopherbuzz, the Buzz language version, the
+// (like a REPL's startup banner): gopherbuzz, the Buzz language version, the
 // compiler, and the target. The page's intro copy already explains what the
 // playground is, so the banner stays terse and doesn't repeat it. The `about`
 // command reprints this line; `version` prints the full build detail.

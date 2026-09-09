@@ -426,7 +426,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_PRIVATE",
 		Flag:     fieldtype.FlagNames{Long: "knowledge-notes-private"},
 		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit anywhere on disk - a vault, a scratc...",
+		Usage:    "MAGUS_KNOWLEDGE_NOTES_PRIVATE: Private is a SECOND notes location, yours rather than the team's, and it may sit anywhere on disk: a vault, a scratch...",
 	},
 	{
 		GoPath:   "Secret.Interactive",

@@ -42,7 +42,7 @@ const ListProjectsContract = "list_projects"
 // providerCacheVersion so existing entries miss.
 type ProvidedProject struct {
 	// Path is the project's directory relative to the WORKSPACE ROOT, forward
-	// slashes. Required. It must stay inside the root and must not be "." - the root
+	// slashes. Required. It must stay inside the root and must not be "."; the root
 	// project is the one the magusfile that wired the provider already owns.
 	Path string `json:"path"`
 	// Name is the human label, for a foreign tool whose project name is not its
@@ -62,7 +62,7 @@ type ProvidedProject struct {
 	// mirrors a returned struct, not an authored map.)
 	DependsOn []string `buzz:"depends_on" json:"depends_on"`
 	// Sources and Outputs are globs relative to THIS PROJECT'S directory, not to the
-	// workspace root - the same anchor magus\project's options use, and the anchor
+	// workspace root: the same anchor magus\project's options use, and the anchor
 	// baseStep joins against the project path. A provider reporting a foreign tool's
 	// workspace-relative globs must re-anchor them first: for a project at libs/foo,
 	// "libs/foo/**/*.ts" is wrong and "**/*.ts" is right.

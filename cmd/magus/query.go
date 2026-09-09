@@ -42,7 +42,7 @@ const defaultLogViewerURL = "https://eli.gladman.cc/magus/console/logs/"
 
 // splitQueryNegations pulls the query grammar's negation terms (-kind:op, -docker) out
 // of args before flag parsing. A negation shares the flag prefix, so stdlib flag.Parse
-// rejects it as an unknown flag - the documented syntax was unreachable from the CLI. A
+// rejects it as an unknown flag: the documented syntax was unreachable from the CLI. A
 // dash token is a term rather than a flag exactly when the full query flag set does not
 // know its name; registered flags, their values, "-name=value" spellings (left for
 // flag.Parse to report, since the grammar spells fields with a colon), and everything
@@ -119,7 +119,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	// relative order between a positive term and a negation carries no meaning.
 	pos = append(pos, negations...)
 
-	// Output-reference retrieval is an EXPLICIT subcommand - `magus query output <ref>` - not a
+	// Output-reference retrieval is an EXPLICIT subcommand (`magus query output <ref>`), not a
 	// shape-routed positional, so a search term can never collide with a ref id.
 	if len(pos) >= 1 && pos[0] == hint.QueryOutput.Leaf() {
 		if len(pos) != 2 {
@@ -148,7 +148,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		}
 		return queryOutputRef(ctx, root, ref, outputRefOpts{open: qf.Open, printURL: qf.Print, viewerBase: qf.URL, attempts: qf.Attempts, identity: qf.Identity, publish: qf.Publish, out: outOpts})
 	}
-	// `magus query invocation <id>` - the sibling of `query output <ref>`, and explicit for
+	// `magus query invocation <id>`, the sibling of `query output <ref>`, and explicit for
 	// the same reason: an id is shape-routed nowhere, so a search term cannot collide with one.
 	if len(pos) >= 1 && pos[0] == hint.QueryInvocation.Leaf() {
 		if len(pos) != 2 {
@@ -206,8 +206,8 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
 
 	// The status is decided once, for every format: a rule that held only for text would
-	// leave the callers most likely to branch on it - `-o name` in a chain, `-o json` in a
-	// script - reading a blind spot as an emptiness.
+	// leave the callers most likely to branch on it (`-o name` in a chain, `-o json` in a
+	// script) reading a blind spot as an emptiness.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		if err := emitFormatted(opts, out); err != nil {
@@ -260,7 +260,7 @@ type outputRefOpts struct {
 
 // outputRefRecord is the -o json/yaml projection of a stored output: its descriptor plus the
 // captured output as an opaque verbatim field. The descriptor DESCRIBES the run (project/target/
-// status/timing); the output is the payload, never parsed - so structure lives in the record,
+// status/timing); the output is the payload, never parsed, so structure lives in the record,
 // not in an interpretation of the bytes.
 type outputRefRecord struct {
 	magus.OutputDescriptor
@@ -275,7 +275,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	// What this verb emits by default is the raw bytes a run captured, and bytes have no
 	// fields to template and no identity to name. Only the record WRAPPING them has a
 	// shape, which is why json and yaml work and the rest are refused rather than
-	// silently answered with the bytes - the accepted-and-ignored failure -o exists to
+	// silently answered with the bytes: the accepted-and-ignored failure -o exists to
 	// avoid, and worse here than elsewhere because the fallback looks like real output.
 	switch o.out.Format {
 	case FormatText, FormatJSON, FormatYAML:
@@ -400,8 +400,8 @@ func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out Out
 // stored descriptor, the producing invocation's lineage when its run log survives, and
 // the cache key's component-class digests when the run persisted its key inputs.
 // invocationRecord is the machine-readable projection of one run: its header plus the events
-// an audit cares about. The events are already redacted - journal.Emit scrubs Text on the way
-// in - and a secret event carries only the reference and the provider by construction.
+// an audit cares about. The events are already redacted (journal.Emit scrubs Text on the way
+// in), and a secret event carries only the reference and the provider by construction.
 type invocationRecord struct {
 	magus.Invocation
 	Secrets []magus.Event `json:"secrets,omitempty"`
@@ -414,7 +414,7 @@ type invocationRecord struct {
 //
 // This exists because the events were written and unreachable. The reference and provider were
 // recorded on every read, docs/concepts/secrets.md offered that as the audit trail, and the id
-// magus prints (`inv:`) resolved to nothing - so the trail was a claim rather than a record.
+// magus prints (`inv:`) resolved to nothing, so the trail was a claim rather than a record.
 func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, out OutputOptions) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
@@ -515,7 +515,7 @@ type outputIdentityRecord struct {
 
 // showOutputIdentity renders a stored run's IDENTITY rather than its output: what ran,
 // how it ended, which invocation produced it, and the digests of its cache key's
-// component classes - the machine-comparable half of the works-on-my-machine story
+// component classes: the machine-comparable half of the works-on-my-machine story
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
 func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
@@ -583,11 +583,11 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 			fmt.Printf(" (dirty: uncommitted changes at capture time; the revision alone may not reproduce it)")
 		}
 		fmt.Println()
-		// The cache key pins a tree STATE, never a commit - this is the one place
+		// The cache key pins a tree STATE, never a commit; this is the one place
 		// that names one, by comparing the descriptor's revision against HEAD now.
 		// PROVENANCE only, never instruction: on a cache HIT, recordOutput never runs,
 		// so the descriptor still carries the revision of whichever run FIRST minted
-		// this key - which can differ from HEAD even though the current tree
+		// this key, which can differ from HEAD even though the current tree
 		// reproduces the output perfectly (that reproduction is exactly why it was a
 		// hit). Telling the user to check out the recorded commit would therefore be
 		// wrong on the most common path that reaches this line: a ref that resolved
@@ -616,7 +616,7 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 // reportRefLookupError renders the standard output-ref resolution failures (ambiguous prefix,
 // missing/aged-out, or an unexpected error) as a coded diagnostic + exit code. On the
 // missing-ref path it also prints a best-effort suggestion inverting the ref back to the
-// workspace target(s) that could have minted it - see printIdentifyRefSuggestion. m may be
+// workspace target(s) that could have minted it; see printIdentifyRefSuggestion. m may be
 // nil at call sites with no loaded Magus in scope; the suggestion is then skipped, not
 // attempted against a nil receiver.
 func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err error) error {
@@ -628,7 +628,7 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 	case errors.Is(err, fs.ErrNotExist):
 		// Name the stores consulted when the lookup knows them: a foreign ref that was
 		// never published reads exactly like a mistyped one otherwise. Render the message
-		// ONCE - RefNotFoundError.Error() already includes "consulted: <stores>".
+		// ONCE: RefNotFoundError.Error() already includes "consulted: <stores>".
 		msg := fmt.Sprintf("no stored output for ref %q. It may have aged out of the cache, or the ref is mistyped; re-run the target to regenerate it.", ref)
 		var missing *cache.RefNotFoundError
 		if errors.As(err, &missing) {
@@ -744,7 +744,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	if !ok {
 		// A bare name does not seed symbols, so explain resolved it against a graph that
 		// provably held no code symbols. Reporting that as "no node matches" is how a
-		// real symbol comes to look nonexistent - but only when the input could have
+		// real symbol comes to look nonexistent, but only when the input could have
 		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
 		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsLazyLayer, false))
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
@@ -766,7 +766,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	// Complementary deep-link: focus this node in the live Graph Explorer with a
 	// blast view (the console's own analogue of `magus explain`). Symbol nodes are
 	// excluded from the live full graph the explorer loads, so a link to one would
-	// open to an empty focus - omit it. The link is always printed for other kinds;
+	// open to an empty focus; omit it. The link is always printed for other kinds;
 	// the daemon may not be up when the browser opens it, hence the hint.
 	if out.Node.Kind != types.KindSymbol {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})

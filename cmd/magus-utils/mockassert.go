@@ -30,8 +30,8 @@ type mockeryConfig struct {
 // that each mock still satisfies the interface it was generated from.
 //
 // mockery's testify template emits a plain struct with methods and no
-// `var _ Iface = (*Mock)(nil)`, so a mock that has gone stale - an interface gained a
-// method, nobody re-ran `magus run generate` - still COMPILES. It fails only at a use
+// `var _ Iface = (*Mock)(nil)`, so a mock that has gone stale (an interface gained a
+// method, nobody re-ran `magus run generate`) still COMPILES. It fails only at a use
 // site, and these mocks are published for downstream consumers rather than used by our
 // own tests, so the first build to break could well be someone else's.
 //
@@ -41,7 +41,7 @@ type mockeryConfig struct {
 // the new mock unverified, exactly the gap the assertions exist to close; and each file
 // had to sit in an EXTERNAL test package, because a test in `package types` cannot import
 // types/gen/mocks, which imports types back. Emitting into the mocks package instead has
-// neither problem - that package already imports the interface's package, so there is no
+// neither problem: that package already imports the interface's package, so there is no
 // cycle, and the list cannot drift from .mockery.yaml because it is derived from it.
 //
 // Not a fork of mockery's template, deliberately. Vendoring a copy to add one line would
@@ -91,14 +91,14 @@ func runMockAssert(args []string) error {
 // isInternal reports whether a mocked package is unreachable from outside this module,
 // which is exactly when these assertions are unnecessary AND impossible.
 //
-// Unnecessary: .mockery.yaml mocks an internal package for one reason - OUR tests inject
-// the fake - so a mock that stops satisfying its interface fails at that use site on the
+// Unnecessary: .mockery.yaml mocks an internal package for one reason (OUR tests inject
+// the fake), so a mock that stops satisfying its interface fails at that use site on the
 // next run. The assertion earns its place only for the published mocks, which nothing
 // here calls and whose first failing build would be a consumer's.
 //
 // Impossible: those same tests live in the package being mocked (internal/dry/eval_test.go
 // is `package dry`) and import the mocks. An assertion makes mocks import dry, and the
-// in-package test importing mocks then closes the loop - `import cycle not allowed in
+// in-package test importing mocks then closes the loop: `import cycle not allowed in
 // test`. Emitting it would trade a compile-time check nobody needs for a build nobody can
 // run.
 func isInternal(pkgPath string) bool {
@@ -122,7 +122,7 @@ func mocksDir(pkgPath string) (string, error) {
 // assertFile renders the assertions for one package.
 //
 // The import is aliased to a fixed name rather than spelled with the package's real one,
-// so this needs no way to map an import path to a package name - which is not derivable
+// so this needs no way to map an import path to a package name, which is not derivable
 // from the path (project/impact is package impact, and the module root is package magus).
 func assertFile(pkgPath string, interfaces []string) []byte {
 	var b bytes.Buffer

@@ -35,7 +35,7 @@ type Namer func(reflect.Type) string
 
 // EnumType resolves a Go type to the Buzz enum it mirrors as: the enum's declared
 // name, and the zero-case reference (e.g. "VersionComponent.patch") an unset field
-// defaults to. It is injected for the same reason Namer is - which named-string Go
+// defaults to. It is injected for the same reason Namer is: which named-string Go
 // types have a registered Buzz enum is the host's registry, not a property the Go
 // type carries itself.
 type EnumType func(reflect.Type) (name, zero string, ok bool)
@@ -115,7 +115,7 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 	// Checked ahead of the Kind switch because a Duration IS an Int64: left to the
 	// integer case it would mirror as a bare `int`, handing a caller a nanosecond count
 	// with nothing in the type or the value saying so. It crosses as its own string form
-	// ("1.5s") for the same reason a timestamp does - the unit travels WITH the value.
+	// ("1.5s") for the same reason a timestamp does: the unit travels WITH the value.
 	if t == reflect.TypeOf(time.Duration(0)) {
 		return "str", `""`, nil
 	}
@@ -188,7 +188,7 @@ func FieldType(t reflect.Type, opts Options) (typeName, zero string, err error) 
 }
 
 // FieldName returns the Buzz field name for a Go struct field. An explicit `buzz:"name"`
-// tag wins (needed for initialisms and renames - OK -> ok); otherwise the leading
+// tag wins (needed for initialisms and renames: OK -> ok); otherwise the leading
 // capital is lowercased to match Buzz's camelCase convention.
 //
 // A name colliding with a reserved word is emitted as a FREE IDENTIFIER (@"type"), which
@@ -216,8 +216,8 @@ func FieldName(f reflect.StructField) string {
 //
 // This is the transform Go itself applies in reverse (the commonInitialisms list revive
 // and protoc-gen-go's JSON naming both key off). It is a floor, not a replacement for the
-// `buzz` tag: the rule catches what nobody thought to tag - ID mirrored as iD until this
-// existed - while a tag states the intended name outright, which is what a reader sees
+// `buzz` tag: the rule catches what nobody thought to tag (ID mirrored as iD until this
+// existed) while a tag states the intended name outright, which is what a reader sees
 // and what survives someone renaming the Go field.
 func LowerFirstWord(name string) string {
 	r := []rune(name)

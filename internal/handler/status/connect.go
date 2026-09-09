@@ -40,7 +40,7 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 var _ statusv1alpha1connect.StatusServiceHandler = (*ConnectService)(nil)
 
 // GetStatus returns the current live snapshot as a typed magus.status.v1alpha1.Status, plus the two static
-// per-session fields (observing_since, config) on the response envelope - the typed replacement for the
+// per-session fields (observing_since, config) on the response envelope, the typed replacement for the
 // removed JSON /api/v1/status route, which carried the live status AND those static fields in one body.
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
 	report := s.src.StatusReport(ctx)
@@ -60,7 +60,7 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 }
 
 // StreamStatus pushes a snapshot on connect, then re-samples on a ticker and pushes again only
-// when the encoded snapshot changes - the typed twin of the base64-SSE status frame. It returns
+// when the encoded snapshot changes, the typed twin of the base64-SSE status frame. It returns
 // when the client disconnects (ctx cancelled). A send error means the stream is gone; return it
 // so Connect tears the RPC down.
 func (s *ConnectService) StreamStatus(ctx context.Context, _ *connect.Request[statusv1.StreamStatusRequest], stream *connect.ServerStream[statusv1.StreamStatusResponse]) error {

@@ -11,15 +11,15 @@ import (
 )
 
 // Knowledge-graph schema: the deterministic, derived graph of the magus domain
-// (projects, targets, spells, ops, charms, modules, methods, diagnostics, and -
-// later - docs and buzz source nodes). Every node and edge is EXTRACTED or
+// (projects, targets, spells, ops, charms, modules, methods, diagnostics, and,
+// later, docs and buzz source nodes). Every node and edge is EXTRACTED or
 // rubric-INFERRED from parseable workspace sources; nothing here is LLM-authored
 // or otherwise unverifiable. These are pure domain types (stdlib-only leaf); the
 // builder lives in internal/graph/knowledge and the CLI surface in cmd/magus.
 
 // KnowledgeSchemaVersion is stamped into every exported graph, shard, and manifest.
-// External consumers - agent skills, MCP tools, other tools reading the node-link
-// JSON - check it; a bump is a changelog event. Increment when the node/edge shape
+// External consumers (agent skills, MCP tools, other tools reading the node-link
+// JSON) check it; a bump is a changelog event. Increment when the node/edge shape
 // or ID scheme changes in a way that would break a consumer that parsed the old form.
 // v2 added a "command" kind; v3 a "tool" kind coupled to it. v4 retires "command"
 // (its rendered argv was always identical to the op's static base command, so it was
@@ -35,17 +35,17 @@ import (
 // v7 changes no node or edge shape at all: it bumps because shard fingerprints are now
 // computed by streaming fields into SHA256 instead of hashing marshaled JSON, so every
 // shard's fingerprint VALUE differs from a v6 store's. The manifest check treats a
-// version mismatch as a full rebuild, which is exactly the migration needed - without
+// version mismatch as a full rebuild, which is exactly the migration needed: without
 // the bump, a v6 cache would read as current while every fingerprint disagreed, and a
 // changed shard would never be rewritten.
 // v8 adds symbol->symbol `calls` edges to the @symbols shards, attributed from the SCIP
 // occurrence's enclosing_range (the callee is referenced from inside the caller's body).
 // The relation and both node kinds already existed, so a v7 consumer parses a v8 graph
-// without changing - but it would read a symbol's edge set as complete when it is not,
+// without changing, but it would read a symbol's edge set as complete when it is not,
 // and the shard fingerprints all differ, so the bump is what forces the rebuild.
 // v9 adds `secret_refs` to a target node: the credential references the target names,
 // alongside the `reads_secrets` flag that already recorded that it names any. The field
-// is additive, so a v8 consumer parses a v9 graph unchanged - the bump is for the OTHER
+// is additive, so a v8 consumer parses a v9 graph unchanged: the bump is for the OTHER
 // direction, a v8 store on disk. Its target shards were extracted before the field
 // existed, and the magusfile they were extracted from has not changed, so nothing else
 // would invalidate them: the version mismatch is what forces the rebuild that puts the
@@ -53,13 +53,13 @@ import (
 // v10 adds the "docsection" kind: one node per markdown heading, carrying its goldmark
 // auto-heading-id anchor, so an agent retrieves the relevant section of a doc rather than
 // the whole page. A page `contains` its sections and a section `contains` its subsections.
-// The kind is additive, so a v9 consumer parses a v10 graph unchanged - the bump is for a
+// The kind is additive, so a v9 consumer parses a v10 graph unchanged: the bump is for a
 // v9 store on disk, whose doc shards were extracted before headings were indexed and whose
 // source markdown has not changed, so only a version mismatch forces the rebuild that adds
 // the sections.
 // v11 makes the edge vocabulary part of the exported schema. Each relation has one
-// canonical definition - description, the labels a reader sees in either direction, and
-// the exact endpoint-kind pairs it may connect - and an export carries those definitions
+// canonical definition (description, the labels a reader sees in either direction, and
+// the exact endpoint-kind pairs it may connect), and an export carries those definitions
 // plus a fingerprint of them, so a consumer meeting an unfamiliar predicate can look it
 // up instead of guessing, and two exports built against different vocabularies say so.
 //
@@ -122,7 +122,7 @@ const (
 	// bound to a host module, a function is authored in Buzz, a symbol comes from SCIP.
 	// They never overlap (SCIP does not index .buzz), so a definition lands in exactly one.
 
-	KindMethod     = "method" // a callable bound to a host module (fs.stat) - magus's built-in API surface
+	KindMethod     = "method" // a callable bound to a host module (fs.stat): magus's built-in API surface
 	KindDiagnostic = "diagnostic"
 	KindDoc        = "doc"        // markdown doc page (phase 4)
 	KindDocSection = "docsection" // a heading within a doc page; the graph's retrieval unit for prose
@@ -135,8 +135,8 @@ const (
 	KindSymbol     = "symbol"     // a definition ingested from a SCIP index (compiled-language source, e.g. Go)
 	KindAuthor     = "author"     // a git contributor; `authored` the files they touched (emergent, vs the declared owner)
 	// KindNote is the one kind that is INJECTED rather than extracted. Every other kind is a
-	// projection of workspace content - a doc from markdown, a rationale from a comment, a
-	// symbol from an index, an author from git - so deleting the graph and rebuilding
+	// projection of workspace content (a doc from markdown, a rationale from a comment, a
+	// symbol from an index, an author from git), so deleting the graph and rebuilding
 	// recovers all of them. A note's content originates with a person and no rebuild
 	// recovers it, which is also why nothing but a person may write one.
 	KindNote = "note" // a human-authored note from the declared notes store
@@ -394,7 +394,7 @@ type KnowledgeOutputRef struct {
 // values, so the shard is remote-shareable (unlike @runtime). Path is workspace-relative
 // and matches a file node's Source. Commits is the number of commits touching the file
 // within the scanned window; LastCommit/LastModified/LastAuthor are the most recent such
-// commit's short SHA, author time, and author name - the last is the EMERGENT maintainer,
+// commit's short SHA, author time, and author name; the last is the EMERGENT maintainer,
 // comparable against a file's DECLARED CODEOWNERS owner.
 //
 // The json tags are this type's CACHE format: the scan is expensive enough to persist
@@ -414,7 +414,7 @@ type KnowledgeVCS struct {
 
 // KnowledgeNote is one human-authored note from the declared notes store (an assembly
 // input, not a wire type). Path is workspace-relative and is what the @vcs shard joins on
-// to attribute the note to whoever wrote it - the reason notes live in the checkout at all.
+// to attribute the note to whoever wrote it: the reason notes live in the checkout at all.
 //
 // Anchors are the entities the note attaches to, already resolved to node IDs by the
 // caller: assembly emits an edge only for an anchor that resolves, because an edge to a
@@ -447,7 +447,7 @@ type KnowledgeSymbol struct {
 	Source string
 	// DefEndLine is the 1-based last line of the definition's BODY, from the SCIP
 	// occurrence's enclosing range, or 0 when the indexer emits none (which is the honest
-	// answer rather than a guess - see Calls, which makes the same trade).
+	// answer rather than a guess; see Calls, which makes the same trade).
 	//
 	// Source alone gives a start with no end, which is enough to point a reader at a
 	// definition but not enough to fingerprint one. Pairing them bounds the exact lines a
@@ -458,7 +458,7 @@ type KnowledgeSymbol struct {
 	Refs       []KnowledgeSymbolRef
 	// Calls are the workspace-defined symbols referenced from inside this symbol's own
 	// definition body, attributed by the SCIP occurrence's enclosing range. Collapsed per
-	// (caller, callee) - the same scale decision Refs makes per (file, symbol) - so a hot
+	// (caller, callee), the same scale decision Refs makes per (file, symbol), so a hot
 	// callee yields one entry per caller, never one per call site. Empty when the indexer
 	// emits no enclosing ranges, which is the honest answer rather than a guess.
 	Calls []KnowledgeSymbolCall
@@ -469,14 +469,14 @@ type KnowledgeSymbol struct {
 // version the manifest resolves to.
 //
 // Manager is not decoration and not derivable from Name. It is what keeps the npm
-// package `foo` and the Go module `foo` from colliding on one node - the same
+// package `foo` and the Go module `foo` from colliding on one node: the same
 // collision internal/symbols/scip.go's parseMoniker already folds the manager into
 // its key to avoid, and for the same reason.
 //
 // Version is what the manifest RESOLVES to, never a range. Go states exact versions
 // in go.mod, so the manifest is the resolved list; ecosystems whose manifest holds a
 // range (npm's ^4.2.0) must read their lockfile instead, which is what
-// spells.Manifest.LockCandidates leads to. A record here always carries a pin - an
+// spells.Manifest.LockCandidates leads to. A record here always carries a pin: an
 // unresolvable dependency is omitted rather than recorded with a range, because a
 // range presented as a version is exactly the version skew this exists to end.
 type KnowledgePackage struct {
@@ -488,8 +488,8 @@ type KnowledgePackage struct {
 	// to bump, and because a direct dependency is the one worth reading docs about.
 	Indirect bool
 	// Replaced marks a dependency a replace directive redirects. Its Version is the
-	// replacement's, which is what actually builds - so the node stays truthful about
-	// what is on disk - and this flag is what stops a reader concluding the manifest's
+	// replacement's, which is what actually builds (so the node stays truthful about
+	// what is on disk), and this flag is what stops a reader concluding the manifest's
 	// original requirement is what shipped.
 	Replaced bool
 }
@@ -524,7 +524,7 @@ type KnowledgeSymbolRef struct {
 
 // KnowledgeSymbolCall is one callee reached from inside a symbol's definition body: the
 // callee's version-stripped key (the same key that becomes its node ID) and how many
-// occurrences were attributed. It carries no line list on purpose - the call sites are
+// occurrences were attributed. It carries no line list on purpose: the call sites are
 // already recorded on the caller file's `references` edge, and duplicating them per pair
 // would be pure shard weight at this edge count.
 type KnowledgeSymbolCall struct {
@@ -541,7 +541,7 @@ type KnowledgeSymbolCall struct {
 // VERDICT is the scalar judgment, and the thing carrying it is named for the question it
 // answers. So KnowledgeAnswer holds a Verdict, spells.VersionBounds.Check returns a
 // spells.Verdict, and a record of a judgment is a Result or a Plan rather than a Verdict.
-// Two packages both spelling the scalar `Verdict` is not a collision - Go qualifies it,
+// Two packages both spelling the scalar `Verdict` is not a collision: Go qualifies it,
 // and both genuinely are verdicts. Prefixing this one to KnowledgeVerdictUnknown would
 // only add stutter and break the tie to what the CLI prints and the JSON key says, which
 // is the one-vocabulary rule the README states.
@@ -572,7 +572,7 @@ const (
 	ReasonCoverageUnknown KnowledgeUnknownReason = "coverage-unknown"
 	// ReasonIndexStale: the symbol index was read, but it predates the sources it covers,
 	// so a definition added or moved since the build is not in it. Fix: rebuild the index.
-	// Only a lookup whose whole evidence base IS the index reports this - a miss there is
+	// Only a lookup whose whole evidence base IS the index reports this: a miss there is
 	// unverifiable, while a general query reads layers the index has no bearing on.
 	ReasonIndexStale KnowledgeUnknownReason = "index-stale"
 )
@@ -614,7 +614,7 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // StaleIndexes is the caveat the text arm has always printed under an answer and the
 // structured arms silently dropped: workspace-relative paths of the projects whose built
 // symbol index predates the sources it covers. It rides the answer rather than the console
-// so `-o json` and MCP cannot lose it - a machine consumer reading only stdout got an
+// so `-o json` and MCP cannot lose it: a machine consumer reading only stdout got an
 // unqualified `absent` where a human reading the same lookup was told the index was behind.
 type KnowledgeAnswer struct {
 	Verdict      KnowledgeVerdict       `json:"verdict"                 yaml:"verdict"`
@@ -775,7 +775,7 @@ const (
 	// rewrite may act on.
 	SymbolOccurrenceVerified SymbolOccurrenceStatus = "verified"
 	// SymbolOccurrenceMismatch means the range resolved but holds something other than
-	// the symbol's name - a stale index, or a position encoding that is not the byte
+	// the symbol's name: a stale index, or a position encoding that is not the byte
 	// offsets magus assumed. Either way the range is not editable, and saying so is the
 	// whole point: the alternative is a confident wrong edit.
 	SymbolOccurrenceMismatch SymbolOccurrenceStatus = "mismatch"
@@ -812,7 +812,7 @@ type SymbolOccurrence struct {
 }
 
 // SymbolOccurrenceFile groups one file's occurrences. Occurrences are sorted by position,
-// which is also the order a caller must NOT apply them in - see KnowledgeOccurrencesOutput.
+// which is also the order a caller must NOT apply them in; see KnowledgeOccurrencesOutput.
 type SymbolOccurrenceFile struct {
 	File        string             `json:"file"        yaml:"file"`
 	Occurrences []SymbolOccurrence `json:"occurrences" yaml:"occurrences"`
@@ -824,7 +824,7 @@ type SymbolOccurrenceFile struct {
 	// did verify. Re-index before trusting it.
 	//
 	// The converse does not hold, and the gap is worth stating plainly: an edit that
-	// disturbed no existing range - appending a new use at the end of the file - leaves
+	// disturbed no existing range (appending a new use at the end of the file) leaves
 	// every occurrence verifying while still adding a site the index never saw. Nothing
 	// magus can compute from the index alone detects that. Completeness rests on the
 	// index being current; `magus status` reports which indexes are.
@@ -847,19 +847,19 @@ type KnowledgeOccurrencesOutput struct {
 	Symbol        string `json:"symbol"         yaml:"symbol"`
 	Label         string `json:"label"          yaml:"label"`
 	// Name is the identifier a rename would replace: the first of Names. It is derived from
-	// the symbol's own descriptor, not from the index's display name - for a package those
+	// the symbol's own descriptor, not from the index's display name: for a package those
 	// differ, and the descriptor's last segment is what call sites write.
 	Name string `json:"name" yaml:"name"`
 	// Names is every spelling an occurrence was allowed to hold, in the order they were
-	// tried. A symbol can legitimately be written more than one way - a package's import
-	// statement holds its full path while its call sites hold the bare identifier - so a
+	// tried. A symbol can legitimately be written more than one way (a package's import
+	// statement holds its full path while its call sites hold the bare identifier), so a
 	// site is checked against this whole set, not against Name alone. It is surfaced so a
 	// consumer can reproduce the verdict instead of having to trust it.
 	Names           []string `json:"names,omitempty"  yaml:"names,omitempty"`
 	FileCount       int      `json:"file_count"       yaml:"file_count"`
 	OccurrenceCount int      `json:"occurrence_count" yaml:"occurrence_count"`
 	// VerifiedCount is how many of OccurrenceCount are safe to edit. A caller comparing
-	// the two learns, in one subtraction, whether a rewrite would be complete - which is
+	// the two learns, in one subtraction, whether a rewrite would be complete, which is
 	// the question that decides whether to proceed at all.
 	VerifiedCount int `json:"verified_count"   yaml:"verified_count"`
 	// StaleFiles is how many of Files carry a stale marker. Non-zero means a rewrite would
@@ -889,7 +889,7 @@ type KnowledgeQueryOutput struct {
 	MatchCount    int    `json:"match_count"    yaml:"match_count"`
 	// Offset is the index of the first returned match within the full ranked list;
 	// 0 (omitted) for an unpaged query or the first page. Offset alone does not
-	// signal paging - page 0 of a paged query and an unpaged query look the same
+	// signal paging: page 0 of a paged query and an unpaged query look the same
 	// here; the MCP layer's next_cursor is what signals more pages remain.
 	Offset  int              `json:"offset,omitempty" yaml:"offset,omitempty"`
 	Matches []KnowledgeMatch `json:"matches"        yaml:"matches"`
@@ -897,7 +897,7 @@ type KnowledgeQueryOutput struct {
 	Links   []KnowledgeEdge  `json:"links"          yaml:"links"`
 	// Answer says whether MatchCount 0 is a verified absence or a blind spot. Most
 	// queries never seed the symbol shards, so a bare term matching nothing says nothing
-	// about whether a code symbol by that name exists - this is where that is stated.
+	// about whether a code symbol by that name exists; this is where that is stated.
 	Answer KnowledgeAnswer `json:"answer" yaml:"answer"`
 }
 
@@ -981,7 +981,7 @@ type KnowledgeStats struct {
 	LargestComponentSize int `json:"largest_component_size" yaml:"largest_component_size"`
 }
 
-// KnowledgeGodNode is a highly-connected node - where structural risk concentrates.
+// KnowledgeGodNode is a highly-connected node: where structural risk concentrates.
 type KnowledgeGodNode struct {
 	ID     string `json:"id"     yaml:"id"`
 	Kind   string `json:"kind"   yaml:"kind"`
@@ -1021,8 +1021,8 @@ const KnowledgeStatsDefinition = "Graph stats reads the knowledge graph to show 
 
 // KnowledgeRouting is the compact "query first" summary rendered into MAGUS.md's
 // header: per-kind and per-project entry points so a reader's (human or agent)
-// next action is a magus query, not a grep. It routes - counts, the field to
-// query, and a few high-degree anchor nodes - and never dumps graph data, so it
+// next action is a magus query, not a grep. It routes (counts, the field to
+// query, and a few high-degree anchor nodes) and never dumps graph data, so it
 // stays diff-stable across routine edits.
 type KnowledgeRouting struct {
 	SchemaVersion int `json:"schema_version" yaml:"schema_version"`

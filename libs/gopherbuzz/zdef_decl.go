@@ -71,7 +71,7 @@ func foldStringConcat(n ast.Node) (string, bool) {
 // A zdef struct used to bind only a {size, align, offsets} LAYOUT, so `Data` was a
 // value and not a type: `Data{ id = 1 }` failed with "undefined type", and
 // `typeof Data` had nothing to name. Synthesizing an ast.ObjectDecl hands the
-// struct to the machinery that already exists - the checker registers it as an
+// struct to the machinery that already exists: the checker registers it as an
 // ObjectType, and the compiler resolves the literal through c.typeDecls exactly as
 // it does for a hand-written `object`. Nothing about object literals had to change.
 //
@@ -112,7 +112,7 @@ func zdefStructDecls(expr ast.Node) []*ast.ObjectDecl {
 
 // buzzTypeForCType maps a C/Zig field spelling onto the Buzz type a script sees.
 // An unrecognized spelling yields "" (unannotated), which reads as Unknown in the
-// checker - the tracking-failure sentinel, so an exotic field stays usable rather
+// checker: the tracking-failure sentinel, so an exotic field stays usable rather
 // than becoming a hard error.
 func buzzTypeForCType(ct string) string {
 	switch ct {

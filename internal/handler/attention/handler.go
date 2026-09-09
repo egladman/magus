@@ -16,7 +16,7 @@ import (
 // consoleSessionHost stamps the disposing session as having been driven by the console.
 //
 // sessions.SessionStart.Host names the surface that drove a session, and the CLI leaves it
-// empty because nothing on its run path knows the answer - "not known", never "a human".
+// empty because nothing on its run path knows the answer: "not known", never "a human".
 // This route DOES know: it is reachable only from the console, so the surface is a fact at
 // the moment of the write rather than something inferred later from an absence. Recording
 // it positively is what keeps that inference from being needed at all.
@@ -29,7 +29,7 @@ const consoleSessionHost = "console"
 // Handler serves /api/v1/attention: the blocks agents have raised in this repository
 // and waiting on a person, plus the one write that closes one.
 //
-// GET answers {"requests":[...],"store":"<dir>"} - the same shape `magus session attention -o json`
+// GET answers {"requests":[...],"store":"<dir>"}, the same shape `magus session attention -o json`
 // prints, so the console and the terminal cannot come to describe one queue differently. The
 // requests are sessions.AttentionRequest values, which is what makes the two identical by
 // construction rather than by review.
@@ -37,7 +37,7 @@ const consoleSessionHost = "console"
 // POST {"id":"<id or prefix>","reason":"<text>"} disposes one, and is a HUMAN act. Nothing
 // magus does closes a request: an event whose whole meaning is "blocked on a person" stops
 // meaning that the moment the tool answers it (docs/doctrine.md, "Manual on purpose"). This
-// route exists because the console IS the person's surface, alongside the CLI - not as an
+// route exists because the console IS the person's surface, alongside the CLI, not as an
 // automation door. There is deliberately no dispose-all, no expiry and no filter that could
 // clear the queue without reading it.
 //
@@ -58,8 +58,8 @@ type Handler struct {
 // the same checkout even if the state directory moves under a long-lived daemon.
 //
 // tel may be nil; it records how long each closed request waited. Only the disposals that come
-// through THIS route are measured - the CLI's `magus session dispose` closes requests in a
-// one-shot process with no collector - which is why the instrument is a wait-time distribution
+// through THIS route are measured (the CLI's `magus session dispose` closes requests in a
+// one-shot process with no collector), which is why the instrument is a wait-time distribution
 // and not a queue depth that would read as the whole queue and be neither.
 func NewHandler(root, version string, log *slog.Logger, tel observability.Provider) *Handler {
 	h := &Handler{root: root, version: version, tel: tel}
@@ -70,8 +70,8 @@ func NewHandler(root, version string, log *slog.Logger, tel observability.Provid
 // attentionView mirrors cmd/magus's attentionListOutput field for field.
 //
 // Mirrored rather than shared because the CLI's copy lives in package main, which nothing can
-// import. The REQUESTS are the same sessions.AttentionRequest type, so the rows - every field
-// a reader acts on - cannot drift; only this two-field envelope is duplicated, and it is
+// import. The REQUESTS are the same sessions.AttentionRequest type, so the rows (every field
+// a reader acts on) cannot drift; only this two-field envelope is duplicated, and it is
 // duplicated in the one direction that matters, with the CLI as the original.
 type attentionView struct {
 	Requests []sessions.AttentionRequest `json:"requests"`
@@ -110,7 +110,7 @@ func (h *Handler) list(w http.ResponseWriter) {
 		http.Error(w, "attention error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// A repository nobody has raised a block in serves "requests":[] rather than null - an
+	// A repository nobody has raised a block in serves "requests":[] rather than null: an
 	// empty queue is the GOOD state and the surface renders a list either way. AttentionQueue
 	// already returns an empty slice rather than a nil one, so this needs no normalizing.
 	handler.WriteJSON(w, attentionView{Requests: sessions.AttentionQueue(fold), Store: dir})

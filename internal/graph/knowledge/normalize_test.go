@@ -28,8 +28,8 @@ func pathShapeGraph(t *testing.T) (*Graph, string) {
 	return g, root
 }
 
-// Every spelling a human produces by copy-pasting - shell tab-completion, an editor's
-// "Copy Path", a Windows-side agent - resolves the node a bare relative path resolves.
+// Every spelling a human produces by copy-pasting (shell tab-completion, an editor's
+// "Copy Path", a Windows-side agent) resolves the node a bare relative path resolves.
 func TestResolvePathShapes(t *testing.T) {
 	g, root := pathShapeGraph(t)
 	abs := filepath.Join(root, "console", "magusfile.buzz")

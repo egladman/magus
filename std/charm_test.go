@@ -108,7 +108,7 @@ func TestCharmPath(t *testing.T) {
 // mirror must all spell the move/copy source the same way. They did not: the
 // constructors emitted "from" (the RFC 6902 / JSON name) while the mirror declared
 // fromPtr, because `from` is a reserved word in Buzz and no mirror can use it. Nothing
-// noticed, because nothing referenced the Buzz name - so a magusfile annotating a charm
+// noticed, because nothing referenced the Buzz name, so a magusfile annotating a charm
 // would have read an empty field forever.
 func TestCharmMoveUsesTheBuzzFieldName(t *testing.T) {
 	got, err := CharmMove(context.Background(), []string{"a", "b", "c"}, "c", "/0")

@@ -6,7 +6,7 @@ import "embed"
 //
 // They live HERE rather than beside the CLI that installs them, next to the catalog that renders,
 // stamps and verifies them. go:embed cannot reach across package directories, so wherever the
-// assets sit is the only package that can embed them - and while they sat under cmd/magus, the
+// assets sit is the only package that can embed them, and while they sat under cmd/magus, the
 // docs generator could not import them at all. It read them off disk through a relative
 // `-src ../cmd/magus` instead, which is a path that silently means the wrong thing the moment
 // either binary moves.
@@ -27,7 +27,7 @@ var agentsSectionMD string
 // Default returns the catalog over magus's own embedded skill sources at the current knowledge
 // schema version.
 //
-// It is the ONE construction every shipping caller wants - the CLI's `agent install`, the docs
+// It is the ONE construction every shipping caller wants: the CLI's `agent install`, the docs
 // generator, and anything that needs to know which skills magus ships. NewCatalog stays exported
 // for a caller supplying different sources, which in practice means tests.
 func Default(schemaVersion int) *Catalog {

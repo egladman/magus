@@ -37,7 +37,7 @@ func TestServiceWithoutDetachIsClean(t *testing.T) {
 }
 
 func TestDetachFlagScopedToContainerBins(t *testing.T) {
-	// dnsmasq -d means "run in the foreground" - the OPPOSITE of detach - so it must
+	// dnsmasq -d means "run in the foreground" (the OPPOSITE of detach), so it must
 	// not be flagged. This is why the ward is bin-scoped, not a universal -d match.
 	assert.Empty(t, Check("dns", service("dnsmasq", "-d", "--port", "5353")))
 }
@@ -54,7 +54,7 @@ func TestWatchOnCommandIsError(t *testing.T) {
 }
 
 func TestWatchOnServiceIsClean(t *testing.T) {
-	// A watcher modeled as a SERVICE op is correct - that is exactly the fix.
+	// A watcher modeled as a SERVICE op is correct; that is exactly the fix.
 	assert.Empty(t, Check("dev", service("tsc", "--watch")))
 }
 

@@ -12,9 +12,9 @@ import (
 // listeners that serve the app (the daemon's loopback /console/ mount and the on-demand LAN
 // "share to phone" listener). It is deliberately strict: the console ORIGIN holds the operator
 // token (in the URL fragment, then in memory) and reaches TokenService (list, mint, revoke), and it
-// renders attacker-influenced output - build/test logs, graph labels, activity text - so a single
+// renders attacker-influenced output (build/test logs, graph labels, activity text), so a single
 // injected script would have a large blast radius. Locking script-src to 'self' (no inline, no
-// eval, no CDN - the built console loads only its own bundles) is the primary XSS control;
+// eval, no CDN; the built console loads only its own bundles) is the primary XSS control;
 // connect-src 'self' keeps any exfiltration channel on the same origin, and form-action 'self'
 // closes the form-POST exfil channel connect-src does not cover. object-src 'none' bans plugin
 // embeds; frame-ancestors 'none' bans clickjacking frames (the console is a standalone app, never
@@ -32,8 +32,8 @@ const consoleCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'uns
 // origins carry the same CSP.
 //
 // The decoupled console is a single shell page that reads its surface from the URL PATH, so a
-// bare /console/<surface>/ request (one of KnownSurfaces) must return the shell - not the static
-// directory listing that physically lives there - so the console's boot router can open that
+// bare /console/<surface>/ request (one of KnownSurfaces) must return the shell (not the static
+// directory listing that physically lives there), so the console's boot router can open that
 // surface. Every real file (the /console/ root index, the bundles, css, assets, and each
 // surface's sub-path files) serves normally through the FileServer.
 func StaticHandler(consoleDir string) http.Handler {
@@ -44,23 +44,23 @@ func StaticHandler(consoleDir string) http.Handler {
 		// the root index.html and any surface stub get the header without a per-branch set.
 		cw := &cspHTMLWriter{ResponseWriter: w}
 		// seg is the single path element under /console/ ("graph"), or "" for the root, or a
-		// multi-element sub-path ("graph/explorer.js") - only a bare known surface is a route.
+		// multi-element sub-path ("graph/explorer.js"); only a bare known surface is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
 		if IsSurfaceRoute(seg) {
 			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
 			// served with <base href="../"> and that only lands on /console/ when the URL
 			// already ends in a slash. Without the redirect, /console/diff resolves every asset
-			// one level too high - console.css, theme.js, patternfly.css all 404 at the site
+			// one level too high: console.css, theme.js, patternfly.css all 404 at the site
 			// root, and the surface renders unstyled and never boots. The trim above hides the
 			// difference from IsSurfaceRoute, so the check has to happen on the raw path.
 			//
 			// KnownSurfaces documents the canonical grammar as /console/<surface>/ and Link
-			// mints it that way, so this only affects a URL a person typed - which is exactly
+			// mints it that way, so this only affects a URL a person typed, which is exactly
 			// the case worth being kind about. Redirecting rather than making the base absolute
 			// keeps the shell servable from a prefix it does not know, which is what the
 			// relative base is for. StatusFound, matching share.go's redirect to /console/.
 			if !strings.HasSuffix(r.URL.Path, "/") {
-				// The destination comes from KnownSurfaces itself, not from the request - see
+				// The destination comes from KnownSurfaces itself, not from the request; see
 				// CanonicalSurfacePath. It also normalizes an odd but legal /console//diff.
 				target, ok := CanonicalSurfacePath(seg)
 				if !ok {
@@ -74,7 +74,7 @@ func StaticHandler(consoleDir string) http.Handler {
 				// so there is nothing to preserve here; the browser reattaches it itself.
 				//
 				//nolint:gosec // G710: the destination is an element of KnownSurfaces, returned by
-				// CanonicalSurfacePath, so it cannot be influenced by the request - only the
+				// CanonicalSurfacePath, so it cannot be influenced by the request; only the
 				// optional query rides along. gosec's taint analysis cannot see through the
 				// allow-list lookup and flags any redirect downstream of a request path.
 				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
@@ -94,7 +94,7 @@ func StaticHandler(consoleDir string) http.Handler {
 // index.html works at both the hosted origin and this daemon; served one level deep at
 // /console/<surface>/, those refs must resolve against the parent /console/, which the base
 // makes so. (The shell's own lazy imports resolve against import.meta.url, i.e. console.js's
-// URL, so they are unaffected.) The hosted static host - which has no such fallback - gets the
+// URL, so they are unaffected.) The hosted static host (which has no such fallback) gets the
 // same effect from the per-surface index.html stubs the console build emits into gen/<surface>/.
 func serveConsoleShell(w http.ResponseWriter, r *http.Request, consoleDir string) {
 	raw, err := os.ReadFile(filepath.Join(consoleDir, "index.html"))

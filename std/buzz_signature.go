@@ -57,7 +57,7 @@ func returnSuffix(m Method) string {
 			// annotation that turns field access into a checked expression, and it is
 			// the only reason to know the name at all. The descriptor already carries
 			// the list form ("[Commit]") when the Impl returns a slice, so this needs
-			// no reflection - which matters because this package IS linked into the
+			// no reflection, which matters because this package IS linked into the
 			// binary, unlike the generator that fills the field in.
 			rets[i] = r.Object
 		default:

@@ -26,7 +26,7 @@ import (
 // answer is, on every host, with nothing to wire and no hook to install.
 //
 // It never withholds and never fails a lookup. The rows print first and this is one line
-// under them, because a stale index still holds true facts - it holds FEWER of them, and
+// under them, because a stale index still holds true facts: it holds FEWER of them, and
 // the failure it prevents is reading a short list as a complete one. printVerdict covers
 // the neighbouring case, an answer that found NOTHING; this one speaks under an answer
 // that found something and may be missing the rest.
@@ -120,7 +120,7 @@ func staleIndexProjects(ctx context.Context, root string) []string {
 // sourceNewerThan reports whether any file under dir was modified after cutoff.
 //
 // It stops at the FIRST one. The question is whether the index is behind, not by how much
-// or because of what, so the walk is over the moment one file answers it - which is the
+// or because of what, so the walk is over the moment one file answers it, which is the
 // common case in a session that has been editing, and the case where the walk would
 // otherwise cost the most.
 func sourceNewerThan(dir string, cutoff time.Time) bool {
@@ -132,7 +132,7 @@ func sourceNewerThan(dir string, cutoff time.Time) bool {
 			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal
 		}
 		if d.IsDir() {
-			// The root itself is never pruned - a project directory whose own name looks
+			// The root itself is never pruned: a project directory whose own name looks
 			// ignorable is still the project being asked about.
 			if path != dir && project.IsIgnoreDir(d.Name()) {
 				return fs.SkipDir
@@ -155,7 +155,7 @@ func sourceNewerThan(dir string, cutoff time.Time) bool {
 
 // The guard's half of the same fact. Half (a) above is the load-bearing one: it works on
 // every host with nothing wired, because it rides the command's own output. This one
-// reaches a host that runs a pre-tool hook, and it arrives one call EARLIER - before the
+// reaches a host that runs a pre-tool hook, and it arrives one call EARLIER: before the
 // stale answer is read rather than under it.
 //
 // It is an advisory and never a deny. A stale index still answers, the answer is still

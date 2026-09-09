@@ -17,7 +17,7 @@ import (
 // This file lives in the bindings layer (not internal/secret) because a spell-backed
 // secret provider needs the Buzz VM to run the spell's handler op. It registers itself
 // with the secret package at init, so core can resolve through a spell provider without
-// linking the VM - the same indirection ci_provider.go and remote_cache.go use.
+// linking the VM: the same indirection ci_provider.go and remote_cache.go use.
 func init() {
 	secret.RegisterProviderOpener(openSpellSecretProvider)
 }
@@ -49,12 +49,12 @@ type spellSecretProvider struct {
 //
 // The value arrives as the op's Text rather than structured Data on purpose: a secret
 // is a single opaque string, and routing it through a typed payload would mean it also
-// passes through the JSON encoder that serializes Data for MCP - one more place a
+// passes through the JSON encoder that serializes Data for MCP: one more place a
 // credential could be retained.
 func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Value, error) {
 	// ANNOUNCED BEFORE THE PROVIDER RUNS, not after. A 1Password prompt appearing during
 	// what looked like an ordinary build, with nothing on screen explaining it, is a
-	// trust failure - the user cannot tell whether magus asked for it or something else
+	// trust failure: the user cannot tell whether magus asked for it or something else
 	// on their machine did. This line is the accountability: what is waiting, what it
 	// wants, and how long before it gives up.
 	//
@@ -74,7 +74,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	defer cancel()
 
 	// Silenced for the duration of the provider's own subprocess. Its stdout IS the
-	// credential, and it streams BEFORE the resolver has any value to redact - the one
+	// credential, and it streams BEFORE the resolver has any value to redact: the one
 	// exec guaranteed to contain a secret is the one redaction structurally cannot
 	// cover, because the value is unknown until the command that reveals it has printed.
 	// Discarding both streams is the only correct answer; a provider that needs to
@@ -106,7 +106,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	//       return Secret{ value = ... };
 	//   }
 	//
-	// Buzz checks function SIGNATURES, so `> Secret` is enforced at compile time - a
+	// Buzz checks function SIGNATURES, so `> Secret` is enforced at compile time: a
 	// provider returning the wrong shape fails to load rather than failing at the first
 	// read. That is why this is worth typing even though magus\secret.read still hands a
 	// magusfile a plain str: Buzz does not check host-call results, so a type there would
@@ -121,7 +121,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	// the op shipped returning `> str` and third-party providers were written against
 	// that, so a plain string is still accepted. Observe it is safe to drop by checking
 	// that no spell in spells/ and no documented provider declares `> str` on
-	// resolve_secret - magus's own three were converted with the typed return.
+	// resolve_secret; magus's own three were converted with the typed return.
 	if resp.Text != "" {
 		return secret.NewValue(resp.Text), nil
 	}

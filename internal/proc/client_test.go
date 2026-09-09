@@ -284,7 +284,7 @@ func TestDialRespectsContextCancellation(t *testing.T) {
 }
 
 // newWedgedServer starts a raw unix-socket listener that accepts one connection,
-// drains the request frame, and then never replies - simulating the wedged-daemon
+// drains the request frame, and then never replies, simulating the wedged-daemon
 // symptom documented elsewhere in this repo as "daemon-adopted runs ignore
 // SIGTERM ... the goroutine parked in proc.readFrame". It returns a unix:// address.
 //
@@ -320,7 +320,7 @@ func newWedgedServer(t *testing.T) string {
 // TestShutdownRespectsContextCancellation is the B-1 regression test: before the
 // fix, Shutdown's readFrame(conn) call used a plain io.Reader with no deadline and
 // completely ignored ctx once past Dial, so a daemon that accepted the connection
-// and never replied blocked Shutdown forever - ctx cancellation could not unblock
+// and never replied blocked Shutdown forever; ctx cancellation could not unblock
 // it. Pre-fix this test hangs past the hard bound below; post-fix it returns
 // promptly with a context error.
 func TestShutdownRespectsContextCancellation(t *testing.T) {

@@ -12,8 +12,8 @@ type invocationAncestorsKey struct{}
 // first, with this invocation itself last. Each entry is an opaque reference minted by
 // [AppendInvocationAncestor]; a caller only ever compares them.
 //
-// It exists so a nested magus can tell a lock its OWN ancestor holds - which can never be
-// released, because the ancestor is blocked waiting on this process to exit - from a lock
+// It exists so a nested magus can tell a lock its OWN ancestor holds (which can never be
+// released, because the ancestor is blocked waiting on this process to exit) from a lock
 // an unrelated concurrent magus holds, which will be released shortly. The two look
 // identical to flock, and treating the first as the second is what made a nested
 // `magus run` hang forever instead of failing.
@@ -57,8 +57,8 @@ func HasInvocationAncestor(ctx context.Context, pid int, id string) bool {
 // invocationRef is the identity two invocations are compared by: the pid that minted the
 // id, plus the id.
 //
-// The pid is not decoration. journal.NewInvocationID is documented as PROCESS-unique - it
-// is a millisecond stamp plus a per-process counter - so two magus processes that mint
+// The pid is not decoration. journal.NewInvocationID is documented as PROCESS-unique (it
+// is a millisecond stamp plus a per-process counter), so two magus processes that mint
 // their first id in the same millisecond mint the same string. On the id alone, a CI
 // fan-out that starts several runs at once would have one refuse another as its own
 // ancestor. A pid is unique among live processes, so the pair is unique among live

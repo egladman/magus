@@ -249,8 +249,8 @@ func (*countingTerm) Fd() uintptr                   { return 2 }
 // few times a second and the diff drops every repaint in between.
 //
 // Kept as the guard the hypothesis deserved: if the status row ever starts
-// differing on every repaint - a spinner, a finer clock, a counter that moves
-// per sample - this is where it shows up.
+// differing on every repaint (a spinner, a finer clock, a counter that moves
+// per sample), this is where it shows up.
 func BenchmarkStatusRowClockOnly(b *testing.B) {
 	const samples = 300
 	ctx := context.Background()

@@ -11,7 +11,7 @@ import "strings"
 // It collapses every managed section, not just the first. The end marker used to be
 // located by a plain Index over the whole text, which finds the FIRST section's end even
 // when the matched begin sits further down; that computed endIdx < startIdx, failed the
-// ordering test, and appended instead - once per invocation. A real .gitattributes
+// ordering test, and appended instead, once per invocation. A real .gitattributes
 // reached four stacked sections this way, each still applying merge=magus for globs the
 // workspace had dropped. Searching for end after begin stops the accumulation; sweeping
 // the rest heals a file that already accumulated.

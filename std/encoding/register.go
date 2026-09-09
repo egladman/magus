@@ -2,14 +2,14 @@
 // under std/encoding/*: base64, csv, hex, ini, json, toml, url, xml, yaml.
 //
 // Each of the nine uses none of std's shared sandbox/exec helpers
-// (resolvePath, checkRead, checkWrite, optStringDefault, ...) - every helper a
-// text codec needs is local to its own file - so splitting them into their
+// (resolvePath, checkRead, checkWrite, optStringDefault, ...): every helper a
+// text codec needs is local to its own file, so splitting them into their
 // own leaf packages hides real behavior behind a real package boundary
 // instead of just renaming a file. See magus-local-development's survey for
 // the modules that do NOT have this property (fs, http, crypto, env, path,
 // os, vcs, archive): their shared helpers ARE the sandbox enforcement layer,
 // so pulling any one of them out would force exporting resolvePath/checkRead/
-// checkWrite onto the public API - the wrong direction to move right after
+// checkWrite onto the public API, the wrong direction to move right after
 // fixing bypasses of exactly those checks.
 //
 // This package's Module values reach std's own registry vocabulary (the
@@ -20,7 +20,7 @@
 // init() side effect into std's package-level map. Each leaf's register.go
 // exposes a plain Modules() function (see e.g. std/encoding/json/register.go),
 // this file aggregates all nine explicitly, and the union with std's own
-// All()/Get() is computed one layer further up, in internal/hostmodules - the
+// All()/Get() is computed one layer further up, in internal/hostmodules, the
 // first package in the import graph that imports both std and std/encoding.
 // That is also why this package exports only Modules()/Get(): nothing here
 // needs std.Register or the internal registry map at all.
@@ -42,9 +42,9 @@ import (
 )
 
 // leafSets lists every std/encoding leaf's contribution, one entry per
-// directory. Adding a tenth leaf package means adding one line here - the
+// directory. Adding a tenth leaf package means adding one line here (the
 // SAME kind of single, auditable edit std/module.go's own Register calls are
-// for the 24 modules that self-register - and TestModulesMatchDirectories (in
+// for the 24 modules that self-register), and TestModulesMatchDirectories (in
 // register_test.go) fails if a leaf directory exists here without a matching
 // entry, or an entry here without a matching directory, so the omission
 // cannot pass silently the way it could with a blank-import list.
@@ -66,7 +66,7 @@ var leafSets = []func() []std.Module{
 // package cannot call Register itself), and a duplicate Name across leaves
 // panics for the same reason std.Register's does: two modules answering to
 // the same bare import name is a program error, not a runtime one, and this
-// runs at package init time - before anything can call it with bad data in
+// runs at package init time, before anything can call it with bad data in
 // hand.
 func Modules() []std.Module {
 	seen := map[string]bool{}

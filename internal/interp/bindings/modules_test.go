@@ -183,8 +183,8 @@ main();
 }
 
 // TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
-// surfaces buildMagusNS serves. They must carry the SAME member names - a script
-// that cannot see a member has no way to learn it exists - so the surfaces differ
+// surfaces buildMagusNS serves. They must carry the SAME member names (a script
+// that cannot see a member has no way to learn it exists), so the surfaces differ
 // only in what a member does when called, which is what MGS1022 reports.
 func TestMagusSurfacesExposeSameMembers(t *testing.T) {
 	sess := scriptSession(t)
@@ -198,7 +198,7 @@ func TestMagusSurfacesExposeSameMembers(t *testing.T) {
 // executes the magusfile at cwd on start, so its locals and targets are there to
 // poke at. It lives here rather than in a cmd/magus testscript because driving the
 // REPL there needed a non-terminal stdin, which is now unambiguously "run this
-// piped script" - and because the wiring worth testing (session + autoload +
+// piped script", and because the wiring worth testing (session + autoload +
 // driver) is all below the CLI anyway.
 func TestReplAutoloadsMagusfile(t *testing.T) {
 	ctx := context.Background()
@@ -226,7 +226,7 @@ export fun noop(ctx: magus\Context, _a: [str]) > void {}
 }
 
 // TestEveryHostModuleIsWired guards against a std host module being declared (and
-// documented) but never exposed to Buzz sessions - the gap that left template,
+// documented) but never exposed to Buzz sessions: the gap that left template,
 // toml, and uuid unreachable after they were added to std/ with generated bindings
 // trampolines but omitted from magusModules. Every module hostmodules.All()
 // reports, save the hand-assembled "magus" namespace, must resolve as a
@@ -628,7 +628,7 @@ func TestRunTargetWithArgs(t *testing.T) {
 	// Forwarded args arrive as ONE list, matching the (ctx, args: [str]) signature
 	// every real magusfile target declares. They used to be spread as positional
 	// parameters, which meant `args: [str]` bound to the FIRST arg as a str and
-	// the rest were dropped - so the documented convention and the runtime
+	// the rest were dropped, so the documented convention and the runtime
 	// disagreed, and every target in this repo was on the losing side.
 	writeMagusfile(t, dir, `
 import "magus";
@@ -711,8 +711,8 @@ export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`
 }
 
 // TestNeedsNonTargetFunctionFails verifies a needs on a function that is not an
-// exported target - a non-exported helper, or a typo that resolves to some other
-// in-scope function - fails fast rather than silently no-op'ing. (A name that
+// exported target (a non-exported helper, or a typo that resolves to some other
+// in-scope function) fails fast rather than silently no-op'ing. (A name that
 // resolves to nothing at all is a Buzz undefined-variable error even earlier; this
 // guards the reachable footgun of passing a real function value that names no target.)
 func TestNeedsNonTargetFunctionFails(t *testing.T) {
@@ -748,8 +748,8 @@ export fun dep(ctx: magus\Context, _a: [str]) > void !> any { fs.writeFile("dep-
 	require.NoError(t, err, "forward-referenced dependency did not run")
 }
 
-// TestNeedsStringArgumentFails verifies magus.needs rejects a bare string - the
-// classic footgun - and points the author at magus.glob for patterns.
+// TestNeedsStringArgumentFails verifies magus.needs rejects a bare string (the
+// classic footgun) and points the author at magus.glob for patterns.
 func TestNeedsStringArgumentFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -874,8 +874,8 @@ export fun nap(ctx: magus\Context, _a: [str]) > void !> any {
 // for a missing one (asserted inside the magusfile via os.exit).
 //
 // It used to return "" for a missing command so a caller could branch on equality. That
-// made the check optional - forget it and the empty string flows into an exec or a path
-// join - and it is not how the rest of these modules report an unavailable answer.
+// made the check optional (forget it and the empty string flows into an exec or a path
+// join), and it is not how the rest of these modules report an unavailable answer.
 func TestOsWhich(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magusfile.buzz")
@@ -1131,7 +1131,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	}
 	got, err := os.ReadFile(filepath.Join(dir, "glob.out"))
 	require.NoError(t, err)
-	// Relative, sorted - not absolute paths.
+	// Relative, sorted, not absolute paths.
 	assert.Equal(t, "sub/a.txt,sub/b.txt", string(got))
 
 	// And each match names the directory those relative values are measured from, which
@@ -1531,7 +1531,7 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 // testBoundaryTypesPath is a private, test-only import path bundling every
 // boundary-type mirror (host-owned and magus-owned) into one compilable source
 // module, in declare-before-use order. It exists only for this file's
-// completeness/parity guards - production code reaches these types through their
+// completeness/parity guards; production code reaches these types through their
 // real owning import (magus/spell for the spell-authored types, or the host
 // module that returns a given one: os, fs, http, encoding, semver, vcs).
 //
@@ -1539,7 +1539,7 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 // functions: the type-declaration companion registered alongside it
 // (hostTypeModuleSources) is collected by the CHECKER for annotation-checking
 // (`final r: ExecResult = proc.exec(...)`), but it is never compiled and run, so it
-// can never bind an object literal's constructor into the runtime env - `Name{}`
+// can never bind an object literal's constructor into the runtime env: `Name{}`
 // needs `Name` bound as an objectDef VALUE, which only a compiled-and-run source
 // module provides (see vm.buildObjectVal). This bundle is that compiled-and-run
 // module, purpose-built so the tests below can construct and read every mirror
@@ -1575,7 +1575,7 @@ var testBoundaryTypesSource = strings.Join([]string{
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a
 // types/ struct means "this value crosses into Buzz", so every one of them owes
-// its owning module an `object` mirror - otherwise a magusfile can only index
+// its owning module an `object` mirror; otherwise a magusfile can only index
 // the result as an untyped map, and the checker has nothing to verify a field
 // name against.
 //
@@ -1657,7 +1657,7 @@ func TestMirrorFieldsMatchBuzzObject(t *testing.T) {
 
 // assertMirrorReadsField reads one field off a zero-valued mirror. A reserved-word
 // key is read through ordinary member access (entry.type), which upstream permits
-// even where the same word cannot be a binding name - so this exercises the free
+// even where the same word cannot be a binding name, so this exercises the free
 // identifier the generator emits for it.
 func assertMirrorReadsField(t *testing.T, object, field string) {
 	t.Helper()
@@ -1699,7 +1699,7 @@ func TestEveryBuzzObjectOwnerIsMirrored(t *testing.T) {
 
 // TestMagusNamespaceIsTyped is the guard for the half of the typed-host-module work
 // that is easiest to lose. "magus" is bound as a session GLOBAL, not a lazily-imported
-// module, so the import-triggered SetModuleDecls collection never runs for it - it is
+// module, so the import-triggered SetModuleDecls collection never runs for it: it is
 // declared directly (RegisterSpellSourceModules). The first version of this change wired
 // the generated declarations into the module loop only, which types every bare-import
 // module (os, fs, vcs, ...) and silently leaves the magus namespace Unknown. Nothing
@@ -1728,8 +1728,8 @@ func TestMagusNamespaceIsTyped(t *testing.T) {
 
 // TestMagusMirrorsResolveInAnnotations covers the OTHER half: the object mirrors a
 // magusfile annotates with. Most ride along with the generated declarations, derived
-// from each method's declared return. Five cannot be - magus.modules/magus.module are
-// hand-bound outside std.Module, and Run/TargetRun have no producing method at all - so
+// from each method's declared return. Five cannot be (magus.modules/magus.module are
+// hand-bound outside std.Module, and Run/TargetRun have no producing method at all), so
 // they are supplied separately (magusUndeclaredTypeSource). This asserts both sources
 // arrive, because swapping the hand-written bundle for the generated one is exactly the
 // edit that would drop the five without any other test noticing.
@@ -1752,7 +1752,7 @@ func TestMagusMirrorsResolveInAnnotations(t *testing.T) {
 }
 
 // TestDeclaredObjectsAreConstructible guards the runtime half of a declared
-// boundary object. The checker knowing HttpRetry is not enough - a caller has to
+// boundary object. The checker knowing HttpRetry is not enough: a caller has to
 // be able to BUILD one, and before declareObjectTypes existed this type-checked
 // and then threw "unknown object type" at run time.
 func TestDeclaredObjectsAreConstructible(t *testing.T) {
@@ -1788,7 +1788,7 @@ std\assert(port > 0, message: "native http.server still bound a port");
 // TestCrossBundleDeclarationsStillImport is the degradation path. magus's own
 // declarations name DoctorCheckStatus, which is declared in a DIFFERENT bundle,
 // so executing them standalone fails. That must leave the import working exactly
-// as it did before - collected and checkable - rather than taking it down.
+// as it did before (collected and checkable) rather than taking it down.
 func TestCrossBundleDeclarationsStillImport(t *testing.T) {
 	sess := scriptSession(t)
 	err := sess.Exec(context.Background(), `
@@ -1805,7 +1805,7 @@ std\assert(true, message: "magus imported despite non-self-contained declaration
 //
 // Buzz's own io.buzz carries an `export object File` beside a real
 // `export fun runFile`. Executing it flat-merges runFile into the importing
-// scope, and for a magusfile that means magus reads it as a target - which broke
+// scope, and for a magusfile that means magus reads it as a target, which broke
 // every workspace load with "MGS1008: target runFile must receive a magus\Context".
 // Nothing else in the suite caught that; it only showed up running the CLI.
 func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
@@ -1822,7 +1822,7 @@ func TestDeclarationsWithRealFunctionsAreNotExecuted(t *testing.T) {
 // implementation detail, invisible from every surface a user or a tool reads.
 //
 // It walks the surfaces that matter rather than asserting registration, because
-// registration was never the hard part - being SEEN was.
+// registration was never the hard part: being SEEN was.
 func TestSourceModuleIsIndistinguishable(t *testing.T) {
 	// 1. It imports and RUNS like any other module.
 	sess := scriptSession(t)

@@ -11,7 +11,7 @@ import (
 // Shards are fingerprinted by their assembled content: a shard is rewritten only
 // when its nodes/edges actually change. Content-hashing (rather than hashing a
 // project's source files) is what makes the fingerprint correct across ALL
-// inputs - a cross-project dependency rename changes the dependent shard's edges
+// inputs: a cross-project dependency rename changes the dependent shard's edges
 // and therefore its fingerprint, which per-project source hashing would miss.
 //
 // The tradeoff is that a shard must be assembled to be fingerprinted, so this
@@ -48,8 +48,8 @@ func fingerprintShardContent(sh Shard) string {
 	h := sha256.New()
 	nodes, edges := g.Nodes(), g.Edges()
 
-	// One reused buffer, appended into and flushed per record. The obvious shape -
-	// io.WriteString(h, field) per field - costs an allocation EVERY field: a
+	// One reused buffer, appended into and flushed per record. The obvious shape
+	// (io.WriteString(h, field) per field) costs an allocation EVERY field: a
 	// hash.Hash is not a StringWriter, so io.WriteString falls back to
 	// h.Write([]byte(s)) and converts. The first version of this did exactly that
 	// and the benchmark caught it: 11.9k allocs became 132k, an eleven-fold

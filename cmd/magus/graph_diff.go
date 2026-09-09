@@ -19,7 +19,7 @@ import (
 )
 
 // graphDiff reports how the knowledge graph changed relative to a baseline: the nodes
-// and edges added, removed, or changed. It is the PR-review blast-radius artifact - emit
+// and edges added, removed, or changed. It is the PR-review blast-radius artifact: emit
 // it as json or markdown for a CI comment. The baseline is either an export file
 // (`magus graph export -o json`, e.g. from the base branch) or, with --rev, a git
 // revision whose tracked files are built into a base graph on the fly.
@@ -297,7 +297,7 @@ func clip(s string) string {
 // backend implementing RevisionExporter; git does, and one that does not gives a clear
 // error), then runs the ordinary extraction pipeline there via a direct Inspect (NOT the
 // memoized inspectWorkspace, which panics on a second root). The result is domain-only
-// and reflects the CURRENT config applied to the revision's files - a historical-config
+// and reflects the CURRENT config applied to the revision's files; a historical-config
 // diff would need the rev's own config threaded through, deliberately out of scope here.
 //
 // The base build is pinned to an isolated, immutable cache under the temp tree: without

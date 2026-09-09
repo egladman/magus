@@ -37,7 +37,7 @@ var gatePoolProbeTimeout = 2 * time.Second
 // gateRedundancy carries one ci invocation's gate identity between the
 // pre-run check and the post-run record: the branch, the commit, the input
 // fingerprint minted from the same per-step cache keys the run mints, and the
-// selection it covers. nil is the inert state - every method tolerates it -
+// selection it covers. nil is the inert state (every method tolerates it),
 // so a caller can thread one unconditionally.
 type gateRedundancy struct {
 	m        *magus.Magus
@@ -103,7 +103,7 @@ func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, t
 }
 
 // evaluate applies the redundancy decision before the gate runs. A nil error
-// means the gate RUNS - there is no skip-and-succeed state. A non-nil error is
+// means the gate RUNS: there is no skip-and-succeed state. A non-nil error is
 // the MGS3010 refusal, exiting 75; the refusal is also recorded in the session
 // store as a deferred gate record, so the decision is interrogable later. The
 // advisory case prints the identical finding to stderr and still returns nil.
@@ -245,7 +245,7 @@ func (g *gateRedundancy) classifier() internalci.ChangeClassifier {
 // sibling worktree's next gate can see it. ctx should be the invocation
 // context, so the record joins to the run's journal by invocation id. An
 // interrupted or timed-out run records nothing: neither is a verdict on the
-// inputs. Store errors are logged, never returned - a store that can fail a
+// inputs. Store errors are logged, never returned: a store that can fail a
 // build is worse than none.
 // resolvedSpells flattens every project's resolved spells so the syntax index
 // covers workspace spells alongside the built-ins.
@@ -308,8 +308,8 @@ func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 // planInheritance is the CI-shaped entry of the verdict-inheritance decision
 // for `magus affected ci --plan`. It fires only when the wired CI provider is
 // active (the github spell answers only under Actions) and names a green run
-// whose delta classifies entirely low-risk; every other path - no provider,
-// no green run, a merge in the range, code in the delta, gate_inherit false -
+// whose delta classifies entirely low-risk; every other path (no provider,
+// no green run, a merge in the range, code in the delta, gate_inherit false)
 // returns nil, and the plan proceeds with no output from this feature.
 //
 // The classification runs HEAD's tree against the GREEN run's commit, through
@@ -362,8 +362,8 @@ var gatePoolProbe = gatePoolSaturated
 
 // gatePoolSaturated asks the admission daemon whether a new run would queue,
 // and always says what it saw, so the finding can print the pool state behind
-// either answer. Every failure - no socket, no answer, a server that
-// arbitrates no budget - reads as idle: the daemon is an accelerant, never a
+// either answer. Every failure (no socket, no answer, a server that
+// arbitrates no budget) reads as idle: the daemon is an accelerant, never a
 // capability gate.
 func gatePoolSaturated(ctx context.Context) (bool, string) {
 	ctx, cancel := context.WithTimeout(ctx, gatePoolProbeTimeout)

@@ -76,7 +76,7 @@ func TestINIStringify(t *testing.T) {
 		"core": {"editor": "vim"},
 	})
 	require.NoError(t, err)
-	// Global first with no header, then sections sorted, keys sorted - byte-stable
+	// Global first with no header, then sections sorted, keys sorted: byte-stable
 	// so a generated config never shows phantom drift.
 	assert.Equal(t, "top=1\n\n[core]\neditor=vim\n\n[user]\nemail=e@x\nname=Eli\n", got)
 }

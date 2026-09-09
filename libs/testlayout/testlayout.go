@@ -30,7 +30,7 @@ import (
 
 // externalPackageMessage names the fix for a test that sits outside the package it
 // tests. It says what to do rather than what is wrong, because the wrong thing here
-// compiles and passes - only a reader ever objects.
+// compiles and passes: only a reader ever objects.
 func externalPackageMessage(pkg string) string {
 	inner := strings.TrimSuffix(pkg, "_test")
 	return "test file declares `package " + pkg + "`; put it in `package " + inner +
@@ -139,7 +139,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 	listings := map[string]map[string]bool{}
 
 	for _, f := range pass.Files {
-		// A file with no position - a synthesized or overlay-sourced AST - has no
+		// A file with no position (a synthesized or overlay-sourced AST) has no
 		// name to reason about and no directory to look beside it. Skipping beats
 		// dereferencing nil and panicking the driver.
 		tf := pass.Fset.File(f.Pos())
@@ -248,8 +248,8 @@ func trimBuildSuffixes(base string) string {
 // yields no names, which reports nothing rather than failing the run.
 //
 // The listing comes off disk rather than out of the pass because the pass does
-// not always hold the answer: an external test package - the _test suffixed one
-// a file declares as package foo_test - is loaded on its own, with none of the
+// not always hold the answer: an external test package (the _test suffixed one
+// a file declares as package foo_test) is loaded on its own, with none of the
 // package's source files in it.
 func sourceNames(dir string) map[string]bool {
 	entries, err := os.ReadDir(dir)

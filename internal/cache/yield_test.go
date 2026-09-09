@@ -81,7 +81,7 @@ func TestStalledTargetsStaysQuietBelowThresholds(t *testing.T) {
 	})
 }
 
-// A failing run still executed, so it still proves the cache did not replay - otherwise a
+// A failing run still executed, so it still proves the cache did not replay; otherwise a
 // target that is both broken and uncacheable would hide behind its own failures.
 func TestStalledTargetsCountsFailuresAsExecutions(t *testing.T) {
 	t.Parallel()

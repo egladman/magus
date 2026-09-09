@@ -95,7 +95,7 @@ func TestWatchReportsASuddenDrop(t *testing.T) {
 	assert.Contains(t, got[0], "900MB of 16384MB")
 }
 
-// Once talking, it re-reports only on a further material drop - not every tick.
+// Once talking, it re-reports only on a further material drop, not every tick.
 func TestWatchRepeatsOnlyOnAFurtherDrop(t *testing.T) {
 	got := drive(t, 16*gb, []int64{
 		1900 << 20, // first report

@@ -69,8 +69,8 @@ func CwdFromContext(ctx context.Context) string {
 }
 
 // WithLease returns ctx carrying the client's lease, readable via
-// LeaseFromContext. An id failing [types.ValidLeaseID] - including the empty
-// string a client that predates the field sends - stores nothing, so a reader sees "".
+// LeaseFromContext. An id failing [types.ValidLeaseID] (including the empty
+// string a client that predates the field sends) stores nothing, so a reader sees "".
 //
 // The validation is here rather than at the call site because the value crosses a socket
 // any local process may dial: a lease id is exempt from the trail's redaction, so
@@ -121,8 +121,8 @@ type Options struct {
 	WorkspaceLister func() []Workspace                             // optional; used by daemon Status RPC
 	ServiceLister   func() []types.StatusService                   // optional; hosted-services snapshot for the daemon Status RPC
 	ServiceHost     ServiceHost                                    // optional; hosts shared services across invocations (daemon only)
-	// OnJobDone, if set, is called after every BACKGROUND job (submitJob) completes - never for
-	// an adopted foreground run - with the job's args, wall-clock duration, and outcome. The
+	// OnJobDone, if set, is called after every BACKGROUND job (submitJob) completes, never for
+	// an adopted foreground run, with the job's args, wall-clock duration, and outcome. The
 	// ctx still carries Root/Cwd. The daemon uses it to record a KIND_JOB activity event; proc
 	// stays decoupled from the trail and cache layout.
 	OnJobDone func(ctx context.Context, args []string, dur time.Duration, err error)
@@ -264,8 +264,8 @@ func (s *Server) Close() {
 func New(opts Options) (*Server, error) {
 	// Name the culprit in the error. This guard refuses to host a second proc server when
 	// MAGUS_DAEMON_SOCKET is set (a nested process must forward to the parent's pool, not open
-	// its own socket). Surfacing the value turns an opaque "already adopted" - which reads as a
-	// mystery to anyone whose environment merely inherited the var - into an actionable one.
+	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
+	// mystery to anyone whose environment merely inherited the var) into an actionable one.
 	if sock := os.Getenv("MAGUS_DAEMON_SOCKET"); sock != "" {
 		return nil, fmt.Errorf("%w (MAGUS_DAEMON_SOCKET=%s)", ErrAlreadyAdopted, sock)
 	}
@@ -368,7 +368,7 @@ func isSocketLive(ctx context.Context, addr string) bool {
 
 func serve(srv *Server, svc *service) {
 	// Read the listener ONCE, under the lock, and accept on the local copy. Reading
-	// srv.listener each iteration races Close, which clears the field - and Close is
+	// srv.listener each iteration races Close, which clears the field, and Close is
 	// dispatched from a connection handler (an RPC `server stop`), so the two run
 	// concurrently by design rather than by accident. Accept on a closed listener
 	// returns an error, which is exactly the loop's existing exit condition, so
@@ -385,7 +385,7 @@ func serve(srv *Server, svc *service) {
 		if !srv.trackConn() {
 			// Close is already waiting on connWg; registering now would be the
 			// Add-during-Wait the WaitGroup contract forbids. Drop the connection
-			// instead - the client sees the same closed socket it would have seen
+			// instead: the client sees the same closed socket it would have seen
 			// had Accept lost the race by a microsecond.
 			_ = conn.Close()
 			return
@@ -411,7 +411,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	}
 	// Anything that got as far as a frame is a client asking for something, which is
 	// what an idle self-exit has to not interrupt. Recorded after the EOF check so a
-	// bare liveness probe - which every `magus status` and every socket check performs -
+	// bare liveness probe (which every `magus status` and every socket check performs)
 	// does not read as use and keep an unwanted daemon alive forever.
 	svc.markActive()
 	if err != nil {
@@ -634,7 +634,7 @@ type service struct {
 // server. It is the single gate shared by run and submitJob: both the client's reqVersion
 // and the server's gateVersion are adoption identities (see adoptionIdentity), so a match
 // means the two builds are provably the same code. An empty identity on EITHER side
-// disables the check - the "" escape hatch for test injection and pre-versioning clients.
+// disables the check: the "" escape hatch for test injection and pre-versioning clients.
 func (s *service) versionAdmits(reqVersion string) bool {
 	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
 }
@@ -671,7 +671,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 
 	// Mint the invocation id here, before dispatch, and thread it onto ctx so the adopted
 	// run's BeginInvocation reuses it (rather than minting its own). That lets this pool
-	// entry carry its inv - the key a dashboard uses to deep-link into the run's live log.
+	// entry carry its inv: the key a dashboard uses to deep-link into the run's live log.
 	inv := journal.NewInvocationID()
 	ctx = journal.WithInvocationID(ctx, inv)
 
@@ -706,7 +706,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 		if errors.As(err, &exitErr) {
 			// os.exit(code) from a magusfile: honor the code and say nothing. The message
 			// is incidental (types.ExitError says so), the magusfile printed whatever it
-			// wanted before exiting, and the local path prints nothing here either - so
+			// wanted before exiting, and the local path prints nothing here either, so
 			// sending text the client would render as an error is a difference between
 			// adopted and local runs, not information.
 			reply.ExitCode = exitErr.Code
@@ -733,7 +733,7 @@ func (s *service) run(req runRequest, reply *runReply) error {
 
 // submitJob accepts a fire-and-forget background job: it registers the invocation (so it
 // shows in the Dashboard like an adopted run), spawns the handler on the server's
-// long-lived context, and returns immediately - unlike run, which blocks until done. A
+// long-lived context, and returns immediately, unlike run, which blocks until done. A
 // duplicate job already in flight (same workspace + args) is coalesced: no second run
 // starts, so a rapid series of checkouts collapses to one refresh. The job's own
 // success/failure is observed via the Dashboard/logs, not the reply.
@@ -789,8 +789,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		ctx = WithSubOp(ctx, call.SubOp)
 		ctx = withJob(ctx) // route through the full job command set, not the run/affected adoption allowlist
 		// A job descends from nobody. parentCtx carries whatever ancestry the DAEMON's
-		// process environment had - which is a real value when the daemon was started from
-		// inside a magus target - and inheriting it would attribute this job's locks to a
+		// process environment had (which is a real value when the daemon was started from
+		// inside a magus target), and inheriting it would attribute this job's locks to a
 		// stranger, and tell every process it forks that it descends from one.
 		ctx = types.WithInvocationAncestors(ctx, nil)
 

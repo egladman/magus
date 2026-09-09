@@ -83,7 +83,7 @@ func TestDetectIdenticalServicesNotFlagged(t *testing.T) {
 
 // TestCollectMembersCarriesTheDistinctReason is the bridge MGS5001's documented remedy runs
 // over. The reason is declared on the op and never appears in the rendered argv, so a member
-// assembled from the command alone loses it - and every consumer downstream then behaves as
+// assembled from the command alone loses it, and every consumer downstream then behaves as
 // though no service in the workspace had ever opted out.
 func TestCollectMembersCarriesTheDistinctReason(t *testing.T) {
 	members := collectMembers([]*types.Project{

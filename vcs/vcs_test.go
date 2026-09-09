@@ -94,7 +94,7 @@ func TestResolveBuiltinBaseRefs(t *testing.T) {
 	t.Run("hg", func(t *testing.T) { assertBuiltinBase(t, "hg", "default") })
 	t.Run("jj", func(t *testing.T) { assertBuiltinBase(t, "jj", "trunk()") })
 	// Sapling's is the remote bookmark, not hg's "tip": Sapling has no branches, and tip
-	// names whatever commit is newest LOCALLY - including your own unpushed work, which
+	// names whatever commit is newest LOCALLY, including your own unpushed work, which
 	// would make `magus affected` compare a branch against itself.
 	t.Run("sl", func(t *testing.T) { assertBuiltinBase(t, "sl", "remote/main") })
 }
@@ -382,7 +382,7 @@ func TestDescribeGit(t *testing.T) {
 // TestIsSecondaryCheckout exercises each backend's on-disk signature for a second
 // checkout of a repo, plus the negatives (primary checkout, submodule, bare dir).
 // The signatures are constructed directly, so the test needs none of the tools
-// installed - it validates the detection, not the VCS.
+// installed: it validates the detection, not the VCS.
 func TestIsSecondaryCheckout(t *testing.T) {
 	mkfile := func(t *testing.T, path, body string) {
 		t.Helper()
@@ -543,7 +543,7 @@ func TestParseTagsPattern(t *testing.T) {
 // still means something on a machine with only git.
 //
 // The driver is named through VCSOptions.Name. Resolve's second parameter is a base
-// REF, not a name - passing "jj" there silently autodetects instead, which is what
+// REF, not a name; passing "jj" there silently autodetects instead, which is what
 // once made this look like a broken jj driver.
 func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 	for _, tc := range []struct {
@@ -667,7 +667,7 @@ func vcsTestRun(t *testing.T, dir, bin string, args ...string) {
 
 // A colocated jj workspace satisfies git's claim too, because `jj git init` writes
 // .git as jj's storage backend. Autodetect has to answer jj, or magus records git's
-// HEAD - which lags jj's working-copy commit until refs sync - as the revision an
+// HEAD (which lags jj's working-copy commit until refs sync) as the revision an
 // output ref reproduces from, describing a tree other than the one built.
 func TestAutodetectPrefersJJInAColocatedRepo(t *testing.T) {
 	if _, err := exec.LookPath("jj"); err != nil {

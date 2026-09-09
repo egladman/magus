@@ -295,7 +295,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			},
 			// hadolint is a second binary the spell drives, pinned by no manifest, so it
 			// needs its own probe: upgrading it changes lint verdicts with nothing in any
-			// cache key to notice. It gets no readiness probe - a lint talks to no daemon.
+			// cache key to notice. It gets no readiness probe: a lint talks to no daemon.
 			"hadolint": {
 				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
 				Diagnostics: spells.DiagnosticGNU,

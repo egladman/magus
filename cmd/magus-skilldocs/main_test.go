@@ -123,7 +123,7 @@ func TestSkillPageShowsTheStampAndBothForms(t *testing.T) {
 
 // TestStampTableStopsAtTheBody guards writeStampTable's scan, which walks the
 // stamped frontmatter line by line. The description is the page's subtitle
-// already, and the body below it is not frontmatter at all - either leaking into
+// already, and the body below it is not frontmatter at all; either leaking into
 // the table would publish prose as a stamp field.
 func TestStampTableStopsAtTheBody(t *testing.T) {
 	body := page(t, generate(t), "magus-query.md")
@@ -145,7 +145,7 @@ func TestARenamedSkillPageCarriesNoRedirect(t *testing.T) {
 }
 
 // TestIndexCardsEverySkill checks what the index exists for: one card per skill,
-// each reaching its page, and a total that covers all of them - the choice between
+// each reaching its page, and a total that covers all of them; the choice between
 // the two forms is meant to be made on measured bytes, so a total that misses
 // a skill misprices it.
 func TestIndexCardsEverySkill(t *testing.T) {

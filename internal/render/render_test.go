@@ -134,7 +134,7 @@ func TestMermaidIDs_ThreeWayCollision(t *testing.T) {
 	// "foo-bar", "foo/bar", and "foo_bar" all sanitize to the same base id
 	// "foo_bar". Sorted order is "foo-bar" < "foo/bar" < "foo_bar" (by byte
 	// value), so the base keeps its bare id and the other two must each get a
-	// distinct numeric suffix - not the two colliding on "foo_bar_1".
+	// distinct numeric suffix, not the two colliding on "foo_bar_1".
 	ids := mermaidIDs([]string{"foo/bar", "foo_bar", "foo-bar"})
 	assert.Len(t, ids, 3, "one id per input path")
 	seen := make(map[string]string, 3)
@@ -431,7 +431,7 @@ func TestWriteTree_VisitedGuard(t *testing.T) {
 	var b strings.Builder
 	require.NoError(t, WriteTree(&b, g))
 	// Whole-output match (not substring Contains): the diamond renders deterministically,
-	// so pin the exact tree - crypto expands under auth (first visit) and is marked
+	// so pin the exact tree: crypto expands under auth (first visit) and is marked
 	// "(visited)" under http (second visit) rather than re-expanded.
 	want := "api\n" +
 		"├── auth\n" +

@@ -33,7 +33,7 @@ var (
 const maxEmittedDedupe = 4096
 
 // Emit writes "hint: <msg>\n" to w when hints are enabled, once per distinct
-// msg - see emitted.
+// msg; see emitted.
 func Emit(w io.Writer, msg string) {
 	if !HintsEnabled() {
 		return

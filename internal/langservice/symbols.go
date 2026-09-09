@@ -36,7 +36,7 @@ type symbol struct {
 // scanSymbols returns the top-level declarations in src: functions, constants
 // (var/final), and object/enum types. It scans line by line rather than parsing,
 // so it still finds the declarations above a half-typed line the parser would
-// reject - the normal state while completing. Only column-0-ish declarations are
+// reject: the normal state while completing. Only column-0-ish declarations are
 // considered (leading whitespace is tolerated for indented magusfiles, but a
 // declaration keyword must start the trimmed line), which keeps locals inside
 // function bodies out of the top-level set.

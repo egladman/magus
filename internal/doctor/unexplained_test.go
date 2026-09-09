@@ -109,7 +109,7 @@ func TestUnexplainedHotspots(t *testing.T) {
 
 	// The ranking is only as good as the paths matching. An anchor stored absolute and a
 	// hotspot reported relative describe the same file and compare unequal, which would
-	// report every hot file unexplained - a bug shaped exactly like a real finding.
+	// report every hot file unexplained: a bug shaped exactly like a real finding.
 	t.Run("an absolute anchor matches a relative hotspot", func(t *testing.T) {
 		r := &runner{root: "/w", ws: hotWorkspace{files: hot("pkg/a.go")}}
 		r.opts.explanations = &Explanations{Notes: 1, Files: []string{"/w/pkg/a.go"}}

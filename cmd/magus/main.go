@@ -17,7 +17,7 @@
 //
 // magus help prints the full top-level surface, in the order and with the
 // descriptions subcommands in surface.go declares as the single source of
-// truth - kept short here rather than a second enumeration that can drift
+// truth, kept short here rather than a second enumeration that can drift
 // from it, as this comment once did (it advertised a `magus tail` that was
 // never a real subcommand).
 //
@@ -139,15 +139,15 @@ func runCLI() int {
 // withInterrupt reports a signal-stopped run as the conventional 128+N.
 //
 // A cancelled run's targets die with `context canceled`, which reaches
-// [exitCodeOf] as a nil error - so without this the process printed [fail] and
+// [exitCodeOf] as a nil error, so without this the process printed [fail] and
 // exited 0, and `magus run test . && deploy` deployed after a Ctrl+C.
 //
 // Only when code == 0, so a command that already failed for its own reason keeps
-// the more specific code - with one exception. A command that RETURNS the
+// the more specific code, with one exception. A command that RETURNS the
 // cancellation instead of swallowing it (awaitInvocation returns ctx.Err()) reached
 // exitCodeOf as a generic failure and reported 1, which says the WORK failed about a
 // run the user stopped. Still gated on interrupted(), so a deadline or a
-// caller-cancelled context - neither of which is a signal - keeps its own code.
+// caller-cancelled context (neither of which is a signal) keeps its own code.
 func withInterrupt(code int, err error, interrupted func() (syscall.Signal, bool)) int {
 	if code != 0 && !errors.Is(err, context.Canceled) {
 		return code
@@ -217,7 +217,7 @@ func wantsUsage(subArgs []string) bool {
 			return true
 		}
 		// The bare word is only a help request in the FIRST position. Elsewhere it is
-		// ordinary data - `magus memory get help` fetches an entry named help, and
+		// ordinary data: `magus memory get help` fetches an entry named help, and
 		// `magus notes show help` shows a note. Treating those as usage would skip the
 		// workspace preload for a real invocation.
 		if a == "help" && i == 0 {
@@ -247,11 +247,11 @@ func hasDetachFlag(args []string) bool {
 
 // isForensicAffected reports whether an `affected` invocation selects one of the forensic
 // modes affectedUsage lists that reason about the set without executing a target:
-// --explain, --plan, --impact. --bisect is excluded deliberately - it runs the target once
+// --explain, --plan, --impact. --bisect is excluded deliberately: it runs the target once
 // per candidate commit, so it wants the shared pool a forward buys.
 //
 // It reuses affected()'s own routing predicates rather than restating them, so the forward
-// decision agrees with what the handler does locally - the property isUsageOnlyInvocation
+// decision agrees with what the handler does locally; the property isUsageOnlyInvocation
 // exists for one layer up. That includes NOT stopping at "--": affected() routes on a
 // bare scan too, and a guard here that disagreed would forward an invocation the handler
 // then answers as a forensic mode.
@@ -266,7 +266,7 @@ func isForensicAffected(subArgs []string) bool {
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	// Asking a command what it does must not do anything. Every subcommand's own parser
 	// already prints usage and returns before it loads a workspace, but the preload here
-	// runs FIRST - so `magus diff -h` opened the workspace, and opening one refreshes the
+	// runs FIRST, so `magus diff -h` opened the workspace, and opening one refreshes the
 	// VCS merge-driver registration, which WRITES the tracked .gitattributes and a git
 	// config entry naming the running binary. A persona doing nothing but reading help
 	// found a dangling registration pointing at a throwaway path.
@@ -280,7 +280,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	case "help", "version":
 		// Neither reads a workspace or a config: one prints text compiled into the
 		// binary, the other a stamp. version dials the daemon for the server half, but
-		// must never FORWARD - a forwarded version would report the daemon's binary as
+		// must never FORWARD: a forwarded version would report the daemon's binary as
 		// the client's, which is exactly the difference it exists to show.
 		return dispatchProfile{}
 	case "buzz":
@@ -306,7 +306,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// working tree, so a daemon serving another workspace must not adopt one.
 		//
 		// The preload matters as much. Opening a workspace refreshes the merge-driver
-		// registration, which writes the tracked .gitattributes - and both merge-facing
+		// registration, which writes the tracked .gitattributes, and both merge-facing
 		// verbs run while that file may be unmerged, or while the VCS holds the index.
 		// loadMagus is a sync.Once singleton, so a preload wins the race and performs the
 		// write each verb defers: merge-driver would dirty the tree against what git
@@ -316,7 +316,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	case "session":
 		// The whole family reads or writes a file store keyed by repository identity:
 		// it needs the root PATH but never the magusfile, and it must stay usable when
-		// the workspace does not load - a broken magusfile is exactly when someone asks
+		// the workspace does not load: a broken magusfile is exactly when someone asks
 		// what the last runs did, and an agent blocked on a person is exactly the state
 		// a half-finished edit produces. Never forwarded: the hook subverb is the LAST
 		// thing that should route through a remote process, notify must reach the local
@@ -336,7 +336,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// stop and job resolve the real daemon socket explicitly (resolveDaemonAddr). The old
 		// default profile made `server stop` forward, and on a version-mismatched forward
 		// (common across dev worktrees on one shared socket) it fell through to hosting its
-		// own throwaway proc server, then shut THAT down instead of the real daemon - a silent
+		// own throwaway proc server, then shut THAT down instead of the real daemon: a silent
 		// no-op stop. The rotate-* job workers that need a workspace load one themselves.
 		return dispatchProfile{needsConfig: true}
 	case "run", "affected":
@@ -352,7 +352,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// --detach is the client's job for exactly the reason usage above is. It SUBMITS
 		// the run to the daemon and reports the job id; forwarding it would have the
 		// daemon submit to itself, print the id onto its own log, and leave the caller
-		// with silence and exit 0 - observed before this guard existed. It needs no
+		// with silence and exit 0 (observed before this guard existed). It needs no
 		// workspace either: it hands off an argv and returns.
 		if hasDetachFlag(subArgs) {
 			return dispatchProfile{needsConfig: true}
@@ -361,7 +361,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
 		// code and an error string and never output, so the daemon runs the mode in its
 		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
-		// child - magus\affectedImpact forks `affected --impact -o json` and decodes it -
+		// child (magus\affectedImpact forks `affected --impact -o json` and decodes it)
 		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
 		// shape as the usage bug above, one layer down.
 		if sub == "affected" && isForensicAffected(subArgs) {
@@ -387,7 +387,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 // the workspace preload snapshots it. See the call site for why that ordering matters.
 //
 // It filters to KNOWN config flags rather than parsing the whole tail, because
-// stdlib flag stops dead at the first name it does not recognize - so an unknown
+// stdlib flag stops dead at the first name it does not recognize, so an unknown
 // local flag would hide every global flag behind it.
 //
 // Scanning stops at "--": past that the tokens belong to the tool being
@@ -611,7 +611,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopSock()
 		// A TOP-LEVEL run stays in this process. The daemon executes an adopted run in
 		// its own process, where the run's console output goes to the daemon's log and
-		// the caller's terminal shows nothing at all - measured, not theoretical. That
+		// the caller's terminal shows nothing at all (measured, not theoretical). That
 		// was tolerable while nobody started a daemon for an ordinary build; it is not,
 		// now that a run starts one for admission. The budget travels over the socket
 		// instead, which is what the daemon is for here: it arbitrates the machine, it
@@ -643,12 +643,12 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// A call the daemon did not adopt is the normal path here: run locally
 			// without alarming the user. The daemon does not adopt a subcommand that
 			// never adopts (only run/affected do), nor a client whose build or protocol
-			// differs from its own (version/protocol mismatch) - in every case the daemon
+			// differs from its own (version/protocol mismatch); in every case the daemon
 			// is alive and answered, it just will not take THIS call, and retrying it
 			// will not help. A version mismatch is common when multiple worktrees run
 			// different builds against one shared per-user daemon; it is not a failure,
 			// so it must not warn. Reserve warn for a genuine forward failure (transport
-			// error, dead daemon). proc.NotAdopted owns the classification - the errors
+			// error, dead daemon). proc.NotAdopted owns the classification: the errors
 			// carry it (a NotAdopted() method).
 			if proc.NotAdopted(fwdErr) {
 				slog.Debug("proc forward not adopted; running locally", slog.String("error", fwdErr.Error()))
@@ -660,7 +660,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// calls. A not-adoptable subcommand leaves a live, same-version daemon worth
 			// forwarding to (nested adoptable calls hit the single top-level pool; probes
 			// like doctor's daemon check see the real daemon). A version/protocol mismatch
-			// - like a transport failure - leaves a daemon we cannot use: clear the
+			// (like a transport failure) leaves a daemon we cannot use: clear the
 			// pointer so nothing keeps dialing it, and fall through to hosting our own pool.
 			parentLive = errors.Is(fwdErr, proc.ErrNotAdoptable)
 			if !parentLive {
@@ -707,7 +707,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	// other generated config flag was dead in that position too.
 	bindGlobalsAfterSubcommand(rest)
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
-	// of them were parsed, and the startup path below still reads it - for the watch
+	// of them were parsed, and the startup path below still reads it: for the watch
 	// ignores, the daemon address, and (worst) the bootstrap limiter's width. That
 	// limiter is INJECTED into the workspace and wins over m.cfg.Concurrency via
 	// limOnce, so sizing it from the pre-flag copy meant `--concurrency` never governed
@@ -716,16 +716,16 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg = globalCfg
 	stopFlags()
 
-	// exitUsage, not 0. No subcommand is the same category as an unknown one - the
-	// invocation was wrong and nothing was attempted - and that path already exits 2
+	// exitUsage, not 0. No subcommand is the same category as an unknown one (the
+	// invocation was wrong and nothing was attempted), and that path already exits 2
 	// (see dispatchSub's default). Returning 0 made bare `magus` a command that
 	// reports success having done nothing, so `magus $CMD` with an empty CMD is a
 	// green step in any script or CI action that builds its argv dynamically.
 	//
 	// An EXPLICIT `magus help` / `-h` / `--help` still exits 0: there the usage text
 	// is what was asked for, so printing it IS the work succeeding. That distinction
-	// is the whole of exitUsage's contract in helpers.go - 0 did what was asked, 2 was
-	// asked wrong - and it is why this cannot simply key on "did we print usage".
+	// is the whole of exitUsage's contract in helpers.go (0 did what was asked, 2 was
+	// asked wrong), and it is why this cannot simply key on "did we print usage".
 	if len(rest) == 0 {
 		if helpRequested {
 			return startupResult{cleanup: cleanup}, 0
@@ -771,7 +771,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		}
 		// THE site that governs: this limiter is injected into the workspace and wins over
 		// m.cfg.Concurrency via limOnce, so a cap applied only in Magus.limiter never runs.
-		// Announced rather than silent - a run quietly narrower than requested is as hard
+		// Announced rather than silent: a run quietly narrower than requested is as hard
 		// to attribute as one that thrashes.
 		if clamped, was := cache.ClampConcurrency(concurrency); was {
 			slog.Warn("magus: concurrency capped to this machine",
@@ -938,7 +938,7 @@ func usage() {
 // snapshotGlobals captures globalCfg and global, returning a restore func that puts them
 // back. runTarget/affected write flags straight into these package globals via cmdParse
 // (gen.BindFlags binds the CURRENT field as each flag's default, so an unset flag keeps
-// whatever a previous dispatch left there) - dispatchAdopted defers the returned restore
+// whatever a previous dispatch left there); dispatchAdopted defers the returned restore
 // so one adopted client's flags cannot bleed into the next one dispatched on this process.
 func snapshotGlobals() (restore func()) {
 	savedCfg, savedGlobal := globalCfg, global
@@ -954,7 +954,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 	// This fixes only the SEQUENTIAL bleed between one adopted dispatch and the next
 	// on this process (e.g. a --dry-run or --cache-dir left set after this call
 	// returns). Two adopted dispatches running truly CONCURRENTLY still share these
-	// globals for the duration of both runs and can still stomp each other - a real
+	// globals for the duration of both runs and can still stomp each other; a real
 	// fix means threading config explicitly through the call chain instead of
 	// reading it off ambient globals, which is out of scope here.
 	defer snapshotGlobals()()
@@ -1001,7 +1001,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 }
 
 // dispatchJob routes a background job submitted through proc.SubmitJob. Unlike an adopted run
-// (dispatchAdopted, limited to run/affected), a job runs a maintenance command - but only one
+// (dispatchAdopted, limited to run/affected), a job runs a maintenance command, but only one
 // whose worker argv the jobs registry recognizes, so the fire-and-forget job RPC can never be
 // used to run an arbitrary command. A recognized worker routes through the full dispatchSub
 // command set and reuses the daemon's warm workspace (withMagus is already on ctx). This is the
@@ -1021,8 +1021,8 @@ func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) 
 //
 // It admits strictly less than a terminal's `magus run`: exactly three tokens, no flags, no
 // charms, no `spell::op` form, and a target name that has to appear in the generated target graph
-// rather than being taken from the caller. So the property dispatchJob exists to hold - a job RPC
-// can never name an arbitrary command - still holds by construction: the allowlist is the
+// rather than being taken from the caller. So the property dispatchJob exists to hold (a job RPC
+// can never name an arbitrary command) still holds by construction: the allowlist is the
 // magusfile, not the request.
 func isDeclaredRun(ctx context.Context, args []string) bool {
 	if len(args) != 3 || args[0] != "run" {
@@ -1198,7 +1198,7 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 	go func() {
 		// Tear down on either path: a signal (ctx cancelled via NotifyContext) or an RPC
 		// `server stop` (which calls srv.Close, closing srv.Done). Waiting only on ctx.Done
-		// missed the RPC path - srv.Close cancels the listener's own context, not this one -
+		// missed the RPC path (srv.Close cancels the listener's own context, not this one),
 		// so a stopped daemon leaked its hosted services and warm workspaces.
 		select {
 		case <-ctx.Done():
@@ -1222,12 +1222,12 @@ func startMultiWorkspaceDaemon(ctx context.Context, cfg config.Config, rc runCon
 
 // applyPreSubDisplayFlags binds the global display flags that appear BEFORE the
 // subcommand, for the profiles whose startup returns before the main flag parse
-// (help, version, buzz - the ones needing no config or workspace).
+// (help, version, buzz: the ones needing no config or workspace).
 //
 // --root and --config are bound to throwaway targets: they are legal here and
 // would otherwise abort the parse at the first one, taking any later -o with them.
 //
-// The parse error is RETURNED, not swallowed - these profiles have no later parse
+// The parse error is RETURNED, not swallowed: these profiles have no later parse
 // to catch it, so ignoring it made `magus --bogus -o json version` print text and
 // exit 0.
 //
@@ -1290,7 +1290,7 @@ func extractRootFlag(args []string) string {
 // applyDisplay runs during early startup and decides progress suppression from
 // global.quiet. --silent counts here: it is documented as "like --quiet, but
 // ...", and reading only --quiet made -s byte-identical to no flag on a passing
-// run - the flag parse set global.silent long after the display was configured.
+// run: the flag parse set global.silent long after the display was configured.
 func extractQuietFlag(args []string) bool {
 	for _, a := range args {
 		if a == "--" {
@@ -1394,7 +1394,7 @@ func exitCodeOf(err error) int {
 	//
 	// Checked after the branches above and not before them: a run where real targets
 	// ALSO failed reaches errSilent first and stays 1, which is the more actionable
-	// verdict - a broken build does not become a scheduling problem because a peer
+	// verdict: a broken build does not become a scheduling problem because a peer
 	// happened to be busy too.
 	if code, ok := proc.ExitCode(err); ok {
 		return code

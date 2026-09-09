@@ -48,12 +48,12 @@ func TestCaptureRunFailsLoudlyWhenLogDirUnwritable(t *testing.T) {
 //	  internal/cache.(*lineTap).Write  capture.go:80
 //
 // captureRun puts ONE pair of taps on the context for an entire target body, and a
-// target that fans out - `ctx.needs(lint, test)`, which is the shape of every `ci`
-// target - runs those children concurrently. Several goroutines therefore reach the
+// target that fans out (`ctx.needs(lint, test)`, which is the shape of every `ci`
+// target) runs those children concurrently. Several goroutines therefore reach the
 // same tap. With buf unguarded, two writers tore its slice header: Write read an
 // index from one state and resliced against another, so `t.buf[i+1:]` indexed past a
 // buffer that had meanwhile become empty. The panic killed the writer goroutine, and
-// the child process then reported its broken output pipe as `exit -1` - which reads
+// the child process then reported its broken output pipe as `exit -1`, which reads
 // as an unrelated tool failure, not as magus crashing.
 //
 // Run with -race this fails on the unguarded version by detecting the race directly;
@@ -121,7 +121,7 @@ func TestLineTapRedactsSecrets(t *testing.T) {
 	tap := newLineEmitter(ctx, "proj", "publish").
 		newLineTap(&sink, "stdout")
 
-	// A child that echoes the credential it was handed - a debug dump, a curl trace.
+	// A child that echoes the credential it was handed: a debug dump, a curl trace.
 	n, err := tap.Write([]byte("auth: password=ghp_do_not_log_me ok\n"))
 	require.NoError(t, err)
 	tap.flush()

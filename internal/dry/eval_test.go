@@ -378,8 +378,8 @@ func TestEval_tracerParseError(t *testing.T) {
 
 // TestEvalAnnouncesUnrunTestBlocks pins the fix for a silent no-op that nearly
 // shipped in the docs. A snippet of `test "..." { assert(...) }` evaluates here
-// with OK=true and no output whether the assertions hold or not - Buzz test bodies
-// run only under the test runner - so a Run button over one renders nothing while
+// with OK=true and no output whether the assertions hold or not (Buzz test bodies
+// run only under the test runner), so a Run button over one renders nothing while
 // implying the assertions passed. Skipping them is correct; saying nothing is not.
 func TestEvalAnnouncesUnrunTestBlocks(t *testing.T) {
 	// The exact shape that fooled me: a deliberately FALSE assertion.
@@ -395,7 +395,7 @@ func TestEvalAnnouncesUnrunTestBlocks(t *testing.T) {
 	two := "test \"a\" {}\ntest \"b\" {}\n"
 	assert.Contains(t, Eval(context.Background(), two).Output, "2 test blocks")
 
-	// A snippet with no test block gets no note - the common case stays silent.
+	// A snippet with no test block gets no note: the common case stays silent.
 	plain := "import \"strings\";\nimport \"std\";\nstd\\print(strings\\kebabCase(\"go_build\"));"
 	out := Eval(context.Background(), plain).Output
 	assert.NotContains(t, out, "not run here")
@@ -415,7 +415,7 @@ func TestEvalAnnouncesUnrunTestBlocks(t *testing.T) {
 //     call it.
 //
 // It lives here rather than in spells/, where the example files are, because it never
-// touches the spells package - it exercises this evaluator against them. In spells/ it
+// touches the spells package; it exercises this evaluator against them. In spells/ it
 // had to sit in an external test package, since importing this package from `package
 // spells` closes a cycle: dry imports spells.
 func TestSpellExamplesParseAndRecord(t *testing.T) {

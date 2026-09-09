@@ -204,7 +204,7 @@ func walkDir(ctx context.Context, buf []byte, fn func(buf []byte, modTimeNs, siz
 // skips wholesale. magus and the VCSes write into these during normal operation
 // (e.g. a nested project's .magus cache/logs populated by a child magus run), so
 // their churn is bookkeeping, not a cross-project source write. This is DELIBERATELY
-// only the metadata subset - it does NOT skip the language/dependency dirs in
+// only the metadata subset: it does NOT skip the language/dependency dirs in
 // project.IgnoreDirs (vendor, node_modules, ...), because a write into a vendored
 // tree IS a cross-project source write the audit must see. switch string(name) is
 // allocation-free.
@@ -325,7 +325,7 @@ func report(ctx context.Context, p *types.Project, target string, descs []descen
 	}
 	// Re-check the dispatch set HERE, not at Begin. descendantsOf runs before the
 	// target body, so a project reached through a cross-project dependency has not been
-	// marked yet - by the time its writes appear it is running a target of its own, and
+	// marked yet; by the time its writes appear it is running a target of its own, and
 	// those writes are its business. Checking only up front blamed the parent for them.
 	active := types.ActiveDispatchFromContext(ctx)
 	errs := make([]error, 0, len(descPaths))

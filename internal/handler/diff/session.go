@@ -1,6 +1,6 @@
 // Package diff serves the review session's plain-JSON routes under /api/v1/diff.
 //
-// Separate from handler/status, which maps one thing - the live status report - onto
+// Separate from handler/status, which maps one thing (the live status report) onto
 // StatusService's two RPCs. These routes ride no proto service at all, and every constructor
 // here was named NewDiff* while living there, which is the package boundary announcing itself.
 package diff
@@ -43,8 +43,8 @@ type diffSource interface {
 }
 
 // Handler serves GET /api/v1/diff: the changed files annotated with what the
-// workspace knows - role (generated or not), owning project, changed-symbol reach, observed
-// coverage - in the order magus recommends reading them.
+// workspace knows: role (generated or not), owning project, changed-symbol reach, observed
+// coverage, in the order magus recommends reading them.
 //
 // It is the differentiated half of the review surface and a SECOND round trip on purpose.
 // /api/v1/diff/patch returns the patch in milliseconds; this one loads the symbol shards and walks
@@ -62,7 +62,7 @@ type Handler struct {
 }
 
 // NewHandler returns the GET /api/v1/diff handler reading from src. sessions and root
-// may be nil/empty, which serves a session-less review - the shape is identical, so a client
+// may be nil/empty, which serves a session-less review: the shape is identical, so a client
 // needs no branch for a daemon that is not pairing.
 func NewHandler(src diffSource, sessions *changeset.Store, root string, log *slog.Logger) *Handler {
 	h := &Handler{src: src, sessions: sessions, root: root}
@@ -121,10 +121,10 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 //
 // The changeset ships PARSED, and the raw patch travels beside it for a caller that wants the
 // interchange format itself. Parsing here rather than in the browser is what keeps one reader
-// in the product - see internal/diff/parse.go for why a second one must not be written.
+// in the product; see internal/diff/parse.go for why a second one must not be written.
 //
 // Optional `path` query parameters scope the diff, repeated once per path. Absent, the whole
-// repository is diffed. A service with no workspace yields 503, not 500 - the same posture
+// repository is diffed. A service with no workspace yields 503, not 500, the same posture
 // the insight route takes, because "no workspace yet" is a state the console renders rather
 // than an error it reports.
 type PatchHandler struct {
@@ -272,7 +272,7 @@ type diffResponse struct {
 	// Patch at all; see PatchHandler for why the daemon parses rather than the browser.
 	Files []changeset.File `json:"files"`
 	// Patch is the same changeset as raw text, kept for a caller that wants the interchange
-	// format itself - a script piping it onward, or a reader diffing it against another tool's.
+	// format itself: a script piping it onward, or a reader diffing it against another tool's.
 	Patch string `json:"patch"`
 	// Digest identifies the changeset as a whole, so a client that joined later can tell a
 	// current answer from a frozen one. Computed here for the same reason the hunk digests are:
@@ -303,7 +303,7 @@ func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // scopePaths reads the repeated `path` query parameter, dropping empties so a stray `?path=`
-// scopes to nothing rather than to the empty pathspec - which every backend reads as "the
+// scopes to nothing rather than to the empty pathspec, which every backend reads as "the
 // whole repository", the opposite of what the caller asked for.
 func scopePaths(r *http.Request) []string {
 	raw := r.URL.Query()["path"]
@@ -325,7 +325,7 @@ func scopePaths(r *http.Request) []string {
 // handler, so it cannot post as the person.
 //
 // It is one route with an `op` rather than five, because these are all small mutations of one
-// object and a client applies them from one place - a keypress handler. Five routes would be
+// object and a client applies them from one place: a keypress handler. Five routes would be
 // five fetch wrappers for no gain in clarity.
 type SessionHandler struct {
 	handler.Base
@@ -377,23 +377,23 @@ type reviewSessionRequest struct {
 	// comment. No anchor field: the server captures it from the patch it tracked, so a client
 	// cannot supply one and cannot get it wrong.
 	Body string `json:"body,omitempty"`
-	// publish: the summary heading the review. The branch and remote are NOT here - the
+	// publish: the summary heading the review. The branch and remote are NOT here: the
 	// daemon resolves those itself, so a client cannot aim a review at another repository.
 	Summary string `json:"summary,omitempty"`
 	// Line is the position an inline comment anchors to on the new side. A hunk index cannot
 	// serve: it means nothing outside the session that produced it.
 	Line int `json:"line,omitempty"`
 	// resolve / answer, and the THREAD for reply. One field because they are the same
-	// question - which one - and never asked together.
+	// question (which one) and never asked together.
 	ID string `json:"id,omitempty"`
 	// Verdict is what the published review should SAY: "comment" (the default), "approve", or
-	// "request_changes". It is a REQUEST, not a decision - the daemon resolves it against who
+	// "request_changes". It is a REQUEST, not a decision: the daemon resolves it against who
 	// opened the review, and a self-review is always a comment however this is set.
 	Verdict string `json:"verdict,omitempty"`
 	// seen: the review threads the surface has just put in front of the reader.
 	//
 	// The CLIENT says this, rather than the review lookup assuming it. Serving a response is not
-	// the same as rendering one - an aborted fetch, a refresh mid-flight or a second tab would
+	// the same as rendering one: an aborted fetch, a refresh mid-flight or a second tab would
 	// otherwise consume the watermark and eat the "new" marks, and with them the notification,
 	// which compares against the same watermark.
 	IDs []string `json:"ids,omitempty"`
@@ -406,7 +406,7 @@ type reviewSessionRequest struct {
 //
 // A draft with no line stays a draft. A provider anchors an inline comment to a line and drops
 // one that has none, so including it would mark it published against a send that never
-// happened - and publish only considers unpublished drafts, so it could never go again.
+// happened, and publish only considers unpublished drafts, so it could never go again.
 func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) (*types.DiffSession, error) {
 	sess := h.Sessions.Get(h.Root)
 	if sess == nil {
@@ -448,13 +448,13 @@ func (h *SessionHandler) publish(ctx context.Context, req reviewSessionRequest) 
 		return nil, err
 	}
 	if got != want && want.Asserts() {
-		// Said out loud rather than swallowed. The remarks DID go, so this is not an error - but
+		// Said out loud rather than swallowed. The remarks DID go, so this is not an error, but
 		// a person who asked to approve and was silently given a comment would believe they had
 		// approved, which is the one outcome worse than refusing.
 		h.Log.InfoContext(ctx, "review published as remarks: a review cannot approve a change its own credential opened",
 			"review", at.ID, "asked", string(want), "published", string(got))
 	}
-	// The verdict that LANDED, not the one asked for, plus whether those two differ - a
+	// The verdict that LANDED, not the one asked for, plus whether those two differ: a
 	// downgrade is invisible in the forge's record and this is the only place it is known.
 	// got is PermittedVerdict's answer, so it is one of the three declared verdicts and
 	// never the caller's spelling.
@@ -562,7 +562,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	case "seen":
 		// The reader's claim that these threads were put in front of them, which is the ONLY
 		// thing that advances the watermark. It arrives on this route because it is the human's
-		// half of the session - an agent reaching the session over MCP cannot make it, exactly
+		// half of the session: an agent reaching the session over MCP cannot make it, exactly
 		// as it cannot mark a hunk read.
 		sess = h.Sessions.MarkThreadsSeen(h.Root, req.IDs)
 	case "publish":
@@ -615,7 +615,7 @@ func (h *SessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 //
 // Best-effort and silent: this is a side effect of reading, and a reader who just finished a
 // file should not meet an error about bookkeeping on their next keypress. A path that cannot
-// be fingerprinted - deleted since the patch was read - records nothing rather than recording
+// be fingerprinted (deleted since the patch was read) records nothing rather than recording
 // a receipt against no content.
 func (h *SessionHandler) mintReceipt(ctx context.Context, path string) {
 	if path == "" || h.CacheDir == "" || h.Root == "" {
@@ -710,7 +710,7 @@ type diffReviewResponse struct {
 }
 
 // remoteHost reduces a git remote URL to the host a reader would recognize. Empty when it is
-// not a URL this understands - a surface then names the repo alone rather than guessing.
+// not a URL this understands; a surface then names the repo alone rather than guessing.
 func remoteHost(remote string) string {
 	s := remote
 	for _, prefix := range []string{"https://", "http://", "ssh://"} {
@@ -769,7 +769,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 // never moves it.
 //
 // Serving a response is not rendering one. Advancing here meant an aborted fetch, a refresh
-// mid-flight, or a second tab silently consumed the marks - and the notification with them, since
+// mid-flight, or a second tab silently consumed the marks, and the notification with them, since
 // the job that raises it compares against this same watermark. The surface says when it has shown
 // them, through the session's `seen` op; until it does, the same threads keep arriving marked.
 func (h *ReviewHandler) markNew(threads []types.ReviewThread) {
@@ -826,7 +826,7 @@ type BranchesHandler struct {
 
 // branchLimit caps how many branches are examined, and so how many forks one request costs.
 // Production `magus affected ci` spends about 31 forks in total, so a bound here is not
-// decoration - an unbounded version would make a diff surface the most expensive thing in the
+// decoration: an unbounded version would make a diff surface the most expensive thing in the
 // daemon on a repository with a hundred stale branches.
 const branchLimit = 20
 

@@ -60,7 +60,7 @@ func WithVersion(v string) Option {
 
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace
 // providers (magus\workspace.provider), leaving only the magusfile-declared projects.
-// For a caller inspecting a tree that is not a working checkout - an exported revision
+// For a caller inspecting a tree that is not a working checkout: an exported revision
 // has no installed toolchain for a provider to shell out to. Unrelated to [WithProvider],
 // which injects an observability provider.
 func WithoutWorkspaceProviders() Option {
@@ -171,7 +171,7 @@ func bindSpell(p *types.Project, spell *spells.Spell, name string, opts ...Bindi
 		}
 	}
 	// Internal plumbing never claims the primary slot. The magusfile registration
-	// binds first on every project - that is how a project is DISCOVERED - so it
+	// binds first on every project (that is how a project is DISCOVERED), so it
 	// won this race everywhere, and `magus ls` reported "spell: magusfile" on 9 of
 	// this repo's 10 projects: a field that was true by construction and therefore
 	// told a reader nothing, while hiding the toolchain they wanted (the root

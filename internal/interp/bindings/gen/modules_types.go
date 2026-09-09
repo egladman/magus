@@ -33,7 +33,7 @@ func (c Capabilities) Has(want Capability) bool { return c&Capabilities(want) !=
 // requirements without widening this record with another boolean.
 //
 // The types live here (not in modules.go) because modules.go is //go:build
-// !wasm - it references the IO trampolines - while the wasm build needs these
+// !wasm (it references the IO trampolines) while the wasm build needs these
 // types for modules_wasm.go's parallel table.
 type ModuleReg struct {
 	Register     RegisterFunc

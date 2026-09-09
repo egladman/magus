@@ -99,7 +99,7 @@ func (o *strObj) runeCursor() (runeIdx, byteOff int) {
 }
 
 // setRuneCursor memoizes a known (rune index, byte offset) pair. Racing callers
-// derive genuine pairs for the same string, so whichever wins is still correct - the
+// derive genuine pairs for the same string, so whichever wins is still correct: the
 // cursor is a hint that changes how far scanRune walks, never what it returns.
 // Offsets past 4 GiB are not memoized rather than truncated to a wrong value.
 func (o *strObj) setRuneCursor(runeIdx, byteOff int) {
@@ -107,7 +107,7 @@ func (o *strObj) setRuneCursor(runeIdx, byteOff int) {
 	// 0xffffffff: `int` is 32 bits on linux/armv6, linux/armv7 and 386, where that
 	// constant overflows it and this package does not compile AT ALL. Both operands are
 	// already known non-negative, so the conversion is total. On a 32-bit host the bound
-	// is simply unreachable, which is the correct reading - a >4 GiB offset cannot arise
+	// is simply unreachable, which is the correct reading: a >4 GiB offset cannot arise
 	// there in the first place.
 	if runeIdx < 0 || byteOff < 0 || uint64(runeIdx) > math.MaxUint32 || uint64(byteOff) > math.MaxUint32 {
 		return
@@ -219,8 +219,8 @@ type mapObj struct {
 	// faithful identity ("1" the str and 1 the int share a display string) and
 	// every lookup has to scan keyVals with mapKeyEqual instead.
 	//
-	// trade-off: such a map gets NO hash at any size - M is dropped on the set
-	//   that promotes it and never rebuilt - so lookups are O(n) rather than the
+	// trade-off: such a map gets NO hash at any size (M is dropped on the set
+	//   that promotes it and never rebuilt), so lookups are O(n) rather than the
 	//   O(1) a str-keyed map regains above smallMapThreshold. Keying M would need
 	//   a synthetic per-key identity string, which costs an allocation on every
 	//   get of every map to serve a shape neither this embedding nor upstream's
@@ -1069,7 +1069,7 @@ func (v Value) Equal(other Value) bool {
 // index into num; under buzz_safe and buzz_unsafe num is 0 for every heap
 // value (str, list, map, fun, object, fib), so any two same-tag heap values
 // compare equal here. It is therefore only meaningful for scalar values
-// (null, bool, int, float) - use Equal for language-level equality.
+// (null, bool, int, float); use Equal for language-level equality.
 func (v Value) RawEqual(other Value) bool {
 	return v.tag() == other.tag() && v.num() == other.num()
 }
@@ -1118,11 +1118,11 @@ func (v Value) ListItems() []Value { return v.asList().Items }
 //
 // The keys are DISPLAY strings, which is exact for the str-keyed maps host code
 // builds and reads (records, host module namespaces, decoded JSON) and lossy for
-// a Buzz map keyed by anything else - `{1: x}` and `{"1": x}` both report "1",
+// a Buzz map keyed by anything else: `{1: x}` and `{"1": x}` both report "1",
 // and MapGet distinguishes them. Iterate a non-str-keyed map from Buzz instead.
 func (v Value) MapKeys() []string { return v.asMap().Keys }
 
-// EnumValue returns an enum case's backing value - what `Enum.case.value` yields -
+// EnumValue returns an enum case's backing value (what `Enum.case.value` yields)
 // and whether v is an enum case at all.
 //
 // It exists for a HOST reading a Buzz record, not for Buzz code, which already has

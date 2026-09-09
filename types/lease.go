@@ -11,7 +11,7 @@ import (
 //
 // NoReturn is deliberately distinct from Fail. A worker that died, stalled, or was
 // killed produced no verdict at all, and folding that into "failed" claims a judgment
-// nobody made - the root agent still has to go look. Silence is not a pass, and it is
+// nobody made: the root agent still has to go look. Silence is not a pass, and it is
 // not a failure either.
 type LeaseState string
 
@@ -48,13 +48,13 @@ const (
 	BaseDiverged LeaseBaseVerdict = "diverged"
 	// BaseUnknown is a registration with nothing to compare against, because the lease was
 	// declared without a Checkpoint. Distinct from BaseMatch on the same ground
-	// StateNoReturn is distinct from StateFail - claiming agreement nobody observed is a
+	// StateNoReturn is distinct from StateFail: claiming agreement nobody observed is a
 	// judgment the ledger did not make.
 	BaseUnknown LeaseBaseVerdict = "unknown"
 )
 
 // terminal reports whether the lease is done, however it ended. Nothing derives a
-// verdict from it - it is what keeps a finished lease out of the overlap report below.
+// verdict from it: it is what keeps a finished lease out of the overlap report below.
 // Unexported because that is its only reader: a client decides what "done" means from
 // the state string itself, which is the value the wire carries.
 func (s LeaseState) terminal() bool {
@@ -72,8 +72,8 @@ const MaxLeaseIDLen = 128
 //
 // The narrowness is a security property, not a naming preference. A lease id is EXEMPT
 // from the redaction internal/trail applies to every other event field, so every channel
-// that can stamp one - a lease marker, the BAGGAGE environment channel, a
-// producer's own field - has to pass its candidate through here first, or the exemption
+// that can stamp one (a lease marker, the BAGGAGE environment channel, a
+// producer's own field) has to pass its candidate through here first, or the exemption
 // becomes a way to carry a credential onto an event line.
 //
 // It lives beside [Lease] rather than in the package that redacts, because the
@@ -100,7 +100,7 @@ func ValidLeaseID(id string) bool {
 //
 // FACTS ONLY, NEVER ENFORCEMENT, and the division is precise rather than a blanket "magus
 // does nothing with these". OwnedPaths and ForbiddenPaths are
-// what an orchestrator said it intended, not a boundary this store checks - nothing here
+// what an orchestrator said it intended, not a boundary this store checks: nothing here
 // blocks a write, gates a run, or refuses a call. The AGENT GUARD is what consults these
 // facts to grade a write, and it lives outside this package and READS this store; a guard
 // verdict is its own, not the ledger's. BaseVerdict is the shape that division takes on a
@@ -121,8 +121,8 @@ func ValidLeaseID(id string) bool {
 //
 // Registered in cmd/magus-utils/boundary_types.go as a RuntimeObject: magus\ledger.put
 // and magus\ledger.list (bound in internal/interp/bindings/ledger_ns.go, backed by
-// std.MagusPutLedger/MagusListLedger) return one. VCSCheckpoint - the value Checkpoint
-// holds - stays unregistered: Checkpoint is a plain string here, the form an
+// std.MagusPutLedger/MagusListLedger) return one. VCSCheckpoint (the value Checkpoint
+// holds) stays unregistered: Checkpoint is a plain string here, the form an
 // orchestrator has at spawn time, so there is no struct to mirror yet.
 type Lease struct {
 	// ID is the lease's identity within the plan, and the key Put upserts on. The
@@ -177,7 +177,7 @@ type Lease struct {
 	// Store-computed and output-only like Releases, and recorded by the AGENT GUARD, which is
 	// the only thing positioned to notice: it already grades every write against these declared
 	// boundaries and already tells the writer to coordinate. It threw the observation away
-	// afterwards, so the lease on the other side - the one whose file moved - was the one
+	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
 	Unattributed []LeaseUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
@@ -188,7 +188,7 @@ type Lease struct {
 	ReportedBase string `json:"reported_base,omitempty" yaml:"reported_base,omitempty"`
 	// BaseVerdict compares the two, computed by the store at the moment the worker
 	// registered and kept as the fact it was then. Empty until a lease registers, which is
-	// why there is no vocabulary member for "never registered" - an absent verdict is not
+	// why there is no vocabulary member for "never registered": an absent verdict is not
 	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
 	BaseVerdict LeaseBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
 	// Registered is unix seconds, stamped by the store on the write that recorded
@@ -197,12 +197,12 @@ type Lease struct {
 	// fact about the client's clock.
 	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
 	// Created and Updated are unix seconds, stamped by the store on write and
-	// output-only to callers - a client-supplied timestamp is a fact about the client's
+	// output-only to callers: a client-supplied timestamp is a fact about the client's
 	// clock, not about when the row was recorded.
 	//
 	// Updated is the row's heartbeat. A lease that re-puts its row on every state change
 	// keeps it moving; a row nobody touches goes stale, and a reader may then judge the
-	// lease possibly dead. That judgment is the READER'S - nothing here transitions a row
+	// lease possibly dead. That judgment is the READER'S: nothing here transitions a row
 	// on its own, and silence has no verdict in it.
 	Created int64 `json:"created" yaml:"created"`
 	Updated int64 `json:"updated" yaml:"updated"`
@@ -246,7 +246,7 @@ type LeaseRelease struct {
 //
 // The inverse of LeaseRelease, and the half that was missing. A release is a worker saying
 // "I am done with this, here is what I left"; this is magus saying "somebody who is not you
-// changed this, here is what is there now" - so a lease that read the file earlier can find
+// changed this, here is what is there now", so a lease that read the file earlier can find
 // out by ASKING rather than by being told, and a digest that no longer matches what it read is the
 // whole signal.
 //
@@ -268,12 +268,12 @@ type LeaseUnattributedWrite struct {
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
 // gates, or reorders anything.
 type LeaseOverlap struct {
-	// LeaseA and LeaseB are the lease ids, in ledger order - LeaseA was recorded first.
+	// LeaseA and LeaseB are the lease ids, in ledger order: LeaseA was recorded first.
 	LeaseA string `json:"lease_a" yaml:"lease_a"`
 	LeaseB string `json:"lease_b" yaml:"lease_b"`
 	// PathsA and PathsB are the intersecting declarations from each side, deduped and
-	// kept apart. They are rarely the same string - "internal/ledger" and
-	// "internal/ledger/store.go" intersect - so one merged list left a reader unable to
+	// kept apart. They are rarely the same string ("internal/ledger" and
+	// "internal/ledger/store.go" intersect), so one merged list left a reader unable to
 	// tell which lease claimed which, which is the only thing they can act on.
 	PathsA []string `json:"paths_a" yaml:"paths_a"`
 	PathsB []string `json:"paths_b" yaml:"paths_b"`
@@ -282,7 +282,7 @@ type LeaseOverlap struct {
 // LeaseReport is what a reader of the ledger is served: the recorded rows, plus
 // the overlaps derived from them. A constructor rather than a literal at each read
 // door, because the MCP tool and the console's route must not be able to disagree
-// about whether an overlap exists - the same reason types.NewFileReport exists.
+// about whether an overlap exists: the same reason types.NewFileReport exists.
 type LeaseReport struct {
 	Leases   []Lease        `json:"leases"             yaml:"leases"`
 	Overlaps []LeaseOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
@@ -295,7 +295,7 @@ type LeaseReport struct {
 // The registration facts take the opposite route and are NOT derived here. ReportedBase,
 // BaseVerdict and Registered describe one row against the checkpoint that row was handed,
 // so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this report - magus_ledger's list op, the console's /api/v1/ledger - by riding
+// reader of this report (magus_ledger's list op, the console's /api/v1/ledger) by riding
 // the leases. Deriving a second copy at read time would be a duplicate to keep true, which
 // is exactly what the overlap rule above avoids in the other direction.
 //
@@ -313,8 +313,8 @@ func NewLeaseReport(leases []Lease) LeaseReport {
 // intersect, in ledger order.
 //
 // A lease in a terminal state is not in any pair. A released or finished lease is not
-// competing for a path - that is the whole shape of the skill's early-release rule,
-// where a worker shrinks its owned paths so a waiter can start - and reporting one
+// competing for a path (that is the whole shape of the skill's early-release rule,
+// where a worker shrinks its owned paths so a waiter can start), and reporting one
 // would make the surface noisiest exactly when the plan is winding down.
 func leaseOverlaps(leases []Lease) []LeaseOverlap {
 	var out []LeaseOverlap

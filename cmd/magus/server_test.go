@@ -71,7 +71,7 @@ func TestServerStopNoDaemonExitsNonzero(t *testing.T) {
 //
 // It asserts on the SPAWN, through the seam, because spawning is the whole observable
 // effect. Checking that the incumbent is still alive passes just as well with the early
-// return deleted - and leaks a real detached daemon while doing it.
+// return deleted, and leaks a real detached daemon while doing it.
 func TestEnsureAdmissionDaemonAdoptsALiveOne(t *testing.T) {
 	// A private socket dir, so this never adopts the developer's own daemon. Short: a
 	// t.TempDir() path can exceed the unix socket length limit on macOS.
@@ -132,7 +132,7 @@ func trapAdmissionSpawn(t *testing.T) *int {
 
 // TestDaemonChildEnvDropsInheritedInvocationState pins that THE DAEMON DESCENDS FROM
 // NOBODY. A run is what starts it, so without the scrub the daemon's process
-// environment permanently records that one run's ancestry - and every workspace it
+// environment permanently records that one run's ancestry, and every workspace it
 // serves would then read those refs as its own, excusing claims from an invocation that
 // ended hours ago and judging an unstamped run to be a nested magus that lost its
 // ancestry. The same rule submitJob already applies to a job's context.
@@ -243,7 +243,7 @@ func TestConsoleURLsDegradeToEmpty(t *testing.T) {
 
 // The message exists because "already running" answered a question nobody asked. A second
 // worktree's `server start` returns 0 having loaded nothing from that tree, and the console then
-// shows the tree the daemon was started in - which reads as success.
+// shows the tree the daemon was started in, which reads as success.
 func TestServingSuffixNamesTheLoadedWorkspaces(t *testing.T) {
 	st := &proc.StatusReply{Workspaces: []proc.Workspace{
 		{Root: "/repo/worktrees/b"},
@@ -329,7 +329,7 @@ func mergedReviewEvents(t *testing.T, cacheDir string) []trail.Event {
 }
 
 // One unreadable remark must not blank the merge report. The threads that decoded are in hand,
-// and the job's error is a MALFORMED record rather than an unreachable host - reading it as the
+// and the job's error is a MALFORMED record rather than an unreachable host; reading it as the
 // latter meant a single bad row suppressed the only notice this merge would ever get, and the
 // conversation was then gone with the branch.
 func TestCheckReviewReportsAMergeDespiteAMalformedRemark(t *testing.T) {
@@ -371,7 +371,7 @@ func TestCheckReviewSaysNothingWhenTheForgeCouldNotBeReached(t *testing.T) {
 
 // TestDaemonChildEnvDropsTheInheritedSocket pins the scrub. A child that inherits
 // MAGUS_DAEMON_SOCKET decides it is already adopted, binds no socket of its own, and then
-// reports the parent's - leaving a daemon `server stop` cannot find.
+// reports the parent's, leaving a daemon `server stop` cannot find.
 func TestDaemonChildEnvDropsTheInheritedSocket(t *testing.T) {
 	t.Setenv("MAGUS_DAEMON_SOCKET", "/tmp/magus-parent.sock")
 	t.Setenv("MAGUS_KEEP_ME", "1")

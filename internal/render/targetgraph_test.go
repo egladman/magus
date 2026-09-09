@@ -72,7 +72,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 		"route-by-question should precede the project tables")
 	// No default_charms passed here, so the header carries no default-charms line.
 	assert.NotContains(t, got, "Default charms:", "default-charms line must be omitted when none are set")
-	// The dispatch plan and the embedded graphs are gone - that bulk is what made
+	// The dispatch plan and the embedded graphs are gone; that bulk is what made
 	// the file useless as in-context routing.
 	for _, bad := range []string{"```mermaid", "**Run order**", "**Toolchain**", "**Defaults**", "**Charms**", "**Executes**", "Shared defaults", "#data="} {
 		assert.NotContains(t, got, bad, "routing index should not carry %q", bad)
@@ -81,7 +81,7 @@ func TestWriteTargetGraphMarkdown(t *testing.T) {
 
 // TestWriteTargetGraphMarkdownDefaultCharms pins the header's default-charms line:
 // it renders (near the header, above the route table) only when the workspace sets
-// default charms, and is omitted entirely - no empty section - when none are set.
+// default charms, and is omitted entirely (no empty section) when none are set.
 func TestWriteTargetGraphMarkdownDefaultCharms(t *testing.T) {
 	out := types.TargetGraphOutput{Projects: []types.TargetGraphProject{{
 		Path: ".", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}},
@@ -411,7 +411,7 @@ func TestWriteTargetGraphMarkdownRenderDeterministic(t *testing.T) {
 // TestMagnitude pins the bucketing MAGUS.md's Size column depends on. The column exists
 // to convey rough size without churning: an exact count moved on every node added
 // anywhere, which buried real changes in the diff. Leading-digit rounding absorbs nine
-// increments out of ten while keeping 273 distinguishable from 136 - a bare order of
+// increments out of ten while keeping 273 distinguishable from 136; a bare order of
 // magnitude would collapse both to "100+" and under-state the larger.
 func TestMagnitude(t *testing.T) {
 	for _, c := range []struct {

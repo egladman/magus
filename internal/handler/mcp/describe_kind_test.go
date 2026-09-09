@@ -112,7 +112,7 @@ func TestDescribeTargetByName(t *testing.T) {
 // graph and modules were reachable on the CLI but not over MCP, so an agent with
 // only MCP could not discover what charms exist, could not see the target DAG, and
 // could not introspect the Buzz stdlib at all. Two of the three were already on the
-// Inspector interface the tool holds - the capability was in hand and unswitched.
+// Inspector interface the tool holds: the capability was in hand and unswitched.
 func TestDescribeKindCoversEveryCLINoun(t *testing.T) {
 	tool := &describeKindTool{ws: &fakeDescriber{}}
 	for _, kind := range []string{"spells", "charms", "targets", "graph", "projects", "workspaces", "modules", "mcp_tools"} {

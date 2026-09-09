@@ -359,7 +359,7 @@ func formatInt(n int) string {
 // This is not hypothetical and it is not symmetric across builds: the cgo zstd path
 // discarded ZSTD_decompressStream's hint and returned 393216 of 1200000 bytes with a nil
 // error, while the pure-Go path on the same input returned io.ErrUnexpectedEOF. It shipped
-// because the -tags libzstd,liblzma build is not exercised by the default test run - so
+// because the -tags libzstd,liblzma build is not exercised by the default test run, so
 // this test only earns its keep when CI runs BOTH tag sets.
 func TestTruncatedStreamIsAnError(t *testing.T) {
 	want := testPayload(1024 * 1024)

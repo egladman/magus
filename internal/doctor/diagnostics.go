@@ -41,13 +41,13 @@ var remediationSections = map[string]bool{
 // code renders a "see:" URL unconditionally, so a code whose page was never written
 // prints a link into a 404 and reads exactly like one that works.
 //
-// The three questions are asked in the order a stuck reader hits them - does the code
-// route to a page, does the page exist, does the page tell me what to do - and graded by
+// The three questions are asked in the order a stuck reader hits them (does the code
+// route to a page, does the page exist, does the page tell me what to do) and graded by
 // what a fix costs. The first two are mechanical and fail; the third is prose somebody has
 // to write, so it is advice, listing the pages by name rather than blocking on them.
 //
 // Scoped to the tree that OWNS these pages. The MGS pages ship with magus's own sources,
-// so a workspace without that tree is not a workspace with 68 gaps - it is somebody else's
+// so a workspace without that tree is not a workspace with 68 gaps; it is somebody else's
 // repo, and the check reports itself skipped there. The scope is the TREE's existence,
 // never a count of pages resolved: no page resolving is equally what a code-to-page mapping
 // broken end to end produces, and skipping on that reports the total failure as a pass.
@@ -164,7 +164,7 @@ func relToRoot(root, path string) string {
 // hasRemediation reports whether md declares a remediation section with something under
 // it. An empty section is the same gap as an absent one, and is the shape a stub takes.
 // The section runs until the next heading at its own level or above: a body structured
-// entirely as deeper subsections (MGS4001's numbered fixes) is content, not absence - but
+// entirely as deeper subsections (MGS4001's numbered fixes) is content, not absence, but
 // the deeper heading is not the content, so a `### stub` with nothing under it is still an
 // empty section.
 func hasRemediation(md string) bool {

@@ -13,7 +13,7 @@ import (
 // chase the wrong one.
 //
 // This measures only what magus itself does. A subprocess (go, pnpm, buf) does its own
-// I/O behind an opaque wall-clock number, and nothing here can see it - so the honest
+// I/O behind an opaque wall-clock number, and nothing here can see it, so the honest
 // framing is "magus's time versus your toolchain's time", never "network versus compute".
 // Reporting a subprocess-heavy target as 0% network would be worse than reporting nothing.
 

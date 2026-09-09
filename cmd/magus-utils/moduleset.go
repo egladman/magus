@@ -6,7 +6,7 @@
 // browser playground's subset and must not, so the wasm build sees a parallel table.
 //
 // Both were hand-maintained, and the wasm half carried the instruction "Keep this in
-// sync with the WASM-capable entries of modules.go" - a mirror with a rule no test
+// sync with the WASM-capable entries of modules.go", a mirror with a rule no test
 // could check, because the WASM classification lived nowhere but in those two tables.
 // std.Module.WASM now declares it, which is what makes both files projections.
 package main
@@ -74,7 +74,7 @@ func renderModuleSet(mods []std.Module, buildTag string, wasmOnly bool, purpose 
 	b.WriteString("var Modules = Set{\n")
 
 	for _, m := range mods {
-		// magus is NOT a bare import - it is wired onto the magus.* namespace with a
+		// magus is NOT a bare import; it is wired onto the magus.* namespace with a
 		// magusfile's target context, so it has no entry here even though it is a
 		// registered host module. Including it would offer `import "magus"` a
 		// registry path that resolves to a context-less namespace.

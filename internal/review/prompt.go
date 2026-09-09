@@ -11,7 +11,7 @@ import (
 
 // promptFileLimit caps how many files a prompt names individually. The changeset arrives ordered
 // by what magus recommends reading first, so the cut takes the tail rather than an arbitrary
-// slice - and the count of what was left out is always stated, because a silently truncated list
+// slice, and the count of what was left out is always stated, because a silently truncated list
 // reads as a complete one.
 const promptFileLimit = 25
 
@@ -24,7 +24,7 @@ const promptBranchLimit = 6
 //
 // The branch cap alone stopped bounding this once local branches were scanned: against a large
 // changeset a single long-lived branch shares seventy files, and six of those lines is most of the
-// prompt. What the reader needs is which branch and roughly how much, not a manifest - the exact
+// prompt. What the reader needs is which branch and roughly how much, not a manifest: the exact
 // list is a `magus diff -o json` away, and this is the section's second cut rather than its first.
 const promptOverlapPathLimit = 6
 
@@ -36,7 +36,7 @@ const promptOverlapPathLimit = 6
 // which is exactly why the check has to be structural.
 //
 // Only skills magus SHIPS can appear. A workspace-local skill exists nowhere but its own tree, so
-// naming one would send every other magus user looking for a file they do not have - and
+// naming one would send every other magus user looking for a file they do not have, and
 // MustSkill refuses it.
 var (
 	skillQuery        = agent.MustSkill("magus-query")
@@ -62,7 +62,7 @@ type PromptInput struct {
 // Prompt renders a review prompt for a PERSON TO PASTE into whichever model they use.
 //
 // magus assembles it and stops there: nothing here calls a model, holds a key, or sends anything
-// anywhere. That is the point rather than a limitation - the clipboard is the airgap, and it is
+// anywhere. That is the point rather than a limitation: the clipboard is the airgap, and it is
 // what keeps the review something the reader wrote.
 //
 // It carries CONTEXT AND INSTRUCTIONS, not the diff, and it NAMES skills rather than restating

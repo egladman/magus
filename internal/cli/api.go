@@ -11,7 +11,7 @@ import (
 // line per subcommand, per subcommand flag, per project target, and per config key.
 // It is emitted to a committed .lock snapshot (the same plain sorted-line format as
 // urls.lock) and drift-gated, so a diff shows exactly what changed in the public
-// interface - a removed line is a removed, backward-incompatible element that a
+// interface: a removed line is a removed, backward-incompatible element that a
 // human reviews and records in the changelog.
 //
 // It reuses the same Command registry the man pages render from, so the snapshot and

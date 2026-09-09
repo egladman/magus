@@ -20,8 +20,8 @@ func init() { Register(Diff) }
 
 // Diff is the "diff" host module: compare two texts and say what changed.
 //
-// magus is in the drift business - a generate target is a drift gate, `magus
-// affected ci` fails when committed output no longer matches regenerated output -
+// magus is in the drift business (a generate target is a drift gate, `magus
+// affected ci` fails when committed output no longer matches regenerated output),
 // and until now the language those gates are written in could not say WHAT
 // differed. A magusfile could report "archive.md is out of date" and nothing more,
 // which leaves the reader to regenerate locally and diff by hand to find out

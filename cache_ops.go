@@ -90,7 +90,7 @@ type CacheStats struct {
 	Hit   int
 	Miss  int
 	Error int
-	// SavedMs is the summed recorded duration of the runs those hits replayed - work the cache
+	// SavedMs is the summed recorded duration of the runs those hits replayed: work the cache
 	// avoided, measured per entry rather than averaged. Understates when an entry predates the
 	// recorded duration; never overstates.
 	SavedMs int64
@@ -98,7 +98,7 @@ type CacheStats struct {
 
 // CacheStats returns this workspace's live cache counters (hits/misses/errors) accumulated
 // since the cache was opened. In daemon mode the cache is long-lived, so these grow across
-// adopted runs - the source for the /dashboard cache-activity panel. Zero value when no cache
+// adopted runs: the source for the /dashboard cache-activity panel. Zero value when no cache
 // is attached (an Inspect workspace).
 func (m *Magus) CacheStats() CacheStats {
 	if m.cache == nil {
@@ -122,7 +122,7 @@ func (m *Magus) CacheDiskBytes() int64 {
 //
 // The name only. There is deliberately no accessor for the references a workspace can
 // reach, let alone their values: a standing inventory of what a build can fetch is a map
-// of what to go after, and magus does not store secrets in the first place - it reads them
+// of what to go after, and magus does not store secrets in the first place: it reads them
 // through a provider. Which provider is loaded is configuration a reader should be able to
 // see; what it can reach is not magus's to publish.
 func (m *Magus) SecretProvider() string { return m.resolver.ProviderName() }
@@ -152,7 +152,7 @@ func (c *MetricsCollector) Collect(ctx context.Context) (metricdata.ResourceMetr
 // MetricsCollector returns a narrow accessor over this workspace's in-process metrics
 // ManualReader for the daemon's derived-dashboard aggregation, or (nil, false) when metrics
 // collection was not enabled at Open (the CLI default). Unlike [Magus.MetricsSnapshot] (OTLP
-// bytes for external export), this reads raw metricdata - histogram buckets and counters -
+// bytes for external export), this reads raw metricdata (histogram buckets and counters)
 // with no exporter hop and without exposing the generated dashboard proto here.
 func (m *Magus) MetricsCollector() (*MetricsCollector, bool) {
 	if m.tel == nil {
@@ -165,7 +165,7 @@ func (m *Magus) MetricsCollector() (*MetricsCollector, bool) {
 	return &MetricsCollector{c: c}, true
 }
 
-// CacheDir returns the resolved workspace cache directory - the same location the
+// CacheDir returns the resolved workspace cache directory: the same location the
 // journal run logs and per-ref output store live under. Callers that persist their own
 // sidecar stores (e.g. the MCP audit log) hang them off this so everything shares one
 // cache root and one retention regime.
@@ -190,7 +190,7 @@ func ResolveCacheDir(root string, opts ...Option) (string, error) {
 // mismatch worth reporting rather than treating as changed inputs.
 const CacheKeyVersion = cache.KeyVersion
 
-// OutputDescriptor is a stored target execution's identity and outcome - the caller-facing
+// OutputDescriptor is a stored target execution's identity and outcome: the caller-facing
 // projection of [cache.OutputDescriptor], the metadata behind a target-output ref.
 // Field tags match [cache.OutputDescriptor]'s exactly, so embedding this in a CLI JSON
 // record (`magus query output <ref> -o json`) reproduces the same wire shape.
@@ -238,7 +238,7 @@ func (m *Magus) OutputByRef(ref string) ([]byte, OutputDescriptor, error) {
 	return data, newOutputDescriptor(d), err
 }
 
-// OutputAttempts lists every stored execution of the step ref names, newest first - the
+// OutputAttempts lists every stored execution of the step ref names, newest first: the
 // keep-last-K history behind one portable ref, for `magus query output <ref> --attempts`.
 // Like OutputByRef it reads the store straight off the resolved cache dir, so Inspect
 // workspaces work too. Returns fs.ErrNotExist when no ref matches, or
@@ -257,8 +257,8 @@ func (m *Magus) OutputAttempts(ref string) ([]OutputDescriptor, error) {
 
 // PublishOutput uploads the run behind ref to the configured remote cache as a signed
 // OUTPUT BUNDLE, and returns the ref a teammate can then resolve. A passing run's
-// output already travels with its cache artifact; this is what makes a FAILING run -
-// never cached, never pushed - shareable, and it is always an explicit act because
+// output already travels with its cache artifact; this is what makes a FAILING run
+// (never cached, never pushed) shareable, and it is always an explicit act because
 // captured output can contain anything the target printed. The bundle carries no
 // manifest and no blobs, so it can never be replayed as a cache hit. Requires a
 // remote backend and a signing key; [types.ErrNoCache] on an Inspect workspace.
@@ -270,7 +270,7 @@ func (m *Magus) PublishOutput(ctx context.Context, ref string) (string, error) {
 }
 
 // OutputByRefRemote resolves a ref to its captured bytes and descriptor, falling back
-// to the remote published-output namespace when the ref is unknown locally - so an
+// to the remote published-output namespace when the ref is unknown locally, so an
 // inspect line pasted from CI or a teammate resolves even on a machine that never ran
 // the target. Requires a live cache (the remote backend and trust set live there); on
 // an Inspect workspace it degrades to the local-only path.
@@ -291,7 +291,7 @@ func (m *Magus) OutputDescriptorByRef(ref string) (OutputDescriptor, error) {
 	return newOutputDescriptor(d), err
 }
 
-// OutputKeyInputs returns the pre-hash key inputs stored behind ref - the deterministic
+// OutputKeyInputs returns the pre-hash key inputs stored behind ref: the deterministic
 // label:value lines hashStep consumed to mint the step's cache key, secret-redacted at
 // write. They are the explanation surface for `magus query output <ref> --meta`
 // (component-class digests) and `describe target --cache --against <ref>` (the exact
@@ -302,7 +302,7 @@ func (m *Magus) OutputKeyInputs(ref string) ([]string, error) {
 }
 
 // LastRecordedRun returns the most recent cache entry recorded for target in projectPath
-// together with the key inputs behind it - the peer `describe target --cache` compares a
+// together with the key inputs behind it: the peer `describe target --cache` compares a
 // live key against to explain why a run here would MISS. Wraps fs.ErrNotExist when
 // nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace.
 func (m *Magus) LastRecordedRun(projectPath, target string) (cache.RecordedRun, error) {
@@ -312,8 +312,8 @@ func (m *Magus) LastRecordedRun(projectPath, target string) (cache.RecordedRun, 
 	return m.cache.LastRecordedRun(projectPath, target)
 }
 
-// InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
-// lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
+// InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header (the command
+// lineage (subcommand/args/trigger), timing, and outcome) read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when
 // the run log has aged out.
 func (m *Magus) InvocationByID(inv string) (Invocation, error) {

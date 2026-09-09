@@ -22,7 +22,7 @@ import (
 )
 
 // A provider shells out to a foreign tool, and it runs on the LOAD PATH of every
-// magus command - `magus ls`, completion, every run, every daemon refresh. Without a
+// magus command: `magus ls`, completion, every run, every daemon refresh. Without a
 // cache, wiring one would make `nx graph` (seconds, on a large repo) the floor for
 // everything magus does. So the answer is remembered, and re-derived only when
 // something that decides the project set changes.
@@ -31,7 +31,7 @@ import (
 //
 //   - the files the provider spell DECLARES as its inputs (mgs_listRequiredGlobs,
 //     read at WORKSPACE scope rather than per project: for a provider that
-//     declaration means "the files that decide what the projects are" - nx.json,
+//     declaration means "the files that decide what the projects are": nx.json,
 //     **/project.json, pnpm-workspace.yaml);
 //   - the glob list itself, so narrowing or renaming a declaration invalidates even
 //     when it happens to match the same files;
@@ -52,12 +52,12 @@ import (
 
 // providerCacheVersion is the entry format, folded into the fingerprint rather than
 // compared separately. A field added, retyped or RE-TAGGED in a later magus would
-// otherwise decode silently zeroed against a fingerprint that still matched - a wrong
+// otherwise decode silently zeroed against a fingerprint that still matched, a wrong
 // project set that looks fresh. Bumping this makes every existing entry miss.
 //
 // v2: spells.ProvidedProject carries json tags. Before them the record encoded under
 // its Go field names, so a v1 file would decode to empty projects under the tagged
-// names - the exact silently-zeroed hit this constant exists to prevent.
+// names, the exact silently-zeroed hit this constant exists to prevent.
 const providerCacheVersion = 2
 
 // ProviderCache says where a provider's answer is remembered between commands. A
@@ -191,7 +191,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 }
 
 // matchedFileIdentities returns "<rel>\x00<size>\x00<mtime>" for every file under
-// root matching globs, sorted. Content is deliberately not read - the point is to be
+// root matching globs, sorted. Content is deliberately not read: the point is to be
 // much cheaper than the provider it guards, and a project-declaring file that changes
 // without changing size or mtime is not a case worth paying for on every command.
 //

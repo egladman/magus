@@ -15,8 +15,8 @@ import (
 // configured registry source.
 //
 // NOT `update` or `upgrade`. apt's update-refreshes-metadata / upgrade-installs
-// pair is correct and is a footgun - the distinction is invisible to anyone it has
-// not already bitten - and `magus self update` already means apt's *upgrade*, so
+// pair is correct and is a footgun (the distinction is invisible to anyone it has
+// not already bitten), and `magus self update` already means apt's *upgrade*, so
 // adopting the pair would mean renaming a shipped verb into the more confusing
 // half. `sync` was the other candidate and fails on UNIX grounds: it means
 // flush-to-disk, and daemon.maintenance.sync_graph already uses it here for a local
@@ -27,7 +27,7 @@ import (
 // distro-packaged magus, where the package manager owns the binary, still reads
 // data files. Stripping this with the updater would leave those installs reporting
 // `never synced` forever while the hint named a subcommand their build did not
-// have - the same 404-shaped dead end by a different road.
+// have: the same 404-shaped dead end by a different road.
 func selfRefreshCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("self refresh", flag.ContinueOnError)
 	bindDisplayFlags(fs)

@@ -100,8 +100,8 @@ func TestReplaceManagedSectionIdempotent(t *testing.T) {
 
 // The two EnsureMergeDriver tests below live here rather than in git_test.go beside the
 // method they call, and reach across to git_test.go's gitInitRepo helper to do it. Their
-// subject is the managed-section contract this file owns - written once, replaced not
-// appended - which the pure replaceManagedSection tests above can only prove in memory.
+// subject is the managed-section contract this file owns (written once, replaced not
+// appended), which the pure replaceManagedSection tests above can only prove in memory.
 // Splitting them from those would put the two halves of one invariant in two files.
 //
 // TestEnsureMergeDriverIdempotent drives EnsureMergeDriver end to end against a real repo,
@@ -111,7 +111,7 @@ func TestReplaceManagedSectionIdempotent(t *testing.T) {
 // EnsureMergeDriver builds its own git commands and does NOT route them through gitEnv, so
 // this pins the ambient git environment itself. GIT_DIR is the one that matters: git exports
 // it inside every hook and every `rebase --exec`, so running the suite from a pre-commit hook
-// sent `git config merge.magus.driver` into whatever repo was being committed to - the test
+// sent `git config merge.magus.driver` into whatever repo was being committed to, the test
 // passing all the while, because it never looked. Pointing the variables at the fixture makes
 // the target explicit rather than merely unset, and the config assertion below is what proves
 // the write landed here.
@@ -228,7 +228,7 @@ func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
 // GIT_DIR overrides both -C and cmd.Dir, and git exports it into every hook and
 // `rebase --exec`. EnsureMergeDriver runs on workspace load, so before the scrub, a magus
 // command invoked from a pre-commit hook registered the merge driver in whatever repository
-// was being committed to - succeeding quietly, because nothing ever read the value back.
+// was being committed to, succeeding quietly, because nothing ever read the value back.
 func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})

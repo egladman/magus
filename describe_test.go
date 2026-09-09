@@ -345,8 +345,8 @@ func TestListProjects_Inventory(t *testing.T) {
 // TestListProjects_Manifests covers projectManifests, the resolution behind
 // ProjectEntry.Manifests: a spell's declared candidates (spells.Spell.Manifests)
 // are filtered down to the ones that exist in the project's directory, in
-// declared order - so the first-existing-file-wins rule holds even when an
-// earlier-declared candidate is absent - and a project whose spell's candidates
+// declared order (so the first-existing-file-wins rule holds even when an
+// earlier-declared candidate is absent), and a project whose spell's candidates
 // are all absent reports no manifest at all.
 func TestListProjects_Manifests(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
@@ -397,7 +397,7 @@ func TestListProjects_Manifests(t *testing.T) {
 // the workspace root, which is how pnpm, npm, yarn and cargo workspaces are laid out.
 // An implementation that looked only in the project directory would report nothing here
 // and still pass every other test in this file, because magus's own repo happens to keep
-// a lockfile beside every package.json - so this fixture, not that one, is what pins the
+// a lockfile beside every package.json, so this fixture, not that one, is what pins the
 // walk.
 //
 // "solo" is the flat case, and it is here to prove the walk stops at the nearest hit
@@ -448,7 +448,7 @@ func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 
 // TestListProjects_LockfilesAbsent pins the empty cases apart from each other: a spell
 // declaring no lock candidate at all, and one declaring candidates none of which exist.
-// Both report nothing, and neither may report the root's lockfile - a project whose
+// Both report nothing, and neither may report the root's lockfile: a project whose
 // ecosystem does not lock must not inherit a lockfile from a neighbour it shares no
 // package manager with.
 func TestListProjects_LockfilesAbsent(t *testing.T) {
@@ -694,7 +694,7 @@ func TestClassifyFiles_Classification(t *testing.T) {
 	assert.Contains(t, unclaimed.Hint, "no project declares")
 
 	// magus maintains .gitattributes outside every target's globs, so it matches no
-	// declared glob and would otherwise land in unclaimed beside scratch.tmp - with a
+	// declared glob and would otherwise land in unclaimed beside scratch.tmp, with a
 	// hint telling you to consider ignoring a file magus wrote and needs tracked.
 	maintained := byPath[".gitattributes"]
 	assert.Equal(t, "maintained", maintained.Role)
@@ -736,7 +736,7 @@ func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
 
 // TestClassifyFiles_Exists pins the one fact that separates a real path from an
 // invented one. Classification is glob matching, so a path that does not exist is
-// still legitimately classified - "where would this file land" is the question -
+// still legitimately classified ("where would this file land" is the question),
 // and every other field is IDENTICAL between the two entries below. Exists is the
 // only thing that can tell them apart, which is why it is reported rather than
 // turned into an error.
@@ -758,7 +758,7 @@ func TestClassifyFiles_Exists(t *testing.T) {
 // gets no classification at all. Every glob here is rooted at this workspace and
 // "**/*.go" matches an absolute path just as happily as a relative one, so the
 // classification loop had reported a fabricated path as owned by "." and declared a
-// Go source - confidently, and byte-identically to a real file beside it.
+// Go source: confidently, and byte-identically to a real file beside it.
 func TestClassifyFiles_OutsideWorkspace(t *testing.T) {
 	ws, root := classifyExistsWorkspace(t)
 
@@ -830,7 +830,7 @@ func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 // method returns a non-nil error satisfying errors.Is(err, context.Canceled)
 // together with the zero value of its result type. A truncated-but-returned result
 // (e.g. Count: 3 out of 50 projects) is indistinguishable from a genuinely small
-// workspace, which is the exact bug describeCancelled exists to prevent - so the
+// workspace, which is the exact bug describeCancelled exists to prevent, so the
 // cancelled case here asserts BOTH halves: the error, and that nothing rides along
 // with it. Table-driven over all nine methods.
 //
@@ -853,7 +853,7 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 
 	// ListCharms/ListTargets need a project that actually USES a declared
 	// spell, or their per-project walk contributes nothing even when it runs to
-	// completion - making the live case pass by coincidence rather than because the
+	// completion, making the live case pass by coincidence rather than because the
 	// walk executed.
 	const spellName = "zzz-ctx-cancel-spell"
 	const customTarget = "zzz-ctx-cancel-target"
@@ -1033,7 +1033,7 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 // TestEvaluateTarget_ReportsPerTargetOutputs pins that a target's description
 // carries the target's OWN declared outputs. It read the project-wide globs
 // before, so a target whose outputs come from ctx.writesFiles described itself as
-// producing nothing - the described plan disagreed with what the cache keys and
+// producing nothing: the described plan disagreed with what the cache keys and
 // snapshots, which is the one thing this command exists to show.
 func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	t.Parallel()
@@ -1057,8 +1057,8 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 
 // TestEvaluateTarget_ReportsTheChainInOrder walks the composition the whole way: the
 // magusfile's ctx.needs arguments, through resolution onto the project, out as the
-// evaluated target's chain. The hop that matters is the last one - the extractor has
-// always had the order and the described plan has always dropped it - and the
+// evaluated target's chain. The hop that matters is the last one (the extractor has
+// always had the order and the described plan has always dropped it), and the
 // cross-project step must arrive resolved to a workspace path, not the raw import.
 func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
 	t.Parallel()
@@ -1098,7 +1098,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // declaration, through resolution onto the project, into the step buildStep hands the
 // cache, out as a key input line. Each hop is covered by a unit test of its own; what
 // this pins is that they are actually connected, which is the failure mode a
-// declaration like this has - it reads as declared, resolves to nothing, and the
+// declaration like this has: it reads as declared, resolves to nothing, and the
 // target caches as though the external fact were not there.
 func TestObservesReachesTheCacheKey(t *testing.T) {
 	t.Parallel()
@@ -1124,8 +1124,8 @@ func TestObservesReachesTheCacheKey(t *testing.T) {
 		"the observation must reach the key a run would mint, not stop at the project")
 }
 
-// TestObservesRejectsAComputedValue pins the load error. A probe cannot reach the key -
-// the key is minted before the body runs - so accepting one would key the step as
+// TestObservesRejectsAComputedValue pins the load error. A probe cannot reach the key
+// (the key is minted before the body runs), so accepting one would key the step as
 // though nothing were observed and replay the staleness the declaration exists to
 // prevent. Loud at load beats quiet at run.
 func TestObservesRejectsAComputedValue(t *testing.T) {
@@ -1184,7 +1184,7 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 // output is explained by asking, per PROJECT, whether that project has a dirty declared
 // source (types.SplitExplainedOutputs). describeFile built source_of from the project-wide
 // baseline only, while the output side already folded in per-target ctx.writesFiles via
-// AllOutputs - so a cross-project read was invisible, and regenerating an output from a
+// AllOutputs, so a cross-project read was invisible, and regenerating an output from a
 // source in another project was reported as MGS4005 environmental drift with "not your
 // change, do not commit".
 //
@@ -1223,8 +1223,8 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 
 // TestClassifyFiles_Claims pins the per-declaration facts, which are what a caller
 // handing paths to concurrent authors needs and what output_of/source_of cannot
-// say: WHICH target declared each path, the glob it matched, and - for a
-// cross-project write - the project that DECLARED it rather than the tree it lands
+// say: WHICH target declared each path, the glob it matched, and, for a
+// cross-project write, the project that DECLARED it rather than the tree it lands
 // in. It also pins the two dependency edges a cross-project ref creates, in
 // opposite directions.
 func TestClassifyFiles_Claims(t *testing.T) {
@@ -1306,7 +1306,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 		},
 		{
 			// An in-place edit is neither an output nor a project-wide source, so the
-			// role stays unclaimed - but without the claim the only write set that
+			// role stays unclaimed, but without the claim the only write set that
 			// names the file would be invisible, and the default hint would tell the
 			// reader nothing declares it.
 			name:      "an in-place edit is claimed, and the hint stops calling it undeclared",

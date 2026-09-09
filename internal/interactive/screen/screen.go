@@ -4,7 +4,7 @@
 // It exists so a test can assert on the PICTURE rather than the bytes. The
 // difference is not cosmetic: a substring check proves a sequence was emitted
 // and says nothing about where the text landed, and every bug this codebase has
-// actually had in terminal rendering was of the second kind - a cursor left in
+// actually had in terminal rendering was of the second kind: a cursor left in
 // the wrong place, a repaint that ate the transcript, a downward move the
 // receiving end ignored.
 //
@@ -106,7 +106,7 @@ func (s *Screen) Write(p []byte) (int, error) {
 			// Modeling it as an ordinary character put ONE cell was wrong in a
 			// way only a picture shows: `go test` prints "ok  \tacme/admin\t0.531s",
 			// so the columns after each tab landed up to seven cells left of
-			// where the terminal actually put them - and the rendered SVG
+			// where the terminal actually put them, and the rendered SVG
 			// carried a literal tab into its <text>, which no renderer expands.
 			// The drift gate could not catch it, because it compares the
 			// renderer against itself rather than against a terminal.
@@ -126,7 +126,7 @@ func (s *Screen) escape(src string) int {
 	if len(src) < 2 {
 		return len(src)
 	}
-	// ESC 7 / ESC 8 - save and restore the cursor (and the SGR state with it).
+	// ESC 7 / ESC 8: save and restore the cursor (and the SGR state with it).
 	switch src[1] {
 	case '7':
 		s.savedRow, s.savedCol, s.savedStyle = s.row, s.col, s.style
@@ -134,12 +134,12 @@ func (s *Screen) escape(src string) int {
 	case '8':
 		s.row, s.col, s.style = s.savedRow, s.savedCol, s.savedStyle
 		return 2
-	case 'D': // IND - line feed, column untouched.
+	case 'D': // IND: line feed, column untouched.
 		s.lineFeed()
 		return 2
 	case ']':
 		// OSC: ESC ] ... terminated by BEL or ST. Hyperlinks carry a URI that
-		// must not land in the grid as text. Consumed and dropped - the model
+		// must not land in the grid as text. Consumed and dropped: the model
 		// has no notion of a link, only of what occupies a cell.
 		for i := 2; i < len(src); i++ {
 			if src[i] == 0x07 {
@@ -205,7 +205,7 @@ func (s *Screen) escape(src string) int {
 			top, bot := clamp(a, s.height), clamp(b, s.height)
 			// An INVERTED region is ignored, as a real terminal ignores it.
 			// Clamping the two independently accepted ESC[10;3r, and lineFeed
-			// then sliced cells[9:2] and panicked - a malformed sequence from
+			// then sliced cells[9:2] and panicked: a malformed sequence from
 			// captured output taking the process down. Crop guards the same
 			// shape and says so; this is where it is also reachable.
 			if top < bot {
@@ -222,7 +222,7 @@ func (s *Screen) escape(src string) int {
 	return n
 }
 
-// lineFeed advances a row, scrolling the SCROLL REGION - not the screen - when
+// lineFeed advances a row, scrolling the SCROLL REGION (not the screen) when
 // the cursor is already on its last row. This is the rule the reserved zone
 // depends on.
 func (s *Screen) lineFeed() {
@@ -318,7 +318,7 @@ func decodeRune(s string) (rune, int) {
 //
 // This is how a frame is captured for a recording: the terminal keeps being
 // written to, and a sequence of pointers to one live Screen would all show its
-// final state. The copy carries the CELLS, styles included - which the obvious
+// final state. The copy carries the CELLS, styles included, which the obvious
 // alternative of re-rendering String() into a fresh screen does not, because
 // String is plain text and drops every color.
 //
@@ -374,7 +374,7 @@ func (s *Screen) Crop(rows int) *Screen {
 	c.cells = c.cells[:rows]
 	c.height = rows
 	// EVERY row coordinate, not just the obvious two. The result is a *Screen,
-	// which is an io.Writer like any other, so a caller may write to it - and a
+	// which is an io.Writer like any other, so a caller may write to it, and a
 	// saved cursor past the new height indexes out of range on the ESC 8 that
 	// restores it, while scrollTop past scrollBot panics in lineFeed's copy on
 	// a low > high slice.

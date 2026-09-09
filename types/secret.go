@@ -11,7 +11,7 @@ import (
 // upstream. The child never holds it.
 //
 // It exists for the case `magus\secret.read` cannot serve. A read hands the value to
-// your magusfile, which is fine when the consumer is your own code - magus knows the
+// your magusfile, which is fine when the consumer is your own code: magus knows the
 // value is a credential and masks it out of everything it writes. It is not fine when
 // the consumer is a SUBPROCESS that decides at runtime what to do and can be induced to
 // print its own environment. There is nothing to redact in another process.
@@ -20,7 +20,7 @@ import (
 // is in magus's memory either way (the resolver memoizes it, and the redaction set must
 // retain it), so withholding it from a Buzz variable in the same process bought close to
 // nothing, while the host matching and per-hop redirect re-checking it needed produced
-// two credential-leak bugs. The host here is ROUTING, not matching - the forwarder has
+// two credential-leak bugs. The host here is ROUTING, not matching: the forwarder has
 // to know where to send.
 //
 // Named a grant rather than a binding because `binding` already means the Go/Buzz
@@ -74,7 +74,7 @@ type SecretGrant struct {
 //
 // Every failure carries [SecretGrantInvalid]. A malformed grant is a magusfile authoring
 // mistake with a documented resolution, and it is the one declaration that decides where
-// a credential may go - so it gets a lookupable code rather than a bare string, and a
+// a credential may go, so it gets a lookupable code rather than a bare string, and a
 // caller can branch on `e.code == "MGS1027"`. One code for every clause: the resolution
 // is the same in each case (fix the declaration the message names), and the specifics
 // are in the message.
@@ -119,14 +119,14 @@ func (g SecretGrant) Normalize() (SecretGrant, error) {
 //
 // Fixing a silent failure, not adding leniency. "api.example.com:443" and
 // "api.example.com." are the SAME destination over https, and a grant for the bare name
-// matched neither - so every request went out unauthenticated, forever, with no error
+// matched neither, so every request went out unauthenticated, forever, with no error
 // anywhere. That is exactly the failure mode Normalize exists to rule out.
 //
 // It does NOT widen the scope. A non-default port is still part of the match, so
 // "api.example.com:8443" remains a different destination.
 //
 // Only :443 is folded, NOT :80. An earlier version stripped both, which quietly turned a
-// grant explicitly pinned to "api.example.com:80" into one for the bare name - and since
+// grant explicitly pinned to "api.example.com:80" into one for the bare name, and since
 // a credential may only travel over https (or loopback), port 80 on a routable host is
 // never the destination the author meant. Folding it made two different destinations one.
 //
@@ -138,7 +138,7 @@ func canonicalHost(host string) string {
 	name, port, err := net.SplitHostPort(h)
 	if err != nil {
 		// No port (or unparsable). Strip IPv6 brackets so the bare form agrees with what
-		// the ported branch produces - SplitHostPort removes them, so leaving them here
+		// the ported branch produces: SplitHostPort removes them, so leaving them here
 		// made "[::1]" and "[::1]:443" two different destinations.
 		return strings.TrimSuffix(strings.Trim(h, "[]"), ".")
 	}
@@ -151,7 +151,7 @@ func canonicalHost(host string) string {
 
 // asciiLower lowercases A-Z and leaves every other byte alone. Deliberately NOT
 // strings.ToLower, which is Unicode-aware and therefore maps distinct codepoints
-// onto the same result - the property that made EqualFold unusable here.
+// onto the same result: the property that made EqualFold unusable here.
 func asciiLower(s string) string {
 	var b []byte
 	for i := 0; i < len(s); i++ {

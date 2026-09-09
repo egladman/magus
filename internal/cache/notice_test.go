@@ -116,7 +116,7 @@ func TestFailureExcerptPinsRealTestFailureAgainstLaterNoise(t *testing.T) {
 // rule above, and guards the mistake made while implementing it: ranking a structural
 // marker above keyword noise must not become an EXEMPTION from the budget. A broadly
 // failing `go test ./...` is nothing but structural markers, and exempting them turned
-// the excerpt back into the full log dump failureExcerpt exists to prevent - while
+// the excerpt back into the full log dump failureExcerpt exists to prevent, while
 // reporting omitted=0, so nothing on screen said the output had been let through.
 func TestFailureExcerptHonoursLimitWhenEveryLineIsStructural(t *testing.T) {
 	t.Parallel()

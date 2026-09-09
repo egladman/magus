@@ -179,7 +179,7 @@ func (m *Magus) KnowledgeGraphHealthy() (watching, valid bool) {
 
 // graphRelevant reports whether any changed path feeds the knowledge graph: a buzz
 // source, a markdown doc, or a magus config file. Other edits (Go, assets) do not
-// change the graph, so they must not invalidate it - over-invalidating would pay a
+// change the graph, so they must not invalidate it: over-invalidating would pay a
 // needless re-parse on the next query.
 func graphRelevant(paths []string) bool {
 	for _, p := range paths {

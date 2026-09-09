@@ -28,7 +28,7 @@ func TestDistance(t *testing.T) {
 
 // TestDistanceCountsRunesNotBytes pins the bug that made three of the four
 // hand-rolled copies this replaced disagree with the fourth. Each ranged over
-// the strings - which yields BYTE offsets with RUNE values - while indexing a
+// the strings (which yields BYTE offsets with RUNE values) while indexing a
 // row sized in bytes, so the outer loop seeded the wrong row cell and the inner
 // one read initialization that was never overwritten.
 //
@@ -89,7 +89,7 @@ func TestNearest_LongerThreshold(t *testing.T) {
 
 // TestNearestIsCaseInsensitive pins the fix for a suggestion that failed
 // exactly where it was most needed. Project paths resolve exactly (they are
-// filesystem paths), so `magus run build API` misses project `api` - and before
+// filesystem paths), so `magus run build API` misses project `api`, and before
 // this, API->api scored three substitutions against a threshold of two, so the
 // user got "unknown project" with no suggestion at all. Case differences are not
 // typos, but the suggestion must still come back in its real casing to be

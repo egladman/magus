@@ -106,7 +106,7 @@ func TestPruneDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
 
 // Rule 1: a request nobody has answered pins every file naming it, however old. The
 // queue belongs to a person, and a retention window that emptied it would be an
-// expiry - the one thing this package refuses to have.
+// expiry: the one thing this package refuses to have.
 func TestPruneExemptsAFileHoldingAStillOpenRequest(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -175,7 +175,7 @@ func TestPruneDeletesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
 
 // Exemptions travel: sparing a file for one request can spare a SECOND request that
 // shares it, which in turn spares the file holding that request's other half. Here
-// att-open pins the agent file, which pins att-done, which pins the human file - and
+// att-open pins the agent file, which pins att-done, which pins the human file, and
 // nothing but the pinning would stop att-done's open from outliving its dispose.
 //
 // One pass in an unlucky map order gets this wrong, which is why pruning iterates to
@@ -263,7 +263,7 @@ func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 	})
 
 	// A dangling symlink reproduces the race deterministically: the directory lists
-	// the name, and the open that follows fails with ENOENT - exactly what a reader
+	// the name, and the open that follows fails with ENOENT: exactly what a reader
 	// meets when pruning unlinks a file between those two calls.
 	if err := os.Symlink(filepath.Join(dir, "already-pruned"), filepath.Join(dir, "gone"+fileExt)); err != nil {
 		t.Skipf("symlinks unavailable on this platform: %v", err)

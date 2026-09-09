@@ -54,8 +54,8 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Le
 // `<rev>+<digest>` for a dirty one.
 //
 // Exported to keep "is this worker on its base" spelled once. Register is the only caller
-// today; a later reader that needs the same question answered - the agent guard, the
-// console - should call this rather than grow a second comparison that can drift from it.
+// today; a later reader that needs the same question answered (the agent guard, the
+// console) should call this rather than grow a second comparison that can drift from it.
 // See types.LeaseBaseVerdict for why the answer is not a boolean.
 func CompareBase(checkpoint, reported string) types.LeaseBaseVerdict {
 	checkpoint, reported = strings.TrimSpace(checkpoint), strings.TrimSpace(reported)

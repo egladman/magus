@@ -1,5 +1,5 @@
 // Package agent owns the two provider-neutral halves of Magus's agent surface: the
-// agent-skill artifact (this file - command packages supply embedded source files, and
+// agent-skill artifact (this file: command packages supply embedded source files, and
 // this package renders, installs and verifies the generated surface without knowing about
 // a particular CLI host), and the guard verdict wire contract (guard.go, which lives here
 // because `package main` cannot be imported, so a parity check outside cmd/magus would
@@ -28,9 +28,9 @@ import (
 //
 // 37: a --simple install also writes each skill's always-full <name>-full twin
 // (see fullTwinSuffix), and both entries carry a cross-reference in their
-// description. The content digest cannot catch this on its own - it hashes the
+// description. The content digest cannot catch this on its own: it hashes the
 // SOURCE bodies, which did not change, while what an install writes did.
-// 38: magus-commit-composition - restructuring an unpushed branch into reviewable
+// 38: magus-commit-composition, restructuring an unpushed branch into reviewable
 // commits from project ownership, declared outputs and blast radius.
 // 39: `magus graph verify` is gone; the installed copies are graded by `magus
 // doctor`'s agent skills check, which every skill that named the old verb now
@@ -41,7 +41,7 @@ import (
 // cannot execute magus gets ROOT-DEFERRED validation up front.
 // 41: the vocabulary drops "unit" for a row of the ledger, in the skill, the
 // ledger table, and the tools it names.
-// 42: the lease runtime reaches the skills - magus-multi-agent
+// 42: the lease runtime reaches the skills: magus-multi-agent
 // teaches ledger register, environment enrollment and the guard's
 // deny/advise split, attention events for a blocked worker, and the session
 // audit of what a lease ran; both it and magus-vcs-hygiene read
@@ -49,29 +49,29 @@ import (
 // 43: the session CLI family (`magus session`, `session attention`, `session
 // dispose`, `session hook`, `session notify`) replaces the sessions/attention/
 // notify/hook top-level verbs in the skill text; there are no compat aliases.
-// 44: enrollment moves to the W3C channels - a worker exports
+// 44: enrollment moves to the W3C channels: a worker exports
 // BAGGAGE=magus.lease=<id>, plus TRACEPARENT and magus.spawner when its host
 // has them. The magus-specific environment variable it replaces is gone.
-// 45: the concept is a LEASE - the ledger row, the `--lease` flag, the BAGGAGE
-// member magus.lease - and magus-delegate-multi-agent is renamed
+// 45: the concept is a LEASE (the ledger row, the `--lease` flag, the BAGGAGE
+// member magus.lease), and magus-delegate-multi-agent is renamed
 // magus-multi-agent. Nothing answers to the old names.
 // 46: verification instructions become proof obligations wherever the evidence
-// is cheap - a gate you added is shown FAILING before its green counts
+// is cheap: a gate you added is shown FAILING before its green counts
 // (magus-run), drift is proven by a second regenerate rather than by reading
 // the diff (magus-vcs-hygiene), fan-out waits on the collision check REPORTING
 // the write sets disjoint and the root reopens a lease's evidence itself
 // (magus-multi-agent), and every audit finding carries the command that
 // reproduces it (magus-context-audit).
 // 47: magus-multi-agent names `magus graph build` as the prerequisite for its
-// central evidence command - in a fresh worktree `magus refs --occurrences`
+// central evidence command: in a fresh worktree `magus refs --occurrences`
 // answers "unknown, not absent" rather than reporting the edit sites, and the
 // partition is then built on a silence.
-// 48: magus-query teaches the doc-section layer - every markdown heading is a
+// 48: magus-query teaches the doc-section layer: every markdown heading is a
 // `docsection` node, so prose is retrieved with `magus query kind=docsection`
 // (a `path#anchor` pointer to one passage) instead of reading the whole file.
 // Pairs with the guard's doc-search advisory on a cat/grep of a `.md`.
-// 49: the query grammar teaches operators - kind=spell (match), kind!=op
-// (exclude), id=~regex (regex) - with the `:`/`-kind:op` spelling kept as a
+// 49: the query grammar teaches operators: kind=spell (match), kind!=op
+// (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
 // compat alias. `=` reads as a match over a structured graph, and `!=` removes
 // the flag collision the dash negation carried.
 // 50: magus-handoff-journal gains the `elimination` record: a hypothesis an
@@ -87,7 +87,7 @@ import (
 // store predates it: it is a repository's memory, which is what the command has
 // always been called. Pre-1.0, so the old directory is not carried: `--prune`
 // removes it, which is what the stale report already names it for.
-// 53: the SHORT/FULL axis answers to one word per end everywhere - the constants,
+// 53: the SHORT/FULL axis answers to one word per end everywhere: the constants,
 // the `skill-variant:` stamp value, `--skill-form`, and the published pages. An
 // installed file's stamp changes from `simple` to `short`, so every tree grades
 // stale until it is reinstalled.
@@ -110,7 +110,7 @@ const skillLicense = "GPL-3.0-or-later"
 const anchorSkillRel = "magus-query/SKILL.md"
 
 // AgentsFile is the repo-root instruction file magus prints a managed block for but never
-// writes, and the [Status.Location] CheckStatuses reports that block under - so a caller
+// writes, and the [Status.Location] CheckStatuses reports that block under, so a caller
 // can tell the one location whose remedy magus cannot run.
 const AgentsFile = "AGENTS.md"
 
@@ -121,7 +121,7 @@ const AgentsFile = "AGENTS.md"
 // design rather than an omission: install writes only the names in skillSources,
 // and grading skips any file magus did not write, so a name magus does not ship
 // is untouchable by structure rather than by exception. The reservation exists so
-// it stays that way - a future shipped skill called magus-local-development would,
+// it stays that way: a future shipped skill called magus-local-development would,
 // on the first --force after the upgrade, silently overwrite every early adopter's
 // file.
 // TestLocalSkillNameIsReserved is what makes the promise enforceable.
@@ -142,7 +142,7 @@ type AgentSkill struct {
 	// Variant is what THIS entry was actually rendered as, independent of the
 	// Form requested from RenderedSkills. FormBoth also returns each skill's
 	// always-full twin (see fullTwinSuffix), and the twin's own stamp must say
-	// "full", never "short" - StampSkill and friends key off this field, not
+	// "full", never "short": StampSkill and friends key off this field, not
 	// the request. Meaningless on an unrendered definition from EmbeddedSkills.
 	Variant Variant
 }
@@ -153,14 +153,14 @@ type AgentSkill struct {
 // not a summary, a truncation, or a model-generated paraphrase: there is exactly
 // one human-written body per skill, and its author brackets the spans that only
 // the full form keeps. So the two can never come to describe different
-// behavior, they share one content digest, and they version together - which is
+// behavior, they share one content digest, and they version together, which is
 // the property a second hand-maintained file could not give.
 //
 // The reason to offer a shorter one at all: a skill is a bet about what the reader
 // cannot infer, and that bet ages. Models keep getting better at inferring the
 // why, so the rationale that earns its context today is the same text that is
 // dead weight in a year. Rather than let the skills quietly become bricks, the
-// choice is a flag - and re-asking "does this still earn its context?" is the
+// choice is a flag, and re-asking "does this still earn its context?" is the
 // audit, not a rewrite.
 //
 // A {{if .Full}} branch alone caps how short the short form can get, because it
@@ -180,11 +180,11 @@ type Variant int
 
 // The words are SHORT and FULL, one each: the Go constants, the wire strings, the
 // installed stamp value, and the published pages. The shorter end had drifted to three
-// spellings across those surfaces - simple, concise, short - which is one word per
+// spellings across those surfaces (simple, concise, short), which is one word per
 // surface a reader crosses, and nothing to tell them the three name one thing.
 //
 // Why these two words rather than any other pair: internal/prompt.Variant is the same
-// concept for prose and already says Short, and the full end cannot move at all - `full`
+// concept for prose and already says Short, and the full end cannot move at all: `full`
 // is the installed twin's directory name and the branch every skill body's {{if .Full}}
 // already takes.
 //
@@ -195,7 +195,7 @@ const (
 	// not the least. A capable reader can re-derive the mechanical steps from the tool
 	// surface on its own; what it cannot re-derive is which failures are silent, what is
 	// load-bearing, and where a judgment call is being asked of it. So short is a bet ON
-	// the reader, not a lossy compression - which is why the split is a judgment an
+	// the reader, not a lossy compression, which is why the split is a judgment an
 	// author records, and why anything a step cannot survive losing belongs in the
 	// unmarked core instead.
 	//
@@ -210,7 +210,7 @@ const (
 
 // fullTwinSuffix names the always-full twin [FormBoth] writes alongside each
 // skill's primary entry: <name>-full. The short form is a bet that the
-// INSTALLING reader can re-derive what it drops - but a session that installs
+// INSTALLING reader can re-derive what it drops, but a session that installs
 // short can still delegate to a smaller or less-briefed reader who cannot, and
 // that reader inherits whatever the top-level install picked with no say in it.
 // The twin gives it a stable name to ask for instead, independent of what the
@@ -239,7 +239,7 @@ func (v Variant) String() string {
 //
 // Full is the one authors reach for: it brackets rationale the short form drops.
 // Short brackets text ONLY the shorter reader sees, which is almost always
-// wrong - a step in that arm is one the better-briefed reader never gets - so
+// wrong (a step in that arm is one the better-briefed reader never gets), so
 // use it for wording, not for content.
 func (v Variant) Full() bool { return v == VariantFull }
 
@@ -296,7 +296,7 @@ func (f Form) Variant() Variant {
 //
 // A skill body that needs to SHOW template syntax (magus-run documents the
 // `-o template` flag, magus-buzz-write documents mustache) escapes it as a string
-// constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too - the
+// constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too; the
 // template engine does not know what Markdown is.
 func applyVariant(name, body string, v Variant) (string, error) {
 	t, err := template.New(name).Parse(body)
@@ -314,7 +314,7 @@ func applyVariant(name, body string, v Variant) (string, error) {
 // and strips trailing whitespace, so an elided body is still well-formed Markdown.
 //
 // It does not rewrap prose. A paragraph left with ragged line lengths renders
-// identically - Markdown folds single newlines inside a paragraph into spaces - and
+// identically (Markdown folds single newlines inside a paragraph into spaces), and
 // a rewrapper would have to understand fenced code, tables and list indentation to
 // avoid breaking them, which is a lot of machinery to buy nothing the reader sees.
 func tidyBlankLines(s string) string {
@@ -354,7 +354,7 @@ type skillSource struct {
 //
 // It exists so a prompt or a message can point a reader at a skill without carrying a copy of it.
 // A copy would be a second definition free to drift from the installed one, and it would spend the
-// reader's context on what their tools already loaded - so what travels is the name, and this type
+// reader's context on what their tools already loaded, so what travels is the name, and this type
 // is the guarantee that the name resolves.
 type SkillRef string
 
@@ -420,12 +420,12 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 //
 // A catalog-wide digest restamped all 26 installed files and all 16 reference
 // pages whenever any skill changed, so a diff could not show which one moved.
-// Both forms of a skill still share this value - see StampSkill. The
+// Both forms of a skill still share this value; see StampSkill. The
 // catalog-wide contentDigest survives for the AGENTS.md block, which routes to
 // every skill by name and so does depend on the whole set.
 func (c *Catalog) SkillDigest(name string) string {
 	// A twin is rendered from its primary's body, so it resolves to the primary's
-	// entry rather than one of its own - that is what makes the two report the
+	// entry rather than one of its own: that is what makes the two report the
 	// same digest and go stale together.
 	if d, ok := c.skillDigests[baseSkillName(name)]; ok {
 		return d
@@ -459,7 +459,7 @@ func (c *Catalog) computeSkillDigests() map[string]string {
 
 // EmbeddedSkills returns every embedded skill's canonical, unrendered
 // definition, in name order: Body carries the raw template source, exactly as
-// checked in. Variant is meaningless on these entries - render one for a
+// checked in. Variant is meaningless on these entries; render one for a
 // specific variant with Render, or get the install-ready list for a form
 // (twins included) with RenderedSkills.
 func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
@@ -478,7 +478,7 @@ func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 
 // Render renders def's raw template Body for v, returning a new AgentSkill
 // whose Body is the final Markdown and whose Variant records which variant
-// produced it - RenderSkill and StampSkill key off that field on the RESULT,
+// produced it: RenderSkill and StampSkill key off that field on the RESULT,
 // never off an ambient caller-supplied variant, so a mixed batch (see
 // RenderedSkills) stamps every entry correctly regardless of what was
 // requested. def is not mutated.
@@ -490,7 +490,7 @@ func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
 	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v}, nil
 }
 
-// RenderedSkills returns exactly the entries form installs, in name order - the
+// RenderedSkills returns exactly the entries form installs, in name order: the
 // install-ready list SkillBytes, SkillTar, PlanSkillTree, and WriteSkillTree all
 // draw from, so none of them can disagree about which names exist. Under
 // [FormBoth] each skill is followed immediately by its always-full <name>-full
@@ -558,7 +558,7 @@ func (c *Catalog) SkillBytes(name string, form Form) ([]byte, error) {
 // carry a fixed mtime and deterministic mode bits so byte-equal output is
 // possible when the binary and skill content are unchanged. Piping the
 // result to `tar -xf - -C <dir>` is the supported way to install skills
-// outside the workspace root - the shell sees the command, the sandbox sees
+// outside the workspace root: the shell sees the command, the sandbox sees
 // it, and the user gets to choose the destination.
 func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
 	skills, err := c.RenderedSkills(form)
@@ -669,7 +669,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) ([]str
 // its writes but not its deletions leaves a mess that outlives every reason for it:
 // renaming a skill leaves the old directory installed, still stamped, still loaded
 // by the host, still teaching whatever it said the day it was orphaned. Nothing
-// reported it either - a drift gate compares the files a generator DECLARES against
+// reported it either: a drift gate compares the files a generator DECLARES against
 // what it wrote, and an extra file is in neither set. This is what makes it
 // reportable; PruneSkillTree is what acts on it, and only when asked.
 //
@@ -713,7 +713,7 @@ func (c *Catalog) StaleSkillDirs(dir, dest string, form Form) ([]string, error) 
 // Never a side effect of installing. Install writes files it can name in advance;
 // this deletes files the caller has not seen, chosen by a rule that lives in a
 // binary they may have just upgraded. Those are different enough acts that the
-// second one asks - so install reports what is stale and names this, and a person
+// second one asks, so install reports what is stale and names this, and a person
 // decides. The stamp makes the deletion safe; it does not make it expected.
 func (c *Catalog) PruneSkillTree(dir, dest string, form Form) ([]string, error) {
 	stale, err := c.StaleSkillDirs(dir, dest, form)
@@ -867,8 +867,8 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 		if section := agentsSectionRe.Find(body); section != nil {
 			// The fix names a PRINTING command, because magus does not write this
 			// file: the block is the developer's to paste over the stale one. The
-			// string has been wrong before - it once named a flag that does not
-			// parse - and a stale stamp whose one job is to hand you the command
+			// string has been wrong before (it once named a flag that does not
+			// parse), and a stale stamp whose one job is to hand you the command
 			// that fixes it is worth checking against `magus agent -h`.
 			out = append(out, c.gradeStamp(AgentsFile, "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
 		}
@@ -886,7 +886,7 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	reinstall := "magus agent install " + dest + " --force"
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
-	// pre-versioning install of a shipped skill - the one case that must still report.
+	// pre-versioning install of a shipped skill, the one case that must still report.
 	// FormBoth, the permissive superset: grading asks whether a name is one magus ever
 	// writes, and a twin beside its primary is a correct install rather than litter.
 	// Pruning is the question that needs the form the caller chose.
@@ -944,7 +944,7 @@ func (c *Catalog) installedSkillNames(path string) []string {
 // Derived from what the form actually renders rather than asserted here: the set used
 // to be every primary PLUS every twin unconditionally, which is right only for
 // FormBoth. The single-body forms write no twin, so the twins a previous FormBoth
-// install left behind graded as shipped - never reported stale, never pruned, and
+// install left behind graded as shipped: never reported stale, never pruned, and
 // still loaded by the host. That is the orphaned directory the form choice exists to
 // prevent.
 //

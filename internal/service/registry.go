@@ -171,10 +171,10 @@ func (r *Registry) reap(key string, e *entry) {
 
 // stop tears down one entry's process, run outside the lock so it cannot block other
 // keys. It waits for the entry's Start to have completed (ready) so it never stops a
-// nil handle while a fork is still in flight - the fix for the Shutdown/reap-vs-Start
+// nil handle while a fork is still in flight: the fix for the Shutdown/reap-vs-Start
 // race. That wait, and the Stop call itself, are bounded by ctx: if ctx is done first,
 // stop gives up rather than blocking teardown on it, at the cost of possibly leaving a
-// just-started process orphaned (an accepted trade-off - an uncancellable teardown is
+// just-started process orphaned (an accepted trade-off: an uncancellable teardown is
 // worse). Release and reap have no caller deadline in scope and pass
 // context.Background(); Shutdown passes its own ctx through.
 func (r *Registry) stop(ctx context.Context, e *entry) {
@@ -194,7 +194,7 @@ func (r *Registry) stop(ctx context.Context, e *entry) {
 // time: run serially, N services could cost up to N * (ReadyTimeout + stop grace) of
 // uncancellable teardown. The entries map is swapped for a fresh one under r.mu
 // before any teardown starts, so the goroutines below touch only their own victim and
-// never r.entries or r.mu - nothing about the fan-out races Registry state. After
+// never r.entries or r.mu; nothing about the fan-out races Registry state. After
 // Shutdown the Registry is empty and reusable.
 func (r *Registry) Shutdown(ctx context.Context) {
 	r.mu.Lock()

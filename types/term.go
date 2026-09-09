@@ -5,7 +5,7 @@ package types
 // A named type with a declared case list rather than a raw SGR string, for the
 // reason [SignAlgorithm] and [PlatformStyle] give: the underlying form is
 // "\x1b[2;32m", which nobody should be asked to type or proofread, and a wrong
-// code is not an error - it is output that renders as garbage on someone else's
+// code is not an error: it is output that renders as garbage on someone else's
 // terminal. The cases are exactly the SGR codes internal/interactive/tty already
 // defines, so this invents no palette; it names the one magus renders with.
 //
@@ -39,7 +39,7 @@ const (
 // An object rather than two returns because a pair of bare ints at a call site is
 // exactly the shape that gets swapped: os\platform's three-string return has the
 // same problem and cannot be fixed without breaking callers. Both fields are 0
-// when the size cannot be determined - piped output, no controlling terminal - so
+// when the size cannot be determined (piped output, no controlling terminal), so
 // a caller checks one field rather than interpreting an error.
 type TermSize struct {
 	Width  int

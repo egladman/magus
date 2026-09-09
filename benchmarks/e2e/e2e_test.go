@@ -139,7 +139,7 @@ func TestRunToolchainChangeRebuilds(t *testing.T) {
 
 // TestMagusfileTargetsRunWithoutBeingDeclared is the contract that replaced the
 // old double-bind guard: a magusfile declares no spell at all and its own targets
-// still run, exactly once. Binding the magusfile driver is magus's job - it is
+// still run, exactly once. Binding the magusfile driver is magus's job: it is
 // what makes the file runnable, not a toolchain the author opts into.
 func TestMagusfileTargetsRunWithoutBeingDeclared(t *testing.T) {
 	root := t.TempDir()
@@ -413,7 +413,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(build); }
 //
 // The chain: the shard's own `magus` run claims the machine's memory, then execs `go
 // test`, which runs THIS process, which drives magus in-process. Only the CLI and the
-// daemon stamp invocation ancestry onto a context, so a library caller has none - and
+// daemon stamp invocation ancestry onto a context, so a library caller has none, and
 // admission read the context alone, judged this process a nested magus that had lost
 // its ancestry, and refused it against its own parent's claim.
 //

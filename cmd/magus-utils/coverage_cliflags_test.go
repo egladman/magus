@@ -77,7 +77,7 @@ func TestGroupAliasesNamesTheFieldForTheLongestSpelling(t *testing.T) {
 
 // TestGroupAliasesPanics pins all three rejections. Each would otherwise emit a
 // shorthand that parses and writes to nothing, which is the bug AliasOf was added to
-// prevent - so a silent extra field is the wrong outcome for every one of them.
+// prevent, so a silent extra field is the wrong outcome for every one of them.
 func TestGroupAliasesPanics(t *testing.T) {
 	t.Run("dangling AliasOf", func(t *testing.T) {
 		assert.PanicsWithValue(t,

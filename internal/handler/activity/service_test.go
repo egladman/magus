@@ -102,7 +102,7 @@ func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	assert.Equal(t, activityv1.Kind_KIND_TOKEN_LIFECYCLE, events[2].GetKind())
 	// A daemon-wide action carries NO workspace, and the merge must not invent one. Event.Workspace
 	// means "the root this action pertained to" (trail.go), and a token rotation genuinely pertains
-	// to no single workspace - substituting whichever trail happened to record it would make the
+	// to no single workspace; substituting whichever trail happened to record it would make the
 	// field mean two different things depending on the row.
 	assert.Empty(t, events[2].GetWorkspace())
 	assert.Equal(t, activityv1.Kind_KIND_MCP_TOOL_CALL, events[3].GetKind())
@@ -262,7 +262,7 @@ func rows(events []*activityv1.ActivityEvent) []row {
 //
 // Each event RECORDS its workspace, the way a real per-workspace producer does (a job runs against
 // one workspace and says so). The merge deliberately does not invent an attribution for events that
-// omit it, so a fixture that wants to assert on workspace has to supply it - which is the honest
+// omit it, so a fixture that wants to assert on workspace has to supply it, which is the honest
 // shape anyway.
 func seedAt(t *testing.T, ts ...int64) string {
 	t.Helper()
@@ -396,7 +396,7 @@ func TestEncodeKindAndOutcome_Defaults(t *testing.T) {
 
 // TestEncodeKindCoversEveryTrailKind: a kind with no proto value encodes to
 // KIND_UNSPECIFIED, which is indistinguishable from "unset" and cannot be selected with
-// ActivityQuery.kinds - so the event is written, stored, and then invisible to the one
+// ActivityQuery.kinds, so the event is written, stored, and then invisible to the one
 // surface that exists to read it. KindCredentialGrant shipped that way and the docs
 // promised a governance view that did not exist.
 //
@@ -422,7 +422,7 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 // TestListActivityEvents_FiltersBeforeTruncating is the regression for a page that starved on a
 // busy daemon: the newest page_size events were cut FIRST and the filter applied to the survivors,
 // so a filter matching only older events answered "none". The console reads that as a false
-// absence - the review bells and the dashboard Agents tile all assert on it.
+// absence: the review bells and the dashboard Agents tile all assert on it.
 func TestListActivityEvents_FiltersBeforeTruncating(t *testing.T) {
 	dir := t.TempDir()
 	// One matching event, then enough noise to bury it past any page.

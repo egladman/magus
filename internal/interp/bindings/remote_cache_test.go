@@ -211,8 +211,8 @@ func repoRoot(t *testing.T) string {
 func ghaBackend(t *testing.T) *spellRemoteBackend {
 	t.Helper()
 	path := filepath.Join(repoRoot(t), "spells", "github", "actions", "spell.buzz")
-	// NOT t.Skipf. This skipped silently for who knows how long - the path carried an
-	// extra "magus" segment from before the repo was flattened - so the only coverage of
+	// NOT t.Skipf. This skipped silently for who knows how long (the path carried an
+	// extra "magus" segment from before the repo was flattened), so the only coverage of
 	// magus's own GitHub Actions cache backend was dead, and read as passing.
 	require.FileExists(t, path, "github spell missing; this test must run, not skip")
 	drv, err := resolveBackendSpell(context.Background(), path)
@@ -250,8 +250,8 @@ const ghaTwirp = "/twirp/github.actions.results.api.v1.CacheService/"
 func (e *ghaEmulator) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Record the Authorization the spell's Twirp calls arrive with. The spell no
-		// longer builds that header itself - it declares a magus\secret grant and magus
-		// attaches it - so without this the emulator would happily serve unauthenticated
+		// longer builds that header itself (it declares a magus\secret grant and magus
+		// attaches it), so without this the emulator would happily serve unauthenticated
 		// requests and the round-trip would pass with the credential never sent.
 		//
 		// The pre-signed blob URLs deliberately carry no auth, hence the Twirp-only
@@ -385,7 +385,7 @@ func TestGHACacheBackendRoundTrip(t *testing.T) {
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "test-token")
 
 	store := ghaBackend(t)
-	// A resolver on the context, because a run always has one - the cache backend is
+	// A resolver on the context, because a run always has one: the cache backend is
 	// invoked from inside a run. The spell declares a magus\secret grant, and without a
 	// resolver that is an error rather than a silent unauthenticated request, which is
 	// the correct behaviour and why the test has to look like production here.

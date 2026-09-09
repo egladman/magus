@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Both insight surfaces - the magus\ Buzz module and the magus_insight MCP tool -
+// Both insight surfaces (the magus\ Buzz module and the magus_insight MCP tool)
 // reach these lenses through a runtime type assertion on types.InsightAnalyzer. This
 // makes dropping or renaming one a COMPILE error here rather than a "workspace does
 // not support insight analysis" at the call site, which reads as a workspace problem.
@@ -141,14 +141,14 @@ func (m *Magus) Ownership(ctx context.Context, opts types.InsightOptions) (types
 // Volatility is the run-outcome lens: each (project, target) pair's recent pass/fail record
 // scored by its Wilson lower bound, flagged volatile at or above the configured threshold.
 // Unlike the git-history lenses it reads the shared runtime-history file (config.HistoryPath),
-// not a commit scan - so it is workspace-wide and takes no InsightOptions window.
+// not a commit scan, so it is workspace-wide and takes no InsightOptions window.
 func (m *Magus) Volatility(ctx context.Context) (types.VolatilityReport, error) {
 	return volatility.BuildReport(ctx, m.cfg.HistoryPath, m.volatilityConfig())
 }
 
 // Unreferenced is the knowledge-graph lens: code symbols this workspace defines that
-// nothing in it names. Like Volatility it takes no window - it reads the graph, not a
-// commit scan - so it is workspace-wide.
+// nothing in it names. Like Volatility it takes no window (it reads the graph, not a
+// commit scan), so it is workspace-wide.
 //
 // The result carries a coverage verdict alongside the list, and that pairing is the whole
 // design. A project whose symbol index was never built contributes no symbols, so its

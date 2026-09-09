@@ -16,7 +16,7 @@ const (
 	// FaultJITCompile is a panic out of the JIT code generator: the chunk hit a
 	// codegen defect and was marked permanently ineligible, so it runs interpreted.
 	// It fires ONCE per chunk (the ineligible verdict is cached), and never for a
-	// chunk the backend merely declines to compile - declining is routine and
+	// chunk the backend merely declines to compile: declining is routine and
 	// silent, a codegen panic is a bug. See safeCompileJIT.
 	FaultJITCompile
 	// FaultJITBadExit is a native JIT run that returned a status, resume ip, or
@@ -48,7 +48,7 @@ func (k FaultKind) String() string {
 // `catch` as a MAP rather than a flat string.
 //
 // Without it, `catch (e)` binds err.Error() and a magusfile can only substring-match to
-// find out what went wrong - the same stringly-typed fragility that a typed error exists
+// find out what went wrong: the same stringly-typed fragility that a typed error exists
 // to remove. With it, the embedder decides the shape, and a caller writes
 // `if (e.code == "MGS2001")`.
 //

@@ -43,7 +43,7 @@ const (
 	// []float64 and a caller that means integers rounds on the way out.
 	TypeFloatSlice
 	// TypeByteSlice is raw bytes, crossing as a Buzz list of ints rather than a
-	// str. A Buzz string is rune-oriented, so arbitrary binary - a NUL, a 0xFF -
+	// str. A Buzz string is rune-oriented, so arbitrary binary (a NUL, a 0xFF)
 	// does not survive a round trip through one; anything that must move bytes
 	// opaquely (an HMAC digest, a decoded base64 payload) uses this.
 	TypeByteSlice
@@ -113,7 +113,7 @@ type Arg struct {
 	// the Impl still receives map[string]any and needs no decoder.
 	//
 	// Without it an argument like encoding.build_url's `parts` reads as {str: any} even
-	// though parse_url returns a URL - so the round trip was typed in one direction and
+	// though parse_url returns a URL, so the round trip was typed in one direction and
 	// untyped in the other, and a caller could pass any map at all.
 	Object string
 	// Enum names the Buzz enum this argument's string must be a case of, for an arg
@@ -137,7 +137,7 @@ type Ret struct {
 	//
 	// Documentation for the CHECKER and the reader, not a marshaling instruction:
 	// the generator already recognizes an object by reflecting on the Impl. What
-	// was missing is the NAME - without it a method's return types as {str: any}
+	// was missing is the NAME: without it a method's return types as {str: any}
 	// outside the generator, so nothing checks the field names.
 	//
 	// The generator validates this against the reflected Impl and fails codegen on
@@ -157,7 +157,7 @@ type Ret struct {
 //
 // Declaring it buys checking a bare value cannot: an object reports an unknown member,
 // so a typo is a load error instead of a null reaching the VM. The runtime binding is
-// unchanged - a Buzz object IS a map at run time.
+// unchanged: a Buzz object IS a map at run time.
 type Namespace struct {
 	Name string
 	Doc  string
@@ -187,7 +187,7 @@ type Method struct {
 	Returns []Ret
 	// Raises is authored, not derived: true when Impl can return a non-nil error
 	// to the Buzz caller under real inputs (not merely when its signature ends in
-	// `error` - many Impls declare one and never return it non-nil). moduledecls
+	// `error`; many Impls declare one and never return it non-nil). moduledecls
 	// reads this to emit `!> any` on the generated extern declaration, which is
 	// what makes the checker's propagate-or-catch enforcement (BZZ1006) apply to
 	// host calls. Get this wrong and either a caller loses a real error path
@@ -197,7 +197,7 @@ type Method struct {
 	// over it to discover its package-qualified name and validates that its
 	// signature matches Args + Returns + (error). Nil only when Extern is set.
 	Impl any
-	// Extern marks a member DECLARED here but BOUND ELSEWHERE - today by
+	// Extern marks a member DECLARED here but BOUND ELSEWHERE: today by
 	// internal/interp/bindings, which MapSets it onto the module's namespace value
 	// at run time. It carries no Impl and gets no generated trampoline; what it
 	// gets is a declaration.
@@ -205,8 +205,8 @@ type Method struct {
 	// The name is upstream Buzz's `export extern fun`: a signature whose
 	// implementation the host binds.
 	//
-	// It exists because a member needing a dynamic binding - one closing over
-	// per-Open state, or binding differently per surface - otherwise had to be
+	// It exists because a member needing a dynamic binding (one closing over
+	// per-Open state, or binding differently per surface) otherwise had to be
 	// MapSet and was invisible to the checker. That is how `crypto\hash`, a
 	// function the crypto module has never had, type-checked inside a spell.
 	//
@@ -220,7 +220,7 @@ type Method struct {
 // invocation.
 //
 // NO MODULE USES THIS, and TestNoModuleDeclaresFields keeps it that way. A Field
-// generates no extern declaration - Buzz has `extern fun` and no extern value - so the
+// generates no extern declaration (Buzz has `extern fun` and no extern value), so the
 // checker cannot type it, and a caller who writes the parens gets a runtime "str is not
 // callable". Declare a constant as a Method returning it.
 //
@@ -241,8 +241,8 @@ type Field struct {
 type Module struct {
 	// Name is the identifier a magusfile calls the module by: `json` in
 	// `json\parse(...)`. It is also the key for everything derived from the
-	// module - the generated trampoline's Go function name, its file name, the
-	// Modules registry key - so it must stay a legal identifier.
+	// module (the generated trampoline's Go function name, its file name, the
+	// Modules registry key), so it must stay a legal identifier.
 	Name string
 	// Path is the import spelling, when it differs from Name: `encoding/json` for
 	// the module bound as `json`. Empty means the two are the same, which is the
@@ -267,7 +267,7 @@ type Module struct {
 	//
 	// Declared here because it is a fact about the MODULE. It previously lived as
 	// prose in doc comments and a hand-maintained table in bindings/gen carrying
-	// "keep this in sync" - a mirror that could drift with no test to check it.
+	// "keep this in sync", a mirror that could drift with no test to check it.
 	//
 	// uuid is WASM despite generating randomness: the browser supplies
 	// getRandomValues. The test is whether the BROWSER can provide it, not whether
@@ -297,7 +297,7 @@ var (
 // for the Module vocabulary, so std registering them back here would import
 // std/encoding in turn and cycle. They are collected explicitly instead (see
 // std/encoding/register.go) and unioned with this registry one layer above std,
-// in internal/hostmodules - the only place that imports both.
+// in internal/hostmodules, the only place that imports both.
 func Register(m Module) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -313,8 +313,8 @@ func Register(m Module) {
 // ValidateModule checks m's Fields and Methods against their declared Impls,
 // the same check Register runs before storing a module. std/encoding's leaf
 // packages call it directly (see std/encoding/register.go) because they
-// cannot call Register itself without cycling back through std - see
-// Register's doc for why - but a malformed descriptor should still fail fast
+// cannot call Register itself without cycling back through std (see
+// Register's doc for why), but a malformed descriptor should still fail fast
 // at the same place in the program's life as every other module's, not
 // silently reach codegen as bad data.
 func ValidateModule(m Module) error {

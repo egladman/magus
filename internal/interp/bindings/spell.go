@@ -102,7 +102,7 @@ func docsByTarget(targets map[string]spells.Op) map[string]string {
 }
 
 // maxProbeOutput bounds what one probe contributes. A version line is one short
-// line; a tool that ignores its version flag and prints its whole help - or a log -
+// line; a tool that ignores its version flag and prints its whole help (or a log)
 // would otherwise be held whole and mixed into the cache key whole.
 const maxProbeOutput = 4 << 10
 
@@ -152,7 +152,7 @@ func newCommandRenderer(targets map[string]spells.Op) func(string, []string) (st
 		args = append(args, op.DefaultArgs...)
 		// A declared Sources is appended as its placeholder token: this renderer
 		// takes no project dir (magus describe has none per-target either), so it
-		// cannot run the runner's real per-project expansion - see
+		// cannot run the runner's real per-project expansion; see
 		// spells.Command.Sources and SourcesPlaceholder.
 		args = append(args, op.SourcesPlaceholder()...)
 		return op.Bin, args, true, nil
@@ -224,7 +224,7 @@ func newCommandConflictChecker(targets map[string]spells.Op) func(string, []stri
 
 // newServiceViewer returns the static service-facts accessor used by `magus describe
 // target`: for a service op it reports the readiness probe, stop command, idle
-// override, distinct reason, and fingerprint - all known without starting the
+// override, distinct reason, and fingerprint, all known without starting the
 // service. ok is false for a non-service op. It executes nothing.
 func newServiceViewer(targets map[string]spells.Op) func(string) (*spells.ServiceView, bool) {
 	return func(target string) (*spells.ServiceView, bool) {
@@ -272,7 +272,7 @@ func noResult() (any, error) {
 // readinessMemo records the outcome of each readiness probe per (bin, dir) for the
 // life of the process. A probe forks, so re-running it for every op of every project
 // would cost more than the failure it prevents; and its answer cannot change mid-run
-// in a way magus could act on - a daemon that dies after the check fails the op
+// in a way magus could act on: a daemon that dies after the check fails the op
 // anyway, with the tool's own message.
 var readinessMemo sync.Map // key "bin\x00dir" -> error (nil when ready)
 
@@ -299,7 +299,7 @@ func checkReady(ctx context.Context, tools map[string]spells.Tool, op spells.Op,
 	}
 	out := probeUntilReady(ctx, probe, op.Bin, dir)
 	// A context error means THIS run was interrupted (Ctrl-C, a deadline), not that
-	// the tool is unready - the memo's "cannot change mid-run" justification above
+	// the tool is unready: the memo's "cannot change mid-run" justification above
 	// assumes one process per run, but the daemon is one process spanning many runs,
 	// so storing it here would fail every later run's probe on this (bin, dir) with a
 	// stale "context canceled" for as long as the daemon lives.
@@ -318,7 +318,7 @@ const readinessGrace = 30 * time.Second
 //
 // Waiting is deliberately interactive-only. In CI or under an agent nobody is going to
 // start a daemon mid-run, so a grace period there is minutes burned across projects to
-// reach the same failure - and it would make a deterministic failure depend on how fast
+// reach the same failure, and it would make a deterministic failure depend on how fast
 // something else happened to start. At a terminal the trade inverts: the fix is one
 // command away, and waiting saves re-running everything.
 //
@@ -328,7 +328,7 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	cmdline := strings.Join(append([]string{probe.Bin}, probe.Args...), " ")
 	// Captured so the tool's OWN diagnosis reaches the user. `docker info` says
 	// "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the
-	// docker daemon running?" - it names the socket and asks the right question,
+	// docker daemon running?": it names the socket and asks the right question,
 	// which is strictly better than anything magus can say about a tool it does not
 	// own. Paraphrasing it was throwing away the most actionable line available.
 	probeOp := spells.Op{Command: probe, Capture: true}
@@ -400,8 +400,8 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no
 	// knowledge of where the cache is. Set on both opts.refs (what a spell's Args
 	// token resolves against) and opts.env (the process environment), so a
-	// workspace-local scip spell that still shells out - the doc comment on
-	// symbols.IndexEnvVar promises the env var is set - keeps working.
+	// workspace-local scip spell that still shells out (the doc comment on
+	// symbols.IndexEnvVar promises the env var is set) keeps working.
 	if req.Target == symbols.IndexOp {
 		env, err := symbolIndexEnv(ctx, req.Dir)
 		if err != nil {
@@ -416,14 +416,14 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider
 // reference) through the run's secret resolver and returns base plus the resolved
-// values, as a fresh map - base is never mutated, so a mid-loop provider failure
+// values, as a fresh map: base is never mutated, so a mid-loop provider failure
 // cannot leave already-resolved values behind in a map the caller retains.
 // secret.Resolver.Read is what registers each value for redaction (internal/secret),
 // so a secret reaching a child through this path is masked out of captured output
 // the same as one a magusfile body read directly.
 //
-// Names are resolved in sorted order so resolution - and any provider logging along
-// the way - is deterministic regardless of map iteration order.
+// Names are resolved in sorted order so resolution (and any provider logging along
+// the way) is deterministic regardless of map iteration order.
 //
 // A name already present in base is an error rather than a silently dropped or
 // overridden value: base is env magus already set for this op (MAGUS_SYMBOL_INDEX on
@@ -608,8 +608,8 @@ func registerLocalSpell(m spells.Descriptor) {
 // named for the thing they adapt (typescript, rust, python, markdown, go), so the
 // language name is the real name and needs no translation.
 //
-// The abbreviations this used to carry - typescript->ts, rust->rs, python->py,
-// markdown->md, golang->go - are gone with the rename that made them unnecessary.
+// The abbreviations this used to carry (typescript->ts, rust->rs, python->py,
+// markdown->md, golang->go) are gone with the rename that made them unnecessary.
 // A table existing to convert what users naturally type into what something was
 // actually called is a report about the name, not a feature.
 var commonSpellAliases = map[string]string{
@@ -628,7 +628,7 @@ var commonSpellAliases = map[string]string{
 // interp.RegisterBuzzSpellImportCheck.
 func checkSpellImports(handles []string) error {
 	for _, h := range handles {
-		// The magusfile driver IS registered - dispatch needs it - so the generic
+		// The magusfile driver IS registered (dispatch needs it), so the generic
 		// check below would happily accept this import even though the handle it
 		// binds is now unusable. Rejected explicitly, with the migration.
 		if h == magusfileSpellName {

@@ -41,7 +41,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 
 // TestStatusProtoMapsCacheAndInv maps per-workspace cache activity onto each Workspace,
 // the invocation id onto each RunningTarget, and the pool-wide aggregate (summed counters + the
-// configured cap) onto Pool.cache - the data the dashboard's cache tiles and per-target
+// configured cap) onto Pool.cache, the data the dashboard's cache tiles and per-target
 // live-log deep-links read.
 func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 	r := types.StatusReport{
@@ -98,7 +98,7 @@ func TestEncodeStatusEventRoundTrip(t *testing.T) {
 }
 
 // TestStatusProtoMapsRuns maps the daemon's live runs and their per-target execution
-// state onto the wire message's runs - the same status frame that carries the pool.
+// state onto the wire message's runs, the same status frame that carries the pool.
 func TestStatusProtoMapsRuns(t *testing.T) {
 	started := time.UnixMilli(1_000)
 	execAt := time.UnixMilli(2_000)
@@ -139,7 +139,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 // that emptiness, so a default filled in here would put a badge on every row.
 //
 // The name and nothing else: there is no reference list and no value on this wire, and
-// there must not be. magus does not store secrets - it reads them through a provider - so
+// there must not be. magus does not store secrets (it reads them through a provider), so
 // publishing what a build CAN reach would be a map of what to go after.
 func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 	r := types.StatusReport{

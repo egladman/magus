@@ -121,7 +121,7 @@ var HTTP = Module{
 		},
 
 		// Extern: declared here, bound by internal/interp/bindings/http_bytes.go. Both
-		// move BYTES rather than strings, which is why they are hand-bound - see that
+		// move BYTES rather than strings, which is why they are hand-bound; see that
 		// file for the encoding reason.
 		{
 			Name:    "byteSize",
@@ -561,7 +561,7 @@ type httpRetry struct {
 }
 
 // retries reports whether this policy asks for more than one attempt. A zero
-// policy - an omitted argument - does not, which is what makes "runs once" the
+// policy (an omitted argument) does not, which is what makes "runs once" the
 // default without a separate flag saying so.
 func (r httpRetry) retries() bool { return r.attempts > 1 }
 
@@ -581,7 +581,7 @@ var httpRetryKeys = map[string]bool{
 // never retries, and the only evidence is a build that gives up on the first blip
 // months after someone believed they had configured otherwise. The declared
 // HttpRetry object gives the checker the same field list, so a magusfile writing
-// HttpRetry{...} is caught earlier still - this is the backstop for the
+// HttpRetry{...} is caught earlier still; this is the backstop for the
 // map-literal form.
 //
 // Durations arrive in MILLISECONDS here while httpOpts.timeout is in seconds.

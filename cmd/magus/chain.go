@@ -30,7 +30,7 @@ import (
 // ctx.writesFiles(...) for the cache.
 //
 // The verb set is deliberately tiny and mirrors the returnable types: `outputs` is the
-// Directory, `file` is the File. Nothing reaches for Container/Service - magus is not a
+// Directory, `file` is the File. Nothing reaches for Container/Service: magus is not a
 // container runtime.
 
 // chainUsage is the shared usage text; every misuse in this file prints it, so a
@@ -64,8 +64,8 @@ func chainUsage() {
 // It exists because the verbs used to be interpreted after the run, so
 // `magus run build --then bogusverb` built the whole project and only then exited 2
 // on a typo it could have rejected in the first millisecond. Everything here is
-// checkable without a result; the one thing that is not - whether `file <path>`
-// names an artifact the target actually produced - stays in chainFile, where the
+// checkable without a result; the one thing that is not (whether `file <path>`
+// names an artifact the target actually produced) stays in chainFile, where the
 // artifact list exists.
 type chainPlan struct {
 	verb   string // outputs | file | value
@@ -117,7 +117,7 @@ func prepareChain(argv []string) (plan chainPlan, proceed bool, err error) {
 			// These take nothing further, so anything trailing is a mistake worth
 			// naming. The commonest is a global flag put after the verb
 			// (`--then file x history -o json`), which the grammar sends to the verb
-			// and which was previously accepted and silently dropped - the same
+			// and which was previously accepted and silently dropped: the same
 			// accepted-and-ignored failure the --then separator exists to avoid.
 			if len(rest) > 2 {
 				chainUsage()
@@ -340,7 +340,7 @@ func artifactRoles(ctx context.Context, m *magus.Magus, artifacts []magus.Target
 //     points, while rename replaces the link itself.
 //
 // The mode is set on the temp file rather than left to O_CREATE, which only applies its
-// mode when it actually creates - so exporting over an existing file kept the OLD
+// mode when it actually creates, so exporting over an existing file kept the OLD
 // permissions and an exported binary quietly lost +x.
 func copyArtifact(src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -411,7 +411,7 @@ func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, re
 		return emitNames(names)
 	}
 
-	// The text form exists to be substituted - VER=$(... --then value) - so it must
+	// The text form exists to be substituted (VER=$(... --then value)), so it must
 	// yield ONE project's value. A fan-out that printed every project's value
 	// unlabeled would concatenate them into a single string with nothing to say it
 	// happened, which is worse than refusing. -o json carries the project alongside
@@ -424,8 +424,8 @@ func chainValue(m *magus.Magus, opts OutputOptions, selection []types.Target, re
 	}
 	switch len(withValue) {
 	case 0:
-		// Not an error to RUN - `> void` is the default and nearly every target is
-		// one - but asking for a value it never produced is. An empty line would read
+		// Not an error to RUN (`> void` is the default and nearly every target is
+		// one), but asking for a value it never produced is. An empty line would read
 		// as "the value was the empty string".
 		return usagef("magus run: this target returned nothing (it is `> void`), so there is no value to print")
 	case 1:
@@ -458,7 +458,7 @@ type artifactVersion struct {
 // that artifact, newest first.
 //
 // The store is content-addressed, so this answers "when did this file's content last
-// actually change" without consulting the VCS - which matters precisely for the files
+// actually change" without consulting the VCS, which matters precisely for the files
 // the VCS is a poor witness for. A generated artifact's git history tells you when
 // someone committed a regeneration; this tells you when the bytes changed.
 func chainFileHistory(ctx context.Context, m *magus.Magus, opts OutputOptions, projectPath, wsPath string) error {

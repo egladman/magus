@@ -11,7 +11,7 @@ import (
 
 // fakeWorkspace implements just the types.WorkspaceRepository surface the impact
 // engine touches (Affected, AffectedFromPaths, Get, ListTargets). Embedding the
-// interface leaves every other method nil - the engine never calls them.
+// interface leaves every other method nil; the engine never calls them.
 type fakeWorkspace struct {
 	types.WorkspaceRepository
 	affected *types.AffectedResult

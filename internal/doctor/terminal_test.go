@@ -14,7 +14,7 @@ import (
 // invocation takes: no terminal on either end.
 //
 // It must be OK, not advice. A workspace built in CI is not degraded and the
-// reader has nothing to act on - warning there would train people to ignore the
+// reader has nothing to act on; warning there would train people to ignore the
 // check, which is the one outcome that makes it worthless.
 func TestCheckTerminalUnderTest(t *testing.T) {
 	c := (&runner{}).checkTerminal()
@@ -47,7 +47,7 @@ func TestCheckTerminalReportsNoColorWithoutBlaming(t *testing.T) {
 
 // TestCheckTerminalReportsTheLogFormatFirst pins the ordering that matters.
 //
-// The format decides whether there is an interactive surface at all - json and
+// The format decides whether there is an interactive surface at all: json and
 // text install a structured handler, so a perfectly capable terminal shows no
 // band. "Why is there no status line" is answered by the format more often than
 // by anything about the terminal, so the check says so and stops rather than
