@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/egladman/magus/types"
 )
@@ -43,7 +46,68 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution) (types
 		return types.VCSCheckpoint{}, fmt.Errorf("vcs checkpoint: %w", err)
 	}
 	cp.PatchDigest = patchDigest(patch)
+	cp.UntrackedDigest = untrackedDigest(ctx, dir, res)
 	return cp, nil
+}
+
+// untrackedDigest fingerprints the untracked files' paths and content, "" when there are
+// none or when the backend cannot answer.
+//
+// Derived from two driver methods rather than a new one: DirtyFiles reports every changed
+// path INCLUDING untracked, TrackedFiles says which of those the backend tracks, and the
+// difference is what nothing else in a checkpoint can see. Both are on every backend, so
+// this is agnostic by construction rather than by four parallel implementations.
+//
+// BEST-EFFORT, and that is a real choice. A checkpoint's job is to record where the work
+// is; refusing to record one because an untracked file was deleted mid-probe, or because
+// a backend lacks TrackedFiles, would lose the revision too - and the revision is the
+// half a reader can still act on. A missing digest reads as "not measured", which is what
+// an empty string already means for PatchDigest.
+func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) string {
+	reporter, ok := res.VCS.(types.TrackedFileReporter)
+	if !ok {
+		return ""
+	}
+	changed, err := res.VCS.DirtyFiles(ctx, dir, nil)
+	if err != nil || len(changed) == 0 {
+		return ""
+	}
+	tracked, err := reporter.TrackedFiles(ctx, dir, changed)
+	if err != nil {
+		return ""
+	}
+	isTracked := make(map[string]bool, len(tracked))
+	for _, p := range tracked {
+		isTracked[p] = true
+	}
+	untracked := make([]string, 0, len(changed))
+	for _, p := range changed {
+		if !isTracked[p] {
+			untracked = append(untracked, p)
+		}
+	}
+	if len(untracked) == 0 {
+		return ""
+	}
+	// Sorted, because DirtyFiles order is the backend's and a digest that moved with it
+	// would report a change nobody made.
+	sort.Strings(untracked)
+
+	h := sha256.New()
+	for _, rel := range untracked {
+		// The PATH is hashed even when its content cannot be read, so a file that appears
+		// and vanishes between the listing and the read still moves the digest rather than
+		// being silently equivalent to absent.
+		fmt.Fprintf(h, "%s\x00", rel)
+		body, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		// hash.Hash.Write is documented never to return an error.
+		_, _ = h.Write(body)
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)[:patchDigestBytes])
 }
 
 // patchDigestBytes is how much of the hash the digest keeps: 16 bytes, rendered as

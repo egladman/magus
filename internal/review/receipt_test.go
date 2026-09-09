@@ -40,7 +40,10 @@ func TestReceiptCarriesNoIdentity(t *testing.T) {
 	for i := range ct.NumField() {
 		checkpoint = append(checkpoint, ct.Field(i).Name)
 	}
-	assert.Equal(t, []string{"Revision", "Branch", "Dirty", "PatchDigest", "VCS"}, checkpoint,
+	// UntrackedDigest joined the struct on 2026-09-08 and is admitted on the same test the
+	// rest pass: it is a hash of paths and content, so it answers "which tree" and cannot
+	// answer "whose". A field that named an author would fail here, which is the point.
+	assert.Equal(t, []string{"Revision", "Branch", "Dirty", "PatchDigest", "UntrackedDigest", "VCS"}, checkpoint,
 		"a receipt embeds this: it must keep naming a revision and never a person")
 }
 

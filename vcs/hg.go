@@ -936,3 +936,37 @@ func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
 	}
 	return nil
 }
+
+// Preserve shelves with --keep, which is Mercurial's own answer: --unknown stores
+// untracked files, --addremove records deletions, and --keep leaves the working directory
+// alone. A plain `hg shelve` REVERTS the tree, which is what makes it unusable here.
+//
+// Storing costs working-copy state - unknown files come back added, missing files come
+// back scheduled for removal - so that state is read first and put back after.
+func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("hg preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	pending, err := hgFamilyReadPending(ctx, "hg", dir)
+	if err != nil {
+		return "", fmt.Errorf("hg preserve: %w", err)
+	}
+	name := shelfName()
+	cmd := vcsExec(ctx, "hg", "--config", "extensions.shelve=",
+		"shelve", "--keep", "--unknown", "--addremove", "--name", name, "--message", preserveMessage)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("hg preserve: shelve: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	// The shelf EXISTS from here, so a failed restore reports the handle rather than
+	// discarding it, and NAMES the files so the state is actionable.
+	if err := hgFamilyRestorePending(ctx, "hg", dir, pending); err != nil {
+		return name, fmt.Errorf("hg preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
+			name, pending.unknown, pending.missing, err)
+	}
+	return name, nil
+}

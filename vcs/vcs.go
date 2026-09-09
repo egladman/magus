@@ -2,6 +2,8 @@ package vcs
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path"
@@ -344,4 +346,99 @@ func trimStatusColumns(lines []string, width int) []string {
 		}
 	}
 	return out
+}
+
+// preserveMessage is what a Preserve leaves on the object it mints. It says magus wrote
+// it, because a reader meeting this commit or shelf in their own history deserves to know
+// what put it there before they wonder what they did.
+const preserveMessage = "magus preserved working copy"
+
+// shelfName mints the name Mercurial stores a shelf under. Random rather than derived
+// from the content: two preserved copies of one tree are distinct events, and a content-derived
+// name would collapse them into one.
+func shelfName() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// A snapshot that cannot be named is worse than one named predictably.
+		return fmt.Sprintf("magus-%d", time.Now().UnixNano())
+	}
+	return "magus-" + hex.EncodeToString(b[:])
+}
+
+// hgFamilyPending is the working-copy state preserving consumes and has to put
+// back: the files the backend calls unknown, and the tracked files missing from disk.
+//
+// Both matter because both are how the backend stores them. Mercurial and Sapling capture
+// unknown files by ADDING them and missing files by marking them REMOVED, so a capture
+// that does not restore leaves the user with files staged for a commit they never made
+// and a deletion scheduled they never asked for.
+type hgFamilyPending struct {
+	unknown []string
+	missing []string
+}
+
+// hgFamilyReadPending reads that state. It must run BEFORE the capture, since the capture
+// is what changes it.
+func hgFamilyReadPending(ctx context.Context, prog, dir string) (hgFamilyPending, error) {
+	unknown, err := hgFamilyStatusPaths(ctx, prog, dir, "--unknown")
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	missing, err := hgFamilyStatusPaths(ctx, prog, dir, "--deleted")
+	if err != nil {
+		return hgFamilyPending{}, err
+	}
+	return hgFamilyPending{unknown: unknown, missing: missing}, nil
+}
+
+// hgFamilyRestorePending returns the working copy to the state hgFamilyReadPending saw.
+//
+// forget un-adds, which is exact. A removal has no un-mark: `add` and `forget` both leave
+// it scheduled (measured), and only revert clears it - which also writes the file back, so
+// it is deleted again immediately after. The bytes restored are the committed ones the
+// user had already deleted, so nothing of theirs is at risk in between.
+func hgFamilyRestorePending(ctx context.Context, prog, dir string, p hgFamilyPending) error {
+	if len(p.unknown) > 0 {
+		if err := hgFamilyRun(ctx, prog, dir, append([]string{"forget", "--"}, p.unknown...)); err != nil {
+			return err
+		}
+	}
+	if len(p.missing) == 0 {
+		return nil
+	}
+	if err := hgFamilyRun(ctx, prog, dir, append([]string{"revert", "--no-backup", "--"}, p.missing...)); err != nil {
+		return err
+	}
+	for _, rel := range p.missing {
+		if err := os.Remove(filepath.Join(dir, filepath.FromSlash(rel))); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("%s: re-delete %s: %w", prog, rel, err)
+		}
+	}
+	return nil
+}
+
+// hgFamilyStatusPaths lists the paths in one status class, bare.
+func hgFamilyStatusPaths(ctx context.Context, prog, dir, class string) ([]string, error) {
+	cmd := vcsExec(ctx, prog, "status", class, "--no-status")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("%s status %s: %w", prog, class, err)
+	}
+	var files []string
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			files = append(files, line)
+		}
+	}
+	return files, nil
+}
+
+func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
+	cmd := vcsExec(ctx, prog, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s %s: %w: %s", prog, args[0], err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

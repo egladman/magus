@@ -31,6 +31,19 @@ type VCSDriver interface {
 	ChangedFiles(ctx context.Context, dir, base string) ([]string, error)
 	Bisect(ctx context.Context, dir string, opts BisectOptions) (Culprit, error)
 	DiffCommands(ctx context.Context, dir, base string) (DiffCommandHints, error)
+	// Preserve captures the working copy's uncommitted state, TRACKED changes and
+	// UNTRACKED files alike, and returns a backend-native handle for it. A clean tree
+	// returns "" and no error: nothing to capture is a state, not a failure.
+	//
+	// Capturing must not COST state. When Preserve returns, every file on disk is
+	// byte-for-byte what it was and the backend still reports the same paths as
+	// modified and unknown. An implementation that cannot hold that must return an
+	// error instead of a handle, because a caller cannot tell a lossy capture from a
+	// lossless one.
+	//
+	// The handle is OPAQUE. Each backend returns its own kind of name and only that
+	// backend can resolve it; nothing here reads one back.
+	Preserve(ctx context.Context, dir string) (string, error)
 	Metadata(ctx context.Context, dir string) (VCSMeta, error)
 	// Dirty reports whether the working tree has uncommitted changes. When paths
 	// is non-empty the probe is scoped to those pathspecs (interpreted relative to
@@ -865,11 +878,24 @@ type VCSCheckpoint struct {
 	// PatchDigest fingerprints the uncommitted patch, empty when the tree is clean.
 	//
 	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
-	// against the checked-out revision. Untracked files make Dirty true and leave no
-	// mark here, so two trees differing only in untracked files share a digest. Stated
-	// rather than papered over: a digest that silently changed with build residue would
-	// answer "did we see the same tree" wrong in the commoner direction.
+	// against the checked-out revision. Untracked files are UntrackedDigest's subject,
+	// deliberately kept out of this one: patchDigest matches internal/diff.PatchDigest
+	// byte for byte so a checkpoint and a review session over one tree produce the same
+	// string, and folding anything else in here would break that silently.
 	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`
+	// UntrackedDigest fingerprints the untracked files' paths AND content, empty when
+	// there are none.
+	//
+	// Untracked is where a concurrent agent's unfinished work lives - it is in no
+	// commit, so it is the work a whole-tree revert destroys irrecoverably, and the
+	// reason the guard denies those commands at all. A checkpoint that answered "same
+	// tree?" while blind to it gave its most confident yes about the state it was least
+	// able to see.
+	//
+	// Content, not just paths: an edit to an untracked file is invisible in a
+	// path-only fingerprint, and an untracked file is edited exactly as often as a
+	// tracked one.
+	UntrackedDigest string `json:"untracked_digest,omitempty" yaml:"untracked_digest,omitempty"`
 	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
 	// syntax Revision is written in.
 	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`

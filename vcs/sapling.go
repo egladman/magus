@@ -1014,3 +1014,53 @@ func (v saplingVCS) AbortMerge(ctx context.Context, root string) error {
 	}
 	return nil
 }
+
+// Preserve commits the working copy and unwinds the commit, which is Sapling's own idiom.
+//
+// Sapling has no --keep on shelve (measured: -k is rejected and absent from its help), and
+// `sl undo` cannot undo uncommitted working-copy changes, so nothing is already recorded
+// and something has to be minted. Sapling's model - no staging area, cheap commits,
+// history unwound with uncommit - makes a commit the native shape.
+//
+// commit RECORDS; it does not remove, so every file stays on disk throughout and no
+// content is ever at risk. What storing costs is working-copy STATE: unknown files come
+// back added and missing files come back scheduled for removal, so both are read first
+// and put back after.
+//
+// Between the commit and the uncommit the working copy is parked on the snapshot and
+// reports clean. A crash there leaves the work committed under a magus message rather
+// than lost, and the error below says so.
+func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	pending, err := hgFamilyReadPending(ctx, "sl", dir)
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: %w", err)
+	}
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "sl", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
+	}
+	if out, err := run("commit", "--addremove", "-m", preserveMessage); err != nil {
+		return "", fmt.Errorf("sl preserve: commit: %w: %s", err, out)
+	}
+	sha, err := run("log", "-r", ".", "--template", "{node}")
+	if err != nil {
+		return "", fmt.Errorf("sl preserve: log: %w", err)
+	}
+	if out, err := run("uncommit"); err != nil {
+		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w: %s", sha, err, out)
+	}
+	if err := hgFamilyRestorePending(ctx, "sl", dir, pending); err != nil {
+		return sha, fmt.Errorf("sl preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",
+			sha, pending.unknown, pending.missing, err)
+	}
+	return sha, nil
+}

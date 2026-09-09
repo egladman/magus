@@ -1852,3 +1852,91 @@ func writeTarEntry(tr *tar.Reader, target string, hdr *tar.Header) error {
 	}
 	return nil
 }
+
+// Preserve builds a commit object holding the working copy's uncommitted state and
+// anchors it under refs/magus/preserved/, so nothing can garbage-collect it.
+//
+// `git stash create` is the obvious call and it is the WRONG one: measured 2026-09-08, it
+// captures TRACKED changes only, which DirtyDiff already gives us, and untracked files
+// are precisely the work that is in no commit and so the work a whole-tree revert
+// destroys irrecoverably. It is a wrapper over this plumbing anyway.
+//
+// A TEMPORARY index is what keeps the invariant. GIT_INDEX_FILE points add at a scratch
+// file, so the developer's real index - which may hold a half-staged commit they are in
+// the middle of - is never read or written, and neither is the working tree. Paths come
+// from DirtyFiles rather than `add -A`, so the set is explicit and an ignored file cannot
+// ride along.
+func (v gitVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("git preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	idx, err := os.CreateTemp("", "magus-preserve-index-")
+	if err != nil {
+		return "", fmt.Errorf("git preserve: temp index: %w", err)
+	}
+	idxPath := idx.Name()
+	// Created only for its NAME: git wants to write this file itself, and an open handle
+	// on Windows would block that. Removed on every path, including the error ones.
+	// Created only for its NAME: git writes this file itself, and an open handle would
+	// block that on Windows. Both errors are deliberately dropped - the file is about to
+	// be recreated by git, and the defer below removes it either way.
+	_ = idx.Close()
+	_ = os.Remove(idxPath)
+	defer os.Remove(idxPath)
+
+	run := func(args ...string) (string, error) {
+		cmd := vcsExec(ctx, "git", args...)
+		cmd.Dir = dir
+		// gitEnviron, never os.Environ: it strips GIT_DIR, GIT_WORK_TREE and the rest, so
+		// cmd.Dir decides the repository. Inheriting them let an exported GIT_DIR send every
+		// command here - and the ref - into a different repository entirely.
+		cmd.Env = append(gitEnviron(), "GIT_INDEX_FILE="+idxPath)
+		out, err := cmd.Output()
+		return strings.TrimSpace(string(out)), err
+	}
+	// Seed from HEAD where there is one, so the snapshot reads as a change against the
+	// checked-out commit rather than as an initial import. An unborn HEAD has nothing to
+	// read and starts from an empty index, which is correct for a repository with no
+	// commits.
+	born := v.hasCommits(ctx, dir)
+	if born {
+		if _, err := run("read-tree", "HEAD"); err != nil {
+			return "", fmt.Errorf("git preserve: read-tree: %w", err)
+		}
+	}
+	// -A over an explicit path list. The list came from DirtyFiles, which keeps only the
+	// NEW side of a rename, so the temp index seeded from HEAD kept the OLD path too and
+	// the snapshot tree held both - a tree that was never the working copy. -A also still
+	// honours .gitignore (measured), which is what the explicit list was wrongly credited
+	// with.
+	if _, err := run("add", "-A"); err != nil {
+		return "", fmt.Errorf("git preserve: add: %w", err)
+	}
+	tree, err := run("write-tree")
+	if err != nil {
+		return "", fmt.Errorf("git preserve: write-tree: %w", err)
+	}
+	commitArgs := []string{"commit-tree", tree, "-m", preserveMessage}
+	if born {
+		commitArgs = append(commitArgs, "-p", "HEAD")
+	}
+	sha, err := run(commitArgs...)
+	if err != nil {
+		return "", fmt.Errorf("git preserve: commit-tree: %w", err)
+	}
+	// Anchored, because a commit no ref points at is unreachable and gc will reap it, which
+	// would make the handle resolve today and not next week.
+	//
+	// refs/magus/ is off every branch and not pushed without an explicit refspec, but it is
+	// NOT invisible: `git log --all`, `rev-list --all` and `clone --mirror` all see it.
+	// Nothing prunes these yet, and each pins the ancestry it was taken on, so a retention
+	// policy is owed before this runs on a schedule rather than on demand.
+	if _, err := run("update-ref", "refs/magus/preserved/"+sha, sha); err != nil {
+		return "", fmt.Errorf("git preserve: update-ref: %w", err)
+	}
+	return sha, nil
+}

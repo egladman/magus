@@ -30,14 +30,19 @@ type parityBackend struct {
 	drv  types.VCSDriver
 	// init creates a repository in dir holding files, with everything committed.
 	init func(t *testing.T, dir string, files map[string]string)
+	// readback returns what a Preserve handle holds for one path. It is per backend
+	// because a handle is per backend and nothing in VCSDriver resolves one - which is
+	// exactly why it belongs in the test: without it, a Preserve that returned a constant
+	// would satisfy every other assertion here.
+	readback func(t *testing.T, dir, handle, path string) string
 }
 
 func parityBackends() []parityBackend {
 	return []parityBackend{
-		{"git", "git", gitVCS{}, gitInitRepo},
-		{"hg", "hg", hgVCS{}, hgInitRepo},
-		{"sl", "sl", saplingVCS{}, slInitRepo},
-		{"jj", "jj", jjVCS{}, jjInitRepo},
+		{"git", "git", gitVCS{}, gitInitRepo, gitReadback},
+		{"hg", "hg", hgVCS{}, hgInitRepo, hgReadback},
+		{"sl", "sl", saplingVCS{}, slInitRepo, slReadback},
+		{"jj", "jj", jjVCS{}, jjInitRepo, jjReadback},
 	}
 }
 
@@ -641,4 +646,149 @@ func TestParityRenameIsNotDeletePlusAdd(t *testing.T) {
 		assert.NotContains(t, patch, "+alpha", "content re-added means the rename was lost")
 		assert.NotContains(t, patch, "-alpha", "content removed means the rename was lost")
 	})
+}
+
+// TestParityCheckpointSeesUntrackedContent is the parity half of the reason
+// UntrackedDigest exists: untracked is where a concurrent agent's unfinished work lives,
+// it is in no commit, and a checkpoint blind to it answered "same tree?" with its most
+// confident yes about the state it could least see. PatchDigest cannot cover it - it is
+// pinned byte-for-byte to internal/diff.PatchDigest so a checkpoint and a review session
+// stay comparable - so a second digest carries it, and it has to work on every backend
+// rather than on git alone.
+func TestParityCheckpointSeesUntrackedContent(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		res := types.VCSResolution{VCS: b.drv, Name: b.name}
+
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("one\n"), 0o644))
+		first, err := Checkpoint(t.Context(), dir, res)
+		require.NoError(t, err)
+		require.NotEmpty(t, first.UntrackedDigest, "%s: an untracked file left no mark", b.name)
+
+		// CONTENT, not just the path: the file name is unchanged, so a path-only
+		// fingerprint would call these two trees identical.
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("two\n"), 0o644))
+		second, err := Checkpoint(t.Context(), dir, res)
+		require.NoError(t, err)
+		assert.NotEqual(t, first.UntrackedDigest, second.UntrackedDigest,
+			"%s: editing an untracked file did not move the digest", b.name)
+
+		// PatchDigest's stability under an untracked edit is NOT universal, and this test
+		// asserted it was until jj said otherwise. jj snapshots the whole working copy, so
+		// a file git calls untracked is one jj already tracks: it lands in jj's DirtyDiff
+		// and moves PatchDigest too. That is double coverage, not a gap, and it is why the
+		// only claim made across every backend here is the one about UntrackedDigest.
+		// "Untracked" is a git and hg category, not a property of version control.
+	})
+}
+
+// A tree with nothing untracked reports no digest rather than a hash of emptiness, so ""
+// keeps meaning "nothing to measure" the way it does for PatchDigest.
+func TestParityCheckpointUntrackedDigestEmptyWhenNoneAreUntracked(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("edited\n"), 0o644))
+
+		cp, err := Checkpoint(t.Context(), dir, types.VCSResolution{VCS: b.drv, Name: b.name})
+		require.NoError(t, err)
+
+		assert.Empty(t, cp.UntrackedDigest, "%s: reported an untracked digest with nothing untracked", b.name)
+	})
+}
+
+// TestParityPreserveCostsNoState is the invariant Snapshot exists to hold, asserted the
+// same way on every backend: capturing state must never cost state.
+//
+// It is one test rather than four because the guarantee is one guarantee. The mechanisms
+// differ wildly - git builds a commit through a temporary index, hg shelves with --keep,
+// jj has already snapshotted, sl commits and unwinds - and a reader choosing a backend
+// should not have to learn which of those leaks. An implementation that cannot hold this
+// fails here rather than shipping a weaker promise under the same method name.
+func TestParityPreserveCostsNoState(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n", "deleted.txt": "gone\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("scratch\n"), 0o644))
+
+		// A DELETED tracked file and a STAGED-equivalent rename belong in the fixture
+		// because each breaks a different backend, and neither did until they were added:
+		// sl turned the deletion into a scheduled removal (R), and git left the rename's
+		// old path in the snapshot tree. A fixture of one edit plus one new file is the
+		// happy path, and a happy-path fixture is how an invariant test passes while the
+		// invariant is false.
+		require.NoError(t, os.Remove(filepath.Join(dir, "deleted.txt")))
+
+		beforeFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		beforeDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+
+		handle, err := b.drv.Preserve(t.Context(), dir)
+		require.NoErrorf(t, err, "%s: Preserve failed", b.name)
+		require.NotEmptyf(t, handle, "%s: a dirty tree produced no handle", b.name)
+
+		// CONTENT: every byte on disk is what it was.
+		tracked, err := os.ReadFile(filepath.Join(dir, "tracked.txt"))
+		require.NoError(t, err)
+		assert.Equalf(t, "v2\n", string(tracked), "%s: Preserve changed a tracked file", b.name)
+		untracked, err := os.ReadFile(filepath.Join(dir, "untracked.txt"))
+		require.NoErrorf(t, err, "%s: Preserve removed the untracked file, which is the work it exists to protect", b.name)
+		assert.Equalf(t, "scratch\n", string(untracked), "%s: Preserve changed an untracked file", b.name)
+
+		// VCS VIEW: the backend still reports the same paths and the same diff. This is
+		// what catches sl's uncommit handing untracked files back as added.
+		afterFiles, err := b.drv.DirtyFiles(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.ElementsMatchf(t, beforeFiles, afterFiles, "%s: Preserve changed which paths report dirty", b.name)
+		afterDiff, err := b.drv.DirtyDiff(t.Context(), dir, nil)
+		require.NoError(t, err)
+		assert.Equalf(t, beforeDiff, afterDiff, "%s: Preserve changed the uncommitted diff", b.name)
+
+		// READ THE HANDLE BACK. Everything above proves the capture cost nothing; only this
+		// proves a capture happened. Without it a Preserve returning a constant passes on
+		// every backend, and `git stash create` - which silently omits untracked files -
+		// would have looked correct.
+		assert.Containsf(t, b.readback(t, dir, handle, "untracked.txt"), "scratch",
+			"%s: the handle does not hold the untracked file's content", b.name)
+	})
+}
+
+// A clean tree has nothing to capture, and says so with "" rather than an error or a
+// handle to emptiness - matching how PatchDigest already reports "nothing measured".
+func TestParityPreserveOfACleanTreeIsEmpty(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"tracked.txt": "v1\n"})
+
+		handle, err := b.drv.Preserve(t.Context(), dir)
+
+		require.NoErrorf(t, err, "%s: a clean tree is a state, not a failure", b.name)
+		assert.Emptyf(t, handle, "%s: a clean tree produced a handle", b.name)
+	})
+}
+
+// The four readbacks. Each asks its own backend what the handle holds, in that backend's
+// spelling, which is the whole reason a handle is documented as opaque.
+func gitReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "git", "show", handle+":"+path)
+}
+
+func hgReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	// A shelf is not a revision, so its content is read as the patch it stores.
+	return vcsTestOutput(t, dir, "hg", "--config", "extensions.shelve=", "shelve", "--patch", handle)
+}
+
+func slReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "sl", "cat", "-r", handle, path)
+}
+
+func jjReadback(t *testing.T, dir, handle, path string) string {
+	t.Helper()
+	return vcsTestOutput(t, dir, "jj", "file", "show", "-r", handle, path)
 }

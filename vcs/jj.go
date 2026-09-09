@@ -737,3 +737,28 @@ func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 	}
 	return nil
 }
+
+// Preserve returns the working-copy commit id, because jj has already done the work.
+//
+// jj snapshots the working copy on every command and tracks files automatically, so what
+// git calls untracked is already inside @ - verified 2026-09-08, an unknown file appears
+// in `jj diff` with no action taken. There is nothing for magus to mint here, and minting
+// something anyway would add an object the backend's own model makes redundant.
+//
+// The invariant holds trivially: this reads and writes nothing.
+func (v jjVCS) Preserve(ctx context.Context, dir string) (string, error) {
+	dirty, err := v.Dirty(ctx, dir, nil)
+	if err != nil {
+		return "", fmt.Errorf("jj preserve: %w", err)
+	}
+	if !dirty {
+		return "", nil
+	}
+	cmd := vcsExec(ctx, "jj", "log", "-r", "@", "--no-graph", "-T", "commit_id")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("jj preserve: log: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
