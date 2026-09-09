@@ -13,9 +13,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The accumulator must ride the same scope as the deadline, or the error that reports the
-// split reads zero for every target: the ceiling context is what the body runs under, and
-// a tracker installed anywhere else is a tracker nothing writes to.
+// A ceiling-bearing body carries an accumulator, which is what lets its error report a
+// split at all.
+//
+// This does NOT guard the install site. Every body gets an accumulator, ceiling or not,
+// and TestDeclaredCeilingIsAPassThroughWithoutATimeout is what holds that line: this test
+// passes either way, because a declared timeout reaches the tracker on any arrangement.
 func TestDeclaredCeilingTracksDependencyWait(t *testing.T) {
 	ws := &ceilingWorkspace{projects: []*types.Project{{
 		Dir:            "/w/api",
@@ -29,7 +32,7 @@ func TestDeclaredCeilingTracksDependencyWait(t *testing.T) {
 	require.Equal(t, 15*time.Minute, ceiling)
 	types.AddDependencyWait(bodyCtx, 90*time.Second)
 	assert.Equal(t, 90*time.Second, types.DependencyWait(bodyCtx),
-		"the ceiling scope carries no accumulator, so the split can never be measured")
+		"a ceiling-bearing body carries no accumulator, so its split can never be measured")
 }
 
 // A target declaring no timeout gets no deadline, but it still gets its own accumulator:
