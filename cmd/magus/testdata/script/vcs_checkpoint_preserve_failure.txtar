@@ -1,0 +1,71 @@
+# A `--preserve` that FAILS has usually already minted, and the handle is the only thing
+# that reaches what it minted. Mercurial shelves first and puts the working copy back
+# after, so a shelf exists from the moment the shelve returns; Sapling commits first and
+# unwinds after. Dropping the handle there leaves an object in the user's repository with
+# nothing pointing at it.
+#
+# Only hg and sl can reach it. git's Preserve returns an empty handle on every one of its
+# failure paths, so there is nothing to hand back and nothing to assert.
+#
+# The failure is forced by putting a DIRECTORY where a deleted tracked file has to be
+# restored: the shelve records the removal happily, and the revert that would write the
+# file back cannot, because the name is taken. Measured 2026-09-09 on Mercurial 7.2.3, that
+# revert aborts with "Operation not permitted" and exit 255. A permission bit would have
+# done the same job for a normal user and nothing at all for root.
+
+[!exec:hg] skip 'hg is not installed'
+
+exec hg init
+exec hg add .hgignore magus.yaml magusfile.buzz src/a.txt gone.txt
+exec hg commit -m initial -u test
+
+# The tree a handoff finds, plus a deletion that cannot be put back.
+cp src/a.new.txt src/a.txt
+rm gone.txt
+mkdir gone.txt
+cp src/a.new.txt gone.txt/inner.txt
+
+# NON-ZERO, because a partial success is still a failure. The handle reaches the user all
+# the same: the record on stdout, the reason on stderr where a failure belongs.
+! exec magus vcs checkpoint --preserve
+stdout '^[0-9a-f]+ default dirty [0-9a-f]{32} preserved magus-[0-9]+-[0-9a-f]+$'
+stderr 'scheduled for removal'
+
+# The object the handle names is really there, so discarding the handle would have stranded
+# it rather than merely lost a string.
+exec hg --config extensions.shelve= shelve --list
+stdout 'magus preserved working copy'
+
+# Re-arm. The failed restore left the deletion RECORDED rather than pending, so a second
+# run finds nothing missing and succeeds; putting the file back and taking it away again is
+# what makes the next assertion about the same failure as the last one.
+rm gone.txt
+exec hg revert --no-backup -- gone.txt
+rm gone.txt
+mkdir gone.txt
+cp src/a.new.txt gone.txt/inner.txt
+
+# -o json carries it too, which is the half no error string can serve: a caller scripting
+# this reads the record, and prose inside a stderr message is not a record.
+! exec magus vcs checkpoint --preserve -o json
+stdout '"preserved": "magus-[0-9]+-[0-9a-f]+"'
+stderr 'scheduled for removal'
+
+-- magus.yaml --
+concurrency: 2
+-- .hgignore --
+syntax: glob
+.magus/**
+*.new.txt
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+-- src/a.txt --
+source one
+-- src/a.new.txt --
+source two
+-- gone.txt --
+gone

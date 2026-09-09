@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -557,9 +558,11 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "you whether two trees match; it cannot rebuild either one. --preserve also")
 	fmt.Fprintln(w, "captures the uncommitted work, tracked edits and untracked files alike, and")
 	fmt.Fprintln(w, "prints a handle that restores it. The working copy is untouched either way.")
-	fmt.Fprintln(w, "On git and Mercurial a capture is dropped once it is 30 days old. On Sapling")
-	fmt.Fprintln(w, "it is a hidden commit no Sapling command can drop, so it stays until you")
-	fmt.Fprintln(w, "remove it; Jujutsu mints nothing and accumulates nothing.")
+	fmt.Fprintln(w, "On git and Mercurial a capture is dropped once it is 30 days old, by every")
+	fmt.Fprintln(w, "later preserve and by the daemon's `"+hint.ServerJob.With("prune-preserved")+"`. With no")
+	fmt.Fprintln(w, "daemon that job is a no-op, so run `magus server prune-preserved` instead. On")
+	fmt.Fprintln(w, "Sapling a capture is a hidden commit no Sapling command can drop, so it stays")
+	fmt.Fprintln(w, "until you remove it; Jujutsu mints nothing and accumulates nothing.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Feed the revision to anything that takes one ("+hint.GraphDiff.With("--rev", "<rev>")+").")
 	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
@@ -601,6 +604,18 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	}
 	cp, err := vcs.Checkpoint(ctx, wsRoot, res, flags.Preserve)
 	if err != nil {
+		// A failed --preserve can still have MINTED. Mercurial's shelf and Sapling's
+		// snapshot commit both exist before the step that reports the failure, and the
+		// handle in cp is the only thing that reaches the object, so it is rendered before
+		// the failure is returned: the record on stdout, the reason on stderr, and an exit
+		// status that still says the command failed. git returns no handle on any of its
+		// failure paths, so it never arrives here.
+		if cp.Preserved == "" {
+			return err
+		}
+		if emitErr := emitCheckpoint(cp); emitErr != nil {
+			return errors.Join(err, emitErr)
+		}
 		return err
 	}
 	return emitCheckpoint(cp)
