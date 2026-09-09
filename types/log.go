@@ -22,6 +22,6 @@ const (
 	// LogWarn reports something the reader should act on eventually.
 	LogWarn LogLevel = "warn"
 	// LogError reports something that already went wrong. It does NOT fail the
-	// target - raising does that; this only records.
+	// target: raising does that; this only records.
 	LogError LogLevel = "error"
 )

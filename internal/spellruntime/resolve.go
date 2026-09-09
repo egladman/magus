@@ -41,8 +41,8 @@ func providerFrom(ctx context.Context) observability.Provider {
 	return p
 }
 
-// ErrNotASpell signals that a Buzz module is simply not a spell - it exports no
-// mgs_getName - rather than a malformed one. Speculative discovery (a local import
+// ErrNotASpell signals that a Buzz module is simply not a spell (it exports no
+// mgs_getName) rather than a malformed one. Speculative discovery (a local import
 // tried as a spell before falling back to a plain module) treats this as a quiet
 // "not a spell, move on"; an explicit spell load still surfaces it as an error.
 var ErrNotASpell = errors.New("magus/spell: a spell module must `export fun mgs_getName`")
@@ -116,9 +116,9 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, e
 	return Decode(buzzSpellObj{v: def})
 }
 
-// resolveOps reduces a function-valued mgs_listTargets - the op handlers a spell
+// resolveOps reduces a function-valued mgs_listTargets, the op handlers a spell
 // returns by value, each `fun(Target) > Run` (or the legacy
-// `fun(Target, fun(Run)) void`) - into the {cmd, args, charms} records the shared
+// `fun(Target, fun(Run)) void`), into the {cmd, args, charms} records the shared
 // decoder reads. Each handler is called once (recordCommandRun) to capture the
 // command it declares, so the built-in command path, BuiltinsHash, and charm
 // enumeration all read plain data. Record-shaped entries (a bare {cmd, args} map)
@@ -159,7 +159,7 @@ func resolveOps(ctx context.Context, sess *buzz.Session, ops vm.Value) (vm.Value
 // must not branch on or read the Target (passed as null here, so a value pulled from
 // it would be null). A Service op is recognized by its `command` field (the process);
 // a Command op by validating directly. Bin/Args, when present, must be strings (an
-// empty Command is allowed - a no-op marker op), so a null value read from the Target
+// empty Command is allowed: a no-op marker op), so a null value read from the Target
 // fails at resolution rather than silently caching a wrong command.
 func recordOp(ctx context.Context, sess *buzz.Session, fn vm.Value) (vm.Value, error) {
 	rv, err := sess.CallValue(ctx, fn, []vm.Value{vm.Null})
@@ -227,8 +227,8 @@ func validateCmdFields(m vm.Value) error {
 	return nil
 }
 
-// DecodeHandle decodes a bind-time spell handle - a map of resolved native data
-// built by a workspace-local spell import - into a spells.Descriptor, so a workspace-local
+// DecodeHandle decodes a bind-time spell handle (a map of resolved native data
+// built by a workspace-local spell import) into a spells.Descriptor, so a workspace-local
 // Buzz spell can be registered by value at bind time.
 func DecodeHandle(v vm.Value) (spells.Descriptor, error) {
 	return Decode(buzzSpellObj{v: v})
@@ -237,7 +237,7 @@ func DecodeHandle(v vm.Value) (spells.Descriptor, error) {
 // DecodeCommandValue decodes a single Buzz Command value (bin + args + the charm
 // JSON-Patch table) into a spells.Command, reusing the same reader the engine uses
 // for a spell op. It is the by-value entrypoint for a caller holding a raw Command
-// map - the playground's dry run - so the sandbox and the engine agree on a
+// map (the playground's dry run), so the sandbox and the engine agree on a
 // command's shape without a second decoder. v must be a map or object instance
 // (MapView'd form); an invalid charm patch is an error, as it is for the engine.
 func DecodeCommandValue(v vm.Value) (spells.Command, error) {
@@ -245,8 +245,8 @@ func DecodeCommandValue(v vm.Value) (spells.Command, error) {
 }
 
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)
-// to obj. All fields are plain data - needs/provides/ops were already resolved by
-// Resolve or marshaled into the handle - so there is no function-calling here.
+// to obj. All fields are plain data (needs/provides/ops were already resolved by
+// Resolve or marshaled into the handle), so there is no function-calling here.
 type buzzSpellObj struct {
 	v vm.Value
 }
@@ -258,7 +258,7 @@ func (o buzzSpellObj) Str(key string) (string, bool) {
 	}
 	// An enum case reads as its backing value. A field the mirror types as an
 	// `enum<str>` arrives as a case object, not a string, so without this a spell
-	// writing `upTo = VersionComponent.patch` would decode as absent - the silent
+	// writing `upTo = VersionComponent.patch` would decode as absent: the silent
 	// miss the enum was adopted to prevent. A plain string still passes through, so
 	// both spellings decode identically.
 	if ev, isEnum := x.EnumValue(); isEnum {
@@ -279,7 +279,7 @@ func (o buzzSpellObj) Strs(key string) ([]string, error) { return mapStrSlice(o.
 
 // StrMap reads key as a string-to-string map. Buzz's map backing store only ever
 // holds string keys (see vm.Value.MapKeys), so the only reachable type error is a
-// wrong-typed VALUE - checked here so a mistyped entry fails loudly at load rather
+// wrong-typed VALUE, checked here so a mistyped entry fails loudly at load rather
 // than silently zeroing. Absent-vs-empty is NOT this method's problem: decodeCommand
 // normalizes both to nil once, for every obj implementation.
 func (o buzzSpellObj) StrMap(key string) (map[string]string, error) {
@@ -379,7 +379,7 @@ func valStrSlice(key string, v vm.Value) ([]string, error) {
 // silence, since that function only reads the keys it knows about.
 //
 // It validates rather than merely passing through because the alternative is the
-// failure this package keeps relearning - a malformed declaration decoding to empty
+// failure this package keeps relearning: a malformed declaration decoding to empty
 // with nothing naming the cause. decodeManifests reads the structure back out with
 // obj.Objs.
 //
@@ -403,7 +403,7 @@ func manifestValues(name string, v vm.Value) (vm.Value, error) {
 		// object's shape in front of the checker, which rejects a mistyped field at compile
 		// time with a better message than this one (BZZ1005). What the checker does NOT
 		// verify is the annotation itself against this contract, so the reachable failure is
-		// a wrong return type - caught by the MapView and .value checks above - and this
+		// a wrong return type (caught by the MapView and .value checks above), and this
 		// guards the same class one level down.
 		locks, ok := m.MapGet("lockCandidates")
 		if !ok {

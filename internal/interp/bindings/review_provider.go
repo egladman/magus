@@ -26,7 +26,7 @@ func SetReviewProvider(name string) {
 //
 // The empty case is answered here rather than left to each caller, because the difference
 // between "no provider" and "provider that failed" is what decides whether a surface shows an
-// error or simply says nothing. Publishing with no provider is not a failure to report - it is
+// error or simply says nothing. Publishing with no provider is not a failure to report: it is
 // a workspace that never asked for one.
 func ReviewProvider() string {
 	reviewProviderMu.RLock()

@@ -1,6 +1,6 @@
 package journal
 
-// Trigger values for [Command.Trigger] - how a run was spawned (lineage).
+// Trigger values for [Command.Trigger]: how a run was spawned (lineage).
 const (
 	TriggerRun      = "run"
 	TriggerAffected = "affected"
@@ -11,14 +11,14 @@ const (
 )
 
 // Command is the invoking command line and context, captured at the CLI edge so the viewer
-// can show a run's lineage - what was asked of magus.
+// can show a run's lineage: what was asked of magus.
 type Command struct {
 	Arguments []string `json:"arguments,omitempty"` // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
 	Cwd       string   `json:"cwd,omitempty"`       // directory the command was invoked in
 	Trigger   string   `json:"trigger,omitempty"`   // one of the Trigger* constants
 }
 
-// Invocation is one magus command, launch to exit - the thing that produces a journal of
+// Invocation is one magus command, launch to exit, the thing that produces a journal of
 // events. It is not stored on its own: it is reconstructed from the stream's lifecycle
 // events (the started event carries the command, version, and start time; the finished
 // event carries the end time and overall outcome), and projected onto the wire as
@@ -36,7 +36,7 @@ type Invocation struct {
 // lifecycle events that bracket it: the started event (the first event) supplies the
 // command, magus version, and start time; the finished event supplies the end time and
 // overall outcome. id names the invocation (its log file's basename). This is the read side
-// of folding the run's identity into the stream - there is no separate metadata file to
+// of folding the run's identity into the stream: there is no separate metadata file to
 // parse. If the stream has no finished event (an interrupted run), the finish time falls
 // back to the last event's timestamp, and FinishedMs stays 0 only for an empty stream.
 func InvocationFromEvents(id string, events []Event) Invocation {

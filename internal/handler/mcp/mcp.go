@@ -144,7 +144,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		Concurrency: opts.Config.Concurrency,
 	}
 	// A private ledger store only when the caller supplied none. The daemon supplies one
-	// so its two doors - this tool and the console's read route - share a mutex.
+	// so its two doors (this tool and the console's read route) share a mutex.
 	ledgerStore := opts.Ledger
 	if ledgerStore == nil {
 		ledgerStore = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
@@ -192,8 +192,8 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		tel = opts.Magus.Telemetry()
 	}
 	tools := allMCPTools(opts)
-	// A function rather than the workspace itself: wrap needs one capability - put this
-	// workspace's secret resolver on a context so the trail writes are redacted - and
+	// A function rather than the workspace itself: wrap needs one capability (put this
+	// workspace's secret resolver on a context so the trail writes are redacted) and
 	// taking *magus.Magus for it would hand the handler a whole workspace to reach into.
 	withSecrets := func(ctx context.Context) context.Context { return ctx }
 	if opts.Magus != nil {
@@ -237,9 +237,9 @@ func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
 // wrap injects origin markers and emits banner log lines around every tool
 // call so the human watching magus's stderr can immediately see when an agent
 // triggered an operation. It also records one activity Event per call to the
-// activity trail (best-effort; a nil trail is a no-op) as a KIND_MCP_TOOL_CALL -
-// the durable form of the banner that the /dashboard activity view reads, with
-// both sides of the exchange captured as content-addressed blobs - and records
+// activity trail (best-effort; a nil trail is a no-op) as a KIND_MCP_TOOL_CALL
+// (the durable form of the banner that the /dashboard activity view reads, with
+// both sides of the exchange captured as content-addressed blobs) and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
 func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {

@@ -10,7 +10,7 @@ import (
 
 // ApplyPatch applies an RFC 6902 JSON Patch to argv, treating argv as a JSON
 // array of strings. Ops run in order; each sees the result of the previous, per
-// the spec's sequential semantics. The input is never mutated - a fresh slice is
+// the spec's sequential semantics. The input is never mutated; a fresh slice is
 // returned. An out-of-range index, a failed `test`, or a malformed pointer is an
 // error naming the offending op.
 //
@@ -99,7 +99,7 @@ func ExplainCharms(argv []string, charms map[string]spells.Charm, activeNames []
 // Conflicts returns the active charms whose effect is clobbered by another active
 // charm on argv (as spells.CharmConflict: the lost charm and the one that overwrites
 // it). A charm conflicts when it changes the command on its own but the command with
-// the full active set equals the command with that charm removed - proof its edit
+// the full active set equals the command with that charm removed: proof its edit
 // left no trace. Disjoint edits (two appended flags both survive) never conflict;
 // only a destructive overlap on the same position does. A charm that is a no-op on
 // its own is not a conflict (that is the Before==After case describe surfaces
@@ -236,7 +236,7 @@ func applyOp(argv []string, op spells.PatchOp) ([]string, error) {
 }
 
 // argvIndex resolves a single-token JSON Pointer into an array index. "/-" yields
-// length (the append position) when allowDash is set - its only legal use, per
+// length (the append position) when allowDash is set; its only legal use, per
 // RFC 6901, is the add target. "/N" yields N, bounds-checked: add/move/copy
 // targets accept [0,length] (length appends); remove/replace/test/from accept
 // [0,length). Leading zeros and non-numeric tokens are rejected.

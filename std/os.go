@@ -166,7 +166,7 @@ func OsExecutable(_ context.Context) (string, error) {
 	// and so the returned path is the one fs.stat will actually resolve.
 	resolved, err := filepath.EvalSymlinks(exe)
 	if err != nil {
-		// The binary can legitimately be gone already - `go run` deletes its temp build
+		// The binary can legitimately be gone already: `go run` deletes its temp build
 		// once the process is up. The unresolved path is still the best answer.
 		//
 		//nolint:nilerr
@@ -276,7 +276,7 @@ func optStringDefault(opts map[string]any, key, def string) string {
 // opts.quiet keeps the capture and drops the live streaming, which is what a caller
 // consuming a value rather than watching a build wants. It is read HERE, the one path
 // proc.exec, proc.shell, and vcs.cmd all share, so the three cannot offer different
-// option sets by accident - and it spells the option the same way the magus.* methods
+// option sets by accident, and it spells the option the same way the magus.* methods
 // already do.
 //
 // Without it a chatty command has no quiet form at all: `git ls-remote --tags` against
@@ -316,7 +316,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		if res.Code == -1 && err != nil {
 			// SIGKILL is uncatchable, so the process itself can never explain this. On
 			// CI it is nearly always the OOM killer picking the largest RSS in the job,
-			// and the job then disappears with no other trace - name the suspicion here
+			// and the job then disappears with no other trace; name the suspicion here
 			// or nobody gets one.
 			if strings.Contains(err.Error(), "signal: killed") && !errors.Is(err, context.Canceled) {
 				return types.ExecResult{}, fmt.Errorf(
@@ -369,7 +369,7 @@ func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map
 
 // OsShell builds the argv that runs line through the platform shell and returns
 // it, rather than running it. It replaced proc.shell, which had zero callers in
-// this tree - where a shell was genuinely wanted, people wrote proc.exec("sh",
+// this tree: where a shell was genuinely wanted, people wrote proc.exec("sh",
 // ["-c", ...]) by hand, which says out loud what exec_sh hid.
 //
 // Two verbs for "run a process" cost more than they bought. Every option worth

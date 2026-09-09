@@ -11,13 +11,13 @@
 //
 // The capture is the raw byte stream off a pseudo-terminal, so the commands, the
 // numbers, the durations and the colors in the picture are the ones magus
-// actually produced - nothing here writes a "[pass]" line. What is staged is the
+// actually produced; nothing here writes a "[pass]" line. What is staged is the
 // reading pace between frames, exactly as core-loop.session.sh already stages the
 // pauses between commands.
 //
 // Why not keep recording a GIF: tapes/README.md notes that a screen recording
 // "is not byte-reproducible, so it would fail every CI run by construction", and
-// so the GIF was excluded from `generate` and drifted unnoticed - the README's
+// so the GIF was excluded from `generate` and drifted unnoticed: the README's
 // own alt text described a project count magus had stopped reporting. Rendering
 // from a committed capture keeps the recording honest AND puts the rendered
 // artifact under the same drift gate as every other generated file, at about a
@@ -45,7 +45,7 @@ const (
 	// Taller than the longest single command's output needs, because the rows a
 	// reserved band occupies are not available to scroll into: at 26 the last
 	// command's own 21 lines did not fit, and the line naming the narrowed
-	// affected set - the entire point of that act - had scrolled off the top
+	// affected set (the entire point of that act) had scrolled off the top
 	// before the frame was taken. The unused rows are cropped back off at render
 	// time rather than paid for in the picture.
 	rows = 34
@@ -129,7 +129,7 @@ func write(path, svg string) {
 // files they would be projects of the magus repo itself (MGS1002), and as one
 // archive they are data. It is not bash heredocs any more because ~280 lines of
 // Go and Buzz inside shell strings are invisible to gofmt, the compiler, the
-// linter and every editor - which is how the two bugs fixed below lived here
+// linter and every editor, which is how the two bugs fixed below lived here
 // unnoticed.
 func materialize(dir string) error {
 	archive, err := txtar.ParseFile(fixturePath)
@@ -148,7 +148,7 @@ func materialize(dir string) error {
 
 	// -b main is not cosmetic and neither is the origin ref. magus resolves the
 	// affected set against a base REF, and the git driver's default is
-	// "origin/main" - a REMOTE-TRACKING name a fixture with no remote does not
+	// "origin/main", a REMOTE-TRACKING name a fixture with no remote does not
 	// have. Without both, `git merge-base origin/main HEAD` exits 128, magus
 	// falls back to "every project", and the recording's third act silently
 	// stops demonstrating the affected set: every project is selected and the
@@ -210,7 +210,7 @@ func checkClean(capture string) error { return checkNoise(capture, false) }
 //
 // allowFailures separates the two kinds of recording. In the core loop a
 // "[fail]" means the recording machine is broken; in the showcase the failures
-// ARE the subject - it exists to demonstrate the surfaces that only appear when
+// ARE the subject; it exists to demonstrate the surfaces that only appear when
 // something breaks. A "[warn]" is an environment problem in both.
 func checkNoise(capture string, allowFailures bool) error {
 	var bad []string
@@ -285,7 +285,7 @@ func render(capture string, theme screen.Theme) (string, error) {
 
 // replay produces one frame per command: the terminal as it stood when that
 // command finished. Split out from render so a test can assert what a frame
-// SHOWS, which is not the same question as what the capture contains - a line
+// SHOWS, which is not the same question as what the capture contains; a line
 // present in the bytes may have scrolled off the top before the frame was taken.
 func replay(capture string) ([]*screen.Screen, error) {
 	segments := split(capture)
@@ -304,7 +304,7 @@ func replay(capture string) ([]*screen.Screen, error) {
 
 	// Every frame is snapshotted after its command finished, so the band has been
 	// released and its rows are blank on all of them. Cropping to the tallest one
-	// keeps them the same size - which Animate requires - while spending no image
+	// keeps them the same size (which Animate requires) while spending no image
 	// on rows the session never wrote to.
 	used := 0
 	for _, f := range frames {
@@ -325,7 +325,7 @@ func split(capture string) []string {
 	if len(parts) < 2 {
 		return nil
 	}
-	// parts[0] is whatever preceded the first prompt - on a pty that is the
+	// parts[0] is whatever preceded the first prompt; on a pty that is the
 	// terminal's own startup noise, which belongs on the first frame rather than
 	// in a frame of its own.
 	segs := make([]string, 0, len(parts)-1)
@@ -386,7 +386,7 @@ func (p pace) holds(frames []*screen.Screen) []float64 {
 }
 
 // added reports how many lines of output cur shows that prev did not, counting
-// what scrolled off the top as well as what appeared at the bottom - a frame
+// what scrolled off the top as well as what appeared at the bottom; a frame
 // that filled the screen and pushed the earlier output away added all of it.
 func added(prev, cur *screen.Screen) int {
 	n := (cur.LastUsedRow() - prev.LastUsedRow()) + (cur.Scrolled() - prev.Scrolled())

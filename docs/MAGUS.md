@@ -60,7 +60,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | function | 900+ | `magus query kind=function` | `tail`, `sign`, `renderContentHTML` |
 | import | 100+ | `magus query kind=import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind=rationale` | `TODO`, `WHY`, `NOTE` |
-| package | 100+ | `magus query kind=package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |
+| package | 100+ | `magus query kind=package` | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
@@ -68,6 +68,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
+| libs/commentdash | 8 | `magus query project=libs/commentdash` | `format`, `build`, `lint` |
 | libs/diagnostics | 8 | `magus query project=libs/diagnostics` | `format`, `build`, `lint` |
 | libs/diagram | 2 | `magus query project=libs/diagram` | `test`, `ci` |
 | libs/gopherbuzz | 10 | `magus query project=libs/gopherbuzz` | `format`, `build`, `lint` |

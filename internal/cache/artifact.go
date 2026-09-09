@@ -42,7 +42,7 @@ func (v ArtifactVersion) ShortBlob() string {
 //
 // Named for the observation, not the cause: eviction is the usual reason, but a
 // hand-cleared store or an entry that never stored its blob reach here too. Callers
-// must not treat it as "no differences" - an empty diff reads as "unchanged", which
+// must not treat it as "no differences": an empty diff reads as "unchanged", which
 // is the most misleading answer available.
 var ErrArtifactMissing = errors.New("cache: artifact content not in store")
 

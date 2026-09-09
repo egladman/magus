@@ -67,7 +67,7 @@ func TestMethodName(t *testing.T) {
 
 // TestKnownVerbs is the arch ratchet: every method on every magus.*.v1 service linked into this test
 // binary must classify to a KNOWN verb. A new RPC whose leading word is in neither the mutating nor the
-// read set fails here, forcing the author to add it to one bucket in interceptor.go - which is the moment
+// read set fails here, forcing the author to add it to one bucket in interceptor.go, which is the moment
 // they decide whether it needs auditing. This is what keeps the audit boundary from silently drifting as
 // the service surface grows.
 func TestKnownVerbs(t *testing.T) {
@@ -94,8 +94,8 @@ func TestKnownVerbs(t *testing.T) {
 }
 
 // fakeTokenService is a minimal TokenServiceHandler that always succeeds, so the interceptor's recording
-// is exercised over a real Connect handler+client roundtrip (AnyRequest cannot be faked - it has
-// unexported methods - so a real call is the only way to drive Spec().Procedure).
+// is exercised over a real Connect handler+client roundtrip (AnyRequest cannot be faked: it has
+// unexported methods, so a real call is the only way to drive Spec().Procedure).
 type fakeTokenService struct{}
 
 func (fakeTokenService) ListTokens(context.Context, *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {

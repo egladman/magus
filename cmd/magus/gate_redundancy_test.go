@@ -74,7 +74,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 
 // TestGateRefusalRecordsDeferral: the refusal persists as a deferred gate
 // record pointing at the green gate, and that record never shadows the green
-// verdict - the next evaluation still finds it and still refuses.
+// verdict: the next evaluation still finds it and still refuses.
 func TestGateRefusalRecordsDeferral(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_LEVEL", "0")

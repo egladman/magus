@@ -126,7 +126,7 @@ type MissingDependency struct {
 }
 
 // DiagnosticEmitted reports one diagnostic (MGS code) fired during a run, captured
-// through the shared diagnostic sink - the same events that enrich the knowledge
+// through the shared diagnostic sink: the same events that enrich the knowledge
 // graph's runtime shard, so the report stream and the graph read one capture.
 type DiagnosticEmitted struct {
 	Unit    string `json:"unit"`              // "<project>:<target>" or a project path

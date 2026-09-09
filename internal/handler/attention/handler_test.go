@@ -18,7 +18,7 @@ import (
 //
 // XDG_STATE_HOME is set rather than the store injected, so the test exercises the REAL
 // sessions.Dir resolution the handler performs. A handler that resolved the wrong directory
-// would serve an empty queue forever and look perfectly healthy doing it - which is the one
+// would serve an empty queue forever and look perfectly healthy doing it, which is the one
 // failure a fake store could not catch.
 func plantStore(t *testing.T) (root, dir string) {
 	t.Helper()

@@ -72,7 +72,7 @@ func parseBisectLog(out []byte) (string, error) {
 //
 // It used to assert this about selfCmd, back when the whole dispatcher was written
 // twice. Only the updater is tagged now, so the dispatcher is not the pair that can
-// drift - this one is.
+// drift; this one is.
 func TestSelfUpdateCmdSignatureCompat(t *testing.T) {
 	// Compile-time signature assertion: selfUpdateCmd must have exactly this type
 	// or this file fails to compile. That guarantee is the entire test — there
@@ -84,7 +84,7 @@ func TestSelfUpdateCmdSignatureCompat(t *testing.T) {
 // subcommand with nothing to do with updating must stay reachable in a build that
 // compiled the updater out, and the usage must not offer `update` where it would
 // only refuse. A distro-packaged magus, where the package manager owns the binary,
-// still reads data files - so `refresh` disappearing with the updater would leave
+// still reads data files, so `refresh` disappearing with the updater would leave
 // it reporting `never synced` forever, naming a subcommand it does not have.
 //
 // Properties rather than the exact string: this list grows, and pinning it would

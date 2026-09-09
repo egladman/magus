@@ -13,7 +13,7 @@ import (
 )
 
 // TestParseSaplingConflicts pins the `sl resolve --list` parse. Only U is a conflict: an R
-// line is a path already settled - and Sapling produces those more readily than Mercurial
+// line is a path already settled, and Sapling produces those more readily than Mercurial
 // does, because `resolve --tool` marks as it goes (see KeepIncoming). Re-resolving one
 // would clobber a resolution the previous step just made.
 func TestParseSaplingConflicts(t *testing.T) {
@@ -44,7 +44,7 @@ func TestParseSaplingConflicts(t *testing.T) {
 // beside parseHgRemovalCandidates instead of reusing it: hg marks the deleted side with an
 // `extra: merge-removal-candidate = yes` line that Sapling never writes. Sapling states it
 // as a null other-side node and a "C" record type. Feeding this output to hg's parser finds
-// nothing, and every modify/delete would be silently classified as a content conflict -
+// nothing, and every modify/delete would be silently classified as a content conflict,
 // which regeneration cannot settle.
 func TestParseSaplingRemovalCandidates(t *testing.T) {
 	const out = `local: f659ed4f11ca57164705271d7b9217cd28bb3edc
@@ -122,7 +122,7 @@ func slRepo(t *testing.T, files map[string]string) string {
 
 // Sapling reports no tags, and that has to be an ANSWER rather than an accident. `sl tags`
 // is a deprecated no-op that exits non-zero, so a driver that shelled out to it the way hg
-// does would surface a hard error on a routine call - and Describe would fail every release
+// does would surface a hard error on a routine call, and Describe would fail every release
 // banner. Both must report "nothing" without consulting the CLI at all.
 func TestSaplingReportsNoTags(t *testing.T) {
 	dir := slRepo(t, map[string]string{"a.txt": "one\n"})
@@ -139,7 +139,7 @@ func TestSaplingReportsNoTags(t *testing.T) {
 // TestSaplingDirtyFilesIgnoresTheMergeBanner is the regression test for Sapling's
 // unfinished-merge commentary. During a merge `sl status` appends a block naming every
 // conflicted path ("# The repository is in an unfinished *merge* state."). It goes to
-// stderr, so reading stdout alone is what keeps it out - but that is a property of how this
+// stderr, so reading stdout alone is what keeps it out, but that is a property of how this
 // driver invokes sl, not a promise sl makes, and a switch to CombinedOutput would turn each
 // of those lines into a phantom changed path.
 func TestSaplingDirtyFilesIgnoresTheMergeBanner(t *testing.T) {
@@ -225,7 +225,7 @@ func TestSaplingConflictRoundTrip(t *testing.T) {
 
 // IgnoredPaths asks about the RULES, and Sapling's two answers differ by one word:
 // "<path>: ignored by rule ..." and "<path>: not ignored". Both exit 0, and the negative
-// one CONTAINS "ignored" - so a substring test for the bare word (which is what hg's
+// one CONTAINS "ignored", so a substring test for the bare word (which is what hg's
 // implementation uses, against hg's different phrasing) reports every path as ignored, and
 // resolution would delete generated files that are still tracked.
 func TestSaplingIgnoredPathsDistinguishesNotIgnored(t *testing.T) {
@@ -239,7 +239,7 @@ func TestSaplingIgnoredPathsDistinguishesNotIgnored(t *testing.T) {
 }
 
 // ChangesByCommit promises the NEWEST commits. `sl log -r <revset>` follows the revset's
-// order rather than log's default, and ancestors() is ascending - so without reverse() the
+// order rather than log's default, and ancestors() is ascending, so without reverse() the
 // limit takes the OLDEST N and a churn heatmap describes the repository's first week
 // forever. Nothing else in the driver depends on revset ordering, so nothing else would
 // catch it.
@@ -258,7 +258,7 @@ func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
 	assert.Equal(t, []types.FileChange{{Path: "a.txt", Status: types.ChangeModified}}, changes[0].Files)
 	assert.NotEmpty(t, changes[0].Author)
 
-	// since arrives as RFC 3339 with a numeric offset - that is what project.parseSince
+	// since arrives as RFC 3339 with a numeric offset: that is what project.parseSince
 	// formats, and it goes into a date() predicate rather than a flag, so the backend has
 	// to accept that exact spelling. A bound nothing satisfies is an empty answer, not a
 	// failure.
@@ -277,7 +277,7 @@ func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
 
 // ExportRevision has two Sapling-specific traps, and both are silent. `sl archive` injects
 // a provenance file that belongs to no commit, and it keeps repo-relative paths where git's
-// archive re-roots them - so a workspace nested below the repository root would export into
+// archive re-roots them, so a workspace nested below the repository root would export into
 // a subdirectory of dstDir and read as an empty tree.
 func TestSaplingExportRevision(t *testing.T) {
 	dir := slRepo(t, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
@@ -313,7 +313,7 @@ func TestSaplingTrackedFiles(t *testing.T) {
 }
 
 // The merge driver is registered in .sl/config, and EnsureMergeDriver has to be silent in
-// the steady state - callers run it on every workspace load.
+// the steady state: callers run it on every workspace load.
 func TestSaplingMergeDriverInstall(t *testing.T) {
 	if _, err := exec.LookPath("sl"); err != nil {
 		t.Skip("sl not available")

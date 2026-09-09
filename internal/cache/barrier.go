@@ -81,14 +81,14 @@ func (b *depBarrier) markDone(key string, err error) {
 }
 
 // waitForDeps blocks until all in-scope DependsOn (same-target) and RunAfter
-// (exact-key) upstreams have markDone'd, or ctx is cancelled - and fails a dependent whose upstream itself
+// (exact-key) upstreams have markDone'd, or ctx is cancelled, and fails a dependent whose upstream itself
 // failed, even if ctx has not observed that cancellation yet.
 //
 // Checking e.err rather than only ctx.Done() closes a real race: markDone runs as a
 // defer inside the SAME goroutine errgroup wraps, so it fires before that goroutine
 // returns to errgroup's own wrapper, which is what cancels the shared ctx. A
 // dependent's select can see e.ch already closed while ctx is still live, and used to
-// read that as "upstream done, proceed" - running its own fn after a dependency it
+// read that as "upstream done, proceed", running its own fn after a dependency it
 // depends on had already failed.
 func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	self := stepKey(s)
@@ -101,8 +101,8 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 			return nil
 		}
 		// Probe the upstream before blocking, so a settled one always wins over a
-		// cancelled ctx. Both can be ready at once - the upstream failed AND a sibling
-		// already cancelled the group - and select picks uniformly at random among
+		// cancelled ctx. Both can be ready at once (the upstream failed AND a sibling
+		// already cancelled the group), and select picks uniformly at random among
 		// ready cases, which would surface the specific "dependency X failed" error
 		// this function exists to produce only about half the time.
 		select {

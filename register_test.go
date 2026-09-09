@@ -240,7 +240,7 @@ func TestWithSpell(t *testing.T) {
 
 func init() {
 	// A spell whose ci op stands in for a provider-driven toolchain's own composed
-	// pipeline (e.g. `nx run project:ci`) - the RunCI anchor tests below need a
+	// pipeline (e.g. `nx run project:ci`): the RunCI anchor tests below need a
 	// registered spell with a ci op, and a provided project has no magusfile to
 	// declare one in. Registered for the WHOLE package (the registry is a process
 	// singleton with no scoped teardown), so every test in package magus sees this
@@ -274,9 +274,9 @@ func withProvided(t *testing.T, pp ...spells.ProvidedProject) {
 }
 
 // TestProvidedProjectIsAFullProject is the end-to-end claim the whole mechanism
-// rests on: a directory with no magusfile becomes an ordinary project - it is
+// rests on: a directory with no magusfile becomes an ordinary project (it is
 // listed, it carries the spells and globs the provider reported, and it lands in
-// the dependency graph - purely because a provider named it.
+// the dependency graph) purely because a provider named it.
 func TestProvidedProjectIsAFullProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json", "libs/shared/package.json")
 	withProvided(t,
@@ -380,7 +380,7 @@ func TestProvidedProjectRejectsEscapingPath(t *testing.T) {
 // TestRunCIAnchorAllowsProvidedProjectWithCIOp verifies the RunCI anchor check
 // (anyProjectDeclaresCI) counts a provided project whose bound spell exposes a ci
 // op. A provider workspace has no magusfile for ci to live in, so the spell op is
-// the only place it can - and `magus run ci` already dispatches to it via the
+// the only place it can, and `magus run ci` already dispatches to it via the
 // ordinary spell fan-out, so RunCI refusing first with MGS1001 would be blocking a
 // run that would otherwise succeed.
 func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
@@ -400,7 +400,7 @@ func TestRunCIAnchorAllowsProvidedProjectWithCIOp(t *testing.T) {
 }
 
 // TestRunCIAnchorRejectsProvidedProjectWithoutCIOp verifies the anchor still
-// refuses a provided project when none of its bound spells declare a ci op -
+// refuses a provided project when none of its bound spells declare a ci op:
 // counting provided projects at all must not make the anchor unconditionally pass.
 func TestRunCIAnchorRejectsProvidedProjectWithoutCIOp(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz", "libs/foo/package.json")

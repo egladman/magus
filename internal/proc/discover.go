@@ -26,7 +26,7 @@ const reapGracePeriod = 5 * time.Minute
 //
 // A unix socket is a filesystem entry and does not disappear when its process dies, so
 // something has to remove it. Server.Close unlinks on clean shutdown and Server.Start
-// reclaims a stale path on EADDRINUSE - both correct, and between them they should be
+// reclaims a stale path on EADDRINUSE: both correct, and between them they should be
 // enough. They are not, because sockets are named magus-<pid>-<rand>.sock: every server
 // picks a globally unique path, so the EADDRINUSE reclaim can never fire, and the only
 // remaining mechanism is the shutdown unlink, which SIGKILL, a panic, a closed terminal,
@@ -35,7 +35,7 @@ const reapGracePeriod = 5 * time.Minute
 // had accumulated 39 dead sockets with zero magus processes running.
 //
 // Discovery is the right place: it already dials every candidate to test liveness, so it
-// knows which are dead and pays nothing extra to say so. Failure is ignored on purpose -
+// knows which are dead and pays nothing extra to say so. Failure is ignored on purpose:
 // a socket another process removed first, or one we cannot unlink, is not worth failing
 // a discovery call over.
 func reapDeadSocket(path string, e os.DirEntry) {
@@ -124,13 +124,13 @@ func DiscoverSockets(ctx context.Context) ([]string, error) {
 		if !strings.HasPrefix(name, "magus-") || !strings.HasSuffix(name, ".sock") {
 			continue
 		}
-		// Skip the stable socket - already probed above.
+		// Skip the stable socket; already probed above.
 		if name == stableSocketName {
 			continue
 		}
 		p := filepath.Join(dir, name)
 		if isSocketLive(ctx, p) {
-			// unix:// URL, matching LookupStableSocket's return format above -
+			// unix:// URL, matching LookupStableSocket's return format above;
 			// functionally inert either way (endpoint.Parse accepts both back-compat),
 			// but a caller comparing addresses across the two branches should not see
 			// two different shapes for the same kind of thing.

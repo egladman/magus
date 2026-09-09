@@ -35,7 +35,7 @@ const envValueDigestLen = 12
 // class that routinely carries material a user would not publish (tokens ride env
 // vars whether or not a secret provider registered them), so the raw value never
 // leaves hashStep: the store persists DIGESTED lines, and every comparison surface
-// digests its live lines the same way - which also keeps the two sides byte-comparable
+// digests its live lines the same way, which also keeps the two sides byte-comparable
 // (a registry-based redaction would fire on one machine and not the other, turning
 // every secret-bearing env line into a false diff). The digest still changes when
 // the value changes, so the diff names the exact variable without exposing it.
@@ -83,8 +83,8 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 
 // RedactKeyInputs replaces every value the run's secret resolver has registered with its
 // mask, one line at a time. It is the second net behind [DigestEnvValues]: env values are
-// digested by construction, but a registered credential can ride a non-env class too - an
-// `arg:` line carrying `--token=<value>`, say - and nothing else strips it.
+// digested by construction, but a registered credential can ride a non-env class too (an
+// `arg:` line carrying `--token=<value>`, say), and nothing else strips it.
 //
 // BOTH sides of a comparison must pass through it. The store redacts at write, so a live
 // line that skipped this differs from its redacted stored twin on every run: a phantom
@@ -135,7 +135,7 @@ func readKeyInputs(dir string) ([]string, error) {
 // ClassDigest summarizes one component class of a cache key: every key input shares a
 // label prefix ("src", "env", "tool", ...), and the class digest hashes the class's
 // lines in key order. Two machines comparing digests learn WHICH CLASS disagrees
-// without shipping the full lines - small enough for a URL fragment - while the full
+// without shipping the full lines (small enough for a URL fragment) while the full
 // lines (CLI side) name the exact file or variable.
 type ClassDigest struct {
 	Class  string `json:"class"`
@@ -183,12 +183,12 @@ func ClassDigests(inputs []string) []ClassDigest {
 // per-class layouts written by hashStepInputs say where that boundary falls.
 //
 // Three classes bury a value behind a multi-part identity, so the pair boundary is the
-// LAST colon: src, env, and tool - whose line reads tool:<spell>:<tool>:<token> because
+// LAST colon: src, env, and tool, whose line reads tool:<spell>:<tool>:<token> because
 // probeTools joins those three parts before hashStepInputs labels them.
 //
 // Five more carry a bare value straight after the class label, so the boundary is the
 // class colon: keyVersion, os, arch, target, spellDefVersion. Pairing them matters as
-// much as pairing src does - unpaired, a bumped keyVersion reads as one line vanishing
+// much as pairing src does: unpaired, a bumped keyVersion reads as one line vanishing
 // and an unrelated one arriving, double-counting the single thing that moved.
 //
 // Everything else is its own identity and can only be present or absent, which is the
@@ -209,7 +209,7 @@ func splitKeyInput(line string) (identity, value string) {
 				return "src:" + rest[:j], rest[j+1:]
 			}
 		}
-	case "env": // env:NAME=<masked> or env:NAME:unset - both key under the variable
+	case "env": // env:NAME=<masked> or env:NAME:unset; both key under the variable
 		if name, v, ok := strings.Cut(rest, "="); ok {
 			return "env:" + name, v
 		}
@@ -242,8 +242,8 @@ type KeyInputChange struct {
 // FirstKeyInputChange reports which inputs disagree between a recorded run's key inputs
 // and the live ones, in LIVE key order (inputs only the recorded key had trail behind, in
 // recorded order). Live order is the order hashStepInputs writes, so the slice LEADS with
-// the earliest component class - the target's own definition before its sources, sources
-// before env, env before tools - which is the order a reader wants to be told about: a
+// the earliest component class (the target's own definition before its sources, sources
+// before env, env before tools), which is the order a reader wants to be told about: a
 // changed target definition explains a moved source hash, never the reverse. Empty exactly
 // when the two sides agree.
 //
@@ -307,7 +307,7 @@ type KeyInputDiff struct {
 // appears once on each side, which is exactly the shape a reader needs to see what drifted.
 //
 // Classes come back in stored-key order, then any class only the live key has, in live
-// order - the order `--against` has always rendered, and a shape scripts read. The
+// order: the order `--against` has always rendered, and a shape scripts read. The
 // pairing's own live-first ordering is the right lead for a SINGLE first difference and
 // the wrong one for a full listing, where the reader is scanning classes rather than being
 // handed a culprit.

@@ -116,7 +116,7 @@ func TestRecentGateRunsIgnoresRunsOutsideTheWindow(t *testing.T) {
 }
 
 // Frequency alone is not waste. A repeat gate over an unchanged tree is mostly cache
-// hits and finishes in seconds - the cache working, not something to advise about.
+// hits and finishes in seconds: the cache working, not something to advise about.
 func TestAdviseRepeatGateIgnoresCheapRepeats(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()

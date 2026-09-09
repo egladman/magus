@@ -3,23 +3,23 @@
 // mint path is narrow: only the two console scopes (CONSOLE and CONSOLE_READ) are
 // mintable, and OPERATOR and CONNECTOR are refused (mintableScope), so a compromised
 // browser session can never forge an /mcp credential or reach the operator token. A
-// browser-minted token is bounded further still - it always expires and its TTL is
-// clamped (CreateToken, consoleTokenExpiry) - so an XSS cannot mint a durable, never-
+// browser-minted token is bounded further still: it always expires and its TTL is
+// clamped (CreateToken, consoleTokenExpiry), so an XSS cannot mint a durable, never-
 // expiring credential. It is a SECOND door onto the exact stores the CLI and the share flow
-// already use - the on-disk connector store (internal/auth) and the daemon's
-// in-memory share manager (internal/share) - never a second store of its own. Two
+// already use, the on-disk connector store (internal/auth) and the daemon's
+// in-memory share manager (internal/share), never a second store of its own. Two
 // tokens are deliberately beyond its reach: the OPERATOR token (the built-in cli
 // credential, auto-seeded on first daemon start) and any renew/extend operation (a
 // token is reminted via the CLI, never extended). The operator boundary is by
 // CONSTRUCTION, not convention: the cli token lives in a store this handler never
 // opens (auth.Load, distinct from the connector store), so ListTokens cannot
 // enumerate it and RevokeToken keyed on its fingerprint falls through to the
-// connector store and returns NotFound, leaving the cli token file untouched - the
+// connector store and returns NotFound, leaving the cli token file untouched: the
 // management UI can never lock the operator out of the daemon it authenticates
 // against. TestOperatorTokenInvisibleAndImmutable proves it. The daemon mounts it on
 // the loopback listener behind a CLI-TOKEN-ONLY
 // bearer guard (auth.VerifyCLIBearer): token management is operator-tier, so a
-// connector token - a mere MCP-client credential - is rejected at the guard and can
+// connector token (a mere MCP-client credential) is rejected at the guard and can
 // never revoke credentials. It is NEVER mounted on the LAN share listener and never
 // served unauthenticated.
 package token
@@ -61,8 +61,8 @@ type Service struct {
 // NewService builds a TokenService handler that manages connector tokens through the
 // shared on-disk store and the share token through mgr. It takes the CONCRETE
 // *share.Manager (not the shareView interface) on purpose: a typed-nil manager passed
-// straight into an interface field would be non-nil at the interface level - the
-// classic typed-nil trap - and every `s.share != nil` guard would then pass and
+// straight into an interface field would be non-nil at the interface level (the
+// classic typed-nil trap), and every `s.share != nil` guard would then pass and
 // nil-deref. Converting only a non-nil manager keeps "no share feature" a true nil, so
 // a nil mgr simply means no share token is ever listed or revoked.
 func NewService(mgr *share.Manager) *Service {
@@ -87,7 +87,7 @@ var _ tokenv1alpha1connect.TokenServiceHandler = (*Service)(nil)
 // ListTokens returns every connector token plus the active share token, each as a
 // secret-free TokenInfo. The cli token is deliberately absent: it is neither read
 // from nor exposed here, so this surface cannot reveal or target it. last_used is
-// left unset - see the package note; there is no cheap seam to record it.
+// left unset: see the package note; there is no cheap seam to record it.
 func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
 	store, err := s.loadStore()
 	if err != nil {
@@ -113,7 +113,7 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 //
 // There is no caller-class check here on purpose. The service is mounted behind
 // BearerGuard(VerifyCLIBearer) (see internal/daemon), so only the operator tier can
-// reach this method at all, and that tier already dominates both scopes it may mint -
+// reach this method at all, and that tier already dominates both scopes it may mint;
 // there is no escalation to check for. What IS checked is the requested scope, because
 // "operator may mint anything" is not the same claim as "anything may be minted from a
 // browser": OPERATOR is refused because it lives in a file this service never opens, and
@@ -150,7 +150,7 @@ func (s *Service) CreateToken(_ context.Context, req *connect.Request[tokenv1.Cr
 }
 
 // maxConsoleTokenTTL bounds a browser-minted console token's lifetime. Unlike the CLI
-// mint - which trusts the operator's own shell and may mint a never-expiring token - a
+// mint (which trusts the operator's own shell and may mint a never-expiring token), a
 // token minted from the console origin (where an injected script can reach this surface)
 // is a durable, on-disk, mutating credential, so it must always expire and cannot be
 // made to live indefinitely. Mirrors the share token's bounded-lifetime rule
@@ -196,7 +196,7 @@ func defaultConsoleTokenName(store *auth.ConnectorStore) string {
 // RevokeToken removes the token matching identifier. It checks the active share
 // token first: when identifier names it, CloseIf revokes the token AND tears the LAN
 // listener down (the share's own teardown, not a reimplementation), but ONLY if that
-// exact share is still live - if a supersede won the race between Active and CloseIf,
+// exact share is still live: if a supersede won the race between Active and CloseIf,
 // the revoke reports NotFound rather than tearing down whatever share replaced it.
 // Otherwise it falls to the connector store. The cli token is never consulted, so it
 // cannot be revoked here even if its fingerprint is supplied.
@@ -234,7 +234,7 @@ func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.Re
 
 // wireScope maps a stored token's surface to its wire class. One store holds all three
 // client classes, so reading the record's own scope is what keeps a console token from
-// being listed as a connector - which is what a hardcoded class did, and it mislabelled
+// being listed as a connector, which is what a hardcoded class did, and it mislabelled
 // every console and viewer token the moment the tiers split.
 func wireScope(s auth.ClientScope) tokenv1.TokenScope {
 	switch s {
@@ -267,7 +267,7 @@ const shareTokenLabel = "share to phone"
 
 // connectorInfo maps a stored connector record to its secret-free, minimized wire
 // shape: the revoke handle (fingerprint), the class, the user-chosen name, and the
-// expiry only - never the secret, the full hash, or the creation time (see TokenInfo's
+// expiry only, never the secret, the full hash, or the creation time (see TokenInfo's
 // minimization note). A zero Expires (never expires) leaves the expires timestamp unset.
 func connectorInfo(c auth.ConnectorToken) *tokenv1.TokenInfo {
 	info := &tokenv1.TokenInfo{
@@ -298,7 +298,7 @@ func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
 // prefix resolution, the share deliberately does NOT prefix-match: a prefix that also
 // prefixes a connector fingerprint must resolve to the connector (the store's job),
 // never get intercepted here by the share. Exact-only keeps that disambiguation
-// unambiguous - List hands out the full 8-char fingerprint, so an exact match is
+// unambiguous: List hands out the full 8-char fingerprint, so an exact match is
 // always available to a client that wants the share.
 func shareMatches(i share.TokenInfo, identifier string) bool {
 	return identifier == shareTokenLabel || identifier == i.Fingerprint

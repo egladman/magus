@@ -1,9 +1,9 @@
 // Package activity is the console-facing ActivityService handler: it lists recent activity
 // events (newest first, filtered) and serves a payload blob by ref for the /dashboard and log
-// viewer. The view is DAEMON-WIDE - it merges the trail of every workspace the daemon has
+// viewer. The view is DAEMON-WIDE: it merges the trail of every workspace the daemon has
 // loaded, because the panel exists to answer "what is touching this daemon" and a per-workspace
 // view would silently under-report every other workspace. It is READ-only and maps the on-disk
-// trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary - the store
+// trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary: the store
 // owns the format, this owns the wire.
 // Mounted on the console's human-facing API surface by the daemon, never under /mcp.
 package activity
@@ -30,7 +30,7 @@ const (
 	maxPageSize     = 1000
 	// maxWindow bounds how far back one request reads each trail. It mirrors internal/trail's own
 	// retention cap, so the ceiling means "everything the trail still holds" rather than an
-	// arbitrary depth - reading further could only turn up events rotation has already dropped.
+	// arbitrary depth; reading further could only turn up events rotation has already dropped.
 	//
 	// The whole retained window is read on EVERY page because the filter runs over it: how many
 	// recorded events hide one page of matching ones is not knowable before matching them.
@@ -39,8 +39,8 @@ const (
 
 // Workspace names one workspace whose trail the view merges: its root (the identity a reader
 // groups rows by) and the cache dir holding the trail. The daemon serves many workspaces, and a
-// producer outside the daemon process - the agent hook, which runs as a short-lived client and
-// resolves the LOCAL cache dir - writes to its own workspace's trail, so the daemon-wide view is
+// producer outside the daemon process (the agent hook, which runs as a short-lived client and
+// resolves the LOCAL cache dir) writes to its own workspace's trail, so the daemon-wide view is
 // the union of them.
 type Workspace struct {
 	Root     string
@@ -81,7 +81,7 @@ var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 //
 // The filter runs BEFORE the page is cut, so page_size counts MATCHING events. Truncating first
 // was the bug this replaced: on a busy daemon the newest page_size events could all be filtered
-// out, and the caller read the empty response as "there are none" - a false absence the review
+// out, and the caller read the empty response as "there are none", a false absence the review
 // bells and the dashboard Agents tile all assert on.
 //
 // page_token is a decimal offset into the filtered, newest-first stream, and next_page_token is
@@ -166,8 +166,8 @@ func pageBounds(total, offset, limit int) (from, to int, next string) {
 // The cap applies to the MERGED set, not per trail: reading limit from each and concatenating
 // would neither be the limit most recent daemon-wide nor in time order. Each trail is read for
 // up to limit events (any one of them could supply the whole window), then the union is sorted and
-// truncated. A trail that cannot be read - a pruned workspace, a permissions error, a workspace
-// that has recorded nothing yet - is SKIPPED: one unreadable workspace must not blank the panel
+// truncated. A trail that cannot be read (a pruned workspace, a permissions error, a workspace
+// that has recorded nothing yet) is SKIPPED: one unreadable workspace must not blank the panel
 // for the rest.
 //
 // limit is the READ WINDOW, not the page: the caller filters and pages what comes back, so cutting
@@ -180,7 +180,7 @@ func readMerged(workspaces []Workspace, limit int) []trail.Event {
 			continue
 		}
 		// Events are merged AS RECORDED. Event.Workspace means "the root this action pertained
-		// to", and it is deliberately empty for a daemon-wide action - trail.go says so, and an
+		// to", and it is deliberately empty for a daemon-wide action; trail.go says so, and an
 		// MCP call genuinely is not bound to one workspace.
 		//
 		// An earlier revision filled those blanks from the trail's owning root, on the theory that
@@ -253,7 +253,7 @@ func matchFilter(e trail.Event, q *activityv1.ActivityQuery) bool {
 // it. A hook records the host its wrapper passed in; an MCP call has no such wrapper, but its
 // HTTP User-Agent names the same thing, so it fills the field here. The mapping lives at the
 // wire boundary rather than in the store because the stored event should keep saying exactly what
-// its producer observed - a User-Agent is not a host name, it is being READ as one.
+// its producer observed: a User-Agent is not a host name, it is being READ as one.
 func encodeHost(e trail.Event) string {
 	if e.Host != "" {
 		return e.Host

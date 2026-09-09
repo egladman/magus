@@ -2,7 +2,7 @@
 //
 // A changeset that compiles and a changeset somebody understood are different things, and
 // nothing else in magus tells them apart. The rest of the tool measures what the code does;
-// this measures whether anyone looked - the property that decays when work is produced
+// this measures whether anyone looked, the property that decays when work is produced
 // faster than it is read.
 //
 // A receipt is DELIBERATELY not inferred. magus could watch an editor and call an open file
@@ -12,8 +12,8 @@
 //
 // It records NO identity, and the store says nothing about who read anything. The store is
 // per-workspace and lives in the cache dir, so it describes one checkout on one machine and
-// travels nowhere. A name here would be self-attested by whatever wrote the file - the
-// forgeable kind the notes store already refused - and would read as accountability while
+// travels nowhere. A name here would be self-attested by whatever wrote the file (the
+// forgeable kind the notes store already refused) and would read as accountability while
 // providing none. What a receipt asserts is exactly this: at this content, somebody said
 // read.
 //
@@ -24,7 +24,7 @@
 // a receipt that would let one be attributed.
 //
 // The reasoning is not privacy, it is measurement. A read count a second person can see is a
-// performance metric, and a performance metric is met by whatever satisfies it most cheaply -
+// performance metric, and a performance metric is met by whatever satisfies it most cheaply,
 // which here is stamping files unread. The measure would then destroy the thing it measures
 // while continuing to report healthy numbers, and everyone downstream would be worse off for
 // having believed it. Keeping the count private to the reader is what leaves it a bookmark:
@@ -55,7 +55,7 @@ const digestLen = 16
 // receiptFile is where the store lives, under the cache dir rather than in the tree.
 //
 // Not committed and not shared: a receipt describes one working tree, and one that traveled
-// would let a stranger's acknowledgement stand in for the reader's own - the laundering this
+// would let a stranger's acknowledgement stand in for the reader's own, the laundering this
 // package exists to refuse.
 const receiptFile = "review/receipts.json"
 
@@ -77,7 +77,7 @@ type Receipt struct {
 	// spelling that still means the same thing tomorrow. Checkpoint.VCS records whose revision
 	// syntax it is written in, since the backends do not share one.
 	//
-	// PROVENANCE ONLY. Covers never reads it, because the digest is already the identity - the
+	// PROVENANCE ONLY. Covers never reads it, because the digest is already the identity: the
 	// package's whole assertion is "at this content, somebody said read", and content is content
 	// whether it arrived from a checkout or a branch. What Source buys is a later reader being
 	// able to tell "I read this on Alice's branch" from "I read this in my tree".
@@ -95,7 +95,7 @@ type Receipt struct {
 //
 // One receipt per path, so the newest acknowledgement of a file replaces the last. That bounds the
 // store to the size of the tree rather than to everything anybody ever read, and it costs a
-// bookmark whenever the same path is read at two contents - reviewing a colleague's version of a
+// bookmark whenever the same path is read at two contents: reviewing a colleague's version of a
 // file you have also edited voids the receipt on your own. The loss is in the safe direction: it
 // reports a file you did read as unread, never the reverse.
 type Store map[string]Receipt
@@ -169,12 +169,12 @@ func Record(cacheDir string, add []Receipt) error {
 	// Written to a temp file and renamed, because this store has two writers by design: the
 	// daemon mints from a console keypress while the CLI mints from `--ack` or a closing
 	// viewer, in another process. A truncating write interrupted between those leaves a
-	// half-written JSON array, and Load treats a corrupt store as an EMPTY one - so a crash
+	// half-written JSON array, and Load treats a corrupt store as an EMPTY one, so a crash
 	// would silently discard every receipt rather than failing loudly.
 	//
 	// Rename is atomic within a directory, so a reader sees the old file or the new one. It
 	// does not make the read-modify-write atomic: two writers can still interleave and the
-	// later one wins, losing the other's receipts. That is a known and accepted limit -
+	// later one wins, losing the other's receipts. That is a known and accepted limit:
 	// losing a receipt costs a re-read, and the alternative is a lock file in a path this
 	// package would then have to reap.
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".receipts-*.json")
@@ -195,7 +195,7 @@ func Record(cacheDir string, add []Receipt) error {
 // ReadStates reports each path's types.DiffReadState against the recorded receipts.
 //
 // One definition, because the CLI's preflight report and the console's review surface must
-// agree on what "read" means - two callers deciding for themselves is how one surface comes
+// agree on what "read" means; two callers deciding for themselves is how one surface comes
 // to call a file reviewed while the other calls it stale.
 //
 // A path whose content cannot be resolved is left out entirely rather than called unread: a
@@ -231,13 +231,13 @@ func ReadStates(cacheDir string, paths []string, digestOf func(path string) stri
 //
 // It is what makes a second pass over a colleague's branch cost only the second pass. Without it a
 // reviewer who asked for changes re-reads the whole change when the author pushes, because nothing
-// distinguishes what moved from what they already weighed - which is exhausting, and is the reason
+// distinguishes what moved from what they already weighed, which is exhausting, and is the reason
 // people rubber-stamp a re-review.
 //
 // THE OLDEST revision wins where receipts disagree, which happens when somebody acked
 // incrementally across several pushes. Conservative on purpose: a newer checkpoint would hide the
 // changes to whichever file was read earliest. Re-showing something already read costs a moment,
-// and hiding something never read is the failure this whole surface exists to prevent - the same
+// and hiding something never read is the failure this whole surface exists to prevent, the same
 // bias Reviewable states for the same reason.
 //
 // A zero checkpoint means no receipt for these paths names a revision: nobody has reviewed them, or
@@ -267,7 +267,7 @@ func (s Store) ReviewedAt(paths []string) (types.VCSCheckpoint, int) {
 //
 //   - A note asks "does this prose still describe this code?" Reformatting does not change
 //     the answer, so a fingerprint that fired on gofmt would produce false drift, and false
-//     drift gets ignored - which is worse than no gate.
+//     drift gets ignored, which is worse than no gate.
 //   - A receipt asks "did a person see these bytes?" In Python, YAML, and a Makefile,
 //     whitespace IS the change. A whitespace-insensitive receipt attests to content the
 //     reader never saw, which is the one failure this whole feature exists to prevent.

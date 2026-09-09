@@ -12,7 +12,7 @@ import (
 )
 
 // resolve builds a bare session with the magus/spell types registered, execs
-// src, and resolves its spec  -  the same setup Extract uses. Every op resolves to
+// src, and resolves its spec, the same setup Extract uses. Every op resolves to
 // its declared command.
 func resolve(t *testing.T, src string) (spells.Descriptor, error) {
 	t.Helper()
@@ -86,7 +86,7 @@ export fun mgs_listTargets() > any {
 
 // TestResolve_RecordTargetsSecrets verifies a record op's `secrets` map (env var
 // name -> provider reference) round-trips through a real Buzz session into
-// Op.Secrets  -  the by-value form a spell can declare without the typed Command
+// Op.Secrets: the by-value form a spell can declare without the typed Command
 // object (gen/types/command.buzz), proving the StrMap decode path works end to end,
 // not only against the Go-level test double in decode_test.go.
 func TestResolve_RecordTargetsSecrets(t *testing.T) {
@@ -104,7 +104,7 @@ export fun mgs_listTargets() > any {
 // TestResolve_SecretsEmptyDecodesNil pins the production normalization: an empty
 // secrets map and an absent one are ONE value (nil), so both spellings share one
 // descriptor serialization and one cache entry. This runs through a real Buzz
-// session, exercising buzzSpellObj.StrMap plus decodeCommand's normalization - not
+// session, exercising buzzSpellObj.StrMap plus decodeCommand's normalization, not
 // the Go test double.
 func TestResolve_SecretsEmptyDecodesNil(t *testing.T) {
 	src := `
@@ -134,7 +134,7 @@ export fun mgs_listTargets() > any {
 }
 
 // TestResolve_ArgsRejectNonStringElement: a mistyped element used to be dropped,
-// so an argv declared as ["build", 7, "-v"] forked as `build -v` - a shortened
+// so an argv declared as ["build", 7, "-v"] forked as `build -v`: a shortened
 // command that succeeds and caches as though the declaration had been honored.
 func TestResolve_ArgsRejectNonStringElement(t *testing.T) {
 	const src = `
@@ -183,7 +183,7 @@ export fun mgs_listTargets() > any {
 // {str: fun(Target) Command} handlers, referenced by value, each returning the
 // {bin, args, charms} Command it declares. Handlers are called once at resolution to
 // record their commands, so the result decodes to the same targets a plain data form
-// would  -  proving the function form is behaviorally identical to a record.
+// would, proving the function form is behaviorally identical to a record.
 func TestResolve_FunctionValueTargets(t *testing.T) {
 	src := `
 import "magus/spell";
@@ -324,8 +324,8 @@ export fun mgs_listTargets() > {str: fun(Target, fun(any)) bool} {
 	assert.ErrorContains(t, err, "return `Command{...}`")
 }
 
-// TestResolve_CommandCapturesHandlerDoc pins that an op handler's doc comment  -
-// the comment block directly above its `fun` declaration  -  is captured onto the
+// TestResolve_CommandCapturesHandlerDoc pins that an op handler's doc comment
+// (the comment block directly above its `fun` declaration) is captured onto the
 // target's Doc, while an undocumented handler and one separated by a blank line
 // carry none. This is the data `magus describe` prints and `magus doctor` enforces.
 func TestResolve_CommandCapturesHandlerDoc(t *testing.T) {
@@ -398,7 +398,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 //
 // The regression it guards is specific: deciding the reduction with a switch over field-name
 // strings in resolve.go means a rename can update the contract, the decoder, and every spell
-// source while the switch still names the old field - pathValues stops running, the Path
+// source while the switch still names the old field: pathValues stops running, the Path
 // objects are never reduced to strings, and the decoded value comes back EMPTY with no error
 // anywhere. A second list of these field names is the thing to keep out of this package.
 //
@@ -407,7 +407,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 // carries lock candidates, and naming the expectation makes such a move a one-line diff a
 // reviewer reads as a decision rather than a silent behaviour change.
 func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
-	// Every entry's Buzz element type, stated by NAME - the stable half of the contract, since a
+	// Every entry's Buzz element type, stated by NAME: the stable half of the contract, since a
 	// Field rename must not be able to change this map. Absent means ShapeStrs.
 	shapes := map[string]contractShape{
 		"mgs_listRequiredGlobs": ShapePaths,
@@ -449,7 +449,7 @@ export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}, 
 
 // TestResolve_ManifestsCarryLockCandidates pins the field this type was added for. pathValues
 // next door reduces each object to its .value and would drop lockCandidates in silence, since it
-// reads only the keys it knows - so the assertion that matters is that the candidates SURVIVE the
+// reads only the keys it knows, so the assertion that matters is that the candidates SURVIVE the
 // boundary, not merely that the manifest does.
 func TestResolve_ManifestsCarryLockCandidates(t *testing.T) {
 	const src = `
@@ -473,7 +473,7 @@ export fun mgs_listManifests() > [Manifest] {
 // declaration decoding to empty with nothing naming the cause.
 //
 // The case it uses is the one the CHECKER cannot catch. A mistyped FIELD is rejected at
-// compile time (`Manifest.lockCandidates is [str], got str` - BZZ1005), because the annotated
+// compile time (`Manifest.lockCandidates is [str], got str`; BZZ1005), because the annotated
 // return type makes the object's shape known. Nothing checks the annotation against the mgs_
 // contract itself, though, so a spell returning the wrong LIST type compiles cleanly and only
 // this validation stands between it and a silently empty Manifests.

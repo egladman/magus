@@ -118,7 +118,7 @@ func TestAppendUniq(t *testing.T) {
 }
 
 // TestResolveChain: a step's import path is dot-relative to the importing
-// magusfile. An unresolvable one KEEPS its raw path rather than being dropped -
+// magusfile. An unresolvable one KEEPS its raw path rather than being dropped:
 // the chain is the target's shape, and a silently shortened one misreports it.
 func TestResolveChain(t *testing.T) {
 	got := resolveChain([]types.ChainStep{

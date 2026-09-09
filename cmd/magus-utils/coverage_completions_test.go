@@ -191,7 +191,7 @@ func TestRunCompletionsRefusesAnEmptySurface(t *testing.T) {
 }
 
 // TestRunCompletionsNamesTheScriptMissingItsMarker. A generator cannot know where in a
-// hand-written file the region belongs, so it must refuse rather than append - and the
+// hand-written file the region belongs, so it must refuse rather than append, and the
 // error has to say which of the four scripts it was reading.
 func TestRunCompletionsNamesTheScriptMissingItsMarker(t *testing.T) {
 	src := t.TempDir()

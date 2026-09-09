@@ -60,7 +60,7 @@ func TestTagBuzzObject(t *testing.T) {
 	assert.Equal(t, want, tag.BuzzObject())
 }
 
-// A tag whose Name never parsed as semver carries the zero Version - test
+// A tag whose Name never parsed as semver carries the zero Version: test
 // Version.Original == "" rather than a separate bool, and BuzzObject must nest
 // that zero value rather than omitting the key.
 func TestTagBuzzObjectNonSemver(t *testing.T) {

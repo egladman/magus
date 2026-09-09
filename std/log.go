@@ -156,7 +156,7 @@ func logSlogLevel(level string) (slog.Level, error) {
 // logEmit forwards to the process-wide default logger, which is magus's own.
 //
 // It checks Enabled first so a filtered-out call does not pay to sort and build
-// its attributes - a log.trace inside a loop over every file in a workspace is
+// its attributes: a log.trace inside a loop over every file in a workspace is
 // the shape that makes that matter.
 func logEmit(ctx context.Context, level slog.Level, message string, attrs map[string]any) error {
 	l := slog.Default()

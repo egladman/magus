@@ -34,7 +34,7 @@ type externalTarget struct {
 // function values a `import "project/<path>"` module binds for each of the
 // dependency's targets (see resolveProjectImport), paired with the target each
 // dispatches. ctx.needs matches a passed function against it by value
-// identity to recover the {project, target} the handle stands for - the handle
+// identity to recover the {project, target} the handle stands for; the handle
 // itself stays an ordinary callable, so `gopherbuzz.build()` also just works.
 // A linear scan is fine: a magusfile imports a handful of projects at most.
 type externalHandles struct {
@@ -117,8 +117,8 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 //	import "spells/github" as github
 //	magus\review.provider(github)
 //
-// One function, deliberately. Everything else a review needs - opening one, reading its
-// threads, publishing drafts, replying - is a reserved name ON the spell (see spells/review.go),
+// One function, deliberately. Everything else a review needs (opening one, reading its
+// threads, publishing drafts, replying) is a reserved name ON the spell (see spells/review.go),
 // not a member here. A magusfile says WHERE reviews live; it does not conduct one.
 //
 // Wiring none is the ordinary state and never an error: the workspace reviews locally, and
@@ -149,7 +149,7 @@ func buildReviewNS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 // read(), NOT resolve(): `resolve` is a hard keyword in the Buzz lexer, so member access
 // on it cannot parse. Do not "fix" this back.
 //
-// read() is the ONLY way a value becomes known-secret - redaction keys off having been
+// read() is the ONLY way a value becomes known-secret: redaction keys off having been
 // read here, not off the reference looking credential-shaped. Reading the same variable
 // with os\env gets a plain string magus has no reason to protect: the documented seam,
 // not a gap.
@@ -169,7 +169,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// records onto the registry it captured.
 		//
 		// ERRORS when there is no resolver rather than no-opping. A silently dropped
-		// selection means the run falls back to the built-in environment provider - the
+		// selection means the run falls back to the built-in environment provider: the
 		// magusfile asked for 1Password and got whatever $VAR happened to hold. That is
 		// the wrong-credential failure memoKey is provider-keyed to prevent, arriving
 		// through a different door, and it would be invisible.
@@ -204,10 +204,10 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		// Audited HERE rather than inside secret.Read, for two reasons. The engine
 		// reason: internal/journal imports internal/secret for redaction, so emitting
 		// from there would be an import cycle. The better reason: this binding IS the
-		// boundary worth auditing - it is the one place a magusfile reaches for a
+		// boundary worth auditing: it is the one place a magusfile reaches for a
 		// credential, which is the act an audit trail exists to record.
 		//
-		// The reference and the provider, NEVER the value - and that is a discipline here,
+		// The reference and the provider, NEVER the value, and that is a discipline here,
 		// not a mechanism. journal.Emit redacts against the resolver on the context it is
 		// given, and this is the per-call context, which carries none. Do not add a value
 		// to this Text expecting something downstream to catch it.
@@ -223,7 +223,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		// Reveal where the credential crosses into a magusfile string. From here it is an
 		// ordinary Buzz str with only redact-at-write behind it, which is the documented
-		// seam - magus\secret.grant is the surface that avoids this crossing entirely.
+		// seam: magus\secret.grant is the surface that avoids this crossing entirely.
 		return vm.StrValue(v.Reveal()), nil
 	}))
 	// endpoint() is what a grant is FOR. It returns a loopback base URL a CHILD can
@@ -244,7 +244,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if r == nil {
 			return vm.Null, fmt.Errorf(`magus\secret.endpoint: no secret resolver on this run`)
 		}
-		// The per-call ctx - see grant() above for why the captured one is stale. It is
+		// The per-call ctx; see grant() above for why the captured one is stale. It is
 		// also the correct LIFETIME: a target's dispatch context is cancelled when the
 		// run ends, not when this call returns, so the forwarder outlives the magusfile
 		// asking for its URL and dies with the run that asked.
@@ -271,11 +271,11 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 // answers "what did this build do" and is read per invocation; the trail answers "who
 // did what against this daemon" and is what the console's activity view shows. When an
 // AGENT triggers a run that makes a credential spendable, this is the event that
-// connects the tool call to its consequence - without it the activity log shows the
+// connects the tool call to its consequence; without it the activity log shows the
 // call and not what it unlocked.
 //
 // The REFERENCE, host and header only. The value is not resolved at declaration time
-// and must not be resolved in order to log it - that would undo the laziness the whole
+// and must not be resolved in order to log it: that would undo the laziness the whole
 // interaction policy rests on, and put a credential one formatting mistake from a
 // durable append-only file.
 func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action string) {
@@ -307,7 +307,7 @@ func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action stri
 //
 // The magusfile DECLARES the object; magus does not export one. A type in a host
 // module's generated declarations can be annotated but not constructed, so exporting a
-// `magus\SecretGrant` would name something an author could not build - which an
+// `magus\SecretGrant` would name something an author could not build, which an
 // earlier version of this error message told them to write.
 //
 // A present-but-wrong-typed field is distinguished from an absent one. Reporting
@@ -316,7 +316,7 @@ func recordCredentialGrant(ctx context.Context, g types.SecretGrant, action stri
 // and the credential went out with no "Bearer " in front of it.
 func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 	// MapView, not IsMap. A magusfile and a spell both declare `object SecretGrant {...}`
-	// and pass an INSTANCE, which is tagObject and NOT tagMap - so an IsMap check rejected
+	// and pass an INSTANCE, which is tagObject and NOT tagMap, so an IsMap check rejected
 	// the documented spelling outright. Nothing caught it because every test built the Go
 	// struct directly instead of going through Buzz; magus's own GitHub Actions cache
 	// spell was the first caller to use the surface as written. MapView accepts a map and
@@ -400,7 +400,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 }
 
 // buildBuzzNeeds returns ctx.needs(...), the one dependency primitive. Every
-// argument is a target function - a same-project exported target passed by
+// argument is a target function: a same-project exported target passed by
 // reference (ctx.needs(format)), a cross-project handle a project import binds
 // (ctx.needs(gopherbuzz.build)), or a LIST of target functions produced by
 // ctx.glob (ctx.needs(ctx.glob("*-generate"))). A string is never accepted:
@@ -483,10 +483,10 @@ func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Valu
 // matches as "-<pattern>" suffix shorthand); it RETURNS the list of matching target
 // function handles, so ctx.needs(ctx.glob("*-generate")) depends on every
 // matching target. glob is the ONE place a pattern (a string) enters the dependency
-// surface: it turns a name query into handles, keeping ctx.needs monomorphic - it
+// surface: it turns a name query into handles, keeping ctx.needs monomorphic; it
 // only ever receives target functions. A pattern matching nothing yields an empty
 // list (needs of it is a no-op). Only exported-function targets carry a handle, so a
-// pattern that would match a spell-provided op yields no handle for it - depend on
+// pattern that would match a spell-provided op yields no handle for it; depend on
 // such a target directly.
 func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -569,14 +569,14 @@ func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) erro
 		// fan-out rather than once per intercepted target: the caller owns one
 		// isolation lease, and only its dispatcher may release it.
 		//
-		// INSIDE the slot yield, not around it. Two locks are released here - the
-		// limiter slot and the isolation lease - and releasing them in one order
+		// INSIDE the slot yield, not around it. Two locks are released here (the
+		// limiter slot and the isolation lease), and releasing them in one order
 		// while re-acquiring them in the other is a lock-order inversion. Held the
 		// other way round it deadlocks at saturated concurrency: an exclusive step
 		// holding the isolation write lock waits for a slot, while this dispatcher
 		// holds a slot and waits to re-read the isolation lock behind it. Neither
-		// re-acquisition is cancellable - Limiter.Yield restores under
-		// context.WithoutCancel and sync.RWMutex takes no context - so Ctrl-C cannot
+		// re-acquisition is cancellable (Limiter.Yield restores under
+		// context.WithoutCancel and sync.RWMutex takes no context), so Ctrl-C cannot
 		// break the cycle. Nested this way the two are strictly LIFO.
 		return cache.YieldRunIsolation(childCtx, func(c context.Context) error {
 			return p.Dispatch(c, names, ancestors)
@@ -629,8 +629,8 @@ func ExecRefusedKeys() []string { return slices.Clone(execRefusedDecls) }
 // be global magus.* declarations: `ctx.needs(format)` binds on the context the function
 // received rather than a floating `magus.needs` attributed by lexical position.
 //
-//   - needs(...) dispatches the named dependencies - a target function, or a
-//     ctx.glob(...) list of them - deduped through the pool.
+//   - needs(...) dispatches the named dependencies (a target function, or a
+//     ctx.glob(...) list of them) deduped through the pool.
 //   - glob(pattern) resolves a pattern to matching target handles, feeding needs.
 //   - readsFiles / writesFiles / modifiesExistingFiles declare the cache footprint, and
 //     are no-ops at run time: it is read STATICALLY by describe.Extract (both arms of
@@ -653,14 +653,14 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// they do nothing.
 	c.MapSet(ctxMarker, vm.BoolValue(true))
 	// ctx.withEnv({...}) / ctx.withCwd(".."): a magus\Exec, the EXECUTION-only context,
-	// carrying overrides for the op calls made with it -
+	// carrying overrides for the op calls made with it:
 	// go["go-test"](ctx.withEnv({"CGO_ENABLED": "0"})).
 	//
 	// Named for WHAT DIFFERS, not the act of making it, following context.WithValue /
 	// WithCancel / WithTimeout: at a call site you want to read the change.
 	//
 	// magus\Exec deliberately carries no declaration methods, so
-	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing - the
+	// ctx.withEnv({...}).inputs("x") fails loudly instead of silently no-op'ing: the
 	// guarantee a checked type would give once gopherbuzz has protocol conformance.
 	var execCtx func(env, cwd vm.Value) vm.Value
 	execCtx = func(env, cwd vm.Value) vm.Value {
@@ -718,22 +718,22 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 			return vm.Null, fmt.Errorf("ctx.%s was removed in v0.4; use ctx.%s instead", old, replacement)
 		}))
 	}
-	// env names variables whose PROCESS value folds into the key - the counterpart to
+	// env names variables whose PROCESS value folds into the key: the counterpart to
 	// withEnv, which carries a value written in the magusfile. Declaration only: the
 	// static read collects the names, and hashing reads the values.
 	// envInputs, not env: "env" is already the key carrying the Exec's actual
-	// environment map, which spell dispatch reads back - a declaration under that name
+	// environment map, which spell dispatch reads back: a declaration under that name
 	// silently replaced the environment with a no-op and dropped every withEnv override.
 	c.MapSet("envInputs", directVal(obs, "ctx.envInputs", footprintDecl))
 	// observes names an EXTERNAL fact the answer depends on but the tree does not
-	// contain - a vulnerability feed's id, a remote schema's revision - so a target
+	// contain (a vulnerability feed's id, a remote schema's revision), so a target
 	// whose answer moves with the world stays cacheable instead of opting out via
 	// skip_cache. Both halves are written in the magusfile and hashed directly, making
 	// it withEnv's mechanical twin and its semantic opposite: an override changes what
 	// the tool RUNS WITH, an observation changes nothing about execution and only
 	// states what the answer depends on.
 	//
-	// The VALUE is a cheap stamp the magusfile states - a version, a digest, a date.
+	// The VALUE is a cheap stamp the magusfile states: a version, a digest, a date.
 	// magus stores it, compares it, and never interprets it: an observation that moves
 	// is a miss, one that holds still replays. This is observation, not verification,
 	// so an expensive probe belongs in the target BODY, where its cost is paid only on

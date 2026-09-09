@@ -45,7 +45,7 @@ type guardCommand struct {
 // into a shell's own -c argument. An AST answers all three structurally.
 //
 // The bool is false when the line does not parse, and the caller skips the
-// raw-tool rules rather than guessing - less of a bypass than it looks, since
+// raw-tool rules rather than guessing: less of a bypass than it looks, since
 // shell that does not parse does not run either.
 func parseGuardCommands(command string) ([]guardCommand, bool) {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
@@ -102,7 +102,7 @@ func peelWrappers(words []string) []guardCommand {
 		name := path.Base(words[0])
 		switch {
 		case name == "find":
-			// find is not a wrapper - it still runs find - but -exec/-execdir
+			// find is not a wrapper (it still runs find) but -exec/-execdir
 			// launches a command find never reparses through a shell, so the
 			// payload has to be judged on its own. Keep find itself too.
 			return append([]guardCommand{{Name: name, Args: words[1:]}}, findExecCommands(words[1:])...)
@@ -112,7 +112,7 @@ func peelWrappers(words []string) []guardCommand {
 
 		case name == "env":
 			// env -S / --split-string takes its argument AS the command line and,
-			// unlike sh -c, never reparses it - so it is peeled like -c: the
+			// unlike sh -c, never reparses it, so it is peeled like -c: the
 			// remainder is parsed and the full ruleset runs over what it contains.
 			if script, ok := envSplitString(words[1:]); ok {
 				inner, _ := parseGuardCommands(script)
@@ -238,7 +238,7 @@ func envSplitString(words []string) (string, bool) {
 // -exec/-execdir (and their interactive -ok/-okdir forms). Each clause runs the
 // argv from after the flag up to the terminating `;` or `+`; find execs it
 // directly with no shell, so the argv is peeled as its own command rather than
-// reparsed as a script - which still unwraps an inner `sh -c` payload.
+// reparsed as a script, which still unwraps an inner `sh -c` payload.
 func findExecCommands(args []string) []guardCommand {
 	var out []guardCommand
 	for i := 0; i < len(args); i++ {
@@ -523,7 +523,7 @@ func fileFindFires(cmds []guardCommand) bool {
 // ciWatchFires reports a gh invocation that BLOCKS until a CI run reaches a terminal
 // state: `gh run watch`, and the --watch form of `gh run view` and `gh pr checks`.
 //
-// Reading a result that already exists - `gh run view --log`, a bare `gh pr checks` - is
+// Reading a result that already exists (`gh run view --log`, a bare `gh pr checks`) is
 // untouched. The rule is about the WAITING.
 func ciWatchFires(cmds []guardCommand) bool {
 	return slices.ContainsFunc(cmds, func(c guardCommand) bool {

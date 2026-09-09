@@ -226,8 +226,8 @@ func daemonStatus(socket string) statusFunc {
 const mcpProbeTimeout = time.Second
 
 // buildMCPEndpointStatus reports the runtime health of the MCP HTTP endpoint an agent
-// host connects to. It probes the endpoint's own HTTP listener - not the proc socket
-// the Pool fields report - because that listener is what a connecting agent sees, and
+// host connects to. It probes the endpoint's own HTTP listener (not the proc socket
+// the Pool fields report), because that listener is what a connecting agent sees, and
 // the two can diverge. Never returns nil so the status render always has the endpoint's
 // address and state to show. The MCP config is passed in (not read from globalCfg) so
 // the function is self-contained and testable with an explicit config.
@@ -294,12 +294,12 @@ func probeMCPReadiness(ctx context.Context, addr string) int {
 //
 // The body is a fixed generic token ("ok"/"unavailable"), NOT evaluateHealth's reason.
 // These routes are served unguarded (no bearer token, no DNS-rebind check) so a container
-// orchestrator can probe them, which means anyone who can reach the port reads the body -
+// orchestrator can probe them, which means anyone who can reach the port reads the body;
 // and evaluateHealth's reason embeds the daemon PID on the healthy path and, on the
 // unreachable path, a proc-dial error that carries the daemon socket path. A liveness probe
 // only needs UP/DOWN, which the status code already carries (a kubelet reads only the code),
 // so the body is redacted to leak neither. The CLI probe path (runProbes) keeps the rich
-// reason - it is a local terminal, not this networked surface.
+// reason: it is a local terminal, not this networked surface.
 func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		snapshot, err := status(r.Context())
@@ -317,7 +317,7 @@ func healthHTTPHandler(kind probeKind, status statusFunc) http.HandlerFunc {
 // readinessExtras supplies the additional data sources for /readyz's JSON body: SCIP
 // symbol-index freshness, hosted-service state, and the warm-knowledge-graph watcher
 // state. None of these influence the pass/fail gate (still evaluateHealth's
-// workspace-loaded check below) - they only enrich the body so a browser client (the
+// workspace-loaded check below): they only enrich the body so a browser client (the
 // console PWA) can render real per-subsystem health instead of a bare text line. A nil
 // func degrades its component to "disabled" rather than panicking, so a caller that only
 // has some of the sources wired (or a test) can pass a partial value.
@@ -328,8 +328,8 @@ type readinessExtras struct {
 }
 
 // readinessHTTPHandler is /readyz's handler. It keeps the EXACT pass/fail gate and status
-// codes healthHTTPHandler(probeReadiness, ...) used to serve - a kubelet reads only the
-// code, and that contract does not change here - but writes a JSON types.ReadinessReport
+// codes healthHTTPHandler(probeReadiness, ...) used to serve (a kubelet reads only the
+// code, and that contract does not change here) but writes a JSON types.ReadinessReport
 // body instead of a plain reason line, so a browser client can read component-level detail
 // via CORS (which a plain 503 line does not give it any structure to parse). Accepts
 // ?workspace= exactly like healthHTTPHandler, pinning the gate to one root.
@@ -351,7 +351,7 @@ func readinessHTTPHandler(status statusFunc, extra readinessExtras) http.Handler
 
 // buildReadinessReport assembles the /readyz JSON body. Ready mirrors the gate the caller
 // already evaluated with evaluateHealth (unchanged by this function); Components are
-// purely informational - a kubelet ignores them, but the console dashboard renders them
+// purely informational: a kubelet ignores them, but the console dashboard renders them
 // as per-subsystem health. Each component degrades independently of the others: a nil
 // source in extra (e.g. no hosted-services registry on this daemon) reads as "disabled",
 // never an error, and a nil snapshot (daemon unreachable) is handled the same way.
@@ -382,7 +382,7 @@ func buildReadinessReport(ctx context.Context, ready bool, snapshot *types.Statu
 
 // /readyz Detail policy: the route is unguarded (no bearer token, no DNS-rebind check) so
 // anyone who can reach the port reads the body. Detail strings therefore stay GENERIC and
-// QUANTITATIVE only - counts and coarse state phrases ("1 loaded", "0 of 4 up to date",
+// QUANTITATIVE only: counts and coarse state phrases ("1 loaded", "0 of 4 up to date",
 // "2 running, 1 failed", "watcher active, graph rebuilding") inform without identifying.
 // Never put a workspace root, project or service name, filesystem path, PID, socket path,
 // or raw error text in a Detail: the identifying per-subsystem view lives behind the

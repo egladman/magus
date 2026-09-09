@@ -141,8 +141,8 @@ func appendRationale(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge, r
 			nodes = append(nodes, types.KnowledgeNode{
 				ID: rID, Kind: types.KindRationale, Label: m[1], Doc: strings.TrimSpace(m[2]), Source: prov,
 			})
-			// Link the rationale to its enclosing function, or - for a file-scope comment sitting above the
-			// first declaration - to the FILE it annotates. Without this fallback a file-level WHY/NOTE
+			// Link the rationale to its enclosing function, or (for a file-scope comment sitting above the
+			// first declaration) to the FILE it annotates. Without this fallback a file-level WHY/NOTE
 			// produced a 0-degree orphan node (a known isolated-node source); every rationale now has a home.
 			if fn := enclosingFunction(fnLines, tk.Line); fn != "" {
 				edges = append(edges, extractedEdge(rID, functionID(rel, fn), types.RelationRationaleFor, prov))
@@ -219,7 +219,7 @@ func isBuiltinImport(path string) bool {
 // root). It is a graph-linking heuristic, not an authoritative reimplementation of
 // Buzz's resolver: candidates cover the file (<path>.buzz) and directory-module
 // (<path>/spell.buzz) forms, resolved root-relative (matching upstream's CWD-
-// relative resolution - see the upstream-buzz-import-resolution memory). Built-in
+// relative resolution; see the upstream-buzz-import-resolution memory). Built-in
 // magus/* imports and anything not matching a scanned file stay unresolved (the
 // caller records the literal as an inferred edge).
 func resolveBuzzImport(path string, scanned map[string]bool) (string, bool) {

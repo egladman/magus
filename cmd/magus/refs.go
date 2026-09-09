@@ -116,7 +116,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		printIndexStaleness(ctx, os.Stdout, root)
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
 		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
-		// here, unlike the unresolved branch above - the symbol resolved and its empty
+		// here, unlike the unresolved branch above: the symbol resolved and its empty
 		// reference list is a real, verified answer, not a request magus could not carry out.
 		if out.Answer.Verdict == types.VerdictUnknown {
 			return errSilent{exitCode: 1}
@@ -202,7 +202,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 			}
 		}
 		// Filtering to verified sites is what makes this format safe to pipe, and it is also
-		// what makes a wholly stale index print NOTHING - byte-identical to a symbol with no
+		// what makes a wholly stale index print NOTHING: byte-identical to a symbol with no
 		// occurrences at all. This is the format a script reads, so the difference has to
 		// live in the exit status, which is the only channel it has left.
 		if out.VerifiedCount < out.OccurrenceCount {
@@ -253,8 +253,8 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		}
 	}
 	if out.VerifiedCount < out.OccurrenceCount {
-		// The count alone does not say what to do about it, and the wrong response - edit
-		// the good ones, skip the rest - produces a half-renamed tree that still compiles
+		// The count alone does not say what to do about it, and the wrong response (edit
+		// the good ones, skip the rest) produces a half-renamed tree that still compiles
 		// in some languages.
 		fmt.Printf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
 			out.OccurrenceCount-out.VerifiedCount, out.StaleFiles)

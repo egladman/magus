@@ -16,7 +16,7 @@ import (
 )
 
 // eventsCmd implements `magus events`: the subscribe surface third-party
-// integrations build against - an editor plugin, a status bar, a notifier.
+// integrations build against: an editor plugin, a status bar, a notifier.
 //
 // It is the OUTBOUND half of magus's machine surface and the dual of `magus
 // session hook`, which is inbound and returns a verdict. Nothing a subscriber

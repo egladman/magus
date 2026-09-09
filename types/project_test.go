@@ -10,7 +10,7 @@ import (
 // TestAttachSpellSkipsInternalForThePrimarySlot pins the rule that keeps
 // `magus ls` informative. Every project is DISCOVERED by having a magusfile, so
 // the magusfile registration attaches to all of them and, being first, used to
-// claim the primary slot everywhere - `magus ls` answered "spell: magusfile" for
+// claim the primary slot everywhere: `magus ls` answered "spell: magusfile" for
 // 9 of this repo's 10 projects, which is true by construction and so tells a
 // reader nothing while hiding the toolchain they wanted.
 func TestAttachSpellSkipsInternalForThePrimarySlot(t *testing.T) {
@@ -140,7 +140,7 @@ func TestProject_AttachSpell(t *testing.T) {
 // TestProjectDisplayNamePrefersDeclaredName pins the fix for the root project's
 // label. Without a declared name it falls back to the checkout's directory
 // basename, so a worktree, a renamed clone, or a CI checkout each renamed the
-// ROOT project and rewrote every generated index that names it - which is why
+// ROOT project and rewrote every generated index that names it, which is why
 // regenerating MAGUS.md from a worktree used to produce spurious diffs.
 func TestProjectDisplayNamePrefersDeclaredName(t *testing.T) {
 	// The root: path "." carries no name of its own, so the declared one is the
@@ -183,7 +183,7 @@ func benchProject(nOwn, nTarget, nInbound int) *Project {
 // `magus clean` calls it once per project, watch calls it once per project at startup,
 // the merge driver calls it once per project per conflicted file, and FindOutputProducer
 // calls it inside its own scan over all projects. The dedup is membership-tested against
-// two growing slices, so cost is quadratic in the glob count - these sizes are what say
+// two growing slices, so cost is quadratic in the glob count: these sizes are what say
 // whether that matters at realistic and pathological widths.
 func BenchmarkProjectAllOutputs(b *testing.B) {
 	cases := []struct {

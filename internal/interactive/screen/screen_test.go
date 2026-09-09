@@ -93,7 +93,7 @@ func TestStyleIsRecordedPerCell(t *testing.T) {
 func TestUnknownSequencesAreDroppedWhole(t *testing.T) {
 	t.Parallel()
 	// The rule that makes this a model of magus rather than of terminals in
-	// general - and the one that hid a missing CUD until it corrupted a screen.
+	// general, and the one that hid a missing CUD until it corrupted a screen.
 	s := New(20, 4)
 	fmt.Fprint(s, "\x1b[?25lvisible")
 	assert.Equal(t, "visible", s.Row(1), "the sequence vanished; its payload did not")
@@ -164,7 +164,7 @@ func TestSnapshotCarriesTheWholeTerminal(t *testing.T) {
 //
 // This shipped: `go test` prints "ok  \tacme/admin\t0.531s", the tab was put in
 // ONE cell, and the rendered SVG in the README carried a literal tab that no
-// renderer expands - so the columns after it sat up to seven cells left of where
+// renderer expands, so the columns after it sat up to seven cells left of where
 // the reader's terminal actually put them. The drift gate structurally cannot
 // catch this class, because it compares the renderer to the renderer.
 func TestWriteExpandsTabs(t *testing.T) {

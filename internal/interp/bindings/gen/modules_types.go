@@ -33,7 +33,7 @@ func (c Capabilities) Has(want Capability) bool { return c&Capabilities(want) !=
 // requirements without widening this record with another boolean.
 //
 // The types live here (not in modules.go) because modules.go is //go:build
-// !wasm - it references the IO trampolines - while the wasm build needs these
+// !wasm (it references the IO trampolines) while the wasm build needs these
 // types for modules_wasm.go's parallel table.
 type ModuleReg struct {
 	Register     RegisterFunc
@@ -42,7 +42,7 @@ type ModuleReg struct {
 	// is the identifier the module binds as (`json`), while Path is what an
 	// import line says (`encoding/json`). Empty means the two are the same.
 	//
-	// It mirrors std.Module.Path, and TestModulesMatchStd checks the two agree -
+	// It mirrors std.Module.Path, and TestModulesMatchStd checks the two agree:
 	// a Path here that std does not declare would register a module at an import
 	// path nothing else in magus knows about.
 	Path string

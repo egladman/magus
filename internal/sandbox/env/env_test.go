@@ -37,7 +37,7 @@ func TestValidateGlobs_RejectsBareWildcard(t *testing.T) {
 
 // TestValidateGlobs_EmptyStringPatternIsInvalid keeps the case that forced the
 // signature: an empty-string glob is invalid, and while the result was a string it
-// could not say so - the report and the all-valid sentinel were both "", so a
+// could not say so: the report and the all-valid sentinel were both "", so a
 // caller checking `!= ""` read it as valid.
 func TestValidateGlobs_EmptyStringPatternIsInvalid(t *testing.T) {
 	assert.ErrorIs(t, ValidateGlobs([]string{""}), ErrInvalidGlob)

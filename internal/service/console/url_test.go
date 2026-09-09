@@ -11,7 +11,7 @@ import (
 
 // TestLogViewerURL builds the log-viewer deep link: the ref identity AND the
 // gzip+base64url Journal both ride the URL fragment (after #), which the browser never
-// transmits - so nothing about the run, not even its ref, leaves the machine.
+// transmits, so nothing about the run, not even its ref, leaves the machine.
 func TestLogViewerURL(t *testing.T) {
 	const base = "https://eli.gladman.cc/magus/logs/"
 	events := []journal.Event{
@@ -35,7 +35,7 @@ func TestLogViewerURL(t *testing.T) {
 // TestLink pins the daemon-origin grammar Link mints: the ORIGIN is the daemon's own
 // loopback host, the surface is a /console/<surface>/ path, and only the bearer token rides
 // the fragment (never the query string, so it is not transmitted on the document GET). There
-// is no #live= host directive - the origin already names which daemon.
+// is no #live= host directive; the origin already names which daemon.
 func TestLink(t *testing.T) {
 	got := Link(LinkOpts{Host: "127.0.0.1:7391", Surface: "dashboard", Token: "mgs_abc123"})
 	assert.Equal(t, "http://127.0.0.1:7391/console/dashboard/#token=mgs_abc123", got)
@@ -98,7 +98,7 @@ func TestKnownSurfaces(t *testing.T) {
 
 // TestLogViewerURLKeyDirective: the key directive rides the fragment ahead of the
 // payload, carries only class digests (never key content), and is omitted entirely
-// when the run recorded no key inputs - so an old ref's link keeps its pre-key shape.
+// when the run recorded no key inputs, so an old ref's link keeps its pre-key shape.
 func TestLogViewerURLKeyDirective(t *testing.T) {
 	digests := KeyDigestsParam([]KeyClassDigest{
 		{Class: "src", Digest: "aabbccddeeff"},

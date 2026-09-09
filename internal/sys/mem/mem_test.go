@@ -20,7 +20,7 @@ import (
 // cannot exceed the memory the machine has.
 //
 // On a platform with no implementation both are 0 (UNKNOWN) and there is nothing
-// to assert - which is itself the contract, so the test states it rather than
+// to assert, which is itself the contract, so the test states it rather than
 // skipping silently.
 func TestTotalAndAvailableAgree(t *testing.T) {
 	total, avail := TotalBytes(context.Background()), AvailableBytes(context.Background())
@@ -81,7 +81,7 @@ func TestNarrowToLimit(t *testing.T) {
 }
 
 // BudgetMB is the arithmetic machine-wide admission is sized from, so an unmeasurable
-// host must read as "no budget to arbitrate" rather than as a budget of nothing - the
+// host must read as "no budget to arbitrate" rather than as a budget of nothing: the
 // difference between admitting everything and refusing everything.
 func TestBudgetMB(t *testing.T) {
 	assert.Equal(t, 12288, BudgetMB(16<<30), "three quarters of the machine")

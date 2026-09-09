@@ -278,7 +278,7 @@ func TestSelectNoMatchEmpty(t *testing.T) {
 
 // TestResolveProjectOwnsContainedNodes guards the project: filter reaching the
 // entities a project contains (files, functions via their source path), not just
-// the project node and its targets - the trap where `project:web kind:function`
+// the project node and its targets, the trap where `project:web kind:function`
 // silently returned nothing.
 func TestResolveProjectOwnsContainedNodes(t *testing.T) {
 	g := NewGraph()

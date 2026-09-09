@@ -203,7 +203,7 @@ func (s *ConnectorSuite) TestVerifyTwoTier() {
 // The MCP and console surfaces must not share a credential class. A connector token
 // is minted for an agent, so accepting it on the console would let a leaked agent
 // credential drive the console's mutating routes; the two used to share one verifier
-// and did exactly that. The operator token is the deliberate exception - it is the
+// and did exactly that. The operator token is the deliberate exception: it is the
 // bootstrap credential and the CLI's own reads depend on it.
 func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
 	t := s.T()
@@ -225,7 +225,7 @@ func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
 
 // The console's own two tiers: a full console token may change things, a viewer token
 // may only read. The write tier is a SUPERSET of the read tier, not a sibling, so a
-// full console token passes the read guard too - otherwise every read route would need
+// full console token passes the read guard too; otherwise every read route would need
 // to accept both explicitly and one omission would lock the console out of itself.
 func (s *ConnectorSuite) TestConsoleWriteAndViewerTiers() {
 	t := s.T()
@@ -430,7 +430,7 @@ func (s *ConnectorSuite) TestListScopeSeparatesThePools() {
 	names := []string{consoleOnly[0].Name, consoleOnly[1].Name}
 	assert.ElementsMatch(t, []string{pwa.Name, phone.Name}, names)
 
-	// The full listing still sees everything - the filter is the caller's choice, not
+	// The full listing still sees everything; the filter is the caller's choice, not
 	// a property of the store.
 	assert.Len(t, st.List(), 3)
 }

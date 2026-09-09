@@ -13,7 +13,7 @@ func NewInlineView(w io.Writer, p Probe) *InlineView {
 }
 
 // Reset forgets what is on screen, for a caller that cleared the terminal
-// underneath this view and is starting again - the watch loop does this when a
+// underneath this view and is starting again; the watch loop does this when a
 // frame is too tall to redraw in place and it falls back to erasing the screen.
 func (v *InlineView) Reset() { v.painted = nil }
 
@@ -47,7 +47,7 @@ func (v *InlineView) Clear() error {
 //
 // Erasing only the block leaves the transcript above it untouched and visible,
 // which is the same restraint [region] keeps and the same thing the picker
-// has always done - this is that redraw, factored out.
+// has always done; this is that redraw, factored out.
 //
 // It is NOT a [region]: there are no scroll margins and no reserved rows,
 // because a watch view does not need to survive other output scrolling past. It
@@ -80,7 +80,7 @@ func (v *InlineView) Paint(frame string) bool {
 
 	// Clip every line to the terminal width. A line that wrapped would occupy
 	// two rows while the accounting counted one, and every erase after it would
-	// be off by one - which shows up as the view slowly eating the transcript
+	// be off by one, which shows up as the view slowly eating the transcript
 	// above it.
 	//
 	// ClipCols, not Clip: a frame handed to this may already be styled, and
@@ -96,8 +96,8 @@ func (v *InlineView) Paint(frame string) bool {
 	}
 
 	// A block of a different height cannot be diffed against the old one, so it
-	// is erased and rewritten whole. Height changes are rare - a watch view
-	// mostly animates in place - and this is the only path that has to be
+	// is erased and rewritten whole. Height changes are rare (a watch view
+	// mostly animates in place), and this is the only path that has to be
 	// correct without knowing what was on screen.
 	if len(lines) != len(v.painted) {
 		if err := EraseLines(v.w, len(v.painted)); err != nil {

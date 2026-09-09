@@ -6,7 +6,7 @@ import "fmt"
 //
 // A spell returns a dynamically typed map, so something has to turn `any` into a Go field, and
 // the posture that turn takes is a decision rather than a detail. It is made once here so the
-// contracts that decode records - workspace and review - make it the same way, rather than each
+// contracts that decode records (workspace and review) make it the same way, rather than each
 // growing its own coercion helpers.
 //
 // The other two contracts do NOT belong here, and moving them in would be a regression rather
@@ -24,7 +24,7 @@ import "fmt"
 //
 // Absent and null read as the ZERO VALUE, not as an error. A Buzz object carries every declared
 // field, so "declared nothing" and "did not declare" are the same statement and must decode to
-// the same record - otherwise two spellings of one answer produce two different results.
+// the same record; otherwise two spellings of one answer produce two different results.
 //
 // `where` is the caller's description of what is being decoded, e.g. `spell "github-review":
 // find_review`. It is prepended to every message, because "field \"number\" is string, want
@@ -82,7 +82,7 @@ func strListField(m map[string]any, key, where string) ([]string, error) {
 	}
 	if len(items) == 0 {
 		// nil, not an empty slice: a Buzz object always carries the field, so "declared
-		// nothing" and "did not declare" must decode to the same record - otherwise two
+		// nothing" and "did not declare" must decode to the same record; otherwise two
 		// spellings of the same answer produce different cache entries.
 		return nil, nil
 	}

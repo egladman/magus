@@ -24,7 +24,7 @@ func Str(args []vm.Value, n int) string {
 	v := args[n]
 	// A str-backed ENUM case crosses as the case's value. The compiler lowers both
 	// `Enum.case` and an inferred `.case` to the enum member, so a host method
-	// declaring an enum argument receives the enum value rather than a str - and
+	// declaring an enum argument receives the enum value rather than a str, and
 	// without this it read as "" and the host reported the argument as unset. That is
 	// the failure mode vm.Value.EnumValue's own doc names: an enum decoding to nothing,
 	// silently, which is the thing a typed enum was adopted to prevent.
@@ -388,7 +388,7 @@ func AnyVal(v any) vm.Value {
 	case map[string]any:
 		return AnyMapVal(x)
 	// types.BuzzObject is a NAMED map[string]any, and a type switch matches on type
-	// IDENTITY, not on underlying type - so without its own case it falls through to
+	// IDENTITY, not on underlying type, so without its own case it falls through to
 	// the null below. That is not theoretical: it is what broke every NESTED boundary
 	// value the moment the named type was introduced. Tag.BuzzObject() nests
 	// Version.BuzzObject(), whose Go type is BuzzObject, so `t.version` arrived in a
@@ -398,12 +398,12 @@ func AnyVal(v any) vm.Value {
 	case map[string]string:
 		return StrMapVal(x)
 	}
-	// A DEFINED type over a basic kind - types.DoctorCheckStatus, types.TargetRunState,
-	// spells.PatchOpKind - matches none of the cases above, because a type switch
+	// A DEFINED type over a basic kind (types.DoctorCheckStatus, types.TargetRunState,
+	// spells.PatchOpKind) matches none of the cases above, because a type switch
 	// matches on identity and not on underlying type. That is the same trap the
 	// BuzzObject case documents, and it had the same symptom one layer down: a
 	// generated BuzzObject emits `v.Status` typed, so `doctor().checks[0].status` read
-	// as NULL in a magusfile rather than "ok" - and a caller told to branch on status
+	// as NULL in a magusfile rather than "ok", and a caller told to branch on status
 	// instead of grepping console text was branching on nothing.
 	//
 	// Handled reflectively rather than by naming each type, because the failure is
@@ -502,8 +502,8 @@ type buzzObject interface{ BuzzObject() types.BuzzObject }
 
 // MapsVal marshals a slice of field-objects to a Buzz list of their boundary maps,
 // the return form for list-of-object Impls like vcs.history. It keeps the "Maps"
-// name (not "ObjectsVal") because it names the vm.Value SHAPE it produces - a
-// Buzz list of maps - matching AnyMapVal/StrMapVal's convention of naming after
+// name (not "ObjectsVal") because it names the vm.Value SHAPE it produces (a
+// Buzz list of maps) matching AnyMapVal/StrMapVal's convention of naming after
 // the runtime value, not the source type's Buzz-language name.
 func MapsVal[T buzzObject](rs []T) vm.Value {
 	items := make([]vm.Value, len(rs))
@@ -543,8 +543,8 @@ func (c *buzzCallback) Call(ctx context.Context, args ...any) ([]any, error) {
 //
 // gopherbuzz deliberately leaves a plain error as a string, because upstream Buzz does and
 // its conformance fixtures pin that; enriching is the embedder's opt-in. This is magus
-// taking it. Without it magus would have a two-shape error surface - coded diagnostics
-// arriving as maps, everything else as text - and an author would have to know which calls
+// taking it. Without it magus would have a two-shape error surface (coded diagnostics
+// arriving as maps, everything else as text), and an author would have to know which calls
 // raise which before knowing whether e["code"] is safe to read. That is the kind of thing
 // you memorise instead of learn.
 //

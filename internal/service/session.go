@@ -45,8 +45,8 @@ func NewSession(reg *Registry, daemonAcquire func(context.Context, string, spell
 // acquire starts (or reuses) the service for key, routing to the daemon when one is
 // reachable, else to the in-process Registry. If the daemon acquire fails (it was
 // reachable at run start but has since died or wedged) the service is hosted
-// in-process for this run rather than aborting - the design's "degrade to
-// per-invocation" - so a daemon hiccup does not fail an otherwise-fine run.
+// in-process for this run rather than aborting (the design's "degrade to
+// per-invocation"), so a daemon hiccup does not fail an otherwise-fine run.
 func (s *Session) acquire(ctx context.Context, key string, svc spells.Service) error {
 	if s.daemonAcquire != nil {
 		if err := s.daemonAcquire(ctx, key, svc); err != nil {

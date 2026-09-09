@@ -94,7 +94,7 @@ func TestMemoryDeclarationsStaysQuiet(t *testing.T) {
 		{"a peak just over the declaration is not drift", 2200 * mb, 2048},
 		// A declaration far above every recorded peak draws silence on purpose.
 		// The recorded peak is a floor (types.PeakRSS folds a target's processes
-		// as a maximum), so it cannot support "you declared too much" - the
+		// as a maximum), so it cannot support "you declared too much": the
 		// finding this repo's own `test` target would have received wrongly.
 		{"a declaration well above the recorded peak is not reported", 3000 * mb, 10240},
 	} {

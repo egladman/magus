@@ -665,7 +665,7 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 	t.Parallel()
 	pub, priv := makeTestKey(t)
 
-	// Index advertises only v0.1.0 - lower than a running v1.0.0.
+	// Index advertises only v0.1.0, lower than a running v1.0.0.
 	releases := []IndexRelease{
 		{
 			Version:   "v0.1.0",
@@ -693,7 +693,7 @@ func TestCompare_DetectsIndexDowngradeAgainstRunning(t *testing.T) {
 func TestPrintUpdateStatus(t *testing.T) {
 	t.Parallel()
 	// PrintUpdateStatus writes to stdout; verify it does not panic for all four branches.
-	// Capture is intentionally omitted - the test only asserts no panic.
+	// Capture is intentionally omitted: the test only asserts no panic.
 	PrintUpdateStatus("v2.0.0", "v1.0.0")    // newer available
 	PrintUpdateStatus("v1.0.0", "v1.0.0")    // up to date
 	PrintUpdateStatus("v0.9.0", "v1.0.0")    // running newer
@@ -754,7 +754,7 @@ func TestFetchAndVerifyTarball_OK(t *testing.T) {
 // acceptable: a downgrade nobody is told about is how a quiet failure starts, so this is
 // an error rather than a warning.
 //
-// Loopback is exempt, the carve-out Docker, pip and the Go module proxy all make - a
+// Loopback is exempt, the carve-out Docker, pip and the Go module proxy all make: a
 // packet that never leaves the host has no network attacker to protect it from, and it is
 // what lets this package's own tests drive the real path.
 func TestRequireHTTPSRefusesPlaintextExceptLoopback(t *testing.T) {

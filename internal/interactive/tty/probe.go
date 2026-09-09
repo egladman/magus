@@ -46,7 +46,7 @@ var SystemProbe Probe = systemProbe{}
 //
 // It exists for the same reason the screen emulator is a package rather than a
 // test file: something has to DRIVE the interactive surfaces outside a
-// terminal - a documentation renderer, a recording - and every one of them
+// terminal (a documentation renderer, a recording), and every one of them
 // stands down without a probe that says there is a terminal to draw on. Tests
 // have always had one; this is that, exported, so a generator can have it too.
 func FixedProbe(width, height int) Probe { return fixedProbe{width: width, height: height} }
@@ -99,7 +99,7 @@ func IsTerminalWriter(w io.Writer, p Probe) bool {
 // must be a terminal, and TERM must not declare one that understands none.
 //
 // TERM=dumb is not a hypothetical. Emacs shell-mode sets it, and the pty behind
-// it IS a terminal - so a descriptor check alone says yes and the cursor
+// it IS a terminal, so a descriptor check alone says yes and the cursor
 // addressing, scroll margins and color all go out to something that will
 // render them as literal garbage. That is the artifacting this whole package is
 // supposed to be incapable of.
@@ -113,7 +113,7 @@ func CanRender(w io.Writer, p Probe) bool {
 // WantsHyperlinks reports whether OSC 8 hyperlinks may be written to w.
 //
 // Deliberately NOT gated on NO_COLOR: that variable is about color, and a link
-// is not color - stripping it would take away a way to reach something rather
+// is not color; stripping it would take away a way to reach something rather
 // than tone the output down. It IS gated on the two terminals known to render
 // the sequence badly rather than swallow it:
 //
@@ -150,7 +150,7 @@ func WantsHyperlinks(w io.Writer, p Probe) bool {
 // honored NO_COLOR.
 //
 // See https://no-color.org: any non-empty value disables color. TERM=dumb
-// disables it too, via [CanRender] - this function's documentation has always
+// disables it too, via [CanRender]; this function's documentation has always
 // said so, and until now only the NO_COLOR half was true.
 func WantsColor(w io.Writer, p Probe) bool {
 	if os.Getenv("NO_COLOR") != "" {

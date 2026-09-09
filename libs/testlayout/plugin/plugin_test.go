@@ -9,7 +9,7 @@ import (
 // TestNewPluginDecodesSettings drives the path production actually runs: a yaml
 // settings block arrives as map[string]any and has to reach [testlayout.Options].
 // The transpose this replaced was a hand-written field copy, where a missed field
-// compiled clean and silently ignored what the user configured - so the point of
+// compiled clean and silently ignored what the user configured, so the point of
 // this test is that the json tags, not a copy, are what carry the values across.
 func TestNewPluginDecodesSettings(t *testing.T) {
 	p, err := newPlugin(map[string]any{

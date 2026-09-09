@@ -20,7 +20,7 @@ import (
 // own doc-strings described `vcs.name()` with call parens, the docs site, the buzz
 // reference and the editor hovers all render from those doc-strings, and a magusfile
 // written against them compiled clean and failed at RUNTIME with "str is not
-// callable" - inside a branch that only executes in CI. Both are Methods now, and
+// callable", inside a branch that only executes in CI. Both are Methods now, and
 // `vcs.name()` is what the surface both documents and accepts.
 //
 // The Field machinery is still wired (magus-docs, langservice-manifest, and the

@@ -13,7 +13,7 @@ import (
 //
 // A field typed as a DEFINED type over a basic kind (types.DoctorCheckStatus,
 // types.TargetRunState) matches no case in AnyVal's type switch, because a type switch
-// matches on identity rather than underlying type - so it fell through and arrived in
+// matches on identity rather than underlying type, so it fell through and arrived in
 // Buzz as null. `doctor().checks[0].status` read null rather than "ok" while the SDK
 // docs told callers to branch on exactly that field. The identical trap had already
 // bitten types.BuzzObject once before.
@@ -58,7 +58,7 @@ func populate(v reflect.Value) {
 		switch fv.Kind() {
 		case reflect.String:
 			// Through SetString rather than a literal so a DEFINED string type gets a
-			// value of its own type - which is the whole case under test.
+			// value of its own type, which is the whole case under test.
 			fv.SetString("x")
 		case reflect.Bool:
 			fv.SetBool(true)

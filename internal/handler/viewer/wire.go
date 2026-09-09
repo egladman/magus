@@ -2,7 +2,7 @@
 // DOMAIN events onto the versioned protobuf tool-page contract and encodes them for a
 // browser (a URL-fragment blob for a finished run, or a live SSE stream), plus the
 // viewer's filter DSL. It consumes domain types straight from the repositories (e.g. the
-// cache output store's []journal.Event) and maps them explicitly to the wire proto - no
+// cache output store's []journal.Event) and maps them explicitly to the wire proto: no
 // intermediate DTOs, no single-use converters. This file is the viewer encoders; query.go
 // is the filter grammar.
 package viewer
@@ -49,7 +49,7 @@ func invocationToProto(inv journal.Invocation) *viewerv1.Invocation {
 		Id:      inv.ID,
 		Command: commandToProto(inv.Command),
 		// Status was omitted here while ListInvocations set it from the same field, so GetInvocation
-		// and the shared Journal envelope reported every run as STATUS_UNSPECIFIED - a reader could
+		// and the shared Journal envelope reported every run as STATUS_UNSPECIFIED: a reader could
 		// not tell a passing run from one whose outcome was never recorded.
 		Status:       statusToProto(inv.Status),
 		StartTime:    tsFromMs(inv.StartedMs),
@@ -76,7 +76,7 @@ func journalToProto(inv journal.Invocation, events []journal.Event) *viewerv1.Jo
 }
 
 // EncodeJournalFragment marshals a journal to protobuf, then gzip+base64url encodes it
-// for a `#data=` URL fragment - the static delivery path. The generated JS client
+// for a `#data=` URL fragment, the static delivery path. The generated JS client
 // reverses it (base64url -> gunzip -> Journal.fromBinary). Reuses the same fragment
 // encoder graph open uses, so the tool pages share one wire envelope.
 func EncodeJournalFragment(inv journal.Invocation, events []journal.Event) (string, error) {

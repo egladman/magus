@@ -67,8 +67,8 @@ func archToken(goarch, goarm string) string {
 	}
 	// A release publishes at most two 32-bit ARM assets (.github/workflows/release.yaml,
 	// which currently publishes neither), so only those two names may be requested.
-	// Every other input - no recorded level, or a level such as 5 that the release does
-	// not build - resolves to armv6, which also runs on ARMv7 hardware. Echoing the level
+	// Every other input (no recorded level, or a level such as 5 that the release does
+	// not build) resolves to armv6, which also runs on ARMv7 hardware. Echoing the level
 	// back as "armv5" would name an asset that does not exist, turning a working update
 	// into a download failure.
 	if level, _, _ := strings.Cut(goarm, ","); level == "7" {
@@ -83,7 +83,7 @@ func archToken(goarch, goarm string) string {
 // Discovery reads ONLY the site's index.json. The GitHub API is not used.
 // MAGUS_UPDATE_URL overrides the discovery URL (e.g. for organizations that
 // self-host the site as a private update channel). If the index is unreachable,
-// the command fails with a clear error - there is no silent fallback.
+// the command fails with a clear error; there is no silent fallback.
 //
 // Downgrade/freeze protection: moving to a lower semver than the running binary
 // is refused unless --version is given explicitly (explicit opt-in) or --force

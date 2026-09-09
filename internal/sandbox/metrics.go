@@ -40,7 +40,7 @@ func MetricsFromContext(ctx context.Context) MetricsRecorder {
 // RecordCheck reports one binding-layer allow/deny decision to the MetricsRecorder on
 // ctx (a no-op when none is stamped). err nil is an allow, non-nil a deny.
 //
-// These count magus's OWN filesystem-binding access checks - the fs, archive, crypto,
+// These count magus's OWN filesystem-binding access checks, the fs, archive, crypto,
 // and exec bindings consulting the resolved Policy before touching the filesystem. They
 // are NOT subprocess syscalls: the kernel landlock layer governs those and does not
 // report them here.

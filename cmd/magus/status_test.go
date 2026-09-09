@@ -163,7 +163,7 @@ func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 // It asserted 0 until the exit-code contract in helpers.go was applied here: no
 // subcommand is a wrong invocation, not work that succeeded, and returning 0 made
 // `magus $CMD` with an empty CMD a green step in anything that builds its argv
-// dynamically. An EXPLICIT help flag still exits 0 - see the subtest - because there
+// dynamically. An EXPLICIT help flag still exits 0 (see the subtest), because there
 // the usage text IS what was asked for, and conflating the two is the easy mistake:
 // both reach this branch with no subcommand left to run.
 func TestStartupNoSubcommandExitsUsage(t *testing.T) {
@@ -171,7 +171,7 @@ func TestStartupNoSubcommandExitsUsage(t *testing.T) {
 	// enough, because startup still scans proc.SockDir() for the stable daemon
 	// socket. Point that dir (XDG_RUNTIME_DIR/magus) at an empty temp dir so a real
 	// `magus server start` daemon running on the developer's machine is not found
-	// and forwarded to - otherwise its exit code, not this path's, is returned.
+	// and forwarded to; otherwise its exit code, not this path's, is returned.
 	t.Setenv("MAGUS_DAEMON_SOCKET", "")
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 

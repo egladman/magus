@@ -13,7 +13,7 @@ import (
 
 // Ownership is EXTRACTED from a committed CODEOWNERS file, never inferred: the
 // graph takes what the file declares (owner, path pattern, line) and nothing more.
-// Blame-derived ownership is deliberately excluded - that is analytics, insight's
+// Blame-derived ownership is deliberately excluded: that is analytics, insight's
 // job, not a verifiable graph edge. CODEOWNERS is committed and deterministic, so
 // the shard is remote-shareable like the other extracted shards (unlike @runtime).
 
@@ -128,7 +128,7 @@ func lastMatch(rules []codeownersRule, path string) (codeownersRule, bool) {
 // path. It implements the common subset of the gitignore-style syntax CODEOWNERS
 // uses: a bare "*" matches everything; a trailing "/" is a directory prefix; a glob
 // (containing * ? [) matches by segment; a plain path matches itself or anything
-// beneath it. A leading "/" anchors the pattern to the repo root - an anchored glob
+// beneath it. A leading "/" anchors the pattern to the repo root: an anchored glob
 // matches only at that depth, while an UNanchored glob ("*.go") also matches at any
 // depth, per gitignore semantics.
 func codeownersMatch(pattern, path string) bool {

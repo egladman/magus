@@ -274,7 +274,7 @@ func TestTrackHunksCountsDistinctDigests(t *testing.T) {
 
 // A receipt must attest to the bytes the reader SAW. The content is fingerprinted when the
 // changeset is tracked, so an agent editing the file mid-review cannot get its own edit
-// stamped as read - the next report calls it stale instead.
+// stamped as read; the next report calls it stale instead.
 func TestContentAtIsTakenWhenTracked(t *testing.T) {
 	s := NewStore("")
 	s.Attach("/w", "working", types.Diff{}, "")

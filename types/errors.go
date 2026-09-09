@@ -64,7 +64,7 @@ type SpellErrors struct {
 	Project string
 	// ProjectLabel is the human name for Project, set from ProjectDisplayName where
 	// the whole project is in hand. Project is the workspace-relative path, and for
-	// a root project that path is ".", which rendered as "magus lint .:" - a bare
+	// a root project that path is ".", which rendered as "magus lint .:", a bare
 	// dot against a colon, which reads as punctuation rather than as the project it
 	// actually names. Empty falls back to Project.
 	ProjectLabel string
@@ -83,7 +83,7 @@ func (e *SpellErrors) Error() string {
 // project and target in the heading immediately above the cause line, so a cause
 // that opened by repeating them ("magus lint .: 1 spell(s) failed [magusfile]
 // magusfile: target lint: ...") spent its first two thirds on what the previous
-// line already said, and buried the one thing it alone knew - the failing tool -
+// line already said, and buried the one thing it alone knew (the failing tool)
 // at the end. Error() keeps the full sentence for an SDK consumer holding nothing
 // but the error; the CLI logs this.
 //

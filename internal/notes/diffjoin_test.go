@@ -10,7 +10,7 @@ import (
 
 // The *Node constants are deliberately NOT derivable from the SCIP key beside them. A node id
 // is minted by the knowledge graph and opaque here, so a fixture that spelled one out would be
-// this package asserting an id shape it is not allowed to know - and that is exactly how the
+// this package asserting an id shape it is not allowed to know, and that is exactly how the
 // join shipped broken: every symbol test compared a bare key against a bare key and passed,
 // while production compared a bare key against a "symbol:"-prefixed node id and matched
 // nothing. cmd/magus mints the real id and pins the two ends together.
@@ -62,7 +62,7 @@ func TestSymbolAnchorMatchesTheChangedSymbolsNodeID(t *testing.T) {
 
 // TestABareSymbolKeyIsNotANodeID is the regression this join was missing. A diff names its
 // changed symbols in the graph's vocabulary, an anchor carries the author's SCIP key, and the
-// two are not interchangeable - comparing them directly is a join that can never fire.
+// two are not interchangeable: comparing them directly is a join that can never fire.
 func TestABareSymbolKeyIsNotANodeID(t *testing.T) {
 	got := AnchorHits(
 		[]ResolvedAnchor{symbolAnchor("put-is-not-idempotent", 0, cachePut, cachePutNode, "")},

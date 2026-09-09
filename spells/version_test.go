@@ -49,8 +49,8 @@ func TestExtractVersionDropsBuildIdentity(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, c, d)
 
-	// Same go version, different host platform. The platform still keys the cache -
-	// see internal/cache/hash.go's platform line - just not through the spell.
+	// Same go version, different host platform. The platform still keys the cache
+	// (see internal/cache/hash.go's platform line), just not through the spell.
 	e, ok := ExtractVersion("go version go1.26.0 linux/amd64")
 	require.True(t, ok)
 	f, ok := ExtractVersion("go version go1.26.0 darwin/arm64")
@@ -175,8 +175,8 @@ func TestVersionKeyIsZero(t *testing.T) {
 }
 
 // The real `govulncheck -version` output. Its shape is why Verbatim exists: the FIRST
-// semver-shaped token is the Go version, not the scanner's, and the database date -
-// the field that decides whether a verdict still holds - is not semver-shaped at all.
+// semver-shaped token is the Go version, not the scanner's, and the database date
+// (the field that decides whether a verdict still holds) is not semver-shaped at all.
 const govulncheckVersion = `Go: go1.21.0
 Scanner: govulncheck@v1.0.1
 DB: https://vuln.go.dev

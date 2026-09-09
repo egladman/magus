@@ -9,7 +9,7 @@
 //
 // It holds the declaration, not the behavior: the CLI itself is cmd/magus, and a
 // package a WASM terminal imports to learn the CLI must stay free of the machinery
-// that runs it. Nor is it named for a consumer - it was "manpage" while the man
+// that runs it. Nor is it named for a consumer: it was "manpage" while the man
 // pages were the only one, and the roff rendering here is one output among several
 // rather than the package's purpose.
 package cli
@@ -38,7 +38,7 @@ type Command struct {
 	// registers them.
 	//
 	// The closure this replaced could only ever be REPLAYED into a FlagSet, so the
-	// only question anything could ask of it was "what did you just register" - the
+	// only question anything could ask of it was "what did you just register"; the
 	// answer arrived at runtime, one FlagSet at a time. Nothing could ask for the
 	// names ahead of time, which is why a flag name reached the rest of the binary
 	// as a string literal, and why the man page's copy of the list could disagree
@@ -54,7 +54,7 @@ type Command struct {
 
 	// ExitStatus documents the codes this command exits with, in ascending order.
 	// Empty renders no section at all, which is the right answer for a command that
-	// only ever follows the CLI-wide contract (0 success, 1 failure, 2 misuse) - a
+	// only ever follows the CLI-wide contract (0 success, 1 failure, 2 misuse); a
 	// section repeating that on ninety pages teaches nobody anything.
 	//
 	// Populate it where a reader would otherwise guess WRONG: a code carrying a
@@ -96,7 +96,7 @@ const (
 	// exists because it chooses which FlagSet to build.
 	//
 	// DECLARED here, BOUND by hand (or by nothing). The command keeps its fs.Var call, and the
-	// generator emits only the name constant - no struct field and no second
+	// generator emits only the name constant, no struct field and no second
 	// binding, which would be a "flag redefined" panic. What the declaration buys
 	// is documentation: --ignore, --ref and --reference were each bound by a
 	// command and absent from every man page, because a flag the registry could
@@ -122,7 +122,7 @@ type Flag struct {
 	// hardcoded numbers in the generated binder that DISAGREED with the live
 	// binding, silently dropping config support for anything that adopted it. A
 	// generated binder for such a command takes a <Command>Defaults argument, so
-	// the caller cannot forget to supply the value - leaving it out is a compile
+	// the caller cannot forget to supply the value; leaving it out is a compile
 	// error rather than a wrong default nobody notices.
 	//
 	// Default should still carry the documented value (usually the config default),
@@ -133,7 +133,7 @@ type Flag struct {
 	// base invocation.
 	//
 	// `magus affected` is one command with four parses: the run itself, --plan,
-	// --impact and --bisect. They are not a base set plus extras - each binds its
+	// --impact and --bisect. They are not a base set plus extras: each binds its
 	// own set, overlapping the others (--base is accepted by three of them,
 	// --max-shards only by --plan). Declared as one merged list, a generated
 	// binder for the base parse would accept --max-shards and ignore it, turning
@@ -150,14 +150,14 @@ type Flag struct {
 	// This is the difference between documenting a shorthand and binding one. The
 	// hand-written CLI binds a pair to ONE variable, so -t and --test are the same
 	// switch. Modeled as two independent flags, a generated binder gave them two
-	// destinations, and setting one left the other false - the shorthand parsed and
+	// destinations, and setting one left the other false: the shorthand parsed and
 	// then did nothing. Every generated struct field is a GROUP: the primary plus
 	// its aliases, bound to a single address.
 	AliasOf string
 
 	// No Enum field, deliberately. Every closed-set value in this CLI belongs to
 	// the GLOBAL -o flag, which this registry does not model (see Flags above), and
-	// no per-command flag has one - the string flags here take refs, paths, commit
+	// no per-command flag has one: the string flags here take refs, paths, commit
 	// SHAs and queries. The -o list is enumerated once at its real source, the
 	// CommonFormats slice in cmd/magus/output.go; an unused Enum here would be a
 	// second place to declare a set nothing in this package owns.
@@ -166,7 +166,7 @@ type Flag struct {
 // Target is a named unit of work a project spell implements (e.g. "build", "test", "lint").
 //
 // No Flags: a target is dispatched by the command it hangs off, and never carried
-// its own flag list - every Target literal in the registry sets Name and Short only.
+// its own flag list: every Target literal in the registry sets Name and Short only.
 type Target struct {
 	Name  string
 	Short string

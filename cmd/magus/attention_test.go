@@ -40,8 +40,8 @@ func blockedEvent(message string) types.Event {
 
 // captureWarnings installs a slog handler for the duration of fn and returns what it
 // logged. The producers here report a request they could NOT open through slog rather
-// than an error - a non-zero exit from an agent hook interrupts the very session the
-// notification exists to help - so the default logger is the only place to observe it.
+// than an error (a non-zero exit from an agent hook interrupts the very session the
+// notification exists to help), so the default logger is the only place to observe it.
 func captureWarnings(t *testing.T, fn func()) string {
 	t.Helper()
 	var buf bytes.Buffer

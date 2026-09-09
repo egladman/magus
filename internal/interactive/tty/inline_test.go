@@ -45,7 +45,7 @@ func TestInlineViewErasesOnlyItsOwnLines(t *testing.T) {
 	buf.Reset()
 	require.True(t, p.Paint("delta\necho\nfoxtrot\n"))
 	out := buf.String()
-	// Every line changed, so every line is erased and rewritten - and nothing
+	// Every line changed, so every line is erased and rewritten, and nothing
 	// outside the block is touched.
 	assert.Equal(t, 3, strings.Count(out, "\x1b[2K"))
 	assert.Contains(t, out, "delta")

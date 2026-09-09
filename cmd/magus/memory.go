@@ -158,8 +158,8 @@ func (s *stringList) Set(v string) error {
 }
 
 func memoryPut(root string, args []string) error {
-	// The two repeatable flags stay hand-bound - the registry declares them
-	// FlagCustom so they reach the man page, which never listed them - and the
+	// The two repeatable flags stay hand-bound (the registry declares them
+	// FlagCustom so they reach the man page, which never listed them), and the
 	// rest bind from the registry.
 	var refs, references stringList
 	var pf *gen.MemoryPutFlags

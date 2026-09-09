@@ -75,8 +75,8 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		dID := docID(rel)
 		node := types.KnowledgeNode{ID: dID, Kind: types.KindDoc, Label: rel, Source: rel}
 
-		// Every doc carries a role - what the markdown IS (readme/agent/changelog/...),
-		// from a universal filename convention - plus its frontmatter title/tags where
+		// Every doc carries a role, what the markdown IS (readme/agent/changelog/...),
+		// from a universal filename convention, plus its frontmatter title/tags where
 		// present, so a query result reads as the doc's human name and an agent can ask
 		// `kind=doc role=agent` in any repo. A page with no frontmatter (a README, a stub)
 		// simply carries no title/tags.
@@ -94,7 +94,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		}
 		node.Attrs = docAttrs
 
-		// Attach the doc to the project whose directory holds it - structural containment,
+		// Attach the doc to the project whose directory holds it: structural containment,
 		// exactly as a source file attaches (project -> contains -> file). This is the
 		// contextual link: from a project you reach its README and design notes, with the
 		// role attr telling you which is which. It never claims the doc "documents" the
@@ -138,7 +138,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 
 		// Index each markdown heading as its own node so an agent retrieves the relevant
 		// SECTION of a page rather than the whole file. The anchor is goldmark's own
-		// auto-heading-id - the same one the site renders - so a section node IS a citable
+		// auto-heading-id (the same one the site renders), so a section node IS a citable
 		// pointer into the page (its Source is "<rel>#<anchor>"), and a reader can slice the
 		// body between one heading and the next. A page `contains` its sections; a heading
 		// `contains` the deeper headings nested under it, so the tree mirrors the outline.
@@ -178,7 +178,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			}
 		}
 
-		// A body mention of a `magus <sub>` command references its manpage doc - the
+		// A body mention of a `magus <sub>` command references its manpage doc, the
 		// doc<->command interconnection. Skip the manpage's self-reference.
 		for _, cmd := range manCmds {
 			docPath := manDoc[cmd]
@@ -196,7 +196,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 // headingMD mirrors the site's markdown config (std/markdown.go) for the one thing the graph
 // needs from it: the ids goldmark's auto-heading-id assigns. Parsing with the same library
 // and options the renderer uses is what makes a section node's anchor byte-identical to the
-// rendered page's - including the "-1"/"-2" suffixes goldmark adds to a repeated heading -
+// rendered page's (including the "-1"/"-2" suffixes goldmark adds to a repeated heading)
 // rather than reproducing the slug algorithm and risking drift. Only WithAutoHeadingID affects
 // the id; GFM is included because it is what headings are parsed under on the site.
 var headingMD = goldmark.New(
@@ -361,14 +361,14 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 // findDocFiles returns every authored markdown path (rel to root), sorted, by walking
 // the whole workspace. Skipped: the build and dependency dirs skipDocWalkDir names,
 // any secondary checkout, MAGUS.md at any level, and anything the VCS ignores.
-// Generated markdown is NOT skipped wholesale - a generated page under a tracked path
+// Generated markdown is NOT skipped wholesale: a generated page under a tracked path
 // is ingested and self-labeled by its producing target's `produces` edge (see
 // assembleIO); only true build-output dirs and the fixpoint file below are dropped.
 //
 // The ignore filter is what keeps this reproducible, and it was missing. The walk
 // descends into hidden dirs on purpose (.claude/skills holds SKILL.md agent files,
 // .github holds templates), which also swept up the INSTALLED agent skills that
-// `magus agent install` writes into .agents/, .opencode/, and .claude/ - untracked
+// `magus agent install` writes into .agents/, .opencode/, and .claude/, untracked
 // renderings of internal/agent/skills/. The committed graph then carried whichever
 // provider trees the last person to regenerate it happened to have installed, so the
 // drift gate failed for everyone else and a clean CI checkout could never reproduce
@@ -383,7 +383,7 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 // `magus describe graph -o markdown`) whose body carries live node/edge counts, so its
 // doc node would emit body-derived edges (MGS codes, backticked spell names, markdown
 // links). Ingesting it makes it both an input and an output: regenerating the counts
-// changes the body, which changes the edge count, which changes the counts - no
+// changes the body, which changes the edge count, which changes the counts: no
 // single-pass fixpoint. Everything in MAGUS.md is already a first-class node, so
 // excluding it loses nothing.
 func findDocFiles(root, notesPath string) []string {
@@ -432,7 +432,7 @@ func findDocFiles(root, notesPath string) []string {
 //
 // Every failure mode returns files unchanged. A workspace with no VCS, a backend
 // without ignore support, or a git invocation that errors all mean "no answer", and
-// the safe reading of no answer is to index what was found - the previous behavior.
+// the safe reading of no answer is to index what was found, the previous behavior.
 // Silently dropping docs because git was unavailable would be far worse than
 // carrying a few extra nodes.
 func dropVCSIgnored(root string, files []string) []string {
@@ -466,8 +466,8 @@ func dropVCSIgnored(root string, files []string) []string {
 
 // skipDocWalkDir reports whether the doc walk should not descend into dir. Unlike
 // project.IsIgnoreDir (which skips ALL dot-dirs), the doc walk DOES descend into
-// meaningful hidden dirs - .claude/skills holds SKILL.md agent files, .github holds
-// templates - and skips only genuine noise: VCS internals, the magus cache, build and
+// meaningful hidden dirs (.claude/skills holds SKILL.md agent files, .github holds
+// templates) and skips only genuine noise: VCS internals, the magus cache, build and
 // dependency trees, and any secondary checkout of the same repo (a git worktree, hg
 // share, or jj workspace) whose files would otherwise be indexed twice.
 func skipDocWalkDir(path, name string) bool {
@@ -479,7 +479,7 @@ func skipDocWalkDir(path, name string) bool {
 }
 
 // roleFromRel classifies a markdown file by what it IS, from cross-ecosystem filename
-// conventions - never magus-specific names, so the same rule is meaningful in any repo.
+// conventions, never magus-specific names, so the same rule is meaningful in any repo.
 // Anything without a recognized convention is a plain "doc".
 func roleFromRel(rel string) string {
 	stem := strings.ToLower(strings.TrimSuffix(filepath.Base(rel), ".md"))

@@ -59,10 +59,10 @@ func collapseOnSuccess(l config.Log) bool {
 }
 
 // Magus is the high-level orchestrator. Read paths and the daemon's warm caches
-// (warmGraph, symbolStatus) are safe for concurrent use - that is what backs
+// (warmGraph, symbolStatus) are safe for concurrent use: that is what backs
 // daemon mode, where one Magus is shared across goroutines; concurrent callers
 // should use types.ContextWithGraphObserver rather than a shared default observer.
-// SetGraphObserver and SetDaemon are NOT concurrency-safe - each mutates shared
+// SetGraphObserver and SetDaemon are NOT concurrency-safe: each mutates shared
 // state with no lock and is meant to be called once, before the workspace is
 // shared (SetGraphObserver mutates the underlying *types.Workspace, which
 // documents itself as safe only for a sole owner). Inspect-constructed
@@ -72,7 +72,7 @@ type Magus struct {
 	cfg   config.Config
 	cache *cache.Cache
 	// version is the running build, as the caller reported it via WithVersion. Kept so
-	// a workspace-load failure can say what this binary IS - the one thing an
+	// a workspace-load failure can say what this binary IS: the one thing an
 	// out-of-date binary can state about itself. See explainStale.
 	version string
 
@@ -110,7 +110,7 @@ type Magus struct {
 
 // Daemon is the long-running server this workspace hosts (the MCP HTTP endpoint plus the
 // console API routes, and whatever else the daemon grows to serve). It is injected by
-// the CLI in daemon mode ONLY - so ordinary command paths never construct one - and held
+// the CLI in daemon mode ONLY (so ordinary command paths never construct one) and held
 // as an interface so the root magus package need not import the daemon/handler packages
 // (which depend on magus), breaking that cycle. The concrete *daemon.Daemon satisfies it.
 type Daemon interface {
@@ -133,7 +133,7 @@ func (m *Magus) ServeDaemon(ctx context.Context) error {
 // workspaceMarker is the ONE file that declares a workspace root.
 //
 // Deliberately a single name, not a set. The earlier attempt listed go.mod here too,
-// on the theory that it only appears at a repo's top - false in any multi-module repo,
+// on the theory that it only appears at a repo's top: false in any multi-module repo,
 // including this one (libs/diagnostics/go.mod, libs/gopherbuzz/go.mod). That reintroduced the
 // exact defect it was meant to fix, one level down: running from libs/diagnostics made
 // libs/diagnostics the workspace, so it locked libs/diagnostics/.magus/locks while a root run locked
@@ -166,7 +166,7 @@ func dirHasMarker(dir string, markers []string) bool {
 // FindRoot walks up from dir (or cwd when empty) to find the workspace root.
 //
 // The NEAREST magus.yaml wins, because it is the only file that declares "the
-// workspace starts here" and the closest declaration is the governing one - the same
+// workspace starts here" and the closest declaration is the governing one, the same
 // rule .git follows, and the reason a git worktree nested inside its parent repo
 // resolves to itself rather than being swallowed by the parent.
 //
@@ -230,7 +230,7 @@ func Inspect(ctx context.Context, root string, opts ...Option) (types.WorkspaceR
 // explainStale annotates a workspace-load failure that looks like an out-of-date
 // binary. load() is the right place: it is where magusfiles and local spells are
 // EVALUATED, and therefore where a name this build does not provide actually surfaces.
-// Discover, above, only walks the tree - it cannot fail this way.
+// Discover, above, only walks the tree; it cannot fail this way.
 func (m *Magus) explainStale(err error) error {
 	return ward.ExplainStaleBinary(err, m.version, m.cfg.RequiredVersion)
 }
@@ -327,7 +327,7 @@ func inspect(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	}
 	// vcs.Resolve falls back to MAGUS_VCS_* env vars on a zero VCSOptions, so this
 	// wiring was the only thing standing between magus.yaml's vcs.* keys and every
-	// caller of vcs.Resolve(..., m.ws.VCSOptions) - without it the keys parsed and
+	// caller of vcs.Resolve(..., m.ws.VCSOptions); without it the keys parsed and
 	// validated but never reached a resolution.
 	ws.VCSOptions = types.VCSOptions{Enabled: cfg.VCS.Enabled, Name: cfg.VCS.Name, BaseRef: cfg.VCS.BaseRef}
 	m := &Magus{ws: ws, cfg: cfg, version: vo.Version}
@@ -619,7 +619,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 	// machine's worth of work.
 	//
 	// The daemon injects the budget it holds; everyone else dials it, at the configured
-	// address when there is one - the stable path is only where an unconfigured daemon
+	// address when there is one: the stable path is only where an unconfigured daemon
 	// happens to land.
 	if admitter := m.machineAdmitter; admitter != nil {
 		cfgOpts = append(cfgOpts, cache.WithMachineAdmission(admitter, noWaitLocks()))
@@ -673,7 +673,7 @@ func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
 //
 // It is the SELF-REVIEW half of the review surface: what you are about to commit, before
 // any provider is involved. The committed-range half (base..head, a pull request) is a
-// different question and deliberately not folded in here - a range diff has to name two
+// different question and deliberately not folded in here: a range diff has to name two
 // revisions, and answering both through one signature would make the common case carry
 // arguments it never uses.
 //
@@ -682,7 +682,7 @@ func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
 // jj each emit their native diff header, and a wrapper that reconciled them would be lying
 // about what ran. A reader parses the unified body, which they do share.
 //
-// A workspace with no VCS is not an error - it is a clean tree with nothing to review - so
+// A workspace with no VCS is not an error (it is a clean tree with nothing to review), so
 // an unresolvable backend yields "" rather than failing the caller.
 func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
@@ -698,7 +698,7 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	}
 	// A diff of tracked changes MISSES a brand-new file entirely, and a new file is the thing
 	// a reviewer most wants to see. Every backend's dirty-diff is tree-against-index by
-	// design - that is what a drift gate needs, and DirtyDiff must keep meaning exactly that -
+	// design (that is what a drift gate needs, and DirtyDiff must keep meaning exactly that),
 	// so the untracked half is composed here rather than by widening a contract other callers
 	// depend on.
 	untracked, uerr := m.untrackedPatch(ctx, res.VCS, paths)
@@ -711,8 +711,8 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 		return untracked, nil
 	}
 	// The newline between the halves is load-bearing. A patch whose last line is not
-	// newline-terminated - which is exactly what a diff ending in "\ No newline at end of
-	// file" produces - would otherwise have the first synthesized header glued onto it, so
+	// newline-terminated (which is exactly what a diff ending in "\ No newline at end of
+	// file" produces) would otherwise have the first synthesized header glued onto it, so
 	// that header stops starting a line, every reader misses it, and the first untracked file
 	// silently disappears from the review while the rest show up fine. Measured: it ate
 	// exactly one new file and nothing reported an error.
@@ -725,7 +725,7 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 // BranchChanges reports what other remote-tracking branches are changing, so a reader can be told
 // that a file in front of them is also being edited elsewhere.
 //
-// Empty rather than an error whenever the answer cannot be had - no VCS, a backend without the
+// Empty rather than an error whenever the answer cannot be had: no VCS, a backend without the
 // capability, a repository with no other branches. The three are the same to the reader, and a
 // surface that has nothing to say about competition should say nothing. That is also why a
 // backend lacking BranchChangeReporter must not be reported as "nothing competes": those are
@@ -740,14 +740,14 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 	}
 	if res.VCS == nil {
 		// Version control disabled for this workspace. There are genuinely no other branches, so
-		// this is an empty answer rather than a gap - the distinction the error below exists for.
+		// this is an empty answer rather than a gap: the distinction the error below exists for.
 		return nil, nil
 	}
 	reporter, ok := res.VCS.(types.BranchChangeReporter)
 	if !ok {
 		// NAMED, not swallowed. A backend that cannot answer and a repository where nothing
 		// competes are different facts, and a surface shown the same emptiness for both tells
-		// the reader "nothing competes" - reassurance magus has not earned. The caller reports
+		// the reader "nothing competes", reassurance magus has not earned. The caller reports
 		// which backend fell short so the gap is legible rather than invisible.
 		// Coded, so a surface can render the gap as a gap rather than as an empty answer, and
 		// so the reader has a page explaining why an empty list here would have been a lie.
@@ -768,7 +768,7 @@ func (m *Magus) BranchChanges(ctx context.Context, limit int) ([]types.BranchCha
 //
 // The counterpart to WorkingDiff, and separate from it on purpose. A range names two revisions and
 // the working tree names none, so folding them into one signature would make the common case carry
-// arguments it never uses - the reason WorkingDiff's doc gives for not answering both.
+// arguments it never uses: the reason WorkingDiff's doc gives for not answering both.
 //
 // A gap is REFUSED rather than answered empty, which is the opposite of BranchChanges. There,
 // silence and "nothing competes" are both true-ish and the caller can tell them apart by getting
@@ -843,7 +843,7 @@ func (m *Magus) FileAt(ctx context.Context, rev, path string) (string, error) {
 //
 // Never an error. A workspace with no VCS, a backend that cannot name a remote, a detached
 // HEAD: all of them yield an empty field, and every one is an ordinary state of a tree rather
-// than a failure. The caller's next question - "is a review open?" - has the same answer for
+// than a failure. The caller's next question ("is a review open?") has the same answer for
 // all of them, so making this fail would only move a branch nobody needs up a layer.
 //
 // The remote is read through the optional RemoteReporter capability rather than by shelling a
@@ -870,8 +870,8 @@ func (m *Magus) ReviewOrigin(ctx context.Context) types.ReviewOrigin {
 // is an addition against /dev/null, which is exactly how git renders a new file.
 //
 // Untracked paths are derived from two capabilities the backends already expose rather than
-// by parsing status output - DirtyFiles lists everything dirty, TrackedFiles says which of
-// those the VCS knows - so this stays backend-agnostic instead of learning git's porcelain
+// by parsing status output (DirtyFiles lists everything dirty, TrackedFiles says which of
+// those the VCS knows), so this stays backend-agnostic instead of learning git's porcelain
 // column format. A backend implementing neither yields no untracked half, which is the honest
 // degradation.
 func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, paths []string) (string, error) {
@@ -950,7 +950,7 @@ func statusLinePath(line string) string {
 // whether it is generated, which project owns it, how widely its changed symbols are
 // referenced, and what coverage was observed on it.
 //
-// It is a JOIN, not a computation. Every input already exists - ClassifyFiles reads the same
+// It is a JOIN, not a computation. Every input already exists: ClassifyFiles reads the same
 // declared globs `magus describe file` reads, and impact.Compute/Enrich are what `magus
 // affected --impact` prints. Assembling them here rather than in the console keeps one
 // definition of review order (types.Diff.SortForReading), so a Buzz advisor writing a
@@ -981,7 +981,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 
 	// The blast radius and the symbol/coverage overlays. Computed from the SAME path set
 	// rather than from a fresh VCS diff, so the annotations describe exactly the files the
-	// caller is reviewing - re-diffing here would race an edit made since the patch was read
+	// caller is reviewing: re-diffing here would race an edit made since the patch was read
 	// and annotate a file the reader cannot see.
 	res, ierr := impact.ComputeFromPaths(ctx, m, paths)
 	if ierr != nil {
@@ -996,7 +996,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
 	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
-	// measured zero on exactly the workspaces that have no index - which is the collapse the
+	// measured zero on exactly the workspaces that have no index, which is the collapse the
 	// nil is there to prevent. HasSymbols is the same predicate impact.Enrich gates its own
 	// overlays on, so the ranking and the overlays can never disagree about whether anyone
 	// looked.
@@ -1011,7 +1011,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	}
 	out.Notes = append(out.Notes, res.Notes...)
 	// SeedProjects is documented as "the ones the author actually edited", so a project whose
-	// only changed file is a declared output does not belong in it - the whole premise of the
+	// only changed file is a declared output does not belong in it: the whole premise of the
 	// fold is that a regenerated file is a machine's restatement, not an edit. Counting it
 	// has one line folding files and un-folding projects in the same breath: measured, a
 	// background regeneration moves "3 projects edited" to 6 while the read list stays
@@ -1019,7 +1019,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	//
 	// AffectedProjects deliberately keeps the FULL closure over every changed path, generated
 	// included, because a regenerated output really does invalidate a downstream cache key.
-	// The two numbers answer different questions - who wrote something, and what has to run -
+	// The two numbers answer different questions (who wrote something, and what has to run),
 	// so they must not be conflated.
 	out.SeedProjects = authorEditedProjects(res.SeedProjects, out.Files)
 	out.AffectedProjects = res.AffectedProjects
@@ -1051,7 +1051,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
 		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
-		// parameters and temporaries - `signal0`, `headers1`, `body0` - and on a real file they
+		// parameters and temporaries (`signal0`, `headers1`, `body0`), and on a real file they
 		// were roughly two thirds of the payload this surface serves to every MCP client. A
 		// symbol that nothing references and that leaves neither the project nor the module
 		// cannot change how anyone reads the diff, so carrying it costs an agent's context and
@@ -1063,7 +1063,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 		//
 		// Only the APPEND is skipped. The reach and surface updates below still run for a
 		// local, because a file whose changed symbols are all locals was still COVERED by the
-		// index - and reporting its surface as unknown would say nobody looked when somebody
+		// index, and reporting its surface as unknown would say nobody looked when somebody
 		// did.
 		if sym.RefCount > 0 || sym.FileCount > 0 || sym.ModuleAPI || len(sym.ExternalProjects) > 0 {
 			f.Symbols = append(f.Symbols, sym)
@@ -1126,13 +1126,13 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 }
 
 // exportedFromModule reports whether a symbol defined at path with the given label is
-// reachable from OUTSIDE the module - the boundary a semver bump is actually about.
+// reachable from OUTSIDE the module: the boundary a semver bump is actually about.
 //
 // It is deliberately per-language and deliberately narrow. Go is the only language answered
 // here because Go states export in the language itself (an initial capital) and states
 // unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
 // is a fact rather than a heuristic. Every other language returns false, which reads as "not
-// known to be module API" and never as "internal" - the caller keeps ExternalProjects, which
+// known to be module API" and never as "internal": the caller keeps ExternalProjects, which
 // is language-neutral, and the surface stays honest about what was not checked.
 //
 // Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a
@@ -1165,7 +1165,7 @@ func exportedFromModule(path, label string) bool {
 // rebuild, and one used across a boundary can.
 //
 // Ownership is by directory containment, longest project path first, which is the same rule
-// ClassifyFiles uses - so a file in a nested project is attributed to the nested one rather
+// ClassifyFiles uses, so a file in a nested project is attributed to the nested one rather
 // than to the root, and a nested project consuming its parent's symbol reads as external.
 //
 // A file owned by nothing is NOT counted as external. It affects no target and rebuilds
@@ -1247,7 +1247,7 @@ func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResul
 // passed at, and passes any other base through untouched.
 //
 // It resolves HERE rather than in vcs.Resolve's precedence chain because the answer does
-// not come from the VCS at all - it comes from the run history, which the vcs package
+// not come from the VCS at all: it comes from the run history, which the vcs package
 // must not learn about. Affected is the single funnel every affected computation goes
 // through (ExpandAffected and Plan both call it), so one resolution covers the CLI, the
 // shard planner, and magus\affected in a magusfile.
@@ -1255,14 +1255,14 @@ func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResul
 // The fallback when nothing was recorded is the PARENT of HEAD, announced. It is not the
 // configured default: on the branch that builds itself the default base is that same
 // branch, so falling back to it compares a commit against itself, reports nothing
-// affected, and runs nothing - a gate that passes having checked nothing. Diffing one
+// affected, and runs nothing: a gate that passes having checked nothing. Diffing one
 // commit is the wrong answer only when a preceding run failed, which is loud here rather
 // than silent.
 func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, error) {
 	// Resolve FIRST and test the winner, rather than testing the argument. The sentinel
 	// can arrive from --base, MAGUS_VCS_BASE_REF, magus.yaml, or a per-VCS env var, and
 	// vcs.Resolve is what knows the precedence between them. Asking it who won means the
-	// sentinel works from every source without this function restating that order - and
+	// sentinel works from every source without this function restating that order, and
 	// without a caller who set the env var getting `git diff last-passed`.
 	res, err := vcs.Resolve(ctx, m.ws.Root, base, m.ws.VCSOptions)
 	if err != nil {
@@ -1273,7 +1273,7 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	}
 	// Refused, not silently downgraded. With the run log off there is nothing to read,
 	// and every fallback available here is a base that gates less than the caller asked
-	// for - which is the failure this base ref exists to prevent. Naming the switch that
+	// for, which is the failure this base ref exists to prevent. Naming the switch that
 	// caused it beats a warning nobody reads under a green check.
 	if !m.cfg.CI.RecordRuns {
 		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off; set it true or pass an explicit --base", BaseLastPassed)
@@ -1353,7 +1353,7 @@ func (m *Magus) buzzPoolRegistry() *buzz.PoolRegistry {
 // Close releases workspace resources (VM pools, telemetry); cache and limiter are
 // caller-owned. A provider built by Open is shut down here so its spans/metrics
 // flush rather than being lost on exit. An injected provider (WithProvider) is
-// left running - it is shared across every workspace the daemon holds (and the
+// left running: it is shared across every workspace the daemon holds (and the
 // bridge Magus), so one workspace's eviction must not stop telemetry for the
 // rest; the daemon itself owns and shuts down that provider.
 func (m *Magus) Close() error {
@@ -1438,7 +1438,7 @@ func magusfileGlobs(projectPath string) []string {
 // joinGlob roots a project-relative glob at the workspace for the cache step and the
 // describe surfaces. It is a named pass-through on purpose: the call sites in this
 // package read as "join", and the rooting rule itself belongs in types, where
-// Project.DeclaredGlobs - the attribution mirror of these very lines - can share it.
+// Project.DeclaredGlobs (the attribution mirror of these very lines) can share it.
 // See types.RootGlob for why the join is cleaned rather than concatenated.
 func joinGlob(projectPath, glob string) string {
 	return types.RootGlob(projectPath, glob)
@@ -1593,8 +1593,8 @@ func forEachSpell(ctx context.Context, p *types.Project, target string, fn func(
 	}
 	// A magusfile target SHADOWS a spell op of the same name and runs alone. Without
 	// this both ran: this repo exports go_build while the go spell provides an op
-	// normalizing to the same name, so `magus run go-build` compiled the module twice -
-	// once bare from the spell, once stamped from the magusfile - and the bare one was
+	// normalizing to the same name, so `magus run go-build` compiled the module twice
+	// (once bare from the spell, once stamped from the magusfile), and the bare one was
 	// waste, built with no -o, no ldflags, no trimpath. The magusfile is the workspace's
 	// own definition, so it decides what the name means there.
 	if only := magusfileOverride(p, resolved, target); only >= 0 {
@@ -1704,8 +1704,8 @@ func forSpellNamed(ctx context.Context, p *types.Project, target, name string, f
 // outside the run path can redact against the credentials this workspace has resolved.
 //
 // It hands out a CONTEXT, not the resolver. The daemon needs redaction on its serving
-// paths - internal/trail writes MCP request and response payloads verbatim, and those are
-// the largest credential-shaped thing magus persists - but nothing outside this package
+// paths (internal/trail writes MCP request and response payloads verbatim, and those are
+// the largest credential-shaped thing magus persists), but nothing outside this package
 // needs to read or mutate the resolver to get it.
 //
 // The resolver is per workspace Open, so this is only meaningful for a caller already

@@ -427,7 +427,7 @@ func TestParity_BlockExpressionWithoutOutIsRejected(t *testing.T) {
 	// that `from { final unused = 1; }` evaluates to null. Upstream rejects it
 	// (tests/compile_errors/block-expression-partial-out.buzz, "All block expression
 	// paths must end with `out`"), and a block expression that silently produces null
-	// is the dangerous kind of divergence - the value is consumed somewhere. Nothing
+	// is the dangerous kind of divergence: the value is consumed somewhere. Nothing
 	// in this repo or in magus used the form, so the rule was adopted.
 	ctx := context.Background()
 	s := buzz.NewSession(ctx)
@@ -811,7 +811,7 @@ fun probe() > int {
 // TestParity_MatchCompoundTypeCondition pins that a match arm whose condition is a
 // COMPOUND type value actually matches. A type value carries the canonical spelling
 // ("[str]") while the runtime test compares the reduced shape ("list"), so passing
-// the canonical name through made every such arm silently dead - it fell to `else`
+// the canonical name through made every such arm silently dead: it fell to `else`
 // where the equivalent `is` answered true. Upstream's match.buzz exercises only
 // simple arms, which reduce to themselves, so it cannot catch this.
 func TestParity_MatchCompoundTypeCondition(t *testing.T) {
@@ -1051,7 +1051,7 @@ fun probe() > str {
 
 // TestParity_TypeValueEquality pins the comparison. Two type values are built
 // independently (one from a literal, one from typeof), so equality has to be
-// structural on the canonical spelling - reference equality would make every
+// structural on the canonical spelling; reference equality would make every
 // `typeof x == <T>` false.
 func TestParity_TypeValueEquality(t *testing.T) {
 	v := evalParity(t, `
@@ -1276,7 +1276,7 @@ fun probe() > str {
 
 func TestParity_MatchWithoutElseIsRejected(t *testing.T) {
 	// This test used to assert the opposite: that falling off the last arm yields
-	// null. True of the VM, but not parity - upstream rejects the source outright
+	// null. True of the VM, but not parity: upstream rejects the source outright
 	// (compile_errors/match-non-exhaustive.buzz), so it never lets the null be
 	// observed. The rejection is the guarantee worth pinning.
 	//
@@ -1579,7 +1579,7 @@ fun probe() > str {
 func TestParity_ImmutableCollectionsRejectSorting(t *testing.T) {
 	// This used to assert that `sort` refused at RUNTIME. The checker now rejects an
 	// in-place mutator on a receiver it can see is immutable, so the source no longer
-	// compiles - an earlier failure for the same rule, and what upstream does.
+	// compiles: an earlier failure for the same rule, and what upstream does.
 	//
 	// The VM's guard is unchanged and still load-bearing: it catches a receiver whose
 	// mutability the checker cannot determine, so errImmutable is not dead code.
@@ -1642,7 +1642,7 @@ fun probe() > str {
 
 // TestParity_WriteThroughANameJustifiesItsVar covers the var-not-assigned check's
 // blind spot. It fired only for an *ast.IdentExpr target, so `digests[p] = h` and
-// `point.x = 2` both read as "never assigned" and the declaration was rejected -
+// `point.x = 2` both read as "never assigned" and the declaration was rejected,
 // which is what stopped tools/drift.buzz from loading. Upstream accepts both; where
 // it comments at all (W102 on an index-assigned `var`) it warns rather than errors.
 func TestParity_WriteThroughANameJustifiesItsVar(t *testing.T) {
@@ -1674,7 +1674,7 @@ object Box { inner: mut Point }
 
 // TestParity_BreakOutOfADoUntilLeavesLiveCode pins the DoStmt terminal-flow guard.
 // `do { ... } until (cond)` runs its body once, so a body that transfers control
-// away does end the loop - but a break that exits the DO lands on the statement
+// away does end the loop, but a break that exits the DO lands on the statement
 // after it, exactly as for while and for. Without the guard everything following a
 // `do { break; } until (...)` was reported unreachable.
 func TestParity_BreakOutOfADoUntilLeavesLiveCode(t *testing.T) {
@@ -1766,7 +1766,7 @@ fun probe() > int {
 }
 
 // TestParity_CollectorKeepsReachableObjects covers the reachability sweep in
-// vm/gc_collect.go, which had NO test at all - which is how both holes below
+// vm/gc_collect.go, which had NO test at all, which is how both holes below
 // survived. The dangerous direction of this check is a false COLLECT: calling a
 // live object's collect() is unrecoverable, where missing a dead one merely
 // delays it.
@@ -1869,7 +1869,7 @@ fun probe() > bool {
 // TestParity_ConstFoldMustNotSwallowABranchTarget pins the bug behind a wrong answer that
 // looked like a precedence problem and was not: `(a ?? 0) + 1` returned `a`.
 //
-// The parse was always correct - `(a ?? 0) + 1` - and the coalesce's jump lands on the
+// The parse was always correct (`(a ?? 0) + 1`), and the coalesce's jump lands on the
 // `1`. That `1` is also the middle of a foldable `LoadConst; LoadConst; OpAdd` triple, and
 // FoldConsts rewrote the trailing two into OpNop without checking branch targets, so the
 // non-null path jumped onto a Nop and the operator never ran. Upstream Buzz evaluates

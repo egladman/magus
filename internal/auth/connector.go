@@ -26,7 +26,7 @@ import (
 // Connector tokens are the SECOND auth tier: named, hashed-at-rest, expiring
 // secrets minted for EXTERNAL MCP clients (a hosted connector, an IDE). Unlike
 // the single retrievable cli token (token.go), a connector token is shown ONCE
-// at creation and only its SHA-256 is stored, so it can never be re-displayed -
+// at creation and only its SHA-256 is stored, so it can never be re-displayed;
 // rotate by minting a new one. Multiple named tokens coexist so each client
 // gets its own revocable credential.
 //
@@ -37,7 +37,7 @@ import (
 // The `mgs_` prefix is self-identifying so secret scanners and logs can catch a
 // leak; the crc32 suffix lets a typo'd token be rejected OFFLINE before any
 // store lookup. The 256-bit body has a ~10^77 keyspace, so a single fast
-// SHA-256 at rest is the correct choice - there is nothing to brute-force or
+// SHA-256 at rest is the correct choice: there is nothing to brute-force or
 // rainbow-table, and a slow hash (bcrypt/argon2) would only add per-request
 // latency. This mirrors exactly what GitHub does for tokens.
 
@@ -90,7 +90,7 @@ const (
 )
 
 // ConnectorToken is one named connector token record. It holds only the hash and
-// a display fingerprint - never the secret.
+// a display fingerprint, never the secret.
 type ConnectorToken struct {
 	Name        string    `json:"name"`
 	SHA256      string    `json:"sha256"`      // hex SHA-256 of the full mgs_ token
@@ -100,7 +100,7 @@ type ConnectorToken struct {
 
 	// compat(until: no store still holds a record written without a scope): records
 	// predate this field, and an absent scope decodes as "". Scope() reads that as
-	// ScopeMCP, which is what every such record was minted for - the console tier did
+	// ScopeMCP, which is what every such record was minted for; the console tier did
 	// not exist when they were written. Observe it is safe to drop by checking that
 	// every file under connectors.d carries a "scope" key.
 	Scope ClientScope `json:"scope,omitempty"`
@@ -136,8 +136,8 @@ type connectorRecord struct {
 // is that the cross-process lock is gone rather than any change in what is stored.
 // One array in one file made every mutation a read-modify-write, so Create and
 // Revoke needed a lock file, a retry loop, and a stale-lock steal heuristic to
-// avoid losing an entry. One file per token makes Create a dropin.Publish - whose
-// atomic link is also the uniqueness check, for free - and Revoke an unlink.
+// avoid losing an entry. One file per token makes Create a dropin.Publish (whose
+// atomic link is also the uniqueness check, for free) and Revoke an unlink.
 // Neither reads the other tokens, so there is nothing left to serialize.
 //
 // It is also the ergonomics: revoking is `rm connectors.d/<name>.json`, which
@@ -255,7 +255,7 @@ func (s *ConnectorStore) ListScope(want ...ClientScope) []ConnectorToken {
 
 // Create mints a new connector token named name that expires at expires (a zero
 // time means it never expires), stores its SHA-256, and returns the plaintext
-// secret ONCE - it cannot be recovered later. name must be non-empty and unique
+// secret ONCE; it cannot be recovered later. name must be non-empty and unique
 // (ErrConnectorExists otherwise). Uniqueness comes from dropin.Publish's O_EXCL
 // create against the token file itself, not a lock, so a concurrent Create of
 // the same name cannot duplicate it; only the final append to the in-memory
@@ -417,7 +417,7 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 // minted for scope. It rejects a malformed or checksum-failing token OFFLINE before
 // any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
 // against every non-expired stored record carrying that scope. Expired records never
-// match, and neither does a token minted for a different surface - that filter is
+// match, and neither does a token minted for a different surface; that filter is
 // what keeps the tiers disjoint rather than merely labeled.
 func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 	if !validTokenFormat(presented) {
@@ -457,7 +457,7 @@ func mintToken() (string, error) {
 
 // validTokenFormat reports whether s is a well-formed mgs_ connector token: the
 // prefix, the exact base62 body+checksum length, base62 alphabet throughout,
-// and a checksum that matches the body. It is a pure offline check - it says
+// and a checksum that matches the body. It is a pure offline check; it says
 // nothing about whether the token is stored or non-expired.
 func validTokenFormat(s string) bool {
 	rest, ok := strings.CutPrefix(s, tokenPrefix)

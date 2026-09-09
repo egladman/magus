@@ -29,7 +29,7 @@ import (
 // descriptor missing the reproduce fields (spell, args, vcs) survives to be read as
 // though those were empty rather than unrecorded.
 //
-// 6 added the spell: line for explicit spell::op runs - emitted only when the filter
+// 6 added the spell: line for explicit spell::op runs, emitted only when the filter
 // is set, but a pre-6 store could already hold entries an op-form run recorded under
 // the plain target's key, and only a bump evicts that poison class.
 const KeyVersion = 7
@@ -42,8 +42,8 @@ func (c *Cache) hashStep(ctx context.Context, s *Step) (string, error) {
 
 // hashStepInputs is hashStep with an optional collector: when lines is non-nil, every
 // pre-hash key input (sans trailing newline) is appended to it in hash order. The
-// collected lines are the key's EXPLANATION - what `describe target --cache` diffs and
-// what the output store persists beside a step's attempts - so they must stay
+// collected lines are the key's EXPLANATION (what `describe target --cache` diffs and
+// what the output store persists beside a step's attempts), so they must stay
 // byte-identical to what the hash consumed; collecting inside the same writeLine keeps
 // that true by construction. The nil path adds no allocations to the hot path.
 func (c *Cache) hashStepInputs(ctx context.Context, s *Step, lines *[]string) (string, error) {
@@ -115,7 +115,7 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	}
 	// The explicit spell::op filter selects a different definition than the plain
 	// target form: it bypasses a magusfile export that shadows the op's name. Same
-	// name, same sources, different body - so the filter must key the cache. Only
+	// name, same sources, different body, so the filter must key the cache. Only
 	// op-form runs write it; plain target runs hash without it.
 	if s.Spell != "" {
 		writeLine("spell:", s.Spell)
@@ -207,8 +207,8 @@ func (c *Cache) StepKey(ctx context.Context, s *Step) (key string, lines []strin
 }
 
 // StepKeyMemo is StepKey with an optional SourceMemo. It exists for a caller that
-// keys MANY steps sharing one WorkspaceRoot in one pass - IdentifyRef's sweep, via
-// ComputeTargetKey - so distinct targets whose buildStep gives them the SAME
+// keys MANY steps sharing one WorkspaceRoot in one pass (IdentifyRef's sweep, via
+// ComputeTargetKey), so distinct targets whose buildStep gives them the SAME
 // Sources baseline expand and hash that source set once instead of once per
 // target/charm combination. Pass nil for ordinary StepKey behavior; see
 // SourceMemo's doc for the safety condition on passing a real one.
@@ -225,7 +225,7 @@ func (c *Cache) StepKeyMemo(ctx context.Context, s *Step, memo *SourceMemo) (key
 // a WorkspaceRoot, keyed by the (Sources, Outputs, IgnoreDirs) tuple that determines it.
 //
 // ONLY for prediction: profiling IdentifyRef's sweep showed expandSources' WalkDir
-// re-walking the workspace root as the dominant cost - 57% of a 355ms sweep - with
+// re-walking the workspace root as the dominant cost (57% of a 355ms sweep) with
 // dozens of walks over an IDENTICAL Sources set, because buildStep gives most targets in
 // a project the same baseline.
 //
@@ -451,7 +451,7 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 		return "", err
 	}
 	// Re-stat: if (mtime,size) changed between the pre-read stat and the hash
-	// read, skip the store to avoid recording a stale fingerprint - matches the
+	// read, skip the store to avoid recording a stale fingerprint; matches the
 	// io_uring tier's same guard above.
 	info2, err := os.Stat(abs)
 	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size {
@@ -480,7 +480,7 @@ func hashFile(path string) (string, error) {
 type relAbs struct{ rel, abs string }
 
 // ExpandSources is expandSources exported for a caller needing the SAME source walk the
-// cache key is built from - today a spell op's Sources placeholder. Reusing this walk
+// cache key is built from: today a spell op's Sources placeholder. Reusing this walk
 // rather than a second one is what makes that op inherit root's declared ignore dirs
 // instead of drifting from the set the key was built from.
 //
@@ -515,13 +515,13 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// A wildcard-free glob names ONE file, so resolve it by stat rather than by the walk
 	// below. The walk prunes whole directories by name (project.IgnoreDirs: gen, vendor,
 	// node_modules, target), and a declaration pointing inside one could therefore never
-	// match - `magus describe target` listed the path as a source while the cache key
+	// match: `magus describe target` listed the path as a source while the cache key
 	// silently omitted it, so edits to it replayed a stale entry forever. docs's
 	// content-generate hit exactly that on proto/gen/descriptor.binpb.
 	//
 	// Only exact paths take this route. Letting a PATTERN reach into a pruned dir would
 	// undo the pruning's whole purpose: a project declaring **/*.js would start hashing
-	// every file in node_modules. An exact path cannot expand that way - it is one file,
+	// every file in node_modules. An exact path cannot expand that way: it is one file,
 	// named deliberately.
 	var exact []string
 	patterns := normalized[:0:0]
@@ -648,7 +648,7 @@ func staticDirPrefix(glob string) string {
 }
 
 // isIgnoreDir reports whether name is a directory to skip during source expansion.
-// It prunes magus/VCS metadata dirs (a deliberately NARROW dot set - not the broad
+// It prunes magus/VCS metadata dirs (a deliberately NARROW dot set, not the broad
 // "any dot-dir" rule project.IsIgnoreDir applies, because a Sources glob like **/*.md
 // legitimately hashes files under .github or .claude), the shared non-source dirs in
 // project.IgnoreDirs, and the per-project spellDirs each resolved spell declares. The

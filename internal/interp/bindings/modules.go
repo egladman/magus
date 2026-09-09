@@ -60,20 +60,20 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 			Bind: func(s *buzz.Session, env buzz.ModuleEnv) error {
 				mod := reg.Register(env.Ctx, s)
 				// http keeps two byte-level companions that no descriptor can yet
-				// declare: byteSize and upload_chunked. crypto no longer needs any -
+				// declare: byteSize and upload_chunked. crypto no longer needs any:
 				// its HMAC and base64 methods became declared std.Module methods once
 				// TypeByteSlice existed, and this hook shrank by one domain as a result.
 				if name == "http" {
 					mergeModuleMap(mod, registerHTTPBytes())
 				}
-				// Layer this module's DECLARATIONS on as a source companion - the same
+				// Layer this module's DECLARATIONS on as a source companion: the same
 				// "native value + declaration source under one import path" mechanism
 				// crypto/io already use for their own signatures (see
 				// gopherbuzz/session.go's resolveImport). They carry the return-type
 				// mirrors and an extern per method, so every call through this module
 				// types against a real signature instead of Unknown.
-				// Read the declarations by NAME - moduledecls writes one flat file per
-				// module, gen/decls/json.buzz - but register them under the IMPORT
+				// Read the declarations by NAME (moduledecls writes one flat file per
+				// module, gen/decls/json.buzz) but register them under the IMPORT
 				// PATH, because resolveImport looks them up by the path the import
 				// line spelled.
 				if src, ok := spellruntime.ModuleDecls(name); ok {
@@ -130,7 +130,7 @@ type moduleSurfaceConfig struct {
 	// magusfile's print is human output like every other thing magus says, and
 	// stdout carries the structured answer (-o json|yaml|jsonl|template) alone. A
 	// magusfile with a print in it would otherwise emit a document no parser
-	// accepts. `magus buzz` overrides it - there the script IS the program, so its
+	// accepts. `magus buzz` overrides it: there the script IS the program, so its
 	// output is the command's output.
 	scriptOut io.Writer
 }
@@ -196,7 +196,7 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 //     Run.targets is a list of it.
 //
 // Everything else that used to live here is now generated, leaf-first, from the
-// returns themselves - a mirror can no longer go missing when a return is added.
+// returns themselves: a mirror can no longer go missing when a return is added.
 var magusUndeclaredTypeSource = strings.Join([]string{
 	spellruntime.ModuleFieldEntrySource,
 	spellruntime.ModuleMethodEntrySource,
@@ -216,7 +216,7 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 //   - the magus namespace's own return types (magusOwnedTypeSource above), declared
 //     directly rather than behind an importable path: "magus" is bound as a session
 //     global (see registerAllBuzz), not a lazily-imported module, so the normal
-//     import-triggered collection (SetModuleDecls) never runs for it - see
+//     import-triggered collection (SetModuleDecls) never runs for it; see
 //     DeclareModuleTypes's doc for why.
 //
 // It is layered on top of RegisterModuleSurface by the magusfile runtime and,
@@ -227,8 +227,8 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
 	// "magus" is bound as a session GLOBAL, not a lazily-imported module, so the
 	// import-triggered SetModuleDecls collection never runs for it (see
-	// DeclareModuleTypes). It gets the same generated source every other module gets -
-	// object mirrors plus an extern per method - which is what types magus\\affectedImpact
+	// DeclareModuleTypes). It gets the same generated source every other module gets
+	// (object mirrors plus an extern per method), which is what types magus\\affectedImpact
 	// and friends at a call site instead of leaving them Unknown.
 	decls, ok := spellruntime.ModuleDecls("magus")
 	if !ok {

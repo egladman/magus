@@ -2,7 +2,7 @@
 // source of truth is a Go file.
 //
 // It is the reading half of the generator pipeline; [github.com/egladman/magus/internal/generate/emit]
-// is the writing half. Only the GENERIC readers live here - a struct's tags, a doc
+// is the writing half. Only the GENERIC readers live here: a struct's tags, a doc
 // line, a slice-of-struct literal, a file's flag bindings. Domain walkers that know
 // what the declaration MEANS (config's flag/env/yaml derivation, for one) stay beside
 // the schema they interpret, because their output type is domain-specific and moving
@@ -10,14 +10,14 @@
 //
 // The reason it exists as a package at all: three copies of this parsing had already
 // diverged. config.go walked struct tags, completions.go read a slice literal, and a
-// test grew a third flag-binding scanner that read only ONE function - so it reported
+// test grew a third flag-binding scanner that read only ONE function, so it reported
 // three false positives for every real finding, because magus binds flags across
 // several functions and files. One tested reader is the fix.
 //
 // What does NOT belong here: a reader that looks generic but encodes one domain's
 // meaning. config's type reader was extracted into this package and reverted, because
 // it deliberately keeps the star on *bool, the package on time.Duration and the
-// brackets on []string - config's flag-kind switch turns on exactly those, and a
+// brackets on []string: config's flag-kind switch turns on exactly those, and a
 // "clean" reader returning the bare identifier silently changed 148 lines of generated
 // output. If a reader's callers would disagree about its result, it is a domain
 // classifier wearing a generic name; leave it with its domain.
@@ -60,8 +60,8 @@ type StructLiteral map[string]string
 
 // SliceOfStructs reads `var <name> = []T{{Field: "v", ...}, ...}` from file.
 //
-// This is the shape a declaration table takes in Go - the list of subcommands, of
-// modules, of diagnostics - and reading it from the AST rather than by matching text
+// This is the shape a declaration table takes in Go (the list of subcommands, of
+// modules, of diagnostics), and reading it from the AST rather than by matching text
 // means a reformatted, reordered or re-commented table still parses.
 func SliceOfStructs(file *ast.File, name string) []StructLiteral {
 	var out []StructLiteral
@@ -114,7 +114,7 @@ var flagBinders = map[string]bool{
 
 // FlagNames returns every flag name bound on a *flag.FlagSet anywhere in file.
 //
-// Use this to answer "what flags does this FILE make reachable" - checking a
+// Use this to answer "what flags does this FILE make reachable", checking a
 // completion script, say, where a flag bound in any function is one a user can type.
 // Scoped to a single function it reported a flag as nonexistent whenever the binding
 // lived in a sibling, which is three false positives for every real finding.

@@ -184,7 +184,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 		// `magus.cmd(["describe","graph","-o","markdown"])` captures this to generate
 		// MAGUS.md, a routing index. It deliberately omits each target's evaluated
 		// dispatch plan (that is `magus describe target <name>` away), so the static
-		// graph is all the renderer needs - no per-target evaluation here.
+		// graph is all the renderer needs: no per-target evaluation here.
 		//
 		// Build the knowledge graph to drive MAGUS.md's "query first" routing
 		// section; best-effort, so a graph build failure just omits the section.
@@ -370,7 +370,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 //
 // Declared and observed are different questions, and only the second one debugs
 // anything. The existing surface answers the first with a bare boolean, which says a
-// probe exists and nothing about what it reports - so a toolchain that has drifted
+// probe exists and nothing about what it reports, so a toolchain that has drifted
 // from what the project pins is invisible even though its value is sitting in every
 // cache key. It is also the first thing to check for MGS1009 (a target that never
 // replays), because a probe returning a moving value moves the key with it.
@@ -485,7 +485,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 		// The {definition, count, items} envelope is a RENDERING shape, built here
 		// rather than returned by ListCharms: definition is a constant and count
 		// is len(charms), so carrying them on the domain type meant re-deriving Count
-		// by hand after every filter - a denormalization one forgotten line ships as
+		// by hand after every filter: a denormalization one forgotten line ships as
 		// a wrong count.
 		return emitFormatted(opts, types.CharmReport{Definition: types.CharmDefinition, Count: len(charms), Charms: charms})
 	case outputName:
@@ -620,7 +620,7 @@ type targetCacheReport struct {
 	Ref          string              `json:"ref"`
 	ClassDigests []cache.ClassDigest `json:"class_digests"`
 	// KeyInputs is the masked line-by-line key, present only with --inputs. The class
-	// digests say a class changed; these say WHICH line - and, read as a list, which
+	// digests say a class changed; these say WHICH line, and, read as a list, which
 	// files a declaration actually resolved to. A `src:` line missing for a file the
 	// target declares is the whole bug class this exists to make visible.
 	KeyInputs []string            `json:"key_inputs,omitempty"`
@@ -646,7 +646,7 @@ type targetCacheLastRun struct {
 	Key      string    `json:"key,omitempty"`
 	At       time.Time `json:"at,omitempty"`
 	// KeyMatches is whether the NEWEST entry's key equals the live key. WouldReplay is the
-	// question the reader actually asked - would a run now hit at all - and the two come
+	// question the reader actually asked (would a run now hit at all), and the two come
 	// apart: an edit and a revert leave the newest entry keyed to the edited tree while an
 	// older entry still sits at the live key and replays. ReplaysRef names the entry a run
 	// would reach, and is set whenever WouldReplay is.
@@ -702,7 +702,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	}
 
 	// The key must match what a run computes, so merge magus.yaml default charms
-	// exactly as the run command does - including --no-default-charms, since CI runs
+	// exactly as the run command does, including --no-default-charms, since CI runs
 	// that way and CI is the comparison peer --against exists for.
 	charms := withDefaultCharms(t.Charms, globalCfg.DefaultCharms, noDefaultCharms)
 
@@ -779,7 +779,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		reports = append(reports, r)
 	}
 
-	// Every format reports the mismatch the same way - through the exit code - so a
+	// Every format reports the mismatch the same way (through the exit code), so a
 	// script gating on `--against` behaves identically whichever renderer it picked.
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -958,8 +958,8 @@ func lastRunLines(lr targetCacheLastRun) []string {
 }
 
 // hashOfKeyInputs digests a key-input set for equality comparison. It is the THIRD
-// spelling of "do these two keys agree" in this command - after key equality and the
-// identity pairing behind [cache.FirstKeyInputChange] - and the only order-sensitive one:
+// spelling of "do these two keys agree" in this command (after key equality and the
+// identity pairing behind [cache.FirstKeyInputChange]), and the only order-sensitive one:
 // it hashes the lines in hash order, so a reordering reads as a difference where the
 // pairing collapses it. That is the correct behavior HERE, since it stands in for the key
 // itself, and the wrong behavior for naming what a reader should go fix.
@@ -968,8 +968,8 @@ func lastRunLines(lr targetCacheLastRun) []string {
 // descriptor predating OutputDescriptor.Key carries no key for --against to compare, and
 // falling back to the lines it does have is what keeps such a ref answerable at all rather
 // than reporting every comparison as a mismatch. Observe it is safe to drop by checking
-// that every .json descriptor under the cache's outputs/ tree - including any store a ref
-// was imported from - carries a non-empty "key".
+// that every .json descriptor under the cache's outputs/ tree (including any store a ref
+// was imported from) carries a non-empty "key".
 func hashOfKeyInputs(lines []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 	return hex.EncodeToString(sum[:])
@@ -1233,7 +1233,7 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		}
 		// Always on, no flag: it is one line, it is absent for a target that composes
 		// nothing, and "what does this run, in what order" is the question the command
-		// already exists to answer - a flag would only hide the answer behind knowing
+		// already exists to answer: a flag would only hide the answer behind knowing
 		// to ask for it (docs/recommendations.md, fold don't add).
 		if len(e.Chain) > 0 {
 			refs := make([]string, len(e.Chain))
@@ -1536,7 +1536,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return emitFormatted(opts, report)
 	case outputName:
 		// One bare path per line. This used to print "<path>\t<role>", which is two
-		// columns in the one format that promises a single token - so `xargs` and
+		// columns in the one format that promises a single token, so `xargs` and
 		// `while read` both got the role as a second argument.
 		names := make([]string, len(files))
 		for i, f := range files {

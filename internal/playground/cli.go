@@ -12,7 +12,7 @@ import (
 // are generated from.
 //
 // It is a read of a declaration, not a second copy of one. internal/cli is
-// pure data - it imports flag and time and nothing else - so it compiles to
+// pure data (it imports flag and time and nothing else), so it compiles to
 // js/wasm unchanged, and the console gets every subcommand and flag magus
 // actually has without listing any of them here.
 //
@@ -46,7 +46,7 @@ func cliCommands() []string {
 // the real subcommands it does not already shadow.
 //
 // Deduplicated, and that is not cosmetic. ls, graph, run and version exist in
-// BOTH lists - the console has an in-memory analogue of each - and a name listed
+// BOTH lists (the console has an in-memory analogue of each), and a name listed
 // twice reads to the completer as two candidates, so `ru<tab>` stopped
 // completing `run ` and offered an ambiguous match against itself.
 func completableCommands() []string {

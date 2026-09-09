@@ -31,8 +31,8 @@ var PathSource string
 
 // ManifestSource is the generated mirror of spells.Manifest: the file a project's
 // dependencies are declared in, plus the lockfiles its ecosystem resolves them into.
-// It belongs in magus/spell for the same reason Path does - mgs_listManifests is
-// authored before any host module is invoked - and it references no other mirror
+// It belongs in magus/spell for the same reason Path does (mgs_listManifests is
+// authored before any host module is invoked), and it references no other mirror
 // (its fields are a str and a [str]), so its position in the bundle is free.
 //
 //go:embed gen/types/manifest.buzz
@@ -61,8 +61,8 @@ var PatchOpSource string
 var CharmTypeSource string
 
 // HintSource is the generated mirror of spells.Hint: one {match, then} failure
-// classification a command op declares. It must PRECEDE CommandSource in the bundle -
-// Command.hints is [Hint] - and it references nothing itself.
+// classification a command op declares. It must PRECEDE CommandSource in the bundle
+// (Command.hints is [Hint]), and it references nothing itself.
 //
 //go:embed gen/types/hint.buzz
 var HintSource string
@@ -70,15 +70,15 @@ var HintSource string
 //go:embed gen/types/command.buzz
 var CommandSource string
 
-// SecretSource is the generated mirror of spells.Secret - what a provider spell's
+// SecretSource is the generated mirror of spells.Secret: what a provider spell's
 // resolve_secret op returns. It references nothing, so it has no ordering constraint in
 // the bundle.
 //
 //go:embed gen/types/secret.buzz
 var SecretSource string
 
-// VersionKeySource is the generated mirror of spells.VersionKey - what a probed tool
-// contributes to the cache key - together with the VersionComponent enum its upTo
+// VersionKeySource is the generated mirror of spells.VersionKey (what a probed tool
+// contributes to the cache key), together with the VersionComponent enum its upTo
 // field is typed as. It ships in the magus/spell bundle so a spell can declare
 // mgs_getVersionKey, and it carries its own enum, so it has no ordering constraint
 // against the others.
@@ -86,7 +86,7 @@ var SecretSource string
 //go:embed gen/types/versionkey.buzz
 var VersionKeySource string
 
-// VersionBoundsSource is the generated mirror of spells.VersionBounds - the window of
+// VersionBoundsSource is the generated mirror of spells.VersionBounds: the window of
 // versions a probed tool is allowed to report, as an inclusive min and an exclusive
 // below. It ships in the magus/spell bundle so a spell can declare what its ops need,
 // and it references nothing, so it has no ordering constraint against the others.
@@ -96,7 +96,7 @@ var VersionBoundsSource string
 
 // ToolSource is the generated mirror of spells.Tool: everything a spell declares about
 // one binary it drives. It must FOLLOW VersionKeySource and VersionBoundsSource in the
-// bundle - Tool.key is a VersionKey and Tool.supported is a VersionBounds - and Command
+// bundle (Tool.key is a VersionKey and Tool.supported is a VersionBounds), and Command
 // is already declared ahead of all three.
 //
 //go:embed gen/types/tool.buzz
@@ -171,7 +171,7 @@ var builtinModuleSources = map[string]string{
 // embedded built-in. A built-in may import only the inlinable pure-Buzz modules
 // (magus/spell, magus/charm): each such import is stripped and the
 // module's source prepended, so the compiled chunk carries the symbols itself.
-// Returns ok=false if the source imports any other module - such a spell needs
+// Returns ok=false if the source imports any other module: such a spell needs
 // host bindings a bare compile can't provide and is not a built-in. Shared by the
 // built-in generator and the bytecode-parity test so both compile built-ins
 // identically.

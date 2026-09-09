@@ -156,7 +156,7 @@ var Charm = Module{
 // charmResult wraps the ops as the spells.Charm every charm builder returns.
 //
 // It used to hand back map[string]any of map[string]any, hand-built, while spells.Charm
-// and spells.PatchOp already described exactly that shape - the same duplication
+// and spells.PatchOp already described exactly that shape, the same duplication
 // vcs.metadata was making over the typed accessors beside it. Returning the struct lets
 // the module declare Object "Charm", so the checker knows the shape and the codegen's
 // return-contract check verifies the declaration against the Impl. That check is not
@@ -180,7 +180,7 @@ func addOps(start int, vals []string) spells.Charm {
 }
 
 // anchorIndex returns the position of the first argv element equal to anchor, or
-// an error - a not-found anchor is a spell bug, surfaced now (author/load time)
+// an error: a not-found anchor is a spell bug, surfaced now (author/load time)
 // rather than silently mis-targeting an index.
 func anchorIndex(argv []string, anchor string) (int, error) {
 	if i := slices.Index(argv, anchor); i >= 0 {

@@ -47,15 +47,15 @@ func kebabCase(s string) string {
 	return strings.ToLower(strings.Join(strings.Fields(b.String()), "-"))
 }
 
-// Normalize canonicalizes any magus entity name - a target, a charm, a spell, a
-// spell op - to kebab-case, so go_build, goBuild and go-build all name the same
+// Normalize canonicalizes any magus entity name (a target, a charm, a spell, a
+// spell op) to kebab-case, so go_build, goBuild and go-build all name the same
 // thing. Applied at BOTH registration and lookup; a name normalized on only one
 // side is a silent miss, not an error.
 //
 // One function rather than the TargetNameNormalizer interface it replaces. That
 // interface had a single implementation, and its injection seam
-// (magus.WithTargetNameNormalizer) had zero callers anywhere in the tree -
-// including tests - so `run.Normalizer` was always nil and the seam only ever
+// (magus.WithTargetNameNormalizer) had zero callers anywhere in the tree
+// (including tests), so `run.Normalizer` was always nil and the seam only ever
 // installed this same kebab-casing. Meanwhile sixteen call sites skipped the
 // interface and reached for the package-level default directly, which is what an
 // injected normalizer would have had to fight. The indirection bought nothing and
@@ -117,8 +117,8 @@ type Target struct {
 	// and Charms above are what magus resolves against, and these only record how it
 	// was typed. Same convention as TargetGraphNode.Declared.
 	//
-	// They exist so a caller can react to a non-canonical spelling - the CLI hints
-	// the canonical form - WITHOUT the parser reaching out to print anything. A parse
+	// They exist so a caller can react to a non-canonical spelling (the CLI hints
+	// the canonical form) WITHOUT the parser reaching out to print anything. A parse
 	// function that writes to stderr cannot be used by the daemon, the MCP handler,
 	// or a test without dragging that output along; returning the fact instead lets
 	// each caller decide, which is why this is on the value rather than in a wrapper.
@@ -129,8 +129,8 @@ type Target struct {
 	SkipCache bool `json:"skip_cache,omitempty" buzz:"skip_cache"` // opt out of the cache: always run, never replay/snapshot
 	// SkipCacheReason is the prose the magusfile gave for SkipCache. It is required
 	// (a bare `true` is a load error) because opting out is a claim that REPLAYING
-	// THIS TARGET WOULD BE WRONG - it signs a fresh artifact, records a screen
-	// capture, mutates go.mod - and not a preference for a fresh run, which is what
+	// THIS TARGET WOULD BE WRONG (it signs a fresh artifact, records a screen
+	// capture, mutates go.mod) and not a preference for a fresh run, which is what
 	// --no-cache is for. Demanding prose is what keeps the two apart: six of these
 	// were once workarounds for a snapshot error that no longer exists, and a bare
 	// bool gave no way to tell them from the real ones.
@@ -152,7 +152,7 @@ type Target struct {
 	// ChainMemoryMB, which is the figure both halves of admission actually read.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Timeout is the wall-clock ceiling for one run of this target, as a Go duration
-	// string ("15m", "90s"). Empty means undeclared, which is unbounded - the behavior
+	// string ("15m", "90s"). Empty means undeclared, which is unbounded: the behavior
 	// every target had before this field existed.
 	//
 	// A duration STRING rather than memory_mb's unit-in-the-key integer, because the
@@ -173,7 +173,7 @@ type Target struct {
 	// member's own ceiling fires inside that as the tighter bound.
 	Timeout string `json:"timeout,omitempty" buzz:"timeout"`
 	// Drift is what happens when this target's declared outputs move under a read-only
-	// run. Empty is the DEFAULT, which gates any target that declares outputs - see
+	// run. Empty is the DEFAULT, which gates any target that declares outputs; see
 	// DriftPolicy for why that is on rather than off.
 	Drift DriftPolicy `json:"drift,omitempty" buzz:"drift"`
 	// DriftReason is the prose the magusfile gave for turning the gate off, and it is
@@ -204,14 +204,14 @@ type Target struct {
 	//
 	//	"image": { "cache": { "include": { "arch": { "enabled": false } } } }
 	//
-	// Stored flat because the nesting exists for the author's benefit - a Go caller
+	// Stored flat because the nesting exists for the author's benefit: a Go caller
 	// reading two optional bools should not walk three structs to find them.
 	IncludeOS   *bool `json:"includeOS,omitempty" buzz:"-"`
 	IncludeArch *bool `json:"includeArch,omitempty" buzz:"-"`
 }
 
 // DriftPolicy says what happens when a target's declared outputs move under a read-only
-// run - the generated file that was never regenerated, and the reason `magus run generate`
+// run: the generated file that was never regenerated, and the reason `magus run generate`
 // is a gate at all.
 //
 // It is a policy about the RESPONSE, never about the diagnosis. magus always separates
@@ -302,16 +302,16 @@ func (t Target) TimeoutDuration() time.Duration {
 
 // CeilingExceededError converts the cancellation a declared timeout caused into
 // MGS3011, and leaves every other outcome alone. It lives here because two layers
-// enforce the same ceiling - the magusfile target body and the scheduled target,
-// which is a spell for some targets - and one message is the point.
+// enforce the same ceiling (the magusfile target body and the scheduled target,
+// which is a spell for some targets), and one message is the point.
 //
 // The reading is narrow on purpose: only a DeadlineExceeded counts. A Ctrl+C and a
 // caller's own deadline cancel the same body, and blaming this target's declaration
 // for either would send the reader to edit a number that was not the reason.
 //
-// A timeout is a FAILURE. The body may well have returned nil - a Buzz loop notices
+// A timeout is a FAILURE. The body may well have returned nil: a Buzz loop notices
 // cancellation on a back edge and a killed subprocess reports its own error, but
-// neither is guaranteed - so the error is synthesized rather than trusted to arrive
+// neither is guaranteed, so the error is synthesized rather than trusted to arrive
 // from below. The body's own error is kept underneath when there is one: the last
 // thing a dying subprocess said is usually the most useful line in the report.
 //
@@ -401,7 +401,7 @@ type ExecResult struct {
 
 // ShellCommand is the argv that runs a line through the platform shell: what
 // proc.shell returns, and what proc.exec takes. It exists so the shell choice is a
-// VALUE rather than a decision taken inside a call - you can print it, log it, or
+// VALUE rather than a decision taken inside a call: you can print it, log it, or
 // assert on it before anything runs, which the old proc.shell wrapper made
 // impossible.
 //
@@ -414,11 +414,11 @@ type ShellCommand struct {
 
 // MagusfileSpellName is the spell a project's own magusfile is bound as. It is matched
 // by name because that spell is a single global instance standing in for every
-// project's magusfile - see Project.MagusfileTargets for why it cannot answer for one.
+// project's magusfile; see Project.MagusfileTargets for why it cannot answer for one.
 const MagusfileSpellName = "magusfile"
 
 // Key returns the lines identifying this target's work for the cache: its name, because
-// the body is Buzz rather than a command and has no argv to serialize - the body's text
+// the body is Buzz rather than a command and has no argv to serialize; the body's text
 // already reaches the key through the magusfile's own Sources entry, leaving the entry
 // point as what separates build from go-build within one project.
 //

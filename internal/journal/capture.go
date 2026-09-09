@@ -87,7 +87,7 @@ func Emit(ctx context.Context, e Event) {
 	//
 	// TEXT ONLY, and that limit is deliberate rather than an oversight: Text is the field
 	// that carries free-form content (a command line, an output line, a warning). The
-	// structured fields beside it - Status, Ref, Stream - are magus's own enumerations,
+	// structured fields beside it (Status, Ref, Stream) are magus's own enumerations,
 	// and a credential reaching one would be a different bug than this guards against.
 	e.Text = secret.RedactString(ctx, e.Text)
 	loggerFromContext(ctx).LogAttrs(ctx, slog.LevelInfo, e.Text, slog.Any(eventAttr, e))
@@ -164,7 +164,7 @@ func (f fanout) WithGroup(name string) slog.Handler {
 }
 
 // FileHandler is the capture handler that appends each event as one JSON line (JSONL) to an
-// io.Writer - the durable run log. Writes are serialized by a mutex so events from
+// io.Writer, the durable run log. Writes are serialized by a mutex so events from
 // concurrent targets stay whole lines. A marshal or write error is dropped: capture is
 // best-effort and must never fail a run. Call [FileHandler.Flush] before closing the file.
 type FileHandler struct {
@@ -194,7 +194,7 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	if err := h.w.WriteByte('\n'); err != nil {
 		return err
 	}
-	// Flush everything except output lines. The run log is not only a durable record -
+	// Flush everything except output lines. The run log is not only a durable record;
 	// it is what a live follower reads (`magus events --follow` tails <cacheDir>/runs/),
 	// and a purely buffered handler makes that stream lag by up to a bufio page, so a
 	// short run delivers nothing until it ends.

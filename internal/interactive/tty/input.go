@@ -87,7 +87,7 @@ type Event struct {
 	// button changed state. Button is MouseNone unless one is held.
 	Motion bool
 	// Clicks is 1 for a single click and 2 for a double click. The TERMINAL
-	// does not report double clicks - it reports presses - so this is timed
+	// does not report double clicks (it reports presses), so this is timed
 	// here, from the interval and cell of the previous press.
 	Clicks int
 }
@@ -115,7 +115,7 @@ const (
 	mouseTrackAny   = "\x1b[?1003h\x1b[?1006h"
 	mouseTrackClick = "\x1b[?1000h\x1b[?1006h"
 	mouseTrackOff   = "\x1b[?1006l\x1b[?1003l\x1b[?1000l"
-	// DSR 6 - ask the terminal to report the cursor position, answered with
+	// DSR 6: ask the terminal to report the cursor position, answered with
 	// CPR ("ESC [ row ; col R").
 	dsrCursor = "\x1b[6n"
 )
@@ -124,7 +124,7 @@ const (
 //
 // Over ssh it drops to 1000, press and release only. Hover reports an event for
 // every cell the pointer crosses, and on a link with any latency that is a
-// stream of round trips for a highlight - the pointer starts to feel heavy,
+// stream of round trips for a highlight: the pointer starts to feel heavy,
 // which is a worse first impression than not having hover at all. Clicking
 // still works exactly the same; only the preview of what a click would hit is
 // given up, and it is given up precisely where it would cost the most.
@@ -141,7 +141,7 @@ func mouseTrackFor() string {
 // ResetMouseTracking turns mouse reporting off unconditionally.
 //
 // [Input.Close] restores a session this process knows it opened; this is the
-// process-exit counterpart, and it is not redundant - a deferred Close does not
+// process-exit counterpart, and it is not redundant: a deferred Close does not
 // run on os.Exit or a SIGKILL, and a process that dies with tracking on leaves
 // the user unable to select text in their own shell with nothing explaining why.
 //
@@ -150,7 +150,7 @@ func mouseTrackFor() string {
 // cursor, so they need no save/restore bracket.
 //
 // No-op when w cannot render escapes at all, so callers do not branch. TERM=dumb never had
-// tracking enabled - Input refuses to open there - so there is nothing to disable, and
+// tracking enabled (Input refuses to open there), so there is nothing to disable, and
 // writing it anyway puts literal garbage on a terminal that declares it understands none.
 func ResetMouseTracking(w io.Writer, p Probe) error {
 	if !CanRender(w, p) {
@@ -167,7 +167,7 @@ func ResetMouseTracking(w io.Writer, p Probe) error {
 // output stays ordinary, so tracking is on only at the moments magus genuinely
 // owns the terminal and off the instant it does not.
 //
-// Raw mode is set on the descriptor that is actually READ - the step gate calls
+// Raw mode is set on the descriptor that is actually READ: the step gate calls
 // MakeRaw on stderr then reads stdin, which works only because both usually point
 // at the same device.
 //
@@ -261,13 +261,13 @@ const readPoll = 50 * time.Millisecond
 // Cancellation is by DEADLINE, not by closing the descriptor: standard input
 // belongs to the process, and a prompt that closed it would take the shell's
 // stdin with it. So the wait for the first byte is a poll under a short read
-// deadline, and ctx is checked between polls - the mechanism [Input.CursorPosition]
+// deadline, and ctx is checked between polls, the mechanism [Input.CursorPosition]
 // already relies on, applied to the wait a person can sit in indefinitely.
 //
 // The deadline covers ONLY the wait for a sequence's first byte. Once one has
 // arrived the rest is read without one, because a terminal writes an escape
 // sequence in a single write and a deadline firing mid-sequence would leave its
-// tail to be decoded as stray keystrokes - an arrow key arriving as a bracket.
+// tail to be decoded as stray keystrokes: an arrow key arriving as a bracket.
 //
 // On a descriptor that cannot take a deadline the wait is an ordinary blocking
 // read, so behavior is unchanged where cancellation was never available.
@@ -309,7 +309,7 @@ func (i *Input) waitForInput(ctx context.Context) error {
 		if err := i.in.SetReadDeadline(time.Now().Add(readPoll)); err != nil {
 			// The descriptor stopped accepting deadlines. Record it and take
 			// the no-deadline path on the next turn rather than failing a
-			// prompt over a capability probe - losing cancellation is the
+			// prompt over a capability probe: losing cancellation is the
 			// documented degradation here, and it is not this caller's error.
 			i.deadlines = false
 			continue
@@ -369,7 +369,7 @@ func (i *Input) decode() (Event, error) {
 	if len(rest) == 0 {
 		return Event{Kind: EventKey, Key: KeyEscape}, nil
 	}
-	// SS3 - "ESC O <final>" - is how F1 to F4 and the application-mode arrows
+	// SS3 ("ESC O <final>") is how F1 to F4 and the application-mode arrows
 	// arrive. It has to be recognized even though magus binds none of them,
 	// because the alternative is not "the key does nothing": ESC followed by
 	// anything used to fall through to KeyEscape below, and KeyEscape is the
@@ -385,7 +385,7 @@ func (i *Input) decode() (Event, error) {
 	}
 	if rest[0] != '[' {
 		// Alt-<key> is sent as ESC then the key. magus binds no Alt chord, so
-		// the keystroke is unknown - which callers IGNORE - rather than escape,
+		// the keystroke is unknown (which callers IGNORE) rather than escape,
 		// which would QUIT.
 		//
 		// The key is consumed rather than left to decode as itself, because
@@ -451,8 +451,8 @@ func (i *Input) decodeByte(b byte) (Event, error) {
 	// A multi-byte rune: put the lead byte back and let the reader decode it
 	// whole, so a non-ASCII filter keystroke is not split into mojibake.
 	if err := i.r.UnreadByte(); err != nil {
-		// Propagated. This cannot happen today - the only caller reaches here
-		// straight after a successful ReadByte with no intervening Peek - but
+		// Propagated. This cannot happen today (the only caller reaches here
+		// straight after a successful ReadByte with no intervening Peek), but
 		// if it ever does, the lead byte is already consumed and its
 		// continuation bytes are still in the stream, so the next decode reads
 		// them as fresh input. That is a parser desync, not a keystroke, and
@@ -541,7 +541,7 @@ func twoInts(s string) (int, int, bool) {
 //
 // It exists because the failure mode is a HANG. A terminal that does not
 // implement the query simply says nothing, and a blocking read on it never
-// returns - so an interactive surface that asked would freeze with no output
+// returns, so an interactive surface that asked would freeze with no output
 // and no way out, which is the worst thing in this package's power to do. A
 // terminal that does answer does so in microseconds, so this is generous.
 const cprTimeout = 250 * time.Millisecond
@@ -575,7 +575,7 @@ func (i *Input) CursorPosition() (row, col int, ok bool) {
 		if err != nil {
 			// The deadline can fire part-way through a sequence, leaving its
 			// tail in the buffer for the next decode to read as fresh
-			// keystrokes - an arrow key arriving as a stray bracket. Whatever
+			// keystrokes: an arrow key arriving as a stray bracket. Whatever
 			// is buffered belongs to a reply nobody is waiting for any more.
 			i.discardBuffered()
 			return 0, 0, false

@@ -43,7 +43,7 @@ func TestStoreRegister(t *testing.T) {
 			// "have the orchestrator commit", NOT the "Materialize the files you touch from
 			// the checkpoint" this pinned until 2026-09-08. A revision-match means the same
 			// commit and a DIFFERENT uncommitted patch, and a checkpoint carries only that
-			// patch's digest - so there was nothing to materialize from and the advice told
+			// patch's digest, so there was nothing to materialize from and the advice told
 			// a worker to perform an impossible recovery. The negative assertion below is
 			// what keeps a restore promise from coming back.
 			says:    []string{baseA, "00112233445566778899aabbccddeeff", "none (clean tree)", "have the orchestrator commit"},

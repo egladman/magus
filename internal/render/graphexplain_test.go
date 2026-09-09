@@ -30,7 +30,7 @@ func TestExplainText(t *testing.T) {
 	assert.Contains(t, got, "Run the tests.")
 	assert.Contains(t, got, "engine: buzz")
 	assert.Contains(t, got, "2 nodes reach this")
-	// Out edges render active; in edges render passive - direction is in the verb.
+	// Out edges render active; in edges render passive: direction is in the verb.
 	assert.Contains(t, got, "uses         op:go:go-test")
 	assert.Contains(t, got, "depends on   target:.:format", "out depends_on is active")
 	assert.Contains(t, got, "part of      project:.", "in contains is passive")

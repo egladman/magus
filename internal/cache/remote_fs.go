@@ -53,7 +53,7 @@ func (r *FSRemoteBackend) PutArtifact(_ context.Context, projectPath, hash strin
 	}
 	// A unique-per-call temp name, not a fixed one: two processes pushing the
 	// same (project, hash) concurrently would otherwise both os.Create the SAME
-	// path - which reuses one inode rather than making two - so one push's
+	// path (which reuses one inode rather than making two), so one push's
 	// writes land on a file the other is simultaneously rewriting, and whichever
 	// renames last can carry a torn tarball into the shared store.
 	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp.*")

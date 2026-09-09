@@ -11,8 +11,8 @@
 // makes redaction exact over the bytes magus produced.
 //
 // State is per-WORKSPACE-OPEN, carried on the context, not per-process. A narrower
-// per-run scope made a top-level read invoke the provider twice - two interactive
-// unlock prompts for one command - because one magusfile evaluation happens during
+// per-run scope made a top-level read invoke the provider twice (two interactive
+// unlock prompts for one command) because one magusfile evaluation happens during
 // preload and another during the run.
 //
 // The cost is that the daemon holds an Open for as long as it serves a workspace, so
@@ -41,11 +41,11 @@ import (
 )
 
 // Provider fetches the value behind an opaque reference. The reference format is the
-// provider's own business - an environment variable name here, a vault path elsewhere -
+// provider's own business (an environment variable name here, a vault path elsewhere)
 // and magus never parses it. See docs/concepts/secrets.md for why there is no URI scheme.
 type Provider interface {
 	// Fetch returns ref's value, or errors if it cannot. A backend FETCHES; the
-	// [Resolver] READS - it selects the provider, memoizes, and registers the value for
+	// [Resolver] READS: it selects the provider, memoizes, and registers the value for
 	// redaction, which is the security-critical part. Two verbs so the two contracts
 	// cannot be confused at a call site.
 	//
@@ -68,7 +68,7 @@ const mask = "***"
 // It applies when a magusfile selects no provider spell.
 //
 // Go rather than a bundled spell for a concrete reason: a spell importing a host module
-// (`os`, here) cannot be bare-compiled into the binary - see cmd/magus-utils/spells.go -
+// (`os`, here) cannot be bare-compiled into the binary (see cmd/magus-utils/spells.go),
 // so an env provider written as a spell could not ship inside magus at all.
 type envProvider struct{}
 
@@ -119,7 +119,7 @@ func opener() func(context.Context, string) (Provider, error) {
 // memoKey pairs a reference with the provider that resolved it. Keying on the reference
 // alone was a real defect: a magusfile that reads before selecting a provider would
 // memoize the built-in env fallback and then keep returning it under a declared
-// 1Password provider - a silently wrong credential rather than an error.
+// provider: a silently wrong credential rather than an error.
 type memoKey struct {
 	provider string
 	ref      string
@@ -150,11 +150,11 @@ type Resolver struct {
 	timeouts Timeouts
 	// group collapses concurrent reads of one key into a single provider invocation.
 	// Without it, N targets resolving the same reference at once means N interactive
-	// unlock prompts, which the memo alone does not prevent - the lookup and the fetch
+	// unlock prompts, which the memo alone does not prevent; the lookup and the fetch
 	// cannot share a lock without serializing unrelated references too.
 	group singleflight.Group
 	// grants are the destination-scoped credentials a magusfile declared, keyed by
-	// (host, header) so one host can carry two of them - a user and a token - while a
+	// (host, header) so one host can carry two of them (a user and a token), while a
 	// redeclaration of the same slot is caught rather than silently replacing.
 	//
 	// Registering a grant resolves NOTHING. That is the whole interaction policy this
@@ -176,7 +176,7 @@ type Resolver struct {
 	// endpointTransport overrides the forwarder's round tripper. Written once at
 	// construction and never again, so it is deliberately outside the mutexes. Nil in
 	// production,
-	// where http.DefaultTransport is correct and the upstream scheme is always https -
+	// where http.DefaultTransport is correct and the upstream scheme is always https;
 	// an origin that could be pointed at a plaintext upstream would undo the one
 	// guarantee this design makes about the hop magus controls. Set only by tests, so
 	// they can exercise the real forwarder against a TLS server with a self-signed
@@ -189,7 +189,7 @@ type Resolver struct {
 // shows no symptom beyond a build that waits six times too long or gives up six times too
 // early.
 type Timeouts struct {
-	// Interactive applies when stdin is a terminal - long enough to find your phone for
+	// Interactive applies when stdin is a terminal: long enough to find your phone for
 	// a biometric.
 	Interactive time.Duration
 	// Unattended applies with no terminal to prompt on. Short, because a provider that
@@ -248,8 +248,8 @@ type runIDKey struct{}
 // than reading journal.InvocationIDFromContext directly: internal/journal imports THIS
 // package for redaction, so that import would be a cycle. run.go sits above both.
 //
-// Process-unique is exactly the right strength here - the map it keys lives in one
-// process - even though an invocation id is not a machine-wide identity.
+// Process-unique is exactly the right strength here (the map it keys lives in one
+// process), even though an invocation id is not a machine-wide identity.
 func ContextWithInvocationID(ctx context.Context, id string) context.Context {
 	if id == "" {
 		return ctx
@@ -313,7 +313,7 @@ func (r *Resolver) ProviderName() string {
 // output passes through [Resolver.Redact], so a value that reaches this method is one
 // magus can recognize on the way out.
 //
-// A value shorter than minRedactLen is returned but NOT registered - see that constant.
+// A value shorter than minRedactLen is returned but NOT registered; see that constant.
 // Callers that care must treat such a value as unprotected; nothing reports it.
 func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 	if r == nil {
@@ -339,7 +339,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 	got, err, _ := r.group.Do(name+"\x00"+ref, func() (any, error) {
 		// Re-checked INSIDE the flight. A caller that missed the memo just as a previous
 		// flight was completing would otherwise start a second one and invoke the
-		// provider again - the exact duplicate-unlock-prompt this exists to prevent.
+		// provider again, the exact duplicate-unlock-prompt this exists to prevent.
 		r.mu.RLock()
 		v, hit := r.memo[key]
 		r.mu.RUnlock()
@@ -361,7 +361,7 @@ func (r *Resolver) Read(ctx context.Context, ref string) (Value, error) {
 			// Say it out loud rather than declining in silence. record refuses to register
 			// a value this short because masking it would shred ordinary output, which
 			// means this credential is returned to the magusfile with NO redaction behind
-			// it - and the caller has no other way to discover that. Telling the user is
+			// it, and the caller has no other way to discover that. Telling the user is
 			// the whole value here; magus cannot protect the value itself.
 			slog.WarnContext(ctx, "secret.short",
 				slog.String("code", string(types.SecretTooShortToMask)),
@@ -425,7 +425,7 @@ var errNoResolver = errors.New("secret: no resolver on this context")
 //
 // What it does NOT cover: a secret base64'd as part of a LARGER string. base64 works in
 // 3-byte groups, so `base64(user + ":" + secret)` contains `base64(secret)` only when
-// the prefix length is a multiple of 3 - `us:` matches and `user:` does not, so an
+// the prefix length is a multiple of 3: `us:` matches and `user:` does not, so an
 // `Authorization: Basic` header is covered about one time in three. Closing that needs
 // the value to mask itself before concatenation, which is what a secret.Value is for.
 func (r *Resolver) record(key memoKey, v string) {
@@ -438,7 +438,7 @@ func (r *Resolver) record(key memoKey, v string) {
 	// Gated on the SOURCE length, not each encoded form. Encoding inflates: base64 of a
 	// 1-character value is "MQ==" and hex of "ab" is "6162", both long enough to clear
 	// minRedactLen on their own. Checking per form therefore registered derivatives of
-	// exactly the values this refuses to protect - shredding ordinary output with a
+	// exactly the values this refuses to protect, shredding ordinary output with a
 	// 4-character match while MGS2011 told the user the value was NOT redacted.
 	if len(v) < minRedactLen {
 		return
@@ -449,8 +449,8 @@ func (r *Resolver) record(key memoKey, v string) {
 }
 
 // registerRedactable adds v to the redaction set without memoizing it as a resolved
-// reference. It exists for values magus MINTS rather than reads - an endpoint's path
-// token and base URL, which authorize an authenticated request - which need the same
+// reference. It exists for values magus MINTS rather than reads (an endpoint's path
+// token and base URL, which authorize an authenticated request), which need the same
 // masking as a credential but belong to no provider and no reference.
 //
 // Encoded forms are registered too, for the same reason record does it: a value a tool
@@ -470,7 +470,7 @@ func (r *Resolver) registerRedactable(v string) {
 //
 // The ONLY caller is a forwarder's shutdown, and the distinction is what makes this
 // safe: an endpoint's token and base URL are credential-equivalent while the listener
-// is up and MEANINGLESS once it is down - the port is released and the token authorizes
+// is up and MEANINGLESS once it is down: the port is released and the token authorizes
 // nothing. A resolved credential is never removed, because it stays valid wherever it
 // was sent.
 //
@@ -532,7 +532,7 @@ func (r *Resolver) addRedactable(v string) {
 }
 
 // Redact replaces every value this resolver has read with [mask]. It returns p unchanged,
-// without copying, when there is nothing to do - the overwhelmingly common case, and this
+// without copying, when there is nothing to do: the overwhelmingly common case, and this
 // sits on the output-capture hot path.
 //
 // Callers must not retain p after a no-op return: it is the caller's own buffer, handed
@@ -543,8 +543,8 @@ func (r *Resolver) addRedactable(v string) {
 //     with os\env, bypassing the provider, is invisible here.
 //   - It is literal substring replacement. record registers the base64, hex and
 //     percent-escaped forms alongside the raw value, so those specific re-encodings are
-//     covered; ANY other transform - a different alphabet, compression, splitting the
-//     value across a delimiter - still defeats it.
+//     covered; ANY other transform (a different alphabet, compression, splitting the
+//     value across a delimiter) still defeats it.
 //   - A secret straddling two writes is masked only if both halves land in one call.
 //     This applies to the live stream, the raw log, AND the output store: the capture tap
 //     redacts per Write, and all three read those same chunks. Only run.Exec's buffered
@@ -595,8 +595,8 @@ func (r *Resolver) RedactString(s string) string {
 	return s
 }
 
-// Redact redacts p using the run's resolver, returning p unchanged - and UNCOPIED, still
-// the caller's own buffer - when there is no resolver or nothing matched.
+// Redact redacts p using the run's resolver, returning p unchanged (and UNCOPIED, still
+// the caller's own buffer) when there is no resolver or nothing matched.
 func Redact(ctx context.Context, p []byte) []byte { return ResolverFromContext(ctx).Redact(p) }
 
 // RedactString redacts s using the run's resolver.
@@ -610,19 +610,19 @@ func RedactString(ctx context.Context, s string) string {
 //
 // This exists because redaction that lives in ONE handler's print path is the same
 // per-call-site mistake it was meant to end: magus picks a handler by `log.format`, and
-// `--log-format=json` sent `run.exec`'s argv - documented as able to carry a credential
-// when a magusfile passes one as an argument - straight to stderr unredacted. Wrapping the
+// `--log-format=json` sent `run.exec`'s argv (documented as able to carry a credential
+// when a magusfile passes one as an argument) straight to stderr unredacted. Wrapping the
 // chosen handler covers every format by construction, including one added later.
 type redactingHandler struct {
 	inner slog.Handler
 	// plain is inner with every pre op ALREADY applied, unredacted. It is the handler used
 	// when the resolver holds nothing to redact, which is the overwhelmingly common case;
 	// building it as the ops arrive keeps the no-secret log path free of a per-record
-	// rebuild. It is never used once a secret exists - then pre is replayed instead.
+	// rebuild. It is never used once a secret exists; then pre is replayed instead.
 	plain slog.Handler
 	// pre records WithAttrs/WithGroup calls in order instead of forwarding them to inner
 	// immediately. Those calls carry no context, so there is no resolver to redact
-	// against at the time they are made - forwarding them meant a logger built with
+	// against at the time they are made; forwarding them meant a logger built with
 	// `slog.With("token", value)` bound the credential into the handler and printed it on
 	// every later record, untouched. Replaying them in Handle, where a context exists, is
 	// what closes that. Order is preserved because a group changes the nesting of the
@@ -637,7 +637,7 @@ type handlerOp struct {
 }
 
 // NewRedactingHandler wraps inner. Wrapping is unconditional and cheap: a run that read no
-// secret - which is nearly all of them, and every run before the first read - hands the
+// secret (which is nearly all of them, and every run before the first read) hands the
 // record to a handler chain built ONCE at WithAttrs/WithGroup time, so it costs one length
 // check and nothing else.
 func NewRedactingHandler(inner slog.Handler) slog.Handler {
@@ -712,7 +712,7 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 		}
 		// Two renderings, because a handler does not necessarily print the one fmt
 		// produces. A type whose String() conceals a credential while its exported fields
-		// still marshal - `func (c creds) String() string { return "creds{redacted}" }` -
+		// still marshal (`func (c creds) String() string { return "creds{redacted}" }`)
 		// passes an fmt comparison and then encoding/json emits {"Token":"ghp_..."}.
 		// Checking the JSON form as well closes that without asking every value to
 		// cooperate. Reached only when the resolver holds something, so the marshal is off
@@ -738,7 +738,7 @@ func redactValue(r *Resolver, v slog.Value) slog.Value {
 //
 // An attr key in this codebase is a compile-time constant naming a field, and the default
 // renderer reads several of them back by exact name (internal/cache/log.go pulls
-// "project", "label", "ref", "holder_pid"). Masking a key cannot fail loudly - it silently
+// "project", "label", "ref", "holder_pid"). Masking a key cannot fail loudly; it silently
 // renders a run with no repro command and no output ref. Since no call site builds a key
 // from a resolved secret, redacting keys would trade a real contract for a hypothetical.
 // If one ever does, the fix is that call site, not this function.

@@ -28,8 +28,8 @@ import (
 )
 
 // RefPrefix begins every target-output reference id ("out1a2b3c"). It is the provenance tag in
-// the shared ref namespace - "out" for a target OUTPUT, alongside "mcp" for an MCP call payload
-// (internal/trail) - so a ref names where it came from at a glance. No delimiter, matching the
+// the shared ref namespace: "out" for a target OUTPUT, alongside "mcp" for an MCP call payload
+// (internal/trail). So a ref names where it came from at a glance. No delimiter, matching the
 // other prefixes. LooksLikeRef validates the shape of the argument to `magus query output <ref>`;
 // it is not a router (retrieval is an explicit subcommand), so a shape-collision with a search
 // term is impossible.
@@ -96,12 +96,12 @@ type OutputDescriptor struct {
 	MagusVersion string `json:"magus_version,omitempty"`
 
 	// The cache key pins a TREE STATE (via its source content hashes)
-	// without naming it - it deliberately contains no commit, branch, or base. Revision
+	// without naming it: it deliberately contains no commit, branch, or base. Revision
 	// and Dirty close that gap: they record the VCS state the run's inputs were read
 	// at, so a ref fetched from a foreign machine (CI, a teammate) can say not just
 	// WHICH target produced it but which commit reproduces it. A v2 descriptor (or
 	// earlier) carries neither field, which reads as "unknown, no VCS, or predates
-	// this field" - never an error, since resolving it is best-effort by construction
+	// this field", never an error, since resolving it is best-effort by construction
 	// (a workspace with no VCS is a supported, silent no-op).
 	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
 	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes; Revision alone then is necessary but not sufficient to reproduce
@@ -124,7 +124,7 @@ type OutputDescriptor struct {
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more
 // than one stored identity. Candidates are pasteable-back refs, sorted: a step
 // candidate renders as its portable ref (lengthened past refHexLen if two keys
-// collide), an attempt candidate as its full file stem - so the CLI can list them for
+// collide), an attempt candidate as its full file stem, so the CLI can list them for
 // the user to disambiguate (git-style).
 type AmbiguousRefError struct {
 	Prefix     string
@@ -183,7 +183,7 @@ func PortableRef(cacheKey string) string {
 // keep-last-K executions of ONE cache key each stay independently addressable (K
 // failing attempts of a volatile target must not collapse to one record). The id
 // keeps the ref prefix and hex shape so a full attempt id from `--attempts` routes
-// and resolves exactly like a ref - and so pre-portable stores, whose file stems
+// and resolves exactly like a ref, and so pre-portable stores, whose file stems
 // were minted the same way, resolve unchanged.
 func (s *OutputStore) mintAttempt(cacheKey string) string {
 	nonce := strconv.FormatInt(time.Now().UnixNano(), 10) + "-" + strconv.FormatUint(s.seq.Add(1), 10)
@@ -198,9 +198,9 @@ const (
 )
 
 // Persist writes the execution's captured output VERBATIM as outputs/<cacheKey>/<attempt>.out
-// (byte-for-byte what the process wrote, so `magus query output <ref>` is a straight read - never
+// (byte-for-byte what the process wrote, so `magus query output <ref>` is a straight read, never
 // a reconstruction) plus an <attempt>.json descriptor, then prunes the cache key's directory to
-// keep-last-K. Per-line structured events are NOT stored here - they live in the invocation
+// keep-last-K. Per-line structured events are NOT stored here: they live in the invocation
 // journal, so no output is stored twice. Returns the descriptor as stamped and stored: Ref is
 // the step's portable ref (shared by every attempt of this key), Attempt the execution-unique
 // id that names the files just written. Best-effort at the call site: on error the caller keeps
@@ -216,7 +216,7 @@ func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byt
 		return OutputDescriptor{}, err
 	}
 	// Temp + rename, matching AdoptImported: newestAttemptBlob picks the freshest
-	// blob by modtime, which - written in place with plain os.WriteFile - is
+	// blob by modtime, which (written in place with plain os.WriteFile) is
 	// exactly the file a concurrent reader could catch mid-write.
 	if err := writeAtomic(filepath.Join(dir, d.Attempt+outExt), output); err != nil {
 		return OutputDescriptor{}, err
@@ -256,7 +256,7 @@ func readDescriptor(path string) (OutputDescriptor, error) {
 
 // StepRef returns the step's portable ref when at least one execution is stored for
 // cacheKey, or "" if none. A cache HIT reuses it instead of re-persisting identical
-// output under a fresh attempt - so hits point at the existing events, not bloat the
+// output under a fresh attempt, so hits point at the existing events, not bloat the
 // store. Pre-portable directories qualify too: the ref derives from the key, not from
 // what any stored descriptor says.
 func (s *OutputStore) StepRef(cacheKey string) string {
@@ -275,7 +275,7 @@ func (s *OutputStore) StepRef(cacheKey string) string {
 // newestAttemptBlob returns the path of the newest attempt's .out blob in a cache-key
 // directory, or "" when the directory holds none. It is how a step-level ref resolves
 // to bytes: the ref names the directory, the newest attempt answers for it. "Newest"
-// is the descriptor comparator (newerDescriptor) - the SAME ordering `--attempts`
+// is the descriptor comparator (newerDescriptor): the SAME ordering `--attempts`
 // lists by, so the bare ref and the top row never disagree; a blob whose descriptor is
 // missing or unreadable (a Persist that died between its two writes) falls back to
 // file modtime, ranked beneath every descriptor-backed attempt.
@@ -332,7 +332,7 @@ func newestAttemptBlob(dir string) string {
 // Descriptors store the REPRO target (bare name plus charm suffix, see reproTarget); this
 // collapses that back to the bare declared target so the newest run is picked across charm
 // variants and Target matches a knowledge-graph node. Descriptors without a target are
-// skipped, as is anything unreadable - fewer entries, never an error. Sorted by project
+// skipped, as is anything unreadable: fewer entries, never an error. Sorted by project
 // then bare target for deterministic assembly.
 func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 	keys, err := os.ReadDir(s.outputsDir())
@@ -379,7 +379,7 @@ func (s *OutputStore) LatestRefsByTarget() []OutputDescriptor {
 }
 
 // ListDescriptors returns every stored execution's descriptor, newest run first, across all cache
-// keys - the feed for the console's run browser (the log-viewer tree groups them project -> target ->
+// keys: the feed for the console's run browser (the log-viewer tree groups them project -> target ->
 // run so a reader can browse recent runs and open any one's captured output). Unlike
 // LatestRefsByTarget, which collapses to the single newest run per target, this keeps every retained
 // execution (the store holds keep-last-K per cache key), so a target's recent history is browsable.
@@ -431,7 +431,7 @@ func bareTarget(reproTarget string) string {
 // newerDescriptor reports whether a is the more recent execution than b: a later
 // timestamp wins, and an equal timestamp is broken by the higher attempt id, then the
 // higher ref, so the pick is deterministic (two runs minted in the same millisecond
-// still resolve the same way - the ref alone no longer discriminates attempts of one
+// still resolve the same way; the ref alone no longer discriminates attempts of one
 // step, which share it).
 func newerDescriptor(a, b OutputDescriptor) bool {
 	if a.TimestampMs != b.TimestampMs {
@@ -443,7 +443,7 @@ func newerDescriptor(a, b OutputDescriptor) bool {
 	return a.Ref > b.Ref
 }
 
-// resolveRef resolves a ref - or a unique ref prefix, git-style - to the path of its .out
+// resolveRef resolves a ref (or a unique ref prefix, git-style) to the path of its .out
 // blob. Two namespaces answer, reflecting the two identity levels:
 //
 //   - STEP refs (portable, key-derived): the hex tail prefix-matches a cache-key
@@ -533,7 +533,7 @@ func (s *OutputStore) resolveRef(ref string) (string, error) {
 // uniqueDirRefs renders cache-key dir names as refs a user can paste back
 // unambiguously: the standard truncation, lengthened (git-style) until the listed
 // candidates are mutually distinct. Without this, two keys colliding in their first
-// refHexLen digits - the one case that MAKES a step ref ambiguous - would list as
+// refHexLen digits (the one case that MAKES a step ref ambiguous) would list as
 // identical strings, a dead end at exactly the moment disambiguation is needed.
 func uniqueDirRefs(dirs []string) []string {
 	n := refHexLen
@@ -565,13 +565,13 @@ func uniqueDirRefs(dirs []string) []string {
 	return out
 }
 
-// Attempts lists every stored execution of the step ref names, newest first - the
+// Attempts lists every stored execution of the step ref names, newest first: the
 // keep-last-K history behind one portable ref (`magus query output <ref> --attempts`).
 // ref may be the step ref, a unique prefix, or any attempt id within the step; the
 // whole directory answers either way. Pre-portable descriptors carry no Attempt field;
 // their file stem (which was the v1 ref) fills it so every row is addressable. A blob
 // whose descriptor is missing or unreadable (a Persist that died between its two
-// writes) still rows up - minimally, from the blob itself - because a listing that
+// writes) still rows up (minimally, from the blob itself) because a listing that
 // silently omits a retrievable execution reads as "it does not exist".
 func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 	path, err := s.resolveRef(ref)
@@ -597,7 +597,7 @@ func (s *OutputStore) Attempts(ref string) ([]OutputDescriptor, error) {
 			}
 		}
 		// compat(until: no store holds schema-1 descriptors): a v1 descriptor predates
-		// the Attempt field, so its file stem - which WAS its ref - fills in, keeping
+		// the Attempt field, so its file stem (which WAS its ref) fills in, keeping
 		// every row addressable. Delete when the oldest reachable store has been
 		// written by a schema-2 magus for longer than the retention window; the
 		// descriptors age out on their own, so this needs no migration. Observable:
@@ -631,7 +631,7 @@ func readEvents(path string) ([]journal.Event, error) {
 }
 
 // pruneKey keeps the keepLast newest executions in a cache-key directory (by the .out blob's
-// modtime, newest first) and removes the rest - each blob together with its .json descriptor.
+// modtime, newest first) and removes the rest: each blob together with its .json descriptor.
 // Best-effort.
 func (s *OutputStore) pruneKey(dir string, keepLast int) {
 	if keepLast <= 0 {
@@ -671,7 +671,7 @@ func (s *OutputStore) runsDir() string { return filepath.Join(s.cacheDir, RunsDi
 
 // RotateRuns keeps the newest invocation journals (runs/<inv>.jsonl, by modtime) and removes the
 // rest, returning how many it deleted and the bytes that freed. The runs dir is flat (one file per
-// invocation, not keyed like outputs/), so this is a single keep-last over the whole directory -
+// invocation, not keyed like outputs/), so this is a single keep-last over the whole directory:
 // the run-log analogue of pruneKey, and the worker behind the rotate-logs job.
 //
 // TWO caps, and the tighter one wins. keepLast bounds the COUNT; keepBytes bounds the total on
@@ -714,7 +714,7 @@ func (s *OutputStore) RotateRuns(keepLast int, keepBytes int64) (removed int, by
 			running += e.size
 			if running > keepBytes {
 				// This journal is the one that busts the budget, so the keep set ends before
-				// it - unless it is the newest, which is always kept. A single run bigger than
+				// it, unless it is the newest, which is always kept. A single run bigger than
 				// the whole budget is a reason to raise the budget, never a reason to delete
 				// the run somebody just did and is most likely about to read.
 				keep = max(i, 1)
@@ -795,7 +795,7 @@ func (s *OutputStore) removeForProject(project string) {
 // An import ships the producer's DESCRIPTOR but not its output blob (the bytes travel
 // once, as the build log), so the attempt is a descriptor with no sibling .out and
 // stays unresolvable. Given the log bytes a cache hit just replayed, this writes that
-// missing blob and returns the step's portable ref - so a fresh machine answers under
+// missing blob and returns the step's portable ref, so a fresh machine answers under
 // the SAME ref the producer printed instead of minting a local one. Reports false
 // when the key has no orphan descriptor to complete (nothing imported, or already
 // completed), leaving the caller to persist its own attempt.
@@ -851,7 +851,7 @@ func (s *OutputStore) AdoptImported(cacheKey string, output []byte) (string, boo
 	return ref, true
 }
 
-// newestDescriptor returns the newest stored execution's descriptor for cacheKey -
+// newestDescriptor returns the newest stored execution's descriptor for cacheKey:
 // the one a bare step ref answers with. It is what the remote export ships so an
 // importing machine resolves the producer's exact ref. fs.ErrNotExist when the key
 // has no stored execution.
@@ -865,7 +865,7 @@ func (s *OutputStore) newestDescriptor(cacheKey string) (OutputDescriptor, error
 }
 
 // DescriptorByRef resolves a ref (or unique prefix) to its stored descriptor alone,
-// without reading the output blob - the identity views (`--identity`, `--against`) want
+// without reading the output blob: the identity views (`--identity`, `--against`) want
 // the metadata, and a captured log can be large. A resolvable ref whose descriptor is
 // missing or unreadable yields the error, unlike ByRef, which still has bytes to
 // return and so degrades to a zero descriptor.
@@ -878,7 +878,7 @@ func (s *OutputStore) DescriptorByRef(ref string) (OutputDescriptor, error) {
 }
 
 // ByRef resolves a ref (or unique prefix) to the target's VERBATIM captured output bytes plus
-// its metadata. The bytes are read straight from the <ref>.out blob - exactly what the process
+// its metadata. The bytes are read straight from the <ref>.out blob: exactly what the process
 // wrote, no reconstruction. This is the retrieval entry point for `magus query output <ref>`
 // (print path).
 func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
@@ -896,7 +896,7 @@ func (s *OutputStore) ByRef(ref string) ([]byte, OutputDescriptor, error) {
 
 // InvocationByID reads the union run log (<cacheDir>/runs/<inv>.jsonl) for one invocation
 // id and rebuilds its header: the command lineage (subcommand/args/trigger), timing, and outcome.
-// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it -
+// It is how a stored output (OutputDescriptor.Inv) is traced back to the run that produced it;
 // `magus query output <ref> --identity` and the viewer surface this lineage. Reads off the cache
 // ROOT (RunsDir), not outputsDir. Returns fs.ErrNotExist when the run log has aged out.
 func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
@@ -916,7 +916,7 @@ func (s *OutputStore) InvocationByID(inv string) (journal.Invocation, error) {
 // run touch", but nothing could read it back. Anything answering a question FROM the journal
 // starts here.
 //
-// inv must be a FULL invocation id - unlike an output ref there is no prefix resolution,
+// inv must be a FULL invocation id: unlike an output ref there is no prefix resolution,
 // because a run log is addressed by exact filename. An id failing [LooksLikeInvocationID] is
 // refused before it is joined onto the runs dir: this is reachable from the daemon's Connect
 // API, where an unvalidated id reads any .jsonl on the machine. Returns fs.ErrNotExist when
@@ -939,7 +939,7 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 //
 // A journal is appended while its run is still going (journal.FileHandler flushes every kind but
 // output), so a follower resumes from where it stopped instead of re-reading megabytes it has
-// already delivered - which is what keeps watching a long build proportional to what arrived.
+// already delivered, which is what keeps watching a long build proportional to what arrived.
 // Stopping at the last newline is what makes a concurrent writer safe to read: a half-written line
 // is left for the next call rather than parsed as corruption.
 //
@@ -988,14 +988,14 @@ func (s *OutputStore) InvocationEventsFrom(inv string, from int64) ([]journal.Ev
 	return events, from + int64(end) + 1, nil
 }
 
-// RunLog summarizes one retained invocation journal - the row the console's run browser lists
+// RunLog summarizes one retained invocation journal: the row the console's run browser lists
 // so a reader can find a past run by the COMMAND that produced it rather than by a ref id
 // somebody printed on a terminal.
 //
 // It is deliberately not [journal.Invocation]: rebuilding one of those means reading a whole
 // stream, and a journal holds every output line the run captured, so listing 500 of them would
 // read hundreds of megabytes to show a list. Every field here comes off the two lifecycle
-// events that bracket the file - the first line and the last - which [OutputStore.ListRunLogs]
+// events that bracket the file (the first line and the last), which [OutputStore.ListRunLogs]
 // reads with bounded seeks.
 type RunLog struct {
 	Inv          string   `json:"inv"`
@@ -1019,7 +1019,7 @@ const runTailWindow = 64 << 10
 //
 // Cost is bounded per journal, not per event: a head read for the started event and a tail read
 // for the finished one. A run killed before it finished has no finished event, so its Status is
-// empty and FinishedMs falls back to the last event the tail window holds - the same honest
+// empty and FinishedMs falls back to the last event the tail window holds: the same honest
 // degradation [journal.InvocationFromEvents] makes.
 //
 // Best-effort throughout: an unreadable dir, an unparsable line, or a journal whose head is not
@@ -1072,7 +1072,7 @@ func (s *OutputStore) ListRunLogs(limit int) []RunLog {
 	return out
 }
 
-// readRunHead reads a journal's first line and returns it when it is the started event - the
+// readRunHead reads a journal's first line and returns it when it is the started event: the
 // only event carrying the run's command lineage and magus version.
 func readRunHead(path string) (journal.Event, bool) {
 	f, err := os.Open(path)

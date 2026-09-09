@@ -51,7 +51,7 @@ func TestDecorateResultErrorHint(t *testing.T) {
 func TestDecorateResultNoBlanketFooterOnSuccess(t *testing.T) {
 	t.Parallel()
 
-	// A plain success from a read tool must NOT gain a footer - output bytes are
+	// A plain success from a read tool must NOT gain a footer: output bytes are
 	// the agent's context cost, so silent successes stay lean.
 	for _, tool := range []string{"magus_query", "magus_explain", "magus_stats", "magus_describe", "magus_where"} {
 		r := mcplib.NewToolResultText(`{"ok":true}`)
@@ -80,7 +80,7 @@ func TestDecorateResultEmptyQueryHint(t *testing.T) {
 
 	t.Run("another tool's empty payload is not decorated", func(t *testing.T) {
 		// Only magus_query declares an empty-result line, and the emptiness read is
-		// gated on that - so a match_count in someone else's payload changes nothing.
+		// gated on that, so a match_count in someone else's payload changes nothing.
 		r := mcplib.NewToolResultText(`{"match_count":0}`)
 		decorateResult(r, "magus_stats")
 		assert.Len(t, r.Content, 1)

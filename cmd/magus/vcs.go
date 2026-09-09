@@ -189,7 +189,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that
-// backs it out again - a no-op unless this is a dry run, since otherwise the merge is the
+// backs it out again: a no-op unless this is a dry run, since otherwise the merge is the
 // whole point and stays in progress for the caller to commit.
 //
 // A real merge rather than `git merge-tree`: merge-tree reports conflicted PATHS only,
@@ -198,7 +198,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 // needs only the names.)
 //
 // So a dry run merges for real and aborts, which is why a clean tree is required up
-// front - `git merge --abort` does not guarantee uncommitted work survives.
+// front: `git merge --abort` does not guarantee uncommitted work survives.
 func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution, ref string) (undo func(), err error) {
 	starter, ok := res.VCS.(types.MergeStarter)
 	if !ok {
@@ -236,7 +236,7 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 // staleDecls says the declarations came from the committed magusfile because the working
 // copy's is mid-merge. It suppresses the regeneration step and nothing else: clearing
 // markers and recording paths are decisions ABOUT the conflicts, which either side's
-// declarations answer the same way, while regenerating PRODUCES bytes - and a merge that
+// declarations answer the same way, while regenerating PRODUCES bytes, and a merge that
 // touched a generator would have this produce output matching neither side.
 func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, resolver types.ConflictResolver, plan resolutionPlan, staleDecls bool) error {
 	if err := resolver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.keep, plan.rederive)); err != nil {
@@ -263,7 +263,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	}
 	// stagePaths, not MarkResolved directly: one pathspec matching nothing aborts the whole
 	// call before staging anything, so a single conflict involving a RENAME took the other
-	// forty paths down with it - regeneration complete, index untouched, and an error naming
+	// forty paths down with it: regeneration complete, index untouched, and an error naming
 	// a file the rename had legitimately removed. filterStageable splits those out first.
 	staged, dropped, err := stagePaths(ctx, m.Root(), driver.Name(), resolver, settled)
 	if err != nil {
@@ -285,8 +285,8 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 // The committed side, not either merge stage: it is the one version guaranteed to parse,
 // and the declarations it carries are the ones the tree had before this merge started.
 //
-// No error return, deliberately: every way this can fail - no VCS, a backend that cannot
-// report conflicts or read a revision, a file the VCS will not hand back - means the same
+// No error return, deliberately: every way this can fail (no VCS, a backend that cannot
+// report conflicts or read a revision, a file the VCS will not hand back) means the same
 // thing to the only caller, which is "carry on with the load failure you already have". An
 // error here could only be discarded, and returning one alongside a nil map is the
 // ambiguity `nilnil` exists to catch. Nothing to overlay is an empty map.
@@ -365,7 +365,7 @@ func (p resolutionPlan) rebuiltProjects() map[string]bool {
 // filling and the reading side.
 //
 // The PATH, never the label. Every nested project agrees on both spellings, so filling
-// with paths and reading back with types.ProjectLabel looked correct - but the ROOT can
+// with paths and reading back with types.ProjectLabel looked correct, but the ROOT can
 // never agree: ProjectLabel rejects "" and ".", resolving the root to its directory
 // basename while the set holds ".". The lookup missed every time, leaving every
 // root-owned regenerated output unstaged, which is the dirty tree settledPaths exists to
@@ -435,7 +435,7 @@ func planResolution(ctx context.Context, m *magus.Magus, resolver types.Conflict
 		// `magus run <target> <project>`, and ProjectRef.Display renders the root as its
 		// directory BASENAME so a bare "." never reaches a human-facing log. In a git
 		// worktree that basename is the worktree's own directory name, which is not a
-		// project any workspace knows - so resolve regenerated nothing and died with
+		// project any workspace knows, so resolve regenerated nothing and died with
 		// `unknown project: "<worktree-dir>"`. Display's own doc draws this line: labels
 		// for reading, the path for anything the user (or this code) feeds back to magus.
 		proj := projectKey(p)
@@ -470,7 +470,7 @@ func runRebuildTargets(ctx context.Context, root string, rc runConfig, rebuild m
 //
 // The second half is the normal case. A generate target writes every output its project
 // declares, so recording only the conflicted paths leaves the rest modified and
-// unrecorded - the dirty tree that makes `git rebase --continue` refuse.
+// unrecorded: the dirty tree that makes `git rebase --continue` refuse.
 //
 // Limited to outputs of the projects that were rebuilt, so a file you had already
 // modified elsewhere is not swept in.
@@ -595,7 +595,7 @@ func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
 	}
 	// The RESOLVED workspace root, not the --root override, for the reason vcsAddCmd
 	// spells out: the override is empty unless you passed --root, and an empty dir sends
-	// every VCS call to the process cwd - which is a different repository the moment you
+	// every VCS call to the process cwd, which is a different repository the moment you
 	// run this from anywhere but the root.
 	wsRoot := ws.Root()
 	res, err := vcs.Resolve(ctx, wsRoot, "", ws.VCSOptions())
@@ -640,8 +640,8 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 }
 
 // checkpointToken is the single most citable thing about a checkpoint, for the one cell a
-// ledger gives it. A clean tree IS its revision. A dirty one is not - every worker on this
-// branch shares that revision - so the digest joins it, and the "+" marks the identity as
+// ledger gives it. A clean tree IS its revision. A dirty one is not (every worker on this
+// branch shares that revision), so the digest joins it, and the "+" marks the identity as
 // a revision PLUS uncommitted work rather than a revision anyone can check out.
 func checkpointToken(cp types.VCSCheckpoint) string {
 	if !cp.Dirty {
@@ -730,8 +730,8 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 	// The resolved workspace root, not the --root OVERRIDE this was handed. The override
 	// is empty unless the user passed --root, and everything below is workspace-relative:
-	// with "" the path math produced `vcs add: "x" is outside the workspace at ` - naming
-	// no workspace at all - so naming a path explicitly, which this command's own
+	// with "" the path math produced `vcs add: "x" is outside the workspace at ` (naming
+	// no workspace at all), so naming a path explicitly, which this command's own
 	// undeclared-file message tells you to do, could never work. The whole-tree form only
 	// appeared to work because an empty dir sends every VCS call to the process cwd.
 	// vcsResolveCmd already goes through m.Root() for the same reason.
@@ -780,7 +780,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// one the caller ASKED for is staged rather than reported as skipped. Without this,
 	// `magus vcs add .gitattributes` refused the very file its own message had just told
 	// you to name ("name them explicitly or pass --untracked"), and the only way to stage
-	// it was the flag - or plain git, which is what the command exists to replace.
+	// it was the flag, or plain git, which is what the command exists to replace.
 	//
 	// --untracked stays the whole-tree form of the same permission: it says yes to every
 	// undeclared path at once, which is the one that needs a flag because nobody named
@@ -804,7 +804,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(unexplained) > 0 {
 		// inputDirty is false by construction: an output is only unexplained BECAUSE no
-		// declared input of its project moved. So this is ClassifyDrift's second fork -
+		// declared input of its project moved. So this is ClassifyDrift's second fork:
 		// skew against a differently-versioned magus, or a non-deterministic generator.
 		code, msg := types.ClassifyDrift(false, version)
 		verdict.Code, verdict.Message, verdict.URL = string(code), msg, types.CodeURL(code)
@@ -871,7 +871,7 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 //
 // Undeclared paths are the hazard `git add -A` poses. Usually build residue, but also
 // where a genuinely new source file and anything magus's core writes directly (see
-// types.IsMagusMaintained) show up - so they are reported rather than dropped.
+// types.IsMagusMaintained) show up, so they are reported rather than dropped.
 func classifyForStaging(out []types.FileEntry) (sources, outputs, undeclared []string) {
 	for _, f := range out {
 		switch f.Role {
@@ -948,7 +948,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 // of asserting every undeclared path "affects nothing".
 //
 // A maintained path is one magus writes directly, rather than a target through a
-// declared output glob - so ClassifyFiles has nothing to match it against and it
+// declared output glob, so ClassifyFiles has nothing to match it against and it
 // lands in "undeclared" alongside genuine residue. Calling it undeclared is
 // accurate; claiming it "affects nothing" is not, so it gets its own report line
 // instead of being folded into the blanket message.
@@ -959,7 +959,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 // declared outputs, so it is re-deriveable rather than mergeable.
 //
 // The set itself is types.IsMagusMaintained rather than a local one, because
-// `describe file` classifies the same paths and the two answers must not diverge -
+// `describe file` classifies the same paths and the two answers must not diverge,
 // which they did, describe calling .gitattributes unclaimed and suggesting the
 // ignore rules while staging reported it as maintained.
 func splitMaintained(undeclared []string) (maintained, unclaimed []string) {
@@ -1002,7 +1002,7 @@ func stagePaths(ctx context.Context, root, vcsName string, recorder types.Confli
 }
 
 // emitStaging renders the verdict: the structured formats get the value itself, and the
-// terminal gets the prose. One decision, several audiences - which is the whole reason
+// terminal gets the prose. One decision, several audiences, which is the whole reason
 // the verdict is a value. `-o json` used to be accepted here and answer in text.
 func emitStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool, review string) error {
 	opts, err := outputOptionsOrDefault()

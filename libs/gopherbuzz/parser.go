@@ -89,7 +89,7 @@ func (p *parser) registerImportBinding(stmt *ast.ImportStmt) {
 
 // markImportUsed records that name was referenced as an identifier: a value, the base
 // of a `.`/`\` chain (parsePrimary), or the base of a type annotation (skipType). A
-// miss - name is not a tracked import binding, or none are tracked at all - is a
+// miss (name is not a tracked import binding, or none are tracked at all) is a
 // harmless no-op on a nil/empty map, so every identifier reference can call this
 // unconditionally without a guard.
 func (p *parser) markImportUsed(name string) {
@@ -136,7 +136,7 @@ func parseModed(src string, strict bool) (*ast.Program, error) {
 // unusedImportDiag is one unreferenced top-level import found while parsing (see
 // parser.importUsage); parseModedTracked's second return value. Path/Alias are the
 // import statement's own literal path and (if present) alias, for a message that
-// names exactly what the source says - not just the derived binding name.
+// names exactly what the source says, not just the derived binding name.
 type unusedImportDiag struct {
 	Line, Col   int
 	Path, Alias string
@@ -419,7 +419,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		return &ast.ExprStmt{Pos: ast.NodePos(m), Expr: m}, nil
 	}
 	// `extern fun name(...) > T;` declares a native function's SIGNATURE with no
-	// body - how upstream types its stdlib (src/lib/*.buzz). Contextual like
+	// body: how upstream types its stdlib (src/lib/*.buzz). Contextual like
 	// `test`: `extern` is a reserved word, so it can never be a binding name, but
 	// it stays an ordinary identifier in every position other than this one.
 	if t.Kind == token.Ident && t.Val == "extern" && p.peekAt(1).Kind == token.Fun {
@@ -464,7 +464,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 		case *ast.EnumDecl:
 			n.IsExported = true
 		default:
-			// `export name;` - upstream's standalone form, where the declaration is
+			// `export name;`, upstream's standalone form, where the declaration is
 			// written plainly and exported by a later statement (see its
 			// tests/utils/testing.buzz). It parses as an expression statement, so the
 			// cases above do not match it, and it used to fall through here and be
@@ -478,7 +478,7 @@ func (p *parser) parseStmt() (ast.Node, error) {
 				return nil, fmt.Errorf("buzz: line %d:%d: export must name a declaration", t.Line, t.Col)
 			}
 			// `export X as Y;` re-exports a value under a new name. `as` is Buzz's cast
-			// operator, so it parses as an AsExpr whose "type" is really the alias -
+			// operator, so it parses as an AsExpr whose "type" is really the alias,
 			// and the meaning is exactly `export final Y = X`, so it DESUGARS into
 			// one. That reuses the declaration export path whole; a re-export needs no
 			// runtime machinery of its own.
@@ -634,7 +634,7 @@ func (p *parser) parseDecl() (*ast.DeclStmt, error) {
 	}
 	pos := ast.Pos{Line: t.Line, Col: t.Col}
 	// A nullable declaration may omit its initializer: `final hello: int?;` binds
-	// null. Only nullable types get this - anything else still has to be assigned.
+	// null. Only nullable types get this; anything else still has to be assigned.
 	if strings.HasSuffix(typeAnnot, "?") && !p.check(token.Assign) {
 		p.optSemicolon()
 		return &ast.DeclStmt{Pos: pos, IsConst: isConst, Name: nameTok.Val, TypeAnnot: typeAnnot, Value: &ast.NullLit{Pos: pos}}, nil
@@ -680,7 +680,7 @@ func (p *parser) skipType() error {
 			}
 		}
 		// A generic instantiation: `Payload::<str, int>` (or the bare `Foo<T>`
-		// spelling). Type arguments are erased, so the identity is the bare name -
+		// spelling). Type arguments are erased, so the identity is the bare name;
 		// the span is recorded for readType to drop, keeping `x is Payload::<str,
 		// int>` a test against `Payload`.
 		if p.check(token.Colon) && p.peekAt(1).Kind == token.Colon && p.peekAt(2).Kind == token.Lt {
@@ -772,8 +772,8 @@ func (p *parser) skipType() error {
 		// A function TYPE carries the same error-set and yield-type suffixes a
 		// declaration does: `fn: fun (v: int) > int !> str` and
 		// `fn: fun () > int *> int?` both appear in parameter position upstream.
-		// Neither is part of the type's identity - a thrown error set and a yield
-		// type never affect assignability - so the span is recorded for readType
+		// Neither is part of the type's identity (a thrown error set and a yield
+		// type never affect assignability), so the span is recorded for readType
 		// to drop rather than folded into the annotation text.
 		for p.check(token.ErrArrow) || p.check(token.YieldArrow) {
 			from := p.pos
@@ -876,7 +876,7 @@ func tokenText(t token.Token) string {
 // runtime, so a generic function compiles to exactly the code its non-generic twin
 // would, and a call site's type arguments only have to parse.
 //
-// `::` is two Colon tokens - there is no distinct token for it - and the argument
+// `::` is two Colon tokens (there is no distinct token for it) and the argument
 // list reuses skipGenericArgs, so nested `::<A::<B>>` fails for the same reason it
 // does upstream: the trailing `>>` lexes as a shift.
 func (p *parser) skipTypeParams() (bool, error) {
@@ -1216,7 +1216,7 @@ func (p *parser) parseForInit() (ast.Node, error) {
 	if p.check(token.Final) || p.check(token.Var) {
 		return p.parseDeclNoSemi()
 	}
-	// `for (i: int = 0; ...)` - upstream declares the loop variable with a type and
+	// `for (i: int = 0; ...)`: upstream declares the loop variable with a type and
 	// no final/var keyword. The `ident :` shape is unambiguous here: an assignment
 	// tail can never carry a type annotation, so nothing else in for-init position
 	// starts this way. It binds mutable, since a for-loop's own post clause assigns
@@ -1500,7 +1500,7 @@ func (p *parser) parseFunDecl() (*ast.FunDecl, error) {
 	return &ast.FunDecl{Pos: ast.Pos{Line: t.Line, Col: t.Col}, Name: nameTok.Val, Params: fr.params, ParamAnnots: fr.paramAnnots, ParamDefaults: fr.paramDefaults, RetAnnot: fr.retAnnot, ErrAnnot: fr.errAnnot, YieldAnnot: fr.yieldAnnot, Body: fr.body, Doc: t.Doc}, nil
 }
 
-// parseExternFunDecl parses `extern fun name(params) > T;` - the signature of a
+// parseExternFunDecl parses `extern fun name(params) > T;`, the signature of a
 // function the HOST implements, with a semicolon where a body would be. It is
 // how upstream Buzz gives its native stdlib types (`export extern fun
 // dump(value: any) > void;`), and the same declaration types magus's host
@@ -1691,7 +1691,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 	}
 	// `object Payload::<K, V>` declares type parameters. They are erased like a
 	// generic function's, so the object's identity stays its bare name and the
-	// parameters only have to parse - a field typed `K` resolves to Unknown,
+	// parameters only have to parse: a field typed `K` resolves to Unknown,
 	// which is compatible with whatever the instance actually holds.
 	if _, err := p.skipTypeParams(); err != nil {
 		return nil, err
@@ -1718,7 +1718,7 @@ func (p *parser) parseObjectDecl() (*ast.ObjectDecl, error) {
 			p.advance()
 		}
 		// `extern fun` inside an object declares a method the HOST binds, with a
-		// semicolon where a body would be - the same form and meaning top-level
+		// semicolon where a body would be: the same form and meaning top-level
 		// `extern fun` already has. It is what lets a namespace the runtime assembles
 		// (`magus\\cache.remote(...)`) be DECLARED: Buzz has no nested namespace, so
 		// such a group is an object reached through the module, and without this its
@@ -1890,7 +1890,7 @@ func (p *parser) parseRange() (ast.Node, error) {
 }
 
 // parseCoalesce parses `??` at upstream Buzz's Precedence.NullCoalescing, which
-// sits BETWEEN Term (`+`/`-`) and Bitwise - so `sum + resume f ?? 0` is
+// sits BETWEEN Term (`+`/`-`) and Bitwise, so `sum + resume f ?? 0` is
 // `sum + (resume f ?? 0)`, not `(sum + resume f) ?? 0`.
 //
 // It used to sit above `or`, looser than every binary operator, which made the
@@ -2283,7 +2283,7 @@ func (p *parser) parsePostfix() (ast.Node, error) {
 			t := p.advance()
 			// Tuple element access: `t.0`. A tuple is an anonymous object whose
 			// fields are named by their decimal index (see parseAnonObjectLit), so
-			// the numeric member IS the field name - `t.0` and `t.@"0"` are the same
+			// the numeric member IS the field name; `t.0` and `t.@"0"` are the same
 			// lookup. The lexer emits Dot then Int here rather than a leading-dot
 			// float, which is what makes the shape unambiguous.
 			nameTok, tupleIndex := p.peek(), false
@@ -2502,7 +2502,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		// fills that in from the expected type.
 		if p.peekAt(1).Kind == token.LBrace {
 			// Anonymous object literal `.{ name = expr }`. Its type is structural, and
-			// gopherbuzz has no structural object runtime - but a map already is one:
+			// gopherbuzz has no structural object runtime, but a map already is one:
 			// stored keys are reachable as members, so `.{ list = l }.list` works with
 			// no new value kind. Fields use `=`, unlike a map literal's `:`.
 			p.advance() // '.'
@@ -2562,7 +2562,7 @@ func (p *parser) parsePrimary() (ast.Node, error) {
 		// This is the single choke point where a bare identifier becomes a reference
 		// (as opposed to a binding name, which never routes through parsePrimary):
 		// the base of a `.`/`\` chain reaches here too, before the postfix loop
-		// decides what to build on top of it - which is what lets this also catch a
+		// decides what to build on top of it, which is what lets this also catch a
 		// module used only to construct a namespaced object literal (`ns\Type{...}`,
 		// see the LBrace case in parsePostfix), since the identifier is consumed
 		// here first and marked used before that later lowering discards it.
@@ -2697,7 +2697,7 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 				return funRest{}, err
 			}
 		} else if strings.HasSuffix(pa, "?") {
-			// A nullable parameter defaults to null, so a call may omit it - the
+			// A nullable parameter defaults to null, so a call may omit it: the
 			// same rule that lets `final hello: int?;` bind without an initializer.
 			def = &ast.NullLit{Pos: ast.Pos{Line: nameTok.Line, Col: nameTok.Col}}
 		}
@@ -2739,14 +2739,14 @@ func (p *parser) parseFunRest(extern bool) (funRest, error) {
 	// errAnnot has declared it may raise, and a call to a raising function is
 	// legal in its body without a surrounding try/catch. A bare `!>` with no
 	// following type (permitted by the grammar below) still counts as a
-	// declared raise, of an unnamed error set - recorded as "any" to match the
+	// declared raise, of an unnamed error set, recorded as "any" to match the
 	// checker's existing convention for an untyped catch clause.
 	// Consume optional *> yield-type annotation, BEFORE !>: upstream's order is
 	// `> Ret *> Yield !> Err` (its own src/lib/sqlite.buzz:193 writes it that way) and
 	// it rejects the reverse with "Expected `,` after error type", reading the `*>` as
 	// a continuation of the error LIST. gopherbuzz parsed !> first, so the one form
 	// upstream documents did not parse here at all and the only form that did was one
-	// upstream refuses - a divergence in both directions at once. Nothing in this
+	// upstream refuses: a divergence in both directions at once. Nothing in this
 	// workspace used the old order.
 	//
 	// A non-optional yield type is legal. Upstream required optional-or-void until

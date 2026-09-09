@@ -20,7 +20,7 @@ import "slices"
 // something they must read or something a target will rewrite.
 const (
 	// DiffRoleOutput is a declared target output. It is GENERATED, so reviewing its diff is
-	// reading a machine's opinion of a change made elsewhere - the source edit is the review.
+	// reading a machine's opinion of a change made elsewhere: the source edit is the review.
 	DiffRoleOutput = "output"
 	// DiffRoleSource is a declared source: it feeds cache keys and the affected set.
 	DiffRoleSource = "source"
@@ -52,7 +52,7 @@ const (
 	// DiffReadRead means a receipt covers this file at exactly its current content.
 	DiffReadRead = "read"
 	// DiffReadStale means a receipt exists for this file at DIFFERENT content: it was read,
-	// then edited. Distinct from unread because it is the more dangerous shape - somebody
+	// then edited. Distinct from unread because it is the more dangerous shape: somebody
 	// did look, which is exactly why nobody will look again.
 	DiffReadStale = "stale"
 )
@@ -64,8 +64,8 @@ const (
 // It deliberately stops short of claiming a break. Deciding that needs signature
 // compatibility, which needs a base-side index magus does not have (the symbol shards
 // describe the working tree, not history) and language semantics magus does not model. A
-// tool that guessed at it would be wrong in exactly the cases that matter most - an
-// unchanged signature with changed behavior, a widened parameter type - and a
+// tool that guessed at it would be wrong in exactly the cases that matter most (an
+// unchanged signature with changed behavior, a widened parameter type), and a
 // breaking-change warning nobody trusts is worse than none. The per-language answer belongs
 // in a spell op (an apidiff), whose output joins this same review.
 const (
@@ -76,7 +76,7 @@ const (
 	// API surface across a boundary the workspace itself draws.
 	DiffSurfacePublic = "public"
 	// DiffSurfaceUnknown means no symbol index covered the file, so the question was not
-	// answered. It must never render as "internal" - "we did not look" and "we looked and
+	// answered. It must never render as "internal": "we did not look" and "we looked and
 	// found nothing" are different facts, and collapsing them is how a signal earns the right
 	// to be ignored.
 	DiffSurfaceUnknown = "unknown"
@@ -91,11 +91,11 @@ type DiffSymbol struct {
 	FileCount int `json:"file_count" yaml:"file_count"`
 	// ExternalProjects are the OTHER projects that reference this symbol, sorted. Non-empty
 	// is what makes a file's surface public, and naming them answers the reader's actual next
-	// question - who breaks - rather than only how many.
+	// question (who breaks) rather than only how many.
 	ExternalProjects []string `json:"external_projects,omitempty" yaml:"external_projects,omitempty"`
 	// ExternalFileCount is how many referencing files sit outside the defining project.
 	ExternalFileCount int `json:"external_file_count" yaml:"external_file_count"`
-	// ModuleAPI reports that this symbol is exported from the MODULE - reachable by a
+	// ModuleAPI reports that this symbol is exported from the MODULE: reachable by a
 	// consumer outside the workspace entirely.
 	//
 	// It is a separate question from ExternalProjects and neither implies the other, which is
@@ -111,7 +111,7 @@ type DiffSymbol struct {
 //
 // It answers a question the diff itself cannot: not "is this change correct" but "is this file
 // being rewritten over and over". A file edited repeatedly is frequently a design problem
-// wearing a series of small fixes - the circle you notice only in hindsight, after the fifth
+// wearing a series of small fixes: the circle you notice only in hindsight, after the fifth
 // visit. Surfacing it AT review time is the whole point, because that is the one moment
 // somebody is already looking at the file and could still decide to fix the cause instead.
 //
@@ -125,7 +125,7 @@ type DiffChurn struct {
 	// problem; many on a hot file is a coordination one. Both are worth knowing, neither is
 	// worth magus deciding.
 	Authors int `json:"authors,omitempty" yaml:"authors,omitempty"`
-	// Score is commits x complexity - the hotspot ranking's own metric.
+	// Score is commits x complexity: the hotspot ranking's own metric.
 	Score int `json:"score" yaml:"score"`
 	// Rank is this file's 1-based position in the workspace's hotspot ranking; 0 when it did
 	// not rank at all, which is the common and unremarkable case.
@@ -136,7 +136,7 @@ type DiffChurn struct {
 	ProjectTrend int `json:"project_trend,omitempty" yaml:"project_trend,omitempty"`
 }
 
-// Rising reports whether this file is both hot and getting hotter - the combination worth
+// Rising reports whether this file is both hot and getting hotter: the combination worth
 // interrupting a reader for. Either signal alone is ordinary: plenty of files are hot because
 // they are big, and plenty of projects are accelerating for good reasons.
 func (c DiffChurn) Rising() bool { return c.NotableRank() && c.ProjectTrend > 0 }
@@ -145,17 +145,17 @@ func (c DiffChurn) Rising() bool { return c.NotableRank() && c.ProjectTrend > 0 
 //
 // The rank itself is honest at any depth; rendering it is not. "Hotspot #1278" tells a reader
 // nothing except that a ranking exists, and a field that is usually meaningless is a field
-// they learn to skip - which then costs them the one time it says #3. The data stays whole and
+// they learn to skip, which then costs them the one time it says #3. The data stays whole and
 // the display is selective, the same trade the guard makes by explaining only what it is sure
 // of.
 // It is EXPORTED so a renderer can state the rule rather than leaving a reader to infer it.
-// An unexplained cutoff makes a missing rank ambiguous - outside the top N, or never computed?
-// - and the two have opposite implications for how much of the ranking to trust.
+// An unexplained cutoff makes a missing rank ambiguous (outside the top N, or never computed?),
+// and the two have opposite implications for how much of the ranking to trust.
 const NotableRankCutoff = 50
 
 // NotableRank reports whether this file ranks high enough for its position to be worth
 // showing. A file outside the cutoff still reports its commit count, which is the part that
-// remains meaningful on its own - and which is what tells a reader that churn WAS measured
+// remains meaningful on its own, and which is what tells a reader that churn WAS measured
 // here, so a missing rank means "outside the top NotableRankCutoff" rather than "not measured".
 func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= NotableRankCutoff }
 
@@ -163,12 +163,12 @@ func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= NotableRa
 // what it was looking at immediately before.
 //
 // This is the part of a review no forge can produce. A guard hook observes every path an agent
-// reaches, so magus can answer "what was it reading when it decided to write this" - the
+// reaches, so magus can answer "what was it reading when it decided to write this": the
 // closest thing to the author's reasoning that any tool can recover without asking them. A
 // diff shows what changed; this shows what the change was made in response to.
 //
 // Transcript is a POINTER and magus never opens it. The trail stays a record of paths and
-// timings, and a reader who wants what was actually said opens the host's own log themselves -
+// timings, and a reader who wants what was actually said opens the host's own log themselves,
 // which is what lets a whole session's reach be carried cheaply while the expensive and
 // sensitive detail stays where the host already put it.
 type DiffTouch struct {
@@ -176,7 +176,7 @@ type DiffTouch struct {
 	Session    string   `json:"session,omitempty"    yaml:"session,omitempty"`
 	Transcript string   `json:"transcript,omitempty" yaml:"transcript,omitempty"`
 	Read       []string `json:"read,omitempty"       yaml:"read,omitempty"`
-	// Ran are the PROGRAMS the session ran, never their arguments - see trail.Touch.Ran for
+	// Ran are the PROGRAMS the session ran, never their arguments; see trail.Touch.Ran for
 	// the leak that shape exists to prevent. This payload is served to every MCP client.
 	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
 }
@@ -200,13 +200,13 @@ type DiffFile struct {
 	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
 	// Surface is one of the DiffSurface constants: whether any changed symbol here is
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
-	// rather than a verdict - see DiffSurface.
+	// rather than a verdict; see DiffSurface.
 	Surface string `json:"surface" yaml:"surface"`
 	// Touches are the agent sessions that wrote this file and what they had READ first.
 	// Empty when no guard hook is wired, which is the common case and not a fault.
 	Touches []DiffTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
 	// ReadState is one of the DiffRead constants: whether a person recorded reading
-	// this file at its current content. Empty is DiffReadUnknown - nobody checked - and is
+	// this file at its current content. Empty is DiffReadUnknown (nobody checked) and is
 	// deliberately not "unread".
 	ReadState string `json:"read_state,omitempty" yaml:"read_state,omitempty"`
 	// Churn is how often this file has been changing, nil when no history lens was attached.
@@ -214,7 +214,7 @@ type DiffFile struct {
 	// facts, and a review that renders the first as the second is lying quietly.
 	Churn *DiffChurn `json:"churn,omitempty" yaml:"churn,omitempty"`
 	// NoHistory reports that the history lens RAN and found this file in none of the commits
-	// it walked - a file added in this change, or one untouched for the whole window.
+	// it walked: a file added in this change, or one untouched for the whole window.
 	//
 	// It is a ranking signal because absence of history is not the same as absence of risk,
 	// and without it the ordering conflates the two. Every other annotation here is derived
@@ -229,12 +229,12 @@ type DiffFile struct {
 	NoHistory bool `json:"no_history,omitempty" yaml:"no_history,omitempty"`
 	// Reach is the widest FileCount among Symbols: how many files reference the most-referenced
 	// thing this file changed. It is the ranking key, and it is deliberately a COUNT OF FILES
-	// rather than of references - one file calling a function forty times is one file that
+	// rather than of references: one file calling a function forty times is one file that
 	// breaks, and ranking by reference count would put a hot loop above a widely-used API.
 	//
 	// NIL when no symbol index was loaded, and nil is DISTINCT from zero for the same reason
 	// Coverage and Churn are: "nothing references this" and "nobody looked" are different
-	// facts. As a plain int an unindexed workspace serves `reach: 0` on every file - a
+	// facts. As a plain int an unindexed workspace serves `reach: 0` on every file, a
 	// valid-looking number that a fleet dashboard reads as "no change touches widely used
 	// code". DiffSurfaceUnknown already refuses that collapse; the pointer is the same refusal
 	// applied to the field the ordering actually turns on.
@@ -242,7 +242,7 @@ type DiffFile struct {
 }
 
 // ReachOr returns the reach, or def when it was not measured. For rendering and comparison
-// only - never use it to decide whether reach is KNOWN, which is what the nil is for.
+// only; never use it to decide whether reach is KNOWN, which is what the nil is for.
 func (f DiffFile) ReachOr(def int) int {
 	if f.Reach == nil {
 		return def
@@ -261,7 +261,7 @@ type Diff struct {
 	// consequence first. See SortForReading. It is the changeset's primary collection, so
 	// it is what -o jsonl streams.
 	Files []DiffFile `json:"files,omitempty" yaml:"files,omitempty" jsonl:"primary"`
-	// SeedProjects are the projects a changed file lands in directly - the ones the author
+	// SeedProjects are the projects a changed file lands in directly: the ones the author
 	// actually edited, as opposed to the ones that merely rebuild.
 	SeedProjects []string `json:"seed_projects,omitempty" yaml:"seed_projects,omitempty"`
 	// AffectedProjects is the full reverse closure. The gap between its length and
@@ -279,7 +279,7 @@ type Diff struct {
 //
 // A CHANGESET-level fact rather than a per-file one, because it answers a question about the
 // reader's history rather than about any file: "where did I leave off". The per-file half is
-// DiffFile.ReadState, and the two are not redundant - ReadState says whether THIS file still
+// DiffFile.ReadState, and the two are not redundant: ReadState says whether THIS file still
 // matches what was read, and this says which revision to diff from to see everything that moved.
 //
 // The zero value means there is no earlier pass to subtract: nobody has reviewed these files, or
@@ -297,8 +297,8 @@ type DiffReviewed struct {
 // It is STAMPED BY THE DAEMON from the transport the write arrived on, and never read from
 // the payload. That is the whole integrity of a paired review: an agent holds an MCP session
 // and a person holds a console tab, the daemon can tell them apart, and so an agent cannot
-// post as the person. The notes store settled the same question the same way - "a
-// self-attested author is forgeable by whatever wrote the file" - and this is that reasoning
+// post as the person. The notes store settled the same question the same way: "a
+// self-attested author is forgeable by whatever wrote the file", and this is that reasoning
 // applied to a store an agent IS allowed to write.
 type DiffAuthor string
 
@@ -312,7 +312,7 @@ const (
 // DiffCursor is where a client is looking: a file and, within it, a hunk.
 //
 // The human's cursor is the one that matters and the one an agent READS. An agent has no
-// cursor of its own, on purpose - see DiffSuggestion for why it cannot move this one.
+// cursor of its own, on purpose; see DiffSuggestion for why it cannot move this one.
 type DiffCursor struct {
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	// Hunk is the 0-based index of the hunk within the file, or -1 for the file heading.
@@ -330,14 +330,14 @@ const (
 	// says so, because a reader who is not told will read the new position as the original one.
 	AnchorMoved CommentAnchorRung = "moved"
 	// AnchorDeclaration is the quoted line gone, but the DECLARATION it sat in still present. The
-	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line -
+	// remark keeps its path and moves to that declaration's hunk, saying it lost the exact line,
 	// which is the rung Gerrit spells "file level", one step narrower.
 	AnchorDeclaration CommentAnchorRung = "declaration"
 	// AnchorLost is the text gone from the file. The remark keeps its path and loses its line,
 	// which is the degradation Gerrit's comment porter makes for the same reason: a remark that
 	// lands on the wrong code is worse than one that admits it lost the thread.
 	AnchorLost CommentAnchorRung = "lost"
-	// AnchorUnknown is a remark carrying no quote to look for - written before anchors were
+	// AnchorUnknown is a remark carrying no quote to look for: written before anchors were
 	// captured, or on a hunk whose text magus never held. Distinct from AnchorExact because
 	// "still in place" and "nobody checked" are different facts.
 	AnchorUnknown CommentAnchorRung = ""
@@ -350,7 +350,7 @@ const (
 // converged on storing several and degrading the CLAIM rather than guessing. Digest DETECTS a
 // change and cannot recover from one; Quote RECOVERS a line that moved and cannot tell an
 // unmoved line from a re-typed one. Together they answer both, and Line stops being the answer and
-// becomes a hint - the prior a search starts from rather than the thing it trusts.
+// becomes a hint: the prior a search starts from rather than the thing it trusts.
 //
 // The field this replaced was a bare digest, documented as letting a remark "report that the code
 // under it has since changed". No client ever set it and nothing ever read it, so the report it
@@ -363,7 +363,7 @@ type CommentAnchor struct {
 	// Before and After are the lines around Quote, up to AnchorContextLines each.
 	//
 	// They are what make a short quote usable at all. A line of code is often not unique in its
-	// own file - a bare closing brace, a `return nil`, a repeated field tag - so a search for the
+	// own file (a bare closing brace, a `return nil`, a repeated field tag), so a search for the
 	// quote alone lands on the first of many. The context is what picks the right one, and it is
 	// the same trick the web-annotation model uses under the name prefix/suffix.
 	Before []string `json:"before,omitempty" yaml:"before,omitempty"`
@@ -372,8 +372,8 @@ type CommentAnchor struct {
 	// second @@, which is "func (r Diff) AttachChurn(...)" or "type Diff struct {".
 	//
 	// GIT'S OWN funcname, not a symbol from the knowledge graph, and the difference is what makes
-	// this rung fire at all. A SCIP symbol is a better identifier - it survives a rename of the
-	// surrounding file and carries real structure - and it is absent unless somebody has run
+	// this rung fire at all. A SCIP symbol is a better identifier (it survives a rename of the
+	// surrounding file and carries real structure), and it is absent unless somebody has run
 	// `magus graph build`, which in this very workspace they have not. An anchor that needs an
 	// index nobody built is an anchor that never resolves. This one is in every patch already,
 	// in every language git has a funcname pattern for, and costs nothing to keep.
@@ -455,7 +455,7 @@ type ReviewOrigin struct {
 // "No provider wired", "no pull request for this branch" and "the host was unreachable" are
 // all an empty ID with a Reason, deliberately. None is a thing the reader did wrong, and a
 // surface that renders them differently would be inventing a distinction its user does not
-// have - what they can do next is identical in all three.
+// have: what they can do next is identical in all three.
 type ReviewTarget struct {
 	// ID is the review's identity in the provider's own terms, opaque to magus and passed
 	// back to the spell untouched.
@@ -463,7 +463,7 @@ type ReviewTarget struct {
 	// A STRING, though every provider magus ships speaks in integers. GitHub numbers pull
 	// requests and GitLab numbers merge requests, but Gerrit and Phabricator identify a change
 	// by a hash, and an int here would have made those providers unwritable for a saving of
-	// nothing - magus does no arithmetic on it. The wrong kind of specific is the kind you find
+	// nothing: magus does no arithmetic on it. The wrong kind of specific is the kind you find
 	// out about from the person who could not write the second provider.
 	ID string `json:"id" yaml:"id"`
 	// Repo is where the review lives, for display: an owner/name on GitHub, a project path on
@@ -473,7 +473,7 @@ type ReviewTarget struct {
 	// State is what the host says has become of the review: "open", "merged" or "closed".
 	//
 	// EMPTY reads as open, so a provider that does not answer this keeps working unchanged and
-	// the subset rule holds - a spell declares nothing to opt out.
+	// the subset rule holds: a spell declares nothing to opt out.
 	//
 	// It is asked of the provider rather than worked out from git because a squash merge leaves
 	// no trace git can follow: the branch is rewritten into one new commit, so its tip is never
@@ -482,14 +482,14 @@ type ReviewTarget struct {
 	State string `json:"state,omitempty" yaml:"state,omitempty"`
 	// Author is who opened the review and Viewer is who the credential belongs to, both in the
 	// provider's own terms. Empty when the provider does not answer, and an empty pair means
-	// UNKNOWN - never "yours". Guessing "yours" would refuse a legitimate approval on a
+	// UNKNOWN, never "yours". Guessing "yours" would refuse a legitimate approval on a
 	// colleague's change; guessing "theirs" would let a change approve itself.
 	Author string `json:"author,omitempty" yaml:"author,omitempty"`
 	Viewer string `json:"viewer,omitempty" yaml:"viewer,omitempty"`
 }
 
 // ReviewVerdict is what a published review SAYS about the change: remarks alone, an approval, or
-// a request for changes. It follows the family rule KnowledgeVerdict states - the scalar judgment
+// a request for changes. It follows the family rule KnowledgeVerdict states: the scalar judgment
 // is a Verdict, and the constants carry that prefix rather than the domain's.
 //
 // Provider-neutral by design. GitHub calls this an "event" and spells its values in caps; GitLab
@@ -511,7 +511,7 @@ const (
 // Asserts reports whether v takes a position on the change rather than only remarking on it.
 //
 // It is the question the permission rule turns on, and it is written once here so an unrecognized
-// value - a client's typo, a newer magus's vocabulary - is not an assertion by default. Only the
+// value (a client's typo, a newer magus's vocabulary) is not an assertion by default. Only the
 // two words below can be.
 func (v ReviewVerdict) Asserts() bool {
 	return v == VerdictApprove || v == VerdictRequestChanges
@@ -524,13 +524,13 @@ func (v ReviewVerdict) Asserts() bool {
 // for. That is deliberate: a second `downgraded bool` return would read as the (value, ok) idiom
 // with its polarity inverted, and a reader who glanced at it would take true for success.
 //
-// Two cases are refused, and both come back as remarks rather than as an error - the review still
+// Two cases are refused, and both come back as remarks rather than as an error; the review still
 // publishes, it just does not assert:
 //
 //   - The viewer opened the review. A change cannot approve itself. The provider API would take
 //     it, which is exactly why the rule lives here rather than in a workspace-authored spell.
 //   - Authorship is UNKNOWN. A provider that names neither party has not said the review belongs
-//     to somebody else, and "magus could not tell" must never resolve to "go ahead" - which is
+//     to somebody else, and "magus could not tell" must never resolve to "go ahead", which is
 //     the whole reason OpenedByViewer reports its own certainty.
 func (r ReviewTarget) PermittedVerdict(want ReviewVerdict) ReviewVerdict {
 	if !want.Asserts() {
@@ -562,7 +562,7 @@ func (r ReviewTarget) AllowedVerdicts() []ReviewVerdict {
 //
 // The two reasons are different facts and a surface that renders them alike misleads: "this is
 // your own change" is how review is supposed to work, while "magus could not tell who opened
-// this" is a gap in what the provider answered - the same distinction the branch lookup's
+// this" is a gap in what the provider answered: the same distinction the branch lookup's
 // unsupported marker exists to preserve.
 func (r ReviewTarget) VerdictLimit() string {
 	mine, known := r.OpenedByViewer()
@@ -622,7 +622,7 @@ type ReviewThread struct {
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
 	// New reports that the reader has not had this thread on screen before. magus's own
-	// annotation rather than anything the host said - every other field here belongs to the
+	// annotation rather than anything the host said: every other field here belongs to the
 	// review, and this one belongs to the reader's history with it.
 	New bool `json:"new,omitempty" yaml:"new,omitempty"`
 }
@@ -636,7 +636,7 @@ type ReviewThread struct {
 // suggestion renders as a peripheral affordance the human accepts with one key, and ignoring
 // it costs nothing.
 //
-// This is the review-surface reading of the guard's own rule - deny only what cannot be
+// This is the review-surface reading of the guard's own rule: deny only what cannot be
 // undone, explain everything else. Yanking a viewport cannot be undone, because the reader's
 // place in the diff was in their head.
 type DiffSuggestion struct {
@@ -656,12 +656,12 @@ type DiffSuggestion struct {
 //
 // One object rather than three implementations: the daemon already multiplexes those three
 // transports over one workspace, so a review they each rebuilt privately would be three
-// diverging opinions of the same changeset. Sharing it is what makes pairing real - the agent
+// diverging opinions of the same changeset. Sharing it is what makes pairing real: the agent
 // can see where the human is and be useful about it rather than narrating blindly.
 type DiffSession struct {
 	ID   string `json:"id" yaml:"id"`
 	Base string `json:"base" yaml:"base"`
-	// AsOf is the digest of the patch this changeset was computed from - the session's
+	// AsOf is the digest of the patch this changeset was computed from: the session's
 	// snapshot identity.
 	//
 	// Without it a client cannot tell a current answer from a frozen one, and the party least
@@ -675,15 +675,15 @@ type DiffSession struct {
 	// Cursor is where the HUMAN is looking.
 	Cursor DiffCursor `json:"cursor" yaml:"cursor"`
 	// Viewed holds the content digests of hunks the human has marked read. Digests rather
-	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk -
+	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk:
 	// the failing of every viewed-checkbox that resets on force-push.
 	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
 	// SeenThreads holds the ids of the review's threads the human has actually had on screen.
 	// It is the watermark that decides what counts as NEW, and it belongs to the reader for the
 	// same reason Viewed does: a mark nobody made is a claim nobody can stand behind.
 	//
-	// ONE watermark, deliberately. The obvious alternative - letting the job that watches the
-	// forge record what it has reported - means everything is already marked seen by the time
+	// ONE watermark, deliberately. The obvious alternative (letting the job that watches the
+	// forge record what it has reported) means everything is already marked seen by the time
 	// the reader opens the diff, so the surface could never show them what arrived. The job
 	// reads this instead and reports what lies outside it.
 	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
@@ -712,7 +712,7 @@ func (s DiffSession) UnseenThreads(threads []ReviewThread) []string {
 	return out
 }
 
-// GeneratedCount reports how many files are declared outputs - the ones a reader can fold
+// GeneratedCount reports how many files are declared outputs: the ones a reader can fold
 // away. It is the headline of the noise-collapse affordance.
 func (r Diff) GeneratedCount() int {
 	n := 0
@@ -736,8 +736,8 @@ func (r Diff) GeneratedCount() int {
 //
 // A file with no hotspot entry gets Churn only when its project's trend actually MOVED, so
 // "quiet file in an accelerating project" is still expressible; a file with neither is left
-// nil, because nil is what says nobody measured. A zero delta is not movement - it is the
-// same absence of evidence a missing trend entry is - and such a row carries no hotspot
+// nil, because nil is what says nobody measured. A zero delta is not movement (it is the
+// same absence of evidence a missing trend entry is), and such a row carries no hotspot
 // counts either, only the trend it was built from.
 func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 	rank := make(map[string]int, len(files))
@@ -764,7 +764,7 @@ func (r Diff) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 			f.NoHistory = true
 		}
 		// A trend entry whose Delta is zero says nothing about this file, so a file with
-		// no hotspot entry and no movement has nothing measured at all - attaching Churn
+		// no hotspot entry and no movement has nothing measured at all; attaching Churn
 		// for it would write "commits: 0, score: 0" where the honest answer is nil.
 		if !isHot && d == 0 {
 			continue
@@ -845,7 +845,7 @@ func (r Diff) AttachReplay(byPath map[string][]DiffTouch) {
 //     caused it is reading the answer before the question.
 //  2. Then widest reach first: the file whose changed symbols are referenced from the most
 //     other files is the one most able to break something.
-//  3. Then unclaimed and maintained files after ordinary sources - they invalidate no cache
+//  3. Then unclaimed and maintained files after ordinary sources: they invalidate no cache
 //     key and affect no target, so nothing downstream turns on them.
 //  4. Path, last, purely so the order is deterministic. It is a TIEBREAK and never a
 //     ranking: alphabetical order is what this exists to replace.
@@ -853,7 +853,7 @@ func (r Diff) AttachReplay(byPath map[string][]DiffTouch) {
 // A file whose reach was NOT MEASURED sorts above one measured at zero and below any measured
 // positive. Unknown is not zero: a measured zero is a promise that nothing references the file,
 // and an unmeasured file has made no promise. Ranking the two together is what let an
-// unindexed workspace render pure path order while the header still claimed a ranking - see
+// unindexed workspace render pure path order while the header still claimed a ranking; see
 // Ranked, which is how a caller is supposed to notice.
 func (r Diff) SortForReading() {
 	rank := func(f DiffFile) int {
@@ -889,12 +889,12 @@ func (r Diff) SortForReading() {
 			return *b.Reach - *a.Reach // widest reach first
 		}
 		// Among files of equal consequence, the ones nobody has read come first, and a file
-		// read and then edited comes first of all - see DiffReadStale.
+		// read and then edited comes first of all; see DiffReadStale.
 		//
 		// A TIEBREAK, never a reordering: reach still decides whenever it is known,
 		// because a widely-referenced file you have read is still likelier to break things
 		// than an unread leaf. What this buys is that a receipt pays for itself the moment
-		// it is minted - read a file and it sinks, edit it and it surfaces - so the record
+		// it is minted (read a file and it sinks, edit it and it surfaces), so the record
 		// is worth keeping for its own sake rather than because a report scolds you.
 		if ra, rb := readRank(a.ReadState), readRank(b.ReadState); ra != rb {
 			return ra - rb
@@ -923,7 +923,7 @@ func (r Diff) SortForReading() {
 //
 // DiffReadUnknown ranks with read rather than with unread, deliberately. Unknown means nobody
 // checked, and sorting an unmeasured workspace's whole changeset to the top would dress "no
-// receipt store" up as "you have read none of this" - the same collapse the state constants
+// receipt store" up as "you have read none of this", the same collapse the state constants
 // refuse everywhere else.
 func readRank(state string) int {
 	switch state {
@@ -942,7 +942,7 @@ func readRank(state string) int {
 // the result is path order wearing a ranking's clothes. Every renderer MUST say so before
 // showing the list. The review's Note about an absent symbol index does not cover this: it
 // names the missing OVERLAYS (callers, coverage) and never the missing ORDER, and it prints
-// after the list - by which point the reader has already formed the belief that the first
+// after the list, by which point the reader has already formed the belief that the first
 // file is the most dangerous one.
 func (r Diff) Ranked() bool {
 	for _, f := range r.Files {

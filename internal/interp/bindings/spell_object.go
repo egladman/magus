@@ -53,7 +53,7 @@ func bindBuzzTargetDispatch(h vm.Value, targets map[string]spells.Op) {
 func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 	h.MapSet(target, vm.DirectValue("spell."+target, func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		// The leading magus.Context is REQUIRED, not optional. Optional would overload
-		// argument one on TYPE - f(), f(ctx), f({args:...}), f(ctx, {args:...}) - which
+		// argument one on TYPE: f(), f(ctx), f({args:...}), f(ctx, {args:...}), which
 		// reads fine to the author and badly to everyone else. One shape always, and a
 		// grep that finds every op invocation.
 		base, consumed := ctxOverridesFromBuzz(args, 0)
@@ -113,8 +113,8 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.E
 // context; go["go-test"]({args: [...]}) (no context) is the transitional form and
 // consumes nothing.
 //
-// Charms are deliberately NOT readable here. They are run-level - what makes "what did
-// this run do" answerable from the invocation alone - and a per-op override would move
+// Charms are deliberately NOT readable here. They are run-level (what makes "what did
+// this run do" answerable from the invocation alone), and a per-op override would move
 // that reasoning from global to local.
 // ctxOverridesFromBuzz reads execution overrides off a leading magus.Context and
 // reports how many arguments it consumed, so the caller can parse opts from the next
@@ -122,8 +122,8 @@ func runBuzzCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.E
 // context; go["go-test"]({args: [...]}) (no context) is the transitional form and
 // consumes nothing.
 //
-// Charms are deliberately NOT readable here. They are run-level - what makes "what did
-// this run do" answerable from the invocation alone - and a per-op override would move
+// Charms are deliberately NOT readable here. They are run-level (what makes "what did
+// this run do" answerable from the invocation alone), and a per-op override would move
 // that reasoning from global to local.
 func ctxOverridesFromBuzz(args []vm.Value, idx int) (opts commandOpts, consumed int) {
 	if idx >= len(args) || !args[idx].IsMap() {
@@ -202,7 +202,7 @@ func targetsToMap(targets map[string]spells.Op) vm.Value {
 		if len(t.Secrets) > 0 {
 			// Every field Decode reads must be written back here, or the by-value
 			// handle round trip (DecodeHandle -> registerLocalSpell) silently drops
-			// it - the exact resolves-nothing-at-spawn failure the decode-side type
+			// it: the exact resolves-nothing-at-spawn failure the decode-side type
 			// errors exist to prevent.
 			secrets := vm.NewMap()
 			for envName, ref := range t.Secrets {

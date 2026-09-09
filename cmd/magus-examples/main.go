@@ -2,7 +2,7 @@
 // current magus binary, runs curated retrieval-verb invocations against a small fixture
 // workspace, captures their ACTUAL stdout, and injects each into docs/knowledge.md
 // between HTML markers (<!-- example:<slug> --> ... <!-- /example -->). So the example
-// output is never hand-typed - it is exactly what `magus explain`/`path` print, from a
+// output is never hand-typed: it is exactly what `magus explain`/`path` print, from a
 // controlled fixture with stable IDs (same approach the txtar tests use, just captured
 // instead of asserted). It mirrors magus-spelldocs (derive committed Markdown from a
 // source of truth) and rides the same generate + vcs.isDirty drift gate: change the
@@ -20,7 +20,7 @@ import (
 )
 
 // fixtureFiles is the curated workspace the examples run against: it declares the
-// built-in go spell (so the output carries realistic, recognizable IDs - tool:go,
+// built-in go spell (so the output carries realistic, recognizable IDs: tool:go,
 // op:go:go-test) but only a couple of targets, so the output stays small and stable
 // across releases (it depends on the go spell's fixed op set, not on whatever this
 // repo happens to contain).
@@ -29,7 +29,7 @@ var fixtureFiles = map[string]string{
 	// The changeset the review example describes, as a PATCH rather than a repository.
 	// `magus diff <patch-file>` is an input magus already documents, so the fixture needs no
 	// git init, no commit and no working-tree edit to have something to review. The patch's
-	// content never shows in the docs - the prompt names paths and annotations, not lines.
+	// content never shows in the docs: the prompt names paths and annotations, not lines.
 	"change.patch": `diff --git a/main.go b/main.go
 --- a/main.go
 +++ b/main.go
@@ -91,7 +91,7 @@ func main() {
 	if err != nil {
 		fatalf("%v", err)
 	}
-	// Grouped by page, because inject treats a rendered example with no marker as a hard error -
+	// Grouped by page, because inject treats a rendered example with no marker as a hard error,
 	// which is what keeps the docs and the example set in lockstep, and would otherwise fire for
 	// every example that belongs on a different page.
 	byDoc := map[string]map[string]string{}
@@ -123,7 +123,7 @@ func renderExamples() (map[string]string, error) {
 	}
 
 	// Build HEAD's magus so the captured output reflects the current renderer, not a
-	// release on PATH - the whole point of the drift gate. The module path (not a
+	// release on PATH, the whole point of the drift gate. The module path (not a
 	// relative ./cmd/magus) so this works whatever directory the generator runs from.
 	//
 	// It builds because the output being documented is CLI stdout and cmd/magus is package
@@ -207,7 +207,7 @@ func inject(path string, rendered map[string]string) error {
 		ei := after + rel
 		// A BLANK line on BOTH sides of the fence, not just a newline: dprint's markdown formatter
 		// wants one between an HTML comment and an adjacent fenced block, and without them the
-		// generator and the formatter each undo the other on every run - the oscillation that
+		// generator and the formatter each undo the other on every run, the oscillation that
 		// makes a page a hybrid nobody can gate.
 		content = content[:after] + "\n\n" + snippet + "\n" + content[ei:]
 	}

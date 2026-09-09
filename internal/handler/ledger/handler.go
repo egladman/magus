@@ -10,7 +10,7 @@ import (
 
 // ledgerSource is the narrow repository contract the ledger handler needs: read every
 // declared lease row. Satisfied by *ledger.Store, so this package holds no store
-// logic - it serves what the store already knows.
+// logic: it serves what the store already knows.
 type ledgerSource interface {
 	List() ([]types.Lease, error)
 }
@@ -46,7 +46,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ledger error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// An unwritten ledger serves "leases":[] rather than null - the drawer renders a list,
+	// An unwritten ledger serves "leases":[] rather than null: the drawer renders a list,
 	// and a workspace where nobody has handed out a lease yet is empty, not broken.
 	// Normalized by the constructor, so this route and the MCP tool cannot disagree about
 	// the shape.

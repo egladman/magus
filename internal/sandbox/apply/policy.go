@@ -30,8 +30,8 @@ var warnedUnsupported sync.Once
 
 // globalsMu guards policyFingerprint and appliedExternally: both are read from Apply
 // on arbitrary goroutines and written from MarkAppliedExternally on arbitrary
-// goroutines, so - unlike applyErr, which only ever changes inside the applyOnce.Do
-// callback - they need their own lock rather than riding on sync.Once's happens-before.
+// goroutines, so (unlike applyErr, which only ever changes inside the applyOnce.Do
+// callback) they need their own lock rather than riding on sync.Once's happens-before.
 var globalsMu sync.Mutex
 
 // policyFingerprint is the fingerprint of the applied landlock policy.

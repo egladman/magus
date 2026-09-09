@@ -415,7 +415,7 @@ func TestPaintTwoConsumersShareOneTerminal(t *testing.T) {
 
 	// One margin set, covering both bands. Seven leased rows, not nine: the
 	// failure band's six plus the ONE row the single notification actually
-	// needs - and the zone's border above them.
+	// needs, and the zone's border above them.
 	assert.Equal(t, 1, scrollTopOf(s))
 	assert.Equal(t, 17-borderRows, scrollBotOf(s))
 	// The border marks where the scrolling stops.

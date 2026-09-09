@@ -32,8 +32,8 @@ type whereOutput struct {
 	Matches   []whereMatch `json:"matches"   yaml:"matches"`
 }
 
-// emitWhere renders resolved matches. The TEXT form stays deliberately bare - one
-// absolute path per line and nothing else - because its whole purpose is to be
+// emitWhere renders resolved matches. The TEXT form stays deliberately bare (one
+// absolute path per line and nothing else) because its whole purpose is to be
 // substituted straight into another command: cd "$(magus where api)". Only the
 // structured formats carry the labels.
 //

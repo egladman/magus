@@ -51,7 +51,7 @@ func TestStoreRoundTrip(t *testing.T) {
 			},
 			want: []types.Lease{
 				// The replacement carries no owned paths, so the row's paths were
-				// released by it - see TestStorePutRecordsReleasedPaths.
+				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
 					ID: "a", Goal: "revised", State: types.StatePass,
 					Releases: []types.LeaseRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
@@ -134,7 +134,7 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 }
 
 // TestStoreUpdateMergesUnderOneLock is what Update exists for. Two writers advancing
-// different fields of one row - a state machine and a checkpoint recorder - each
+// different fields of one row (a state machine and a checkpoint recorder) each
 // read-modify-write the same file, and a merge that reads with List and writes with Put
 // releases the lock in between: the second write then reverts the first one's field.
 func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
@@ -178,7 +178,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 // TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
 // in-process mutex cannot cover: two Stores on one directory share no mutex, exactly as
 // the CLI, the daemon, and a registering worker do not. Only the file lock stops their
-// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW -
+// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW:
 // the loser read the ledger before the winner appended, so its write puts back a file
 // that never held the winner's lease.
 //

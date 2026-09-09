@@ -14,7 +14,7 @@ import (
 // statusReportToProto maps the LIVE portion of the domain status report (types.StatusReport)
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
-// intentionally not on this dashboard contract - it is `magus status`/config.
+// intentionally not on this dashboard contract: it is `magus status`/config.
 func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.Status {
 	s := &statusv1.Status{
 		Health: deriveHealth(r),
@@ -28,7 +28,7 @@ func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.
 	if r.Pool != nil {
 		s.Pool = poolToProto(r.Pool)
 		// Pool-wide cache activity is the sum of the warm workspaces' counters, with the
-		// configured cap from the static report - the headline hit/miss tiles plus the
+		// configured cap from the static report: the headline hit/miss tiles plus the
 		// client-side trend.
 		if len(r.Pool.Workspaces) > 0 || r.Cache.SizeMB > 0 {
 			agg := &statusv1.Cache{SizeCapMb: int32(r.Cache.SizeMB)}
@@ -130,7 +130,7 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 }
 
 // EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus
-// SSE `data:` line - the live-dashboard delivery. The JS client base64-decodes then
+// SSE `data:` line, the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
 func EncodeStatusEvent(r types.StatusReport, build types.BuildInfo) (string, error) {
 	raw, err := proto.Marshal(statusReportToProto(r, build))

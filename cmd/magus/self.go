@@ -13,7 +13,7 @@ import (
 // `-tags noselfupdate` removes. The dispatcher used to be written twice, once per
 // tag, so every subcommand had to be added to both files and a subcommand that has
 // nothing to do with updating still disappeared from the stub if you forgot. The
-// tagged files now supply one function each - selfUpdateCmd - and everything else
+// tagged files now supply one function each (selfUpdateCmd), and everything else
 // lives here and works in both builds.
 func selfCmd(ctx context.Context, _ string, args []string) error {
 	if len(args) == 0 {

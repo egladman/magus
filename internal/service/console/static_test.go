@@ -30,7 +30,7 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 
 // The shell is served with <base href="../">, which resolves to /console/ ONLY when the URL
 // already ends in a slash. Served at a bare /console/diff, every asset resolves one level too
-// high - console.css, theme.js and patternfly.css all 404 at the site root - so the surface
+// high (console.css, theme.js and patternfly.css all 404 at the site root), so the surface
 // renders unstyled and never boots. Canonicalize instead.
 func TestSurfaceRouteWithoutTrailingSlashRedirects(t *testing.T) {
 	h := StaticHandler(consoleDir(t))
@@ -49,7 +49,7 @@ func TestSurfaceRouteRedirectKeepsTheQuery(t *testing.T) {
 	assert.Equal(t, "/console/diff/?scope=a.go&x=1", w.Header().Get("Location"))
 }
 
-// The canonical form Link mints must be served directly - a redirect loop here would take the
+// The canonical form Link mints must be served directly: a redirect loop here would take the
 // whole console down.
 func TestCanonicalSurfaceRouteServesTheShell(t *testing.T) {
 	h := StaticHandler(consoleDir(t))

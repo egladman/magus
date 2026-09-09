@@ -249,7 +249,7 @@ func TestRunAdoptsClientLease(t *testing.T) {
 
 // The wire is not a trusted channel: any local process may dial the socket, and a lease id is
 // exempt from the trail's redaction. Validating server-side is what stops a forwarded value
-// carrying a credential onto an event line - the client's own check is not the server's.
+// carrying a credential onto an event line; the client's own check is not the server's.
 func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	for name, id := range map[string]string{
 		"spaces":   "not a lease id",
@@ -272,7 +272,7 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 
 // TestRunRequestLeaseCrossesTheWire pins the field on the frame rather than on the struct: a
 // tag typo would leave every assertion above green while the daemon still saw nothing. The
-// missing-field case is the compatibility half - an older client sends no lease and must
+// missing-field case is the compatibility half: an older client sends no lease and must
 // decode to "" rather than failing the frame.
 func TestRunRequestLeaseCrossesTheWire(t *testing.T) {
 	var buf bytes.Buffer
@@ -337,8 +337,8 @@ func TestRunHonorsTheErrorsOwnExitCode(t *testing.T) {
 
 // TestShutdownClosesServer pins the fix for the silent `server stop` no-op: a shutdown RPC
 // must actually tear the server down, not just acknowledge. It asserts the observable
-// signals a blocking daemon loop and `server stop`'s verification rely on - Done() closing
-// and the socket going dead - because the shutdown handler cancels only the listener's own
+// signals a blocking daemon loop and `server stop`'s verification rely on (Done() closing
+// and the socket going dead), because the shutdown handler cancels only the listener's own
 // context, and a caller cannot see that from the reply alone.
 func TestShutdownClosesServer(t *testing.T) {
 	srv, err := New(Options{Handler: func(context.Context, []string) error { return nil }})

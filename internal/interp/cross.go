@@ -108,13 +108,13 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dir, target string) error 
 	// Same reason the memo is fresh, applied to the dispatch ancestor stack: its
 	// entries are bare target names, and a name only means something within one
 	// project. Carried across, a sub-project target that merely SHARES a name with
-	// one of the caller's ancestors read as a cycle - deterministically, and for a
+	// one of the caller's ancestors read as a cycle, deterministically, and for a
 	// graph that has none. The cross-project cycle it might otherwise have caught is
 	// the key below's job.
 	rctx = buzz.WithAncestors(rctx, nil)
 	// And the interceptor, for the third time the same reason: it is bound to ONE project.
 	// The closure the caller installed captured its own project, so a needs inside the
-	// remote target minted a step against the CALLER - the remote project's work cached
+	// remote target minted a step against the CALLER: the remote project's work cached
 	// under the caller's key, re-run by the caller's edits and never by its own. Nothing
 	// errors; buildStep is map lookups, so it mints a plausible entry and moves on.
 	//

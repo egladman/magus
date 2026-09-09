@@ -17,10 +17,10 @@ import (
 )
 
 // newIdentityWorkspace opens a real (cache-backed) single-project workspace bound to a
-// spell providing target "build" - IdentifyRef needs a live cache (ComputeTargetKey
+// spell providing target "build": IdentifyRef needs a live cache (ComputeTargetKey
 // returns types.ErrNoCache on an Inspect workspace), unlike the Inspect-only fixtures
 // most describe_test.go tests use. defaultCharms, when given, becomes the workspace's
-// configured default_charms (m.cfg.DefaultCharms) - what IdentifyRef now reads directly
+// configured default_charms (m.cfg.DefaultCharms), what IdentifyRef now reads directly
 // instead of taking as a parameter.
 func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
@@ -157,11 +157,11 @@ func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 // TestIdentifyRef_SkipsTargetThatFailsToKey guards the sweep's documented
 // best-effort contract: "a single target that fails to key is skipped rather
 // than aborting the sweep" (IdentifyRef's doc). The workspace has two targets on
-// one spell - "build" (no per-target sources) and "broken" (a per-target source
+// one spell: "build" (no per-target sources) and "broken" (a per-target source
 // glob pointing at a file made unreadable). computeTargetKey for "broken" then
 // fails deterministically (expandAndHashSources -> hashFiles -> os.Open EACCES),
 // while "build" keys fine. The sweep must still find "build"'s match rather than
-// returning an error or an empty result - a `continue` turned into a `return`
+// returning an error or an empty result: a `continue` turned into a `return`
 // here would silently break every missing-ref suggestion in a workspace with one
 // bad source path.
 func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {

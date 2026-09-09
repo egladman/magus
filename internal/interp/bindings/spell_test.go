@@ -346,7 +346,7 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 // TestVcsCommitRaisesOutsideRepo pins that an unavailable commit RAISES rather than
 // handing back a zero object to sniff.
 //
-// This test previously asserted the opposite - that vcs.commit() returned an object with
+// This test previously asserted the opposite: that vcs.commit() returned an object with
 // every field empty, and that callers should test `c.date == ""`. That is not how a Buzz
 // function reports failure (upstream declares the error in the signature and the caller
 // writes try/catch), and "" is a value some of those fields could legitimately hold, so
@@ -414,8 +414,8 @@ magus.project(".", {"spells": [parity]});`)
 // no-suggestion floor.
 func TestSuggestSpellName(t *testing.T) {
 	cases := []struct{ in, want string }{
-		// Real synonyms. The former rows here - python->py, rust->rs, markdown->md,
-		// golang->go - are gone: each spell now IS the name a user reaches for, so
+		// Real synonyms. The former rows here (python->py, rust->rs, markdown->md,
+		// golang->go) are gone: each spell now IS the name a user reaches for, so
 		// those imports resolve outright and never reach a suggestion.
 		{"javascript", "typescript"},
 		{"js", "typescript"},
@@ -439,7 +439,7 @@ func TestCheckSpellImports(t *testing.T) {
 	require.NoError(t, checkSpellImports([]string{"go", "typescript", "markdown"}),
 		"built-in and host-registered handles must pass")
 
-	// magusfile IS registered - dispatch needs it - so the generic registered-handle
+	// magusfile IS registered (dispatch needs it), so the generic registered-handle
 	// check would accept this import. It is rejected explicitly instead: the handle
 	// binds nothing an author can use, and accepting it taught readers magusfile was
 	// a toolchain adapter like go or buf.
@@ -449,7 +449,7 @@ func TestCheckSpellImports(t *testing.T) {
 	assert.Contains(t, err.Error(), "magusfile is not a spell")
 
 	// javascript is a real SYNONYM for the typescript spell, not an abbreviation of
-	// it - the abbreviation aliases went away when spells took the names users
+	// it: the abbreviation aliases went away when spells took the names users
 	// already reach for.
 	err = checkSpellImports([]string{"go", "javascript"})
 	require.Error(t, err)
@@ -697,7 +697,7 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 }
 
 // TestDispatchOpSecretsRequireAResolver proves an op that declares Secrets fails
-// loudly - naming the op - when no secret resolver is on the run, rather than
+// loudly (naming the op) when no secret resolver is on the run, rather than
 // silently spawning with the secret unset.
 func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 	ops := map[string]spells.Op{
@@ -733,7 +733,7 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 
 // TestResolveSecretEnvMergesWithoutClobberingReservedEnv proves resolveSecretEnv
 // merges resolved secrets alongside magus-reserved env (e.g. MAGUS_SYMBOL_INDEX, set
-// by symbolIndexEnv for the scip op) without disturbing it - the existing
+// by symbolIndexEnv for the scip op) without disturbing it: the existing
 // symbolIndexEnv behavior is unaffected by an op that also declares secrets.
 func TestResolveSecretEnvMergesWithoutClobberingReservedEnv(t *testing.T) {
 	t.Setenv("NPM_TOKEN", "s3cr3t-token")
@@ -767,10 +767,10 @@ func TestResolveSecretEnvCollisionErrors(t *testing.T) {
 // `sh -c 'scip-go --output "$MAGUS_SYMBOL_INDEX"'` in the built-in scip spells: a
 // bare $MAGUS_SYMBOL_INDEX token in an op's Args is resolved by the runner (via
 // opts.refs, wired in dispatchOp) to the real cache destination BEFORE the process
-// forks - not left for a shell to expand. The op here writes its raw argv[1] (not
+// forks, not left for a shell to expand. The op here writes its raw argv[1] (not
 // an env var) to a file, so a script that merely referenced $MAGUS_SYMBOL_INDEX as
-// an environment variable - which the child also receives, for a workspace-local
-// scip spell that still shells out - would not make this test pass; only genuine
+// an environment variable (which the child also receives, for a workspace-local
+// scip spell that still shells out) would not make this test pass; only genuine
 // engine-side substitution of the arg token does.
 func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 	ctx := context.Background()
@@ -821,7 +821,7 @@ func TestReadinessGateBlocksOpAndCarriesCode(t *testing.T) {
 	assert.Contains(t, err.Error(), "not ready")
 }
 
-// The tool's own diagnosis is what tells someone what to fix - `docker info` names the
+// The tool's own diagnosis is what tells someone what to fix: `docker info` names the
 // socket and asks whether the daemon is running. Paraphrasing it discarded the most
 // actionable line available, so the probe's output must reach the error.
 func TestReadinessErrorCarriesProbeOutput(t *testing.T) {
@@ -861,7 +861,7 @@ func TestReadinessGateAllowsWhenProbePasses(t *testing.T) {
 	assert.NoError(t, checkReady(context.Background(), readiness, op, t.TempDir()))
 }
 
-// An op whose tool declares no probe is never gated - the hadolint-beside-docker case.
+// An op whose tool declares no probe is never gated: the hadolint-beside-docker case.
 func TestReadinessGateIgnoresUndeclaredTools(t *testing.T) {
 	readinessMemo.Clear()
 	readiness := map[string]spells.Tool{
@@ -911,7 +911,7 @@ func TestReadinessDoesNotWaitWhenNotInteractive(t *testing.T) {
 // TestReadinessCancelledProbeIsNotMemoized proves a run cancelled mid-probe (Ctrl-C)
 // does not poison the memo for the process's remaining lifetime. Before the fix,
 // checkReady stored whatever probeUntilReady returned unconditionally, including
-// ctx.Err() from the interactive wait loop's `case <-ctx.Done()` branch - so one
+// ctx.Err() from the interactive wait loop's `case <-ctx.Done()` branch, so one
 // cancelled run made every later op on the same (bin, dir) fail with "context
 // canceled" for as long as the daemon lived, even once the tool was actually ready.
 func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
@@ -939,7 +939,7 @@ func TestReadinessCancelledProbeIsNotMemoized(t *testing.T) {
 	}
 
 	// A later call with a live context must re-probe rather than return the stale
-	// cancellation - swap in a passing probe to prove the probe actually re-ran.
+	// cancellation; swap in a passing probe to prove the probe actually re-ran.
 	readiness["faketool"] = spells.Tool{Ready: spells.Command{Bin: "sh", Args: []string{"-c", "exit 0"}}}
 	assert.NoError(t, checkReady(context.Background(), readiness, op, dir))
 }

@@ -18,7 +18,7 @@ import (
 
 // buildFixture returns a cache dir and the inputs for a two-project workspace.
 // Shards are fingerprinted by assembled content, so the fixture needs no
-// magusfiles on disk - a change is modeled by mutating the Inputs (exactly what
+// magusfiles on disk: a change is modeled by mutating the Inputs (exactly what
 // re-parsing changed sources produces in production).
 func buildFixture(t *testing.T) (cacheDir string, in Inputs) {
 	cacheDir = filepath.Join(t.TempDir(), ".magus")
@@ -70,7 +70,7 @@ func TestBuildPersistsAndReloads(t *testing.T) {
 
 // TestSymbolShardsLazyExcludeAndMerge: a declared symbol shard is persisted but
 // kept OUT of the default graph (Sync and Load), and pulled in on demand by
-// MergeSymbolShards - the lazy-loading contract that keeps symbols off the hot path.
+// MergeSymbolShards, the lazy-loading contract that keeps symbols off the hot path.
 func TestSymbolShardsLazyExcludeAndMerge(t *testing.T) {
 	cacheDir, in := buildFixture(t)
 	in.Symbols = map[string][]types.KnowledgeSymbol{
@@ -116,7 +116,7 @@ func TestFingerprintInvalidation(t *testing.T) {
 }
 
 // TestCrossProjectInvalidation: content fingerprinting catches a change that a
-// per-project source hash would miss - a cross-project edge from pkg/a to a
+// per-project source hash would miss: a cross-project edge from pkg/a to a
 // pkg/b target. When that target reference changes, pkg/a's shard must rebuild.
 func TestCrossProjectInvalidation(t *testing.T) {
 	cacheDir, in := buildFixture(t)
@@ -260,7 +260,7 @@ func TestRemoteShardPushPullRoundTrip(t *testing.T) {
 	// Simulate LRU eviction: every shard file gone, manifest intact.
 	evictAllShardFiles(t, dir)
 
-	// Load restores each shard from remote by fingerprint - full graph, no rebuild.
+	// Load restores each shard from remote by fingerprint: full graph, no rebuild.
 	g, err := NewStore(dir, false, 0, rem, nil).Load(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, wantNodes, len(g.Nodes()), "graph fully restored from remote")
@@ -344,12 +344,12 @@ func benchStore(b *testing.B, nProjects int) (*Store, int64) {
 
 // Load must merge shards in a stable order. AddNode and AddEdge are both
 // first-writer-wins, so when two shards describe the same node with a different
-// Source, the winner is decided purely by merge order - and Load used to take Go's
+// Source, the winner is decided purely by merge order, and Load used to take Go's
 // randomized map order over the manifest.
 //
 // The failure this guards against is nasty precisely because it is quiet: the export
 // sorts nodes and edges by ID afterward, so counts never move and the diff is a
-// handful of "source" lines. That is exactly how it presented - `magus run generate`
+// handful of "source" lines. That is exactly how it presented: `magus run generate`
 // regenerated gen/*.json, the drift gate saw a changed file, and the change was
 // provenance only.
 //
@@ -417,7 +417,7 @@ func TestLoadMergesShardsInStableOrder(t *testing.T) {
 // per node and edge to materialize the graph, so throughput FALLS as the workspace
 // grows (134 MB/s at 2k projects, 79 MB/s at 50k) and the wall time reaches ~5 s.
 // SetBytes is on the shard bytes so the report is throughput, which is the number
-// that exposes the degradation - a plain ns/op just looks bigger for a bigger input.
+// that exposes the degradation: a plain ns/op just looks bigger for a bigger input.
 //
 // Note for anyone reading a profile from this: Store.Load has no production caller
 // today. Every command goes through Build, which re-assembles from source. That

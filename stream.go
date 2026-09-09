@@ -155,7 +155,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 // Cancellation CLOSES r when it can be closed. The ctx checks below only run between
 // reads, so a cancelled stream whose input has simply gone quiet left this goroutine
 // parked in a blocking read forever; closing the reader is the only thing that returns
-// it. A reader with no Close keeps that old shape - it parks until EOF - because there is
+// it. A reader with no Close keeps that old shape (it parks until EOF) because there is
 // nothing generic to interrupt it with.
 func readBatches(ctx context.Context, r io.Reader, null bool) <-chan []string {
 	ch := make(chan []string, 8)

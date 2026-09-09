@@ -30,7 +30,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Dura
 	if err != nil {
 		return nil, err
 	}
-	// Only a target's OWN declaration makes an empty result an error - see Step.OutputsDeclared.
+	// Only a target's OWN declaration makes an empty result an error; see Step.OutputsDeclared.
 	if len(matches) == 0 && len(s.Outputs) > 0 && s.OutputsDeclared {
 		return nil, fmt.Errorf("snapshot: target %q in project %q declared outputs but produced none: %v",
 			s.Target, s.ProjectPath, s.Outputs)
@@ -99,7 +99,7 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	if info.IsDir() {
 		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is a directory (use a glob like %s/**)", rel, rel)
 	}
-	// Opening a FIFO blocks until a writer appears - no timeout, no diagnostic -
+	// Opening a FIFO blocks until a writer appears (no timeout, no diagnostic),
 	// so an output glob matching a stray pipe hung the build outright. A replay
 	// materializes every blob as a regular file, so a non-regular output cannot
 	// round-trip anyway; refusing it is both the fix and the honest contract.
@@ -224,7 +224,7 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 		// A manifest can be attacker-controlled (an insecure remote, or a signed
 		// supply-chain artifact whose recorded outputs magus never authored), so
 		// nothing here may write or delete outside root. Refuse a destination that
-		// escapes root, or whose parent chain traverses a symlink - checked before
+		// escapes root, or whose parent chain traverses a symlink, checked before
 		// the Remove and MkdirAll below, either of which would otherwise follow a
 		// symlink an earlier record planted (record "link"->"../" then "link/evil").
 		if err := ensureReplayDstSafe(root, dst, rec.Path); err != nil {

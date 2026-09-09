@@ -22,7 +22,7 @@ func routingKind(r types.KnowledgeRouting, kind string) (types.KnowledgeRoutingK
 // it before, and the set shipped two kinds short: the embedded built-in spells were missed
 // as a catalog, so spell, op and tool counted as workspace facts.
 //
-// charm is the control - it has no registry mint site, so a predicate loose enough to
+// charm is the control: it has no registry mint site, so a predicate loose enough to
 // sweep it in is too loose.
 func TestBinarySuppliedKindsMembership(t *testing.T) {
 	for _, kind := range []string{
@@ -93,8 +93,8 @@ func TestRoutingProjects(t *testing.T) {
 	assert.True(t, slices.IsSorted(paths), "projects sorted by path")
 }
 
-// TestRoutingIncludesOwnerKind pins that owner nodes - merged into the default graph by
-// store.go (it excludes only symbol/coverage shards) - actually surface in the routing
+// TestRoutingIncludesOwnerKind pins that owner nodes, merged into the default graph by
+// store.go (it excludes only symbol/coverage shards), actually surface in the routing
 // table, not just get loaded and then dropped by an incomplete kind allowlist.
 func TestRoutingIncludesOwnerKind(t *testing.T) {
 	g := NewGraph()

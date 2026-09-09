@@ -15,7 +15,7 @@ import (
 // The optional hooks are genuinely optional and a check that demanded all of them
 // would be wrong: the buzz spell declares no version command because there is no
 // useful Buzz-toolchain version to probe, and saying so is correct, not a defect.
-// So this reports coverage rather than mandating it - a reader can see at a glance
+// So this reports coverage rather than mandating it: a reader can see at a glance
 // that a spell claims no language or no probe, and decide whether that is intended.
 //
 // What it DOES fail on is the one thing no spell can function without: a name.
@@ -28,9 +28,9 @@ import (
 //
 // LIMITATION worth stating, because it is the bug this check was asked for and does
 // not catch: a spell whose DECLARED hook never reaches the registered spell looks
-// identical here to one that never declared it. That happened - workspace-local Buzz
+// identical here to one that never declared it. That happened (workspace-local Buzz
 // spells silently lost their version probe, language, and opaque flag because one
-// construction path omitted the options - and doctor cannot see it, because doctor
+// construction path omitted the options) and doctor cannot see it, because doctor
 // only ever observes the registered spell, never the descriptor it was built from.
 // Catching declaration-versus-application drift needs a test over magus's own
 // construction paths, not a workspace diagnostic. See TestSpellOptionsApplied.

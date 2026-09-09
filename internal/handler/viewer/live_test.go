@@ -105,7 +105,7 @@ func TestLiveServerViewerURL(t *testing.T) {
 	defer ls.Stop(ctx)
 
 	u := ls.ViewerURL("https://eli.gladman.cc/magus/logs/")
-	// Both the loopback host and the bearer token ride the fragment - nothing in the query.
+	// Both the loopback host and the bearer token ride the fragment: nothing in the query.
 	assert.True(t, strings.HasPrefix(u, "https://eli.gladman.cc/magus/logs/#live="), u)
 	before, after, found := strings.Cut(u, "#")
 	require.True(t, found, "live url must have a fragment")
@@ -145,7 +145,7 @@ func (f *flushErrWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe
 func (f *flushErrWriter) Flush()                    {}
 
 // TestStreamEventsAbortsOnBacklogWriteError confirms streamEvents returns early (does not hang)
-// when writing a backlog event fails - e.g. the browser hung up mid-replay.
+// when writing a backlog event fails, e.g. the browser hung up mid-replay.
 func TestStreamEventsAbortsOnBacklogWriteError(t *testing.T) {
 	bc := journal.NewBroadcaster()
 	emit(bc, journal.Event{Kind: journal.KindOutput, Text: "backlog"})

@@ -8,7 +8,7 @@ import (
 )
 
 // TestAnalyzer covers the default rule in one pass over the sprawl package: the
-// narrowed files are reported, and the shapes that must not be stay silent - the
+// narrowed files are reported, and the shapes that must not be stay silent: the
 // paired file, the conventional export and benchmark names, a build-tag suffix,
 // a source file carrying the same suffix as its test, and a cross-cutting concern
 // that pairs with nothing.

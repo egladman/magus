@@ -10,8 +10,8 @@ import (
 )
 
 // TestManifestUpToDate is the gate the manifest lacked. It had drifted by eleven
-// modules - base64, csv, hex, ini, url, log, math, net, sort, term, diff were all
-// absent - so editor completion and hover silently did not know they existed. A
+// modules: base64, csv, hex, ini, url, log, math, net, sort, term, diff were all
+// absent, so editor completion and hover silently did not know they existed. A
 // snapshot with no gate is a snapshot that rots, and this one rotted unnoticed
 // across a whole stdlib expansion.
 func TestManifestUpToDate(t *testing.T) {

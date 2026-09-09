@@ -12,11 +12,11 @@ import (
 )
 
 // gatedReader delivers first IN FULL (io.Copy's internal buffer is far smaller
-// than first, so this takes several Read calls), then blocks - closing waiting
-// so a test can observe the pause - until proceed is closed, then delivers
+// than first, so this takes several Read calls), then blocks (closing waiting
+// so a test can observe the pause) until proceed is closed, then delivers
 // second in full, then io.EOF. It gives a test deterministic control over
 // exactly how much of a PutArtifact push has landed on disk before a second,
-// competing push runs - no wall-clock race needed.
+// competing push runs: no wall-clock race needed.
 type gatedReader struct {
 	first, second []byte
 	proceed       chan struct{}
@@ -92,7 +92,7 @@ func TestFSRemoteBackendPutArtifactConcurrentPushesDontTear(t *testing.T) {
 		"push B, fully overlapping push A's pause, must complete cleanly")
 
 	close(readerA.proceed) // let push A finish writing and attempt its rename
-	<-doneA                // its own error (if any - e.g. a stale temp name) is not the point; the stored bytes are
+	<-doneA                // its own error (if any, e.g. a stale temp name) is not the point; the stored bytes are
 
 	got, err := os.ReadFile(r.artifactPath("proj", "deadbeef"))
 	require.NoError(t, err, "an artifact must exist after both pushes")

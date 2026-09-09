@@ -2,7 +2,7 @@
 // the console's Diff surface renders and an agent joins over MCP, read with a keyboard.
 //
 // The CLI already shared the review COMPUTATION; what it did not share was the
-// COORDINATION - where the human is looking, which hunks they have read, what an agent
+// COORDINATION: where the human is looking, which hunks they have read, what an agent
 // wants them to look at. That is the whole difference between three tools rendering one
 // changeset and three clients of one review.
 //
@@ -22,7 +22,7 @@ import (
 )
 
 // Hunk is one @@ section as the viewer shows it. Digest is the content address the viewed
-// set is keyed by - the same one internal/diff computes, passed in rather than recomputed
+// set is keyed by: the same one internal/diff computes, passed in rather than recomputed
 // so the CLI and the console mark the same hunk.
 type Hunk struct {
 	// NewStart is the hunk's first line on the new side, and Declaration is the enclosing
@@ -38,7 +38,7 @@ type Hunk struct {
 	Header string
 	Lines  []string
 	Digest string
-	// Emph is, per line of Lines, which part of it changed - as byte offsets into the RAW
+	// Emph is, per line of Lines, which part of it changed, as byte offsets into the RAW
 	// line, marker included, because that is what the renderer slices. Empty or short is fine
 	// and means no emphasis, which is what a caller that does not compute it gets.
 	//
@@ -54,7 +54,7 @@ type File struct {
 	Path string
 	// Settled is a file a receipt covers at exactly its current content: read, and unmoved since.
 	//
-	// Folded by default for the same reason Generated is - it is not what the reader is here for -
+	// Folded by default for the same reason Generated is (it is not what the reader is here for)
 	// but for a different reason, so it is a separate flag and a separate key. A generated file is
 	// a machine's restatement of an edit made elsewhere; a settled file is one this reader already
 	// weighed. Conflating them would fold a colleague's unreviewed generated file and a reader's
@@ -66,7 +66,7 @@ type File struct {
 }
 
 // Input is the changeset the viewer opens on. Files arrive in reading order and are never
-// re-sorted here - types.Diff.SortForReading is the one definition of that order.
+// re-sorted here; types.Diff.SortForReading is the one definition of that order.
 type Input struct {
 	Files    []File
 	Unranked bool
@@ -119,7 +119,7 @@ type Row struct {
 	Thread string
 	Text   string
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
-	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
+	// with its counterpart. The zero span means there is nothing to draw harder than the rest:
 	// the line has no partner, or the whole of it changed and the row color already says so.
 	Emph changeset.Span
 }
@@ -212,7 +212,7 @@ func New(in Input) *Model {
 // Rows returns every visible row, cursor included. The renderer windows it.
 //
 // The slice ALIASES the model's own, which rebuild refills in place. A cursor move does not
-// rebuild, but a fold or a read mark does, and a row list that grew REALLOCATES - so an earlier
+// rebuild, but a fold or a read mark does, and a row list that grew REALLOCATES, so an earlier
 // return value is left pointing at whichever backing array it was handed, stale rather than
 // live. Read it and drop it rather than holding it. Copying instead would allocate the whole
 // changeset on each of the frames a keypress draws, which is the cost the reuse exists to avoid.
@@ -245,7 +245,7 @@ func (m *Model) overviewCursor() int { return m.overCursor }
 // cursor is where the human is looking, in the shape the session takes.
 //
 // Hunk is the hunk's index in the PATCH (Hunk.Index), which is the coordinate the session
-// addresses talk by - the same one talkRows joins comments on. It is NOT the row position the
+// addresses talk by: the same one talkRows joins comments on. It is NOT the row position the
 // cursor walks: those coincide only while the viewer holds every hunk of every file, so
 // publishing the position would key the shared cursor by something no other client can resolve.
 func (m *Model) cursor() types.DiffCursor {
@@ -332,7 +332,7 @@ type ViewedChange struct {
 
 // toggleViewed flips the read mark on the hunk under the cursor and reports what changed,
 // so the caller can tell the session. ok is false on a file heading or a hunk with no
-// digest - there is nothing to key a mark by.
+// digest; there is nothing to key a mark by.
 func (m *Model) toggleViewed() (change ViewedChange, ok bool) {
 	if m.hunk < 0 || len(m.files) == 0 {
 		return ViewedChange{}, false
@@ -359,8 +359,8 @@ func (m *Model) Viewed(digest string) bool { return m.viewed[digest] }
 //
 // Keyed on what the viewport DREW rather than on what the viewer was handed, because the
 // watermark it feeds is the reader's claim to have had a remark in front of them: marking a
-// thread three screens down at open would consume the mark - and the notification that exists
-// to send the reader back to it - for something nobody looked at. Serving is not showing; the
+// thread three screens down at open would consume the mark (and the notification that exists
+// to send the reader back to it) for something nobody looked at. Serving is not showing; the
 // console's session route draws the same line.
 //
 // The overview draws no changeset rows at all, so it shows nothing.
@@ -385,7 +385,7 @@ func (m *Model) takeShownThreads() []string {
 //
 // This is what makes a second pass cost only the second pass. A reviewer who asked for changes
 // comes back to a changeset where most files are exactly what they already read, and nothing
-// distinguishes those from the ones that moved - so they re-read everything, find the same things,
+// distinguishes those from the ones that moved, so they re-read everything, find the same things,
 // and learn that re-reviewing is not worth doing carefully.
 //
 // Folded by DEFAULT, and the count is always stated, because a hidden file nobody was told about
@@ -577,7 +577,7 @@ func (m *Model) rebuild() {
 // elsewhereRows are the remarks this pass has nowhere to put: on a file the changeset does not
 // contain, or on one folded away.
 //
-// Listed rather than dropped, which is the whole rule the placement follows - "your colleague
+// Listed rather than dropped, which is the whole rule the placement follows: "your colleague
 // said nothing" is the one thing a review surface must never say by accident. A pull request
 // covers commits a working diff does not, so a thread landing outside it is ordinary rather than
 // exceptional, and until this existed the terminal viewer discarded every one of them in silence
@@ -631,7 +631,7 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 	k := hunkRef{path: m.files[file].Path, hunk: h.Index}
 	var out []Row
 	// The host's threads first. What a colleague already said is context for the remark you are
-	// about to write, not a footnote to it - the same order the console renders.
+	// about to write, not a footnote to it: the same order the console renders.
 	for _, t := range m.threads[k] {
 		out = append(out, threadRows(t, file, row)...)
 	}

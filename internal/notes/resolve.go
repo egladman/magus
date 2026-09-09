@@ -8,20 +8,20 @@ import (
 // Resolver answers whether one anchor still names something that exists.
 //
 // Injected rather than imported: this package must not learn about the knowledge graph,
-// so the composition root - the one place allowed to know both - supplies the lookup.
+// so the composition root (the one place allowed to know both) supplies the lookup.
 type Resolver interface {
 	// Resolves reports whether the given anchor still names a live entity.
 	Resolves(ctx context.Context, a Anchor) bool
 	// Digest returns the CURRENT fingerprint of the anchored content.
 	//
 	// An empty digest with a nil error means the kind has nothing to hash: nothing to say,
-	// and nothing wrong. A non-nil error means the fingerprint COULD NOT be computed - an
+	// and nothing wrong. A non-nil error means the fingerprint COULD NOT be computed: an
 	// unbuilt symbol index, an indexer that reported no enclosing range, an unreadable
 	// file.
 	//
 	// Neither is drift, and that direction is deliberate: a gate that manufactures a change
 	// out of its own blind spot gets ignored, and an ignored gate is worse than none. They
-	// are separated because they are differently actionable - nothing to hash is the end of
+	// are separated because they are differently actionable: nothing to hash is the end of
 	// the story, while a failure names something a reader can go fix. Collapsing both into
 	// "" hid four distinct causes behind one silence.
 	Digest(ctx context.Context, a Anchor) (string, error)
@@ -39,13 +39,13 @@ type Resolver interface {
 // separates a body edit, which rarely invalidates prose, from drift worth re-reading for.
 //
 // Exported so the CLI and the daemon grade with one rule rather than two. They present the
-// answer differently - an Issue with a hint, an AnchorStatus with a detail - but a surface
+// answer differently (an Issue with a hint, an AnchorStatus with a detail), but a surface
 // whose verdict disagreed with `magus notes verify` would be a second opinion rather than a
 // second view of one answer.
 //
 // False is the answer for every uncertainty: no recorded declaration digest, no computable
 // one, or an error. The finding then degrades to ungraded drift instead of to silence, which
-// is the safe direction - an ungraded finding overstates a change, while grading on absent
+// is the safe direction: an ungraded finding overstates a change, while grading on absent
 // data would understate one.
 func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 	if a.DeclDigest == "" {
@@ -56,8 +56,8 @@ func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 }
 
 // AnchorIssues reports every anchor that no longer resolves, with the coarser anchor it
-// degrades to. It is the Issue projection of ResolveAnchors' pass - the same grader, filtered
-// to the anchors something is wrong with - and never a second opinion about one.
+// degrades to. It is the Issue projection of ResolveAnchors' pass (the same grader, filtered
+// to the anchors something is wrong with), and never a second opinion about one.
 //
 // The empirical case for doing this at all is blunt: humans do not maintain references in
 // prose. Under 9% of links in source comments are ever revised after the commit that added
@@ -72,7 +72,7 @@ func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 // rather than quietly re-pointed.
 //
 // What this deliberately does NOT do is guess. Nothing here searches for a renamed symbol or
-// a moved file: a low-confidence match is worse than an admitted failure, measured - when
+// a moved file: a low-confidence match is worse than an admitted failure, measured. When
 // users were shown anchors placed on a single weak match, the median rating was "terrible".
 // Every system that guessed instead (a lost tour step parked at line 2000, a highlight that
 // silently fails to render, a quote anchored within 50% edit distance) produced confident,
@@ -125,11 +125,11 @@ const StatusUngraded IssueCode = "ungraded-anchor"
 
 // ResolveAnchors grades EVERY anchor of every note, healthy ones included. It is the
 // resolution pass itself, and AnchorIssues is that pass projected onto the anchors that graded
-// to a finding, so the two views cannot disagree - re-deriving a grade for either would be the
+// to a finding, so the two views cannot disagree; re-deriving a grade for either would be the
 // second opinion DeclarationHeld exists to prevent.
 //
 // The per-anchor view is the primitive because an Issue can only describe a problem, while the
-// joins built on top of this store - which note does this diff touch - are mostly about anchors
+// joins built on top of this store (which note does this diff touch) are mostly about anchors
 // that are perfectly fine. Reconstructing those from the Issue view is impossible in both
 // directions: an anchor's kind and target live only inside a message written for a person, and
 // a clean anchor produces no Issue at all.
@@ -137,7 +137,7 @@ const StatusUngraded IssueCode = "ungraded-anchor"
 // res may be NIL, meaning ungraded: every anchor comes back StatusUngraded, and the caller
 // learns WHAT is anchored while claiming nothing about freshness nobody measured. That is the
 // state a knowledge graph which will not load leaves behind, and it is deliberately not an
-// error - a broken index should cost the drift column, never the answer.
+// error: a broken index should cost the drift column, never the answer.
 //
 // Status is the IssueCode this anchor graded to, "" when it is clean, and StatusUngraded when
 // res was nil, so a caller renders drift without asking twice. Pos is the anchor's index in its
@@ -145,7 +145,7 @@ const StatusUngraded IssueCode = "ungraded-anchor"
 //
 // File is filled in for file anchors only, graded or not. A symbol's file is deliberately not
 // derivable here: a SCIP symbol key names a package and a descriptor, never a path, and only
-// the graph knows where a symbol currently sits - a dependency this package does not have and
+// the graph knows where a symbol currently sits, a dependency this package does not have and
 // must not grow (see internal/graph/knowledge.NoteResolver). A caller holding the graph
 // populates it; one that leaves it empty loses the weaker neighbor match in AnchorHits and
 // nothing else.
@@ -210,7 +210,7 @@ func resolveAnchor(ctx context.Context, res Resolver, note string, a Anchor) anc
 		}
 	}
 	// The anchor resolves, so the easy question is answered. The harder one is whether the
-	// thing it points at still SAYS what the note claims - the case a reader cannot see and
+	// thing it points at still SAYS what the note claims: the case a reader cannot see and
 	// an existence check cannot catch.
 	//
 	// Both empty cases are silence, not drift: no stored digest means the note predates
@@ -254,7 +254,7 @@ func resolveAnchor(ctx context.Context, res Resolver, note string, a Anchor) anc
 }
 
 // driftHint says what to re-read and, when the note recorded where its fingerprint was
-// taken, what to diff - otherwise a reader is told the code changed and left to find how.
+// taken, what to diff; otherwise a reader is told the code changed and left to find how.
 func driftHint(name string, a Anchor) string {
 	hint := "Re-read the note against the code as it is now."
 	if a.Commit != "" && a.Kind == AnchorFile {
@@ -267,8 +267,8 @@ func driftHint(name string, a Anchor) string {
 
 // degradeHint names the coarser anchor this one falls back to, and says what to do.
 //
-// A warning rather than an error, deliberately: a symbol disappears for ordinary reasons -
-// a rename, a refactor, an indexer upgrade that re-spells every key - and a note whose
+// A warning rather than an error, deliberately: a symbol disappears for ordinary reasons
+// (a rename, a refactor, an indexer upgrade that re-spells every key), and a note whose
 // subject moved is still worth reading. What it is not is silently current.
 func degradeHint(a Anchor) string {
 	switch a.Kind {
@@ -289,7 +289,7 @@ func degradeHint(a Anchor) string {
 // This is a re-attestation, not a repair, and the distinction is the whole reason it is
 // separate from verify. Verify never writes; a person running this is stating "I have read
 // this note against the code as it is now". Because notes live in the checkout, that
-// statement lands as a reviewed commit under their name - the one genuinely good idea in
+// statement lands as a reviewed commit under their name, the one genuinely good idea in
 // Google's freshness stamps, which are otherwise a nag with no gate behind them.
 //
 // It must therefore never run implicitly on an agent's behalf. Recording a digest silently

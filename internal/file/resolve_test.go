@@ -70,7 +70,7 @@ func TestResolveProjectDeprecatedScheme(t *testing.T) {
 		assert.Contains(t, out, `use=pkg/api`)
 	})
 
-	// The root alias returns "." regardless of anchor - it is not the bare "." reading,
+	// The root alias returns "." regardless of anchor; it is not the bare "." reading,
 	// which would resolve to the anchor.
 	t.Run("root alias stays the root", func(t *testing.T) {
 		out := logged(t, "workspace://", "web/studio", ".")
@@ -80,7 +80,7 @@ func TestResolveProjectDeprecatedScheme(t *testing.T) {
 
 	// "workspace://." is NOT the root alias: the "." is a dot-relative marker and
 	// anchors, exactly as a bare "." does. That equivalence is the whole argument for
-	// retiring the scheme - it never bought a reading the bare path did not already have.
+	// retiring the scheme: it never bought a reading the bare path did not already have.
 	t.Run("explicit dot anchors like the bare dot", func(t *testing.T) {
 		logged(t, "workspace://.", "web/studio", "web/studio")
 		bare, err := ResolveProject(t.Context(), ".", "web/studio")

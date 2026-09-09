@@ -68,7 +68,7 @@ func renderWindow(b spells.VersionBounds) string {
 	}
 }
 
-// buildToolRow turns one probe outcome into a row. Pure - no context, no exec - because
+// buildToolRow turns one probe outcome into a row. Pure (no context, no exec) because
 // welding this state machine inside the fork loop is what let four distinct outcomes
 // collapse into one blank "not found".
 func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.VersionBounds, raw string, probeErr error) toolRow {
@@ -81,7 +81,7 @@ func buildToolRow(project, bin, spell string, t spells.Tool, projBounds spells.V
 	}
 	switch {
 	case probeErr != nil:
-		// Could not run at all - the only outcome that means "not installed".
+		// Could not run at all: the only outcome that means "not installed".
 		row.Verdict, row.ProbeError = verdictUnprobed, probeErr.Error()
 		return row
 	default:

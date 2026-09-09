@@ -67,7 +67,7 @@ func TestAnnotateProseStaleness(t *testing.T) {
 }
 
 // TestAnnotateProseStalenessIsSilentWithoutEvidence pins the direction this must fail in.
-// An unmeasured node is not "fresh" - it carries no attr at all, and ranking leaves it
+// An unmeasured node is not "fresh": it carries no attr at all, and ranking leaves it
 // alone. Manufacturing a verdict from absent data is how a signal becomes noise.
 func TestAnnotateProseStalenessIsSilentWithoutEvidence(t *testing.T) {
 	t.Run("no vcs history at all (the default: knowledge.vcs.enabled is off)", func(t *testing.T) {
@@ -114,7 +114,7 @@ func TestStalenessLabel(t *testing.T) {
 
 // Staleness annotates and never reorders. The subject that keeps moving is where knowledge is
 // worth most (churn predicts defect density), and prose whose subject is gone is often the
-// only surviving evidence of why it went - ranking either one down buries it exactly when it
+// only surviving evidence of why it went; ranking either one down buries it exactly when it
 // is needed. Guru and g3doc both label rather than demote for the same reason.
 func TestResolveLabelsStalenessWithoutReordering(t *testing.T) {
 	g := NewGraph()
@@ -154,7 +154,7 @@ func nodeIn(t *testing.T, shards []Shard, id string) types.KnowledgeNode {
 }
 
 // TestOutrunDaysCountsCalendarDays pins the unit. Subtracting raw instants truncates, so
-// prose committed late one evening and a subject edited two dates later reports 1 - which
+// prose committed late one evening and a subject edited two dates later reports 1, which
 // reads as "yesterday" for a two-day gap, and would misplace prose sitting on the petrified
 // cutoff. Days are also what the graph publishes (vcs_last_modified is a date), so this is
 // the arithmetic a reader can check the number against.
@@ -171,6 +171,6 @@ func TestOutrunDaysCountsCalendarDays(t *testing.T) {
 	assert.Equal(t, 0, outrunDays(late, time.Date(2026, 8, 12, 7, 0, 0, 0, tokyo)))
 
 	// Prose newer than its subject goes negative, which annotateProseStaleness reads as
-	// current - it must not wrap to a large positive and report a petrified doc.
+	// current: it must not wrap to a large positive and report a petrified doc.
 	assert.Negative(t, outrunDays(late, late.AddDate(0, 0, -5)))
 }

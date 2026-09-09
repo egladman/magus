@@ -45,7 +45,7 @@ const (
 )
 
 // budgetMagic guards the two frames above. Both MUTATE state shared by every magus on
-// the machine - one takes a claim against the host's memory, the other hands one back -
+// the machine (one takes a claim against the host's memory, the other hands one back)
 // and a release in particular is unauthenticated denial of service if anything on the
 // socket can send it: drop a peer's claim and the budget re-admits work against memory
 // that is still held. The same reasoning as jobMagic and shutdownMagic, and the same
@@ -121,17 +121,17 @@ type runRequest struct {
 	Root     string   `json:"root,omitempty"` // empty → daemon walks up from Cwd
 	// Ancestors is the client's invocation ancestry, oldest first. The daemon adopts it
 	// so a run it executes on this client's behalf can recognize a project lock held by
-	// one of the client's OWN ancestors - which, under the daemon, is a lock this very
+	// one of the client's OWN ancestors, which, under the daemon, is a lock this very
 	// process holds. Empty from a client that predates the field: re-entry detection is
 	// then unavailable and the acquire falls back to waiting.
 	Ancestors []string `json:"ancestors,omitempty"`
 	// Lease is the lease the CLIENT was launched under, carried because the
 	// daemon executes the run in its own process and so reads its own environment, not
-	// the client's - without this an adopted run records no lease at all.
+	// the client's; without this an adopted run records no lease at all.
 	//
 	// It is the client's own claim about itself, exactly what the BAGGAGE channel's
-	// magus.lease member is - the client's trace context does not cross this socket, so
-	// an adopted run records the lease and no ancestry - and it
+	// magus.lease member is (the client's trace context does not cross this socket, so
+	// an adopted run records the lease and no ancestry) and it
 	// arrives over a socket any local process may dial. The server therefore re-validates
 	// it with types.ValidLeaseID and drops a value that fails, matching what
 	// trail.LeaseFromEnv does with a malformed environment value: a lease id is
@@ -259,7 +259,7 @@ type serviceStopAllReply struct {
 // next command against each one reopens it and re-reads magus.yaml. It is the config
 // counterpart of serviceStopAllRequest: a partial reset that leaves the daemon up.
 //
-// There is no "apply this config" payload, and deliberately so - the daemon does not hold
+// There is no "apply this config" payload, and deliberately so: the daemon does not hold
 // a config to patch, it holds OPEN WORKSPACES that each captured one when they loaded.
 // Dropping them is the reload; the config is then read from disk the ordinary way,
 // through exactly the path a cold start uses. Nothing here can disagree with that path

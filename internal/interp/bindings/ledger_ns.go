@@ -14,7 +14,7 @@ import (
 // types.Lease).
 //
 // Hand-bound, like cache/ci/secret/workspace above, because a Namespace's methods are
-// Extern by construction (see std.Namespace) - there is no Impl for codegen to reflect a
+// Extern by construction (see std.Namespace): there is no Impl for codegen to reflect a
 // trampoline from. Unlike those, ledger needs no session-scoped state (a provider
 // selection, a resolver), so it takes no captured ctx: each closure calls std.MagusListLedger
 // et al with the CALL-TIME ctx the VM supplies, the same one every generated Impl
@@ -24,7 +24,7 @@ import (
 // trampoline does and what makes a caught value a MAP rather than a str: the VM turns a
 // bare error into StrValue(err.Error()) and only a StructuredError into an indexable map
 // (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
-// one - handing them a differently-typed value than every other magus\* method does is a
+// one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
 func buildLedgerNS(obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()

@@ -108,7 +108,7 @@ var table = []cmd{
 	got := SliceOfStructs(f, "table")
 	assert.Equal(t, []StructLiteral{
 		{"Name": "run", "Short": "run a target"},
-		// Hits is an int, so only the string field survives - all a declaration
+		// Hits is an int, so only the string field survives, all a declaration
 		// table's generator reads.
 		{"Name": "ls"},
 	}, got, "a non-composite element and an all-empty entry are both skipped")
@@ -131,7 +131,7 @@ var table = []cmd{}
 // TestSliceOfStructsReadsAFunctionLocalTable asserts the whole-file walk is
 // INTENDED, not an accident of using ast.Inspect. A table declared inside a
 // function is as much a declaration table as a package-level one, and a reader that
-// silently skipped it would report an incomplete list - the failure mode this
+// silently skipped it would report an incomplete list, the failure mode this
 // package was created to end.
 func TestSliceOfStructsReadsAFunctionLocalTable(t *testing.T) {
 	f := parseSrc(t, `package p
@@ -172,7 +172,7 @@ func bind(fs *flag.FlagSet) {
 // because checking the type would mean resolving imports. A local named fs that is
 // not a FlagSet therefore reports flags it does not bind.
 //
-// This is the right trade for the question FlagNames answers - "what flags does
+// This is the right trade for the question FlagNames answers: "what flags does
 // this file make reachable", asked of magus's own command files, where fs is a
 // FlagSet by convention everywhere. The test exists so the limitation is a choice
 // on record rather than a surprise, since the alternative (type resolution) is what
@@ -231,7 +231,7 @@ fs.Bool("verbose",false,"")
 // TestSliceOfStructsIgnoresNonSliceAndNonIdentKeys covers the two remaining
 // skip paths: a declaration bound to something that is not a composite literal at
 // all, and an entry whose key is not a plain field name. Both must be ignored
-// rather than crash - the reader runs over hand-edited tables.
+// rather than crash; the reader runs over hand-edited tables.
 func TestSliceOfStructsIgnoresNonSliceAndNonIdentKeys(t *testing.T) {
 	f := parseSrc(t, `package p
 
@@ -268,12 +268,12 @@ func bind(fs *flag.FlagSet, args []string) {
 
 // TestSliceOfStructsDropsAPositionalEntry pins the last skip path, and it is the
 // one worth reading twice. The reader maps FIELD NAMES to values, so an entry
-// written positionally - `{"run", "run a target"}`, legal Go - carries no names to
+// written positionally (`{"run", "run a target"}`, legal Go) carries no names to
 // map and is dropped ENTIRELY, not partially.
 //
 // That is a silent loss: a generator reading the subcommand table would emit a list
 // missing that command, with nothing to say so. It is pinned rather than fixed
-// because fixing it needs the struct's field order, which means resolving the type -
+// because fixing it needs the struct's field order, which means resolving the type,
 // and every table in this repo is written with field names. If a positional entry
 // ever appears, this test is the note explaining why the generated output was short.
 func TestSliceOfStructsDropsAPositionalEntry(t *testing.T) {

@@ -18,14 +18,14 @@ import (
 //
 // The names existed only as string literals before this: `magus run` bound "wait"
 // in run.go, the man page declared "wait" in its own list, and the code that has to
-// recognize the flag later - localOnlyFlags, the pre-parse --detach peek, the REPL's
-// "-C applies to the REPL" message - spelled it a third and fourth time. One const
+// recognize the flag later (localOnlyFlags, the pre-parse --detach peek, the REPL's
+// "-C applies to the REPL" message) spelled it a third and fourth time. One const
 // (detachFlagName) existed and its neighbor on the same line did not, which is the
 // shape this is meant to make impossible: a flag name is now declared once, as data,
 // and every other mention resolves to it or fails to compile.
 //
-// Constants are prefixed by command because a bare flag name is not unique -
-// no-cache, upstream and depth each appear under several commands - and a shared
+// Constants are prefixed by command because a bare flag name is not unique
+// (no-cache, upstream and depth each appear under several commands), and a shared
 // constant would quietly tie two commands' flags together.
 func runCLIFlags(args []string) error {
 	fs := flag.NewFlagSet("cliflags", flag.ExitOnError)
@@ -77,7 +77,7 @@ func runCLIFlags(args []string) error {
 //
 // RECURSIVE, because the tree is: config's children have children of their own,
 // four levels down. A one-level walk left every flag below the second level
-// undeclared and unbindable - which is why `config cache prune --older-than` and
+// undeclared and unbindable, which is why `config cache prune --older-than` and
 // six siblings were bound by hand and documented nowhere.
 func walkCommands(path string, c cli.Command, visit func(string, cli.Command)) {
 	visit(path, c)
@@ -127,8 +127,8 @@ func flagsForMode(flags []cli.Flag, mode string) []cli.Flag {
 // writeBinder emits the typed struct and the Bind function for one command.
 //
 // A struct of typed fields rather than a name-keyed lookup, because the hand-written
-// binding it replaces already had typed destinations - a local var per flag, passed
-// to fs.BoolVar and friends - and a lookup would have made every read site worse to
+// binding it replaces already had typed destinations (a local var per flag, passed
+// to fs.BoolVar and friends), and a lookup would have made every read site worse to
 // buy nothing. The field names are derived from the flag names, so the struct is the
 // flag list: adding a flag to the registry adds a field, and removing one breaks
 // every read of it at compile time instead of leaving a silently-always-false bool.
@@ -226,7 +226,7 @@ func dashes(name string) string {
 // Order is the declaration order of the primaries; an alias never introduces a
 // group. A dangling or mistyped AliasOf is a panic rather than a silent extra
 // field, because the failure it would otherwise produce is a shorthand that parses
-// and does nothing - the exact bug this concept was added to prevent.
+// and does nothing, the exact bug this concept was added to prevent.
 func groupAliases(command string, flags []cli.Flag) []aliasGroup {
 	index := make(map[string]cli.Flag, len(flags))
 	for _, f := range flags {
@@ -364,7 +364,7 @@ func constsFor(command string, flags []cli.Flag, seen map[string]string) []strin
 // inherited), plus the two this workspace's vocabulary adds.
 //
 // A table rather than a library call because there is no algorithm here: no
-// transformation derives "URL" from "url" - it is a convention list, and every
+// transformation derives "URL" from "url"; it is a convention list, and every
 // package that offers this ships the same hardcoded map or asks the caller to
 // register one. golang.org/x/text/cases does LANGUAGE casing, and titling "url"
 // with it produces "Url", the output this exists to prevent.

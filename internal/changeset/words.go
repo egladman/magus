@@ -59,13 +59,13 @@ func byteSpan(text string, s Span) Span {
 //
 // The algorithm is deliberately NOT a full word-level diff. It takes the common prefix and the
 // common suffix on TOKEN boundaries and emphasizes the span between them. That is exact when a
-// line has one edit region - overwhelmingly the common case - and it degrades to "the whole
+// line has one edit region (overwhelmingly the common case) and it degrades to "the whole
 // middle changed" otherwise, which is true rather than merely plausible. A real LCS would be
 // more precise on multi-region edits and would also, on the lines where it disagrees with the
 // eye, produce confident nonsense.
 //
 // Two empty spans mean the lines are identical, one side is empty, or the two differ so
-// completely that emphasizing everything would be noise rather than signal - in each case the
+// completely that emphasizing everything would be noise rather than signal; in each case the
 // row color already says all there is to say.
 //
 // Parse calls this and ships the result, so both surfaces read one answer. Do not add a
@@ -73,7 +73,7 @@ func byteSpan(text string, s Span) Span {
 // the same changed line reads as two different changes depending on where it was opened.
 //
 // BOUNDARY SEMANTICS: the scan compares RUNES and the returned offsets are BYTES. Byte-wise
-// scanning is not the same algorithm - "café" and "cafè" share a lead byte, and a byte-wise
+// scanning is not the same algorithm: "café" and "cafè" share a lead byte, and a byte-wise
 // common prefix would end in the middle of a rune and hand back an offset that slices the line
 // into invalid UTF-8. Bytes are what a Go caller slices a string with; the browser is handed
 // UTF-16 offsets instead, converted where the row is built.
@@ -124,7 +124,7 @@ type emphasisPair struct {
 //
 // Pairing is strictly positional and only within a run of equal length. An unequal run means
 // lines were added or removed rather than rewritten, and pairing across that boundary invents a
-// correspondence the patch does not contain - which would emphasize the wrong half of two
+// correspondence the patch does not contain, which would emphasize the wrong half of two
 // unrelated lines and read as a confident lie.
 func pairForEmphasis(dels, adds []int) []emphasisPair {
 	if len(dels) == 0 || len(dels) != len(adds) {

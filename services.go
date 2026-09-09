@@ -43,7 +43,7 @@ func (m *Magus) newServiceSession(ctx context.Context) *service.Session {
 // warnNearDuplicateServices emits MGS5001 when a run brings up services that look
 // like near-duplicate copies of one shared service. It is scoped to the run's
 // reachable projects (the seed projects plus their cross-project dependency
-// closure) so it reflects what will actually run rather than the whole workspace -
+// closure) so it reflects what will actually run rather than the whole workspace;
 // that repo-wide view is the `magus doctor` audit. A run with fewer than two
 // near-duplicates emits nothing, so the warning stays a real signal.
 func (m *Magus) warnNearDuplicateServices(seeds []*types.Project, charms []string) {

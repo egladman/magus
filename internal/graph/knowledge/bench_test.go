@@ -130,7 +130,7 @@ func BenchmarkAssembleSymbols(b *testing.B) {
 
 // BenchmarkBuildNoop is the steady-state cost every query pays: assemble +
 // fingerprint every shard + reconcile against an up-to-date store (nothing to
-// write except - today - the manifest).
+// write except, today, the manifest).
 func BenchmarkBuildNoop(b *testing.B) {
 	in := syntheticInputs(benchProjects, benchTargets)
 	cacheDir := b.TempDir()

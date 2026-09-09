@@ -12,7 +12,7 @@ type Signature struct {
 // offset, or nil when the cursor is not inside such a call or the callee is not a
 // known module method, in-file function, or builtin. It finds the innermost
 // unclosed "(" before the cursor, reads the callee in front of it, and resolves it
-// the same way completion and hover do - so it works on the half-typed source an
+// the same way completion and hover do, so it works on the half-typed source an
 // editor asks about.
 func SignatureAt(src string, offset int) *Signature {
 	if offset < 0 {

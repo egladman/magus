@@ -60,7 +60,7 @@ func req[T any](msg *T) *connect.Request[T] { return connect.NewRequest(msg) }
 
 // TestListNeverContainsSecret seeds two connector tokens in the store and lists them
 // alongside an active share token, then asserts no field of any TokenInfo carries a
-// raw secret - only the prefix-only fingerprints - and that the secrets the store
+// raw secret (only the prefix-only fingerprints) and that the secrets the store
 // minted do not appear anywhere in the list response.
 func TestListNeverContainsSecret(t *testing.T) {
 	sh := &fakeShare{
@@ -110,7 +110,7 @@ func TestListNeverContainsSecret(t *testing.T) {
 }
 
 // TestRevokeShareTokenClosesListener revokes by the share token's fingerprint and
-// asserts the share manager's teardown (Close) fired - closing the LAN listener -
+// asserts the share manager's teardown (Close) fired, closing the LAN listener,
 // and that the response describes the share token.
 func TestRevokeShareTokenClosesListener(t *testing.T) {
 	sh := &fakeShare{
@@ -212,7 +212,7 @@ func TestNilShareManagerConstructor(t *testing.T) {
 // built-in cli token) by construction: with a real cli token on disk, ListTokens
 // never enumerates it and a deliberate RevokeToken keyed on its fingerprint fails
 // (NotFound) and leaves the token file byte-for-byte intact. The boundary is not a
-// convention this handler chooses to honor - the cli token lives in a store this
+// convention this handler chooses to honor: the cli token lives in a store this
 // service never opens (auth.Load, not the connector store), so there is no code path
 // by which the browser-facing surface could enumerate or delete it.
 func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
@@ -258,7 +258,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 // share token, serializes the response every way a browser could observe it (proto
 // wire bytes AND protojson), and FAILS if any serialization contains the raw secret,
 // the mgs_ secret prefix, or the full-length hash. The list must carry only the short
-// revoke-handle fingerprint - never the secret or the full hash.
+// revoke-handle fingerprint, never the secret or the full hash.
 func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 	// A share whose 8-char fingerprint is the prefix of a known 64-char hash, so the
 	// test can assert the REST of that hash never rides the list.
@@ -333,14 +333,14 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 }
 
 // TestTierHierarchyAtGuard proves the three-tier policy the daemon mounts this
-// service behind: the guard is BearerGuard(auth.VerifyCLIBearer, ...) - exactly
-// the daemon's wiring - with a REAL cli token and a REAL non-expired connector
+// service behind: the guard is BearerGuard(auth.VerifyCLIBearer, ...), exactly
+// the daemon's wiring, with a REAL cli token and a REAL non-expired connector
 // token on disk. The connector token, though valid on every data surface
 // (auth.VerifyMCPBearer accepts it), must be rejected on BOTH TokenService RPCs
 // (List, Revoke): a client credential must never list or revoke credentials. The
 // cli token must pass. (The share token needs no test here: it is only ever
 // verified by the LAN listener's per-session closure, and this service is never
-// mounted there - asserted structurally by the daemon's shareGuarded map not
+// mounted there, asserted structurally by the daemon's shareGuarded map not
 // containing it.)
 func TestTierHierarchyAtGuard(t *testing.T) {
 	s := newIsolatedService(t, nil)

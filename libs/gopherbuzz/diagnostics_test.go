@@ -61,7 +61,7 @@ func TestSession_Diagnostics_UnusedImport(t *testing.T) {
 }
 
 // TestSession_Diagnostics_ImportUsedViaDotAccess verifies dot access on the imported
-// module (`mod.field`) counts as use, same as backslash access - gopherbuzz accepts
+// module (`mod.field`) counts as use, same as backslash access: gopherbuzz accepts
 // both, unlike upstream, which only has the backslash form.
 func TestSession_Diagnostics_ImportUsedViaDotAccess(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
@@ -111,13 +111,13 @@ func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
 // TestSession_Diagnostics_ImportUsedOnlyInObjectLiteralType is the hard case: a module
 // referenced only by constructing its exported type as `ns\Type{...}`. gopherbuzz's
 // parser lowers that straight to ast.ObjectLit{TypeName: "Type"}, discarding the "ns"
-// identifier - so this only passes if detection runs during parsing (before that
+// identifier, so this only passes if detection runs during parsing (before that
 // lowering erases the reference), not by walking the finished AST.
 //
 // Modeled on how gopherbuzz's own stdlib does this (std/std.go's crypto/io, "registered
 // TWICE"): a native module value PLUS a declaration source under the same import path,
 // so the checker can resolve the exported object type. That combination resolves as
-// ImportNative, which importUsageIsReliable always trusts - unlike a plain file import,
+// ImportNative, which importUsageIsReliable always trusts, unlike a plain file import,
 // whose non-aliased form also flat-merges (see NonAliasedFileImportNeverWarnsUnused)
 // and can't reach `ns\Type{...}` resolution at all without it.
 func TestSession_Diagnostics_ImportUsedOnlyInObjectLiteralType(t *testing.T) {
@@ -176,7 +176,7 @@ final f = Foo{ n = 7 };
 
 // TestSession_Diagnostics_FlatImportNeverWarnsUnused pins that a flat import (`as _`)
 // is out of scope for BZZ3001: it binds no single namespace name, so attempting the
-// check would mean tracking each flattened symbol individually - a broader "unused
+// check would mean tracking each flattened symbol individually: a broader "unused
 // local" question, not "unused import".
 func TestSession_Diagnostics_FlatImportNeverWarnsUnused(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded())
@@ -201,7 +201,7 @@ func TestSession_Diagnostics_SelectiveImportNeverWarnsUnused(t *testing.T) {
 
 // TestSession_Diagnostics_ReplSuppressesUnusedImportWarning matches upstream: a REPL
 // evaluates one statement at a time, so an import "unused so far" may simply be used
-// by a line not typed yet - upstream Buzz gates its own unused_import warning on the
+// by a line not typed yet; upstream Buzz gates its own unused_import warning on the
 // same flavor check (Parser.zig: `self.flavor != .Repl`).
 func TestSession_Diagnostics_ReplSuppressesUnusedImportWarning(t *testing.T) {
 	s := NewSession(context.Background(), WithEmbedded(), WithREPL())

@@ -23,8 +23,8 @@ type checkDef struct {
 	// measured under --probe, so this is the default rather than a fixed property.
 	Evidence types.Evidence
 	// NeedsWorkspace marks a check that reads r.ws, skipped when the workspace fails to
-	// load. The ones that run regardless ask about the host - this process, this
-	// machine's sockets, this terminal - which is exactly what is still worth answering
+	// load. The ones that run regardless ask about the host (this process, this
+	// machine's sockets, this terminal), which is exactly what is still worth answering
 	// when the magusfile is unparsable.
 	NeedsWorkspace bool
 	// run takes the projects slice even where the check ignores it, keeping the table

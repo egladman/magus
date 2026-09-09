@@ -120,7 +120,7 @@ func withDeclaredStruct(t *testing.T, name string, fields []string) {
 
 // TestMarshalStructArgRoundTripsBool pins both directions of the bool defect. The
 // marshal switch handled only tagInt and tagFloat, so a bool field was never
-// written and every bool reached C as the zero AllocFFI left - false, however the
+// written and every bool reached C as the zero AllocFFI left: false, however the
 // script set it. The read-back then wrote IntValue over the field, so a round trip
 // also changed the field's TYPE from bool to int.
 func TestMarshalStructArgRoundTripsBool(t *testing.T) {
@@ -156,7 +156,7 @@ func TestMarshalStructArgRoundTripsBool(t *testing.T) {
 
 // TestMarshalStructArgUsesUnionLayout pins that a union argument is laid out as a
 // union. declaredAggregates recorded only {Size, Align}, so marshalStructArg had
-// nothing to distinguish one and always called StructLayoutWith - giving a union
+// nothing to distinguish one and always called StructLayoutWith, giving a union
 // struct offsets and a struct size, disagreeing with the layout the declaration
 // had already published and with what the callee reads.
 func TestMarshalStructArgUsesUnionLayout(t *testing.T) {

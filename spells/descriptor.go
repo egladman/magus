@@ -15,8 +15,8 @@ import (
 type PatchOpKind string
 
 const (
-	// OpNone is the zero value. It is not a valid operation - ValidatePatch rejects
-	// it - and exists so the mirror's enum has a default case to name.
+	// OpNone is the zero value. It is not a valid operation (ValidatePatch rejects
+	// it) and exists so the mirror's enum has a default case to name.
 	OpNone    PatchOpKind = ""
 	OpAdd     PatchOpKind = "add"
 	OpRemove  PatchOpKind = "remove"
@@ -26,7 +26,7 @@ const (
 	OpTest    PatchOpKind = "test"
 )
 
-// The spell value types - PatchOp, Charm, Command, Service, and the resolved Op -
+// The spell value types (PatchOp, Charm, Command, Service, and the resolved Op)
 // live HERE, in package spells, beside the Descriptor that carries them. They used
 // to sit in types, referenced as types.* throughout, on the theory that magus-utils
 // types needed a neutral package to reflect from without an embed/codegen cycle;
@@ -73,7 +73,7 @@ func ValidatePatch(ops []PatchOp) error {
 type Manifest struct {
 	Value string `json:"value"`
 	// LockCandidates names the lockfiles this ecosystem MIGHT resolve Value into, of
-	// which exactly one will exist - not the lockfiles a project has. package.json
+	// which exactly one will exist, not the lockfiles a project has. package.json
 	// resolves into any of pnpm-lock.yaml, package-lock.json, npm-shrinkwrap.json,
 	// yarn.lock or a bun lockfile depending on which package manager is in use, and
 	// pyproject.toml into any of poetry.lock, pdm.lock, uv.lock or Pipfile.lock. Go and
@@ -84,8 +84,8 @@ type Manifest struct {
 	// here. mgs_ functions run during spell discovery, before a project exists, and a
 	// workspace hoists one lockfile to its root to serve many manifests. Which
 	// directory holds the live one is resolved by walking up from the project, not
-	// declared. (Locks are also relative to nothing, so Path's base - the reason Path
-	// beats a string elsewhere - has nothing to carry.)
+	// declared. (Locks are also relative to nothing, so Path's base, the reason Path
+	// beats a string elsewhere, has nothing to carry.)
 	LockCandidates []string `json:"lock_candidates,omitempty" buzz:"lockCandidates"`
 }
 
@@ -104,7 +104,7 @@ type Descriptor struct {
 	// here. Declared by mgs_listIgnoreDirs.
 	IgnoreDirs []string `json:"ignore_dirs,omitempty"`
 	// Manifests is the ordered list of candidate manifests this spell's ecosystem
-	// declares. Ordered because some ecosystems have genuine alternatives - the first
+	// declares. Ordered because some ecosystems have genuine alternatives: the first
 	// one present in a project directory is its manifest. Declared by
 	// mgs_listManifests. Distinct from Needs (cache/affected input globs), from a
 	// spell's DeclarationFiles (project discovery, not exposed on Descriptor), and
@@ -114,7 +114,7 @@ type Descriptor struct {
 	TargetNeeds map[string][]string `json:"target_needs,omitempty"`
 	Ops         map[string]Op       `json:"targets,omitempty"`
 	// Tools is every binary this spell drives, keyed by the bin name an op names in
-	// its Command - so no op restates which tool it runs, and everything magus knows
+	// its Command, so no op restates which tool it runs, and everything magus knows
 	// about that binary sits in one place.
 	//
 	// It replaces five separate declarations (a primary probe, named probes, a primary
@@ -124,7 +124,7 @@ type Descriptor struct {
 	// notices rather than a decision someone made.
 	//
 	// There is no privileged "primary" tool. `go` had one only for historical cache-key
-	// reasons, and nothing principled distinguished it from golangci-lint - both are
+	// reasons, and nothing principled distinguished it from golangci-lint: both are
 	// binaries the spell drives, so both key the cache as spell:tool:version.
 	Tools map[string]Tool `json:"tools,omitempty"`
 

@@ -45,7 +45,7 @@ func ReadHeapStats() HeapStats {
 //
 // The daemon is one process serving many invocations against a heap that never
 // shrinks. Without a rebase the first run's peak is reported against every later
-// run, and the attribution names a magusfile that finished hours ago - the
+// run, and the attribution names a magusfile that finished hours ago: the
 // diagnostic would confidently accuse the wrong file. Callers rebase at the start
 // of an invocation.
 //

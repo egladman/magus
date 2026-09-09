@@ -19,7 +19,7 @@ var embeddedKeyring []byte
 // accepts any.
 //
 // A ring rather than a key, because the rotation CONTRIBUTING used to describe was a
-// chain - ship a compatibility release signed by the old key that embeds the new one -
+// chain (ship a compatibility release signed by the old key that embeds the new one),
 // and SelectRelease takes the newest release by default. Anyone who skipped that one
 // release jumped to a signature their binary had never been told to trust, and had no
 // in-band way back. A standby key ships long before it signs anything, so by the time
@@ -165,7 +165,7 @@ func (k Keyring) RevokedIDs() []string {
 
 // Without returns the ring minus the named fingerprints. Applied to the ring carried
 // forward after the signed index has been read, so a key the publisher revoked cannot
-// verify anything downloaded afterwards - even though this binary was built trusting it.
+// verify anything downloaded afterwards, even though this binary was built trusting it.
 func (k Keyring) Without(ids []string) Keyring {
 	if len(ids) == 0 {
 		return k

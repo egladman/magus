@@ -13,7 +13,7 @@ import (
 // Graph is the in-memory knowledge graph: the union of every shard's nodes and
 // edges, keyed for dedup and emitted in deterministic order. It is assembled at
 // load time (shards are authoritative on disk; there is no continuously merged
-// file). Not safe for concurrent mutation - build it on one goroutine, then read.
+// file). Not safe for concurrent mutation: build it on one goroutine, then read.
 //
 // Reads ARE safe for concurrent use, including from many goroutines that have
 // never seen each other: the daemon's warm graph hands the same *Graph to
@@ -67,7 +67,7 @@ func (g *Graph) SetRoot(root string) { g.root = root }
 // AddNode inserts a node, or upgrades an existing one with the same ID by filling
 // empty fields from the newcomer. Idempotent: the same node from two shards (e.g.
 // an op node the registry declares and a project references) merges cleanly. Only
-// EMPTY fields are filled - when both shards carry a non-empty Doc/Source/Label,
+// EMPTY fields are filled: when both shards carry a non-empty Doc/Source/Label,
 // the first writer wins and insertion order decides.
 func (g *Graph) AddNode(n types.KnowledgeNode) {
 	n.Label = sanitize(n.Label, maxLabelLen)
@@ -77,7 +77,7 @@ func (g *Graph) AddNode(n types.KnowledgeNode) {
 	// get the same control-char strip and length cap as the other free-form fields.
 	// Sanitize into a FRESH map rather than in place: on the read paths (Output,
 	// Select, Neighborhood) AddNode is fed nodes straight from g.Nodes(), whose
-	// Attrs alias the live graph's own maps - mutating them there would write shared
+	// Attrs alias the live graph's own maps; mutating them there would write shared
 	// state during what is logically a query. (maxLabelLen is a short cap; attrs are
 	// keys and small scalars, so a label's budget is ample.)
 	if len(n.Attrs) > 0 {
@@ -138,7 +138,7 @@ func (g *Graph) node(id string) (types.KnowledgeNode, bool) {
 // Guarded by adjMu rather than a bare nil check: this runs on the query path, and
 // the daemon's warm graph publishes one *Graph to concurrent requests, so two
 // first-queries after a rebuild can call this at once. A bare nil check let both
-// goroutines write g.out/g.in together - a concurrent map write, which is an
+// goroutines write g.out/g.in together, a concurrent map write, which is an
 // unrecoverable Go runtime fatal, not a recoverable panic. The mutex makes the
 // second caller block and then see the already-built index instead of racing.
 func (g *Graph) ensureAdj() {
@@ -185,7 +185,7 @@ func (g *Graph) Merge(nodes []types.KnowledgeNode, edges []types.KnowledgeEdge) 
 // set out to catch.
 //
 // An edge whose endpoints are not both in the graph is SKIPPED, not reported. A missing
-// node means the kind is unknown, and "unknown" is not "wrong" - that is a
+// node means the kind is unknown, and "unknown" is not "wrong"; that is a
 // dangling-reference question, which is not this one.
 //
 // The enforcement point is a test over this workspace's own assembled graph. A producer

@@ -26,7 +26,7 @@ import (
 func looksLikeZigDecls(src string) bool {
 	for _, decl := range strings.Split(src, ";") {
 		decl = strings.TrimSpace(decl)
-		// `pub` is visibility, not shape - stripped here for the same reason
+		// `pub` is visibility, not shape; stripped here for the same reason
 		// parseSingleZigDecl strips it. A block whose only declaration is a
 		// `pub const ... = extern struct` was not recognized as Zig at all, and fell
 		// through to the C prototype parser.
@@ -138,8 +138,8 @@ func parseSingleZigDecl(src string, structs map[string][]string) (CFuncSig, erro
 }
 
 // parseZigStruct parses `Name = extern struct { f1: T1, f2: T2 }`, and the union
-// spelling of the same shape. A union differs only in layout - every field starts at
-// offset 0 - so the field parsing is shared and IsUnion carries the distinction.
+// spelling of the same shape. A union differs only in layout (every field starts at
+// offset 0), so the field parsing is shared and IsUnion carries the distinction.
 func parseZigStruct(src string) (CFuncSig, error) {
 	name, rest, ok := strings.Cut(src, "=")
 	if !ok {

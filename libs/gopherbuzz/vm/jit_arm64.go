@@ -138,7 +138,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		p.To.Reg = rd
 		add(p)
 	}
-	cmpRR := func(rm, rn int16) { // flags = rn - rm
+	cmpRR := func(rm, rn int16) { // `flags = rn - rm`
 		p := np()
 		p.As = arm64.ACMP
 		p.From.Type = obj.TYPE_REG
@@ -146,7 +146,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		p.Reg = rn
 		add(p)
 	}
-	cmpImm := func(imm int64, rn int16) { // flags = rn - imm
+	cmpImm := func(imm int64, rn int16) { // `flags = rn - imm`
 		if imm == 0 {
 			// CMP $0 miscompiles: the assembler's cmp() lets the register-compare
 			// optab match a zero constant, and the unset From.Reg encodes as x0 —
@@ -206,7 +206,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 		p.To.Reg = fd
 		add(p)
 	}
-	fcmpRR := func(fm, fn int16) { // flags = fn - fm, matching cmpRR's operand order
+	fcmpRR := func(fm, fn int16) { // `flags = fn - fm`, matching cmpRR's operand order
 		p := np()
 		p.As = arm64.AFCMPD
 		p.From.Type = obj.TYPE_REG
@@ -390,7 +390,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			br(arm64.ABEQ, deoptFor(ip))
 			alu(arm64.ASDIV, aR4, aR3, aR5) // aR5 = left / right (truncating)
 			if sub == OpMod {
-				// No integer remainder instruction on AArch64: rem = left - quot*right.
+				// No integer remainder instruction on AArch64: `rem = left - quot*right`.
 				// Truncating division gives the remainder the dividend's sign, which is
 				// what IDIV produces on amd64 and what the interpreter expects.
 				alu(arm64.AMUL, aR4, aR5, aR5)
@@ -400,7 +400,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			}
 			boxInt(aR3)
 		default: // comparison
-			cmpRR(aR4, aR3) // aR3 - aR4 (left - right)
+			cmpRR(aR4, aR3) // `aR3 - aR4` (`left - right`)
 			boxBool(setCC(sub))
 		}
 		store(aR3)
@@ -415,7 +415,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			toDoubleFPR(aR3, aF0, ip)
 			toDoubleFPR(aR4, aF1, ip)
 			if isCmp(sub) {
-				fcmpRR(aF1, aF0) // flags = left - right
+				fcmpRR(aF1, aF0) // `flags = left - right`
 				boxBool(floatSetCC(sub))
 			} else {
 				if sub == OpDiv { // ±0.0 divisor ⇒ float division-by-zero error → deopt
@@ -445,7 +445,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 	storeFalseBranch := func(target int) func(int16) {
 		return func(reg int16) {
 			movImm(aR5, jitFalseBits)
-			cmpRR(aR5, reg) // reg - false
+			cmpRR(aR5, reg) // `reg - false`
 			br(arm64.ABEQ, label[target])
 		}
 	}
@@ -569,7 +569,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			cmpRR(aR6, aR5)
 			br(arm64.ABNE, deoptFor(ip)) // non-bool → deopt
 			movImm(aR5, jitFalseBits)
-			cmpRR(aR5, aR3)              // aR3 - false
+			cmpRR(aR5, aR3)              // `aR3 - false`
 			br(arm64.ABEQ, label[ins.A]) // false ⇒ forward jump
 
 		case OpJumpTruePeek:
@@ -596,7 +596,7 @@ func compileJIT(chunk *Chunk) *compiledJIT {
 			cmpRR(aR6, aR5)
 			br(arm64.ABNE, deoptFor(ip))
 			movImm(aR5, jitFalseBits)
-			cmpRR(aR5, aR3) // aR3 - false
+			cmpRR(aR5, aR3) // `aR3 - false`
 			if int(ins.A) <= ip {
 				br(arm64.ABNE, label[ip+1]) // true → continue
 				emitPoll(int(ins.A))

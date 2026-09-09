@@ -568,7 +568,7 @@ func TestCorpusDistribution(t *testing.T) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// The corpus is controlled - no spaces inside an argument - so a
+		// The corpus is controlled (no spaces inside an argument), so a
 		// whitespace split plus quote-stripping stands in for a shell parser
 		// without depending on one.
 		fields := strings.Fields(line)

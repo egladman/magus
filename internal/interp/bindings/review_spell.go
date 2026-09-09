@@ -35,7 +35,7 @@ func FindReview(ctx context.Context, branch, remote string) types.ReviewTarget {
 	//
 	// The answer needs a second round trip on every host magus ships for (GitHub names the PR's
 	// author in the payload it already returns, but not the token's owner), and this call sits
-	// under opening a diff - the path where latency is the product. A token's owner does not
+	// under opening a diff: the path where latency is the product. A token's owner does not
 	// change while a daemon runs, so the second call is paid once and the cache spares every
 	// lookup after it. A provider that answers nothing leaves it empty, which reads as unknown.
 	want := cachedViewer()
@@ -170,7 +170,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, w
 			spells.PublishReviewContract)
 	}
 	// What came back is not read beyond that. A review posts as ONE request, so a per-draft
-	// count could only restate the length of what was sent - which the caller already has. See
+	// count could only restate the length of what was sent, which the caller already has. See
 	// the handler's publish for why every draft in the batch is one the provider could place.
 	return verdict, nil
 }
@@ -180,7 +180,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, w
 // Loud, like PublishReview and unlike the two read paths: a reply is a sentence a colleague is
 // waiting for, and a caller told it was sent when it was not will believe the conversation is
 // finished. A spell that answers false without erroring is reported as a refusal here rather
-// than passed off as success - the ONLY thing this function may not do is stay quiet.
+// than passed off as success: the ONLY thing this function may not do is stay quiet.
 func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string) error {
 	drv, ok := reviewDriver()
 	if !ok {
@@ -204,11 +204,11 @@ func ReplyReview(ctx context.Context, at types.ReviewTarget, thread, body string
 //
 // Empty on an unreachable host, for the reason FindReview gives about itself: this is the one
 // call that makes a local surface depend on a host being reachable, and the surface has to keep
-// working when it is not. Nil error, empty list - ReviewThreadsReached is for the caller that
+// working when it is not. Nil error, empty list; ReviewThreadsReached is for the caller that
 // cannot afford to lose that distinction.
 //
 // A MALFORMED thread is different, and is reported. Dropping one leaves the surface saying a
-// colleague said nothing, which is the single worst thing a review reader can be told - and
+// colleague said nothing, which is the single worst thing a review reader can be told, and
 // the threads that did decode still come back, so the caller shows what it has and says what
 // it could not read.
 func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewThread, error) {
@@ -224,8 +224,8 @@ func ReviewThreads(ctx context.Context, at types.ReviewTarget) ([]types.ReviewTh
 // and those are opposite facts. A surface that RENDERS wants ReviewThreads: staying up against a
 // host it cannot reach is the whole point of that contract.
 //
-// reached is false only when the host was asked and did not answer. Nothing to ask - no provider
-// wired, no review open - reports true, because no host failed.
+// reached is false only when the host was asked and did not answer. Nothing to ask (no provider
+// wired, no review open) reports true, because no host failed.
 func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads []types.ReviewThread, reached bool, err error) {
 	drv, ok := reviewDriver()
 	if !ok || !at.Open() {
@@ -241,7 +241,7 @@ func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads [
 	}
 	where := "review provider: " + spells.ReviewThreadsContract
 	if resp.Data == nil {
-		// Absent reads as the zero value, not as an error - the posture spell_decode.go states
+		// Absent reads as the zero value, not as an error: the posture spell_decode.go states
 		// for this whole layer. A spell whose review has no threads returns nothing, and
 		// calling that malformed would put a provider bug on the screen for an empty review.
 		return nil, true, nil
@@ -253,7 +253,7 @@ func ReviewThreadsReached(ctx context.Context, at types.ReviewTarget) (threads [
 	out := make([]types.ReviewThread, 0, len(rows))
 	// Every row is attempted. Returning at the first bad one would drop the threads AFTER it,
 	// so a provider with one malformed remark near the top would render as a conversation
-	// nobody had - which is the failure this whole path is written to avoid.
+	// nobody had, which is the failure this whole path is written to avoid.
 	var bad []error
 	for i, r := range rows {
 		t, derr := decodeReviewThread(r, fmt.Sprintf("%s[%d]", where, i))
@@ -272,8 +272,8 @@ func decodeReviewThread(row any, where string) (types.ReviewThread, error) {
 		return types.ReviewThread{}, fmt.Errorf("%s is %T, want a record", where, row)
 	}
 	// UNPLACED until something places it. The zero value is a valid hunk index, so leaving it
-	// would render every thread against the first hunk of its file - the wrong code, stated
-	// confidently - on any path that does not reach diff.PlaceThreads.
+	// would render every thread against the first hunk of its file (the wrong code, stated
+	// confidently) on any path that does not reach diff.PlaceThreads.
 	t := types.ReviewThread{Hunk: -1}
 	var err error
 	if t.ID, err = strField(m, "id", where); err != nil {

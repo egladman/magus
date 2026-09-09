@@ -14,8 +14,8 @@ import (
 // position responsible so the diagnostic can name a line instead of a suspicion.
 //
 // Sampled from the interpreter loop rather than from gHeapAlloc, for two reasons.
-// The allocator has no frame to attribute to - it is a package function reached
-// from every value constructor - while the loop already holds one. And the
+// The allocator has no frame to attribute to (it is a package function reached
+// from every value constructor) while the loop already holds one. And the
 // allocator is the hottest path in the VM, where a review has already objected to
 // a single atomic load; the loop can carry a masked counter instead.
 //
@@ -67,7 +67,7 @@ func sampleHeapGrowth(f *frame, lastLen *int) {
 	}
 	// Drop a sample with no line information. A chunk compiled without line data
 	// yields "<main>:?", which names nothing a reader can open, and on a runner it
-	// outranked the actual growing loop - a ranking led by an unattributable entry
+	// outranked the actual growing loop; a ranking led by an unattributable entry
 	// is worse than a shorter honest one.
 	line := f.chunk.lineAt(f.ip - 1)
 	if line <= 0 {

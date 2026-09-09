@@ -19,11 +19,11 @@
 //     coordination, and that was wrong about what they are: a self-review remark is not chatter
 //     about a live conversation, it is a sentence addressed to a teammate that has not been
 //     sent yet. Losing eight of them to a daemon restart is losing the work, not forgetting a
-//     detail. An AGENT's comment stays ephemeral - it belongs to the pairing session, and
+//     detail. An AGENT's comment stays ephemeral: it belongs to the pairing session, and
 //     reviving it into a review nobody is having is the failure the rule above names.
 //   - PROGRESS (which hunks the human has read) is persisted, because it is the one piece
 //     whose whole value is surviving an interruption. It is keyed by CONTENT DIGEST, so the
-//     mark survives a rebase that did not touch the hunk - which is the failing of every
+//     mark survives a rebase that did not touch the hunk, which is the failing of every
 //     viewed-checkbox that resets on force-push.
 package changeset
 
@@ -69,14 +69,14 @@ type Store struct {
 	// nobody reads. Populated by TrackHunks at attach, where the patch is already in hand.
 	hunks  map[string]map[string]string
 	counts map[string]map[string]int
-	// content is each tracked file's fingerprint as of the last TrackHunks - the bytes the
+	// content is each tracked file's fingerprint as of the last TrackHunks: the bytes the
 	// reader is looking at, which is what a receipt must attest to.
 	content map[string]map[string]string
 	// parsed is each tracked file's hunks as of the last TrackHunks, kept because a remark's
 	// anchor has to be captured from the patch the READER WAS SHOWN.
 	//
 	// Server-side only, like hunks. Taking it from the client instead would mean three
-	// implementations - console, terminal, MCP - of a thing that must agree, and an anchor a
+	// implementations (console, terminal, MCP) of a thing that must agree, and an anchor a
 	// caller can compose is an anchor a caller can compose wrongly.
 	parsed map[string]map[string][]Hunk
 	nextID int
@@ -104,12 +104,12 @@ func NewStore(stateDir string) *Store {
 // HunkDigest is the content address of one hunk: its file path and its body.
 //
 // The PATH is included, so the same three lines changed in two files are two marks. The hunk
-// HEADER is not, because its line numbers move whenever anything above it changes - a digest
+// HEADER is not, because its line numbers move whenever anything above it changes; a digest
 // over them would reset every mark in a file on any edit near the top, which is the exact
 // behavior this exists to avoid.
 func HunkDigest(path string, lines []string) string {
 	// hash.Hash.Write is documented never to return an error, so the returns are discarded
-	// explicitly rather than checked - a branch that cannot be taken is untestable, and
+	// explicitly rather than checked: a branch that cannot be taken is untestable, and
 	// pretending otherwise would put unreachable error handling in a hot path.
 	h := sha256.New()
 	_, _ = h.Write([]byte(path))
@@ -172,8 +172,8 @@ func (s *Store) TrackHunks(root string, files []FileHunks, digestAt func(path st
 	for _, f := range files {
 		parsed[f.Path] = f.Hunks
 		for _, h := range f.Hunks {
-			// DISTINCT digests. Two byte-identical hunks in one file share a digest -
-			// HunkDigest is path plus body - so counting occurrences would set a total the
+			// DISTINCT digests. Two byte-identical hunks in one file share a digest
+			// (HunkDigest is path plus body), so counting occurrences would set a total the
 			// marked set can never reach, and that file could never be finished.
 			if _, seen := byDigest[h.Digest]; seen {
 				continue
@@ -210,7 +210,7 @@ func (s *Store) relocate(root string) {
 	for i, c := range sess.Comments {
 		// A published remark is not moved. It exists somewhere a colleague may already have
 		// replied to, and re-placing our copy would make the two surfaces disagree about what
-		// was said where - the same reason a published remark is no longer editable.
+		// was said where: the same reason a published remark is no longer editable.
 		if c.Published {
 			continue
 		}
@@ -293,8 +293,8 @@ func (s *Store) MarkThreadsSeen(root string, ids []string) *types.DiffSession {
 //
 // finished names the file this mark just completed, empty when it completed none. That is
 // what a caller mints a read receipt from, and the reason it is reported HERE rather than
-// computed by the caller: a mark arriving on this route is live by construction - a person
-// pressed something - which is the property a receipt rests on. The persisted viewed set is
+// computed by the caller: a mark arriving on this route is live by construction (a person
+// pressed something), which is the property a receipt rests on. The persisted viewed set is
 // an unauthenticated file, so a file that merely LOOKS complete after a reload must never
 // mint one on its own.
 func (s *Store) MarkViewed(root, digest string, viewed bool) (sess *types.DiffSession, finished string) {
@@ -344,7 +344,7 @@ func (s *Store) completedBy(root, digest string, viewed []string) string {
 }
 
 // AddComment attaches a remark. author is stamped by the CALLER from the transport the write
-// arrived on - never from the request body - which is what stops an agent posting as the
+// arrived on (never from the request body), which is what stops an agent posting as the
 // human. See types.DiffAuthor.
 func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
@@ -393,7 +393,7 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSessio
 // way they can back out of a staged setting.
 //
 // UNPUBLISHED and HUMAN only. A published remark exists somewhere a colleague may already have
-// replied to, and deleting the local copy would not unsay it - it would only hide it from the
+// replied to, and deleting the local copy would not unsay it; it would only hide it from the
 // person who wrote it. An agent's remark is not the reader's to delete.
 func (s *Store) DiscardDraft(root, id string) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
@@ -412,7 +412,7 @@ func (s *Store) DiscardDraft(root, id string) *types.DiffSession {
 // MarkPublished records that a draft has left the machine.
 //
 // One comment at a time even though publishing is a batch, because the caller decides which
-// ones count as sent - see the handler's publish, which keeps a draft no provider could anchor
+// ones count as sent; see the handler's publish, which keeps a draft no provider could anchor
 // out of the batch entirely rather than marking it here.
 func (s *Store) MarkPublished(root, id string) *types.DiffSession {
 	out := s.mutate(root, func(sess *types.DiffSession) {
@@ -428,7 +428,7 @@ func (s *Store) MarkPublished(root, id string) *types.DiffSession {
 }
 
 // Suggest enqueues an agent's request for attention. It does NOT move the cursor, and that
-// omission is the design - see types.DiffSuggestion.
+// omission is the design; see types.DiffSuggestion.
 func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffSession {
 	return s.mutate(root, func(sess *types.DiffSession) {
 		sug.ID = fmt.Sprintf("s%d", len(sess.Suggestions)+1)
@@ -437,7 +437,7 @@ func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffSessio
 	})
 }
 
-// AnswerSuggestion records the human's decision AND, on acceptance, moves the cursor - which
+// AnswerSuggestion records the human's decision AND, on acceptance, moves the cursor, which
 // is the only path by which a suggestion ever reaches the viewport. The human pressed a key;
 // the agent did not move anything.
 //
@@ -508,7 +508,7 @@ func (s *Store) persistDrafts(root string) {
 	s.saveDrafts(keep)
 }
 
-// loadDrafts reads the persisted drafts, empty on any failure - for the reason loadViewed
+// loadDrafts reads the persisted drafts, empty on any failure, for the reason loadViewed
 // gives, and more so here: refusing to open a review because a draft file is corrupt would
 // take the changeset away along with the remarks.
 func (s *Store) loadDrafts() []types.DiffComment {

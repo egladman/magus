@@ -3,7 +3,7 @@ package spells
 // The review contract: the reserved function names a spell exports to connect a workspace to
 // wherever its changes are discussed.
 //
-// A fourth CONTRACT beside the cache, CI and secret ones, detected the same way - by reserved
+// A fourth CONTRACT beside the cache, CI and secret ones, detected the same way: by reserved
 // function name on a spell a magusfile selected. It is not a new subsystem.
 //
 // Whether it rides on the same spell as the other three is up to the vendor. For GitHub it does
@@ -21,8 +21,8 @@ package spells
 // PublishReviewContract takes every draft at once rather than one comment per call. Self-review
 // is a pass: you read, you accumulate remarks, and only then do you decide the whole thing is
 // worth sending. A per-comment call would publish the first thought before the fifth one had
-// changed your mind about it, and it would turn one outward-facing act - which is what needs
-// confirming - into a series of small ones nobody confirms individually.
+// changed your mind about it, and it would turn one outward-facing act (which is what needs
+// confirming) into a series of small ones nobody confirms individually.
 //
 // # Why reading is separate from publishing
 //
@@ -41,7 +41,7 @@ const (
 	// A lookup, never a creation: no name here opens a review, and `find` says so to the next
 	// spell author, who would otherwise read `open` as the verb and implement one.
 	//
-	// It may also report `state` - "open", "merged" or "closed". Answering it is optional and an
+	// It may also report `state`: "open", "merged" or "closed". Answering it is optional and an
 	// empty answer reads as open. magus asks rather than working it out from git because a squash
 	// merge leaves nothing git can follow: the branch becomes one new commit that is neither an
 	// ancestor of the base nor patch-equivalent to it, so a workspace that squash-merges would

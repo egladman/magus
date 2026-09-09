@@ -35,7 +35,7 @@ func describeCancelled(ctx context.Context, walk string, done, total int) error 
 // ListSpells returns the catalog of registered spells, sorted by name. A
 // package-level function, not a *Magus method: it reads only the global spell
 // registry (project.DefaultSpellRegistry), never the receiver, so it is not on
-// the Inspector interface - a workspace method that ignores its workspace is a
+// the Inspector interface: a workspace method that ignores its workspace is a
 // global query wearing a domain method's clothes.
 func ListSpells(ctx context.Context) ([]types.Spell, error) {
 	all := project.DefaultSpellRegistry().All()
@@ -60,7 +60,7 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 				docs[t] = d
 			}
 			// Render the op's base command (empty charms). ok is false for a function-op
-			// (no static renderer), which simply contributes no entry - exactly the ops
+			// (no static renderer), which simply contributes no entry: exactly the ops
 			// whose argv is not statically knowable.
 			if cmd, args, ok, err := p.RenderCommand(t, nil); ok && err == nil && cmd != "" {
 				if opCommands == nil {
@@ -292,7 +292,7 @@ func gitRoot(dir string) string {
 }
 
 // collectTargetNodes returns src's target graph nodes, read statically from the
-// magusfile source by describe.Extract - the sole graph source. Both the cache-footprint
+// magusfile source by describe.Extract, the sole graph source. Both the cache-footprint
 // path (applyTargetDepsAndFootprint) and the graph render (TargetGraph) read through
 // here so a target's reads/writes/modifications and cross-deps reach the cache key and affected-tracking,
 // not only MAGUS.md. The static read is deterministic and side-effect free (it never runs
@@ -360,7 +360,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 							types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, ref.Project)
 					}
 					// Skip a self-resolving import (r == p.Path): a self-edge is both
-					// unnecessary and rejected by the depgraph as a self-loop - same guard
+					// unnecessary and rejected by the depgraph as a self-loop, same guard
 					// the input loop below applies.
 					if r != p.Path {
 						extra = append(extra, r)
@@ -370,7 +370,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// time, so a computed argument is unreadable rather than merely unread and
 				// the target would cache against a footprint narrower than what it touches.
 				// Scoping this on p.TargetPolicies[...].SkipCache looks equivalent and is
-				// not - policies are only populated when the interpreter evaluates
+				// not: policies are only populated when the interpreter evaluates
 				// magus.project(), so on a bare library caller's magus.Open every target
 				// reads as cacheable and a magusfile the CLI loads fine is rejected. The
 				// expressiveness this used to cost (release-build derives GOOS, GOARCH and a
@@ -387,7 +387,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// to the cache key via joinGlob(Project, Glob). A cross
 				// input's owner is also unioned into DependsOn so a change to it marks this
 				// project affected (project.Affected is a DependsOn-reverse-closure); a
-				// same-project owner is this project itself and is skipped - a self-edge is
+				// same-project owner is this project itself and is skipped: a self-edge is
 				// both unnecessary (it seeds by directory containment) and rejected by the
 				// depgraph as a self-loop.
 				for _, ref := range n.ReadsFiles {
@@ -421,7 +421,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						// consequences invert: dropping an unresolvable input only
 						// under-declares the cache key, but dropping an output takes the
 						// glob out of the snapshot set, so the file is never recorded and
-						// every later cache hit replays a build that leaves it missing -
+						// every later cache hit replays a build that leaves it missing:
 						// the exact stale-hit failure this footprint exists to prevent.
 						return types.DiagnosticErrorf(types.CrossOutputOwnerUnknown,
 							"%s: target %q: ctx.writesFiles declares an output into %q, which does not resolve to a path in this workspace",
@@ -436,14 +436,14 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					}
 					// The edge runs the OTHER WAY from an input's. Writing another
 					// project's tree means that project must run AFTER this one, so the
-					// OWNER gains the dependency - not this project. Recorded here and
+					// OWNER gains the dependency, not this project. Recorded here and
 					// applied once every project is known, because the owner may not have
 					// been walked yet.
 					if owner != p.Path {
 						// The glob half needs the same hygiene the project half just got.
 						// Nothing checked it before: ctx.writesFiles(site.file("../../etc/x"))
 						// survived extraction and resolution and surfaced only once the target
-						// had already run - or, worse, made `magus clean` abort the WHOLE
+						// had already run, or, worse, made `magus clean` abort the WHOLE
 						// workspace, since clean expands globs for every project in one loop
 						// and doublestar rejects the pattern. The rule is the cache's own
 						// (internal/cache/snapshot.go): owner-relative, no "..".
@@ -501,7 +501,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					// Append-with-dedup like the three sibling loops, not assign. A project
 					// can load several sources (magusfile.buzz plus magusfiles/*.buzz), and
 					// assigning meant the last source's overrides silently replaced an
-					// earlier source's - dropping them from the key rather than merging.
+					// earlier source's, dropping them from the key rather than merging.
 					for _, o := range n.ExecOverrides {
 						if !slices.Contains(p.TargetExecOverrides[n.Name], o) {
 							p.TargetExecOverrides[n.Name] = append(p.TargetExecOverrides[n.Name], o)
@@ -534,8 +534,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						p.TargetUpdates[n.Name] = append(p.TargetUpdates[n.Name], resolved)
 					}
 					// No ordering edge either way, unlike inputs and outputs. Both of those
-					// infer one from ownership - "I read you, so I run after" and "I write
-					// your tree, so you run after me" - and neither inference holds for a
+					// infer one from ownership ("I read you, so I run after" and "I write
+					// your tree, so you run after me"), and neither inference holds for a
 					// file magus does not own: the target rewrites one region of a file
 					// whose other regions someone else authored, which says nothing about
 					// build order. A target that needs ordering declares ctx.needs, where a
@@ -566,7 +566,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		// The two cross-project edges run opposite ways, so declaring both against one
 		// project closes a 2-cycle: reading b.file(...) makes this project depend on b,
 		// writing b.file(...) makes b depend on this project. That is the most natural
-		// shape to reach for - read a project's sources, write its generated file back -
+		// shape to reach for (read a project's sources, write its generated file back),
 		// so it has to fail here, naming both halves, while both are still in hand.
 		//
 		// Left to the depgraph it surfaces as a bare "graph: dependency cycle" that names
@@ -585,8 +585,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			op.DependsOn = slices.Compact(op.DependsOn)
 		}
 		// File the glob on the OWNER, keyed by the writer. This is what makes the file
-		// visible to everything that asks a project what lands in its tree - clean,
-		// watch's rebuild-loop guard, ownership lookup, the merge driver - none of which
+		// visible to everything that asks a project what lands in its tree (clean,
+		// watch's rebuild-loop guard, ownership lookup, the merge driver), none of which
 		// can see the writer's declaration, and all of which resolve globs against the
 		// project's own root, which is exactly what this glob is relative to.
 		if op.InboundOutputs == nil {
@@ -595,7 +595,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		// Two projects writing one path is not a conflict magus can order its way out of.
 		// Both snapshot the file, so whichever loses the race still records the winner's
 		// bytes as its own output, and a later cache hit for the loser replays content it
-		// never produced - cross-project cache poisoning, silent and durable.
+		// never produced: cross-project cache poisoning, silent and durable.
 		//
 		// Checked here rather than left to the run-scoped MGS4002 advisory, which only
 		// fires when both writers land in ONE dispatch and only for the first stage per
@@ -620,7 +620,7 @@ type crossOutput struct{ owner, writer, glob string }
 
 // existingWriter returns the project already declaring co.glob as an output in the owner's
 // tree, or "" when none does. That is either another writer holding the same inbound path or
-// the owner declaring it for itself - the second matters just as much, since the owner's own
+// the owner declaring it for itself; the second matters just as much, since the owner's own
 // build would then produce and clean a file the writer also owns. The writer re-declaring its
 // own glob does not count; that is idempotent.
 func existingWriter(owner *types.Project, co crossOutput) string {
@@ -664,7 +664,7 @@ func concatSource(src *interp.Source) string {
 // from.
 //
 // It exists as its own method because it is the ALLOWLIST a run triggered from outside a terminal
-// is checked against, and that check has two call sites - the console's run route and the daemon's
+// is checked against, and that check has two call sites: the console's run route and the daemon's
 // job dispatch. The dispatch admits only argvs the jobs registry recognises, deliberately, "so the
 // fire-and-forget job RPC can never be used to run an arbitrary command"; a console button able to
 // name any command would hand a browser-reachable surface exactly that. Both sites asking THIS is
@@ -688,7 +688,7 @@ func (m *Magus) ProjectTargets(ctx context.Context, project string) []string {
 }
 
 // TargetGraph returns the target dependency graph of each project, read statically
-// from the magusfile source (describe.Extract) - deterministic and side-effect free, so
+// from the magusfile source (describe.Extract), deterministic and side-effect free, so
 // introspection never runs a target body. Buzz magusfiles are supported; a project on
 // any other engine yields an engine-tagged entry with no nodes until that extractor
 // lands. ctx bounds the walk so a large workspace's introspection stays cancellable.
@@ -712,7 +712,7 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 				}
 			}
 			// The workspace-root project's path is ".", which would render as the
-			// ambiguous "## Project: ." heading. A DECLARED name wins outright - it is
+			// ambiguous "## Project: ." heading. A DECLARED name wins outright: it is
 			// the only label that survives being checked out under a different
 			// directory name (a worktree, a renamed clone, a CI checkout), each of
 			// which otherwise renamed the root project and rewrote every generated
@@ -740,7 +740,7 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 // local step render as a bare name.
 //
 // A step whose import path does not resolve KEEPS the raw path rather than being
-// dropped. The chain is the target's shape - what it invokes, in what order - so a
+// dropped. The chain is the target's shape (what it invokes, in what order), so a
 // silently shortened one misreports that shape, while a raw import path at least names
 // what the magusfile wrote. It is close to unreachable anyway: the cross-dependency
 // resolution ahead of it already fails the load on an unresolvable import.
@@ -805,7 +805,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 
 // projectEntry builds the declared-facts view of p, shared by ListProjects and
 // EvaluateProjects (whose embedded ProjectEntry carries every field this builds,
-// Sources/Outputs excepted - see the field comment on ProjectEntry.Sources).
+// Sources/Outputs excepted; see the field comment on ProjectEntry.Sources).
 func projectEntry(p *types.Project, root string) types.ProjectEntry {
 	manifests := projectManifestSpecs(p)
 	return types.ProjectEntry{
@@ -826,7 +826,7 @@ func projectEntry(p *types.Project, root string) types.ProjectEntry {
 
 // projectManifests resolves p's spells' declared manifest candidates
 // (spells.Spell.Manifests) down to the ones that actually exist in p.Dir, in
-// declared order - a magusfile reading ProjectEntry.Manifests gets the file that
+// declared order: a magusfile reading ProjectEntry.Manifests gets the file that
 // carries this project's version without walking the filesystem itself: the spell
 // already knows the candidate names for its ecosystem, only existence is a
 // per-project fact only the workspace can check. A project bound to more than one
@@ -904,7 +904,7 @@ func projectLockfiles(manifests []spells.Manifest, dir, root string) []string {
 // The walk is the OUTER loop and the candidates the inner one, which is the whole
 // subtlety: proximity outranks declared order. A project holding its own yarn.lock
 // inside a workspace whose root holds a pnpm-lock.yaml resolves to ITS yarn.lock, even
-// though pnpm-lock.yaml is declared first - because the candidate list is an
+// though pnpm-lock.yaml is declared first, because the candidate list is an
 // alternation over package managers, not a preference between them, and the nearer file
 // is the one the project's own package manager wrote. Candidate order only breaks ties
 // within a single directory, which is a layout that should not exist anyway (two
@@ -998,9 +998,9 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 		}
 		// buildStep, not baseStep: this entry describes ONE target, and baseStep
 		// carries only the project-wide globs. A target's own ctx.writesFiles (and
-		// ctx.readsFiles) were therefore missing from its own description - `magus
+		// ctx.readsFiles) were therefore missing from its own description (`magus
 		// describe target index-generate` reported no outputs while the target
-		// declares MAGUS.md - so the described plan disagreed with the plan the
+		// declares MAGUS.md), so the described plan disagreed with the plan the
 		// cache actually keys and snapshots.
 		step := m.buildStep(p, et.Name)
 
@@ -1095,7 +1095,7 @@ func (m *Magus) EvaluateProjects(ctx context.Context) (types.EvaluatedProjectsOu
 		}
 
 		// The embedded ProjectEntry carries the same declared facts ListProjects
-		// builds - Name and Spell included, the bug this fixes - except Sources and
+		// builds (Name and Spell included, the bug this fixes) except Sources and
 		// Outputs, which are overwritten with the RESOLVED, workspace-rooted globs
 		// baseStep computes (see the field comment on ProjectEntry.Sources).
 		pe := projectEntry(p, m.ws.Root)
@@ -1129,8 +1129,8 @@ func appendUniq(s []string, v string) []string {
 // declared source and output globs (the same workspace-rooted globs baseStep
 // feeds the cache), plus directory containment for ownership, and reports each
 // matching declaration individually (FileEntry.Claims) with the target that made
-// it. The classification is pure declaration lookup - no target evaluation, no
-// VCS - so it is cheap enough to run over a whole dirty tree; the one filesystem
+// it. The classification is pure declaration lookup (no target evaluation, no
+// VCS), so it is cheap enough to run over a whole dirty tree; the one filesystem
 // call per path is the Lstat behind FileEntry.Exists, which is what separates a
 // declared-but-absent path from a declared-and-present one. An absolute path is
 // re-rooted onto the workspace; a path that resolves outside it is classified
@@ -1163,7 +1163,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	// NormalizeWorkspacePath hands its input back unchanged when it cannot place the
 	// path inside root, so a still-absolute or still-escaping result names a file in
 	// some other tree. It gets no classification: every glob here is rooted at this
-	// workspace, and "**/*.go" happily matches another checkout's path - which is how
+	// workspace, and "**/*.go" happily matches another checkout's path, which is how
 	// a fabricated absolute path came back owned by "." and declared a Go source.
 	if filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
 		return types.FileEntry{
@@ -1210,7 +1210,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		// Not cosmetic: `magus vcs add` asks by PROJECT identity whether a drifted
 		// output has a dirty declared input behind it. A source declared only through
 		// a cross-project read reported source_of=["."] alone, so its regenerated
-		// output was called MGS4005 environmental drift - a staging check telling you
+		// output was called MGS4005 environmental drift: a staging check telling you
 		// not to commit your own change is one people learn to override.
 		//
 		// Cross-project refs are KEPT here, unlike AllOutputs which drops them: the
@@ -1245,7 +1245,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		entry.Hint = "magus maintains this outside any target's globs: it invalidates no cache key, but magus wrote it and expects it committed - regenerate it rather than hand-editing, and never ignore it"
 	// Only an in-place edit reaches here with a claim: ctx.modifiesExistingFiles is
 	// deliberately neither an output nor a project-wide source, so the role stays
-	// unclaimed - but the default hint below says no project declares the path, and
+	// unclaimed, but the default hint below says no project declares the path, and
 	// that sentence would send someone to ignore a file a target rewrites.
 	case len(entry.Claims) > 0:
 		entry.Hint = "no declared glob matches, but a target edits it in place (ctx.modifiesExistingFiles): magus neither replays nor cleans it, and the claims below name the target that rewrites it"
@@ -1271,7 +1271,7 @@ func fileExists(p string) bool {
 //
 // Deliberately does NOT read p.InboundOutputs. An inbound glob is another project's
 // ctx.writesFiles ref re-filed on the tree it lands in, and the caller walks every
-// project, so reading it here would report one declaration twice - the second time
+// project, so reading it here would report one declaration twice: the second time
 // without the target name that makes it actionable.
 func matchedClaims(p *types.Project, sources []string, path string) []types.FileClaim {
 	type claimKey struct{ target, role, glob string }

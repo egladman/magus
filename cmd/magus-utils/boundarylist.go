@@ -15,7 +15,7 @@ import (
 //
 // A hand-maintained list is the failure this prevents. types.DoctorCheckStatus crossed
 // as null for an unknown stretch because a type switch matches on identity and no test
-// covered every boundary type - and the same trap had already bitten types.BuzzObject
+// covered every boundary type, and the same trap had already bitten types.BuzzObject
 // once. Sourcing the list from the registry that generates the mirrors means a new
 // boundary type is covered the moment it is declared.
 func runBoundaryList(args []string) error {

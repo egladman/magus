@@ -32,13 +32,13 @@ type FactHandler struct {
 // as session facts under root's store. start describes the invocation and is written as
 // the KindSessionStart record ahead of the first fact.
 //
-// It returns nil - a nil slog.Handler interface, safe to compare - when the store cannot
+// It returns nil (a nil slog.Handler interface, safe to compare) when the store cannot
 // be resolved, which the fan-out treats as "no handler": a machine with no usable state
 // directory still runs builds.
 //
 // It lives HERE rather than in the CLI because the daemon executes adopted runs itself
 // (cmd/magus/main.go dispatchAdopted), so "who produces a session fact" is not a
-// CLI-only question. start.Lease is read by the CALLER for that reason - see
+// CLI-only question. start.Lease is read by the CALLER for that reason; see
 // cmd/magus/journalhook.go, which documents what the daemon gets wrong today.
 func NewFactHandler(root string, start SessionStart) slog.Handler {
 	dir, err := Dir(root)
@@ -94,7 +94,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 // stopRecording abandons the session store for the rest of this invocation, and says so
-// once - h.broken gates every later Handle, so this cannot repeat per target.
+// once; h.broken gates every later Handle, so this cannot repeat per target.
 //
 // Failing silently is what made an unwritable store indistinguishable from an idle
 // repository: nothing recorded, and `magus session` then reporting in good faith that

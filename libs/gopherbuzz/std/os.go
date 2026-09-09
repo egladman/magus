@@ -109,8 +109,8 @@ func osExit(_ context.Context, args []vm.Value) (vm.Value, error) {
 }
 
 // probeBins are shell utilities whose entire job is to answer a question the fs module
-// answers with a syscall. Spawning one costs a fork and an exec - on the order of a
-// thousand times a stat - and the cost is invisible in a profile of the CALLER, because
+// answers with a syscall. Spawning one costs a fork and an exec (on the order of a
+// thousand times a stat), and the cost is invisible in a profile of the CALLER, because
 // process creation is kernel time, not user time.
 //
 // This is not hypothetical. The magus documentation site used os.execute(["test", "-f",

@@ -162,7 +162,7 @@ func (puregoFFI) OpenLibrary(libname string, sigs []CFuncSig) (Value, error) {
 				layout = UnionLayoutWith
 			}
 			// declared accumulates as the loop goes, so a later aggregate may name an
-			// earlier one - which is exactly the shape of upstream's `Misc`.
+			// earlier one, which is exactly the shape of upstream's `Misc`.
 			size, align, offsets, err := layout(sig.FieldTypeNames, declaredAggregates)
 			if err != nil {
 				return Null, fmt.Errorf("buzz: ffi: struct %s: %w", sig.Name, err)
@@ -503,7 +503,7 @@ func buildFFIFunc(sig CFuncSig, sym uintptr) (fn Value, err error) {
 		in := make([]reflect.Value, len(sig.Params))
 		// A struct argument is passed BY REFERENCE, which is upstream's rule for a
 		// foreign struct. The instance is an ordinary Buzz object, so it is marshalled
-		// into a C block for the duration of the call and read back afterwards - that
+		// into a C block for the duration of the call and read back afterwards; that
 		// read-back is what makes `set_data_id(data)` visible as `data.id`.
 		var pinned []structArg
 		defer func() {
@@ -601,8 +601,8 @@ type structArg struct {
 	strs    []uintptr
 }
 
-// foreignStructArg reports whether v is an object instance carrying a layout - the
-// shape a zdef `extern struct` produces - and yields it.
+// foreignStructArg reports whether v is an object instance carrying a layout (the
+// shape a zdef `extern struct` produces) and yields it.
 func foreignStructArg(v Value) (*objectInst, bool) {
 	if v.tag() != tagObject {
 		return nil, false

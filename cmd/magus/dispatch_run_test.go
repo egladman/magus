@@ -9,7 +9,7 @@ import (
 
 // TestIsDeclaredRunRejectsEverythingButThreeBareTokens pins the shape half of the job-dispatch
 // allowlist. dispatchJob exists so a browser-reachable RPC can never name an arbitrary command,
-// and isDeclaredRun is the one path that widens it beyond the fixed job argvs - so each rejection
+// and isDeclaredRun is the one path that widens it beyond the fixed job argvs, so each rejection
 // below is load-bearing, not defensive tidiness.
 //
 // The workspace half (the target must appear in the magusfile's target graph) needs a loaded

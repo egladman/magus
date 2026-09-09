@@ -72,7 +72,7 @@ func TestModuleEntryBuzzObjectEmpty(t *testing.T) {
 // declaration that covers SEVERAL of the classified paths, listing them. A caller
 // splitting paths across concurrent authors reads this instead of intersecting the
 // per-entry claims itself, so the grouping key (project, target, role, glob) has to
-// be exact - two claims that differ only by target are two declarations.
+// be exact: two claims that differ only by target are two declarations.
 func TestNewFileReportOverlaps(t *testing.T) {
 	t.Parallel()
 	gen := FileClaim{Project: "docs", Target: "generate", Role: "output", Glob: "docs/gen/**"}

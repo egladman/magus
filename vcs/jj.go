@@ -133,7 +133,7 @@ func (v jjVCS) Describe(_ context.Context, _ string) (string, error) {
 }
 
 // Tags reports none. jj models named pointers as bookmarks, not tags, and its
-// Describe already answers tag questions with "" - returning bookmarks here
+// Describe already answers tag questions with ""; returning bookmarks here
 // would quietly answer a different question than the caller asked.
 func (v jjVCS) Tags(_ context.Context, _, _ string) ([]types.VCSTag, error) {
 	return nil, nil
@@ -172,7 +172,7 @@ func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 	return len(files) > 0, err
 }
 
-// DirtyFiles implements types.VCSDriver. jj needs no status-prefix strip - `diff
+// DirtyFiles implements types.VCSDriver. jj needs no status-prefix strip: `diff
 // --name-only` already reports bare paths, which is why it is also the backend a
 // prefix-GUESSING parser corrupted: it has no prefix to find, so anything that looked like
 // one was part of the filename.
@@ -180,7 +180,7 @@ func (v jjVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 // It runs from the workspace ROOT, not from dir, because jj resolves paths against the
 // CWD and offers no --root-relative equivalent (`-R` does not change it either, measured
 // on jj 0.44). From a subdirectory it answers "../root.txt" and "a.txt" where git and hg
-// answer "root.txt" and "sub/a.txt" - and callers stamp the repository root as the base,
+// answer "root.txt" and "sub/a.txt", and callers stamp the repository root as the base,
 // so those names then address different files. Moving the CWD costs no scoping: jj reports
 // the whole workspace from any directory, exactly as git and hg do, so only the base
 // changes. Caller pathspecs are dir-relative by contract, so they are rebased to match.
@@ -286,7 +286,7 @@ var _ types.ConflictResolver = jjVCS{}
 //	gone.txt    2-sided conflict including 1 deletion
 //
 // That trailing clause is why jj needs no second command to classify a conflict, unlike
-// hg (which needs `status -nd`) - the deletion is reported inline.
+// hg (which needs `status -nd`): the deletion is reported inline.
 //
 // Paths may contain spaces, so the split is on the RUN of whitespace before the
 // description rather than on the first space. The description always begins with a digit
@@ -317,7 +317,7 @@ func parseJJConflicts(out string) []types.Conflict {
 // exit for jj ("No conflicts found at this revision"), not empty output, so the error is
 // swallowed into the empty result the interface asks for.
 // The discriminator reads STDERR, not stdout, and that is the whole correctness of it.
-// vcsOutputRaw returns ("", err) on any failure, so testing `out` - which is stdout - tests
+// vcsOutputRaw returns ("", err) on any failure, so testing `out` (which is stdout) tests
 // the empty string every time: `strings.Contains(out, "No conflicts") || out == ""` is
 // unconditionally true on the error path, leaving the real-failure branch below it
 // unreachable. jj missing from PATH, not a jj repo, a cancelled context and a permission
@@ -343,7 +343,7 @@ func (v jjVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, er
 //
 // git's "theirs" is the commit being replayed at a paused rebase. jj never pauses, so a
 // conflicted commit just has parents, and `jj log -r @-` returns them in jj's own sort
-// order rather than the order they were merged - there is no second-parent-is-theirs
+// order rather than the order they were merged; there is no second-parent-is-theirs
 // convention to lean on. Verified: merging sideA then sideB lists sideB first.
 //
 // Restoring from any parent clears the markers, and jj then reports the path resolved
@@ -374,14 +374,14 @@ func (v jjVCS) KeepIncoming(ctx context.Context, root string, paths []string) er
 // MarkResolved implements types.ConflictResolver as a NO-OP, and that is correct rather
 // than unimplemented. jj has no index and no resolve state: it snapshots the working copy
 // automatically, and a file that no longer carries conflict markers is simply resolved.
-// Verified - after restoring one side, `jj resolve --list` stopped reporting the path
+// Verified: after restoring one side, `jj resolve --list` stopped reporting the path
 // without anything being marked.
 func (v jjVCS) MarkResolved(_ context.Context, _ string, _ []string) error { return nil }
 
 // RemoveConflicts implements types.ConflictResolver by deleting the files. jj snapshots
 // the deletion on its next command, which both resolves the conflict and records the
 // removal; verified by removing a conflicted path and seeing it leave `resolve --list`
-// and appear as D in `jj status`. No untrack step is needed or wanted - `jj file untrack`
+// and appear as D in `jj status`. No untrack step is needed or wanted: `jj file untrack`
 // would stop tracking a path that is supposed to stay deleted.
 func (v jjVCS) RemoveConflicts(_ context.Context, root string, paths []string) error {
 	for _, p := range paths {
@@ -394,7 +394,7 @@ func (v jjVCS) RemoveConflicts(_ context.Context, root string, paths []string) e
 
 // IgnoredPaths implements types.ConflictResolver, and is the one method jj cannot answer
 // faithfully. The interface asks whether the ignore RULES cover a path whether or not it
-// is tracked - git needs `check-ignore --no-index` precisely because the default answers
+// is tracked; git needs `check-ignore --no-index` precisely because the default answers
 // "not ignored" for anything tracked. jj exposes no equivalent: `jj file list` reports
 // tracked paths, so it cannot distinguish a tracked file that rules would now ignore.
 //
@@ -409,18 +409,18 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 // it does NOT implement are absent on purpose, and each is argued where a reader looking
 // for it would go:
 //
-//   - MergeDriverInstaller - the interface takes the workspace's declared output GLOBS, and
+//   - MergeDriverInstaller: the interface takes the workspace's declared output GLOBS, and
 //     jj has nowhere to put them. git maps a pattern to a driver in .gitattributes and hg
 //     maps one in [merge-patterns]; jj's merge-tools config carries only program,
-//     merge-args, edit-args and friends - one tool for the whole repository, with no
+//     merge-args, edit-args and friends, one tool for the whole repository, with no
 //     per-path selection anywhere in its key set (checked against `jj config list
 //     --include-defaults`). Registering magus as that single tool would route EVERY
 //     conflicted file through it rather than the declared outputs, a much larger promise
 //     than the caller made. jj's supported path is the bulk one: ConflictResolver IS
 //     implemented, so `magus vcs resolve` settles a jj workspace with no driver at all.
-//   - RefreshHookInstaller - jj has no native hook mechanism, as types.RefreshHookInstaller
+//   - RefreshHookInstaller: jj has no native hook mechanism, as types.RefreshHookInstaller
 //     itself records.
-//   - IgnoredFileReporter  - jj exposes no ignore-RULES query; see IgnoredPaths above, which
+//   - IgnoredFileReporter: jj exposes no ignore-RULES query; see IgnoredPaths above, which
 //     is the same gap reached from the other interface.
 //
 // Verified against jj 0.44.0.
@@ -454,8 +454,8 @@ func (v jjVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
 
 // DefaultRef implements types.DefaultRefReporter by naming the bookmark at trunk().
 //
-// trunk() is jj's own answer to "the primary line of development" - it is what Base()
-// already returns - but the interface asks for a NAME, not a revset, so that a committed
+// trunk() is jj's own answer to "the primary line of development" (it is what Base()
+// already returns), but the interface asks for a NAME, not a revset, so that a committed
 // artifact can put it in a URL. The bookmark sitting on that revision is that name, and it
 // comes back without a remote prefix ("main"), matching what git's DefaultRef returns.
 //
@@ -485,7 +485,7 @@ func (v jjVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // as git's. jj has no "untracked but present" state: it auto-snapshots the working copy, so
 // a file written a second ago is already in @ and a bare `jj file list` calls it tracked.
 // Both callers of this interface ask it about DECLARED OUTPUTS, to tell a committed
-// artifact from a pure build product - and against @ every generated file answers "tracked"
+// artifact from a pure build product, and against @ every generated file answers "tracked"
 // the moment a target writes it, which is precisely the distinction they need and the
 // opposite of the truth.
 //
@@ -493,7 +493,7 @@ func (v jjVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 // ls-files approximates by requiring a deliberate `git add`. A repository whose @- is the
 // root commit reports nothing tracked, which is correct rather than a failure.
 //
-// An argument matching nothing is simply absent rather than an error - jj exits 0, like
+// An argument matching nothing is simply absent rather than an error: jj exits 0, like
 // git's ls-files and unlike hg's and sl's `files`.
 //
 // Run from the workspace ROOT with rebased pathspecs, for the reason DirtyFiles is: jj
@@ -532,8 +532,8 @@ func (v jjVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 // as one that still exists.
 //
 // "modified" is matched EXPLICITLY and anything else emits "?", the letter parseNameStatus
-// skips. The final branch used to be "M", so a status jj gained after this was written -
-// or one this translation never covered - was recorded as an edit to the path, which is a
+// skips. The final branch used to be "M", so a status jj gained after this was written
+// (or one this translation never covered) was recorded as an edit to the path, which is a
 // guess dressed as a fact. Skipping loses the line, which is the documented behavior for
 // a line magus cannot read.
 //
@@ -548,7 +548,7 @@ const jjChurnTemplate = `"\0" ++ commit_id ++ "\0" ++ author.name() ++ "\0" ++ `
 	`"\t" ++ f.source().path() ++ "\t" ++ f.target().path()).join("\n") ++ "\n"`
 
 // ChangesByCommit implements types.ChurnReporter. `::@` is the ancestors of the working-copy
-// commit, and jj log is newest-first by default - unlike hg and sl, whose revset order is
+// commit, and jj log is newest-first by default, unlike hg and sl, whose revset order is
 // ascending and needs an explicit reverse().
 //
 // since bounds the scan by committer date through jj's own `committer_date(after:...)`
@@ -596,7 +596,7 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // ExportRevision implements types.RevisionExporter through a throwaway jj WORKSPACE.
 //
 // jj has no `archive` or `export` command, and materializing a revision file by file
-// through `jj file show` would be one subprocess per path - unusable on a tree of any size.
+// through `jj file show` would be one subprocess per path, unusable on a tree of any size.
 // `jj workspace add -r <rev>` checks the revision out into a directory in a single command,
 // which is the bulk primitive the other backends get from archive.
 //
@@ -612,12 +612,12 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // ReadFileAt implements types.RevisionFileReader via `jj file show -r <rev>`.
 //
 // "" is `@-`, NOT `@` as everywhere else in this driver. jj's working copy IS a commit and
-// is snapshotted continuously, so `@` holds the edit in progress - asking it for a file
+// is snapshotted continuously, so `@` holds the edit in progress; asking it for a file
 // hands back the working copy, which is precisely what a caller asking for the committed
 // revision is trying to avoid. `@-`, its parent, is what git spells HEAD and hg spells `.`.
 // The parity suite caught this: git and sl passed, jj returned the working copy.
 //
-// Every other `@` in this file is deliberate - the working-copy commit IS the subject of a
+// Every other `@` in this file is deliberate: the working-copy commit IS the subject of a
 // status or a log there. This is the one question about the side that is NOT being edited.
 //
 // `file show`, not the older `cat`: this driver already speaks modern jj elsewhere
@@ -685,8 +685,8 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 // inside that commit, where jj's own resolve machinery reports them.
 //
 // So "a merge in progress" for jj means "the working-copy commit has two parents", and that
-// is exactly the state Conflicts already reads. A caller's sequence - start, inspect
-// conflicts, regenerate, conclude - works unchanged; what differs is that nothing is
+// is exactly the state Conflicts already reads. A caller's sequence (start, inspect
+// conflicts, regenerate, conclude) works unchanged; what differs is that nothing is
 // blocked in the meantime.
 //
 // A working copy that is ALREADY a merge is refused, for the same reason the other backends
@@ -724,8 +724,8 @@ func (v jjVCS) mergeInProgress(ctx context.Context, root string) (bool, error) {
 // removes it and moves the working copy back onto its first parent, which is the state
 // StartMerge found.
 //
-// Unlike sl's abort - a whole-tree revert that would silently discard uncommitted work when
-// there is no merge - this touches only the commit it created, and refuses when the working
+// Unlike sl's abort (a whole-tree revert that would silently discard uncommitted work when
+// there is no merge), this touches only the commit it created, and refuses when the working
 // copy is not a merge at all.
 func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 	underway, err := v.mergeInProgress(ctx, root)

@@ -84,8 +84,8 @@ func TestManifestOutOfTreeOutputPathIsRefused(t *testing.T) {
 }
 
 // TestManifestMalformedBlobRefIsRefused: blobPath shards on the first two characters and
-// joins the rest, so a blob ref that is not a plain sha256 digest resolves outside cas/ -
-// an arbitrary read, and with a hostile output path an arbitrary write.
+// joins the rest, so a blob ref that is not a plain sha256 digest resolves outside cas/
+// (an arbitrary read, and with a hostile output path an arbitrary write).
 func TestManifestMalformedBlobRefIsRefused(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")

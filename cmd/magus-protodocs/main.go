@@ -12,7 +12,7 @@
 // numbers, and labels back out of it would be reconstruction, not reading.)
 //
 // The descriptor is produced by the `proto` project's `descriptor` target and consumed here
-// as a plain file, so magus sees the whole chain - .proto -> descriptor -> these pages - and
+// as a plain file, so magus sees the whole chain (.proto -> descriptor -> these pages) and
 // buf's version enters the proto project's cache key. Invoking buf from inside this binary
 // would hide all of that behind an exec call.
 //
@@ -55,7 +55,7 @@ func main() {
 	}
 	// buf build emits a buf Image, a FileDescriptorSet plus a buf_extension field. Decoding
 	// into FileDescriptorSet drops that extension as an unknown field, which is exactly what
-	// we want - the extension carries buf bookkeeping, not schema.
+	// we want: the extension carries buf bookkeeping, not schema.
 	set := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(raw, set); err != nil {
 		fmt.Fprintln(os.Stderr, "magus-protodocs: decode descriptor set:", err)
@@ -80,7 +80,7 @@ type api struct {
 	messages map[string]message
 	enums    map[string]enumType
 	// packages holds a standalone page for a magus package that declares messages or enums
-	// but no service (magus.query.v1, magus.graph.v1) - without one, a type declared there
+	// but no service (magus.query.v1, magus.graph.v1); without one, a type declared there
 	// has nowhere to live and a message that imports it (ActivityService's TimeRange) would
 	// have to duplicate it in full on every page that references it.
 	packages map[string]pkgPage
@@ -383,7 +383,7 @@ func firstNonZeroEnumValue(ed protoreflect.EnumDescriptor) string {
 
 // displayType returns the table cell for a field and, when the field points at a magus type,
 // the fully qualified name so the page can document (and link to) it too. A map field's cell
-// is always plain text - "map<string, Foo>" - even when Foo is a magus type: the caller
+// is always plain text ("map<string, Foo>"), even when Foo is a magus type: the caller
 // still needs Foo reachable (see collectMessage), just not rendered as a link inline in the
 // cell.
 func displayType(fd protoreflect.FieldDescriptor) (disp, ref string) {
@@ -434,8 +434,8 @@ func isDeprecated(opts protoreflect.ProtoMessage) bool {
 	return ok && d.GetDeprecated()
 }
 
-// fieldConstraints renders a field's buf.validate rules as short phrases -
-// "0 to 1000", "matches `^[a-z]{2,8}[0-9a-f]+$`", "required" - so the reference states what
+// fieldConstraints renders a field's buf.validate rules as short phrases
+// ("0 to 1000", "matches `^[a-z]{2,8}[0-9a-f]+$`", "required"), so the reference states what
 // the daemon actually enforces instead of leaving a client to discover it from a rejected
 // request.
 func fieldConstraints(fd protoreflect.FieldDescriptor) string {
@@ -530,7 +530,7 @@ func describeSubRules(prefix string, m protoreflect.Message) []string {
 			out = append(out, describeListRule(name, fd, v)...)
 		case fd.Kind() == protoreflect.MessageKind && !fd.IsMap():
 			// A further-nested rule (e.g. repeated.items is itself a FieldRules). Noted
-			// rather than recursed without bound - nothing in this schema goes this deep.
+			// rather than recursed without bound: nothing in this schema goes this deep.
 			out = append(out, name+" constrained")
 		case fd.Kind() == protoreflect.BoolKind:
 			if v.Bool() {
@@ -636,7 +636,7 @@ func fileDoc(fd protoreflect.FileDescriptor) (string, int32) {
 	return bodyComments(loc), int32(loc.StartLine) + 1
 }
 
-// bodyDoc reads a comment that renders as page PROSE - a service, method, message, or enum
+// bodyDoc reads a comment that renders as page PROSE: a service, method, message, or enum
 // doc. It keeps the blank-line paragraph breaks the author wrote, because those carry the
 // summary-then-detail split this schema writes in: Staleness opens with one line saying
 // what it is, then a paragraph on why it is not calendar age, and running them together
@@ -650,7 +650,7 @@ func bodyDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) (stri
 	return bodyComments(loc), int32(loc.StartLine) + 1
 }
 
-// cellDoc reads a comment destined for a table cell - a field or an enum value - and
+// cellDoc reads a comment destined for a table cell (a field or an enum value) and
 // flattens it to the single line a cell can hold. No line number: a row carries no source
 // link of its own, only the message or enum heading above it does.
 func cellDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) string {
@@ -659,7 +659,7 @@ func cellDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) strin
 
 // bodyComments is cleanComments with the author's paragraph breaks kept. Each paragraph
 // still goes through clean(), so the escaping and bare-URL handling are identical to a
-// table cell's - only the breaks between paragraphs survive.
+// table cell's; only the breaks between paragraphs survive.
 func bodyComments(loc protoreflect.SourceLocation) string {
 	var paras []string
 	for _, block := range []string{loc.LeadingComments, loc.TrailingComments} {
@@ -778,7 +778,7 @@ func anchor(name string) string {
 
 // pagePath is a page's output path relative to outDir, with no extension: the same path the
 // .proto it documents has, minus the "magus/" prefix every magus package shares (redundant
-// under reference/api/) - "magus/graph/v1alpha1/graph.proto" becomes "graph/v1alpha1/graph". A generated
+// under reference/api/): "magus/graph/v1alpha1/graph.proto" becomes "graph/v1alpha1/graph". A generated
 // page then sits at the same depth as its source, so knowing one locates the other, and two
 // files can never collide on output path without already colliding on input path.
 func pagePath(protoFile string) string {
@@ -803,7 +803,7 @@ func (a api) pageFor(pkg string) (string, bool) {
 // relLink computes the relative Markdown link (no extension or anchor) from the page at
 // fromPath to the page at toPath, both output paths as pagePath returns them. Pages nest by
 // .proto directory, so a cross-package reference cannot assume its target is a sibling in
-// the same directory - "token/v1/token" linking to "query/v1/query" needs
+// the same directory: "token/v1/token" linking to "query/v1/query" needs
 // "../../query/v1/query", not "query/v1/query".
 //
 // The link is resolved from fromPath's DIRECTORY, since a relative href is read from the
@@ -928,7 +928,7 @@ type usage struct {
 }
 
 // computeUsedBy walks every method's request and response transitively and records, per
-// magus type, which methods reach it - so a message that is never itself a request or
+// magus type, which methods reach it, so a message that is never itself a request or
 // response, only nested inside one, can still say which RPCs return it.
 func (a api) computeUsedBy() map[string][]usage {
 	out := map[string][]usage{}
@@ -1050,8 +1050,8 @@ func streamingMethods(a api) []string {
 
 // exampleJSON builds a shallow protojson skeleton for a request message: top-level scalar
 // and enum fields only, each keyed by its wire (JSON) name. A oneof's fields are omitted
-// entirely - they are mutually exclusive alternatives, and including all of them would
-// misstate the contract - as are message and repeated fields, to keep the example short
+// entirely (they are mutually exclusive alternatives, and including all of them would
+// misstate the contract), as are message and repeated fields, to keep the example short
 // enough to read at a glance.
 func (a api) exampleJSON(inputFull string) string {
 	msg, ok := a.messages[inputFull]
@@ -1219,9 +1219,9 @@ func seedsOf(s service) []string {
 
 // reachableFrom walks the type graph transitively from a set of seed type names, staying
 // within pkg. A one-hop walk documents only inputs and outputs, which omits the types they
-// carry - ListEventsResponse holds `repeated Event`, and Event is the message a client most
+// carry: ListEventsResponse holds `repeated Event`, and Event is the message a client most
 // needs. A type declared in a different package is a foreign reference: it is linked where
-// it is used (typeLink), not walked further or rendered again here - it has its own
+// it is used (typeLink), not walked further or rendered again here; it has its own
 // canonical page.
 func (a api) reachableFrom(pkg string, seeds []string) (msgs []string, enums []string) {
 	seen := map[string]bool{}

@@ -38,8 +38,8 @@ func DefaultConcurrency() int {
 // ResolveConcurrency returns the width a run actually gets from a configured value: the
 // default when nothing is configured, clamped to what the machine can run.
 //
-// It is the resolution the run path applies - cmd/magus/main.go when it builds the
-// bootstrap limiter, Magus.limiter per workspace - so a reporter can answer "how many
+// It is the resolution the run path applies (cmd/magus/main.go when it builds the
+// bootstrap limiter, Magus.limiter per workspace), so a reporter can answer "how many
 // slots does this box give a build" without re-deriving it. Those two sites keep their
 // own copy because they announce the clamp as it takes effect; this one only reports.
 func ResolveConcurrency(configured int) int {
@@ -51,7 +51,7 @@ func ResolveConcurrency(configured int) int {
 }
 
 // MachineCeiling is the most concurrent build steps this machine should ever run: one per
-// CPU. It is a CEILING, not a default - DefaultConcurrency picks a smaller, gentler number
+// CPU. It is a CEILING, not a default: DefaultConcurrency picks a smaller, gentler number
 // when nothing is configured, and this only ever caps a number someone asked for.
 func MachineCeiling() int {
 	n := runtime.NumCPU()
@@ -66,7 +66,7 @@ func MachineCeiling() int {
 //
 // A configured value was previously taken at face value, so `concurrency: 32` in a
 // magus.yaml written on a big machine ran 32 parallel steps on a laptop with 10 cores.
-// That does not fail - it thrashes, and every target simply takes longer, which is the
+// That does not fail; it thrashes, and every target simply takes longer, which is the
 // failure mode nothing ever gets attributed to. The number also outlives the machine it
 // was chosen on: it travels in the repo, and the person it hurts is whoever has the
 // smallest box.

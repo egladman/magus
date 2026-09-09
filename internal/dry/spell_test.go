@@ -24,7 +24,7 @@ func tourFile(t *testing.T, name string) string {
 // TestLoadSpell_services loads the canonical service fixture (09-services.buzz) as a
 // SPELL buffer and asserts the whole spell path: it loads clean, is recognized as a
 // spell, `serve` is discovered as an op, and a `run serve` dry-run classifies it as a
-// SERVICE op (not a command). The flip side of the magusfile path - targets come from
+// SERVICE op (not a command). The flip side of the magusfile path: targets come from
 // mgs_listTargets, not the export set.
 func TestLoadSpell_services(t *testing.T) {
 	ctx := context.Background()
@@ -63,7 +63,7 @@ func TestLoadSpell_wardMGS5002(t *testing.T) {
 	ctx := context.Background()
 	src := tourFile(t, "10-wards.buzz")
 
-	// The warded op still loads clean at the graph level - the ward is an op-level
+	// The warded op still loads clean at the graph level: the ward is an op-level
 	// diagnostic surfaced at dry-run, not a parse/load failure.
 	g := LoadMagusfile(ctx, src)
 	require.True(t, g.OK, "10-wards must still load: %+v", g.Diag)
@@ -116,7 +116,7 @@ func TestTourFilesLoadClean(t *testing.T) {
 // TestLoadSpell_customCharms loads the custom-charm fixture (15-charms-custom.buzz, a
 // spell whose `lint` op declares `fix` and `verbose` charms as JSON patches over its
 // argv) and asserts a `run lint:charm` dry-run reshapes the command exactly as the
-// engine would - the point of routing the sandbox through spell.ApplyCharms rather
+// engine would, the point of routing the sandbox through spell.ApplyCharms rather
 // than a second charm reader. Covers bare, one charm, and both (order-independent).
 func TestLoadSpell_customCharms(t *testing.T) {
 	ctx := context.Background()

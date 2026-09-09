@@ -12,7 +12,7 @@ import (
 
 // WriteKnowledgeDOT emits a knowledge-graph export as a Graphviz DOT digraph.
 // Node identity is the raw node ID; the format is structural (edges only), so
-// relations and Attrs are dropped - GraphML carries the full detail. Meant for a
+// relations and Attrs are dropped; GraphML carries the full detail. Meant for a
 // selected neighborhood, not the whole graph (an unfiltered dump is unreadable).
 func WriteKnowledgeDOT(w io.Writer, out types.KnowledgeGraphOutput) error {
 	return writeDOT(w, knowledgeGraphIR(out))
@@ -20,7 +20,7 @@ func WriteKnowledgeDOT(w io.Writer, out types.KnowledgeGraphOutput) error {
 
 // WriteKnowledgeMermaid emits a knowledge-graph export as a Mermaid flowchart:
 // nodes colored by kind, edges labeled with their relation. Meant for a selected
-// neighborhood - Mermaid chokes on thousands of nodes, so the CLI gates it behind
+// neighborhood: Mermaid chokes on thousands of nodes, so the CLI gates it behind
 // --select.
 func WriteKnowledgeMermaid(w io.Writer, out types.KnowledgeGraphOutput) error {
 	return writeMermaid(w, knowledgeGraphIR(out))
@@ -119,14 +119,14 @@ func knowledgeKindColor(kind string) (fill, text string) {
 }
 
 // WriteKnowledgeGraphML emits the merged knowledge graph as GraphML, the XML
-// graph format external viewers (Gephi, yEd) open directly - the second export
+// graph format external viewers (Gephi, yEd) open directly, the second export
 // format next to node-link JSON. Every node/edge field becomes a declared
 // <key>; kind-specific node Attrs are declared as attr_<name> keys collected
 // across the whole graph, so the schema is self-describing. Output is
 // deterministic: nodes/edges are written in input order (the export is already
 // sorted) and attr keys are sorted.
 func WriteKnowledgeGraphML(w io.Writer, out types.KnowledgeGraphOutput) error {
-	var b bytes.Buffer // accumulate, then one write - keeps the body free of per-line error checks
+	var b bytes.Buffer // accumulate, then one write; keeps the body free of per-line error checks
 
 	b.WriteString(xml.Header)
 	b.WriteString(`<graphml xmlns="http://graphml.graphdrawing.org/xmlns">` + "\n")

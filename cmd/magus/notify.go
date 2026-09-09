@@ -85,8 +85,8 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 // quietly treating a producer's partial JSON object as a valid wire contract.
 //
 // A body that LOOKS like an envelope and fails is warned about first. The demotion is
-// still the right outcome - the notification fires either way, and a hook must not exit
-// non-zero over metadata - but silence made it undiagnosable: a producer sending a
+// still the right outcome (the notification fires either way, and a hook must not exit
+// non-zero over metadata), but silence made it undiagnosable: a producer sending a
 // half-built envelope saw a working notification, an empty source, and therefore no
 // attention request, with nothing anywhere saying why.
 func eventFromStdin(body []byte) types.Event {
@@ -104,7 +104,7 @@ func eventFromStdin(body []byte) types.Event {
 
 // noteUnusableEnvelope reports a JSON object that could not be read as an event, and
 // names which half failed: the parse, or the three fields an envelope must carry. A
-// producer debugging this cannot see either from the outside - both paths produce the
+// producer debugging this cannot see either from the outside: both paths produce the
 // same working plain-text notification.
 func noteUnusableEnvelope(err error, ev types.Event) {
 	if err != nil {

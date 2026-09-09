@@ -249,7 +249,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	set2 := []string{"c", "b", "a"}
 
 	// Named and timed, because this test has failed intermittently in the full
-	// suite and reported only "AcquireAll goroutine failed: <err>" - which said
+	// suite and reported only "AcquireAll goroutine failed: <err>", which said
 	// nothing about which order was waiting, how far it had got, or how long the
 	// call took. A flake nobody can diagnose gets rerun until it passes, which
 	// is how a real defect hides.
@@ -257,7 +257,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	// The diagnosis those numbers bought, recorded so it is not re-litigated: the
 	// flake was I/O contention on the OWNER RECORDS, never the lock order. Every
 	// acquire and release calls record.Write, which is a MkdirTemp, a WriteFile
-	// per field, a RemoveAll and a Rename - about twenty filesystem operations.
+	// per field, a RemoveAll and a Rename: about twenty filesystem operations.
 	// acquireAll takes three locks, so one iteration costs ~90 of them, and the
 	// two goroutines run 50 iterations each against the SAME lock directory tree,
 	// where those renames serialize. Roughly 9,000 filesystem operations, which on
@@ -267,7 +267,7 @@ func TestAcquireAllSortedNoDeadlock(t *testing.T) {
 	// so it was a stall rather than a creep.
 	//
 	// So acquireBudget is generous ON PURPOSE and hides nothing. The invariant this
-	// test is named for - sorted order cannot deadlock - is guarded by the deadline
+	// test is named for (sorted order cannot deadlock) is guarded by the deadline
 	// below, which a genuine deadlock trips whatever this is set to. This budget
 	// only decides whether a stall is reported as a failed acquire (with the order,
 	// the iteration and the duration) or as an expired deadline that says none of
@@ -347,7 +347,7 @@ const testWorkspaceRoot = "/ws"
 
 // TestLockNamespaceIsPerWorkspace proves a SHARED cache dir does not merge two
 // workspaces' locks. An absolute cache.dir (or MAGUS_CACHE_DIR) resolves to the same
-// path for every root - that is the point, one cache - but it used to collapse the
+// path for every root (that is the point, one cache), but it used to collapse the
 // lock tree too, so an unrelated checkout's project "." blocked on this one's and
 // presented as a hang rather than an error.
 func TestLockNamespaceIsPerWorkspace(t *testing.T) {
@@ -465,7 +465,7 @@ func ancestryCtx(t *testing.T, ids ...string) context.Context {
 // a target that runs magus against a project its own invocation already locked used to
 // wait forever, because the holder cannot release until the waiter exits.
 //
-// Both acquires happen in ONE process, which is not a shortcut - it is the daemon shape
+// Both acquires happen in ONE process, which is not a shortcut: it is the daemon shape
 // exactly. flock is per open file description, so a second handle in the same process
 // contends like any other, and under a daemon the holder and the waiter really are one
 // process. The ctx timeout is the regression guard: without the refusal this test hangs
@@ -509,7 +509,7 @@ func TestUnrelatedContentionStillWaits(t *testing.T) {
 	lockDir := filepath.Join(cacheDir, "locks", workspaceLockKey(testWorkspaceRoot))
 
 	// A separate process, so the holder's sidecar carries an invocation id this one has
-	// never heard of - the shape of two developers, or two agents, in one workspace.
+	// never heard of: the shape of two developers, or two agents, in one workspace.
 	cmd := helperHold(t, cacheDir, "app", 400)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start holder: %v", err)
@@ -757,7 +757,7 @@ func TestWatchWorkspaceRootStopJoins(t *testing.T) {
 // in failure.
 //
 // It used to return ctx.Err() bare, so a run that timed out waiting reported
-// "context deadline exceeded" - the same sentence as any other cancelled
+// "context deadline exceeded", the same sentence as any other cancelled
 // operation, naming neither the lock nor the project. That is the moment a
 // reader most needs to know which project is held and by whom, and it was the
 // only error in this function that did not say.

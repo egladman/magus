@@ -19,7 +19,7 @@ import (
 
 // mcpAddress returns the MCP host:port for a given MCP config, falling back to the
 // default when unset. It takes the config explicitly (rather than reading globalCfg)
-// so callers that already hold a config.MCP - including tests - resolve the address
+// so callers that already hold a config.MCP (including tests) resolve the address
 // without touching package state.
 func mcpAddress(mcp config.MCP) string {
 	if mcp.Address != "" {
@@ -54,8 +54,8 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "MCP endpoint (Streamable HTTP):\n  http://%s/mcp\n\n", addr)
 	fmt.Fprintf(os.Stderr, "The endpoint requires a bearer token. Print it with:\n  magus config token print\n\n")
 	// Everything above is what EVERY client needs: transport, URL, credential.
-	// What each client does with them - a TOML table, a JSON object, an env var
-	// read at launch - is that client's dialect, and it belongs in documentation
+	// What each client does with them (a TOML table, a JSON object, an env var
+	// read at launch) is that client's dialect, and it belongs in documentation
 	// the reader owns, not in this binary. Naming clients here would make a
 	// change to any one of them a magus release. See docs/guides/integrations/mcp.md.
 	fmt.Fprintf(os.Stderr, "Point your MCP client at that endpoint. Most take three settings:\n")
@@ -70,7 +70,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 	fmt.Fprintf(os.Stderr, "changes, are documented in: docs/guides/integrations/mcp.md\n")
 	// mcp is a retired verb: everything useful it could do is printed above, and
 	// nothing was run, so it exits like any other misuse (errUsage's 2) rather
-	// than 0 - a script that still invokes `magus mcp` expecting a server should
+	// than 0: a script that still invokes `magus mcp` expecting a server should
 	// see a failure, not a silent no-op success.
 	return errSilent{exitCode: exitUsage}
 }
@@ -81,7 +81,7 @@ func mcpCmd(_ context.Context, _ []string) error {
 //
 // ResolveCacheDir is the narrow path: it reads config without discovering projects or
 // evaluating magusfiles, so the value is the bridge Magus's CacheDir without paying a
-// workspace load to learn it - which is what lets this run ahead of the MCP gate. A root
+// workspace load to learn it, which is what lets this run ahead of the MCP gate. A root
 // that will not resolve leaves the base empty, and every writer already treats an empty
 // base as "drop the record, best-effort".
 func publishDaemonTrailBase() {
@@ -105,7 +105,7 @@ func publishDaemonTrailBase() {
 // rather than continuing to run with MCP unavailable.
 func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel observability.Provider) {
 	// Before the gate, deliberately. The trail base is the workspace cache dir and has
-	// nothing to do with MCP, but it used to be published from below this return - so
+	// nothing to do with MCP, but it used to be published from below this return, so
 	// mcp.enabled: false left it empty, the maintenance scheduler bailed at every tick,
 	// and no background job was ever recorded. Turning off one integration silently
 	// turned off all scheduled maintenance.
@@ -120,7 +120,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	}
 	// The bridge Magus MUST share the daemon's single provider (WithProvider) so the
 	// /dashboard derived metrics (GetMetrics / StreamMetrics) read the counters that
-	// per-workspace registry builds actually recorded - not this bridge's own empty
+	// per-workspace registry builds actually recorded, not this bridge's own empty
 	// ManualReader. If no shared provider was supplied (bridge started without the
 	// multi-workspace daemon), fall back to a bridge-local collector so the endpoint is
 	// still non-empty; one-shot CLI runs leave metrics off entirely.
@@ -142,7 +142,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	}
 	// Keep a warm knowledge graph for MCP queries: the watcher invalidates it on
 	// source changes, so query/explain/path/stats answer from memory without
-	// re-parsing every magusfile per call. Non-fatal if it cannot start - the
+	// re-parsing every magusfile per call. Non-fatal if it cannot start: the
 	// tools fall back to a cache-first rebuild per call (equally fresh). The
 	// watcher lives for the daemon's context.
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {

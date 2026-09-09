@@ -12,7 +12,7 @@ import (
 // graph"; steady state is a fingerprint check, not a rebuild) is guarded here by
 // invariants that hold regardless of machine speed. Wall-clock and allocation
 // budgets live in the benchmarks (bench_test.go) with benchstat evidence, per the
-// repo's go-ultra-optimize discipline - a timing assertion in a unit test only
+// repo's go-ultra-optimize discipline: a timing assertion in a unit test only
 // buys CI flakes.
 
 // largeGraph builds the 16k-target synthetic fixture once per test. It is the
@@ -65,7 +65,7 @@ func TestWarmLoadMatchesColdBuild(t *testing.T) {
 	require.NoError(t, err)
 
 	// A warm Load reads only the persisted shards (no assembly) and must reproduce
-	// the same graph the cold build merged in memory - the cache-first contract.
+	// the same graph the cold build merged in memory, the cache-first contract.
 	warm, err := NewStore(dir, false, 0, nil, nil).Load(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, len(cold.Nodes()), len(warm.Nodes()))

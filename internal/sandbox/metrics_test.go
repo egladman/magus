@@ -134,7 +134,7 @@ func TestRecordEnvDropped_SilentWhenSandboxOff(t *testing.T) {
 }
 
 // TestRecordEnvDropped_SilentWhenNothingDropped covers a policy that is present
-// (sandbox on) but stripped nothing - the count-must-be-positive half of the gate.
+// (sandbox on) but stripped nothing, the count-must-be-positive half of the gate.
 func TestRecordEnvDropped_SilentWhenNothingDropped(t *testing.T) {
 	var buf bytes.Buffer
 	prev := slog.Default()

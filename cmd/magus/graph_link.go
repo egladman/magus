@@ -19,7 +19,7 @@ const authHint = "(append &token=$(magus config token print) to open it authenti
 // applied. It does not probe the daemon, and it NEVER embeds the bearer token.
 //
 // It used to call auth.Load() and put the live token in the fragment. The fragment
-// is not transmitted in an HTTP request, which is why that read as safe - but it is
+// is not transmitted in an HTTP request, which is why that read as safe, but it is
 // still a credential written to stdout on every `magus explain`, and stdout is
 // scrollback, a captured run log, and the context of whatever agent ran the command.
 // A credential that reaches three sinks nobody audits is leaked regardless of what

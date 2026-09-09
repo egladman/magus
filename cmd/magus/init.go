@@ -24,7 +24,7 @@ import (
 // so the old name made discovery register magus's own repository as owning a project
 // here. It then failed doctor's language-coverage check, and the only ways to quiet
 // that were to bind a spell the template must not have or to write an opt-out into
-// the very file `magus init` hands new users - ceremony in the one file whose whole
+// the very file `magus init` hands new users: ceremony in the one file whose whole
 // point is that a magusfile's mere presence is enough. The .buzz suffix stays so the
 // shipped template is still linted and syntax-checked as Buzz.
 //
@@ -77,7 +77,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	// Ahead of every write: init touches three places at once, and two are outside
-	// the repo - the config, and the merge driver in the VCS's own config.
+	// the repo: the config, and the merge driver in the VCS's own config.
 	if inf.DryRun {
 		return printInitPlan(inf.Global, inf.Local, inf.Force)
 	}
@@ -227,7 +227,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 
 	// Point users at the agent surface. A hint, not a step: connecting a client
 	// is per-user and per-machine (it writes the client's config, not the repo),
-	// so it does not belong in repo bootstrap - init just says where to look.
+	// so it does not belong in repo bootstrap; init just says where to look.
 	interactive.Emit(os.Stderr, "")
 	interactive.Emit(os.Stderr, "let an agent use this workspace over the daemon (graph-aware skills + MCP tools):")
 	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With(".agents/skills")+"  # Agent Skills; it also prints the AGENTS.md block to paste")

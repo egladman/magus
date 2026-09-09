@@ -104,7 +104,7 @@ func TestCurrentLevel(t *testing.T) {
 
 // TestExecWithholdsDaemonSocket pins the contract runMagus (std/magus.go) relies on: the
 // daemon/pool pointer MAGUS_DAEMON_SOCKET is magus-internal and must NOT reach an op
-// subprocess - even with the sandbox off (the default), where childEnv takes the raw process
+// subprocess, even with the sandbox off (the default), where childEnv takes the raw process
 // env. A leaked socket makes any program that links proc (magus's own test binaries) mistake
 // itself for "already adopted under a parent magus". An explicit Env override still wins, which
 // is how a legitimate nested magus re-injects it for forwarding. Mutates env; not parallel.

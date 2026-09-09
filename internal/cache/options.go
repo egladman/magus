@@ -112,7 +112,7 @@ func OnResult(fn func(*Step, *Result, error)) RunOption {
 // WithMaxFailures bounds how many steps may fail before RunAll stops admitting more,
 // as a budget rather than a boolean: 1 is fail-fast, 3 tolerates three, and 0 (the
 // default) is unlimited. A step that fails only because a dependency failed does not
-// count - it is a consequence, not an independent finding - so a budget of 1 stops at
+// count (it is a consequence, not an independent finding), so a budget of 1 stops at
 // the first REAL failure rather than at whichever cascade victim reports first.
 func WithMaxFailures(n int) RunOption {
 	return func(rc *runCtx) { rc.maxFailures = n }

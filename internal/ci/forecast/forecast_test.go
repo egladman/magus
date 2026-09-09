@@ -315,7 +315,7 @@ func TestPlan_memoryBudgetSplitsAShardThatWouldNotFit(t *testing.T) {
 
 	// An effectively infinite budget, NOT a zero one: zero means "derive from this
 	// host", so a bare Forecaster asserts something different on a 16GB CI runner
-	// than on a workstation - which is precisely how this test passed locally and
+	// than on a workstation, which is precisely how this test passed locally and
 	// failed in CI. Pin the budget whenever the assertion is about the time model.
 	unbudgeted := Forecaster{History: h, Target: "ci", MemoryBudgetBytes: 1 << 62}.Plan(ps, 8)
 	require.Len(t, unbudgeted, 1, "precondition: the time model consolidates these")
@@ -330,7 +330,7 @@ func TestPlan_memoryBudgetSplitsAShardThatWouldNotFit(t *testing.T) {
 func TestPlan_memoryBudgetLeavesAFittingPlanAlone(t *testing.T) {
 	t.Parallel()
 	// Two small projects fit together, so the budget must not buy runners nobody
-	// needs - the constraint exists to prevent a death, not to fan out by default.
+	// needs: the constraint exists to prevent a death, not to fan out by default.
 	h := History{Constants: consolidating()}
 	seedPeak(&h, "a", "ci", 200<<20)
 	seedPeak(&h, "b", "ci", 300<<20)
@@ -342,8 +342,8 @@ func TestPlan_memoryBudgetLeavesAFittingPlanAlone(t *testing.T) {
 
 func TestPlan_unmeasuredProjectsPlanExactlyAsBefore(t *testing.T) {
 	t.Parallel()
-	// The compatibility guarantee. A workspace that has recorded no peaks - every
-	// workspace, the first time this ships - must get byte-identical planning,
+	// The compatibility guarantee. A workspace that has recorded no peaks (every
+	// workspace, the first time this ships) must get byte-identical planning,
 	// because unknown is not zero and must not be read as either free or vast.
 	h := History{}
 	ps := projects("a", "b", "c", "d")
@@ -392,7 +392,7 @@ func TestPlan_oneProjectOverBudgetDoesNotSpin(t *testing.T) {
 func TestMemoryBudget_derivedFromTheHostWithNoKnob(t *testing.T) {
 	t.Parallel()
 	// The default path: no caller sets anything, and a budget still appears on any
-	// host magus can ask. This is the whole point of not exposing a config key -
+	// host magus can ask. This is the whole point of not exposing a config key:
 	// the protection has to be on for people who never heard of it.
 	f := Forecaster{Target: "ci"}
 	got := f.memoryBudget()

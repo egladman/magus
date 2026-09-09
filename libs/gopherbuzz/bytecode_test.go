@@ -804,8 +804,8 @@ func assertJITMatchesInterp(t *testing.T, src string) {
 // self-checks. Both counters mean a defect in this package rather than anything
 // about the program: a codegen panic, or a native exit whose stack height or
 // resume ip the interpreter refused to resume from. Neither shows up as a wrong
-// answer - the recovery is correct, so a differential assertion alone stays green
-// while the JIT silently stops doing its job - which is exactly why the counters
+// answer (the recovery is correct, so a differential assertion alone stays green
+// while the JIT silently stops doing its job), which is exactly why the counters
 // have to be asserted next to it. See vm.JITBadExitCount.
 func assertJITInternallyConsistent(t *testing.T) {
 	t.Helper()
@@ -1117,7 +1117,7 @@ func wantBool(t *testing.T, v vmpackage.Value, want bool) {
 // (validated against the 0.6.0-dev binary): strings match by content, lists and
 // maps match by reference identity only, a missing element returns null. This
 // source runs under every value representation (nanbox, buzz_safe, buzz_unsafe)
-// and must agree in all three - the pre-fix RawEqual path made any same-tag heap
+// and must agree in all three: the pre-fix RawEqual path made any same-tag heap
 // needle match the first element under buzz_safe/buzz_unsafe.
 func TestListIndexOfConformance(t *testing.T) {
 	wantNull := func(v vmpackage.Value, msg string) {
@@ -1475,9 +1475,9 @@ func TestPromoteEquivalence(t *testing.T) {
 	for _, src := range srcs {
 		promote := runProg(t, src, promoteOpts)
 		shared := runProg(t, src, sharedOpts)
-		// RawEqual is raw tag+num bits - heap reference identity holds only in
+		// RawEqual is raw tag+num bits: heap reference identity holds only in
 		// the nanbox build; under buzz_safe/buzz_unsafe any two same-tag heap
-		// values compare equal - so compare by kind + rendered content instead.
+		// values compare equal, so compare by kind + rendered content instead.
 		assert.Equalf(t, shared.String(), promote.String(), "promote vs shared mismatch for %q", src)
 		assert.Equalf(t, shared.IsStr(), promote.IsStr(), "promote vs shared kind mismatch for %q", src)
 	}
@@ -1580,7 +1580,7 @@ return getx();`, CompileOptions{}), 10)
 
 	// LIVE capture: a captured slot is one shared cell, so a write after the closure
 	// is built is visible through it. This asserted 1 (a by-value snapshot) until
-	// upvalues were boxed, which also removed the slot-vs-SharedGlobals divergence -
+	// upvalues were boxed, which also removed the slot-vs-SharedGlobals divergence:
 	// both models now observe the live variable.
 	wantInt(t, runProg(t, `var x = 1;
 fun getx() > int { return x; }
@@ -1708,7 +1708,7 @@ func TestJITComputesNatively(t *testing.T) {
 			while (i < 100) { s = s + i % 7; i = i + 1; } return s;`)
 	})
 	// arm64 has no integer remainder instruction, so the backend open-codes
-	// rem = left - (left/right)*right. Truncating division gives the remainder the
+	// `rem = left - (left/right)*right`. Truncating division gives the remainder the
 	// DIVIDEND's sign, matching amd64's IDIV/RDX; nothing above would notice if a
 	// sign flipped, because every operand there is positive.
 	t.Run("int_div_mod_negative_operands", func(t *testing.T) {
@@ -1810,7 +1810,7 @@ func TestJITDeoptsOnRuntimeError(t *testing.T) {
 // a backend file must report a backend, on every OS, in every Value representation.
 // Without it the tag expressions are only ever checked by whether the package
 // compiles, and a stub silently selected on an arch that has real codegen looks
-// identical to a pass - every JIT test would skip and the suite would go green having
+// identical to a pass: every JIT test would skip and the suite would go green having
 // run nothing. It matters most on a platform nobody runs the suite on by habit:
 // Windows selects a different executable-memory half (jit_mem_windows.go), so a tag
 // mistake there would go unnoticed until a user hit it.
@@ -1833,7 +1833,7 @@ func TestJITBackendPresence(t *testing.T) {
 //
 //   - A BARE NEGATIVE LITERAL makes the whole chunk ineligible. Negation is not in
 //     depths()' opcode whitelist, so `var s = -5;` is declined outright and the JIT
-//     never runs - the differential test then compares the interpreter with itself
+//     never runs; the differential test then compares the interpreter with itself
 //     and proves nothing. Negatives are spelled `(0 - n)`, which is exactly why the
 //     fixed corpus above spells them that way too.
 //   - A VARIABLE'S NUMERIC TYPE IS FIXED. Assigning a double into an int local is a
@@ -1926,13 +1926,13 @@ func randJITProgram(rng *rand.Rand) string {
 }
 
 // TestJITMatchesInterpreterRandomized is the property the whole JIT design rests
-// on: for ANY program, native and interpreted execution agree - same value, or the
+// on: for ANY program, native and interpreted execution agree: same value, or the
 // same error. The fixed corpus above pins the shapes someone thought to write down;
 // this explores the combinations nobody did, which is where a codegen defect
 // actually lives (an operand order, a sign, a promotion, or a comparison sense that
 // only misbehaves on one arch with one mix of types).
 //
-// Deterministic by construction - fixed seed - so a failure reproduces and a green
+// Deterministic by construction (fixed seed), so a failure reproduces and a green
 // run means the same thing on every machine. The failure prints the generating
 // source, so a counterexample can be pasted straight into the fixed corpus.
 func TestJITMatchesInterpreterRandomized(t *testing.T) {
@@ -2049,10 +2049,10 @@ func FuzzJITMatchesInterpreter(f *testing.F) {
 //
 // Two things had to be true and neither was. The aliased path exec'd the file in an
 // isolated sub-session and returned before collectImportedModule, so the type was
-// never registered - the checker reported an undefined type. And `ns\Name{...}`
+// never registered: the checker reported an undefined type. And `ns\Name{...}`
 // compiles to a construction of the BARE name (the parser resolves it that way
 // deliberately), which the VM looks up in the env, where an aliased import had bound
-// only the alias map - so once the checker was satisfied it failed at RUN time with
+// only the alias map, so once the checker was satisfied it failed at RUN time with
 // "unknown object type".
 //
 // The defaults assertion is the point of the second half: an unknown type still
@@ -2106,7 +2106,7 @@ func TestImport_NamespaceRelativeToImporter(t *testing.T) {
 	sess.SetIncludeDirs([]string{dir})
 
 	// The program READS both spellings, so it would fail to compile if either were
-	// unbound - which is the regression this guards.
+	// unbound, which is the regression this guards.
 	require.NoError(t, sess.Exec(ctx, "namespace a\\b;\nimport \"child\";\nimport \"sib\";\n"+
 		"final m = here\\message;\nfinal n = other\\note;"), "exec")
 
@@ -2130,7 +2130,7 @@ func TestImport_NamespaceRelativeToImporter(t *testing.T) {
 // Upstream's tests/behavior/mutual-import.buzz is the case: the entry file is in
 // tests/behavior and imports ../utils/import-b, which imports a bare `import-a` that
 // sits beside IT in tests/utils. Only the entry file's directory was searched, so the
-// inner import resolved against tests/behavior and was reported missing - which reads
+// inner import resolved against tests/behavior and was reported missing, which reads
 // as a circular-import failure and is plain path resolution.
 //
 // The cycle itself was never the problem: loadedPaths already guards that, and
@@ -2142,7 +2142,7 @@ func TestImport_ResolvesRelativeToImportingFile(t *testing.T) {
 	require.NoError(t, os.MkdirAll(entry, 0o755))
 	require.NoError(t, os.MkdirAll(nested, 0o755))
 
-	// leaf sits beside mid, and mid imports it by BARE name - resolvable only from
+	// leaf sits beside mid, and mid imports it by BARE name, resolvable only from
 	// mid's own directory.
 	require.NoError(t, os.WriteFile(filepath.Join(nested, "leaf.buzz"),
 		[]byte("export final leafValue = 5;\n"), 0644))

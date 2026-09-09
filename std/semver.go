@@ -92,8 +92,8 @@ var Semver = Module{
 
 // SemverCompare orders a against b, returning -1, 0, or 1.
 //
-// This is what `compare` means everywhere else - Go's cmp.Compare and strings.Compare,
-// x/mod/semver.Compare, Masterminds' Compare, node-semver's compare - and returning a
+// This is what `compare` means everywhere else (Go's cmp.Compare and strings.Compare,
+// x/mod/semver.Compare, Masterminds' Compare, node-semver's compare), and returning a
 // bool from a function by that name is a trap: an author arriving from any of them
 // guesses three-way ordering, and the guess compiles.
 //
@@ -132,7 +132,7 @@ func SemverParse(_ context.Context, v string) (types.SemverVersion, error) {
 // major, minor, or patch. Delegates to Masterminds/semver's Inc* methods
 // rather than hand-rolling "+1" arithmetic: per version.go's IncPatch and
 // semver.org spec item 9, a version WITH a prerelease has IncPatch strip the
-// prerelease and KEEP the patch (v1.2.3-rc1 -> v1.2.3, not v1.2.4) - a
+// prerelease and KEEP the patch (v1.2.3-rc1 -> v1.2.3, not v1.2.4), a
 // subtlety naive arithmetic gets wrong and that this delegation gets free.
 func SemverNext(_ context.Context, v string) (types.SemverNext, error) {
 	sv, err := semver.NewVersion(v)
@@ -162,8 +162,8 @@ func SemverIsValid(_ context.Context, v string) (bool, error) {
 // SemverCanonical returns v in canonical "vX.Y.Z" form.
 //
 // The leading "v" is what every function in this file that returns a version STRING
-// emits, so a caller can compare two of them directly. Input stays lenient - "1.2",
-// "v1.2.0", and "1.2.0+build" all canonicalize - which keeps it consistent with parse,
+// emits, so a caller can compare two of them directly. Input stays lenient ("1.2",
+// "v1.2.0", and "1.2.0+build" all canonicalize), which keeps it consistent with parse,
 // the module's other entry point.
 func SemverCanonical(_ context.Context, v string) (string, error) {
 	sv, err := semver.NewVersion(v)
@@ -200,7 +200,7 @@ func SemverMajorMinor(_ context.Context, v string) (string, error) {
 // SemverSatisfies reports whether v meets a full constraint RANGE.
 //
 // compare() takes a single operator and one version, so it cannot express ">= 1.2,
-// < 2.0" - the form magus.yaml's required_version already accepts and the one a
+// < 2.0", the form magus.yaml's required_version already accepts and the one a
 // magusfile reaches for when gating on a toolchain window.
 func SemverSatisfies(_ context.Context, v, constraint string) (bool, error) {
 	c, err := semver.NewConstraint(constraint)

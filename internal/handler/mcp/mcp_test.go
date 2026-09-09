@@ -145,7 +145,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	t.Parallel()
 
 	// adapt() turns a soft failure into an IsError result with a nil err. The trail (and the
-	// metric) must record it as error, not ok - the regression the review caught.
+	// metric) must record it as error, not ok: the regression the review caught.
 	dir := t.TempDir()
 	tel := &fakeTel{}
 	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "a"} }

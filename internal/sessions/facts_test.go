@@ -25,7 +25,7 @@ func emitFact(t *testing.T, h slog.Handler, e journal.Event) {
 
 // captureFactWarnings installs a slog handler for the duration of fn and returns what it
 // logged. A handler that abandons the store reports it through slog rather than an error
-// - Handle returning one would make bookkeeping able to fail a build - so the default
+// (Handle returning one would make bookkeeping able to fail a build), so the default
 // logger is the only place to observe it.
 func captureFactWarnings(t *testing.T, fn func()) string {
 	t.Helper()

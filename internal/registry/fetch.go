@@ -22,8 +22,8 @@ const fetchTimeout = 60 * time.Second
 // Refresh fetches, verifies, and caches one source, returning what is now local.
 //
 // The order is signature first, then the document. That does NOT let magus verify
-// before downloading - a detached Ed25519 signature is computed over the artifact,
-// so the artifact has to be in hand - and claiming otherwise would be dishonest.
+// before downloading (a detached Ed25519 signature is computed over the artifact,
+// so the artifact has to be in hand), and claiming otherwise would be dishonest.
 // What it buys is concrete: a missing signature fails after 1 KB instead of after
 // the whole file, which is exactly the shape of the bug that made `magus self
 // update` exit 1 for every user, and the document host is not contacted until the

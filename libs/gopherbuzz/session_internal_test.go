@@ -12,7 +12,7 @@ import (
 
 // TestSession_Warnings_VisibleAfterExec reproduces the gap this fix closes: BZZ3001
 // was computed by compileShared and then thrown away (a comment there says so
-// explicitly), so nothing on the normal Exec path could ever see it - only the
+// explicitly), so nothing on the normal Exec path could ever see it; only the
 // separate Diagnostics call could, and that one re-executes every import, which is
 // unsafe to call after a real run. Warnings() must expose the SAME warning
 // compileShared already computed for this Exec, without re-resolving anything.

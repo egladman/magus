@@ -103,7 +103,7 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 }
 
 // TestLastRecordedRun_KeyComesFromTheFilename: readManifest accepts an empty Hash as
-// valid - the permissive-on-absence convention that keeps pre-field entries usable - so
+// valid (the permissive-on-absence convention that keeps pre-field entries usable), so
 // the body cannot be trusted for the key. The filename IS the key, and a RecordedRun that
 // took the body's word for it reports Key "" and compares against nothing.
 func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
@@ -125,7 +125,7 @@ func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 }
 
 // TestLastRecordedRun_WouldReplayAnOlderKey: an edit and a revert leave the NEWEST entry
-// keyed to the edited tree while the key a run now mints belongs to the first entry -
+// keyed to the edited tree while the key a run now mints belongs to the first entry,
 // which still hits. Reading the verdict off the newest entry alone reports a miss for a
 // run that never executes.
 func TestLastRecordedRun_WouldReplayAnOlderKey(t *testing.T) {

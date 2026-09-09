@@ -26,8 +26,8 @@ var (
 	commit    = unknownVersion
 	buildDate = unknownVersion
 	// builtBy is the CI workflow that produced this binary ($GITHUB_WORKFLOW_REF),
-	// empty for a local build. A CLAIM, not proof - a signature is what proves
-	// provenance - but empty is the honest default, so a local build never asserts a
+	// empty for a local build. A CLAIM, not proof (a signature is what proves
+	// provenance), but empty is the honest default, so a local build never asserts a
 	// pedigree it does not have. For a keyless-signed artifact it should equal the
 	// job_workflow_ref in the certificate, which is what makes the two cross-checkable.
 	builtBy = ""
@@ -70,7 +70,7 @@ type daemonProbe struct {
 
 // daemonProbeTimeout bounds the whole server half: socket discovery plus the status
 // round-trip. Far under proc's own 5s status deadline because `magus version` is a
-// scriptable command - an absent or wedged daemon must cost a blink, not seconds.
+// scriptable command: an absent or wedged daemon must cost a blink, not seconds.
 const daemonProbeTimeout = 500 * time.Millisecond
 
 func runVersion(ctx context.Context, args []string) error {
@@ -97,7 +97,7 @@ func runVersion(ctx context.Context, args []string) error {
 	}
 	out := versionOutput{Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz"}
 	// -o name prints the bare version and nothing else, so the round-trip would be paid
-	// for a field nothing renders - and that form is what a CI step compares against a
+	// for a field nothing renders, and that form is what a CI step compares against a
 	// pin, which is exactly where a daemon that is slow to answer must not be felt.
 	var probe daemonProbe
 	probed := !vf.Client && opts.Format != outputName
@@ -142,8 +142,8 @@ func runVersion(ctx context.Context, args []string) error {
 // Two of those failures are NOT silent, because reporting either as "not running" states
 // something false about this machine: several live servers, and an address discovery
 // reached by SCANNING the user's socket directory. A scanned per-process proc server
-// belongs to whatever invocation spawned it - very possibly an unrelated checkout's
-// in-flight run - so only the stable daemon socket, or an address the caller selected
+// belongs to whatever invocation spawned it (very possibly an unrelated checkout's
+// in-flight run), so only the stable daemon socket, or an address the caller selected
 // explicitly, may be reported as the daemon serving this workspace.
 func probeDaemonVersion(ctx context.Context) daemonProbe {
 	ctx, cancel := context.WithTimeout(ctx, daemonProbeTimeout)
@@ -177,7 +177,7 @@ func probeDaemonVersion(ctx context.Context) daemonProbe {
 //
 // The unknown case is its own line rather than a comparison: an unstamped client also
 // reports "unknown", so an unstamped client talking to an unstamped daemon would have
-// read as "daemon: unknown" - the same line two matching stamped builds print.
+// read as "daemon: unknown", the same line two matching stamped builds print.
 func daemonLine(p daemonProbe, client string) string {
 	switch {
 	case p.several:

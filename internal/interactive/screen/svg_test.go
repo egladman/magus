@@ -39,8 +39,8 @@ func TestSVGIsDeterministic(t *testing.T) {
 
 func TestSVGEscapesMarkup(t *testing.T) {
 	t.Parallel()
-	// Terminal output carries angle brackets and ampersands constantly - a diff,
-	// a shell command, an HTML fragment in a log - and an unescaped one would
+	// Terminal output carries angle brackets and ampersands constantly (a diff,
+	// a shell command, an HTML fragment in a log), and an unescaped one would
 	// produce an SVG that does not parse.
 	s := New(40, 2)
 	fmt.Fprint(s, "if a<b && c>d\n")
@@ -108,7 +108,7 @@ func TestAnimateRefusesMismatchedInput(t *testing.T) {
 // animation legible at all.
 //
 // SMIL defaults to linear interpolation, so a frame that reaches opacity 0 at
-// the end of the timeline FADES there from the end of its own window - and with
+// the end of the timeline FADES there from the end of its own window, and with
 // every frame doing that, all of them are superimposed at partial opacity for
 // most of the loop. The first version of this shipped exactly that.
 func TestAnimateSwitchesFramesRatherThanFading(t *testing.T) {

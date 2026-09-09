@@ -1,6 +1,6 @@
 // Package otlp holds the concrete OpenTelemetry/OTLP provider that backs the
 // observability.Provider interface. It is a subpackage so the heavy OTLP SDK
-// dependency graph - which pulls in net/http and grpc - stays out of the light
+// dependency graph (which pulls in net/http and grpc) stays out of the light
 // parent package and out of the Buzz playground's wasm build (TinyGo's js/wasm
 // cannot compile net/http).
 package otlp

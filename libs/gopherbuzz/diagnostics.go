@@ -3,7 +3,7 @@ package buzz
 import "github.com/egladman/magus/libs/diagnostics"
 
 // This file is gopherbuzz's own diagnostic-code namespace: the BZZ#### family. It uses the SAME shared
-// mechanism as magus (github.com/egladman/magus/libs/diagnostics) but declares an ENTIRELY SEPARATE catalog - no
+// mechanism as magus (github.com/egladman/magus/libs/diagnostics) but declares an ENTIRELY SEPARATE catalog: no
 // code is shared with magus's MGS codes, and the docs live in gopherbuzz's own tree, not magus's. The
 // codes give a buzz author the same lookupable, documented errors magus targets get. gopherbuzz's error
 // TEXT already differs from upstream buzz (only interpreter BEHAVIOR must match), so the codes render
@@ -12,7 +12,7 @@ import "github.com/egladman/magus/libs/diagnostics"
 // Ranges: 1000 = type-check errors (checker.go), 2000 = session/runtime errors (imports,
 // fibers), 3000 = warnings (parser.go).
 
-// bzzDocsBase is where BZZ code docs live - inside gopherbuzz's OWN source tree, kept separate from
+// bzzDocsBase is where BZZ code docs live: inside gopherbuzz's OWN source tree, kept separate from
 // magus's docs/codes.
 const bzzDocsBase = "https://github.com/egladman/magus/blob/main/libs/gopherbuzz/docs/codes/"
 
@@ -37,7 +37,7 @@ const (
 	UnresolvedImport diagnostics.Code = "BZZ2001" // an import that cannot be resolved to a module or file
 	FiberMisuse      diagnostics.Code = "BZZ2002" // resume/resolve called wrong: not a fiber, missing argument, or a running fiber
 
-	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile -
+	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile;
 	// see Severity.
 	UnusedImport diagnostics.Code = "BZZ3001" // an import whose namespace binding is never referenced
 
@@ -54,8 +54,8 @@ var allBZZCodes = []diagnostics.Code{
 }
 
 // Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every
-// diagnostic built before Severity existed - and every one the checker still builds
-// without setting it explicitly - keeps its current meaning: it fails Exec/Compile
+// diagnostic built before Severity existed (and every one the checker still builds
+// without setting it explicitly) keeps its current meaning: it fails Exec/Compile
 // exactly as before this type was introduced. Only a diagnostic that opts in
 // (UnusedImport, StringAccumulation) is a warning, which Exec/Compile must never fail on.
 type Severity int

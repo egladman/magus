@@ -19,7 +19,7 @@ const (
 )
 
 // DefaultShutdownTimeout bounds a [Registry.Shutdown] call for a caller whose own ctx
-// may already be cancelled (e.g. Ctrl-C) by the time it tears down services - such a
+// may already be cancelled (e.g. Ctrl-C) by the time it tears down services; such a
 // caller must derive a fresh ctx (context.WithoutCancel plus this timeout) rather than
 // pass the cancelled one through, or Shutdown would return immediately without
 // stopping anything. It covers one victim's worst case (defaultReadyTimeout waiting
@@ -31,13 +31,13 @@ const DefaultShutdownTimeout = 40 * time.Second
 // process group, waits for an optional readiness probe to pass, and stops it via
 // its graceful Stop command or a signal, escalating to a group kill. It supervises
 // the process in the background (the Registry, not this Runner, decides when to stop
-// it), which is why a service must run in the foreground and not detach - the
+// it), which is why a service must run in the foreground and not detach; the
 // MGS5002 ward enforces that.
 //
 // Process control (group setup, graceful terminate, hard group-kill) is delegated to
 // internal/proc/run's platform primitives so grandchildren of a wrapper like `docker run`
-// are reaped, not orphaned, on every OS - the same handling magus uses for ordinary
-// forked commands.
+// are reaped, not orphaned, on every OS (the same handling magus uses for ordinary
+// forked commands).
 //
 // The zero value is ready to use; the timing fields are for tuning (and for keeping
 // tests fast). Any field left 0 uses its default.
@@ -99,7 +99,7 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 		if err := r.waitReady(ctx, s.Readiness); err != nil {
 			// Start's own ctx, not context.Background(): if ctx is already why waitReady
 			// gave up (deadline/cancel), stopProc's grace wait should not outlive it
-			// either - a caller that cancelled Start is not going to wait around for a
+			// either; a caller that cancelled Start is not going to wait around for a
 			// graceful cleanup grace period.
 			stopProc(ctx, h)
 			return nil, fmt.Errorf("service: %q not ready: %w", s.Command.Bin, err)
@@ -112,7 +112,7 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 // grace: if ctx is done first, Stop escalates to a hard kill immediately instead of
 // waiting out the rest of the grace window, and does not block confirming the
 // process was reaped (the Start goroutine still reaps it in the background, so
-// nothing is left a zombie - Stop just stops waiting to hear about it).
+// nothing is left a zombie; Stop just stops waiting to hear about it).
 func (ExecRunner) Stop(ctx context.Context, h Handle) {
 	eh, ok := h.(*execHandle)
 	if !ok || eh == nil {
@@ -170,7 +170,7 @@ func runStopCommand(ctx context.Context, stop spells.Command, grace time.Duratio
 // model), run repeatedly at a fixed interval. Each attempt is bounded by the
 // remaining time to deadline (mirroring runStopCommand's use of CommandContext) so a
 // probe binary that never exits cannot block past ReadyTimeout or an outer ctx
-// cancellation - a plain exec.Command here would run inside c.Run() uninterruptibly.
+// cancellation; a plain exec.Command here would run inside c.Run() uninterruptibly.
 func (r ExecRunner) waitReady(ctx context.Context, probe spells.Command) error {
 	deadline := time.Now().Add(r.readyTimeout())
 	for {

@@ -45,7 +45,7 @@ func TestCheckRequiredVersion(t *testing.T) {
 
 	// A prerelease of the version that satisfies the floor satisfies it. Semver
 	// constraints otherwise exclude every prerelease, so v0.4.0-rc1 would be told to
-	// upgrade to 0.4.0 - which it already effectively is.
+	// upgrade to 0.4.0, which it already effectively is.
 	t.Run("a prerelease of the required version satisfies it", func(t *testing.T) {
 		assert.Nil(t, CheckRequiredVersion(">= 0.4.0", "v0.4.0-rc1"))
 	})
@@ -65,7 +65,7 @@ func TestCheckRequiredVersion(t *testing.T) {
 
 // A source build must satisfy any floor, including one naming a release that does not
 // exist yet. This is what makes a floor armable the moment the feature lands rather than
-// only after it ships - and shipping is exactly when the floor stops mattering.
+// only after it ships, and shipping is exactly when the floor stops mattering.
 func TestCheckRequiredVersion_SourceBuildIsNotBlocked(t *testing.T) {
 	for _, running := range []string{
 		"v0.3.0-286-ga899daa3",       // git describe: 286 commits past v0.3.0
@@ -82,7 +82,7 @@ func TestCheckRequiredVersion_SourceBuildIsNotBlocked(t *testing.T) {
 
 // The binary a floor exists to catch: a real release, built elsewhere and shipped, that
 // predates the feature the magusfile needs. Without the floor this is the build that
-// fails somewhere unrelated - or, for a silently-ignored argument, hangs.
+// fails somewhere unrelated, or, for a silently-ignored argument, hangs.
 func TestCheckRequiredVersion_ShippedReleaseBelowTheFloorIsRefused(t *testing.T) {
 	err := CheckRequiredVersion(">= 0.4.0", "v0.3.1")
 	require.Error(t, err)

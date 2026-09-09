@@ -25,7 +25,7 @@ func Build(ctx context.Context, cacheDir string, opts BuildOptions, in Inputs, l
 	shards := AssembleShards(in)
 
 	// optimization: fingerprint shards in parallel. Each fingerprint builds a
-	// temp graph, sorts, marshals, and hashes - independent CPU work done for
+	// temp graph, sorts, marshals, and hashes: independent CPU work done for
 	// every shard on every build (the steady-state query cost), so it scales with
 	// cores. fingerprintShardContent shares no state, so this is race-free.
 	//   measured: BenchmarkBuildNoop -44.3% sec/op (benchstat, n=8+6, 2000-project

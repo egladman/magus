@@ -61,7 +61,7 @@ func TestCheckMCPTokens(t *testing.T) {
 // TestProbeBridgeReachability pins which lifecycle the skip keys on.
 //
 // It used to key on the PROC daemon being reachable, and magus spins one of those up for
-// ordinary commands - so a plain `magus doctor` adopted one, the skip could never fire, and
+// ordinary commands, so a plain `magus doctor` adopted one, the skip could never fire, and
 // every machine without a console failed here. The bridge rides on the MCP HTTP server that
 // only `magus server start` starts, so that is what "expected" has to mean.
 func TestProbeBridgeReachability(t *testing.T) {

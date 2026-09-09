@@ -29,8 +29,8 @@ import (
 //     would make them stop trusting their own place in the diff, and a lost place cannot be
 //     restored because it was in their head. This is the review reading of the guard's rule:
 //     deny what cannot be undone, explain everything else.
-//   - It cannot claim to be the human. Author is stamped from the transport - this file
-//     always stamps agent - so a body that says otherwise is ignored. Same reasoning the
+//   - It cannot claim to be the human. Author is stamped from the transport (this file
+//     always stamps agent), so a body that says otherwise is ignored. Same reasoning the
 //     notes store uses: a self-attested author is forgeable by whatever wrote the file.
 //
 // It also cannot mark a hunk viewed, for a quieter reason: "read" is a claim only the reader
@@ -79,7 +79,7 @@ type diffState struct {
 	Recomputed bool `json:"recomputed,omitempty"`
 	// Threads are the remarks already on the host's review, each placed on the hunk holding
 	// its line (or -1). An agent pairing on a change should know what a reviewer has already
-	// asked for - otherwise it re-raises a point somebody settled yesterday, or works on
+	// asked for; otherwise it re-raises a point somebody settled yesterday, or works on
 	// something the review has moved past.
 	//
 	// READ-ONLY here, deliberately: an agent may draft a comment into the session, which a
@@ -111,7 +111,7 @@ type diffCounts struct {
 
 // diffConversation is op=state's projection=conversation shape: where the human is and what
 // has been said about the change, without the changeset body that made those coordinates
-// checkable in the first place - a client asking for this shape already has the change and
+// checkable in the first place: a client asking for this shape already has the change and
 // wants the talk about it.
 type diffConversation struct {
 	ID          string                 `json:"id"`
@@ -142,7 +142,7 @@ type diffPatch struct {
 // omits it must see exactly what it always has.
 //
 // It shapes op=state only. comment, suggest, and resolve keep returning the full session no
-// matter what this parameter is set to - each already answers with just what it changed, so
+// matter what this parameter is set to: each already answers with just what it changed, so
 // there is no heavy body to elide, and a second response shape would be a second contract to
 // keep in sync for no reader's benefit.
 func projectDiffState(st diffState, projection string) (any, error) {
@@ -190,7 +190,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 }
 
 // totalHunks sums the per-file hunk counts in a parsed patch, for the summary projection's
-// "hunks" count - st.Hunks is one entry per FILE, each carrying its own hunk slice.
+// "hunks" count: st.Hunks is one entry per FILE, each carrying its own hunk slice.
 func totalHunks(files []changeset.FileHunks) int {
 	n := 0
 	for _, f := range files {
@@ -221,7 +221,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	switch op {
 	case "state":
 		// The whole session: the annotated changeset, where the human is, what they have read,
-		// and the conversation so far - recomputed first when the tree has moved underneath it.
+		// and the conversation so far, recomputed first when the tree has moved underneath it.
 		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
 		st, serr := t.state(ctx, sess, wantsThreads(projection))
 		if serr != nil {
@@ -256,7 +256,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		}, types.DiffAuthorAgent)
 		// The author here is transport-stamped, never read off the payload, which is what makes
 		// it safe as an attribute: it says which DOOR the remark came through, and the agent's
-		// own agent_name label - unbounded, and a claim - stays out of the metric.
+		// own agent_name label (unbounded, and a claim) stays out of the metric.
 		if p := observability.FromContext(ctx); p != nil {
 			p.RecordReviewRemark(ctx, string(types.DiffAuthorAgent))
 		}
@@ -302,7 +302,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 // tree, so "this may be stale" is advice it has no way to act on, and the failure it prevents
 // is the agent confidently describing a changeset that no longer exists.
 // wantsThreads reports whether a projection carries the review's threads. Only these two do,
-// and reading them costs a forge round trip - which a caller asking for counts or the patch
+// and reading them costs a forge round trip, which a caller asking for counts or the patch
 // should not wait on.
 func wantsThreads(projection string) bool {
 	return projection == "" || projection == "full" || projection == "conversation"

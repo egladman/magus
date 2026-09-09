@@ -8,7 +8,7 @@
 //   - WHO WRITES. A note is written by a person in their editor. Nothing here is an
 //     agent-facing write path, and there is deliberately no Put: `magus notes edit`
 //     opens $EDITOR and gets out of the way.
-//   - WHERE IT LIVES. In the CHECKOUT, at a path the workspace declares - not in XDG
+//   - WHERE IT LIVES. In the CHECKOUT, at a path the workspace declares, not in XDG
 //     state like memory, whose package doc explains that "a developer's working memory
 //     does not belong in a shared checkout". A note inverts exactly that clause: a
 //     team's shared understanding does belong there. Being in the checkout is also what
@@ -19,7 +19,7 @@
 //     way: its only provenance is a person. So anchors are required for FINDABILITY,
 //     but prose is the payload rather than a caption.
 //
-// Everything in the graph other than a note is DERIVED from workspace content - docs
+// Everything in the graph other than a note is DERIVED from workspace content: docs
 // from markdown, rationale from comments, symbols from an index, authors from git.
 // Delete the graph and rebuild and you get all of it back. A note is the one node class
 // that is injected rather than extracted, and no rebuild recovers it.
@@ -50,7 +50,7 @@ var ErrDisabled = errors.New("notes: this workspace declares no notes path (set 
 // AnchorKind is the closed set of things a note may attach to.
 //
 // Deliberately absent: any kind carrying a POSITION. A node ID is checkable, so its
-// breakage is reportable; a line number is not, so its breakage is invisible - it
+// breakage is reportable; a line number is not, so its breakage is invisible: it
 // changes on the next edit above it with nothing to detect. That single distinction is
 // what separates this from every line-anchored review comment, code tour, and web
 // annotation, all of which rot and then paper over it with fuzzy re-matching.
@@ -74,7 +74,7 @@ type Anchor struct {
 	// stopped meaning what the note says. Empty when the kind has no content to hash,
 	// and empty until the note has been verified once.
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
-	// DeclDigest fingerprints only the anchored subject's DECLARATION - see DigestDecl. It
+	// DeclDigest fingerprints only the anchored subject's DECLARATION; see DigestDecl. It
 	// grades what Digest detects: when both moved, what the subject IS changed, and the note
 	// is very likely wrong; when only Digest moved, the body was edited under an unchanged
 	// signature, which is the case that almost never invalidates prose.
@@ -82,7 +82,7 @@ type Anchor struct {
 	// Empty for a kind with no declaration to speak of (a whole file, a project, a target),
 	// and empty on a note stamped before grading existed. Both are ungraded, never a verdict.
 	DeclDigest string `json:"decl_digest,omitempty" yaml:"decl_digest,omitempty"`
-	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY -
+	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY:
 	// resolution always runs against the working tree. A pinned revision never breaks,
 	// which is precisely why it must never be the anchor: it would go on pointing at
 	// correct-looking frozen content long after the thing it described was deleted.
@@ -98,18 +98,18 @@ type Anchor struct {
 //
 // There are no created/updated fields either, and that is the same argument. These files
 // are edited by hand, so a stored timestamp is wrong the first time someone saves without
-// going through magus - a self-maintained field that rots is exactly the failure this
+// going through magus: a self-maintained field that rots is exactly the failure this
 // whole store is built to avoid. Modified is derived from the file and never serialized;
 // git carries the real history.
 type Note struct {
 	// Name is the note's identity in memory: its ID when one is declared, otherwise its
-	// path within the store. Never serialized under this key - see ID.
+	// path within the store. Never serialized under this key; see ID.
 	Name string `json:"name" yaml:"-"`
 	// ID is an optional stable identity, and it is what makes a store survive being a
 	// vault someone reorganizes.
 	//
-	// Without it a note is identified by its path, and Obsidian's rename - which helpfully
-	// rewrites every [[wikilink]] and knows nothing about magus - silently changes the
+	// Without it a note is identified by its path, and Obsidian's rename (which helpfully
+	// rewrites every [[wikilink]] and knows nothing about magus) silently changes the
 	// note's graph ID and dangles every note-kind anchor pointing at it. That is the exact
 	// failure this feature argues against everywhere else: an identity that encodes a
 	// location. magus stamps one on every note it creates; a hand-written vault note gets
@@ -131,7 +131,7 @@ type Note struct {
 	//
 	// It exists because Name cannot answer the question. A note that declares an id is
 	// identified by that id, and the id is deliberately independent of where the file
-	// sits - that is the whole point of having one. So joining the store dir to Name
+	// sits; that is the whole point of having one. So joining the store dir to Name
 	// names a real file only while the two happen to agree, and names a file that does
 	// not exist the moment someone renames the note in their vault. Two callers derived
 	// it that way and both were wrong: the console showed a reader a path they could not
@@ -147,7 +147,7 @@ type Note struct {
 // kind this binary predates is better served by seeing it than by having it rejected.
 type SourceKind string
 
-// SourceReviewThread is a conversation from a magus review session - the comments a human and
+// SourceReviewThread is a conversation from a magus review session: the comments a human and
 // any agents left against one changeset.
 const SourceReviewThread SourceKind = "review-thread"
 
@@ -160,7 +160,7 @@ const SourceReviewThread SourceKind = "review-thread"
 // convention that holds until someone forgets it.
 type Source struct {
 	Kind SourceKind `json:"kind" yaml:"kind"`
-	// Ref identifies the conversation within Kind - a review session id. Opaque here.
+	// Ref identifies the conversation within Kind: a review session id. Opaque here.
 	Ref string `json:"ref,omitempty" yaml:"ref,omitempty"`
 	// AsOf is the subject's identity at capture time: for a review thread, the digest of the
 	// patch the comments were written against. It is what makes a stale capture detectable
@@ -188,7 +188,7 @@ const (
 )
 
 // IssueCode names what verify found, so a caller branches on the code rather than matching
-// the message - the messages are written for a person and change freely.
+// the message: the messages are written for a person and change freely.
 type IssueCode string
 
 const (
@@ -203,7 +203,7 @@ const (
 	// CodeDanglingAnchor: an anchor names an entity the graph no longer has.
 	CodeDanglingAnchor IssueCode = "dangling-anchor"
 	// CodeDriftedAnchor: the anchored entity still exists, and what it IS changed since a
-	// person last reviewed the note against it - its declaration moved, or the note predates
+	// person last reviewed the note against it: its declaration moved, or the note predates
 	// grading and only the whole-content fingerprint is known.
 	CodeDriftedAnchor IssueCode = "drifted-anchor"
 	// CodeAnchorBodyChanged: the anchored entity's content changed UNDER AN UNCHANGED
@@ -213,7 +213,7 @@ const (
 	// not worth interrupting for, and never worth gating on.
 	CodeAnchorBodyChanged IssueCode = "anchor-body-changed"
 	// CodeUnverifiableAnchor: the anchored entity exists, and its fingerprint could not be
-	// computed - so whether the note still holds is UNKNOWN rather than wrong.
+	// computed, so whether the note still holds is UNKNOWN rather than wrong.
 	CodeUnverifiableAnchor IssueCode = "unverifiable-anchor"
 )
 
@@ -235,7 +235,7 @@ type Verification struct {
 }
 
 // nameRE is the note name shape: a kebab slug. It doubles as the on-disk basename, so it
-// must be filesystem-safe - lowercase alphanumerics joined by single hyphens, no slashes
+// must be filesystem-safe: lowercase alphanumerics joined by single hyphens, no slashes
 // or dots, which keeps a name from escaping the notes directory.
 var nameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -281,7 +281,7 @@ const MaxNotes = 5000
 const scipLocalPrefix = "local "
 
 // Scope names which of the two stores a path belongs to. The two differ in exactly one
-// way that matters - whether the location can attribute a note to anyone - and every
+// way that matters (whether the location can attribute a note to anyone), and every
 // other difference below follows from it.
 type Scope string
 
@@ -301,7 +301,7 @@ func (s Scope) ConfigKey() string { return "knowledge.notes." + string(s) }
 // when nothing is declared.
 //
 // One entry point rather than a resolver per scope, because every caller has the scope in
-// hand and had to pair it with the matching function by eye - a pairing nothing checked,
+// hand and had to pair it with the matching function by eye, a pairing nothing checked,
 // and getting it backwards would silently grant a shared store the private store's freedom
 // to live outside the checkout.
 //
@@ -339,7 +339,7 @@ func sharedDir(root, declared string) (string, error) {
 	}
 	// The workspace root itself is not a notes store. Allowing it would make every
 	// markdown file in the repo a note (so README.md reports as a malformed one) and,
-	// worse, would make the agent guard treat every path under the root as protected -
+	// worse, would make the agent guard treat every path under the root as protected,
 	// one config line turning a targeted rule into a workspace-wide deny.
 	if clean == "." {
 		return "", fmt.Errorf("notes: %s %q is the workspace root; name a directory inside it", ScopeShared.ConfigKey(), declared)
@@ -362,7 +362,7 @@ func sharedDir(root, declared string) (string, error) {
 }
 
 // privateDir resolves the reader's own notes directory, which unlike the shared one may
-// live anywhere on disk - that is the whole difference between the two stores.
+// live anywhere on disk; that is the whole difference between the two stores.
 //
 // `~` is expanded because this is a hand-written path in a config file and a literal `~`
 // directory is never what anyone meant. A relative path resolves against the workspace,
@@ -486,13 +486,13 @@ func Verify(dir string) (Verification, error) {
 //
 // A FILE IN THE STORE IS NOT AUTOMATICALLY A NOTE. The store may be a directory magus
 // owns, or it may be someone's Obsidian vault with thousands of files that have nothing to
-// do with this workspace - and pointing at a vault is a supported thing to do. So the
+// do with this workspace, and pointing at a vault is a supported thing to do. So the
 // discriminator is explicit: a file is a magus note when its frontmatter declares
 // `anchors:`, and anything else is somebody's writing that magus reads past in silence.
 //
 // Getting this wrong is not a small matter of tone. Treating every .md as a malformed note
 // turned a 1,900-file vault into 1,500 error-severity issues and half a megabyte of output
-// from `magus notes ls`, which then exited non-zero - the feature reporting the user's own
+// from `magus notes ls`, which then exited non-zero: the feature reporting the user's own
 // notes as damage.
 //
 // The walk is RECURSIVE because vaults are foldered; a flat read silently ignored 400
@@ -528,7 +528,7 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 			return nil // images and attachments are not notes and never were
 		}
 		// A sync conflict is a byte-for-byte copy of a note, magus block and all, so it
-		// would otherwise load as a second note competing with the original - and if the
+		// would otherwise load as a second note competing with the original, and if the
 		// original declares an id, as a duplicate of that id. Obsidian Sync, Syncthing and
 		// Dropbox each spell it differently; all three are recognizable.
 		if isSyncConflict(d.Name()) {
@@ -612,8 +612,8 @@ func Get(dir, name string) (Note, error) {
 	if err == nil && isNote && n.Name == name {
 		return n, nil
 	}
-	// Otherwise the name may be a declared id whose file has since been moved or renamed -
-	// which is the entire reason ids exist - so look for it rather than reporting it gone.
+	// Otherwise the name may be a declared id whose file has since been moved or renamed
+	// (which is the entire reason ids exist), so look for it rather than reporting it gone.
 	if found, _, ferr := Inspect(dir); ferr == nil {
 		for _, c := range found {
 			if c.Name == name {
@@ -693,7 +693,7 @@ func Save(dir string, n Note) error {
 		return fmt.Errorf("notes: save: %w", err)
 	}
 	// Written back to the file it was READ from, so a note whose declared id no longer
-	// matches its filename is updated in place rather than duplicated at the id's path -
+	// matches its filename is updated in place rather than duplicated at the id's path,
 	// which is what re-attestation did, splitting one note into two and leaving the
 	// original's anchors unfingerprinted. A note with no origin is new (Scaffold, a body
 	// piped in), and there its name is what names the file.
@@ -799,14 +799,14 @@ func setMagusNode(doc *yaml.Node, payload notePayload) error {
 
 // declaresMagus reports whether frontmatter is addressed to magus.
 //
-// A boolean rather than an error, because "this is someone else's note" is not a failure -
+// A boolean rather than an error, because "this is someone else's note" is not a failure:
 // it is the majority answer in any vault. Unparsable frontmatter answers false for the
 // same reason: it cannot claim to be a magus note, so magus does not claim it.
 func declaresMagus(frontmatter []byte) (*yaml.Node, bool) {
 	var doc yaml.Node
 	if err := yaml.Unmarshal(frontmatter, &doc); err != nil {
 		// Frontmatter magus cannot parse cannot be claiming to be a magus note, so it is
-		// left alone rather than reported - the majority answer in any vault.
+		// left alone rather than reported: the majority answer in any vault.
 		return nil, false
 	}
 	return &doc, magusNode(&doc) != nil
@@ -814,7 +814,7 @@ func declaresMagus(frontmatter []byte) (*yaml.Node, bool) {
 
 // readNoteFile reads one file and reports (note, isNote, err).
 //
-// isNote false means the file is not addressed to magus - no frontmatter, unparsable
+// isNote false means the file is not addressed to magus: no frontmatter, unparsable
 // frontmatter, or frontmatter that declares no anchors. That is the common case in a vault
 // and it is not an error; only a file that DOES declare anchors is held to the schema.
 //
@@ -835,7 +835,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 	}
 	var payload notePayload
 	if err := magusNode(doc).Decode(&payload); err != nil {
-		// It claimed the magus key and then would not decode, which IS worth reporting -
+		// It claimed the magus key and then would not decode, which IS worth reporting,
 		// unlike the case above, where the file never addressed magus at all.
 		return Note{}, true, fmt.Errorf("notes: %s: %w", filepath.Base(path), err)
 	}

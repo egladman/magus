@@ -38,7 +38,7 @@ func supervisionActive(ctx context.Context) bool {
 // supervision is active, returning handled=true so the caller does not fork it in
 // the foreground. When there is no Session or supervision is not active it returns
 // handled=false (a no-op probe) and the caller runs the service inline (foreground,
-// blocking) - the directly-run-service case.
+// blocking): the directly-run-service case.
 func TrySupervise(ctx context.Context, key string, s spells.Service) (handled bool, err error) {
 	sess := sessionFrom(ctx)
 	if sess == nil || !supervisionActive(ctx) {

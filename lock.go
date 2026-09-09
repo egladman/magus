@@ -40,7 +40,7 @@ func noWaitLocks() bool {
 // and returns a single release func.
 //
 // The lock is held ONCE for the whole invocation, at the boundary where the
-// invocation begins mutating the project set - NOT around each target. The
+// invocation begins mutating the project set, NOT around each target. The
 // intra-process target scheduler fans out beneath the held lock and never
 // contends on it (it is the same lock-holding process); the lock's only job is to
 // keep a SEPARATE magus process from mutating the same project concurrently. This
@@ -54,7 +54,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	// The CLI and the daemon stamp invocation ancestry at their own entry points; a
 	// LIBRARY caller (a Go test driving magus in-process) has none, so reentrantErr
 	// could never fire for it and a re-entrant acquire hung instead of reporting
-	// MGS3007. The env var is already in this process - read it here so the third
+	// MGS3007. The env var is already in this process; read it here so the third
 	// entry point is covered too, and only when nothing upstream stamped one.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
@@ -67,7 +67,7 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	// Idempotent: the watchdog below is a SECOND caller of release. Without this, a
 	// watchdog release followed by the caller's deferred release runs removeOwner
 	// twice, and between them another process can take the lock and write its own
-	// sidecar - which the finished run would then delete, making the live holder
+	// sidecar, which the finished run would then delete, making the live holder
 	// invisible to `magus status` and to every waiter.
 	var releaseOnce sync.Once
 	releaseIdempotent := func() { releaseOnce.Do(release) }
@@ -88,7 +88,7 @@ const rootWatchdogInterval = 30 * time.Second
 // a flock lives exactly as long as its holder, goes on holding every lock it took while
 // later runs wait on a holder that is never coming back.
 //
-// It releases rather than exits - a process whose tree is gone is not mutating anything,
+// It releases rather than exits: a process whose tree is gone is not mutating anything,
 // so holding is pure harm to peers. Killing it is the caller's decision.
 func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, release func()) func() {
 	if root == "" || every <= 0 {
@@ -99,8 +99,8 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 	var once sync.Once
 	// Joins the goroutine, mirroring startWaitHeartbeat. Closing done alone only
 	// narrows the race: a goroutine already past the inner select still reaches
-	// release(), and in the daemon - one long-lived process running many invocations
-	// - that late release lands on whatever the NEXT run holds.
+	// release(), and in the daemon (one long-lived process running many invocations),
+	// that late release lands on whatever the NEXT run holds.
 	stop := func() {
 		once.Do(func() { close(done) })
 		<-stopped
@@ -126,7 +126,7 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 				}
 				// Only a genuine absence counts. Treating every stat error as "gone"
 				// means an EACCES after a permissions change, or an EIO on a network
-				// mount, withdraws a live run's exclusivity while it keeps mutating -
+				// mount, withdraws a live run's exclusivity while it keeps mutating:
 				// the precise thing the lock exists to prevent.
 				if _, err := os.Stat(root); err == nil || !errors.Is(err, fs.ErrNotExist) {
 					continue
@@ -150,10 +150,10 @@ func watchWorkspaceRoot(ctx context.Context, root string, every time.Duration, r
 //
 // The lock is held via an OS file lock (flock, github.com/gofrs/flock). The
 // kernel releases it automatically when the holding process exits or crashes, so
-// a killed magus never leaves a project wedged - this is deliberately NOT a
+// a killed magus never leaves a project wedged: this is deliberately NOT a
 // PID/existence lockfile, which would strand a project after a crash.
 //
-// LIMITATION - the lock is ADVISORY. It serializes MAGUS processes and nothing
+// LIMITATION: the lock is ADVISORY. It serializes MAGUS processes and nothing
 // else. It does NOT protect the working tree from a non-magus mutation: a raw
 // `git clean`, an `rm`, or any other tool ignores it entirely. The guarantee it
 // provides is "no two magus invocations mutate the same project at once", NOT
@@ -189,7 +189,7 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 //
 // The workspace segment is what keeps the lock namespace per-WORKSPACE rather than
 // per-cache-dir. An absolute cache.dir (or MAGUS_CACHE_DIR) is returned unchanged by
-// resolveCacheDir for every root, which is the point - one shared cache - but without
+// resolveCacheDir for every root, which is the point (one shared cache), but without
 // this it also collapses every workspace's locks together, so an unrelated tree's
 // project "." blocked on this one's. That is a false conflict between projects that
 // share nothing, and it presents as a hang rather than an error.
@@ -209,7 +209,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...locke
 // nor a timeout can tell that from ordinary contention; ancestry can, and it is the only
 // signal that also covers the daemon, where holder and waiter are threads of one process.
 //
-// Best-effort by design - no sidecar, or an ancestry that never reached this process,
+// Best-effort by design: no sidecar, or an ancestry that never reached this process,
 // yields nil and the acquire waits as before. Under-detecting restores the old behavior;
 // over-detecting would refuse a legitimate concurrent run.
 func (l *projectLocker) reentrantErr(ctx context.Context, projectPath string) error {
@@ -292,7 +292,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 	if !got {
 		// Before anything else: a lock held by one of this invocation's OWN ancestors can
 		// never be released, because the ancestor is blocked waiting on this process to
-		// exit. Waiting is not slow here, it is permanent, so refuse instead - ahead of
+		// exit. Waiting is not slow here, it is permanent, so refuse instead, ahead of
 		// the noWait branch, since this diagnosis is the more specific one.
 		if err := l.reentrantErr(ctx, projectPath); err != nil {
 			return nil, err
@@ -310,7 +310,7 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		stopWaiter()
 		if err != nil {
 			// HOW LONG, not just which. This is the path a lock wait actually
-			// ends on - TryLockContext returns the context's own error - and
+			// ends on (TryLockContext returns the context's own error), and
 			// "workspace lock: lock api: context deadline exceeded" leaves the
 			// reader unable to tell a wait that timed out after five seconds
 			// from one cancelled immediately. The duration is the difference
@@ -385,7 +385,7 @@ func (l *projectLocker) lockPath(projectPath string) string {
 // emitWaiting tells the user, up front, that the run is not hung: another magus
 // process holds the project's lock, this run will start automatically once it frees,
 // and MAGUS_NO_WAIT is the fail-fast escape hatch. It goes to stderr unconditionally
-// (even under -s/--silent) - a run that stalls without explanation is the exact UX we
+// (even under -s/--silent): a run that stalls without explanation is the exact UX we
 // are avoiding. The notify hook diverts it for tests and the console.
 func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if l.notify != nil {
@@ -496,7 +496,7 @@ type processRecord struct {
 	Dir     string    `record:"dir"`
 	Started time.Time `record:"started,omitempty"`
 	// Inv is the invocation that took the lock. It is what makes a holder identifiable to
-	// a DESCENDANT of it - a pid cannot, since under the daemon the holder and the waiter
+	// a DESCENDANT of it: a pid cannot, since under the daemon the holder and the waiter
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
 	// sidecar written by an older magus; a waiter then has nothing to match and waits.
 	Inv string `record:"invocation,omitempty"`
@@ -534,7 +534,7 @@ func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
 func selfRecord(ctx context.Context) processRecord {
 	dir, _ := os.Getwd()
 	// This invocation's OWN id, never the ancestry's last element. Those look the same for
-	// a run - BeginInvocation appends its id there - and differ for every lock-taker that
+	// a run (BeginInvocation appends its id there), and differ for every lock-taker that
 	// mints no invocation of its own: `magus clean` inherits an ancestry and appends
 	// nothing, so the tail is its PARENT's id, and stamping that on the lock would have a
 	// sibling nested run refuse a lock the parent does not hold.
@@ -550,8 +550,8 @@ func selfRecord(ctx context.Context) processRecord {
 // describeOwner renders the current holder for a wait message, or "" when there is
 // nothing trustworthy to say.
 //
-// A blocked acquire already proves the holder is ALIVE - the kernel would have
-// released the flock otherwise - so this never needs to probe liveness. It only
+// A blocked acquire already proves the holder is ALIVE (the kernel would have
+// released the flock otherwise), so this never needs to probe liveness. It only
 // answers which process, started when, from where.
 func (l *projectLocker) describeOwner(projectPath string) string {
 	o := l.readOwner(projectPath)
@@ -575,7 +575,7 @@ func (l *projectLocker) describeOwner(projectPath string) string {
 // being the likely explanation and "abandoned" starts.
 //
 // Exported because it is a JUDGMENT the whole product has to agree on. It was
-// previously decided twice - two minutes here and ten in the console tile - which put
+// previously decided twice (two minutes here and ten in the console tile), which put
 // a CLI warning that a holder "may be abandoned" beside a dashboard row still styled
 // as perfectly healthy. One threshold, one place; the console reads it off the wire.
 const LockStaleAfter = 10 * time.Minute
@@ -633,7 +633,7 @@ func (l *projectLocker) removeOwner(projectPath string) {
 // like, but one held by a process nobody remembers starting is invisible while every
 // other run waits. Naming the holder makes that a fact instead of a hang.
 //
-// Best-effort throughout - an unreadable sidecar is skipped rather than failing the
+// Best-effort throughout: an unreadable sidecar is skipped rather than failing the
 // caller. A sidecar can outlive its flock if a holder was killed between unlocking and
 // cleanup, so treat an entry as a strong hint, never proof.
 func (m *Magus) HeldLocks() []types.StatusLock {
@@ -695,7 +695,7 @@ func (l *projectLocker) readOwner(projectPath string) processRecord {
 
 // readRecord decodes a sidecar, or returns a zeroed record when there is nothing
 // trustworthy to read. PID == 0 is what every caller already tests for "nothing to
-// say", so an absent, malformed, or unreadable sidecar collapse to one answer here -
+// say", so an absent, malformed, or unreadable sidecar collapse to one answer here,
 // which is safe only because these records are informational. The flock decides
 // exclusion; nothing branches on this being present.
 func readRecord(dir string) processRecord {

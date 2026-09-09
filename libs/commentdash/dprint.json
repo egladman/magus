@@ -1,0 +1,5 @@
+{
+  "extends": "../../dprint-base.json",
+  "includes": ["./**/*.md"],
+  "excludes": ["./node_modules/**", "./gen/**", "./src/gen/**", "./MAGUS.md"]
+}

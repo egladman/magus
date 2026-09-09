@@ -68,7 +68,7 @@ func TestShardSkillsDeriveFromWhatTheShardDoes(t *testing.T) {
 
 // TestJoinProjectGlobRootsTheCollisionSurface: two briefings are compared for overlap, so
 // a glob that stayed project-relative would read as colliding with an identically-named
-// one in a different project - the exact mistake the field exists to prevent.
+// one in a different project: the exact mistake the field exists to prevent.
 func TestJoinProjectGlobRootsTheCollisionSurface(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "console/gen/**", joinProjectGlob("console", "gen/**"))
@@ -83,7 +83,7 @@ func TestAppendUniquePreservesOrderAndDropsBlanks(t *testing.T) {
 
 // TestFilterShardsIntersectsRatherThanReplaces pins the distinction the filter exists for.
 // `magus run ci docs` runs docs whether or not the diff touched it; this answers "of the
-// work this change implies, give me the docs part" - which is what an orchestrator
+// work this change implies, give me the docs part", which is what an orchestrator
 // splitting an affected set across agents is actually asking.
 func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 	t.Parallel()
@@ -97,7 +97,7 @@ func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 
 	require.Len(t, got, 2, "a shard left with nothing drops out")
 	// IDs are preserved, not renumbered, so a filtered plan reads against the one it came
-	// from - shard 1 is absent rather than shard 2 being renamed to 1.
+	// from: shard 1 is absent rather than shard 2 being renamed to 1.
 	assert.Equal(t, "0", got[0].ID)
 	assert.Equal(t, []string{"docs"}, got[0].ProjectPaths, "the unselected project leaves the shard it shared")
 	assert.Equal(t, "2", got[1].ID)
@@ -105,7 +105,7 @@ func TestFilterShardsIntersectsRatherThanReplaces(t *testing.T) {
 }
 
 // TestFilterShardPathsEmptyWhenNothingMatches: a real project outside the affected set is
-// the honest empty answer, not an error - that is precisely the question being asked.
+// the honest empty answer, not an error: that is precisely the question being asked.
 func TestFilterShardPathsEmptyWhenNothingMatches(t *testing.T) {
 	t.Parallel()
 	got := filterShardPaths([]types.Shard{{ID: "0", ProjectPaths: []string{"docs"}}}, map[string]bool{"libs/foo": true})

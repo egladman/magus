@@ -11,7 +11,7 @@
 // nothing else.
 //
 // It was a DIRECTORY with one file per field, which read the same way per field and cost
-// a mkdir, a create per field, a RemoveAll of the previous record and a rename - about
+// a mkdir, a create per field, a RemoveAll of the previous record and a rename, about
 // twenty-six syscalls, measured at 670us per write on macOS. A lock acquisition writes one
 // and its release removes it, so a run over many projects paid that per project, per lock.
 // The file shape is a create and a rename: measured 112us, six times faster, and the whole
@@ -58,7 +58,7 @@ const partialPrefix = ".record-tmp-"
 //
 // A record is never observed HALF written: it is filled under a temporary name and renamed
 // into place, and rename on a FILE is atomic and replacing. A reader therefore sees either
-// the whole previous record or the whole new one, never neither and never a mix - which the
+// the whole previous record or the whole new one, never neither and never a mix, which the
 // directory shape this replaced could not promise, since it had to remove the old record
 // before renaming the new one into its place.
 func Write(path string, v any) error {

@@ -50,7 +50,7 @@ func requireDirect(t *testing.T, ns vm.Value, name string) vm.Value {
 }
 
 // callVoidDirect invokes a DirectValue whose result is Null (or an error) through a
-// Session - the same CallValue path host code uses. It suits side-effecting builtins
+// Session, the same CallValue path host code uses. It suits side-effecting builtins
 // like magus.cache.remote where the return is Null and the error is what matters; a
 // DirectValue that yields a non-Null value cannot be read back this way (see
 // requireDirect) and is covered end to end instead.
@@ -91,7 +91,7 @@ func TestMatchBuzzTargets(t *testing.T) {
 		// A negation is exact, never suffix shorthand: "!build" must NOT read as
 		// "^.*-build$" here, or this would subtract both -build targets.
 		{"negate bare name is exact", []string{"*-build", "!build"}, []string{"go-build", "rust-build"}},
-		// Subtracting from nothing is nothing - never "everything else".
+		// Subtracting from nothing is nothing, never "everything else".
 		{"only negation selects nothing", []string{"!go-build"}, nil},
 	}
 	for _, tt := range tests {
@@ -104,7 +104,7 @@ func TestMatchBuzzTargets(t *testing.T) {
 
 // TestResolveTargetFun pins how magus.needs maps a passed function value to its
 // canonical target key: the declared name is normalized like the run path, existence
-// is checked against the target set, and - when an export registry is available - the
+// is checked against the target set, and (when an export registry is available) the
 // value must BE the exported function, so a local helper sharing a target's name can't
 // stand in for it.
 func TestResolveTargetFun(t *testing.T) {
@@ -393,7 +393,7 @@ func (stubErr) Error() string { return "boom" }
 //
 // It discards the value deliberately: a DirectValue's non-Null result cannot be read back
 // this way (see callVoidDirect). For read() that costs nothing, because the assertion
-// worth making is a SIDE EFFECT - reading registers the value for redaction - which
+// worth making is a SIDE EFFECT (reading registers the value for redaction) which
 // Resolver.Redact observes directly.
 func callSecretNS(t *testing.T, ns vm.Value, name string, args ...vm.Value) error {
 	t.Helper()
@@ -476,7 +476,7 @@ func (h *eventRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *eventRecorder) WithGroup(string) slog.Handler      { return h }
 
 // TestSecretNSReadIsAudited pins that reading a credential lands in the invocation
-// journal - the durable activity trail. A secret read is the moment a build reaches for
+// journal: the durable activity trail. A secret read is the moment a build reaches for
 // something privileged, which is exactly the question an audit answers.
 //
 // The event carries the REFERENCE and the PROVIDER, never the value. journal.Emit
@@ -567,7 +567,7 @@ func TestNoReviewProviderIsEmptyRatherThanAnError(t *testing.T) {
 // differently:
 //
 //   - Declared but not bound: the checker says the member exists, so a call to it
-//     type-checks and then finds null at run time - `buzz: null is not callable`,
+//     type-checks and then finds null at run time, `buzz: null is not callable`,
 //     the exact class of bug the declarations were added to prevent, reintroduced
 //     from the other side.
 //   - Bound but not declared: the member is invisible to the checker, so a typo
@@ -609,7 +609,7 @@ func TestMagusExternsAreBound(t *testing.T) {
 //
 // Both halves matter. A declared member nothing binds type-checks and then finds null
 // at run time; a bound member nothing declares is invisible, so a typo beside it
-// cannot be distinguished from a member that does not exist - which is the whole
+// cannot be distinguished from a member that does not exist, which is the whole
 // reason these stopped being hand-wired-and-undeclared.
 func TestMagusNamespacesAreBound(t *testing.T) {
 	top := map[string]bool{}

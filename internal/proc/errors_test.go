@@ -9,7 +9,7 @@ import (
 )
 
 // NotAdopted classifies a call the daemon did not adopt (non-adoptable subcommand, or
-// a build/protocol mismatch) - carried ON the error via NotAdopted() - apart from a
+// a build/protocol mismatch), carried ON the error via NotAdopted(), apart from a
 // genuine forward/transport failure. It must see through error wrapping.
 func TestNotAdopted(t *testing.T) {
 	yes := []error{

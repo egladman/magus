@@ -43,8 +43,8 @@ func TestEventFromStdin(t *testing.T) {
 	assert.Equal(t, types.Event{Message: "build failed"}, eventFromStdin([]byte("build failed")))
 }
 
-// A body that LOOKS like an envelope and fails still demotes to prose - the notification
-// has to fire either way - but silently it was undiagnosable: the producer saw a working
+// A body that LOOKS like an envelope and fails still demotes to prose (the notification
+// has to fire either way), but silently it was undiagnosable: the producer saw a working
 // notification, no attention request, and nothing anywhere saying why.
 func TestEventFromStdinWarnsOnAnUnusableEnvelope(t *testing.T) {
 	for name, tc := range map[string]struct {

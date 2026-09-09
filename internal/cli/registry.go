@@ -779,7 +779,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 	Usage: "magus config <view|set|history|cache|mcp> [flags]",
 	// Nested to match the real tree. These were five flat children with no flags,
 	// while the CLI parses four levels deep and binds fourteen flags across six of
-	// them - every one of which was documented nowhere, because a child could not
+	// them, every one of which was documented nowhere, because a child could not
 	// carry flags and nothing walked past the first level.
 	Children: []Command{
 		{Name: "view", Short: "Print the effective configuration (defaults + file + env)"},
@@ -933,7 +933,7 @@ check for the file with [ -S "$socket" ] before starting one.`,
 	Usage: "magus server <start|stop|reload|job> [flags]",
 	// Each subcommand carries its own flags. --foreground sat on the parent with
 	// "(server start)" in its doc, and stop's --socket and --services were not
-	// declared at all - bound by the command, absent from every man page.
+	// declared at all, bound by the command, absent from every man page.
 	Children: []Command{
 		{
 			Name:  "start",

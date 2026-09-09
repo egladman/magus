@@ -134,7 +134,7 @@ func TestExtractFlag(t *testing.T) {
 // The four documented keys that default true. mergeConfig's non-zero-wins rule
 // cannot tell an absent key from an explicit `false`, so until mergeOverlay
 // consulted the document's own key set every one of these decoded to false and
-// was then discarded as "inherit" - unrepresentable from magus.yaml.
+// was then discarded as "inherit", unrepresentable from magus.yaml.
 func TestLoadDirIntoBoolFalseTurnsOffADefaultOnKey(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -182,8 +182,8 @@ func TestLoadDirIntoBoolTrueOverridesADefaultOffKey(t *testing.T) {
 
 // An empty or comment-only magus.yaml declares nothing, which is valid. yaml's
 // decoder reports io.EOF for it, and reading that as a decode failure made loading
-// warn about "unknown or unexpected keys ... detail=EOF" while LoadFile(strict) -
-// what `magus config validate` runs - rejected the file outright.
+// warn about "unknown or unexpected keys ... detail=EOF" while LoadFile(strict),
+// what `magus config validate` runs, rejected the file outright.
 func TestEmptyDocumentIsNotAnError(t *testing.T) {
 	t.Parallel()
 	for name, content := range map[string]string{

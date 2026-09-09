@@ -17,8 +17,8 @@ type Member struct {
 
 // Cluster is a group of two or more near-duplicate services: they share a
 // [ClusterKey] (same image repository and primary container port) but are not all
-// identical (more than one distinct [Fingerprint]). This is the sprawl foot-gun -
-// copies of the same service that will run as separate processes - which magus
+// identical (more than one distinct [Fingerprint]). This is the sprawl foot-gun
+// (copies of the same service that will run as separate processes), which magus
 // surfaces rather than silently merging, because the difference between them may
 // be load-bearing.
 type Cluster struct {
@@ -94,7 +94,7 @@ func NearDuplicates(members []Member) []Cluster {
 // UnusedDistinct returns the names of members marked distinct whose suppression no
 // longer suppresses anything: no other service shares their cluster key with a
 // different fingerprint, so there is no near-duplicate warning to silence. This is
-// the golangci-lint allow-unused=false check - a stale reason to prune. Output is
+// the golangci-lint allow-unused=false check, a stale reason to prune. Output is
 // name-sorted.
 func UnusedDistinct(members []Member) []string {
 	// Fingerprints per cluster key across all members (distinct included), so a

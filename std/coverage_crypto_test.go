@@ -122,7 +122,7 @@ func TestCryptoVerifyRejectsMalformedInputs(t *testing.T) {
 }
 
 // TestCryptoLegacyFileDigests covers the two interop-only file hashes. Each must
-// agree with the string form over the same bytes - the file path streams, the
+// agree with the string form over the same bytes: the file path streams, the
 // string path does not, and a disagreement would make a checksum manifest wrong.
 func TestCryptoLegacyFileDigests(t *testing.T) {
 	ctx := context.Background()

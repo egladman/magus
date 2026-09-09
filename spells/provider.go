@@ -36,13 +36,13 @@ const ListProjectsContract = "list_projects"
 // handle, so a provider has only the name to give. Every name must resolve.
 //
 // The record crosses INTO magus as a Buzz object and is marshaled back out as JSON by
-// the provider cache, keyed by the json tags below. Those tags are not decoration -
+// the provider cache, keyed by the json tags below. Those tags are not decoration:
 // without them the cache encoded under Go field names, which musttag could not see. A
 // rename here is a wire change in two directions: regenerate the mirror, and bump
 // providerCacheVersion so existing entries miss.
 type ProvidedProject struct {
 	// Path is the project's directory relative to the WORKSPACE ROOT, forward
-	// slashes. Required. It must stay inside the root and must not be "." - the root
+	// slashes. Required. It must stay inside the root and must not be "."; the root
 	// project is the one the magusfile that wired the provider already owns.
 	Path string `json:"path"`
 	// Name is the human label, for a foreign tool whose project name is not its
@@ -62,7 +62,7 @@ type ProvidedProject struct {
 	// mirrors a returned struct, not an authored map.)
 	DependsOn []string `buzz:"depends_on" json:"depends_on"`
 	// Sources and Outputs are globs relative to THIS PROJECT'S directory, not to the
-	// workspace root - the same anchor magus\project's options use, and the anchor
+	// workspace root: the same anchor magus\project's options use, and the anchor
 	// baseStep joins against the project path. A provider reporting a foreign tool's
 	// workspace-relative globs must re-anchor them first: for a project at libs/foo,
 	// "libs/foo/**/*.ts" is wrong and "**/*.ts" is right.
@@ -79,7 +79,7 @@ type ProvidedProject struct {
 // Secret is what a provider spell's resolve_secret op returns: one resolved credential.
 //
 // A typed return rather than a bare `str`, and the distinction that makes it worth having
-// is narrow but real. Buzz does not check host-call RESULTS or object field literals -
+// is narrow but real. Buzz does not check host-call RESULTS or object field literals,
 // which is why magus\secret.read still hands a magusfile a plain string, and why there is
 // no Buzz-level Secret type there. It DOES check function signatures, so
 // `resolve_secret(...) > Secret` is enforced: a provider that returns something else

@@ -20,8 +20,8 @@ import (
 // internal/auth/guard.go), so minting a console token through a command spelled
 // "mcp connector" would teach exactly the conflation the scopes exist to prevent.
 //
-// The two surfaces share one on-disk store because the record shape is identical -
-// named, hashed at rest, expiring - and duplicating it would mean duplicating mint,
+// The two surfaces share one on-disk store because the record shape is identical
+// (named, hashed at rest, expiring), and duplicating it would mean duplicating mint,
 // revoke, and expiry. What is NOT shared is what each command shows and touches:
 // every read and every revoke here is filtered to the console scopes, so an agent
 // credential never appears in a console listing and cannot be revoked by one.
@@ -229,7 +229,7 @@ func configConsoleTokenRevoke(args []string) error {
 	}
 	// Resolve WITHIN the console tiers before revoking. Revoke itself searches the whole
 	// store, so without this an MCP connector sharing a name would be deleted by a
-	// console command - the two pools must not be reachable through each other.
+	// console command: the two pools must not be reachable through each other.
 	if !matchesScoped(store.ListScope(consoleScopes...), q) {
 		if matchesScoped(store.ListScope(auth.ScopeMCP), q) {
 			return usagef("magus config console token revoke: %q is an MCP connector, not a console token; revoke it with `"+hint.ConfigMCPConnectorRevoke.With("%s")+"`", q, q)
@@ -249,7 +249,7 @@ func configConsoleTokenRevoke(args []string) error {
 }
 
 // matchesScoped reports whether q names one of toks by exact name, or by an exact or
-// prefix fingerprint match - the same three spellings Revoke accepts, applied to a
+// prefix fingerprint match: the same three spellings Revoke accepts, applied to a
 // scope-filtered slice so a lookup cannot cross tiers.
 func matchesScoped(toks []auth.ConnectorToken, q string) bool {
 	q = strings.TrimSpace(q)

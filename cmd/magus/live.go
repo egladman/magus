@@ -15,8 +15,8 @@ import (
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
 // run, launches the browser log viewer on it and prints the link too, so a long run
 // (especially `magus affected ci`) can be watched as it streams. It returns the broadcaster to
-// fold into the invocation's sinks - so every captured record fans out to the live
-// stream - and a stop function to defer, which closes the broadcaster (ending the stream)
+// fold into the invocation's sinks (so every captured record fans out to the live
+// stream), and a stop function to defer, which closes the broadcaster (ending the stream)
 // and shuts the server down after a brief grace window. When disabled or if the server
 // cannot start it returns (nil, no-op) and the run proceeds normally: --open never blocks
 // a run.
@@ -50,7 +50,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	url := ls.ViewerURL(base)
 	// Printed as well as opened, always. A browser that cannot launch (ssh, CI, a
 	// headless box) is the normal case for a long run, and a failure to open must not
-	// cost the reader the link - so the link goes out first and the launch is
+	// cost the reader the link, so the link goes out first and the launch is
 	// best-effort on top of it. --open never blocks or fails a run.
 	fmt.Fprintf(os.Stderr, "watch this run (loopback, stays on your machine):\n  %s\n", url)
 	if err := openBrowser(url); err != nil {

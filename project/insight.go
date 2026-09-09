@@ -228,8 +228,8 @@ func ProjectStats(scan []ScannedCommit) map[string]ProjectStat {
 // Churn is attributed along LINEAGE, not by path string: every name a file went by
 // in the window folds onto the name it ends under, so a file renamed three times
 // ranks once with its whole history rather than four times with a quarter each. That
-// is what makes the ranking answer "what keeps getting rewritten" - the thing, not
-// the path - and it is why a file's move count is worth reporting beside its edits.
+// is what makes the ranking answer "what keeps getting rewritten" (the thing, not
+// the path), and it is why a file's move count is worth reporting beside its edits.
 //
 // A file whose last event was a delete is left OUT. The ranking exists to point at
 // what to fix first, and a deleted file is not a refactoring target; including it

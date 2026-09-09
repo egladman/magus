@@ -23,3 +23,11 @@ plugins:
   - module: github.com/egladman/magus/libs/testlayout
     import: github.com/egladman/magus/libs/testlayout/plugin
     path: .
+  # commentdash reports a comment spelling an em-dash with a spaced hyphen. It is
+  # compiled in but NOT enabled in .golangci.yml: the tree carries 4513 lines that
+  # would fail on the first run, and the sweep that clears them lands separately.
+  # Building it in ahead of that keeps the binary and the config one step apart
+  # rather than two, so enabling is a one-line edit.
+  - module: github.com/egladman/magus/libs/commentdash
+    import: github.com/egladman/magus/libs/commentdash/plugin
+    path: ../commentdash

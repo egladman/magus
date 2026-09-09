@@ -25,12 +25,12 @@ const maxRunAge = 5 * time.Minute
 // RunRegistry is the daemon's live-run tap: a slog.Handler folded into every adopted run's
 // capture logger. It decodes the journal events a run emits (started/scope/exec/result/
 // finished) and maintains, per invocation, the per-target execution state a dashboard
-// renders - so the SAME status surface that reports the pool also reports what each run's
+// renders, so the SAME status surface that reports the pool also reports what each run's
 // targets are doing. Finished runs are pruned after a short retention window.
 //
 // It is daemon-held (one per daemon process, attached to each adopted dispatch), so it must
 // not accumulate unbounded state: it keeps only in-flight and recently-finished runs, never
-// a full event backlog. All methods are safe for concurrent use - events arrive on the run
+// a full event backlog. All methods are safe for concurrent use: events arrive on the run
 // goroutines while Snapshot is read on the status/SSE handler goroutines.
 type RunRegistry struct {
 	mu     sync.Mutex
@@ -214,7 +214,7 @@ func WithRunSink(ctx context.Context, h slog.Handler) context.Context {
 }
 
 // RunSinkHandlers lifts the handler threaded by WithRunSink into the variadic capture-handler
-// list BeginInvocation accepts (empty when none is set - the non-daemon path).
+// list BeginInvocation accepts (empty when none is set: the non-daemon path).
 func RunSinkHandlers(ctx context.Context) []slog.Handler {
 	if h, ok := ctx.Value(runSinkKey{}).(slog.Handler); ok && h != nil {
 		return []slog.Handler{h}

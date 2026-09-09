@@ -10,7 +10,7 @@ import (
 
 // attRecord builds one session record with an explicit timestamp. The fold's rules
 // turn on the ORDER records arrive in, and a writer stamps wall-clock milliseconds,
-// so two appends in one millisecond would order by session name instead - which is
+// so two appends in one millisecond would order by session name instead, which is
 // the wrong axis to hang a first-dispose-wins test on.
 func attRecord(t *testing.T, session string, seq uint64, ts int64, kind string, payload any) Record {
 	t.Helper()

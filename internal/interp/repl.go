@@ -31,13 +31,13 @@ type ReplOptions struct {
 	//
 	// It is a callback rather than a slice because the workspace is the caller's to
 	// read, and reading it once at startup would go stale in a session long enough
-	// to matter - which is most of them, since a REPL is where you sit while editing
+	// to matter, which is most of them, since a REPL is where you sit while editing
 	// the magusfile it is describing.
 	Candidates func() []string
 }
 
 // replInput is the REPL's line source. It is one type with two behaviors because
-// every caller wants the same thing - give me the next line - and only the
+// every caller wants the same thing (give me the next line) and only the
 // implementation differs:
 //
 //   - On a terminal: an x/term line editor, so arrow keys recall history, Ctrl-A
@@ -45,7 +45,7 @@ type ReplOptions struct {
 //     without history is one where every typo is retyped from scratch.
 //   - Off a terminal: the bufio.Scanner this used to be, unconditionally. A piped
 //     or scripted session must stay byte-identical, which also means it must not
-//     enter raw mode - there is no terminal to restore.
+//     enter raw mode: there is no terminal to restore.
 type replInput struct {
 	editor  *term.Terminal
 	scanner *bufio.Scanner
@@ -154,7 +154,7 @@ func (c *replCompleter) complete(line string, pos int, key rune) (string, int, b
 		insert = commonPrefix(matches)
 		if insert == word {
 			// No progress to make, so show the alternatives instead of silently
-			// doing nothing - the state where a user presses Tab repeatedly.
+			// doing nothing: the state where a user presses Tab repeatedly.
 			c.list(matches)
 			return "", 0, false
 		}
@@ -287,7 +287,7 @@ const stickyFooterRows = 1
 //
 // The last of those is the reason it is worth the row. A continuation prompt says
 // ">>" and nothing else, so an unclosed brace looks identical to a REPL that has
-// simply stopped responding - the state that makes people kill the process. The
+// simply stopped responding: the state that makes people kill the process. The
 // footer names the depth instead.
 //
 // It degrades to nothing off a TTY: the lease reports disabled, and every method
@@ -301,8 +301,8 @@ func newReplFooter(out io.Writer) *replFooter {
 }
 
 // paint redraws the footer. It needs no cursor bookkeeping: Region painting is
-// cursor-transparent, so the prompt printed next - and the characters the terminal
-// echoes as the user types - land wherever the transcript had reached.
+// cursor-transparent, so the prompt printed next (and the characters the terminal
+// echoes as the user types) land wherever the transcript had reached.
 func (f *replFooter) paint(state string) {
 	if f == nil || !f.lease.Enabled() {
 		return
@@ -983,7 +983,7 @@ func displaySource(short, full string) string {
 // printHeap reports the script heap and the lines responsible for its growth.
 //
 // This is the profiler view inside the debugger. The VM's heap is append-only, so
-// a magusfile can exhaust a machine without any single value being large - the one
+// a magusfile can exhaust a machine without any single value being large: the one
 // failure mode where a paused stack tells you where you ARE but nothing about what
 // filled memory getting there. Objects rather than bytes: the pathological shape is
 // millions of small strings, which a size reading makes look unremarkable.

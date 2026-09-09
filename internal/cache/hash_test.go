@@ -96,7 +96,7 @@ func TestHashFileWithMtimeRehashesOnChange(t *testing.T) {
 // TestHashFileWithMtimeSkipsStaleFingerprintOnConcurrentChange verifies the
 // re-stat guard: if the file changes (new mtime AND new size) while
 // hashFileWithMtime is reading it, the pre-read fingerprint must not be
-// stored - it would pair the OLD (mtime,size) with a hash that reflects
+// stored: it would pair the OLD (mtime,size) with a hash that reflects
 // content read partway through a concurrent change, exactly the "stale
 // fingerprint" the io_uring tier already guards against.
 //
@@ -179,7 +179,7 @@ func TestExpandSourcesExcludesOutputs(t *testing.T) {
 
 // TestExpandSourcesPrunesSpellDirs verifies that a directory named by a spell's
 // declared IgnoreDirs is pruned from the walk even when it holds files matching a
-// source glob - the mechanism that lets a language spell (not the cache) decide its
+// source glob: the mechanism that lets a language spell (not the cache) decide its
 // ecosystem's non-source dirs. A dir NOT in the spell set (nor the core set) is walked.
 func TestExpandSourcesPrunesSpellDirs(t *testing.T) {
 	root := t.TempDir()
@@ -230,7 +230,7 @@ func TestExpandSourcesEmptyGlobs(t *testing.T) {
 }
 
 // TestExpandSourcesExported pins the exported wrapper a caller outside this
-// package uses (a spell op's Sources placeholder - see spells.Command.Sources):
+// package uses (a spell op's Sources placeholder; see spells.Command.Sources):
 // it must return root-relative paths, sorted, and honor ignoreDirs exactly like
 // the unexported walk it wraps, since the whole point is reusing that walk
 // rather than a second one.
@@ -258,8 +258,8 @@ func TestHashFilesEmpty(t *testing.T) {
 
 // TestHashStepIgnoreDirsKeyStability is the byte-stability contract for spell-declared
 // ignore dirs, asserted at the cache KEY (not just the file set): pruning a dir that
-// holds no matching source leaves the key untouched - the reason node_modules/__pycache__
-// never invalidate a Go project - while pruning a dir that DOES hold matching source moves
+// holds no matching source leaves the key untouched (the reason node_modules/__pycache__
+// never invalidate a Go project) while pruning a dir that DOES hold matching source moves
 // the key, proving the prune actually drops those files. A future change that folded
 // Step.IgnoreDirs into the key directly, or stopped pruning, would fail one of these.
 func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
@@ -273,8 +273,8 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
 	}
 	write("src/main.go", "package main")            // real source, always hashed
-	write("noise/data.txt", "x")                    // no **/*.go match - pruning is key-neutral
-	write("shadow/vendored.go", "package vendored") // matches **/*.go - pruning drops it from the key
+	write("noise/data.txt", "x")                    // no **/*.go match: pruning is key-neutral
+	write("shadow/vendored.go", "package vendored") // matches **/*.go: pruning drops it from the key
 
 	key := func(ignore ...string) string {
 		h, err := c.hashStep(ctx, &Step{
@@ -299,12 +299,12 @@ func TestHashStepIgnoreDirsKeyStability(t *testing.T) {
 // (WorkspaceRoot, Sources, Outputs, IgnoreDirs) tuple is expanded and hashed
 // ONCE, and a second StepKeyMemo call with the same memo reuses that result
 // instead of re-walking and re-hashing. Reuse is proved, not just equal
-// output - if the second call actually re-walked, it would either find src.go
+// output: if the second call actually re-walked, it would either find src.go
 // gone (WalkDir enumerates nothing under that glob, so the key would drop the
 // "src:" line and change) or fail outright, since the file is removed between
 // calls. A memo that silently stopped reusing would still produce a first key
 // equal to a comparison of two independently-computed identical steps, so an
-// assertion that only compared keys would pass with SourceMemo deleted -
+// assertion that only compared keys would pass with SourceMemo deleted;
 // deleting the source file between calls is what makes the second call's
 // result trustworthy evidence of reuse rather than a coincidence.
 func TestStepKeyMemoReusesSourceExpansion(t *testing.T) {
@@ -451,7 +451,7 @@ func TestDerivedOverridesChangeTheKey(t *testing.T) {
 // TestObservationsChangeTheKey pins ctx.observes' whole reason to exist: a fact
 // outside the tree that the answer depends on has to move the key when it moves, and
 // leave it alone when it does not. Without the first half the target replays yesterday's
-// answer against today's world - the staleness skip_cache was forfeiting all caching to
+// answer against today's world: the staleness skip_cache was forfeiting all caching to
 // avoid. Without the second half it is skip_cache with extra steps.
 func TestObservationsChangeTheKey(t *testing.T) {
 	root := t.TempDir()
@@ -667,8 +667,8 @@ func BenchmarkExpandSourcesJSWorkspace(b *testing.B) {
 
 // BenchmarkIsIgnoreDir measures the per-directory prune check the source walk runs
 // on every directory entry. It replaced a hardcoded switch with a project.IgnoreDirs +
-// spell-declared lookup; this pins that the check stays single-digit nanoseconds - far
-// below the per-directory syscall cost of WalkDir - so making the ignore set spell-driven
+// spell-declared lookup; this pins that the check stays single-digit nanoseconds (far
+// below the per-directory syscall cost of WalkDir), so making the ignore set spell-driven
 // does not touch the walk's hot path. The miss case (a normal source dir, the overwhelming
 // majority of entries) is the one that must stay cheap.
 func BenchmarkIsIgnoreDir(b *testing.B) {

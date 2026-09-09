@@ -4,7 +4,7 @@ package vm
 
 import "testing"
 
-// The heap only ever grows today, so live and peak agree - but the peak is tracked
+// The heap only ever grows today, so live and peak agree, but the peak is tracked
 // separately on purpose (see gHeapPeak) so this diagnostic survives a future
 // compaction pass. Asserting the relationship rather than either number keeps the
 // test honest through that change.

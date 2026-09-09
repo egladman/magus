@@ -31,7 +31,7 @@ import (
 //
 // Why the split. Both surfaces used to share one verifier, so a connector token
 // minted for an agent could drive the console's mutating routes, and a token pasted
-// into a console URL was accepted at /mcp - meaning a leaked console link reached the
+// into a console URL was accepted at /mcp, meaning a leaked console link reached the
 // whole agent tool surface. Neither is true now.
 
 // VerifyMCPBearer reports whether presented may use /mcp: the retrievable cli token
@@ -39,7 +39,7 @@ import (
 // call, so a rotate, create, or revoke takes effect without restarting the daemon,
 // and each fails closed on a load error.
 //
-// A CONSOLE token is rejected here by construction - it is not consulted - so a
+// A CONSOLE token is rejected here by construction (it is not consulted), so a
 // credential handed to a browser cannot reach the agent tool surface.
 func VerifyMCPBearer(presented string) bool {
 	if VerifyCLIBearer(presented) {
@@ -77,7 +77,7 @@ func VerifyConsoleBearer(presented string) bool {
 // the mutating console mounts (JobService, MemoryService, the share trigger) use
 // VerifyConsoleBearer, which does not consult ScopeConsoleRead, so a leaked viewer
 // credential can read the console and change nothing. A full console token is
-// accepted too - the write tier is a superset of the read tier, not a sibling.
+// accepted too: the write tier is a superset of the read tier, not a sibling.
 func VerifyConsoleReadBearer(presented string) bool {
 	if VerifyConsoleBearer(presented) {
 		return true
@@ -89,7 +89,7 @@ func VerifyConsoleReadBearer(presented string) bool {
 }
 
 // VerifyCLIBearer reports whether presented is exactly the retrievable cli
-// token - the OPERATOR tier and nothing else. Connector and share tokens never
+// token, the OPERATOR tier and nothing else. Connector and share tokens never
 // match here. It exists as its own narrow verifier so privileged mounts (token
 // management) can be guarded at the guard level rather than trusting a handler
 // to re-check the caller's class; both surface verifiers compose it as their

@@ -23,7 +23,7 @@ type gatedKey struct {
 // source.
 //
 // Only keys whose use is OBSERVABLE on a Project appear here, and only keys that carry
-// a Since - the rest predate floors and need no coverage. Detection by decoded state
+// a Since; the rest predate floors and need no coverage. Detection by decoded state
 // means a key set through any spelling or any composition path still counts, where a
 // source scan would miss `"tools": policy.all` and every other indirection.
 //
@@ -154,7 +154,7 @@ func (r *runner) checkSchemaFloor(projects []*types.Project) types.DoctorCheck {
 // anything older than v" can be answered with a single probe.
 //
 // Greatest, not merely "some older version", and that distinction is the whole check.
-// Probing the previous minor's .0 - v0.4.0 -> v0.3.0 - answers a narrower question than
+// Probing the previous minor's .0 (v0.4.0 -> v0.3.0) answers a narrower question than
 // the one being asked: `>= 0.3.5` rejects 0.3.0, so the check reported OK while the
 // declared floor still admitted 0.3.5 through 0.3.9, none of which can load the
 // workspace. Any floor set INSIDE the previous series was invisible.

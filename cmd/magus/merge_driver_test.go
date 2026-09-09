@@ -12,7 +12,7 @@ import (
 )
 
 // mergeDriverWorkspace builds a workspace whose generate target declares gen/** as its own
-// output via ctx.writesFiles - the shape settleTarget requires - and which would leave
+// output via ctx.writesFiles (the shape settleTarget requires), and which would leave
 // gen/regenerated.txt behind if that target ever ran.
 func mergeDriverWorkspace(t *testing.T) (context.Context, string) {
 	t.Helper()
@@ -35,7 +35,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 	return withMagus(context.Background(), m), root
 }
 
-// writeResultFile writes git's %A file - the current version, and the file the VCS reads
+// writeResultFile writes git's %A file: the current version, and the file the VCS reads
 // back as the merge result.
 func writeResultFile(t *testing.T, dir, body string) string {
 	t.Helper()
@@ -63,7 +63,7 @@ func TestMergeDriverKeepsCurrentVersion(t *testing.T) {
 
 // TestMergeDriverDoesNotRegenerate is the regression test for the rebase loop. The driver
 // used to run the owning project's generate target with write access, which rewrote every
-// output the project declares - dirtying the working tree against what git had staged, so
+// output the project declares, dirtying the working tree against what git had staged, so
 // `git rebase --continue` refused to proceed. Nothing in the workspace may change here.
 func TestMergeDriverDoesNotRegenerate(t *testing.T) {
 	ctx, root := mergeDriverWorkspace(t)
@@ -77,7 +77,7 @@ func TestMergeDriverDoesNotRegenerate(t *testing.T) {
 		"the driver must not run the project's regeneration target")
 	// The whole-tree comparison is a broader "ran nothing" oracle than the sentinel alone,
 	// catching cache manifests and output records too. Note those live under .magus/, which
-	// is gitignored, and ignored files do NOT block `git rebase --continue` - it is the
+	// is gitignored, and ignored files do NOT block `git rebase --continue`; it is the
 	// TRACKED declared outputs that do. Both matter here: this asserts the driver ran no
 	// target at all.
 	assert.Equal(t, before, snapshotTree(t, root),
@@ -99,7 +99,7 @@ func TestMergeDriverRejectsUndeclaredPath(t *testing.T) {
 // TestMergeDriverRefusesUnrebuildableOutput covers the case that makes auto-resolution safe
 // in the first place. A project-wide output glob with no target that writes it names no
 // command a human could run afterwards, so keeping one side would drop the other's change
-// with no conflict marker - and the VCS only invokes a driver when BOTH sides changed the
+// with no conflict marker, and the VCS only invokes a driver when BOTH sides changed the
 // file. go.mod and the lockfiles in this repo are wired to the driver in exactly this shape.
 func TestMergeDriverRefusesUnrebuildableOutput(t *testing.T) {
 	root := t.TempDir()

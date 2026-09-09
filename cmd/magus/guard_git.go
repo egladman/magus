@@ -16,7 +16,7 @@ import (
 // rewrite the lockfile, keyed by program. They are what types.CharmRelock exists
 // for: `rw` grants rewriting DERIVED output, which is reproducible from a clean
 // checkout, while these read a registry and yield different bytes on different
-// days - which is why relock is not folded into rw.
+// days, which is why relock is not folded into rw.
 //
 // A hand-kept list rather than a catalog lookup, unlike the raw-tool rule: the
 // spell catalog says which op renders a command, never whether that command's
@@ -31,7 +31,7 @@ import (
 //
 // Each prefix is spelled as its argv words. Written as a space-joined string it needed
 // re-splitting on every call, and the bare-program case had to be encoded as an empty
-// string - a sentinel indistinguishable from a typo'd entry; here it is the empty prefix
+// string: a sentinel indistinguishable from a typo'd entry; here it is the empty prefix
 // {{}}, which is what it means.
 var guardDependencyMutations = map[string][][]string{
 	"go":          {{"get"}, {"mod", "tidy"}},
@@ -78,8 +78,8 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 		case "stash":
 			// Reading a stash is safe. RESTORING one is not, which this rule used to
 			// assume it was: the stash stack is per-REPOSITORY, shared by every linked
-			// worktree, so `git stash pop` with no ref applies whatever is at stash@{0} -
-			// routinely a stranger's work from another worktree - into your tree, and
+			// worktree, so `git stash pop` with no ref applies whatever is at stash@{0}
+			// (routinely a stranger's work from another worktree) into your tree, and
 			// drops the entry if it applies cleanly. Naming the entry after reading
 			// `git stash list` is the deliberate form and stays allowed.
 			// `create` writes a stash COMMIT OBJECT and returns its name, touching
@@ -95,8 +95,8 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			// `git stash push -- <paths>` shelves only what it names, so the whole-tree
 			// reason does not apply: nothing outside those paths moves, and a concurrent
 			// agent's untracked work is untouched. It is also how a workspace escapes a
-			// bootstrap deadlock - shelve the one hunk an old binary rejects, build,
-			// restore - which this rule was denying, putting that answer out of reach.
+			// bootstrap deadlock (shelve the one hunk an old binary rejects, build,
+			// restore), which this rule was denying, putting that answer out of reach.
 			// A bare `git stash push` names nothing and stashes everything, so it stays
 			// denied.
 			if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
@@ -146,7 +146,7 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			}
 		case "add":
 			// In the DENY pass, not beside the advisory below it: a stage-everything
-			// form reached second - `git restore -- x && git add -A` - lost its deny to
+			// form reached second (`git restore -- x && git add -A`) lost its deny to
 			// whichever advisory the first command earned, which is the ordering the
 			// two-pass split exists to prevent.
 			if slices.ContainsFunc(rest, isStageAllOperand) {
@@ -231,7 +231,7 @@ func isTreeIdentityQuery(args []string) bool {
 
 // gitGuardFallback applies the legacy regexes, and runs ONLY when the line does
 // not parse. Its false positives on prose are the reason gitGuard exists, so it
-// is confined to the case where there is no AST to consult - and there, an
+// is confined to the case where there is no AST to consult, and there, an
 // over-eager deny really is the safe direction, because these rules guard work
 // that cannot be recovered.
 func gitGuardFallback(command string) (bashGuardVerdict, bool) {
@@ -333,7 +333,7 @@ func isStageAllOperand(a string) bool {
 // isDeletingClean reports whether a `git clean` would actually delete.
 //
 // Read as short-flag CLUSTERS rather than as any word containing one of fdxX, which
-// denied `git clean --dry-run` (the d in "dry") and `git clean --exclude=x` (the x) -
+// denied `git clean --dry-run` (the d in "dry") and `git clean --exclude=x` (the x):
 // two invocations that remove nothing. A dry run anywhere wins: -n and --dry-run only
 // list what would go.
 func isDeletingClean(args []string) bool {
@@ -359,19 +359,19 @@ func isDeletingClean(args []string) bool {
 // Sapling, which are one dialect, and Jujutsu, which is its own.
 //
 // These were unmatched, and the guard doc justified that by saying magus "also drives
-// Mercurial and Jujutsu, where recoverability differs - jj snapshots the working copy and
+// Mercurial and Jujutsu, where recoverability differs: jj snapshots the working copy and
 // keeps an operation log, so its nearest equivalents are undoable". That reasoning is
 // TRUE OF JJ AND ONLY JJ, and it was generalized to Mercurial without argument. hg has no
 // operation log: `hg rollback` only ever undid the last transaction and is gone, `hg
 // revert` writes .orig backups for modified TRACKED files alone (and --no-backup drops
-// even those), and `hg purge` deletes untracked files with no backup at all - the same
+// even those), and `hg purge` deletes untracked files with no backup at all: the same
 // blast radius as `git clean -f`, which denies. So an hg or sl user had none of the
 // protection a git user has, for operations that are just as irrecoverable.
 //
 // jj was exempt too, on the same sentence's reasoning that its operation log makes these
 // undoable. That exemption is gone. Undoable-IN-PRINCIPLE is a weaker guarantee than this
 // bar: it needs someone to know `jj undo` exists and to reach for it before later
-// operations bury the entry. And recoverability was never the whole test - the worktree
+// operations bury the entry. And recoverability was never the whole test: the worktree
 // rule denies because it destroys ANOTHER session's work, which `jj abandon` on a shared
 // working copy does just as thoroughly.
 //

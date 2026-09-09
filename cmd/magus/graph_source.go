@@ -51,7 +51,7 @@ func githubRawBase(blobBase string) string {
 // types.RemoteReporter capability) and turns it into a forge blob-URL base, so a
 // node's relative `source` path can be linked to the RIGHT repository. Returns ""
 // (no link) whenever the remote is missing, the backend lacks the capability, or
-// the forge is not one we can build a browse URL for - never a guessed/wrong link.
+// the forge is not one we can build a browse URL for: never a guessed/wrong link.
 func deriveSourceBase(ctx context.Context, root string) string {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil {
@@ -85,7 +85,7 @@ func deriveSourceBase(ctx context.Context, root string) string {
 // forgeBlobBase turns a git remote URL + branch into a blob-URL base like
 // "https://github.com/owner/repo/blob/main". Only GitHub-style forges are handled;
 // anything else returns "" so we never emit a broken link (GitLab's /-/blob/ and
-// Bitbucket's /src/ differ, and self-hosted conventions vary - a future addition).
+// Bitbucket's /src/ differ, and self-hosted conventions vary; a future addition).
 func forgeBlobBase(remote, branch string) string {
 	host, owner, repo := parseGitRemote(remote)
 	if owner == "" || repo == "" || !strings.Contains(strings.ToLower(host), "github") {

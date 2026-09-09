@@ -171,7 +171,7 @@ type Runtime struct {
 // policy (RetryOnVolatile), opted into per target, and must stay off for the
 // targets that never asked for it.
 //
-// Fusing them meant history only ever filled for targets that wanted retries -
+// Fusing them meant history only ever filled for targets that wanted retries:
 // in a workspace where none do, the forecaster had no data at all.
 //
 // retry is the RUN-WIDE half of the retry gate and nothing finer: it carries

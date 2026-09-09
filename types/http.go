@@ -6,14 +6,14 @@ package types
 // WHY IT IS A DECLARED OBJECT and not five keys in the opts map: retrying is the
 // setting most likely to be wrong in a way nothing reports. A misspelled
 // "retry_delayy" in an untyped map is silently ignored, and the only symptom is a
-// build that hammers a flaky endpoint at the wrong cadence - or does not retry at
+// build that hammers a flaky endpoint at the wrong cadence, or does not retry at
 // all when the author believed it would. As a declared object the checker catches
 // the typo at load.
 //
 // WHY THE ZERO VALUE MEANS NO RETRYING: an omitted policy has to be the safe
 // reading, and for a build tool the safe reading is "run the request once". magus
 // retried three times by default for a long while, which is wrong in two
-// directions at once - it silently triples the cost of a genuinely failing request
+// directions at once: it silently triples the cost of a genuinely failing request
 // (and the wait before the failure is reported), and it can mask a real outage
 // long enough that a build looks merely slow. Retrying is a decision about a
 // specific endpoint's behavior, so the caller states it.

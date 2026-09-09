@@ -3,8 +3,8 @@
 //
 // It RECORDS AND REFUSES NOTHING. Nothing here gates a run or blocks a write; the AGENT
 // GUARD is what consults these rows to grade one, and it is a separate thing that READS
-// this store. Register does compute a verdict - whether a worker's reported base is the
-// checkpoint its lease was handed - and that is a fact recorded on the row and handed back
+// this store. Register does compute a verdict (whether a worker's reported base is the
+// checkpoint its lease was handed), and that is a fact recorded on the row and handed back
 // to the caller, not a gate: the registration succeeds either way and what to do about a
 // divergence is the caller's and the orchestrator's call. Enforcement stays outside for
 // the reason types.Lease gives: a store that refused would make the ledger
@@ -14,12 +14,12 @@
 //
 // ONE PLAN PER WORKSPACE, and no history of past plans: Clear wipes the rows so the
 // next plan starts empty. A plan that ended is not archived anywhere, which is the v1
-// scope on purpose - keeping every past plan means deciding what identifies one, and
+// scope on purpose: keeping every past plan means deciding what identifies one, and
 // nothing in the vocabulary names a plan yet.
 //
 // "LEDGER" NAMES THE RECONCILIATION, NOT THE DURABILITY, and the difference is worth
 // stating because the word oversells one of them. A financial ledger is append-only and
-// historical; this is neither - Put upserts a row in place, Clear wipes the book, and
+// historical; this is neither: Put upserts a row in place, Clear wipes the book, and
 // nothing is archived. What it does share is the part that earns the name: it is written
 // to be checked AGAINST reality later, which is exactly the skill's "compare the ledger
 // against the actual diff since each lease's checkpoint" step. Read it as a book of
@@ -27,19 +27,19 @@
 // vocabulary came from the magus-multi-agent skill, which is also where the row shape is
 // defined (see types.Lease).
 //
-// It is the INTENT layer of three, and naming the other two is what keeps them apart -
+// It is the INTENT layer of three, and naming the other two is what keeps them apart;
 // they are flat stores joined by lease id at render time, never a storage hierarchy:
 //
-//   - intent - this package. What an orchestrating agent SAID it would hand out.
+//   - intent: this package. What an orchestrating agent SAID it would hand out.
 //     Declared up front, mutable, one plan at a time.
-//   - actions - internal/trail. What was actually DONE against the daemon, append-only.
+//   - actions: internal/trail. What was actually DONE against the daemon, append-only.
 //     The closest sibling, and the one to reach for when the question is "did it happen"
 //     rather than "was it planned".
-//   - effects - the run itself: the pool, the locks, the outputs a target produced.
+//   - effects: the run itself: the pool, the locks, the outputs a target produced.
 //
 // The two stores that sound related and are NOT: internal/journal is the event stream of
 // one magus invocation (what a build executed), and internal/memory and internal/notes
-// are prose a human or an agent writes to be read later - neither models leased work.
+// are prose a human or an agent writes to be read later; neither models leased work.
 package ledger
 
 import (
@@ -64,7 +64,7 @@ import (
 )
 
 // ErrNoID reports a lease with no id. The id is what Put upserts on, so a row without
-// one could never be updated or referred to again - it is unaddressable, not merely
+// one could never be updated or referred to again: it is unaddressable, not merely
 // incomplete.
 var ErrNoID = errors.New("ledger: a lease needs an id")
 
@@ -80,8 +80,8 @@ var ErrNoID = errors.New("ledger: a lease needs an id")
 //     magus_ledger MCP tool and the console's read route).
 //   - An OS file lock beside leases.json serializes writers across PROCESSES. The CLI, the
 //     daemon, and an MCP client each hold their own Store on the same file, and workers
-//     now register and heartbeat against it, so "one orchestrating agent writes this" -
-//     the assumption that made a cross-process race acceptable - stopped being true. Two
+//     now register and heartbeat against it, so "one orchestrating agent writes this"
+//     (the assumption that made a cross-process race acceptable) stopped being true. Two
 //     read-modify-writes that interleave drop whichever row the loser had not read.
 //
 // Both are taken for the span of ONE call. A caller that merges fields by reading with
@@ -101,7 +101,7 @@ type Store struct {
 
 // Location is where a Store lives: which cache directory holds the file, and which
 // workspace its rows describe. A struct rather than two string params because the two
-// are transposable at every call site and nothing downstream would notice - a ledger
+// are transposable at every call site and nothing downstream would notice: a ledger
 // written into the workspace and digested against the cache dir reads as an ordinary
 // empty ledger.
 type Location struct {
@@ -110,7 +110,7 @@ type Location struct {
 	CacheDir string
 	// Root is the workspace a row's paths are relative to, read for one purpose:
 	// digesting a path at the moment a lease releases it (see Update). A Store built
-	// with an empty root still records releases - it just cannot say what was in them.
+	// with an empty root still records releases; it just cannot say what was in them.
 	Root string
 }
 
@@ -142,17 +142,17 @@ func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
 // holding both of the Store's locks ONCE. That is the whole point: a merge spread across
 // List and Put releases them in between, so two concurrent writers advancing different
 // fields of one row each read it before the other wrote, and the second write reverts the
-// first - whether the two are goroutines or separate magus processes.
+// first, whether the two are goroutines or separate magus processes.
 //
 // The row is CREATED when absent, matching Put: apply then sees a zero lease carrying
 // only the id, so declaring a lease and advancing one are the same call. Created is
 // preserved from the stored row and Updated is stamped on every write, exactly as Put
-// does, and the id is the key - whatever apply writes into ID is overwritten with it.
+// does, and the id is the key: whatever apply writes into ID is overwritten with it.
 //
 // Releases are stamped here too, and for the same reason Created is: they are the
 // store's to say, not the caller's. A write that drops a path from OwnedPaths IS the
 // release announcement the skill has workers make when they finish editing a contested
-// path, so the dropped paths are digested and recorded on the row - under this same
+// path, so the dropped paths are digested and recorded on the row, under this same
 // lock, because reading the previous owned set and writing the next one has to be one
 // step or a concurrent put decides which release happened.
 //
@@ -161,7 +161,7 @@ func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
 // caller, before the call.
 //
 // ctx reaches the release digests and nothing else. A cancelled call still WRITES the
-// row - the merge is already done and abandoning it would lose the state change - but it
+// row (the merge is already done and abandoning it would lose the state change), but it
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
 func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
@@ -186,8 +186,8 @@ const MaxUnattributedWrites = 32
 // twelfth save is the only one that describes the tree, and eleven superseded digests would bury
 // it. The timestamp moves with the digest, so "when did this last move" stays answerable.
 //
-// Recording from the guard is a deliberate softening of this package's split - the ledger records,
-// the guard enforces - and it survives the rule because what lands here is an OBSERVATION and
+// Recording from the guard is a deliberate softening of this package's split (the ledger records,
+// the guard enforces), and it survives the rule because what lands here is an OBSERVATION and
 // never a verdict. The guard already read these boundaries to grade the write; it simply discarded
 // what it saw afterwards, leaving the one party who needed it uninformed.
 //
@@ -304,7 +304,7 @@ func (s *Store) List() ([]types.Lease, error) {
 }
 
 // Clear drops every row, which is how a fresh plan starts. Clearing an empty or absent
-// ledger is not an error - the caller asked for an empty ledger and got one.
+// ledger is not an error: the caller asked for an empty ledger and got one.
 //
 // It reads nothing, so no row can be lost to an interleaving; it takes the file lock
 // anyway, so that every rewrite of leases.json is under it and a reader of this package
@@ -318,7 +318,7 @@ func (s *Store) Clear(ctx context.Context) error {
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
-// gave up - the ones prev owned and next does not.
+// gave up, the ones prev owned and next does not.
 //
 // A path that is owned again drops OUT of the list: a row saying it both owns and has
 // released the same path tells a reader nothing they can act on. A path released twice
@@ -348,14 +348,14 @@ func (s *Store) releases(ctx context.Context, prev, next types.Lease, now int64)
 // it left rather than the one it did.
 //
 // Everything that is not a readable file inside the root answers with one of the three
-// documented markers rather than a hash - types.DigestAbsent, types.DigestDir and
+// documented markers rather than a hash; types.DigestAbsent, types.DigestDir and
 // types.DigestUnreadable say which. The absent/unreadable split matters to the next
 // agent: "the releaser deleted it" and "something is there nobody could read" are
 // different problems. A path escaping the root is absent by the same rule: the ledger
 // describes this workspace, so a row is never handed a digest of something outside it.
 //
-// Runs under the store's mutex, which is deliberate - reading the previous owned set and
-// recording what it gave up has to be one step - and is why every branch below is bounded.
+// Runs under the store's mutex, which is deliberate (reading the previous owned set and
+// recording what it gave up has to be one step), and is why every branch below is bounded.
 func (s *Store) digest(ctx context.Context, declared string) string {
 	if s.root == "" {
 		return types.DigestAbsent
@@ -389,7 +389,7 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 		return types.DigestDir
 	case !info.Mode().IsRegular():
 		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
-		// somebody writes to it, and it would block holding the store's mutex - one
+		// somebody writes to it, and it would block holding the store's mutex: one
 		// released fifo would wedge every ledger operation in the daemon.
 		return types.DigestUnreadable
 	case info.Size() > maxDigestBytes:
@@ -437,7 +437,7 @@ func (s *Store) read() (ledgerFile, error) {
 // The same idiom the workspace project locks use (magus/lock.go): gofrs/flock, TryLock
 // first and TryLockContext to poll while contended. An OS lock rather than a lockfile
 // because the kernel drops it when the holder exits, so a killed worker never leaves the
-// ledger wedged. Advisory, like that one - it serializes the code that takes it and
+// ledger wedged. Advisory, like that one: it serializes the code that takes it and
 // nothing else, so a hand-edit of leases.json ignores it entirely.
 //
 // The wait is BOUNDED, which is where this parts company with the project locks. Those

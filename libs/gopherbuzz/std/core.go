@@ -190,7 +190,7 @@ func stdPattern(_ context.Context, args []vm.Value) (vm.Value, error) {
 }
 
 // stdToUd converts a number to userdata. Upstream's `ud` is a Zig `*anyopaque`,
-// which is why this pair was stubbed as unsupported for as long as it existed - but
+// which is why this pair was stubbed as unsupported for as long as it existed, but
 // the VM has carried a userdata value (`udObj`, a bare uintptr) all along, and what
 // upstream's std.buzz actually asserts of one is only that `toUd(23) is ud` and
 // that `parseUd("42") == toUd(42)`. Both are satisfied by carrying the numeric

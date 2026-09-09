@@ -14,7 +14,7 @@ import (
 // This file lives in the bindings layer (not internal/ci/annotate) because
 // a spell-backed CI provider needs the Buzz VM to run the spell's handler
 // ops. It registers itself with the annotate package at init, so core can
-// select a spell provider without linking the VM - the same indirection
+// select a spell provider without linking the VM: the same indirection
 // remote_cache.go uses for cache backends.
 func init() {
 	annotate.RegisterOpener(openSpellAnnotator)
@@ -81,7 +81,7 @@ type spellAnnotator struct {
 }
 
 // opTimeout bounds every spell op. These are meant to be a few bytes of
-// formatting, so any op still running after this is misbehaving - and a
+// formatting, so any op still running after this is misbehaving, and a
 // provider spell is third-party code that may call out to a network the
 // build has no reason to wait on. Exceeding it degrades to "no
 // annotation", never to a hung build.
@@ -160,12 +160,12 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 
 // runQueryTimeout bounds last_green_run alone. Unlike the formatting ops
 // under opTimeout, answering it means a round trip to the provider's API,
-// so it gets API headroom - and it runs once per plan, never per line.
+// so it gets API headroom, and it runs once per plan, never per line.
 const runQueryTimeout = 15 * time.Second
 
 // LastGreenRun implements [annotate.RunSource] over the spell's optional
-// last_green_run op, which answers {run, commit} or null. Any failure -
-// an undeclared op, a null answer, a malformed record, a timeout - reads
+// last_green_run op, which answers {run, commit} or null. Any failure
+// (an undeclared op, a null answer, a malformed record, a timeout) reads
 // as "no green run": inheritance is an optimization, never a capability.
 func (a *spellAnnotator) LastGreenRun() (annotate.GreenRun, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), runQueryTimeout)
@@ -235,8 +235,8 @@ func (a *spellAnnotator) quotePrefixes() []string {
 //
 // That tolerance is the INVOKER's, not this method's: an op the spell does not
 // declare comes back as a nil result with no error (see newBuzzSpellInvoker), so
-// every error reaching here is a real failure - a handler that raised, a spell
-// that would not load, an op that timed out - and is reported. Swallowing it made
+// every error reaching here is a real failure (a handler that raised, a spell
+// that would not load, an op that timed out), and is reported. Swallowing it made
 // a broken provider report success for the life of the build.
 func (a *spellAnnotator) call(op string, params map[string]any) error {
 	ctx, cancel := spellCtx()

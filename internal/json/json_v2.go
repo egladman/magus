@@ -3,7 +3,7 @@
 // A magus build REQUIRES GOEXPERIMENT=jsonv2; requires_jsonv2.go is what a build missing
 // it hits. There is deliberately no v1 fallback: v1 escapes <, > and & to their \u00XX
 // form and v2 does not, so a shim would make every byte magus writes depend on how the
-// binary was built - and magus writes committed generated output and a signed release
+// binary was built, and magus writes committed generated output and a signed release
 // index.
 //
 // libs/gopherbuzz keeps its own two-armed shim: it is a separate module that must build

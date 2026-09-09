@@ -75,10 +75,10 @@ const OutcomeWindow = 100
 const hitColdStart = 5
 
 // Default scheduling constants used until History.Constants is fitted from real
-// observations - which is currently never: nothing in this tree calls Update with
+// observations, which is currently never: nothing in this tree calls Update with
 // shardSamples, so SetupP50Ms and AlphaMs stay these defaults forever. The raw
-// numbers Update would fit from exist - report.ShardTotal, written by
-// (*magus.ReportWriter).RecordShardTotal in a CI matrix run (see report.go) - but
+// numbers Update would fit from exist: report.ShardTotal, written by
+// (*magus.ReportWriter).RecordShardTotal in a CI matrix run (see report.go). But
 // nothing reads that JSONL stream back into a History to close the loop.
 const (
 	DefaultSetupMs    Millis = 30_000
@@ -145,7 +145,7 @@ const (
 
 // RunWindow is the rolling window of runs kept. Matched to SampleWindow
 // (roughly 5 CI days) because it answers the same kind of question over the same span,
-// and because the useful reads here - the last passing commit, the current red streak -
+// and because the useful reads here (the last passing commit, the current red streak)
 // are all near the head of the log.
 const RunWindow = 100
 
@@ -243,13 +243,13 @@ func (h *History) PredictDuration(project, target string, tags []string) time.Du
 // resolvePrediction returns (p75, hitCount, missCount, hitRate) for the best matching tier.
 //
 // Tier 3 is the tier the record path fills. Tiers 1-2 read Buckets, keyed by tags Tags()
-// derives from the changed-file list - known at plan time, not at record time. Filling
+// derives from the changed-file list, known at plan time, not at record time. Filling
 // them means threading the affected set onto the outcome, a real change to what the
 // record path knows.
 //
 // HitCount/MissCount stay unfed for the same shape of reason: a cache hit executes no
 // target, so no outcome exists. hitRate stays 0 and no hit discount applies, which
-// over-predicts - the safe direction for a shard planner.
+// over-predicts: the safe direction for a shard planner.
 func (h *History) resolvePrediction(project, target string, tags []string) (p75 int64, hitCount, missCount int, hitRate float64) {
 	if targets, ok := h.Projects[project]; ok {
 		if s, ok := targets[target]; ok {
@@ -399,7 +399,7 @@ func (h *History) Update(now time.Time, projectSamples []Sample, shardSamples []
 			h.Setup = appendCapped(h.Setup, ss.SetupMs)
 		}
 		if ss.TotalMs > 0 && ss.WorkMs > 0 && ss.NShards > 0 {
-			// α ≈ (T_total - T_setup - W/N) / N
+			// `α ≈ (T_total - T_setup - W/N) / N`
 			setup := h.Constants.SetupP50Ms
 			if setup <= 0 {
 				setup = DefaultSetupMs
@@ -560,7 +560,7 @@ func (h *History) Merge(other *History) {
 }
 
 // RecordRun appends one end-to-end run to the log, trimming to [RunWindow].
-// Only a caller that knows how the WHOLE run came out may call it - in a sharded CI
+// Only a caller that knows how the WHOLE run came out may call it: in a sharded CI
 // run that is the aggregation job, never an individual shard, since no shard can see
 // its siblings' results.
 //
@@ -568,7 +568,7 @@ func (h *History) Merge(other *History) {
 // has run on this ref" from "everything since has failed", and those want opposite
 // responses.
 //
-// Recording a passing run whose affected set was empty is deliberate - skipping it
+// Recording a passing run whose affected set was empty is deliberate: skipping it
 // would pin the last passing commit at whichever one last touched something and grow
 // every later diff without bound.
 func (h *History) RecordRun(run Run, now time.Time) {
@@ -590,7 +590,7 @@ func (h *History) RecordRun(run Run, now time.Time) {
 //
 // A false return is the ordinary case on a fresh workspace, a fork, or after the store
 // aged out. Callers must have an answer for it rather than treating it as a failure,
-// and must not fall back to a base that measures nothing - which is what comparing a
+// and must not fall back to a base that measures nothing, which is what comparing a
 // ref against itself does.
 func (h *History) PassedCommit(ref, target string) (string, bool) {
 	for i := len(h.Runs) - 1; i >= 0; i-- {

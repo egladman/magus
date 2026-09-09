@@ -18,7 +18,7 @@ import (
 // This is the only ward an OLD binary can enforce, and that asymmetry is the whole
 // reason it exists. When a magusfile reaches for a host module or a project key
 // added after the running binary was built, the binary that reports the failure is
-// the old one - it cannot look up which release introduced the thing it does not
+// the old one: it cannot look up which release introduced the thing it does not
 // have, because it has never heard of that release. The failure therefore surfaces
 // wherever the magusfile happened to touch it first (`import "xml": module not
 // found`), which reads like a typo rather than an out-of-date tool. A declared
@@ -42,7 +42,7 @@ import (
 //
 // The describe form used to be compared, and that made a floor for an UNRELEASED feature
 // unarmable. `git describe` says "286 commits past v0.3.0", but semver parses that as the
-// prerelease 0.3.0-286-gabc123, which orders BELOW 0.3.0 - the opposite of what the
+// prerelease 0.3.0-286-gabc123, which orders BELOW 0.3.0, the opposite of what the
 // string means. Stripping the prerelease recovers 0.3.0, so a floor naming the release
 // that will first carry the feature rejected every build made before that release was
 // tagged, including the source-path builds CI uses to exercise a magusfile change at the
@@ -50,7 +50,7 @@ import (
 // precisely when it is no longer the thing anyone needed protecting from.
 //
 // Exempting it is not a hole. A source build is compiled FROM the workspace it then runs,
-// so it cannot lack a feature that workspace's magusfile uses - they are the same commit.
+// so it cannot lack a feature that workspace's magusfile uses; they are the same commit.
 // The binary a floor exists to catch is one built somewhere else and shipped: a release.
 // types.IsDevMagusVersion is the same test the drift classifier uses, so "what counts as
 // a dev build" has one answer.
@@ -79,7 +79,7 @@ func CheckRequiredVersion(constraint, running string) *types.DiagnosticError {
 	}
 	// Compare on the release alone. A prerelease of the version that satisfies the
 	// floor is treated as satisfying it, because semver constraints otherwise
-	// exclude every prerelease - so a v0.4.0-rc1 binary would be told to upgrade to
+	// exclude every prerelease, so a v0.4.0-rc1 binary would be told to upgrade to
 	// 0.4.0, which it effectively already is.
 	base, err := v.SetPrerelease("")
 	if err == nil {
@@ -113,15 +113,15 @@ const (
 // out-of-date binary, and returns err untouched otherwise.
 //
 // CheckRequiredVersion above is the ward that PREVENTS this, and it only fires when
-// the workspace author remembered to raise the floor. When they did not - the common
-// case, because the floor is a separate manual edit from the change that needed it -
+// the workspace author remembered to raise the floor. When they did not (the common
+// case, because the floor is a separate manual edit from the change that needed it),
 // the failure lands here instead, as a name the magusfile or a spell reached for and
 // this binary has never heard of. That is indistinguishable from a typo unless
 // something says otherwise, and what makes it worse than a typo is that EVERY magus
 // command then fails the same way, including the one that would build a newer binary.
 // That is the deadlock: the tool cannot tell you to update the tool.
 //
-// This cannot say which release introduced the missing name - an old binary has never
+// This cannot say which release introduced the missing name: an old binary has never
 // heard of that release. It says the two things an old binary does know: what it is,
 // and what the workspace asked for. That is enough to act on.
 //

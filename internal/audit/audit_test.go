@@ -376,7 +376,7 @@ func BenchmarkSnapshotAndDiff(b *testing.B) {
 // dies by: a project reached through a cross-project dependency is marked WHILE the
 // parent's body runs, which is after descendantsOf has already chosen what to watch.
 // Excluding only at Begin meant the mark always arrived too late, and the child's own
-// output was reported as the parent writing across a boundary - which is what made
+// output was reported as the parent writing across a boundary, which is what made
 // `magus run build .` fail on a tree where nothing was wrong.
 func TestMarkedMidRunIsNotAViolation(t *testing.T) {
 	tmp := t.TempDir()
@@ -392,7 +392,7 @@ func TestMarkedMidRunIsNotAViolation(t *testing.T) {
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, dispatch)
 
-	// Begin BEFORE the child is known to be dispatching - the real ordering.
+	// Begin BEFORE the child is known to be dispatching: the real ordering.
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a, "Begin returned nil; expected an audit")
 

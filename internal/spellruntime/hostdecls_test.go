@@ -12,7 +12,7 @@ import (
 
 // TestModuleDeclsParse is the guard for a failure mode with no runtime symptom.
 // SetModuleDecls DROPS a source that does not parse, so a malformed declaration does
-// not raise an error - it silently un-types the whole module, and every call through
+// not raise an error; it silently un-types the whole module, and every call through
 // it goes back to being unchecked while still running fine. Nothing in a passing test
 // suite would look different.
 //
@@ -30,7 +30,7 @@ func TestModuleDeclsParse(t *testing.T) {
 
 // TestModuleDeclsDeclareEveryMethod pins the declarations to the module they describe:
 // every method gets a signature, so a new one cannot be added and left untyped.
-// Variadic methods are the deliberate exception - Buzz has no variadic parameter, so
+// Variadic methods are the deliberate exception: Buzz has no variadic parameter, so
 // fs\join("a", "b", "c") cannot be spelled with a fixed parameter list.
 func TestModuleDeclsDeclareEveryMethod(t *testing.T) {
 	for _, mod := range hostmodules.All() {

@@ -30,7 +30,7 @@ func TestCopyEmitsExactlyWhatWasAskedFor(t *testing.T) {
 
 // TestCopyKeepsTheTailWhenOversized: terminals cap the sequence and typically
 // drop the WHOLE thing when it is over, so a copy that silently did nothing
-// would be worse than one that took the end - which is the part a failure puts
+// would be worse than one that took the end, which is the part a failure puts
 // its reason in.
 func TestCopyKeepsTheTailWhenOversized(t *testing.T) {
 	t.Parallel()

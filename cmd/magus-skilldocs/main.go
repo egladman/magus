@@ -10,7 +10,7 @@
 // failure this repo builds generators to avoid.
 //
 // The rendered skill text is fenced verbatim so a reader can copy it, but the page
-// says plainly that `magus agent install` is the supported way to get it - a copied
+// says plainly that `magus agent install` is the supported way to get it: a copied
 // skill carries no provenance stamp, so `magus doctor` cannot tell whether it
 // is current.
 package main
@@ -50,7 +50,7 @@ func main() {
 //
 // The real KnowledgeSchemaVersion is threaded through, not zero. It used to be
 // zero on the grounds that it only feeds the install stamp and these pages did
-// not reproduce the stamp - but they do now (writeStampTable), and a page
+// not reproduce the stamp, but they do now (writeStampTable), and a page
 // claiming `knowledge-schema-version: 0` would be documenting a stamp no install
 // ever writes. A generated page showing a value that cannot occur is worse than
 // no page.
@@ -91,8 +91,8 @@ func run(outDir string) error {
 // prune deletes pages for skills this binary no longer ships.
 //
 // A generator that owns its writes but not its deletions cannot rename anything.
-// Renaming a skill wrote the new page and left the old one - still published,
-// still linked from nothing, still describing a skill nobody can install - and no
+// Renaming a skill wrote the new page and left the old one (still published,
+// still linked from nothing, still describing a skill nobody can install), and no
 // gate reported it, because a drift check compares a generator's DECLARED outputs
 // against what it wrote and an extra file is in neither set. The magus-docs
 // generator has a test for exactly this orphan; this one had neither the test nor
@@ -127,7 +127,7 @@ func prune(outDir string, shipped []agent.AgentSkill) error {
 // fenced verbatim.
 //
 // The two bodies share one position on the page, behind a tab strip, so the reader
-// flips between them rather than scrolling from one to the other - see writeVariants.
+// flips between them rather than scrolling from one to the other; see writeVariants.
 func renderSkill(cat *agent.Catalog, full, short agent.AgentSkill) string {
 	var b strings.Builder
 	// The two byte counts are stated as FACTS; the SSG turns them into a percentage
@@ -211,7 +211,7 @@ func writeVariantPanel(b *strings.Builder, dir, body string) {
 //
 // A fixed three-backtick fence is broken here, and it shipped that way: every skill
 // body contains its own fenced examples (18 of them in magus-buzz-write), and Markdown
-// fences do not nest - the body's first ```sh closed the wrapper, so most of the page
+// fences do not nest: the body's first ```sh closed the wrapper, so most of the page
 // rendered as live Markdown instead of verbatim text. CommonMark closes a fence only
 // on a run at least as long as the opener, so measuring the longest run and adding
 // one is the fix.
@@ -305,7 +305,7 @@ func firstSentence(s string) string {
 // writeStampTable renders the provenance frontmatter an INSTALLED copy carries.
 //
 // The page already tells the reader that an installed skill is stamped and that
-// copied text is not, then never showed the stamp - so the one concrete reason to
+// copied text is not, then never showed the stamp, so the one concrete reason to
 // prefer `magus agent install` over copy-paste was an assertion rather than
 // something you could look at. These are the exact fields `magus doctor`
 // reads to decide "up to date" or "STALE".

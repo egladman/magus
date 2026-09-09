@@ -95,8 +95,8 @@ func TestNormalizeWorkspacePathRefusesOutOfWorkspace(t *testing.T) {
 }
 
 // An absolute path under root resolves on the path alone. Requiring it to exist would
-// make a query about a file the graph still remembers but the tree no longer has - a
-// deleted file, a stale index - answer as if the path had never been understood.
+// make a query about a file the graph still remembers but the tree no longer has (a
+// deleted file, a stale index) answer as if the path had never been understood.
 func TestNormalizeWorkspacePathAbsoluteNeedsNoFile(t *testing.T) {
 	root := normalizeRoot(t)
 	got, ok := NormalizeWorkspacePath(filepath.Join(root, "gone", "deleted.go"), root)
@@ -119,7 +119,7 @@ func TestNormalizeWorkspacePathWithoutRoot(t *testing.T) {
 }
 
 // A Windows drive letter is a path shape on every platform, so the verdict does not
-// depend on GOOS - the same reasoning ResolveImport records for its backslashes.
+// depend on GOOS, the same reasoning ResolveImport records for its backslashes.
 func TestNormalizeWorkspacePathDriveLetter(t *testing.T) {
 	root := normalizeRoot(t)
 	got, ok := NormalizeWorkspacePath(`C:\console\magusfile.buzz`, root)

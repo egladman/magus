@@ -11,7 +11,7 @@ import (
 // https://buzz-lang.dev/0.5.0/reference/std/gc.html
 //
 // The Go runtime does not expose a 1:1 equivalent of Buzz's Zig allocator
-// statistics. allocated() reports HeapAlloc - the bytes of LIVE heap objects - which
+// statistics. allocated() reports HeapAlloc (the bytes of LIVE heap objects), which
 // is the closest analogue to upstream's "presently allocated" and, unlike HeapInuse,
 // actually falls after a collection. HeapInuse counts whole spans the runtime has
 // reserved and rarely returns, so it could report growth immediately after a
@@ -36,7 +36,7 @@ func gcCollect(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 	//
 	// This is the part Go's GC cannot do on its own. Reachability is computed over
 	// the VM's own roots, because a Go finalizer arrives on another goroutine at an
-	// unspecified time and this VM is single-goroutine - see vm/gc_collect.go.
+	// unspecified time and this VM is single-goroutine; see vm/gc_collect.go.
 	if running := vm.FromContext(ctx); running != nil {
 		if _, err := running.CollectUnreachable(); err != nil {
 			return vm.Null, err

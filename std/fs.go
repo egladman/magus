@@ -294,10 +294,10 @@ func FsGlob(ctx context.Context, pattern string) ([]types.Path, error) {
 	//
 	// That base is carried on each result rather than discarded. It was already computed
 	// here and thrown away, so every caller had to know out of band which directory the
-	// strings were measured from - and a target's cwd is its PROJECT directory, not the
+	// strings were measured from, and a target's cwd is its PROJECT directory, not the
 	// workspace root, which is exactly the distinction a bare string cannot express.
 	// EffectiveCwd, not cwdFromContext: outside a target there is no context cwd, but the
-	// matches are still relative - to the PROCESS cwd - so reporting an empty base would
+	// matches are still relative (to the PROCESS cwd), so reporting an empty base would
 	// hand back a relative value that names nothing. EffectiveCwd falls back to the
 	// process cwd, which makes "a glob result always knows its base" total rather than
 	// true-only-inside-a-target.
@@ -346,7 +346,7 @@ func FsExists(ctx context.Context, path string) (bool, error) {
 		// RAISE the policy error rather than answering "does not exist".
 		//
 		// Reporting false conflated two different facts: "the sandbox will not let me
-		// look" and "there is nothing there". A caller acts on those in opposite ways -
+		// look" and "there is nothing there". A caller acts on those in opposite ways:
 		// `if (!fs\exists(p)) { write(p); }` then attempts a write that is ALSO denied,
 		// and the failure surfaces far from the policy that caused it.
 		//
@@ -515,7 +515,7 @@ func FsWriteFileAtomic(ctx context.Context, path string, content string) error {
 	// The temporary file has to live in the SAME directory as the destination:
 	// rename is only atomic within one filesystem, and os.TempDir is routinely a
 	// different mount (tmpfs on Linux, a separate volume on macOS). Staging there
-	// would turn the final step into a cross-device copy - the exact partial-write
+	// would turn the final step into a cross-device copy: the exact partial-write
 	// window this method exists to close.
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

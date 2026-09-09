@@ -87,7 +87,7 @@ func (f Forecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Pr
 // It exists because optimalShardCount reasons entirely in milliseconds: it
 // weighs predicted work against runner setup cost and consolidates whenever
 // setup would dominate. That is right for time and blind to the thing that
-// actually ends a CI job - two heavy projects landing on one runner, which the
+// actually ends a CI job: two heavy projects landing on one runner, which the
 // duration model scores as a cheap win because their combined runtime is
 // unremarkable. A runner that runs out of memory does not run slower, it
 // disappears, and the job reports "cancelled" with no diagnostics at all.
@@ -125,7 +125,7 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 // fits reports whether every shard's predicted peak is within the budget.
 //
 // A shard's figure is the SUM of its projects, and the contrast with
-// types.PeakRSS - which takes a maximum - is not an inconsistency at this level:
+// types.PeakRSS (which takes a maximum) is not an inconsistency at this level:
 // this one aggregates the projects within a shard, which magus schedules
 // CONCURRENTLY up to its concurrency budget, so their peaks can coincide and the
 // runner has to hold all of them.
@@ -133,7 +133,7 @@ func (f Forecaster) fitMemory(projects []*types.Project, durations []int64, n, l
 // The per-project figures being summed are FLOORS, and this is the consumer that
 // pays when one is too low: a shard that fits on paper still takes its runner
 // down, which is the exact failure this packing exists to prevent. They used to be
-// much worse than floors - a target's processes were folded as a maximum on the
+// much worse than floors: a target's processes were folded as a maximum on the
 // premise that they run in sequence, so a parallel suite whose real footprint was
 // 3GB recorded 1.2GB (see types/peakrss.go). That is fixed at the source now by
 // sampling the process tree, but history written before the fix still carries the

@@ -2,8 +2,8 @@ package types
 
 // TimeLayout names a timestamp format a time\format or time\parse call uses.
 //
-// Go's reference-layout scheme - spelling a format by writing out the reference
-// instant, "2006-01-02T15:04:05Z07:00" - is unguessable for anyone who has not
+// Go's reference-layout scheme (spelling a format by writing out the reference
+// instant, "2006-01-02T15:04:05Z07:00") is unguessable for anyone who has not
 // written Go, and mistyping one digit yields a format that parses and renders the
 // wrong thing. These cases name the layouts Go's own time package defines, so a
 // magusfile writes TimeLayout.rfc3339 instead.

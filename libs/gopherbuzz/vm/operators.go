@@ -698,7 +698,7 @@ func listMethod(vm *VM, list Value, name string) *directObj {
 			return listValue(cp, lo.Mut), nil
 		})
 	case "fill":
-		// fill(value, start: int?, len: int?) - upstream fills a RANGE, defaulting to
+		// fill(value, start: int?, len: int?): upstream fills a RANGE, defaulting to
 		// the whole list. Ignoring start/len silently filled everything, which passes
 		// the simple case and quietly corrupts the windowed one.
 		return newDirect("list.fill", func(_ context.Context, args []Value) (Value, error) {
@@ -756,12 +756,12 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 	switch name {
 	// "len" and "size" are the same count. The checker has always typed map.len as
 	// Int (see inferMember's MapType case) while the VM only answered to "size", so
-	// m.len() type-checked and then died at runtime with "null is not callable" -
+	// m.len() type-checked and then died at runtime with "null is not callable",
 	// the worst shape of bug, since the checker actively vouched for it.
 	case "len", "size":
 		// Builtins otherwise win over stored keys (see the caller), but a map is also
 		// how an object like buffer.Buffer is modelled, and such a type defines its
-		// own len - Buffer's even takes an alignment argument. Yield to a stored entry
+		// own len; Buffer's even takes an alignment argument. Yield to a stored entry
 		// rather than shadowing it; "size" keeps the old unconditional behavior since
 		// nothing stores that name.
 		if name == "len" {
@@ -812,7 +812,7 @@ func mapMethod(vm *VM, m Value, name string) *directObj {
 	case "map":
 		// Upstream: "Returns a map made from applying the callback to each key-value
 		// pair." The callback yields the new entry as a record with `key` and `value`
-		// members, which an anonymous `.{ key = ..., value = ... }` literal builds - so
+		// members, which an anonymous `.{ key = ..., value = ... }` literal builds, so
 		// the result may arrive as a map or, when it resolved to a named object, as an
 		// instance. Both are read through getMember.
 		return newDirect("map.map", func(ctx context.Context, args []Value) (Value, error) {
@@ -993,8 +993,8 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 	switch name {
 	case "len":
 		// BYTES, matching upstream (src/builtin/str.zig: `@intCast(str.string.len)`).
-		// This counted runes, which measured every non-ASCII or binary string short -
-		// a 16-byte MD5 digest reported 15 - and did so silently. utf8Len is the
+		// This counted runes, which measured every non-ASCII or binary string short:
+		// a 16-byte MD5 digest reported 15, and did so silently. utf8Len is the
 		// codepoint count, and upstream has both for exactly this reason.
 		return newDirect("str.len", func(_ context.Context, _ []Value) (Value, error) {
 			return IntValue(int64(len(str))), nil
@@ -1087,12 +1087,12 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 			}
 			// EVERY occurrence, matching upstream: src/builtin/str.zig's replace calls
 			// Zig's std.mem.replaceOwned, which substitutes throughout. This substituted
-			// only the first for a long time, and the damage was quiet rather than loud -
+			// only the first for a long time, and the damage was quiet rather than loud:
 			// an escaper is the shape that hides it best. docs/lib/feed.buzz escapes HTML
 			// as s.replace("&", "&amp;").replace("<", "&lt;"), which encoded the FIRST
 			// ampersand of a document and left the rest raw; spells/github/actions
 			// escapeData encoded the first newline of a workflow command and let the
-			// runner end the command at the second. Nothing failed - the output was just
+			// runner end the command at the second. Nothing failed: the output was just
 			// wrong. .github/actions/advice/version-floor.buzz still carries the
 			// workaround it forced: .replace("\"", ...) written twice to strip two quotes,
 			// now a harmless no-op on the second call.
@@ -1209,7 +1209,7 @@ func strMethod(vm *VM, s Value, name string) *directObj {
 // not one. Mirrors listMethod/mapMethod.
 //
 // A range runs from Lo TOWARD Hi and stops before it, in either direction, which
-// is what foreach does - so `10..0` yields 10 down to 1 and has length 10. low()
+// is what foreach does, so `10..0` yields 10 down to 1 and has length 10. low()
 // and high() report the operands as written, not the smaller and larger of them.
 func rngMethod(vm *VM, r Value, name string) *directObj {
 	ro := vm.asRange(r)
@@ -1298,14 +1298,14 @@ func callValue(vm *VM, ctx context.Context, callee Value, args []Value) (Value, 
 	case tagFun:
 		// Parented to the caller's tree, so a collectable the callback allocates joins
 		// the one registry and is swept later. Detached, its registry died with this
-		// VM and its collect() never ran at all - measured: five Tracked built inside
+		// VM and its collect() never ran at all; measured: five Tracked built inside
 		// a map callback and then dropped collected ZERO times, where the same five
 		// built outside collected five.
 		//
 		// It also makes the sweep SAFER, not riskier: CollectUnreachable walks the
 		// chain from the requesting VM up to the root, so an object the caller still
 		// holds is marked even when the sweep is armed in here. (A detached VM was not
-		// collecting live outer objects, contrary to a review finding - registry and
+		// collecting live outer objects, contrary to a review finding: registry and
 		// roots were both scoped to this VM, so a sweep could only reach its own
 		// garbage. The defect was the orphaning, not premature collection.)
 		callVM := NewVM(ctx)

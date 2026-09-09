@@ -47,7 +47,7 @@ func TestResolveOutput(t *testing.T) {
 }
 
 // -o template renders against the JSON-normalized value, so template field names are
-// the json-tag keys (lowercase here), exactly what -o json emits - NOT the PascalCase
+// the json-tag keys (lowercase here), exactly what -o json emits, NOT the PascalCase
 // Go fields. The fixtures carry json tags to exercise that contract.
 func TestWriteTemplate(t *testing.T) {
 	type project struct {
@@ -84,7 +84,7 @@ func TestWriteTemplate(t *testing.T) {
 	assertTmpl("range with newline",
 		`{{range .projects}}{{.path}}={{.spell}}{{"\n"}}{{end}}`,
 		"api=go\nweb=typescript\n")
-	// join over a list field (now []any) - templateJoin handles it where strings.Join could not.
+	// join over a list field (now []any): templateJoin handles it where strings.Join could not.
 	assertTmpl("join helper",
 		`{{range .projects}}{{.path}}: {{join .deps ","}}{{"\n"}}{{end}}`,
 		"api: internal/db\nweb: \n")

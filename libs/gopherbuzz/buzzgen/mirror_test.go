@@ -42,7 +42,7 @@ func TestFieldType_Kinds(t *testing.T) {
 		{"uint64", reflect.TypeOf(uint64(0)), "int", "0"},
 
 		// A pointer is Go's optional, so it must arrive nullable and default to
-		// null - not to the pointed-to type's zero, which would assert presence.
+		// null, not to the pointed-to type's zero, which would assert presence.
 		{"pointer to struct", reflect.TypeOf(&inner{}), "inner?", "null"},
 		{"pointer to string", reflect.TypeOf(new(string)), "str?", "null"},
 

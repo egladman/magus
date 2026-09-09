@@ -26,7 +26,7 @@ var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
 //
 // Destinations are explicit arguments, never auto-detected, and writing into a
 // repo's agent-config dirs happens only through `install`. AGENTS.md is the one
-// file magus refuses to write - `install` prints the block for the developer to
+// file magus refuses to write: `install` prints the block for the developer to
 // paste instead.
 func agentCmd(ctx context.Context, args []string) error {
 	if len(args) == 0 {
@@ -100,11 +100,11 @@ func agentUsageErr() error {
 // are explicit, never inferred from an agent-host name: magus writes the
 // standard format where told and stays out of the host-specific business.
 // Absolute destinations are refused unless --global is set; the supported
-// way to install skills outside the working tree is `magus agent install
-// --tar | tar -xf - -C <absolute path>`.
+// way to install skills outside the working tree is
+// `magus agent install --tar | tar -xf - -C <absolute path>`.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
-	// The display flags are global, so every command takes them - one gap decays the
+	// The display flags are global, so every command takes them: one gap decays the
 	// whole convention. `agent install ... -s` previously died on an undefined flag,
 	// and with stderr redirected that looked exactly like a successful install: the
 	// skills were never written and nothing said so.
@@ -232,8 +232,8 @@ func printAgentInstallNextSteps(dir string, written, stale []string, form agent.
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
-	// Only when there is something to act on. Nothing is stale in the ordinary case -
-	// a fresh install, or an upgrade that renamed nothing - and a line that printed on
+	// Only when there is something to act on. Nothing is stale in the ordinary case
+	// (a fresh install, or an upgrade that renamed nothing), and a line that printed on
 	// every install is one a reader stops seeing by the third time, which is exactly
 	// when it finally matters. One line for the whole set, so a release that renames
 	// eight skills does not print eight lines.
@@ -285,8 +285,8 @@ const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself
 
 // agentSampleDoc returns an AGENTS.md starter for a developer to paste and own.
 //
-// The magus guidance arrives inside its begin/end markers - the same bytes
-// install prints - so `magus doctor` can grade it once pasted.
+// The magus guidance arrives inside its begin/end markers (the same bytes
+// install prints), so `magus doctor` can grade it once pasted.
 func agentSampleDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
@@ -314,7 +314,7 @@ func agentSampleCmd() error {
 //
 // BYTES, not tokens: a token count is only true for one tokenizer, and these
 // files are installed for whatever host the reader uses. Printed at all for
-// accountability - a surface that never states its own cost has no pressure on
+// accountability: a surface that never states its own cost has no pressure on
 // it to shrink.
 func reportContextCost(dir string, written []string) {
 	// Twins are counted separately, not folded in: only the primary is
@@ -368,8 +368,8 @@ func byteSize(n int64) string {
 // with the message telling the caller to pass the flag they had just passed.
 //
 // Fixed HERE rather than by adding an escape hatch to the catalog. That guard is
-// the library's own safety property - it also blocks "../../outside", which no
-// CLI flag should be able to switch off - so instead the absolute path is split
+// the library's own safety property (it also blocks "../../outside", which no
+// CLI flag should be able to switch off), so instead the absolute path is split
 // into the directory it names and the leaf inside it. The containment check the
 // catalog performs is then still meaningful: the write stays under the directory
 // the caller actually named.

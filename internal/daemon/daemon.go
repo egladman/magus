@@ -81,7 +81,7 @@ type Option func(*Daemon)
 
 // WithRuns supplies the daemon's live-run source (the run registry's Snapshot). When
 // set, the StatusService (GetStatus/StreamStatus) and the status SSE frame carry the per-target
-// execution state of every adopted run alongside the pool - the same status surface, more live state.
+// execution state of every adopted run alongside the pool: the same status surface, more live state.
 func WithRuns(fn func() []types.StatusRun) Option {
 	return func(d *Daemon) { d.runs = fn }
 }
@@ -115,8 +115,8 @@ func New(opts mcp.Options, options ...Option) *Daemon {
 // activityWorkspaces is the trail source the ActivityService reads: the bridge workspace plus
 // every workspace the registry reports loaded, deduplicated by cache dir (the registry adopts the
 // bridge workspace too, and reading one trail twice would double every event on the page). The
-// bridge workspace is unconditional so a daemon whose registry is empty - a single-workspace
-// daemon, or a bridge started without the multi-workspace server - still serves its own trail.
+// bridge workspace is unconditional so a daemon whose registry is empty (a single-workspace
+// daemon, or a bridge started without the multi-workspace server) still serves its own trail.
 func (s *Daemon) activityWorkspaces() func() []activityhandler.Workspace {
 	bridge := activityhandler.Workspace{Root: s.opts.Magus.Root(), CacheDir: s.opts.Magus.CacheDir()}
 	return func() []activityhandler.Workspace {
@@ -179,14 +179,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No
-	// routes or listener are mounted here - that is this package's job.
+	// routes or listener are mounted here; that is this package's job.
 	mcpHandler, err := mcp.HTTPHandler(opts)
 	if err != nil {
 		return err
 	}
 
 	// Serve the MCP Streamable-HTTP handler and any health routes from one
-	// mux/listener so health probes share the MCP port - no second http.Server.
+	// mux/listener so health probes share the MCP port: no second http.Server.
 	//
 	// httpx.GuardRebind and the bearer guard are applied only to /mcp. Health
 	// routes are left unguarded so container orchestrators can probe them
@@ -200,7 +200,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	}
 	// Cap the MCP body too: the connector-token client reaches /mcp, not the Connect
 	// services, and mark3labs' streamable handler reads the body with an uncapped
-	// io.ReadAll - so the connectReadMax above does not cover this surface.
+	// io.ReadAll, so the connectReadMax above does not cover this surface.
 	cappedMCP := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		handler.LimitRequestBody(w, r)
 		mcpHandler.ServeHTTP(w, r)
@@ -211,7 +211,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	// the server port. Built here (not only inside the console block below) so /livez and
 	// /readyz get the same allow-list even when the console mount is disabled: a browser
 	// client (the console PWA) needs to read them cross-origin, but they stay otherwise
-	// unguarded - no rebind check, no bearer token - so an orchestrator can still probe them
+	// unguarded (no rebind check, no bearer token), so an orchestrator can still probe them
 	// freely. CORSAllow itself only ever reflects an allow-listed Origin, never "*", so this
 	// widens readability, not who may write.
 	siteOrigin, _ := opts.SiteOrigin()
@@ -274,8 +274,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			// The bridge routes share the same auth and DNS-rebind middleware as
 			// /mcp, header-only included: the explorer authenticates every /api
-			// call - fetches AND the SSE event stream (a fetch()-based reader, not
-			// an EventSource) - with an Authorization header, so the token never
+			// call (fetches AND the SSE event stream, a fetch()-based reader, not
+			// an EventSource) with an Authorization header, so the token never
 			// rides in the URL. CORS still advertises the Authorization header for
 			// the cross-origin preflight.
 			// Read handlers are built ONCE and reused for two audiences: the loopback
@@ -289,7 +289,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			patchH := diffhandler.NewPatchHandler(svc, log)
 			contextH := diffhandler.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
-			// below and the magus_diff MCP tool read the SAME object - that sharing is the
+			// below and the magus_diff MCP tool read the SAME object: that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
 			diffSessions := opts.DiffSessions
@@ -314,8 +314,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
-			// the same two sources the console already trusts - the service for structure and
-			// live pool state, the output store for each node's last outcome and its ref - so
+			// the same two sources the console already trusts (the service for structure and
+			// live pool state, the output store for each node's last outcome and its ref), so
 			// it introduces no third notion of what ran.
 			planH := planhandler.NewHandler(svc, outputStore, opts.Magus.Root(), log)
 			ledgerH := ledgerhandler.NewHandler(opts.Ledger, log)
@@ -326,7 +326,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
-			// (magus.status.v1alpha1.StatusService/GetStatus, mounted below) is its full replacement -
+			// (magus.status.v1alpha1.StatusService/GetStatus, mounted below) is its full replacement:
 			// it serves the same live snapshot plus observing_since and config on the wire contract,
 			// and the console reads it there now.
 			bridgeMux.Handle("/api/v1/events", cors(eventsH))
@@ -336,17 +336,17 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Plain JSON over the same /api guards as the rest.
 			bridgeMux.Handle("/api/v1/insight", cors(insightH))
 			// Diff surface: the working tree's uncommitted changes as one unified patch.
-			// Loopback-only, alongside the other /api reads - deliberately NOT added to the LAN
+			// Loopback-only, alongside the other /api reads: deliberately NOT added to the LAN
 			// share subset below, because a working diff is unreviewed source and a share link
 			// is handed to a phone.
 			bridgeMux.Handle("/api/v1/diff/patch", cors(patchH))
 			bridgeMux.Handle("/api/v1/diff/context", cors(contextH))
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
-			// from /api/v1/diff/patch because it is far more expensive - see Handler.
+			// from /api/v1/diff/patch because it is far more expensive; see Handler.
 			bridgeMux.Handle("/api/v1/diff", cors(diffH))
 			// The human's half of a paired review. Reachable only from the console and the
 			// CLI, which is what lets it stamp every write as human without trusting the
-			// payload - an agent reaches the session through MCP, never through here.
+			// payload: an agent reaches the session through MCP, never through here.
 			bridgeMux.Handle("/api/v1/diff/session", cors(diffSessionH))
 			// Which review this branch has open, and what colleagues have already said on it.
 			// Its own route because it crosses the network to a forge: a reader must never wait
@@ -357,8 +357,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// already been fetched rather than going to the network for more.
 			bridgeMux.Handle("/api/v1/diff/branches", cors(diffBranchesH))
 			// Does this still pass? Asked of the machine the code is on, which is the one review
-			// question a forge structurally cannot answer. Loopback only and MUTATING - it starts
-			// work - so it sits with the diff routes rather than in the LAN share subset, and the
+			// question a forge structurally cannot answer. Loopback only and MUTATING (it starts
+			// work), so it sits with the diff routes rather than in the LAN share subset, and the
 			// work it can start is bounded by what the magusfile declares.
 			bridgeMux.Handle("/api/v1/diff/run", cors(diffRunH))
 			// Human run view: every plain run has a plan, and an agent-declared one is not the
@@ -367,13 +367,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
 			// Lease ledger: the plan an orchestrating agent DECLARED, read straight off
-			// the store the magus_ledger MCP tool writes. Read-only here - the write door is
-			// the tool - and magus enforces none of it.
+			// the store the magus_ledger MCP tool writes. Read-only here (the write door is
+			// the tool), and magus enforces none of it.
 			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))
 			// Attention queue: GET lists the open requests, POST disposes one. The write is a
 			// PERSON closing a block through their own surface (docs/doctrine.md, "Manual on
 			// purpose"), which is why it sits here on the loopback bridge and NOT in the LAN
-			// share subset below - a share link is handed to a phone, and disposing a request
+			// share subset below: a share link is handed to a phone, and disposing a request
 			// is exactly the judgment a link cannot be trusted with.
 			bridgeMux.Handle("/api/v1/attention", cors(attentionH))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
@@ -382,7 +382,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// shareGuarded is the exact read surface the LAN share listener exposes,
 			// each entry guarded per-session by the share token (share.Manager wraps
 			// them). It is deliberately a subset of the loopback bridge: NO /api/v1/graph,
-			// NO /mcp, NO mutating JobService - a leaked share link reaches only these
+			// NO /mcp, NO mutating JobService: a leaked share link reaches only these
 			// read routes. The two Connect read services (activity, metrics) are added
 			// to this map below, where their handlers are built.
 			shareGuarded := map[string]http.Handler{
@@ -423,7 +423,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Activity-trail Connect service for the /dashboard + log viewer: recent agent
 			// and governance activity, read-only over every loaded workspace's trail. Mounted
 			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
-			// browser client) and unconditionally - the trail is readable even when metrics are off.
+			// browser client) and unconditionally: the trail is readable even when metrics are off.
 			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()), connectReadMax)
 			activityAllowed := allowed
 			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
@@ -444,8 +444,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
 
-			// Tool Connect service: the toolchain view - which binaries this workspace's
-			// spells drive, what each reported, and the window it is held to.
+			// Tool Connect service: the toolchain view (which binaries this workspace's
+			// spells drive, what each reported, and the window it is held to).
 			//
 			// Deliberately NOT in shareGuarded, unlike every other read service here.
 			// Read-only is not the bar for that surface: every other entry answers from
@@ -461,7 +461,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// the SAME cached scan through the same console service. The console dashboard reads
 			// it here; the JSON route stays mounted above for its documented non-console callers.
 			// Same cross-origin guards as the other read services, and read-only, so it joins the
-			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
+			// share read surface too: the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
 			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, insightConnectHandler))))
@@ -469,11 +469,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
 			// Viewer Connect service: the typed twin of the JSON run-browser routes this
-			// replaced (/api/v1/outputs, /output, /runs, /run - retired in 7ce1896d4, see
+			// replaced (/api/v1/outputs, /output, /runs, /run; retired in 7ce1896d4, see
 			// docs/concepts/compatibility.md), reading the SAME two stores.
 			//
 			// Read-only, so it takes the read bearer and joins the share surface the way its
-			// retired JSON twins did - a shared phone renders the run browser, and it must keep
+			// retired JSON twins did: a shared phone renders the run browser, and it must keep
 			// reaching the same runs whichever route the page settles on.
 			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore), connectReadMax)
 			httpServer.Handle(viewerPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
@@ -498,7 +498,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
-			// cross-origin allowance as the read services - never unauthenticated - so a browser
+			// cross-origin allowance as the read services (never unauthenticated), so a browser
 			// client can trigger maintenance without the daemon exposing an open action endpoint.
 			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version), connectReadMax)
 			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, jobHandler))))
@@ -507,7 +507,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
 			// listener serving shareGuarded (the read surface) under a fresh read-only
 			// token. The trigger is loopback-only (RequireLoopbackPeer, atop the
-			// loopback-bound listener) and requires the existing cli/connector bearer -
+			// loopback-bound listener) and requires the existing cli/connector bearer:
 			// only the local, already-authenticated console can open a share. CORS wraps
 			// the bearer so the console's cross-origin POST preflight is answered here.
 			// The manager's parent is ctx, so every open share listener is torn down on
@@ -533,7 +533,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// adds the SPA fallback so the clean /console/<surface>/ surface paths resolve to the
 			// shell, and a strict CSP on the HTML. Static serving stays unauthenticated by design
 			// - the app shell is not a secret; it reads the bearer token from the URL fragment and
-			// replays it on the guarded /api and Connect routes above - but it is wrapped in the
+			// replays it on the guarded /api and Connect routes above, but it is wrapped in the
 			// same GuardRebind the rest of the loopback surface uses, so a forged cross-origin Host
 			// cannot reach it. Mounted only when a build was found; otherwise the daemon still runs
 			// (MCP + data routes) and /console/ just 404s until a console is built.
@@ -544,13 +544,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			// Token management service: the typed surface the console Settings UI uses to LIST,
 			// CREATE, and REVOKE console and viewer tokens, and to see/revoke the active share
-			// token. CreateToken can mint - it is not view-and-revoke only - but only the two
+			// token. CreateToken can mint (it is not view-and-revoke only), but only the two
 			// scopes a browser has any business minting (console, console-read); the operator and
 			// connector classes are refused there by the handler itself (internal/handler/token),
 			// regardless of who is asking. What guards against a compromised browser forging a
 			// durable /mcp credential is the GUARD tier below, not an absence of a mint path. It
 			// is a second door onto the same connector store the CLI writes and the same shareMgr
-			// the share endpoint drives - never a second store.
+			// the share endpoint drives, never a second store.
 			//
 			// The mount enforces the three-tier credential hierarchy at the GUARD, so the handler
 			// stays dumb:
@@ -558,7 +558,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			//     (VerifyCLIBearer, not the generic VerifyBearer). Whoever holds it owns the daemon,
 			//     so every token op, mint included, is operator-tier.
 			//   - connector token (MCP client): valid on /mcp and the console data services, but
-			//     rejected on this mount - a client credential must never mint or revoke another
+			//     rejected on this mount; a client credential must never mint or revoke another
 			//     credential (privilege self-replication).
 			//   - share token (read-only viewer): only ever valid on the LAN share listener; this
 			//     service is deliberately NOT in shareGuarded, so a shared phone can never reach
@@ -570,8 +570,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// lives in a store the handler never opens, so it is neither listed, mintable, nor
 			// revocable here), preventing lockout.
 			// The audit interceptor classifies every RPC on this service by its leading verb
-			// (internal/handler/trailrpc) and records the mutating ones - CreateToken and
-			// RevokeToken today - to the trail, so a browser-reachable mint or revoke is always
+			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
+			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
 			// audited. The actor is stamped "operator" from the mount tier (this surface is
 			// cli-guarded), never read from a caller-supplied field. Reads (ListTokens) are not
 			// recorded. See internal/handler/trailrpc for the pattern and the arch-test ratchet
@@ -584,7 +584,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Memory management service: the typed surface the console Settings UI uses to LIST,
 			// READ, EDIT, and DELETE the durable magus_memory files (status, progress, decisions).
 			// It is a second door onto the EXACT on-disk files the magus_memory MCP tool writes,
-			// never a second store - the human edit/delete surface is the safety valve against agent
+			// never a second store: the human edit/delete surface is the safety valve against agent
 			// memory growing unbounded (it is append-heavy and never rotated by default). Mounted on
 			// the loopback listener behind the standard bearer guard and deliberately NOT in
 			// shareGuarded: memory is the operator's own working notes, not a read surface for a
@@ -600,8 +600,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
 			// Notes service: the typed surface the console's Notes view uses to READ the
-			// workspace's human-authored notes. Read-only by construction - the contract has no
-			// write RPC - because a note's value is the guarantee that a person wrote it, and a
+			// workspace's human-authored notes. Read-only by construction (the contract has no
+			// write RPC), because a note's value is the guarantee that a person wrote it, and a
 			// browser write would put an unattributable author on the one node class nothing in
 			// the repository corroborates. The way in stays `magus notes edit`, in an editor,
 			// committed under the author's name.
@@ -617,8 +617,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, notesHandler))))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
-			// Graph service: the typed surface for the knowledge graph's own verbs - query,
-			// resolve, explain, path, stats. It exists so the browser stops reimplementing them;
+			// Graph service: the typed surface for the knowledge graph's own verbs (query,
+			// resolve, explain, path, stats). It exists so the browser stops reimplementing them;
 			// the Graph Explorer's filter was a second, divergent copy of the query grammar,
 			// scoring by raw degree over a payload /api/v1/graph had already sent whole. That
 			// route stays: a bulk subgraph document is a different job from ranked retrieval.
@@ -630,7 +630,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			//
 			// VerifyConsoleBearer, NOT the read-tier verifier its read-only contract would
 			// suggest. This service and /api/v1/graph are two doors onto ONE body of data, and
-			// /api/ is mounted at the write tier - so the read tier here would let a viewer
+			// /api/ is mounted at the write tier, so the read tier here would let a viewer
 			// credential page the whole graph through QueryNodes after being refused the bulk
 			// route, which is a hole rather than a convenience. The tiers move together or the
 			// weaker one decides.

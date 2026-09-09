@@ -36,8 +36,8 @@ func TestCommandRender(t *testing.T) {
 //
 // It reads the declarations out of the source rather than comparing AllCommands against a
 // second hand-written list. That is not pedantry: the hand-written version compared LENGTHS
-// against a copy of AllCommands itself, so forgetting a command in both places - which is
-// exactly what forgetting looks like - kept the counts equal and the test green.
+// against a copy of AllCommands itself, so forgetting a command in both places (which is
+// exactly what forgetting looks like) kept the counts equal and the test green.
 // ServerReload was declared, routed on by serverCmd, and absent from the registry for as
 // long as it existed.
 //

@@ -4,13 +4,13 @@
 //
 // Deliberately a THIRD listener, distinct from the daemon's loopback-bound standing
 // ones: it binds the machine's LAN IPv4 on an ephemeral port and exists only while a
-// share is active. There is no loopback guard - the phone is remote, which is the
-// point - so the TOKEN is the sole gate, and listener and token are created and
+// share is active. There is no loopback guard (the phone is remote, which is the
+// point), so the TOKEN is the sole gate, and listener and token are created and
 // destroyed together so neither outlives the other.
 //
 // This package is the subject of two figures on the docs site; edit them alongside it.
-// magus:diagram daemon-share - the boxes "/api/v1/share" and "LAN listener".
-// magus:diagram daemon-http - the box "/api/v1/share".
+// magus:diagram daemon-share (the boxes "/api/v1/share" and "LAN listener").
+// magus:diagram daemon-http (the box "/api/v1/share").
 //
 // The console app is served from the SAME origin as its API on this listener, so
 // the phone's browser never issues a cross-origin request and CORS never engages.
@@ -48,8 +48,8 @@ const defaultTTL = 15 * time.Minute
 // MaxTTL is 90 days because a wall display outlives any session and a link expiring
 // nightly turns an ambient dashboard into a daily chore.
 //
-// It stays BOUNDED, and short of a year. This is a bearer credential - whoever holds
-// the URL is the audience - and URLs end up pasted into chat, photographed off a
+// It stays BOUNDED, and short of a year. This is a bearer credential (whoever holds
+// the URL is the audience), and URLs end up pasted into chat, photographed off a
 // screen, left in a kiosk browser's history. An unexpiring share makes each of those
 // permanent.
 const (
@@ -71,7 +71,7 @@ type iface struct {
 // interface then address order: the interface must be up and not loopback, and
 // the address must be an IPv4 in an RFC-1918 private range (10/8, 172.16/12,
 // 192.168/16). Link-local (169.254/16), loopback, IPv6, and public addresses
-// are all skipped. It reports false when nothing qualifies - the caller turns
+// are all skipped. It reports false when nothing qualifies; the caller turns
 // that into a clear "no LAN interface" error rather than sharing on a public or
 // nonexistent address.
 func pickLANIPv4(ifaces []iface) (netip.Addr, bool) {
@@ -234,7 +234,7 @@ func (m *Manager) resolveTTL(ttl time.Duration) time.Duration {
 // uses the manager's configured default, and any other value is clamped to
 // [MinTTL, MaxTTL]. consoleDir must contain the built console.
 // No ctx parameter on purpose: a share OUTLIVES the request that opened it, so accepting
-// the caller's context invites the wrong wiring - the HTTP handler passes r.Context(),
+// the caller's context invites the wrong wiring: the HTTP handler passes r.Context(),
 // which would tear the share down the instant that POST returned.
 func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl time.Duration) (Session, error) {
 	addr, err := m.selectAddr()
@@ -297,11 +297,11 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// The TTL and the parent lifetime are one context: whichever fires first
 	// (timeout, daemon shutdown, or a Close/supersede cancel) tears the listener
 	// down. Closing the listener and expiring the token are therefore the same
-	// event - there is never a live listener with a dead token or vice versa.
+	// event: there is never a live listener with a dead token or vice versa.
 	//
 	// cancel is stored on active.cancel below (m.cur.cancel) and invoked later by
 	// Manager.Close, Manager.CloseIf, and the supersede branch just below on the NEXT
-	// Start - not leaked, just called through a field. This used to carry a
+	// Start, not leaked, just called through a field. This used to carry a
 	// //nolint:gosec for G118; gosec no longer flags it, so nolintlint reported the
 	// directive as unused and it is gone. The reasoning stays: it is why the pattern
 	// is safe, not merely why a linter was quiet.
@@ -310,7 +310,7 @@ func (m *Manager) Start(consoleDir string, guarded map[string]http.Handler, ttl 
 	// Supersede any current share and publish this one under the lock BEFORE starting
 	// Serve and the shutdown watcher. Publishing first closes a race on teardown: if
 	// the parent context is already cancelled (daemon shutting down), the watcher below
-	// must find m.cur pointing at THIS session so Close/CloseIf can tear it down - a
+	// must find m.cur pointing at THIS session so Close/CloseIf can tear it down: a
 	// listener published only after the goroutines start could serve on an address no
 	// management surface knows to revoke. There is still exactly one live share:
 	// superseding cancels the previous one before this replaces it.
@@ -419,7 +419,7 @@ func (g *sessionGuard) admit(next http.Handler) http.Handler {
 //
 // CAVEAT: the identity is the source IP, which is NOT stable across a NAT rebind or a
 // Wi-Fi-to-cellular handoff. A phone that changes IP mid-session gets 403 and the
-// operator must re-share - the accepted cost of making a sniffed plaintext token
+// operator must re-share, the accepted cost of making a sniffed plaintext token
 // useless from another device. A rejected device never tears the share down.
 func (g *sessionGuard) bindDevice(host string) bool {
 	g.bindMu.Lock()
@@ -440,7 +440,7 @@ func (g *sessionGuard) bindDevice(host string) bool {
 //
 // The dedupe decision runs synchronously under the lock (so "once per host" holds
 // even when several requests race), but the disk write is spawned in a goroutine so
-// recording genuinely never blocks the response the phone is waiting on - the reason
+// recording genuinely never blocks the response the phone is waiting on, the reason
 // the request fields are copied out before the goroutine starts.
 func (g *sessionGuard) recordFirstUse(r *http.Request) {
 	if g.m.trailDir == "" {
@@ -461,7 +461,7 @@ func (g *sessionGuard) recordFirstUse(r *http.Request) {
 	// the context is carried for the secret resolver Append redacts against, not for
 	// cancellation, and a cancelled ctx would still redact correctly but reads as a
 	// deadline being ignored. A share listener carries no resolver today, so redaction
-	// degrades to a no-op - which is the documented contract, not an oversight.
+	// degrades to a no-op, which is the documented contract, not an oversight.
 	trailCtx := context.WithoutCancel(r.Context())
 	// KindTokenLifecycle is the closest existing activity kind: a share token being
 	// exercised by a remote device is a lifecycle event of that token. No new proto
@@ -507,7 +507,7 @@ func (m *Manager) Close() {
 // that read the active fingerprint via Active and then called Close could, in the
 // window between the two, race a supersede and tear down a DIFFERENT share minted in
 // the meantime. CloseIf re-checks identity while holding the lock, so it revokes
-// exactly the share the caller named or nothing - a lost race leaves the new share
+// exactly the share the caller named or nothing: a lost race leaves the new share
 // alive and returns false (the revoke maps that to NotFound).
 func (m *Manager) CloseIf(fingerprint string) bool {
 	m.mu.Lock()

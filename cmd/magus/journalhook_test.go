@@ -160,7 +160,7 @@ func TestWithSessionJournalStampsTheLeaseOnEveryVerb(t *testing.T) {
 // The lease a forwarded run carries beats the environment, because on an adopted run this
 // code executes in the DAEMON and the environment it would otherwise read belongs to whoever
 // started the daemon. Without the preference every daemon-adopted run in a fleet is attributed
-// to one stranger, or to nobody - the defect this wiring exists to close.
+// to one stranger, or to nobody: the defect this wiring exists to close.
 func TestWithSessionJournalPrefersTheForwardedLease(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=fleet/daemon-env")

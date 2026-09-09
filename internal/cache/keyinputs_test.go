@@ -20,7 +20,7 @@ import (
 // toolLine is a verbatim `tool:` key input, not an invented one: hash.go's
 // hashStepInputs writes "tool:" + v (hash.go:191) for each Step.ToolVersions entry, and
 // probeTools in run.go builds every such entry as <spell>:<tool>:<token> (run.go:842).
-// The shape matters - the last colon is the only thing separating the tool from its
+// The shape matters: the last colon is the only thing separating the tool from its
 // version token, and a fixture that spells it any other way tests a producer that does
 // not exist.
 const toolLine = "tool:go:go:go1.25.0"
@@ -97,7 +97,7 @@ func TestKeyInputsRoundTripByRef(t *testing.T) {
 }
 
 // TestKeyInputsAbsent: a step persisted before key input persistence resolves but has no
-// lines - fs.ErrNotExist, distinct from an unresolvable ref.
+// lines: fs.ErrNotExist, distinct from an unresolvable ref.
 func TestKeyInputsAbsent(t *testing.T) {
 	s := NewOutputStore(t.TempDir())
 	ref := mustPersist(t, s, "cafebabecafebabe", []byte("ok\n"), OutputDescriptor{Project: "p"})
@@ -181,7 +181,7 @@ func TestDiffKeyInputs(t *testing.T) {
 }
 
 // TestDiffKeyInputsKeepsStoredClassOrder: the projection lists classes the way `--against`
-// has always rendered them - stored-key order first - even though the pairing it reads
+// has always rendered them (stored-key order first) even though the pairing it reads
 // leads with the live key. A charm dropped since the stored run is reached only by the
 // pairing's recorded-only pass, so ordering by the change slice would print it after the
 // src class it precedes in the key.
@@ -224,8 +224,8 @@ func changedInputs(changes []KeyInputChange) []string {
 	return out
 }
 
-// TestHashStepLinesMatchesHash: the collected lines are the exact pre-hash input -
-// re-hashing them reproduces the cache key - and the nil path returns the same key.
+// TestHashStepLinesMatchesHash: the collected lines are the exact pre-hash input
+// (re-hashing them reproduces the cache key), and the nil path returns the same key.
 func TestHashStepLinesMatchesHash(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
@@ -250,7 +250,7 @@ func TestHashStepLinesMatchesHash(t *testing.T) {
 
 // TestRunPersistsKeyInputsAndAgainstDiffNamesTheDrift is Phase 2's acceptance check:
 // a real Run persists the key's pre-hash lines beside its output, and diffing a
-// LATER live key against them names exactly what drifted - the edited source file
+// LATER live key against them names exactly what drifted: the edited source file
 // as a src line, the changed allowlisted env var as an env line.
 func TestRunPersistsKeyInputsAndAgainstDiffNamesTheDrift(t *testing.T) {
 	root, _, c := newMutableCache(t)
@@ -322,7 +322,7 @@ func TestFirstKeyInputChangePairsAMovedToolVersion(t *testing.T) {
 	step := makeStep(root)
 	step.Target = "build"
 
-	// A ToolVersions entry carries no class label - hashStepInputs prefixes "tool:" - so
+	// A ToolVersions entry carries no class label (hashStepInputs prefixes "tool:"), so
 	// this is exactly the <spell>:<tool>:<token> string probeTools appends.
 	step.ToolVersions = []string{"go:go:go1.25.0"}
 	recorded := producedKeyInputs(t, c, &step)
@@ -419,7 +419,7 @@ func TestFirstKeyInputChangePairsInputsByIdentity(t *testing.T) {
 
 // TestFirstKeyInputChangeReportsLiveOrderFirst: the slice leads with the earliest class
 // hashStepInputs writes, so a bumped keyVersion is named ahead of the source hashes it
-// explains - every src line moves when the key layout does, and blaming a file for that
+// explains: every src line moves when the key layout does, and blaming a file for that
 // sends the reader after the wrong thing.
 func TestFirstKeyInputChangeReportsLiveOrderFirst(t *testing.T) {
 	t.Parallel()
@@ -427,8 +427,8 @@ func TestFirstKeyInputChangeReportsLiveOrderFirst(t *testing.T) {
 	live := []string{"keyVersion:4", "target:build", "src:svc/a.go:zzz:0", "src:svc/b.go:bbb:0"}
 
 	got := FirstKeyInputChange(recorded, live)
-	// The bumped keyVersion, the edited source, and the dropped dep - three, not the five
-	// an unpaired keyVersion would report - and the recorded-only dep trails the live ones.
+	// The bumped keyVersion, the edited source, and the dropped dep (three, not the five
+	// an unpaired keyVersion would report), and the recorded-only dep trails the live ones.
 	require.Len(t, got, 3)
 	assert.Equal(t, []KeyInputChange{
 		{Class: "keyVersion", Input: "keyVersion", Recorded: "3", Live: "4"},
@@ -438,7 +438,7 @@ func TestFirstKeyInputChangeReportsLiveOrderFirst(t *testing.T) {
 }
 
 // TestFirstKeyInputChangeMarksAbsence: a class with no value slot can only appear or
-// disappear, and the *Absent flags are what say which - an empty value does not.
+// disappear, and the *Absent flags are what say which; an empty value does not.
 func TestFirstKeyInputChangeMarksAbsence(t *testing.T) {
 	t.Parallel()
 	got := FirstKeyInputChange(nil, []string{"charm:rw"})
@@ -451,7 +451,7 @@ func TestFirstKeyInputChangeMarksAbsence(t *testing.T) {
 }
 
 // TestKeyInputsRedactBothSidesOfAComparison: a registered credential can ride a class
-// DigestEnvValues does nothing for - an `arg:` line here, exactly as a magusfile passing a
+// DigestEnvValues does nothing for: an `arg:` line here, exactly as a magusfile passing a
 // token through --token= produces. The store redacts at write, so the live side has to
 // redact too or the two never agree again, and `describe target --cache` reports a
 // difference every run that no edit can settle.

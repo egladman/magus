@@ -39,8 +39,8 @@ func (c *Cache) LastEntryForTarget(projectPath, target string) (*Manifest, strin
 // behind that key. KeyInputs is nil when the entry predates key-input persistence, which
 // leaves the key comparable but nothing line-level to name.
 //
-// [RecordedRun.WouldReplay] answers the separate question of whether some entry - not
-// necessarily this one - would replay for a given key.
+// [RecordedRun.WouldReplay] answers the separate question of whether some entry (not
+// necessarily this one) would replay for a given key.
 type RecordedRun struct {
 	Key       string
 	CreatedAt time.Time
@@ -59,7 +59,7 @@ type RecordedRun struct {
 //
 // The entry it finds need not be this one. [RecordedRun.Key] names only the NEWEST entry,
 // so an edit followed by a revert leaves Key pointing at the edited run while the key a run
-// now mints belongs to an older entry that still hits - and that is the case a verdict read
+// now mints belongs to an older entry that still hits, and that is the case a verdict read
 // off the newest entry alone gets wrong.
 //
 // False on a zero RecordedRun and on an empty key.
@@ -74,7 +74,7 @@ func (r RecordedRun) WouldReplay(key string) bool {
 // LastRecordedRun returns the most recent entry recorded for target in projectPath, the
 // comparison peer for "why would a run here MISS": its key inputs are what
 // [FirstKeyInputChange] pairs the live ones against. Charms are deliberately not part of the
-// lookup - an entry recorded under different charms is still the last thing this target
+// lookup: an entry recorded under different charms is still the last thing this target
 // stored here, and the charm lines then show up as the difference that explains the miss.
 //
 // Wraps fs.ErrNotExist when nothing is recorded for that target.
@@ -95,7 +95,7 @@ func (c *Cache) LastRecordedRun(projectPath, target string) (RecordedRun, error)
 	return run, nil
 }
 
-// lastEntry returns the newest manifest for projectPath - optionally filtered to target -
+// lastEntry returns the newest manifest for projectPath (optionally filtered to target)
 // and the cache key it is stored under.
 //
 // The key is the FILENAME, never the manifest body: readManifest accepts an empty Hash as

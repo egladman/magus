@@ -122,7 +122,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 		assert.Contains(t, got.Details[0], "idle ")
 	})
 
-	// Not yet loaded is normal - a workspace loads on first use - so this stays OK
+	// Not yet loaded is normal (a workspace loads on first use), so this stays OK
 	// and only says what it sees.
 	t.Run("not registered", func(t *testing.T) {
 		r := &runner{root: "/repo", opts: options{daemonInfo: &DaemonInfo{

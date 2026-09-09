@@ -41,7 +41,7 @@ type StatusReport struct {
 	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
 	// Pools is every live proc server found on this machine, one entry each, and is set
 	// only when there is more than one: Pool above is the first of them, so a single
-	// server would just be repeated here. Enumerating them is the point - a multi-server
+	// server would just be repeated here. Enumerating them is the point: a multi-server
 	// box must still report the capacity and in-use numbers, never an error demanding
 	// --socket.
 	Pools []StatusOutput `json:"pools,omitempty" yaml:"pools,omitempty"`
@@ -59,7 +59,7 @@ type StatusReport struct {
 	// all-time. Zero (omitted) when reported by a non-daemon `magus status`.
 	ObservingSince time.Time `json:"observing_since,omitempty" yaml:"observing_since,omitempty"`
 	// Config surfaces the daemon's RESOLVED configuration (read-only) so a dashboard can show what
-	// the daemon is set to do - the default charms it applies, the concurrency cap - without a
+	// the daemon is set to do (the default charms it applies, the concurrency cap) without a
 	// round-trip to the terminal. Additive JSON, not on the proto event wire.
 	Config StatusConfig `json:"config,omitempty" yaml:"config,omitempty"`
 	// SymbolIndexes reports each symbol-capable project's SCIP index freshness (up to
@@ -68,7 +68,7 @@ type StatusReport struct {
 	// unavailable or no project is symbol-capable.
 	SymbolIndexes []SymbolIndexStatus `json:"symbol_indexes,omitempty" yaml:"symbol_indexes,omitempty"`
 	// Locks are the per-project workspace locks held right now, with the process
-	// holding each. A held lock is NORMAL - every mutating run takes one - so this is
+	// holding each. A held lock is NORMAL (every mutating run takes one), so this is
 	// reported as state, never as a fault: it must not fail a readiness or liveness
 	// probe, because a run blocked on a peer is waiting correctly and restarting it
 	// would only send it to the back of the queue.
@@ -100,7 +100,7 @@ type StatusReport struct {
 // ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a
 // kubelet's status-code check already enforces (200 iff Ready), and Components adds
 // component-level detail an orchestrator ignores but a browser client (the console PWA)
-// can render as per-subsystem daemon health. Adding this body does not change the gate -
+// can render as per-subsystem daemon health. Adding this body does not change the gate;
 // it is purely additive alongside the existing 200/503 status code.
 type ReadinessReport struct {
 	Ready      bool                 `json:"ready"`
@@ -111,9 +111,9 @@ type ReadinessReport struct {
 // of: ok, degraded, down, idle, disabled. Detail is a short plain-ASCII human-readable line
 // that stays generic and quantitative (e.g. "2 of 3 up to date") because /readyz is served
 // unguarded: counts inform without identifying, but workspace roots, project or service
-// names, filesystem paths, PIDs, and raw error text must never appear here - that
+// names, filesystem paths, PIDs, and raw error text must never appear here; that
 // identifying detail lives behind the bearer-guarded StatusService. Never the sole
-// signal - a client should key off Status.
+// signal: a client should key off Status.
 type ReadinessComponent struct {
 	Name   ReadinessName   `json:"name"`
 	Status ReadinessStatus `json:"status"`
@@ -122,7 +122,7 @@ type ReadinessComponent struct {
 
 // ReadinessName identifies which subsystem a readiness component reports on, and
 // ReadinessStatus is its verdict. Both were bare strings whose vocabulary lived in a
-// trailing comment - which a compiler cannot check and a reader has to trust. A probe
+// trailing comment, which a compiler cannot check and a reader has to trust. A probe
 // endpoint is read by a kubelet, so a value drifting from what the reader expects is
 // the kind of break nothing surfaces until a rollout stalls.
 type ReadinessName string
@@ -166,7 +166,7 @@ type StatusConfig struct {
 	// Concurrency is the CONFIGURED cap on concurrent builds; 0 means nothing was
 	// configured, not that no build may run.
 	Concurrency int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
-	// ConcurrencyEffective is the width a run actually gets - Concurrency resolved through
+	// ConcurrencyEffective is the width a run actually gets: Concurrency resolved through
 	// the default and the machine clamp (internal/cache.ResolveConcurrency). It is the
 	// number to budget against; Concurrency alone cannot be, because its common value is
 	// the one that means "ask someone else".
@@ -177,7 +177,7 @@ type StatusConfig struct {
 
 // ServiceState is where a supervised service sits in its lifecycle. Deliberately NOT
 // TargetRunState: the two share only "running" and "failed", and describe different
-// things - a service is idle when nothing needs it, a target run is cached when its
+// things: a service is idle when nothing needs it, a target run is cached when its
 // result was replayed. One union type would make half the values invalid for each
 // user, which is the opposite of what naming them buys.
 type ServiceState string
@@ -307,8 +307,8 @@ type StatusOutput struct {
 	Capacity int    `json:"capacity" yaml:"capacity"`
 	Running  int    `json:"running" yaml:"running"`
 	// Available is the free slots: Capacity minus Running, floored at zero. Carried as a
-	// number because the question it answers - how much work can I hand this box right
-	// now - should not require the reader to subtract.
+	// number because the question it answers (how much work can I hand this box right
+	// now) should not require the reader to subtract.
 	Available      int                   `json:"available" yaml:"available"`
 	Queued         int                   `json:"queued" yaml:"queued"`
 	RunningTargets []StatusRunningTarget `json:"running_targets,omitempty" yaml:"running_targets,omitempty"`
@@ -338,6 +338,6 @@ type StatusWorkspace struct {
 	// Work the hits replayed instead of ran, summed from each entry's recorded run duration.
 	CacheSavedMs int64 `json:"cache_saved_ms,omitempty" yaml:"cache_saved_ms,omitempty"`
 	// SecretProvider is the provider spell the magusfile selected; empty means the
-	// built-in environment provider. The NAME only - never a reference, never a value.
+	// built-in environment provider. The NAME only, never a reference, never a value.
 	SecretProvider string `json:"secret_provider,omitempty" yaml:"secret_provider,omitempty"`
 }

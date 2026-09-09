@@ -99,7 +99,7 @@ func TestCwdAnchor(t *testing.T) {
 	})
 
 	// The --root regression. filepath.Rel answers a cwd outside the workspace with a
-	// "../"-prefixed path, which is not an anchor - every relative project ref then
+	// "../"-prefixed path, which is not an anchor: every relative project ref then
 	// inherits the escape and `magus --root <ws> run build .` failed with
 	// `project path "." escapes workspace root from "../<dir>"`.
 	t.Run("cwd outside the workspace anchors at the root", func(t *testing.T) {

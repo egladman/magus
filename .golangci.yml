@@ -102,12 +102,36 @@ linters:
     # no runtime plugin loading, and it is why `magus run lint` builds the binary.
     - testlayout
 
+    # commentdash reports a comment spelling an em-dash with a spaced hyphen, which
+    # this repo bans in prose. The reasoning and the per-exemption measurements are
+    # in libs/commentdash/readme.md.
+    #
+    # It only ever fires on new prose: the 4513 asides this tree carried, and the 211
+    # that wrap onto a second line, were cleared before it was enabled. What the rule
+    # exempts is therefore load-bearing rather than cosmetic, and the gofmt doc-list
+    # bullet in particular: flag one of those and the linter fights the formatter.
+    - commentdash
+
   settings:
     custom:
       testlayout:
         type: module
         description: reports a test file whose name narrows a source file's name
         original-url: github.com/egladman/magus/libs/testlayout
+
+      # Declared but not enabled: see the commented entry above. Declaring it here
+      # keeps the settings block reviewed alongside the rule instead of arriving
+      # with the sweep, and a declared-but-disabled custom linter runs nothing.
+      commentdash:
+        type: module
+        description: reports a comment using a spaced hyphen as an em-dash aside
+        original-url: github.com/egladman/magus/libs/commentdash
+        settings:
+          # The wrapped half is the same aside with its second clause on the next
+          # line. It is a separate setting because its fix can move a clause across
+          # a line break rather than swapping one character, which reviews as a
+          # different kind of edit.
+          wrapped: true
 
     sloglint:
       # all, not scope: EVERY slog call must take a context. `scope` would only catch a

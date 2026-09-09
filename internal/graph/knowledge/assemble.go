@@ -23,7 +23,7 @@ const registryShardName = "@registry"
 
 // Inputs are the already-gathered describe outputs the assembler composes. The
 // caller (the CLI/composition root) fetches these from the workspace so that
-// internal/graph/knowledge depends only on types - it never reaches into the registry,
+// internal/graph/knowledge depends only on types; it never reaches into the registry,
 // host, or spell packages itself.
 type Inputs struct {
 	Graph       types.TargetGraphOutput // TargetGraph(): projects, targets, deps, charms, spell ops
@@ -47,40 +47,40 @@ type Inputs struct {
 	// OutputRefs carries each target's most recent captured-output reference from the
 	// local output store. Like Timings it is non-deterministic and lands in the @runtime
 	// shard, folding last_output_ref / last_run_ok attrs onto existing target nodes rather
-	// than adding edges - the query -> target -> last output two-hop.
+	// than adding edges: the query -> target -> last output two-hop.
 	OutputRefs []types.KnowledgeOutputRef
 	// Symbols maps a project path to the code symbols ingested from its SCIP index
 	// (empty unless the project declares one in config). Each becomes a per-project
-	// @symbols shard - deterministic, so remote-shareable like the other extracted
+	// @symbols shard: deterministic, so remote-shareable like the other extracted
 	// shards, and destined for lazy loading (it can dwarf the domain graph).
 	Symbols map[string][]types.KnowledgeSymbol
 	// Packages maps a project path to the third-party dependencies its manifest
 	// declares, at the versions that manifest resolves to. They merge into the single
 	// @packages shard rather than one per project, because a package node is shared
-	// between the projects that require it - see packagesShardName. Deterministic, so
+	// between the projects that require it; see packagesShardName. Deterministic, so
 	// remote-shareable like the other extracted shards.
 	Packages map[string][]types.KnowledgePackage
 	// VCS carries per-file git history metadata (empty unless knowledge.vcs.enabled and
 	// the workspace is a git repo). It folds onto existing file nodes in the @vcs shard
-	// as attrs - deterministic per commit, so remote-shareable.
+	// as attrs: deterministic per commit, so remote-shareable.
 	VCS []types.KnowledgeVCS
 	// DeclaredSpells is the set of spell names some project declares in its magusfile
 	// `spells:` list (the union over projects). It lets the orphan lens tell a genuinely
 	// dead spell (declared here, nothing runs it) from a compiled-in builtin that is
-	// merely available and unused - only declared spells are orphan candidates.
+	// merely available and unused; only declared spells are orphan candidates.
 	DeclaredSpells map[string]bool
 	// VCSAuthorship includes the author nodes + authored edges in the @vcs shard
 	// (knowledge.vcs.authorship, default on). False keeps only the per-file vcs_* attrs.
 	VCSAuthorship bool
 	// NotesPath is the workspace-relative directory holding human-authored notes
 	// (knowledge.notes.path), empty when the workspace declares none. It is not a source
-	// of nodes here - it EXCLUDES one: the docs walk indexes every .md in the tree, so
+	// of nodes here; it EXCLUDES one: the docs walk indexes every .md in the tree, so
 	// without this a notes store becomes kind:doc nodes and stops being distinguishable
 	// from documentation.
 	NotesPath string
 	// Notes carries the workspace's human-authored notes with their anchors already
 	// resolved to node IDs (empty unless knowledge.notes.path is declared). Committed to
-	// the repo, so deterministic and remote-shareable - the opposite of @memory.
+	// the repo, so deterministic and remote-shareable, the opposite of @memory.
 	Notes []types.KnowledgeNote
 	// PrivateNotes are the reader's own notes (knowledge.notes.personal), which may live
 	// outside any repository. Same shape and same anchors as Notes; different trust, and a
@@ -88,7 +88,7 @@ type Inputs struct {
 	PrivateNotes []types.KnowledgeNote
 	// Coverage carries per-file statement coverage parsed from the local Go coverage
 	// profile (empty unless a profile is present). Like Runtime/Timings it is observed,
-	// not extracted, so it lands in the isolated @coverage shard - folding a coverage
+	// not extracted, so it lands in the isolated @coverage shard, folding a coverage
 	// ratio onto the file (and, via SCIP def lines, symbol) nodes rather than churning
 	// the deterministic @symbols shards it annotates.
 	Coverage []FileCoverage
@@ -176,14 +176,14 @@ func AssembleShards(in Inputs) []Shard {
 			shards = append(shards, n)
 		}
 		// Personal notes anchor into the same workspace entities but land in their own,
-		// never-exported shard - see privateNotesShardName.
+		// never-exported shard; see privateNotesShardName.
 		if n := assembleNotes(in.PrivateNotes, known, privateNotesShardName, ScopePrivate); len(n.Nodes) > 0 {
 			shards = append(shards, n)
 		}
 	}
 	// Third-party dependencies, read from the manifests the project shards already
 	// named. One singleton shard rather than one per project, because a package node is
-	// shared by every project requiring it - see packagesShardName.
+	// shared by every project requiring it; see packagesShardName.
 	if pk := assemblePackages(in.Packages); len(pk.Nodes) > 0 {
 		shards = append(shards, pk)
 	}
@@ -238,7 +238,7 @@ func AssembleShards(in Inputs) []Shard {
 	//
 	// Symbol paths are held OUT of @dirs and aggregated into their project's @symbols
 	// shard. @dirs merges into the default graph and emits a node per directory, so
-	// folding symbol paths in MINTED dir nodes purely because a local SCIP index existed -
+	// folding symbol paths in MINTED dir nodes purely because a local SCIP index existed,
 	// making the committed graph differ between a developer who had run `magus graph build`
 	// and CI, which never does. A shard's contents must be visible exactly when its own
 	// layer is loaded.
@@ -288,7 +288,7 @@ func AssembleShards(in Inputs) []Shard {
 // containsChain builds the directory containment tree from a project down to a
 // path-bearing leaf, returning a KindDir node per intervening directory plus the chain
 // project -> topdir -> ... -> leaf. It replaces a flat project -> leaf edge so a directory
-// is a first-class node - the granularity agent memory anchors to and dir-level
+// is a first-class node, the granularity agent memory anchors to and dir-level
 // coupling/churn reads against.
 //
 // Dir nodes and edges dedup across shards on merge. A leaf directly in the project root
@@ -396,7 +396,7 @@ func assembleRegistry(in Inputs) Shard {
 		spellAttrs := map[string]string{}
 		if sp.Language != "" {
 			// Tag the adapter with the language it builds, so `language:go` reaches the
-			// go spell alongside the Go files and symbols it governs - the same attr
+			// go spell alongside the Go files and symbols it governs, the same attr
 			// key the file/symbol nodes carry.
 			spellAttrs["language"] = sp.Language
 		}
@@ -416,7 +416,7 @@ func assembleRegistry(in Inputs) Shard {
 			oID := opID(sp.Name, op)
 			// The base argv this op runs (empty charms), when statically knowable. A
 			// function-op contributes no entry, so it carries no argv and links to no
-			// tool - the "not statically knowable" boundary the command kind used to draw.
+			// tool, the "not statically knowable" boundary the command kind used to draw.
 			argv := sp.OpCommands[op]
 			var opAttrs map[string]string
 			var toolName string
@@ -452,7 +452,7 @@ func assembleRegistry(in Inputs) Shard {
 				})
 			}
 			s.Edges = append(s.Edges, extractedEdge(oID, tID, types.RelationUses, ""))
-			// The spell runs the tool too - conveys the spell<->tool relationship directly
+			// The spell runs the tool too: conveys the spell<->tool relationship directly
 			// (spell:go uses tool:go), so `explain tool:go` shows its ops and its spell.
 			// Deduped per (spell, tool).
 			if key := sp.Name + "\x00" + toolName; !spellToolSeen[key] {
@@ -625,7 +625,7 @@ func nilIfEmpty(m map[string]string) map[string]string {
 // local run records (see the persistence half in store.go), not workspace sources,
 // so they are isolated in a dedicated @runtime shard and excluded from remote
 // export: "emits" edges from a unit to each MGS code it tripped in actual runs
-// ("what has this target tripped" - history the static "documents" edge cannot),
+// ("what has this target tripped": history the static "documents" edge cannot),
 // observed performance attrs (p75 duration, cache hit rate) on target nodes, and the
 // last captured-output ref plus its outcome (last_output_ref / last_run_ok) so an agent
 // can hop from a target to its last output.

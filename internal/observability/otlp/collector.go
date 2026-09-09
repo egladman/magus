@@ -15,7 +15,7 @@ import (
 // captureTransport is an http.RoundTripper that intercepts the OTLP export POST and keeps its
 // body instead of sending it. Pairing it with an otlpmetrichttp exporter lets us reuse OTel's
 // OWN metricdata->OTLP-protobuf serialization (that transform lives in the exporter's internal
-// package and is not importable) to produce a standard OTLP snapshot on demand - the wire the
+// package and is not importable) to produce a standard OTLP snapshot on demand: the wire the
 // /dashboard reads. Proven end-to-end in otlp_spike_test.go.
 type captureTransport struct {
 	mu   sync.Mutex
@@ -51,7 +51,7 @@ func (c *captureTransport) snapshot() []byte {
 
 // newCaptureReader builds an SDK metric Reader that "exports" through a captureTransport,
 // yielding standard OTLP protobuf without a network hop. The long interval means it only
-// produces bytes when explicitly flushed - Snapshot drives that via MeterProvider.ForceFlush.
+// produces bytes when explicitly flushed; Snapshot drives that via MeterProvider.ForceFlush.
 func newCaptureReader(ctx context.Context) (sdkmetric.Reader, *captureTransport, error) {
 	capT := &captureTransport{}
 	exp, err := otlpmetrichttp.New(ctx,
@@ -68,8 +68,8 @@ func newCaptureReader(ctx context.Context) (sdkmetric.Reader, *captureTransport,
 
 // Snapshot returns a fresh OTLP-protobuf metrics payload (an
 // otlp/collector/metrics/v1.ExportMetricsServiceRequest) for the current instrument values, or
-// nil when this provider has no capturing reader. It flushes the meter provider - collecting
-// the current values - then reads the bytes the capturing exporter recorded.
+// nil when this provider has no capturing reader. It flushes the meter provider (collecting
+// the current values), then reads the bytes the capturing exporter recorded.
 func (p *otelProvider) Snapshot(ctx context.Context) ([]byte, error) {
 	if p.capture == nil || p.mp == nil {
 		return nil, nil

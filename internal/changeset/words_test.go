@@ -9,7 +9,7 @@ import (
 
 // Intra-line emphasis is computed independently in TypeScript, and the console renders from
 // that copy. If the two ever disagree, the same changed line is highlighted differently in the
-// browser than in the terminal - which reads as a bug in whichever surface the reader trusts
+// browser than in the terminal, which reads as a bug in whichever surface the reader trusts
 // less, with nothing in either output saying which one is wrong.
 //
 // PROVENANCE: every expectation below was produced by RUNNING the console's words.ts under

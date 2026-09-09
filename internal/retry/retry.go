@@ -317,7 +317,7 @@ func backoff(cfg options, attempt int) time.Duration {
 
 // retryAfterDelay returns the delay from a Retry-After header, falling back to
 // the computed exponential delay when the header is absent or unparsable. A
-// header-supplied delay is capped at maxDelay - otherwise a server could name
+// header-supplied delay is capped at maxDelay; otherwise a server could name
 // an arbitrarily long wait and defeat the caller's own backoff ceiling. Every
 // current caller also sets WithTimeout, which already bounds the whole loop,
 // so this is defense-in-depth for a future caller that omits it.

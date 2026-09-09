@@ -20,7 +20,7 @@ const (
 	// It is the default, and what the rest of magus indexes platforms by.
 	PlatformStyleGo PlatformStyle = "go"
 	// PlatformStyleUname renders the spellings uname -m / uname -s report
-	// (x86_64, aarch64, Darwin) - the form a shell script or a download URL
+	// (x86_64, aarch64, Darwin), the form a shell script or a download URL
 	// built for a release asset usually wants.
 	PlatformStyleUname PlatformStyle = "uname"
 )

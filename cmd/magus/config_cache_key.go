@@ -47,9 +47,10 @@ func configCacheKey(_ context.Context, _ string, args []string) error {
 }
 
 // signingKeyOutput is the generated keypair as a record, so `-o template` can hand
-// the seed to a secret store over a pipe. The JSON TAGS are the template surface -
-// `-o template` projects the -o json names, so it is `{{.seed}}`, not `{{.Seed}}` -
-// and renaming one breaks a documented command line. Treat the tags as API.
+// the seed to a secret store over a pipe. The JSON TAGS are the template surface
+// (`-o template` projects the -o json names, so it is `{{.seed}}`, not
+// `{{.Seed}}`), and renaming one breaks a documented command line. Treat the
+// tags as API.
 type signingKeyOutput struct {
 	KeyID  string `json:"keyid" yaml:"keyid"`
 	Seed   string `json:"seed" yaml:"seed"`
@@ -106,7 +107,7 @@ func configCacheKeyGenerate(args []string) error {
 	}
 	// A key's identity is its keyid, and the keyid ALONE: the seed is the one value that
 	// must never be what a bare token means. That makes -o name a lossy form here rather
-	// than a broken one - the key exists, and only its identity was asked for - so it says
+	// than a broken one (the key exists, and only its identity was asked for), so it says
 	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
 	if opts.Format == outputName {
 		fmt.Fprintln(os.Stderr, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.")
@@ -125,7 +126,7 @@ func configCacheKeyGenerate(args []string) error {
 	// Same rule the run output follows: a value you must copy goes LAST on its own
 	// line, unprefixed, so a double-click selects it and nothing else. The old layout
 	// put the seed after "MAGUS_CACHE_SIGNING_KEY=" inside a drawn box, which made it
-	// awkward to select and invited pasting it into an `export` - straight into shell
+	// awkward to select and invited pasting it into an `export`, straight into shell
 	// history, which is the one place it must not land.
 	fmt.Printf("keyid  %s\n\n", km.KeyID)
 

@@ -48,7 +48,7 @@ func TestDiagEventFromError(t *testing.T) {
 }
 
 func TestTargetHandler_NormalizesVariantSpellings(t *testing.T) {
-	// The drift gate no longer keys off the target NAME - every target is eligible, and
+	// The drift gate no longer keys off the target NAME: every target is eligible, and
 	// the policy plus its declared outputs decide. Normalization still matters: a policy
 	// is looked up by canonical name, so a variant invocation has to resolve to it or the
 	// target silently runs ungated.
@@ -77,7 +77,7 @@ func TestRaceForcesNoCache(t *testing.T) {
 
 // TestRun_RaceReexecutesCachedTarget guards the A2 fix end to end: a target
 // that's already a cache hit must still genuinely re-execute under --race
-// (magus.WithRace), not replay - otherwise the race detector observes nothing.
+// (magus.WithRace), not replay; otherwise the race detector observes nothing.
 func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 	const spellName = "zzz-race-test-spell"
 	var calls atomic.Int32
@@ -114,8 +114,8 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 }
 
 // TestRun_NoCacheReexecutesAndRefreshesEntry guards the A7 fix: magus run
-// --no-cache (WithNoCache) forces a cached target to re-execute, and - unlike
-// --race - the rebuild refreshes the entry, so a subsequent ordinary run hits
+// --no-cache (WithNoCache) forces a cached target to re-execute, and, unlike
+// --race, the rebuild refreshes the entry, so a subsequent ordinary run hits
 // the refreshed result instead of missing or replaying something stale.
 func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	const spellName = "zzz-no-cache-test-spell"
@@ -155,7 +155,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 // TestRunAffected_NoCacheReexecutes guards magus affected --no-cache
 // specifically: RunAffected (not just Run) must also honor WithNoCache. There
 // is no VCS in this temp workspace, so ExpandAffected falls back to "all
-// projects" (types.ErrAffectedFallback) rather than erroring - the same
+// projects" (types.ErrAffectedFallback) rather than erroring, the same
 // documented safety net a real no-VCS or disabled-VCS workspace gets.
 func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	const spellName = "zzz-affected-no-cache-test-spell"
@@ -491,7 +491,7 @@ func TestInputsDynamicArgIsLoadError(t *testing.T) {
 // rejection scoped on a per-target skip_cache policy passes on the CLI path (where
 // magus.project() has been evaluated and policies are loaded) and fails everywhere else,
 // because an unevaluated project reads as cacheable. A computed ctx.withEnv is the shape
-// that tripped it - it must load, with or without the interpreter linked in.
+// that tripped it: it must load, with or without the interpreter linked in.
 func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
 	root := t.TempDir()
 	const mf = `export fun build(ctx: magus\Context, args: [str]) > void {
@@ -628,8 +628,8 @@ func gateDriftFixture(t *testing.T) (*Magus, *types.Project) {
 }
 
 // driftingFixture is gateDriftFixture plus a declared output the target actually moves.
-// The VCS is only consulted once something drifted - there is nothing to attribute
-// otherwise - so a test about the VCS half has to produce drift first or it never gets
+// The VCS is only consulted once something drifted (there is nothing to attribute
+// otherwise), so a test about the VCS half has to produce drift first or it never gets
 // there.
 func driftingFixture(t *testing.T) (*Magus, *types.Project, func() error) {
 	t.Helper()
@@ -681,7 +681,7 @@ func TestGateDriftErrorsOnUnresolvableVCS(t *testing.T) {
 
 // An UNTRACKED output cannot be stale: a bundle, a dist/ tree, anything the build rewrites
 // every run has no committed form to disagree with. This was the gate's first false
-// positive when it became default-on - `console:ci` failed on its own gen/sw.js, which is
+// positive when it became default-on: `console:ci` failed on its own gen/sw.js, which is
 // gitignored and rewritten by design.
 //
 // The temp dir here is not a repository, so no backend claims it and the gate returns
@@ -721,7 +721,7 @@ func TestGateDriftPropagatesTargetError(t *testing.T) {
 }
 
 // TestCurrentRevisionNoVCS pins CurrentRevision's no-VCS behavior directly: a disabled
-// VCS yields ("", false), never an error - the caller (executeStages) always has a
+// VCS yields ("", false), never an error: the caller (executeStages) always has a
 // value to stamp onto every step, and "unknown" is the correct answer, not a failure.
 func TestCurrentRevisionNoVCS(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
@@ -767,7 +767,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 
 // TestRun_NoVCSLeavesRevisionEmpty drives the real Run path (executeStages -> recordOutput)
 // in a workspace with VCS disabled: the persisted descriptor's Revision must be empty and
-// Dirty false, and recording it must raise nothing - a missing revision is "unknown", the
+// Dirty false, and recording it must raise nothing: a missing revision is "unknown", the
 // same silent no-op verifyReadOnly's VCS resolution already treats it as.
 func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
@@ -851,8 +851,8 @@ func TestWithWrite_SetsWriteCharm(t *testing.T) {
 // TestOutputWatchDirsSpansOwnerRoots pins the reason outputWatchDirs returns directories
 // instead of globs: one target's outputs can now land in two different project roots, so
 // a cross-project glob must resolve against the OWNER's dir. Resolving it against the
-// writer's would watch a path that does not exist, and the previous behavior - dropping
-// it - left the one file two projects can both write as the only output the race,
+// writer's would watch a path that does not exist, and the previous behavior (dropping
+// it) left the one file two projects can both write as the only output the race,
 // overlap, replay, and missing-dependency checks never looked at.
 func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 	m, _ := writeCrossOutputWorkspace(t)
@@ -867,7 +867,7 @@ func TestOutputWatchDirsSpansOwnerRoots(t *testing.T) {
 
 // TestRedactError masks a secret in a run error's message while keeping the chain
 // intact. The CLI's last line on any failure is `slog.Error(err.Error())` with no
-// context, so the log handler's redaction cannot reach it - a magusfile that throws an
+// context, so the log handler's redaction cannot reach it: a magusfile that throws an
 // interpolated credential would print it verbatim as the final thing a user sees. This
 // is the one seam where a run error stops being magus's and becomes the caller's text.
 func TestRedactError(t *testing.T) {
@@ -908,7 +908,7 @@ func TestRedactError(t *testing.T) {
 
 // TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject pins the existing rule as
 // unchanged: for a magusfile project the magusfile is the definition, so a bound
-// spell's ci op must NOT satisfy the anchor - only counting it for provided
+// spell's ci op must NOT satisfy the anchor: only counting it for provided
 // projects, which have no magusfile to shadow.
 func TestRunCIAnchorIgnoresSpellCIOpOnMagusfileProject(t *testing.T) {
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
@@ -963,7 +963,7 @@ func recordOutputOverlapEvents(t *testing.T, steps []cache.Step) []recordedOutpu
 // checkOutputOverlap: the function used to take the whole invocation's scope label
 // (e.g. "3 projects") as its "target" parameter and stamp that into MGS4002 reports,
 // even though every cache.Step already carries its own real Target. Pre-fix, calling
-// checkOutputOverlap(steps, "3 projects", w) recorded Target: "3 projects" - never
+// checkOutputOverlap(steps, "3 projects", w) recorded Target: "3 projects", never
 // "build", which is what this test now asserts.
 func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 	steps := []cache.Step{
@@ -984,7 +984,7 @@ func TestCheckOutputOverlap_UsesStepTargetNotScopeLabel(t *testing.T) {
 // single blanket "target" parameter actively wrong: one executeStages call can cover
 // several target stages (runResolved groups a multi-target request into one call), so
 // two overlapping steps can legitimately belong to different targets. Neither target
-// alone is "the" target - both must be visible in the report.
+// alone is "the" target; both must be visible in the report.
 func TestCheckOutputOverlap_DifferingTargetsReportsBoth(t *testing.T) {
 	steps := []cache.Step{
 		{ProjectPath: "a", Target: "build", Outputs: []string{"dist/**"}},
@@ -1012,7 +1012,7 @@ type recordedMissingDependency struct {
 // race.Runtime.WrittenPaths, which is keyed by project only), so the fix renamed the
 // parameter from "target" to "scope" and documented why, rather than fabricating a
 // target value. This pins that the report's Target field still carries the scope
-// label - the value genuinely available - so a caller reading it is not left with an
+// label (the value genuinely available), so a caller reading it is not left with an
 // empty field.
 func TestCheckMissingDependencies_ReportsScopeLabelAsTarget(t *testing.T) {
 	consumer := &types.Project{Path: "consumer", Dir: "/ws/consumer", Sources: []string{"**/*.go"}}
@@ -1098,7 +1098,7 @@ func TestToolWindowReportsEveryViolation(t *testing.T) {
 
 // A batch with one violation of each kind must not let the project NAMES decide the code.
 // The code was previously recovered by sniffing the sorted messages for "older than", so
-// it turned on which project label sorted first - an alphabetical accident.
+// it turned on which project label sorted first: an alphabetical accident.
 func TestToolWindowCodeDoesNotTurnOnProjectOrder(t *testing.T) {
 	old := projectWith("zz", map[string]spells.VersionBounds{"node": {Min: "22"}}, tsSpell("node", spells.VersionBounds{}))
 	recent := projectWith("aa", map[string]spells.VersionBounds{"node": {Below: "25"}}, tsSpell("node", spells.VersionBounds{}))
@@ -1123,7 +1123,7 @@ func TestToolWindowCodeDoesNotTurnOnProjectOrder(t *testing.T) {
 }
 
 // An unread version is never a violation. That covers an absent binary, output carrying
-// no version, and probing switched off entirely - magus must not fail on a comparison it
+// no version, and probing switched off entirely: magus must not fail on a comparison it
 // could not make.
 func TestToolWindowSkipsUnreadVersions(t *testing.T) {
 	p := projectWith("console", map[string]spells.VersionBounds{"node": {Min: "99"}}, tsSpell("node", spells.VersionBounds{}))
@@ -1234,7 +1234,7 @@ func TestProbeToolsDoesNotGateOnADeclaredConstant(t *testing.T) {
 }
 
 // MAGUS_CACHE_TOOL_VERSION=off short-circuits the probe pass, and the window gate reads
-// what that pass records - so switching off tool-version CACHE KEYING also switches off
+// what that pass records, so switching off tool-version CACHE KEYING also switches off
 // the version gate. Pinned because it is not obvious from either name, and because a gate
 // that can be disabled by a cache knob should at least be disabled on purpose.
 func TestProbeToolsOffAlsoDisablesTheWindowGate(t *testing.T) {
@@ -1322,8 +1322,8 @@ export fun ci(ctx: magus\Context, args: [str]) > void {}
 // TestRun_RetryOnVolatileIsPerTargetNotPerRun is the regression this policy was
 // promoted to fix, and the reason it needed fixing before it could be declared.
 //
-// The run used to collapse every selected target's policy to one bool - the first
-// project that declared ANY policy for a target won - and store it on the volatility
+// The run used to collapse every selected target's policy to one bool (the first
+// project that declared ANY policy for a target won) and store it on the volatility
 // Runtime, which then short-circuited on it without ever asking which pair it was
 // deciding for. Opting `flaky` in therefore made `steady` retryable too, so a real
 // regression in a sibling got a second attempt nobody asked to give it and the run
@@ -1396,7 +1396,7 @@ func (b *syncBuffer) String() string {
 // Its only two reports used to be a CI annotation, which needs a live annotator and is
 // Nop everywhere else, and a report record, which needs --report. So locally a target
 // failed, silently reran, passed, and the run went green with the first attempt's output
-// collapsed - the unnoticed volatile target the annotation exists to prevent, unnoticed.
+// collapsed: the unnoticed volatile target the annotation exists to prevent, unnoticed.
 func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	const spellName = "zzz-retry-audible-spell"
 	var calls atomic.Int32

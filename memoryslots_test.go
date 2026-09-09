@@ -9,7 +9,7 @@ import (
 )
 
 // gbTest is the host total these tests pin. slotsForPolicy takes it as an
-// argument, so nothing here depends on the machine running the suite - the same
+// argument, so nothing here depends on the machine running the suite: the same
 // trap the forecaster tests had to be fixed for.
 const gbTest = int64(1) << 30
 

@@ -168,7 +168,7 @@ func TestLimiterFairQueueing(t *testing.T) {
 	l.ReleaseN(4)
 
 	// Drain: both goroutines must finish before the limiter can be called clean. This was a
-	// 20-iteration busy loop whose body was `_ = i` - it yielded nothing and almost never
+	// 20-iteration busy loop whose body was `_ = i`: it yielded nothing and almost never
 	// outlasted the goroutines, so the Running assertion below sampled a limiter still
 	// holding slots and failed intermittently under -race.
 	wg.Wait()
@@ -261,7 +261,7 @@ func TestLimiterWaitingHook(t *testing.T) {
 		runtime.Gosched()
 	}
 	// Queued and the onWait hook are separate atomics that AcquireN updates a couple of
-	// instructions apart - it increments queued, THEN calls onWait - so waiting on Queued
+	// instructions apart (it increments queued, THEN calls onWait), so waiting on Queued
 	// alone exits inside that window and samples net == 0 against Queued == 1. Waiting for
 	// both makes the assertion below about the two agreeing rather than a race with the
 	// update itself. The slot is held for the duration, so the waiter cannot proceed and

@@ -26,7 +26,7 @@ func (m *Magus) ResolveProjects(targets []types.Target) []*types.Project {
 type TargetArtifact struct {
 	Path string // workspace-relative
 	Glob string // the declaration it matched
-	// ProjectPath is the project whose target DECLARED the glob - not necessarily the
+	// ProjectPath is the project whose target DECLARED the glob, not necessarily the
 	// project the file sits in, since a target may declare an output into another
 	// project's tree. Recorded here because this is the only place that knows it: a
 	// consumer re-deriving attribution from Path has to guess, and the guess fails
@@ -38,7 +38,7 @@ type TargetArtifact struct {
 // into the files that exist on disk right now.
 //
 // It reads buildStep, not the project-wide union, so the answer is scoped to the
-// ONE target asked about - the same fold the cache keys and snapshots, so what this
+// ONE target asked about: the same fold the cache keys and snapshots, so what this
 // reports and what the cache replays cannot disagree.
 //
 // This is the question an agent otherwise has to guess at: a build says it passed,
@@ -47,7 +47,7 @@ func (m *Magus) ResolveTargetOutputs(ctx context.Context, projects []*types.Proj
 	var found []TargetArtifact
 	// buildStep's Outputs are WORKSPACE-relative ("api/dist/*.txt"), unlike
 	// Project.AllOutputs which is project-relative. Globbing them against the project
-	// dir looked for api/api/dist/*.txt and silently found nothing - and the root
+	// dir looked for api/api/dist/*.txt and silently found nothing, and the root
 	// project hid it, because there the two spellings are identical.
 	fsys := os.DirFS(m.Root())
 	for _, p := range projects {
@@ -151,7 +151,7 @@ func (m *Magus) CleanCache(ctx context.Context, projects ...*types.Project) erro
 //
 // The producer is not always the project the file sits in. For an output a project
 // declares for itself the two coincide, but for one another project writes into its tree
-// (InboundOutputs) only the WRITER can rebuild it - the owner has no target that produces
+// (InboundOutputs) only the WRITER can rebuild it: the owner has no target that produces
 // those bytes. The merge driver is the consumer that makes this distinction load-bearing:
 // handed the owner, it would run a target that touches nothing, then copy the
 // unregenerated file over the conflict and report a clean merge.

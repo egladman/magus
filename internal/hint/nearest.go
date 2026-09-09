@@ -15,7 +15,7 @@ import (
 // nothing is close enough.
 //
 // Distance is measured case-insensitively, but the candidate is returned in its
-// real casing - a suggestion has to be copy-pasteable. Case counted as edits
+// real casing: a suggestion has to be copy-pasteable. Case counted as edits
 // before, which defeated the suggestion exactly where it was most obviously
 // needed: `magus run build API` misses project `api` (paths resolve exactly, and
 // deliberately, since they are filesystem paths), and API->api is three
@@ -58,7 +58,7 @@ func Threshold(typed string) int {
 //
 // It counts RUNES. These are names a human typed, and an accented or CJK
 // character is one keystroke to get wrong, not the two or three bytes it
-// encodes to - so a byte-counted distance rejects a suggestion that is one
+// encodes to, so a byte-counted distance rejects a suggestion that is one
 // typo away.
 func Distance(a, b string) int {
 	if a == b {

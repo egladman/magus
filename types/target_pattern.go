@@ -19,26 +19,26 @@ import (
 //
 // Negation exists because the alternative was to rename around the matcher. A target that
 // legitimately ends in "-generate" but must stay out of `ctx.needs(ctx.glob("*-generate"))`
-// previously had exactly one remedy - do not name it that - and the reason was invisible at
+// previously had exactly one remedy (do not name it that), and the reason was invisible at
 // both the glob and the definition.
 //
 // A negation takes a NAME or a GLOB, never suffix shorthand: "!site-generate" excludes the
 // target actually called site-generate. Making it suffix shorthand instead would have it
 // compile to ^.*-site-generate$ and silently exclude nothing, which is the one outcome a
 // subtraction must never produce. Excluding a whole family is still available, spelled the
-// same way it is included: "!*-generate". The include shorthand is deliberately left alone -
+// same way it is included: "!*-generate". The include shorthand is deliberately left alone;
 // widening it to match bare names too would make ctx.glob("generate") match the `generate`
 // target that contains it, turning a convenience into self-recursion.
 //
 // Exclusions apply to the union of the includes regardless of order, so
 // ("*-generate", "!site-generate") and ("!site-generate", "*-generate") are the same set.
 // Patterns that are ONLY negations select nothing: subtracting from an empty set is empty,
-// not "everything else" - a glob that silently grew to the whole workspace because its one
+// not "everything else": a glob that silently grew to the whole workspace because its one
 // positive pattern was deleted is a worse failure than matching nothing.
 //
 // One implementation, deliberately. The runtime binding, the dry-run tracer, and the static
 // describe extractor each carried their own copy of the compile step, each commented as
-// mirroring the others - three places to update in lockstep for a matcher whose whole job is
+// mirroring the others: three places to update in lockstep for a matcher whose whole job is
 // that the traced, described, and executed edge sets agree.
 func MatchTargetPatterns(names, patterns []string) []string {
 	include, exclude := compileTargetPatterns(patterns)

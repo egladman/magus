@@ -49,7 +49,7 @@ func WithOutputs(paths ...string) ProjectOption {
 // WithSources declares additional file globs (project-relative) that feed this
 // project's cache key and affected-set membership, alongside whatever its
 // resolved spells already contribute via their own Sources(). Use this when a
-// project's real inputs reach beyond what its spells claim - e.g. non-code
+// project's real inputs reach beyond what its spells claim: e.g. non-code
 // assets, sibling proto schemas, or docs a generator target reads.
 //
 // A glob may REACH OUT of the project ("../proto/**" from docs/); that is what makes
@@ -58,14 +58,14 @@ func WithOutputs(paths ...string) ProjectOption {
 // "proto/**".
 //
 // Storing the path.Clean'd spelling is what keeps one glob one string. Every check
-// downstream compares declarations by string equality - Project.DeclaredGlobs dedups
+// downstream compares declarations by string equality (Project.DeclaredGlobs dedups
 // that way, MGS1005 asks whether a per-target glob is already project-wide the same
-// way - and "./docs/**" and "docs/**" are one declaration, not two.
+// way), and "./docs/**" and "docs/**" are one declaration, not two.
 //
 // A glob reaching PAST the workspace root is rejected here, where it is written, rather
 // than stored and ignored. The source walk starts at the workspace root and yields
 // workspace-relative paths, so a glob outside it can never match a file, never move a
-// cache key, and never mark this project affected - accepting one would record a
+// cache key, and never mark this project affected; accepting one would record a
 // declaration magus has no way to honor.
 func WithSources(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
@@ -124,8 +124,8 @@ func WithReviewRequired(globs ...string) ProjectOption {
 }
 
 // WithGateLowRisk declares the globs the ci-gate redundancy check classifies as
-// prose. Zero globs is a legal, meaningful declaration - it turns the prose
-// class off - so the DECLARED flag is set here, not inferred from length.
+// prose. Zero globs is a legal, meaningful declaration (it turns the prose
+// class off), so the DECLARED flag is set here, not inferred from length.
 // Escaping globs are refused for WithReviewRequired's reason: one would
 // silently classify nothing while the author believes it does.
 func WithGateLowRisk(globs ...string) ProjectOption {

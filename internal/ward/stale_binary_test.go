@@ -14,8 +14,8 @@ import (
 // realBuzzErr compiles src and returns the failure wrapped the way workspace load wraps it.
 //
 // It goes through the checker rather than hand-building a *diagnostics.Error, and that is the
-// whole point of the helper. The hand-built fixture is not the shape gopherbuzz returns - the
-// checker returns its own unexported error type - so a test built on it proved that errors.As
+// whole point of the helper. The hand-built fixture is not the shape gopherbuzz returns (the
+// checker returns its own unexported error type), so a test built on it proved that errors.As
 // works and nothing else. It was green for the entire time the BZZ1002 half of this explainer
 // could not fire.
 //

@@ -31,7 +31,7 @@ func (v gitVCS) ReviewCommand() string { return "git diff --cached --stat" }
 
 // ParentRef is the first parent of the checked-out commit. `^` rather than `~1`:
 // they are the same for a linear commit and differ on a merge, where `^` is the
-// branch being merged INTO - which is the side a CI run wants to measure from.
+// branch being merged INTO, which is the side a CI run wants to measure from.
 func (v gitVCS) ParentRef() string { return "HEAD^" }
 
 // IsSecondaryCheckout reports whether dir is a linked git worktree: its .git is a
@@ -41,7 +41,7 @@ func (v gitVCS) ParentRef() string { return "HEAD^" }
 func (v gitVCS) IsSecondaryCheckout(dir string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, ".git"))
 	if err != nil {
-		return false // absent, or a directory (the main checkout) - either way not linked
+		return false // absent, or a directory (the main checkout); either way not linked
 	}
 	rest, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
 	if !ok {
@@ -84,7 +84,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	}
 	// core.quotePath=false on BOTH probes, for the reason DirtyFiles sets it: git otherwise
 	// renders a path outside ASCII as a C-quoted, backslash-escaped literal
-	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way -
+	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way:
 	// project.normalizeFiles only trims and slash-converts, so the quoted string matches no
 	// source glob, and the project owning that file is simply never rebuilt. No diagnostic,
 	// no error; `magus affected` just under-builds forever.
@@ -108,7 +108,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 // first, so a reader can be told the file in front of them is also being edited elsewhere.
 //
 // Remote-tracking refs only, and it does NOT fetch. The answer is exactly as fresh as the reader's
-// last fetch - going and getting more would be a network act nobody asked for, on a path that
+// last fetch; going and getting more would be a network act nobody asked for, on a path that
 // exists to annotate a diff. A caller has to say "as of your last fetch" rather than implying the
 // answer is live.
 //
@@ -123,9 +123,9 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	if err := checkRef(base); err != nil {
 		return nil, err
 	}
-	// Deliberately over-asked. FOUR kinds of ref are dropped below - <remote>/HEAD, the reader's
+	// Deliberately over-asked. FOUR kinds of ref are dropped below: <remote>/HEAD, the reader's
 	// own branch, one whose diff fails, and one whose diff is empty (which always includes base
-	// itself) - and a budget of limit+1 covered exactly one of them, so a repository with a few
+	// itself). A budget of limit+1 covered exactly one of them, so a repository with a few
 	// stale remotes silently returned fewer branches than asked with no sign the list was short.
 	// Listing refs is one fork whatever the count; only the per-branch diffs are paid per entry,
 	// and the loop stops at limit.
@@ -146,7 +146,7 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 	// A local branch and its remote-tracking copy are ONE line of work under two names, and
 	// reporting both would tell the reader two people are editing a file when one is. Local wins:
 	// it is the current answer, where the tracking copy is only as new as the last fetch. Sorted
-	// by committerdate, so the copy git listed first is not reliably the fresher one - the name
+	// by committerdate, so the copy git listed first is not reliably the fresher one; the name
 	// decides, not the order.
 	seen := make(map[string]bool, limit)
 	for _, pass := range []bool{true, false} {
@@ -174,7 +174,7 @@ func (v gitVCS) BranchChanges(ctx context.Context, dir, base string, limit int) 
 			}
 			if err := checkRef(ref); err != nil {
 				// A ref git itself listed, so this is not the caller-supplied case checkRef
-				// exists for - but a name that cannot be passed safely is skipped rather
+				// exists for, but a name that cannot be passed safely is skipped rather
 				// than trusted.
 				continue
 			}
@@ -353,7 +353,7 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 //
 // GIT_TERMINAL_PROMPT=0 is the load-bearing part: git and ssh read a credential prompt
 // from /dev/tty directly, not from the stdin vcsOutput hands them, so an auth-required
-// remote would hang a build tool forever on a prompt nobody can see - strictly worse than
+// remote would hang a build tool forever on a prompt nobody can see, strictly worse than
 // the over-build this recovery exists to prevent. --no-recurse-submodules because
 // fetch.recurseSubmodules defaults to on-demand and the recovery wants commits in THIS
 // repository, never a submodule's contents.
@@ -562,15 +562,15 @@ func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]s
 // rename arrow, then git's C-quoting.
 //
 // A rename reads "R  old -> new", and the NEW path is the one that exists on disk, so that
-// is the one kept - a caller stages, hashes, or globs what is there.
+// is the one kept: a caller stages, hashes, or globs what is there.
 //
 // The unquoting is NOT made redundant by core.quotePath=false. That setting stops git
 // escaping bytes outside ASCII, and nothing more: a name containing a double quote or a
-// backslash still comes back quoted and escaped ("we\"ird.txt") with the setting off -
-// measured. Left alone it is a path that exists nowhere.
+// backslash still comes back quoted and escaped ("we\"ird.txt") with the setting off
+// (measured). Left alone it is a path that exists nowhere.
 //
 // Only git's own quoting form is unquoted, gated on the leading double quote, because
-// strconv.Unquote also accepts Go rune and raw-string literals - without the gate a file
+// strconv.Unquote also accepts Go rune and raw-string literals; without the gate a file
 // literally named `x` would lose its backquotes.
 func gitStatusPaths(lines []string) []string {
 	out := trimStatusColumns(lines, 3)
@@ -595,7 +595,7 @@ func gitStatusPaths(lines []string) []string {
 // It returns a bool rather than an error deliberately: the callers want the question
 // answered, not propagated, and phrasing it as "if err != nil { return nil }" at the call
 // site is both the nilerr pattern a linter flags and the shape this package has repeatedly
-// been bitten by - a probe whose failure becomes a false answer. Confining the error to one
+// been bitten by: a probe whose failure becomes a false answer. Confining the error to one
 // named predicate makes "no commits yet" a fact rather than a swallowed failure.
 func (v gitVCS) hasCommits(ctx context.Context, dir string) bool {
 	_, err := vcsOutput(ctx, dir, "git", "rev-parse", "--verify", "HEAD")
@@ -621,8 +621,8 @@ const gitTrackedBatch = 256
 // DirtyDiff implements types.VCSDriver, diffing the working tree against HEAD.
 //
 // Against HEAD and not against the INDEX, which is what a bare `git diff` does. The index is
-// git's alone - hg, sl and jj have none, so their DirtyDiff and DirtyFiles necessarily agree
-// - and leaving it in made git the one backend where the two disagreed: `git status
+// git's alone (hg, sl and jj have none, so their DirtyDiff and DirtyFiles necessarily agree),
+// and leaving it in made git the one backend where the two disagreed: `git status
 // --porcelain` reports a STAGED change, while `git diff` does not. Measured: stage a drifted
 // generated file and DirtyFiles names it while DirtyDiff comes back empty, so the drift gate
 // prints "these outputs moved" followed by no diff at all. That is precisely the situation
@@ -641,7 +641,7 @@ func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (stri
 	//
 	// The check runs BEFORE the diff rather than as a rescue afterwards. Rescuing would
 	// mean returning nil from an error branch, which cannot distinguish an unborn HEAD from
-	// any other failure without matching git's message - and this package has been bitten
+	// any other failure without matching git's message, and this package has been bitten
 	// repeatedly by probes that report a false answer instead of an error. The cost is one
 	// extra process on every call, which this path can afford: DirtyDiff runs a handful of
 	// times per invocation, from the drift gate, not per file.
@@ -724,8 +724,8 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 // order together instead of the lightweight ones bunching at the repository's age.
 // An ANNOTATED tag's %(objectname) is the TAG OBJECT's id, not the commit it points at,
 // while a lightweight tag's is the commit. types.VCSTag.ID promises "the revision
-// identifier the tag resolves to", so recording objectname made every annotated tag - the
-// kind `git tag -a` and most release tooling create - report an id that matches no commit.
+// identifier the tag resolves to", so recording objectname made every annotated tag (the
+// kind `git tag -a` and most release tooling create) report an id that matches no commit.
 // A caller asking "is this release tagged at HEAD?" compared VCSTag.ID to Commit.ID and
 // got no match for exactly the tags a release process creates. %(*objectname) is the
 // dereferenced commit, and is EMPTY for a lightweight tag, so the %(if) picks whichever of
@@ -874,7 +874,7 @@ func parseChangesByCommit(out string) []types.CommitChange {
 }
 
 // parseNameStatus reads one --name-status line: a status letter, a TAB, then one
-// path - or two, for the rename and copy forms, whose letter carries a similarity
+// path, or two, for the rename and copy forms, whose letter carries a similarity
 // score (R096, C075). A line magus cannot read is skipped rather than guessed at,
 // because a mis-parsed path attributes churn to a file that does not exist.
 //
@@ -914,7 +914,7 @@ func parseNameStatus(line string) (types.FileChange, bool) {
 }
 
 // Managed-section markers: a locator plus the full line written. Matchers use the
-// locator alone, so a section written by an older magus - whose banner used an em-dash -
+// locator alone, so a section written by an older magus (whose banner used an em-dash)
 // is still found and rewritten rather than duplicated below.
 const (
 	gitAttrsBegin     = "# BEGIN magus-generated"
@@ -945,7 +945,7 @@ func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs
 // Installing only at `magus init` leaves the protection frozen at the shape the
 // workspace had that day: a project that declares an output later is never added to
 // .gitattributes, and a clone that never ran init has no registration at all. Both fail
-// the same silent way - a merge conflicts every generated file by hand. The globs are
+// the same silent way: a merge conflicts every generated file by hand. The globs are
 // derived, so treat the section as derived too and keep it current on its own.
 func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs []string) (bool, error) {
 	if len(outputGlobs) == 0 {
@@ -995,19 +995,19 @@ func (v gitVCS) attrsSectionPresent(root string) bool {
 // The comparison is EXACT, against everything after the executable, because a substring or
 // suffix test is only sound in one direction: a binary whose own verb is `merge-driver` finds
 // " merge-driver " inside `vcs merge-driver %O ...`, calls the registration current, and
-// never rewrites - while git invokes a spelling it cannot dispatch.
+// never rewrites, while git invokes a spelling it cannot dispatch.
 //
 // The wanted string derives from gitDriverArgs, so changing the arguments cannot leave this
 // matching a spelling the binary no longer answers to.
-// It checks the ARGUMENTS ONLY - exactly the spelling this binary writes. driverUsable is
+// It checks the ARGUMENTS ONLY: exactly the spelling this binary writes. driverUsable is
 // what decides whether a registration that does NOT match may still be left alone.
 func driverArgsCurrent(registered string) bool {
 	return driverArgsMatch(registered, gitDriverArgs)
 }
 
 // driverArgsMatch takes the wanted argument string explicitly so a test can pose as a magus
-// whose subcommand path differs from this one's. That direction - an OLDER binary reading a
-// NEWER registration - is the one a suffix comparison gets wrong, and with gitDriverArgs
+// whose subcommand path differs from this one's. That direction (an OLDER binary reading a
+// NEWER registration) is the one a suffix comparison gets wrong, and with gitDriverArgs
 // hard-coded it could not be exercised at all: every assertion written against this binary's
 // own spelling passes under both the correct rule and the broken one.
 func driverArgsMatch(registered, wanted string) bool {
@@ -1018,8 +1018,8 @@ func driverArgsMatch(registered, wanted string) bool {
 // driverUsable reports whether a registration can be left as it is.
 //
 // Two registrations differ from the spelling this binary writes, and they need opposite
-// treatment. A WRAPPER - `env FOO=1 magus vcs merge-driver %O ...`, a shape splitVCSVerb's doc
-// says is supported - works and must be preserved; rewriting it silently drops the wrapper
+// treatment. A WRAPPER (`env FOO=1 magus vcs merge-driver %O ...`, a shape splitVCSVerb's doc
+// says is supported) works and must be preserved; rewriting it silently drops the wrapper
 // someone added on purpose. A STALE VERB, written by a magus whose subcommand path has since
 // moved, does not dispatch at all, and leaving it makes git read every generated file as
 // conflicted. String comparison cannot separate them: `vcs merge-driver %O ...` ends with
@@ -1028,7 +1028,7 @@ func driverArgsMatch(registered, wanted string) bool {
 //
 // So ask the registration itself, and only when it is about to be overwritten. A matching
 // spelling short-circuits, which is the overwhelmingly common case and keeps the steady state
-// free of subprocesses - the cost lands only on the rare path that was going to rewrite
+// free of subprocesses; the cost lands only on the rare path that was going to rewrite
 // anyway, where being right is worth one exec.
 func driverUsable(ctx context.Context, registered string) bool {
 	return driverUsableFor(ctx, registered, gitDriverArgs)
@@ -1157,7 +1157,7 @@ func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 // gitMergeDriverCommand is the command line git runs to resolve a conflict in a
 // generated file. Registering the bare word "magus" assumes a released binary on
 // PATH; when there is not one, git cannot execute the driver and silently falls
-// back to conflict markers in every generated file - which is indistinguishable
+// back to conflict markers in every generated file, which is indistinguishable
 // from having no driver at all. Prefer PATH so the registration survives an
 // upgrade-in-place, and fall back to this binary's own absolute path so a
 // source checkout with no installed magus still merges cleanly.
@@ -1165,7 +1165,7 @@ func (v gitVCS) writeGitAttrs(root string, outputGlobs []string) error {
 // PATH is preferred only if that binary answers the spelling being registered. Existing on
 // PATH is not enough: a source checkout finds an INSTALLED RELEASE there, and pairing that
 // path with this binary's spelling registers something nothing can dispatch. One release plus
-// one source tree is enough to hit it - the ordinary development setup.
+// one source tree is enough to hit it: the ordinary development setup.
 //
 // A magus built at the workspace root comes FIRST, ahead of PATH. Answering the spelling is
 // a weaker test than it looks: driverExeAnswers probes with -h, which returns before the
@@ -1212,7 +1212,7 @@ func quoteDriverExe(exe string) string {
 // driverExeAnswers reports whether exe dispatches the subcommand gitDriverArgs names, by asking
 // it for help: a binary that does not know the subcommand exits non-zero.
 //
-// It spawns a subprocess, so it belongs on the repair path only - EnsureMergeDriver returns
+// It spawns a subprocess, so it belongs on the repair path only; EnsureMergeDriver returns
 // early in the steady state and reaches InstallMergeDriver when something is already wrong.
 // `-h` returns before the child opens a workspace, so it also works in a tree no released
 // magus can load, which is when the answer matters most.
@@ -1229,7 +1229,7 @@ func driverExeAnswers(ctx context.Context, exe string) bool {
 // runnable binary. A registration can rot without anyone touching git config: an absolute
 // path recorded from a `go run` build points into a temp dir that is gone next run, and a
 // path into a since-removed install is no better. git treats a driver it cannot execute
-// as a conflict, so a rotted registration behaves exactly like no driver - the failure it
+// as a conflict, so a rotted registration behaves exactly like no driver; the failure it
 // causes never mentions the driver, so nothing points at the cause.
 func driverExeExists(registered string) bool {
 	exe, _ := splitDriver(registered)
@@ -1245,8 +1245,8 @@ func driverExeExists(registered string) bool {
 }
 
 // writeGitConfig scopes the registration per worktree where git allows it. The value is
-// usually THIS worktree's binary - gitMergeDriverCommand falls back to os.Executable()
-// when PATH holds no magus that answers - so a shared write points every other worktree at
+// usually THIS worktree's binary (gitMergeDriverCommand falls back to os.Executable()
+// when PATH holds no magus that answers), so a shared write points every other worktree at
 // this build, and a merge there silently resolves with the wrong tool. Reading stays
 // unscoped; `git config <key>` already prefers worktree config.
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
@@ -1274,8 +1274,8 @@ func (v gitVCS) worktreeConfigEnabled(ctx context.Context, root string) bool {
 //
 // A path INSIDE root is reachable by definition, and that is the case this got wrong. It
 // admitted only PATH's magus and this process's own binary, so a registration naming a
-// binary in the worktree - which is what install-dogfood writes, and the only thing that
-// can resolve conflicts with the change under test - was rejected as foreign and rewritten
+// binary in the worktree (which is what install-dogfood writes, and the only thing that
+// can resolve conflicts with the change under test) was rejected as foreign and rewritten
 // on the next workspace load. Measured 2026-09-05: the registration survived exactly one
 // magus command. The distinction the original rule wanted is another worktree's root
 // versus this one, not "in a worktree at all".
@@ -1302,7 +1302,7 @@ func driverIsReachableHere(ctx context.Context, root, registered string) bool {
 //
 // Reachability alone leaves a wrong registration in place forever. An installed release
 // answers the -h probe, so driverIsReachableHere calls it fine, the steady-state check
-// returns early, and nothing ever rewrites - which is why 142 worktrees kept a v0.3.0
+// returns early, and nothing ever rewrites, which is why 142 worktrees kept a v0.3.0
 // driver that could not read the tree. Preferring the local build has to be a reason to
 // REPLACE what is registered, not only a preference applied when something else already
 // forced a rewrite.
@@ -1329,8 +1329,8 @@ func pathUnder(root, p string) bool {
 
 // InstallRefreshHook implements types.RefreshHookInstaller: it writes (or refreshes) the
 // managed magus section into each of gitRefreshHooks so a history-changing event runs
-// command. It reuses replaceManagedSection - the same managed-section mechanism as the
-// merge-driver install - so it is idempotent and never clobbers a user's own hook body.
+// command. It reuses replaceManagedSection (the same managed-section mechanism as the
+// merge-driver install), so it is idempotent and never clobbers a user's own hook body.
 // A non-git tree yields no error and no installs.
 func (v gitVCS) InstallRefreshHook(ctx context.Context, root, command string) ([]string, error) {
 	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
@@ -1517,7 +1517,7 @@ func (v gitVCS) StartMerge(ctx context.Context, root, ref string) error {
 	if err == nil {
 		return nil
 	}
-	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up -
+	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up;
 	// the conflicts are the payload, reported by Conflicts. Only a merge that never began
 	// is an error. git leaves MERGE_HEAD behind exactly when one is underway.
 	if _, statErr := os.Stat(filepath.Join(root, ".git", "MERGE_HEAD")); statErr == nil {
@@ -1575,7 +1575,7 @@ func (v gitVCS) RemoveConflicts(ctx context.Context, root string, paths []string
 // --no-index makes the answer useful. By default check-ignore consults the index and
 // calls a TRACKED path not-ignored, since ignore rules do not apply to what git already
 // follows. Every conflicted path is tracked, so the default answers "not ignored" for all
-// of them - including the generated file whose conflict is that one side stopped tracking
+// of them, including the generated file whose conflict is that one side stopped tracking
 // it. The question is about the RULES: would this path be ignored if nothing tracked it.
 func (v gitVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error) {
 	ignored := make(map[string]bool, len(paths))
@@ -1621,7 +1621,7 @@ var gitRedirectVars = []string{
 //
 // Deliberately NOT "drop everything matching GIT_*". That prefix is not one category, it is
 // two, and only one of them is a problem. The variables above answer WHICH repository; the
-// rest answer HOW to work on it - GIT_SSH_COMMAND, GIT_ASKPASS and GIT_PROXY_COMMAND are
+// rest answer HOW to work on it: GIT_SSH_COMMAND, GIT_ASKPASS and GIT_PROXY_COMMAND are
 // how a fetch authenticates (recoverMergeBase really does fetch), GIT_TERMINAL_PROMPT=0 is
 // what stops CI hanging on a credential prompt, GIT_EXEC_PATH is how a nonstandard install
 // finds its own subcommands, and GIT_TRACE is someone actively debugging. Stripping those
@@ -1656,8 +1656,8 @@ func gitExec(ctx context.Context, args ...string) *exec.Cmd {
 // uncolored prepends the switch that stops a backend emitting ANSI, so magus never parses
 // output it has to strip first.
 //
-// Not defensive: a user with `color.ui = always` in their gitconfig - a common setting, since
-// it is how you keep color when piping to a pager - made `magus diff` list every UNTRACKED
+// Not defensive: a user with `color.ui = always` in their gitconfig (a common setting, since
+// it is how you keep color when piping to a pager) made `magus diff` list every UNTRACKED
 // file and silently drop every tracked one, at exit 0. The escape sequence lands in front of
 // the `diff --git` header, so the header stops beginning a line and no reader sees it. magus
 // synthesizes the untracked half itself, uncolored, which is why output still appeared and
@@ -1724,10 +1724,10 @@ func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string
 }
 
 // revFileOutput runs a backend's "show this file at this revision" command and returns
-// stdout EXACTLY - no trimming of any kind, unlike vcsOutput and vcsOutputRaw.
+// stdout EXACTLY: no trimming of any kind, unlike vcsOutput and vcsOutputRaw.
 //
 // This is file CONTENT, not a status line. A trailing newline is part of the file, and a
-// helper that ate it would hand back something that is not what the revision holds - which
+// helper that ate it would hand back something that is not what the revision holds, which
 // is the one promise ReadFileAt makes.
 func revFileOutput(cmd *exec.Cmd, what string) (string, error) {
 	var out, errBuf bytes.Buffer
@@ -1752,7 +1752,7 @@ func splitLines(out []byte) []string {
 // ReadFileAt implements types.RevisionFileReader via `git show <rev>:<path>`.
 //
 // The path is passed with forward slashes and rooted at the repository, which is how git
-// spells a revision:path pair on every platform - it is an object lookup, not a filesystem
+// spells a revision:path pair on every platform; it is an object lookup, not a filesystem
 // one, so filepath.FromSlash here would break it on Windows rather than fix it.
 func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
 	if rev == "" {

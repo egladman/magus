@@ -148,7 +148,7 @@ func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 
 // TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape pins the one reach that is a
 // load error rather than a declaration. Nothing outside the workspace root is ever
-// walked, so the glob could only be stored and ignored - the silent shape this whole
+// walked, so the glob could only be stored and ignored: the silent shape this whole
 // affordance was fixed to stop producing.
 func TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape(t *testing.T) {
 	opts := vm.NewMap()
@@ -282,7 +282,7 @@ func TestParseBuzzProjectOpts_UnknownTargetPolicyKeyErrors(t *testing.T) {
 // TestParseBuzzProjectOpts_KeysFromTheFutureLoad is the deadlock regression, at both
 // depths where a magusfile can carry a key this binary predates.
 //
-// A rejection here aborts workspace load, which takes out every magus command at once -
+// A rejection here aborts workspace load, which takes out every magus command at once,
 // `magus run go-build` included, so the workspace cannot even build the binary that
 // would understand the key. Ignoring it costs one policy not applying.
 func TestParseBuzzProjectOpts_KeysFromTheFutureLoad(t *testing.T) {
@@ -352,7 +352,7 @@ func TestTargetCacheIncludeOverride(t *testing.T) {
 }
 
 // A misspelled nesting level would leave the target inheriting the workspace answer,
-// which looks identical to a cache that works - so it is a load error.
+// which looks identical to a cache that works, so it is a load error.
 func TestTargetCacheIncludeRejectsWrongShape(t *testing.T) {
 	bad := vm.NewMap()
 	cache := vm.NewMap()
@@ -412,7 +412,7 @@ func TestParseBuzzProjectOpts_Tools(t *testing.T) {
 	})
 
 	// A bound that is not a version must fail at LOAD. Letting it through would make
-	// VersionBounds.Check return unknown, which never fails a build - so a typo would
+	// VersionBounds.Check return unknown, which never fails a build, so a typo would
 	// silently widen the window to everything, the exact opposite of declaring one.
 	t.Run("a non-version bound is a load error", func(t *testing.T) {
 		got, err := parseBuzzProjectOpts(context.Background(), toolsOpts("node", map[string]string{"min": "latest"}))
@@ -532,8 +532,8 @@ func TestParseBuzzProjectOpts_ReviewRequired(t *testing.T) {
 }
 
 // gate_low_risk feeds the ci-gate redundancy check's prose class. Unlike
-// review_required an EMPTY list is a legal declaration - it is the spelling
-// that turns the prose class off - so this pins that [] parses and sets the
+// review_required an EMPTY list is a legal declaration (it is the spelling
+// that turns the prose class off), so this pins that [] parses and sets the
 // declared flag, while a non-list or a blank entry stays a load error.
 func TestParseBuzzProjectOpts_GateLowRisk(t *testing.T) {
 	t.Run("globs are recorded and the declaration is marked", func(t *testing.T) {

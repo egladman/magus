@@ -34,7 +34,7 @@ type overlayCtxKey struct{}
 const TargetContextGlobal = "__magus_target_context"
 
 // CtxFormTargetKeys returns the normalized keys of the exported functions in src whose
-// FIRST parameter is annotated `magus\Context` (types.ContextParamAnnotation) - the target
+// FIRST parameter is annotated `magus\Context` (types.ContextParamAnnotation): the target
 // contract. execBuzzSrc uses it to enforce that contract at load (an exported function
 // missing the context is rejected with MGS1008) and to prepend the context at dispatch.
 // It does NOT build the graph: the dependency graph is read statically by
@@ -61,7 +61,7 @@ func CtxFormTargetKeys(src string) map[string]bool {
 // removedMagusfileAPI lists the magusfile calls magus no longer binds, each paired
 // with the call that replaced it. Removing a binding is not self-reporting: Buzz
 // reads a missing member as null rather than erroring, so every one of these still
-// parses, still loads, and still passes `magus ls` - the magusfile only breaks when
+// parses, still loads, and still passes `magus ls`; the magusfile only breaks when
 // the target finally runs, as a bare "null is not callable" that names neither the
 // call nor the migration. The needs family is worse than that, because the static
 // target graph is built from `ctx.needs`: a magusfile still calling `magus.needs`
@@ -141,7 +141,7 @@ func RemovedAPICall(src string) (call, replacement string, ok bool) {
 }
 
 // magusRooted reports whether e is the member path `magus.<path...>`, written with
-// either separator - the dot and backslash forms are the same access, and a stale
+// either separator: the dot and backslash forms are the same access, and a stale
 // magusfile predates the backslash spelling entirely.
 func magusRooted(e ast.Node, path []string) bool {
 	for i := len(path) - 1; i >= 0; i-- {
@@ -178,8 +178,8 @@ func SourceFromContext(ctx context.Context) *Source {
 //
 // It exists for the one caller that has to load a workspace whose magusfile it cannot read:
 // `magus vcs resolve`, during a merge that left conflict markers in the magusfile itself.
-// Everything that command does rests on the declarations - which target rebuilds which
-// output - so a magusfile it cannot parse leaves it unable to settle even the conflicts it
+// Everything that command does rests on the declarations (which target rebuilds which
+// output), so a magusfile it cannot parse leaves it unable to settle even the conflicts it
 // does own. The committed side of the merge is a complete, parseable copy of exactly those
 // declarations, and reading it here is what lets the command do its half of the work while
 // the hand-written conflict waits for a human.
@@ -408,14 +408,14 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	// needed the entry target back was not a cycle to anyone, and it re-ran the
 	// entry target's body inside its own dependency. With two dependencies in
 	// flight that second execution then parked on one dependency's memo entry
-	// while that dependency parked on the entry target - a hang instead of the
+	// while that dependency parked on the entry target: a hang instead of the
 	// cycle diagnostic the pool produces one level deeper.
 	ctx = buzz.WithAncestors(ctx, []string{key})
 	val, err := fn(ctx, buzzArgs)
 	// The typed error is the answer whenever it survived the VM; the capture is only the
 	// fallback for an engine that stringifies ExitError away. Consulting the capture
-	// before err was looked at at all let an earlier os\exit(0) - an op's clean early
-	// return - report success for a genuine failure raised after it, so a captured ZERO
+	// before err was looked at at all let an earlier os\exit(0) (an op's clean early
+	// return) report success for a genuine failure raised after it, so a captured ZERO
 	// is never taken as that fallback: the error in hand says the run did not succeed.
 	if code, ok := exitCode(); ok {
 		var ex types.ExitError
@@ -429,7 +429,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	if err != nil {
 		// Deliberately unwrapped: every caller reaches a user through
 		// types.SpellErrors, which already names the spell and the target. Adding
-		// them here too produced "[magusfile] magusfile: target lint: ..." - the
+		// them here too produced "[magusfile] magusfile: target lint: ...", the
 		// spell twice, the target twice, before the actual failure.
 		return nil, err
 	}
@@ -439,7 +439,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	if err != nil {
 		// Deliberately unwrapped: every caller reaches a user through
 		// types.SpellErrors, which already names the spell and the target. Adding
-		// them here too produced "[magusfile] magusfile: target lint: ..." - the
+		// them here too produced "[magusfile] magusfile: target lint: ...", the
 		// spell twice, the target twice, before the actual failure.
 		return nil, err
 	}
@@ -615,7 +615,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 			_ = buzzSess.Close()
 			return nil, targetCollisionErr(prev, name, key)
 		}
-		// Every target must receive a magus.Context as its first parameter - the
+		// Every target must receive a magus.Context as its first parameter: the
 		// signature IS the contract magus reads statically to build the graph. Reject the
 		// old ctx-less form at load rather than dispatching it with the wrong arguments.
 		if !ctxForm[key] {

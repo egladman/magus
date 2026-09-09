@@ -18,7 +18,7 @@ import (
 // whether to interrupt someone. A StreamEvent carries neither, because a program
 // subscribing to a build stream decides relevance by [StreamEventType]. The two
 // do not meet on the wire today: every mapped type is a run or target fact, and
-// an attention request has no adapter onto this stream - see the const block.
+// an attention request has no adapter onto this stream; see the const block.
 //
 // Nothing a subscriber does can change a magus verdict. The stream is outbound
 // only, by design and not by omission: docs/scope.md seals the engine, the cache,
@@ -51,7 +51,7 @@ type StreamEvent struct {
 	// connection, and an event with no workspace cannot be routed to a buffer.
 	Workspace string `json:"-"`
 	// Inv groups every event belonging to one magus invocation. Empty for events
-	// that belong to no run - a file change, an attention request, a guard verdict.
+	// that belong to no run: a file change, an attention request, a guard verdict.
 	Inv string `json:"-"`
 	// Body carries the per-type fields and determines [StreamEvent.Type]. It is
 	// never nil on a well-formed event; a nil Body marshals as an error rather
@@ -121,7 +121,7 @@ type StreamRun struct {
 	// Command is the full argument vector, subcommand included, as invoked.
 	// Set on the started phase only.
 	Command []string `json:"command,omitempty"`
-	// Trigger is how the run was spawned - one of journal's Trigger constants
+	// Trigger is how the run was spawned: one of journal's Trigger constants
 	// (run, affected, ci, x, watch, direct). Set on the started phase only.
 	Trigger string `json:"trigger,omitempty"`
 	// MagusVersion is the binary that produced the run. Set on the started phase.

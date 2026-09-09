@@ -23,7 +23,7 @@ const runLogExt = ".jsonl"
 // The directory IS the bus, and that is the design rather than a fallback. Every
 // magus process in a workspace already appends its invocation to
 // <cacheDir>/runs/<inv>.jsonl, so a follower reading that directory sees runs
-// started from any terminal, any editor, and the daemon alike - with no daemon
+// started from any terminal, any editor, and the daemon alike: with no daemon
 // required, no socket to discover, and no token to provision. A subscriber that
 // wants lower latency than a poll can take the daemon socket instead; it learns
 // the same events.
@@ -107,7 +107,7 @@ func (f *Follower) skip(names []string) {
 // blocking until ctx is cancelled. It returns nil on cancellation: a follower
 // stopping because it was asked to is not a failure.
 //
-// An emit error stops the follow and is returned - that is the subscriber's pipe
+// An emit error stops the follow and is returned: that is the subscriber's pipe
 // closing, and continuing to read a directory nobody is listening to is waste. A
 // read error on one log is skipped rather than fatal, because a log being written
 // concurrently is the normal case.

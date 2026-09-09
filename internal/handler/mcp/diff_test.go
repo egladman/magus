@@ -107,7 +107,7 @@ func TestStateRecomputesWhenTheTreeHasMoved(t *testing.T) {
 func TestCommentRefusesACoordinateTheChangesetDoesNotHave(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
 
-	// A file with no changes at all - the exact mistake a stale session invited.
+	// A file with no changes at all, the exact mistake a stale session invited.
 	_, err := invoke(t, tool, map[string]any{
 		"op": "comment", "path": "not-in-the-change.go", "body": "looks wrong",
 	})
@@ -158,13 +158,13 @@ func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
 }
 
 // The projection parameter is additive: a caller that never sends it, sends it empty, or
-// sends "full" must see byte-identical output to what op=state has always returned - the
+// sends "full" must see byte-identical output to what op=state has always returned: the
 // serialized session, patch, and hunks, with nothing narrowed.
 func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
 
 	// Built the same way op=state has always built its answer, independent of
-	// projectDiffState - the reference every case below is pinned against.
+	// projectDiffState, the reference every case below is pinned against.
 	sess := tool.sessions.Get(tool.root)
 	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
@@ -189,7 +189,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 }
 
 // Each projection keeps only the fields it promises: presence of what it claims to carry, and
-// - since a projection struct simply has no field for what it does not - absence of
+// (since a projection struct simply has no field for what it does not) absence of
 // everything else, checked on the serialized wire rather than trusted from the Go type alone.
 func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
@@ -244,8 +244,8 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 	}
 }
 
-// The summary projection keeps Recomputed - the one bit that says an answer was freshly
-// computed rather than replayed - even though it drops everything else state adds.
+// The summary projection keeps Recomputed (the one bit that says an answer was freshly
+// computed rather than replayed) even though it drops everything else state adds.
 func TestProjectionSummaryCarriesRecomputedThrough(t *testing.T) {
 	src := &fakeDiffSrc{patch: agentPatch}
 	tool := newDiffTool(t, src)
@@ -270,7 +270,7 @@ func TestProjectionRejectsAnUnknownValue(t *testing.T) {
 	assert.Contains(t, err.Error(), "summary")
 }
 
-// projectDiffState only shapes op=state by design - a writing op keeps returning the full
+// projectDiffState only shapes op=state by design: a writing op keeps returning the full
 // session no matter what this parameter is set to.
 func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
@@ -288,8 +288,8 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 // This is the sharpest form of "agents draft, humans send": a remark on a hunk is addressed to
 // whoever reads the review, but a reply is addressed to the colleague who asked, by name, and
 // receiving a wall of generated text where you asked a question is how the human half of a review
-// dies. The protection is structural rather than advisory - there is simply no agent-reachable op
-// that produces one - and this pins it, because the failure mode of a missing test here is a
+// dies. The protection is structural rather than advisory (there is simply no agent-reachable op
+// that produces one), and this pins it, because the failure mode of a missing test here is a
 // future op named "reply" that nobody notices has crossed the line.
 //
 // publish is refused for the same reason it is refused everywhere else: an agent cannot make

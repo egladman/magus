@@ -247,7 +247,7 @@ func TestRecordDigestsSkipsADanglingAnchor(t *testing.T) {
 
 // TestRecordDigestsStampsTheRevision: the digest says the anchored code changed, and the
 // commit says what to diff it against. They are written together because a pair that
-// disagreed would send a reader to the wrong diff, which is worse than no provenance - and
+// disagreed would send a reader to the wrong diff, which is worse than no provenance, and
 // the CLI has always printed this field, so leaving nothing writing it meant printing blank.
 func TestRecordDigestsStampsTheRevision(t *testing.T) {
 	dir := t.TempDir()
@@ -452,7 +452,7 @@ func TestResolveAnchorsAgreesWithAnchorIssues(t *testing.T) {
 	require.NoError(t, err)
 
 	// Keyed by note because the Issue view identifies an anchor only inside a message written
-	// for a person - which is itself the reason the per-anchor view had to exist.
+	// for a person, which is itself the reason the per-anchor view had to exist.
 	reported := map[string][]IssueCode{}
 	for _, i := range issues {
 		reported[i.Note] = append(reported[i.Note], i.Code)
@@ -519,7 +519,7 @@ func TestUngradedResolutionDiffersOnlyInStatus(t *testing.T) {
 	}
 }
 
-// errDeclResolver computes a body digest but fails on the declaration - a symbol the indexer
+// errDeclResolver computes a body digest but fails on the declaration: a symbol the indexer
 // found but reported no enclosing range for.
 type errDeclResolver struct{ fakeResolver }
 
@@ -529,7 +529,7 @@ func (errDeclResolver) DeclDigest(context.Context, Anchor) (string, error) {
 
 // TestDeclarationHeldFailsTowardsUngraded pins the DIRECTION the grading fails in, which is
 // the whole reason it is one exported function rather than a rule each caller re-implements.
-// Every way of being unsure - nothing recorded, nothing computable, an error - answers false,
+// Every way of being unsure (nothing recorded, nothing computable, an error) answers false,
 // so the finding degrades to ungraded drift rather than to the softer verdict. Overstating a
 // change costs a re-read; understating one is a note that quietly stopped being true.
 func TestDeclarationHeldFailsTowardsUngraded(t *testing.T) {

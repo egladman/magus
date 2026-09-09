@@ -49,7 +49,7 @@ func (s *Service) Insight(ctx context.Context) (types.InsightView, error) {
 
 // cachedScan returns the four VCS-history lenses, reusing a scan within the TTL. Assembly is
 // serialized by the cache mutex, so concurrent pollers past a cold TTL wait for one scan rather
-// than each launching their own. Volatility is not part of this cache - Insight folds it in fresh.
+// than each launching their own. Volatility is not part of this cache; Insight folds it in fresh.
 func (s *Service) cachedScan(ctx context.Context) (types.InsightView, error) {
 	s.insightMu.Lock()
 	defer s.insightMu.Unlock()

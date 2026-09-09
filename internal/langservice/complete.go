@@ -41,8 +41,8 @@ var builtins = []string{
 }
 
 // CompleteAt returns the completions for the cursor at offset in src. It classifies
-// the cursor context from the raw text - inside an import path, after a `module.`
-// member access, or on a bare word - so it stays useful on the half-typed source a
+// the cursor context from the raw text (inside an import path, after a `module.`
+// member access, or on a bare word), so it stays useful on the half-typed source a
 // live editor calls it with. offset is a byte offset; out-of-range offsets are
 // clamped. Results are sorted and each carries Replace, the length of the partial
 // token it completes.

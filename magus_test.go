@@ -286,7 +286,7 @@ func TestStepFor_RootProject(t *testing.T) {
 }
 
 // TestStepFor_NoSpellsHasNoIgnoreDirs pins that a project with no resolved spells
-// carries no ignore dirs into its Step - the walk falls back to the core set only.
+// carries no ignore dirs into its Step: the walk falls back to the core set only.
 func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 	t.Parallel()
 	root := makeWorkspaceRoot(t, "magusfile.buzz")
@@ -298,7 +298,7 @@ func TestStepFor_NoSpellsHasNoIgnoreDirs(t *testing.T) {
 
 // TestStepFor_UnionsSpellIgnoreDirs verifies baseStep unions the IgnoreDirs of ALL a
 // project's resolved spells (not just one) and dedups overlaps, preserving first-seen
-// order - the polyglot case where two spells both claim a dir. This exercises the whole
+// order: the polyglot case where two spells both claim a dir. This exercises the whole
 // spell-declared path end to end: WithIgnoreDirs -> Spell.IgnoreDirs() -> Step.IgnoreDirs.
 func TestStepFor_UnionsSpellIgnoreDirs(t *testing.T) {
 	t.Parallel()
@@ -777,7 +777,7 @@ func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
 // recorded through one is visible via the other's MetricsCollector. This is exactly what lets
 // the daemon's bridge Magus read the counters that separate per-workspace registry builds
 // record. Without a shared provider each Magus has its own ManualReader and the bridge
-// collector reads zeros - the bug this feature fixes.
+// collector reads zeros: the bug this feature fixes.
 func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	ctx := context.Background()
 
@@ -841,7 +841,7 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 // The cross input folds into the cache key WORKSPACE-relative (lib/go.mod, NOT
 // consumer/lib/go.mod) and unions its owning project into DependsOn; the same-project
 // input folds relative to the consumer (consumer/app/**) and adds NO self-dependency. A
-// change to either file marks the consumer affected - the cross one via the DependsOn
+// change to either file marks the consumer affected: the cross one via the DependsOn
 // reverse-closure, the same-project one via directory containment. All recovered
 // statically at Open, no runtime dispatch.
 func TestCrossFileInputs(t *testing.T) {
@@ -882,7 +882,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 	}, consumer.TargetInputs["build"],
 		"same-project and cross-project inputs share one TargetInputs list, each owning-project-tagged")
 
-	// The cross input's owning project is unioned into DependsOn - required for
+	// The cross input's owning project is unioned into DependsOn, required for
 	// affected-tracking (a DependsOn-reverse-closure). The same-project input adds no
 	// self-edge (the depgraph rejects self-loops; it seeds by directory containment).
 	assert.Contains(t, consumer.DependsOn, "lib",
@@ -1041,7 +1041,7 @@ func TestClose_ShutsDownOwnedProvider(t *testing.T) {
 }
 
 // TestClose_JoinsProviderShutdownError verifies a shutdown error is surfaced (not
-// swallowed) and that Close does not bail out early - required so a later resource
+// swallowed) and that Close does not bail out early, required so a later resource
 // (the pool registry) still gets a chance to close even when telemetry shutdown fails.
 func TestClose_JoinsProviderShutdownError(t *testing.T) {
 	wantErr := errors.New("otlp: flush failed")
@@ -1178,7 +1178,7 @@ func floorWorkspace(t *testing.T, constraint string) string {
 
 // The wiring, not the comparison: internal/ward covers the semver logic, and this
 // covers that magus.yaml's required_version actually reaches it. That path is easy to
-// break invisibly - the field carries `cli:"-"`, so it is absent from the generated
+// break invisibly: the field carries `cli:"-"`, so it is absent from the generated
 // flag/env/schema tables, and a loader that read those instead of the struct tags
 // would silently see an empty floor and admit every binary.
 //
@@ -1305,7 +1305,7 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 }
 
 // The two halves are CONCATENATED, and a tracked diff whose last line is not
-// newline-terminated would otherwise glue the first synthesized header onto it - so that
+// newline-terminated would otherwise glue the first synthesized header onto it, so that
 // header stops starting a line, every reader misses it, and the first untracked file vanishes
 // from the review while the rest appear normally. It cost one real file here and reported
 // nothing, which is what makes it worth a test rather than a comment.

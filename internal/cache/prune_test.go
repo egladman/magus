@@ -54,7 +54,7 @@ func TestPrune_DryRun_NothingDeleted(t *testing.T) {
 // produce byte-identical output content share one CAS blob (content-addressed
 // storage dedupes it). Pruning the entry created before cutoff must not count
 // that shared blob's bytes: the surviving (newer) manifest still references
-// it, so gcBlobs keeps it on disk - counting it as freed overstates what was
+// it, so gcBlobs keeps it on disk; counting it as freed overstates what was
 // actually reclaimed. freed is checked against an exact expectation (its own
 // manifest.json plus its own recorded run output, neither of them shared)
 // rather than a loose bound, since freed legitimately includes bytes larger

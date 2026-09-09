@@ -17,7 +17,7 @@ const LanguageVersion = "0.6.0-dev"
 // subset. Do NOT restate the score here: this comment carried "26 of 83" long
 // after the real figure moved, and a second stale number lived in
 // conformance_test.go at the same time, so the tree asserted three different
-// scores at once. The authority is testdata/upstream-behavior-allowlist.txt -
+// scores at once. The authority is testdata/upstream-behavior-allowlist.txt:
 // its line count IS the passing count, because the conformance test enforces the
 // list in both directions. The README's parity section carries the running record
 // in prose. Bump this ref and re-run the conformance target on every sync.

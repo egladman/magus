@@ -244,8 +244,8 @@ var surfaceLockPath = filepath.Join("testdata", "magus-api.lock")
 // magusSurfaceNames flattens the magusfile-surface magus namespace to dotted member
 // names, two levels deep: the top-level members plus the members of each namespace
 // member (project, cache, ci, secret, workspace). Two levels is what the removal
-// history needs - `magus.project.register` and `magus.target.literal` were both
-// nested - and going deeper would snapshot returned data rather than the surface.
+// history needs (`magus.project.register` and `magus.target.literal` were both
+// nested), and going deeper would snapshot returned data rather than the surface.
 func magusSurfaceNames(t *testing.T) []string {
 	t.Helper()
 	ctx := context.Background()
@@ -342,7 +342,7 @@ func TestRemovedAPIIsActuallyRemoved(t *testing.T) {
 // a Go host method reached across the binding boundary, or as Buzz source running
 // on the VM?
 //
-// collapseWs is the comparison because BOTH already exist and agree on semantics -
+// collapseWs is the comparison because BOTH already exist and agree on semantics:
 // std.StringsCollapseWs (Go, via strings.Fields) and the hand-rolled version in
 // docs/lib/text.buzz. Nothing had to be written twice to measure it.
 //

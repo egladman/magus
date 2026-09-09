@@ -66,7 +66,7 @@ func StartLive(origin string, bc *journal.Broadcaster) (*LiveServer, error) {
 	return ls, nil
 }
 
-// Addr is the loopback "127.0.0.1:PORT" the server bound - the value the viewer connects its
+// Addr is the loopback "127.0.0.1:PORT" the server bound, the value the viewer connects its
 // EventSource to.
 func (ls *LiveServer) Addr() string { return ls.srv.Addr().String() }
 
@@ -76,7 +76,7 @@ func (ls *LiveServer) Token() string { return ls.token }
 // ViewerURL builds the viewer link for this live run: <logsBase>/#live=<addr>&token=<token>,
 // where logsBase is the log viewer page URL (e.g. https://.../magus/logs/). BOTH the loopback
 // host and the bearer token ride the URL fragment, which the browser never transmits to a
-// server - so the connection details are handed to the page locally and nothing leaves the
+// server, so the connection details are handed to the page locally and nothing leaves the
 // machine; the page reads the token and strips it from the URL.
 func (ls *LiveServer) ViewerURL(logsBase string) string {
 	return strings.TrimRight(logsBase, "/") + "/#live=" + url.QueryEscape(ls.Addr()) + "&token=" + url.QueryEscape(ls.token)

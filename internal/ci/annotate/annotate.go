@@ -74,7 +74,7 @@ type Group struct {
 	// Collapsed asks for the section to start folded. It is a request, not
 	// a guarantee: GitHub always folds regardless, and providers with no
 	// notion of folding ignore it. Callers should set it false for output
-	// the reader needs to see without clicking - a failure, above all.
+	// the reader needs to see without clicking: a failure, above all.
 	Collapsed bool
 }
 
@@ -82,7 +82,7 @@ type Group struct {
 // pull request. Every field beyond Message is optional; a provider uses
 // what it supports.
 //
-// SECURITY: Message and Title are UNTRUSTED - they carry a failing
+// SECURITY: Message and Title are UNTRUSTED; they carry a failing
 // process's output, so their content is whatever some test, compiler or
 // transitive dependency chose to print. A provider must never interpolate
 // them where their content becomes syntax (a shell command, a URL), or a
@@ -106,7 +106,7 @@ type Annotation struct {
 //
 // Implementations are constructed around their destination and are
 // expected to be cheap: core may call Active per build step. Nothing
-// here assumes the output is a stream - Buildkite raises annotations by
+// here assumes the output is a stream: Buildkite raises annotations by
 // invoking its agent binary, so an implementation may shell out.
 type Annotator interface {
 	// Active reports whether this provider is running the job. False makes
@@ -142,8 +142,8 @@ type GreenRun struct {
 
 // RunSource is the optional provider capability behind CI verdict
 // inheritance: the newest green run of this same pipeline for the current
-// branch or pull request. A provider that cannot answer - not a PR context,
-// no API access, no green run yet - reports ok=false, and the caller
+// branch or pull request. A provider that cannot answer (not a PR context,
+// no API access, no green run yet) reports ok=false, and the caller
 // proceeds as if the capability did not exist.
 type RunSource interface {
 	LastGreenRun() (GreenRun, bool)
@@ -166,7 +166,7 @@ var (
 
 // RegisterOpener installs the hook that supplies a spell-backed
 // Annotator. The bindings layer registers it at init, so core selects a
-// provider without linking the Buzz VM - the same indirection
+// provider without linking the Buzz VM, the same indirection
 // [cache.RegisterRemoteBackendOpener] uses for remote cache backends.
 func RegisterOpener(fn func() Annotator) {
 	openerMu.Lock()
@@ -180,8 +180,8 @@ func RegisterOpener(fn func() Annotator) {
 // Every provider is a spell: magus ships no CI syntax of its own, so a
 // workspace opts in by naming one (magus.ci.provider), and adding support
 // for a new system is a spell someone writes rather than a change to
-// magus. A spell that reports itself inactive - the github spell outside
-// Actions - yields Nop, so an unconditional wiring costs nothing
+// magus. A spell that reports itself inactive (the github spell outside
+// Actions) yields Nop, so an unconditional wiring costs nothing
 // elsewhere.
 //
 // Detect hands a provider no destination: a provider spell emits markers with
@@ -211,7 +211,7 @@ func Detect() Annotator {
 // worth.
 //
 // Dropping the first character rather than inserting one keeps the result
-// plain ASCII and legible - "::error::x" becomes ":error::x". Leading
+// plain ASCII and legible: "::error::x" becomes ":error::x". Leading
 // whitespace is preserved.
 //
 // The drop repeats until no prefix matches. A single pass would UPGRADE a
@@ -328,7 +328,7 @@ func ClampPrefixes(in []string) []string {
 // SanitizeGroup bounds a group's fields the way [Sanitize] bounds an
 // annotation's. A group's title embeds a project and target name, which
 // come from a magusfile rather than from process output, so this is a
-// weaker threat than an annotation - but the same boundary applies, and
+// weaker threat than an annotation, but the same boundary applies, and
 // a title is echoed into the job log all the same.
 func SanitizeGroup(g Group) Group {
 	g.ID = clampText(g.ID, maxFieldLen)

@@ -4,7 +4,7 @@ import "fmt"
 
 // Indexer describes the SCIP indexer a language's spell drives: the tool it forks and
 // where to get it. It exists so a failed index run can point the user at an install
-// page instead of a bare "command not found" - the indexers are separate projects magus
+// page instead of a bare "command not found": the indexers are separate projects magus
 // does not bundle, so "not installed" is a common, recoverable state.
 type Indexer struct {
 	Language string // canonical language (matches the spell's mgs_getLanguage)

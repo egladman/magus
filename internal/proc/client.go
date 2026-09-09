@@ -47,8 +47,8 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	// takes the project locks for an adopted run: without it the daemon cannot tell a
 	// lock held for THIS client's parent from one held for an unrelated client.
 	// The lease travels for the same reason in the other direction: the daemon runs the
-	// work, so it would otherwise attribute it to the daemon's environment - which is
-	// nobody's lease - and the session journal would show adopted runs unattributed.
+	// work, so it would otherwise attribute it to the daemon's environment (which is
+	// nobody's lease) and the session journal would show adopted runs unattributed.
 	// Read through trail.LeaseFromEnv rather than the raw variable so a malformed
 	// value is dropped here, once, by the same rule every other channel applies.
 	req := runRequest{
@@ -81,7 +81,7 @@ func Forward(ctx context.Context, args []string, version, root string) (int, err
 	}
 	// An adopted run's failure reason has to be SAID. The server hands it back in
 	// reply.Err and this used to drop it, on the reasoning that the exit code is what
-	// callers act on - which is true, and left the user with a bare status and no reason,
+	// callers act on, which is true, and left the user with a bare status and no reason,
 	// because the adopted handler returns its error to the server instead of printing it
 	// the way a local dispatch does. Emitted through slog so it renders exactly as the
 	// local path's error does; the exit code is still what the caller returns on.
@@ -137,7 +137,7 @@ func QueryStatus(ctx context.Context, addr string) (*StatusReply, error) {
 	return &reply, nil
 }
 
-// SubmitJob dials the proc server at addr and submits a fire-and-forget background job -
+// SubmitJob dials the proc server at addr and submits a fire-and-forget background job:
 // the daemon runs `magus <args>` asynchronously and this returns as soon as it is
 // accepted, with the job's invocation id (a Dashboard deep-link). It scopes the job to
 // the caller's working directory (computed here, like Forward, so there is no

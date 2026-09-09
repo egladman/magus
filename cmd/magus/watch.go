@@ -89,7 +89,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	//
 	// AllOutputs, not the project-wide Outputs alone: a per-target ctx.writesFiles glob and a
 	// glob another project writes into this tree both land in the same loop otherwise.
-	// The cross-project case closes it fastest - the writer produces the file, watch fires
+	// The cross-project case closes it fastest: the writer produces the file, watch fires
 	// on the owner, the owner's depends_on drags the writer back in, and its cache hit
 	// replays the very file that triggered the round.
 	var outputGlobs []string
@@ -140,8 +140,8 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 	// Sentinel tokens (e.g. magus.StreamAllSentinel) and any path that
 	// escapes the workspace root are passed through verbatim.
 	//
-	// The flush is the whole point of the function - stdout is block-buffered when
-	// piped, so an unflushed batch never reaches `magus affected --stdin` - which is
+	// The flush is the whole point of the function (stdout is block-buffered when
+	// piped, so an unflushed batch never reaches `magus affected --stdin`), which is
 	// why its error is returned rather than dropped: a closed pipe downstream ends the
 	// watch, it does not become a stream that silently emits nothing.
 	writeBatch := func(paths []string) error {
@@ -170,7 +170,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 		case err := <-w.Errors():
 			// A watcher error is the watch failing, not a note about it: the backend has
 			// stopped seeing some or all of the tree, so continuing prints an empty
-			// stream and exits 0 - a build pipeline reads that as "nothing changed".
+			// stream and exits 0: a build pipeline reads that as "nothing changed".
 			return fmt.Errorf("magus watch: %w", err)
 		case batch, ok := <-w.Events():
 			if !ok {

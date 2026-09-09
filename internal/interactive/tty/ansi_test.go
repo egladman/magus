@@ -127,8 +127,8 @@ func TestWantsHyperlinksRefusesOverSSH(t *testing.T) {
 func TestClipVisibleCountsColumnsNotBytes(t *testing.T) {
 	t.Parallel()
 	// The bug this exists for: a coloured cell is ONE column and about fifteen
-	// bytes, so a byte budget cuts a styled row long before it is too wide -
-	// inside an escape - and the terminal then eats the following text as
+	// bytes, so a byte budget cuts a styled row long before it is too wide
+	// (inside an escape), and the terminal then eats the following text as
 	// parameters.
 	cell := Colorize("*", SGRGreen)
 	row := strings.Repeat(cell, 8)
@@ -161,7 +161,7 @@ func TestClipVisibleNeverSplitsAnEscape(t *testing.T) {
 func TestClipVisibleKeepsHyperlinksWhole(t *testing.T) {
 	t.Parallel()
 	// OSC carries a URI, which must never be counted as visible text nor cut in
-	// half - a severed OSC leaves the terminal waiting for a terminator.
+	// half: a severed OSC leaves the terminal waiting for a terminator.
 	link := Hyperlink("out-42", "file:///tmp/a.log")
 	got := ClipCols(link+"tail", 6)
 	assert.Contains(t, got, "file:///tmp/a.log", "the URI is not visible text and is not budgeted")

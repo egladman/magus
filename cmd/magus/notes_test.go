@@ -19,7 +19,7 @@ import (
 )
 
 // A record already points into the graph, so promotion reads its anchors rather than asking
-// the promoter to restate them - that restatement is the friction promotion exists to remove.
+// the promoter to restate them: that restatement is the friction promotion exists to remove.
 func TestAnchorsComeFromTheRecordsNodeRefs(t *testing.T) {
 	got, err := anchorsFromRefs(memory.Record{
 		Name: "pairing",
@@ -208,7 +208,7 @@ func TestReviewThreadsReachTheForgeWithNoDaemon(t *testing.T) {
 	require.Len(t, threads, 1)
 	assert.Equal(t, "theirs", threads[0].Body)
 	assert.Empty(t, reason)
-	// Nothing has been on screen here, so the whole conversation is new - the mark the daemon
+	// Nothing has been on screen here, so the whole conversation is new: the mark the daemon
 	// would have applied, taken from the watermark the store persists rather than from a session.
 	assert.True(t, threads[0].New)
 }
@@ -297,7 +297,7 @@ func TestRelativeToRootKeepsAnOutsidePathAbsolute(t *testing.T) {
 }
 
 // unreadableNoteStores declares a shared and a private store and plants a name in the
-// shared one that EXISTS and cannot be read - a directory where the .md should be, so
+// shared one that EXISTS and cannot be read: a directory where the .md should be, so
 // the failure is EISDIR rather than a permission bit root would ignore.
 func unreadableNoteStores(t *testing.T, name string) (root string, privateDir string) {
 	t.Helper()

@@ -29,7 +29,7 @@ func repoFile(t *testing.T, path string) string {
 //
 // It is the whole reason for rendering rather than recording: the artifact a
 // reader sees is a pure function of a committed capture, so CI can assert the two
-// agree. Both palettes are checked - a variant nothing gates is a variant that
+// agree. Both palettes are checked: a variant nothing gates is a variant that
 // goes stale, which is the failure this gate exists to prevent.
 func TestCoreLoopUpToDate(t *testing.T) {
 	for _, v := range screen.ThemeVariants {
@@ -98,8 +98,8 @@ func TestFramesTellTheStory(t *testing.T) {
 // reserves rows for the pinned band, so the scroll region is smaller than the
 // screen, and at the size this was first recorded at the line naming the
 // narrowed set had scrolled off the top before the frame was taken. The picture
-// showed the summary of a run whose whole point - that it only did the work the
-// edit reached - was no longer on screen.
+// showed the summary of a run whose whole point (that it only did the work the
+// edit reached) was no longer on screen.
 //
 // Cheap to assert and impossible to notice by eye once the animation is looping,
 // so it is asserted.
@@ -272,7 +272,7 @@ func TestPaceScalesWithWhatAFrameAdds(t *testing.T) {
 }
 
 // TestHoldsPacesEveryFrame walks the real recording, because holds measures each
-// frame against its predecessor and the first against an empty screen - a shape
+// frame against its predecessor and the first against an empty screen, a shape
 // no synthetic pair of frames exercises.
 func TestHoldsPacesEveryFrame(t *testing.T) {
 	frames, err := replay(repoFile(t, capturePath))

@@ -53,7 +53,7 @@ func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: 
 
 // TestCursorPublishesThePatchIndexNotTheRowPosition pins the coordinate the shared session is
 // keyed by. Hunk.Index and the position in Hunks agree while the viewer holds every hunk of
-// every file, so only a fixture where they differ can tell the two apart - and Index is the one
+// every file, so only a fixture where they differ can tell the two apart, and Index is the one
 // the console and the MCP surface resolve talk by, the same one talkRows joins on.
 func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 	t.Parallel()
@@ -321,7 +321,7 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	assert.False(t, m.Overview())
 }
 
-// The viewer no longer computes emphasis - the parser does, and hands it over in Hunk.Emph.
+// The viewer no longer computes emphasis; the parser does, and hands it over in Hunk.Emph.
 // What is left to check here is that a span it was GIVEN survives into the row it belongs to,
 // including the "nothing to mark" case, since the slice may be short or absent entirely.
 //
@@ -523,7 +523,7 @@ func rowTextFor(m *Model, kind RowKind, file int) string {
 }
 
 // A colleague's remark reaches the TERMINAL, not only the browser. The reader chooses where to
-// read and magus does not care which - read receipts already work both ways, and a review that
+// read and magus does not care which; read receipts already work both ways, and a review that
 // showed the conversation in one surface and not the other would send half of them to a browser
 // to find out what was asked.
 func TestTheHostsThreadsRenderBesideTheCodeTheyAreAbout(t *testing.T) {
@@ -558,7 +558,7 @@ func TestAnUnplacedThreadRendersUnderItsFileRatherThanVanishing(t *testing.T) {
 // A pull request covers commits a working diff does not, so a colleague's remark can land on a
 // file this changeset never touches. The console lists those; the viewer used to read m.unplaced
 // only INSIDE its per-file loop, so a thread on a path it was not drawing reached no row at all
-// and was discarded in silence - the one thing a review surface must never do.
+// and was discarded in silence: the one thing a review surface must never do.
 func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
@@ -576,7 +576,7 @@ func TestAThreadOutsideTheChangesetIsListedRatherThanDropped(t *testing.T) {
 }
 
 // A folded file draws one stand-in row instead of its hunks, so a remark anchored inside it has
-// nowhere to sit either - and it was dropped for the same reason, one loop deeper.
+// nowhere to sit either, and it was dropped for the same reason, one loop deeper.
 func TestAThreadOnAFoldedFileIsListedRatherThanDropped(t *testing.T) {
 	t.Parallel()
 	m := New(Input{
@@ -610,8 +610,8 @@ func twoThreadFile() Input {
 }
 
 // The watermark is the reader's claim to have HAD a remark in front of them, so it follows the
-// viewport and not the changeset. Advancing it at open would consume the mark - and the
-// notification that exists to send the reader back - for a thread three screens down that
+// viewport and not the changeset. Advancing it at open would consume the mark (and the
+// notification that exists to send the reader back) for a thread three screens down that
 // nobody looked at.
 func TestOnlyTheThreadsTheViewportDrewAreReportedSeen(t *testing.T) {
 	t.Parallel()
@@ -695,7 +695,7 @@ func TestSettledFilesFoldByDefault(t *testing.T) {
 	assert.True(t, m.Unsettled())
 }
 
-// The control that keeps the fold honest. DiffReadStale - read, then EDITED - is the file that
+// The control that keeps the fold honest. DiffReadStale (read, then EDITED) is the file that
 // most needs a second look, and folding it would hide the change from the one person who would
 // otherwise have caught it.
 func TestAStaleFileIsNeverFolded(t *testing.T) {

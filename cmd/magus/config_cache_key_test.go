@@ -20,7 +20,7 @@ func withOutputFlags(t *testing.T, format, tee string) {
 }
 
 // The seed goes to a secret store over a pipe, so stdout must carry the seed and
-// NOTHING else - no prose, and no trailing newline. `gh secret set` stores stdin
+// NOTHING else: no prose, and no trailing newline. `gh secret set` stores stdin
 // verbatim, so one stray byte becomes part of the secret and the base64 decode on
 // the other end fails at signing time, a long way from the cause.
 func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
@@ -40,7 +40,7 @@ func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
 }
 
 // The keyid and public key still have to reach a human who is piping the seed
-// away unseen - they are what you paste into magus.yaml - so they move to stderr
+// away unseen (they are what you paste into magus.yaml), so they move to stderr
 // rather than being suppressed.
 func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
 	withOutputFlags(t, "template={{.keyid}}", "")
@@ -92,7 +92,7 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "keyid  ")
-	// The seed sits BARE on its own line - not after "VAR=", which is awkward to
+	// The seed sits BARE on its own line, not after "VAR=", which is awkward to
 	// select and invites pasting it into an export, straight into shell history.
 	assert.Contains(t, out, "\n\n"+seedOf(t, out)+"\n\n", "the seed must be alone on its line")
 	assert.NotContains(t, out, signingKeyEnv+"=", "the seed must not be rendered as an assignment")

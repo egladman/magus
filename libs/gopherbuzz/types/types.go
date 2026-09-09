@@ -222,7 +222,7 @@ func Compat(got, want Type) bool {
 	// Mutability is DIRECTIONAL, not an equality: `mut T` is assignable to `T`,
 	// and `T` is not assignable to `mut T`. Requiring the two to match rejected
 	// upstream's tests/behavior/iterator.buzz, which builds a `mut [int]` and
-	// returns it from a `> [int]` function - dropping the permission to mutate is
+	// returns it from a `> [int]` function; dropping the permission to mutate is
 	// always safe, while gaining it is what the annotation exists to prevent
 	// (upstream's tests/compile_errors/object-prop-immutable-value.buzz).
 	gl, glOK := got.(*ListType)
@@ -305,8 +305,8 @@ func (p *annotParser) skipGeneric() {
 }
 
 // parse reads one type, honoring a leading `mut ` modifier. The modifier is only
-// meaningful on a collection - `mut Foo` names a mutable object INSTANCE, which
-// this checker models nominally and so cannot distinguish - so it is consumed and
+// meaningful on a collection (`mut Foo` names a mutable object INSTANCE, which
+// this checker models nominally and so cannot distinguish), so it is consumed and
 // then applied where it has a representation.
 func (p *annotParser) parse() Type {
 	mut := p.acceptMut()
@@ -326,8 +326,8 @@ func (p *annotParser) parse() Type {
 // swallow a name.
 func (p *annotParser) acceptMut() bool {
 	// The leading skipSpace is unconditional (outside the restore) so a spelling
-	// that separates its parts - `{str: int}`, which is how canonicalTypeName
-	// renders a map - parses the same as the token-joined `{str:int}` a source
+	// that separates its parts (`{str: int}`, which is how canonicalTypeName
+	// renders a map) parses the same as the token-joined `{str:int}` a source
 	// annotation produces.
 	p.skipSpace()
 	save := p.pos

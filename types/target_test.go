@@ -100,7 +100,7 @@ func TestValidateTargetName(t *testing.T) {
 //
 // These cases ARE the table published in docs/concepts/targets.md ("Name
 // normalization"). Documented behavior that nothing asserts is documented
-// intent, not documented behavior - if a row here changes, that page is wrong
+// intent, not documented behavior: if a row here changes, that page is wrong
 // and this test is the thing that says so.
 func TestNormalize(t *testing.T) {
 	for _, c := range []struct{ in, want string }{

@@ -8,7 +8,7 @@ import (
 
 // TestInvocationFromEvents confirms the run header is reconstructed from the stream's two
 // lifecycle events: the started event supplies command/version/start, the finished event
-// supplies the end time and outcome - no separate metadata file.
+// supplies the end time and outcome: no separate metadata file.
 func TestInvocationFromEvents(t *testing.T) {
 	events := []Event{
 		{Ts: 100, Kind: KindStarted, MagusVersion: "v2", Command: &Command{Arguments: []string{"affected", "ci"}, Trigger: TriggerCI}},

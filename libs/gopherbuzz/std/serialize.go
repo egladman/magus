@@ -263,7 +263,7 @@ func serializeJSONEncode(_ context.Context, args []vm.Value) (vm.Value, error) {
 // list/map already being written on this call stack (see errCircularReference).
 //
 // It exists because json.Marshal sorts the keys of a Go map, and a Buzz map is
-// ordered - mapObj carries a Keys slice, and foreach already iterates it in that
+// ordered: mapObj carries a Keys slice, and foreach already iterates it in that
 // order. Round-tripping through buzzToGo therefore silently reordered a user's
 // object, which upstream's json test catches: it expects {"hello":...,"bye":...}
 // in the order written.

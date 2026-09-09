@@ -192,7 +192,7 @@ func TestAssembleSymbolsRefOnly(t *testing.T) {
 }
 
 // The default graph must not change when a SCIP index exists. A symbol index is CACHE
-// state - gitignored, per-worktree, present only where the scip op has run - so anything
+// state (gitignored, per-worktree, present only where the scip op has run), so anything
 // it contributes has to stay in the lazily-loaded @symbols shards. When it did not, the
 // aggregate @dirs shard minted dir nodes and @io minted produces/consumes edges for
 // symbol paths, both merged into the default graph: MAGUS.md and gen/knowledge-graph.json

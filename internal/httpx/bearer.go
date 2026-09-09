@@ -21,7 +21,7 @@ type verifier func(presented string) bool
 // endpoint, plain fetch() clients): a bearer token must not travel in the URL,
 // where it leaks into access logs, proxy logs, and browser history (RFC 6750
 // section 2.3). For the browser-EventSource endpoints that genuinely cannot set
-// a header, use [BearerGuardWithQueryToken] instead - an explicit opt-in, so a
+// a header, use [BearerGuardWithQueryToken] instead: an explicit opt-in, so a
 // new mount is header-only unless it deliberately widens the carrier.
 //
 // verify is called on every request, so a rotate, create, or revoke takes effect
@@ -36,7 +36,7 @@ func BearerGuard(verify verifier, next http.Handler) http.Handler {
 // `?token=<token>` query parameter, preferring the header when both are present.
 // Use it ONLY for endpoints a browser EventSource connects to: EventSource cannot
 // set an Authorization header, so the query carrier is the sole option. It is a
-// deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3) -
+// deliberate, scoped exception to the header-only rule (RFC 6750 section 2.3);
 // keep it off the MCP endpoint, which every supported client reaches with a header.
 func BearerGuardWithQueryToken(verify verifier, next http.Handler) http.Handler {
 	return guard(verify, presentedToken, next)

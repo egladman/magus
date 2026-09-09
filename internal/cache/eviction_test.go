@@ -120,7 +120,7 @@ func TestEvictAndPruneReclaimOutputs(t *testing.T) {
 
 // TestEvictReclaimsOrphanOutputs: a FAILING run stores output but is never
 // snapshotted, so no manifest ever claims it. Those bytes count toward the cap, so
-// eviction has to be able to reclaim them - otherwise it would delete every manifest
+// eviction has to be able to reclaim them; otherwise it would delete every manifest
 // chasing a floor it can never reach, and the failure residue would still be there.
 func TestEvictReclaimsOrphanOutputs(t *testing.T) {
 	root, cdir, c := newMutableCache(t)
@@ -170,7 +170,7 @@ func TestEvictLRU_SharedBlobsSurvive(t *testing.T) {
 	assert.Equal(t, 1, countBlobs(t, cdir), "setup: want 1 shared blob in CAS")
 	require.Len(t, listManifests(t, cdir), 2, "setup: want 2 manifests")
 
-	// Cap to (total - 1): guarantees one eviction (the loop requires total > limit)
+	// Cap to `total - 1`: guarantees one eviction (the loop requires total > limit)
 	// but stops after removing the oldest manifest file because subtracting its
 	// size (≥ 1 byte) brings total to ≤ limit. The shared blob size is NOT
 	// subtracted — blobRefs for the shared blob drops to 1, not 0 — so

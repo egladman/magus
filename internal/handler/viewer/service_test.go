@@ -27,8 +27,8 @@ import (
 // stored answers rather than a mock: every RPC here reads, so what a test needs to say is what the
 // store would have returned.
 type fakeRuns struct {
-	// mu guards events so a streaming test can append mid-stream - a live journal grows under
-	// its reader - without racing the handler goroutine.
+	// mu guards events so a streaming test can append mid-stream (a live journal grows under
+	// its reader) without racing the handler goroutine.
 	mu     sync.Mutex
 	events []journal.Event
 	header journal.Invocation
@@ -127,7 +127,7 @@ func TestListEventsFilterNarrows(t *testing.T) {
 }
 
 // TestListEventsFiltersBeforePaging pins the ORDER of the two operations. The one matching event
-// sits past the first page, so cutting the page first would answer "none" - a false absence a
+// sits past the first page, so cutting the page first would answer "none", a false absence a
 // caller cannot tell from an empty journal.
 func TestListEventsFiltersBeforePaging(t *testing.T) {
 	events := make([]journal.Event, 0, 51)
@@ -218,7 +218,7 @@ func TestGetInvocationRejectsPreJournalRef(t *testing.T) {
 
 // streamClient mounts the real ViewerService Connect handler over an httptest server and returns a
 // client for it. connect.ServerStream has no injectable test sink, so a streaming RPC is exercised
-// end to end - the same shape the status service's stream test uses. poll is tightened so a test
+// end to end, the same shape the status service's stream test uses. poll is tightened so a test
 // does not wait on the production cadence.
 func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServiceClient {
 	t.Helper()
@@ -260,8 +260,8 @@ func TestStreamEventsReplaysThenTails(t *testing.T) {
 	require.NoError(t, stream.Close())
 }
 
-// TestStreamEventsFilterNarrows checks the filter is applied before each send, and - the part worth
-// pinning - that the terminal event is read from the UNFILTERED batch: a filter excluding it must
+// TestStreamEventsFilterNarrows checks the filter is applied before each send, and (the part worth
+// pinning) that the terminal event is read from the UNFILTERED batch: a filter excluding it must
 // still end the stream.
 func TestStreamEventsFilterNarrows(t *testing.T) {
 	runs := &fakeRuns{events: []journal.Event{
@@ -286,7 +286,7 @@ func TestStreamEventsFilterNarrows(t *testing.T) {
 }
 
 // TestStreamEventsResumesFromSince covers reconnecting: filter.time.since trims the replay to what
-// the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again -
+// the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again;
 // at-least-once is the honest guarantee for a millisecond cursor several events can share.
 func TestStreamEventsResumesFromSince(t *testing.T) {
 	runs := &fakeRuns{events: []journal.Event{

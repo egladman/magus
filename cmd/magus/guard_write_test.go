@@ -181,7 +181,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 // TestGradeLeasedWriteMalformedDeclaration pins the fail-open being made VISIBLE. The
 // matcher's error was discarded, so a declaration it could not read matched nothing: a
 // forbidden path spelled with a stray bracket stopped denying and said so nowhere, which
-// is the shape of failure this rule is least able to afford - a boundary that looks
+// is the shape of failure this rule is least able to afford: a boundary that looks
 // enforced and is not.
 func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 	t.Run("the acting lease's own forbidden list", func(t *testing.T) {
@@ -206,7 +206,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 
 	t.Run("a valid entry still denies through an earlier malformed one", func(t *testing.T) {
 		// The malformed pattern comes first, the valid glob that covers the write second.
-		// Short-circuiting on the bad pattern downgraded this deny to an advisory - a valid
+		// Short-circuiting on the bad pattern downgraded this deny to an advisory: a valid
 		// forbidden boundary must still hold when a sibling entry is unreadable.
 		leases := fleetLeases()
 		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
@@ -250,7 +250,7 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	})
 
 	t.Run("on owned ground it advises rather than denying", func(t *testing.T) {
-		// The id is unusable, so the write is graded as un-enrolled - and an un-enrolled
+		// The id is unusable, so the write is graded as un-enrolled, and an un-enrolled
 		// write is never denied, even on another lease's ground.
 		got := gradeLeasedWrite(ctx, "lease b!", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
@@ -424,7 +424,7 @@ func TestDenyNotesWrite(t *testing.T) {
 	}
 
 	globalCfg.Knowledge.Notes.Shared = "notes"
-	// The store must exist to be defended - see TestDenyNotesWriteRequiresTheStoreToExist.
+	// The store must exist to be defended; see TestDenyNotesWriteRequiresTheStoreToExist.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", "nested"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "team", "notes"), 0o755))
 
@@ -485,8 +485,8 @@ func TestDenyNotesWriteIgnoresAForeignDeclaration(t *testing.T) {
 //
 // The gate was "the directory exists", on the reasoning that a person creates the store by
 // writing the first note, so an agent could never bring it into being. The reverse held.
-// An agent could author the store's FIRST note - the single entry with nothing beside it to
-// look wrong against - and the deny would switch on immediately afterwards, defending the
+// An agent could author the store's FIRST note (the single entry with nothing beside it to
+// look wrong against), and the deny would switch on immediately afterwards, defending the
 // forgery it had just let through. The opt-in is the committed key, not the directory.
 func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
 	root := t.TempDir()
@@ -621,7 +621,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 
 // TestGradeLeasedWriteRequiresACheckpoint is the rule that turns a skill into a guarantee.
 //
-// The instruction to checkpoint before working lived only in a skill, which an agent can skip -
+// The instruction to checkpoint before working lived only in a skill, which an agent can skip;
 // and the record it was meant to leave is missing exactly when somebody needs to recover from it.
 // This is the enforcement point, and it is a deny because an advisory is the same pinky promise
 // with better wording.

@@ -5,8 +5,8 @@
 // path: internal/memory and internal/sessions each carried a copy of the rule, which
 // folded a linked worktree back onto its main checkout and stopped there. A second
 // CLONE of the same repository therefore got its own memory and its own session
-// history. That is not a split a developer can see - both stores live in XDG state,
-// not in the tree - and not one they expect, because both document themselves as
+// history. That is not a split a developer can see (both stores live in XDG state,
+// not in the tree) and not one they expect, because both document themselves as
 // belonging to the REPOSITORY. Measured 2026-09-08: two sessions working one project
 // from ~/Documents/ChatGPT/magus and ~/Repos/magus wrote to two stores, so neither
 // could read what the other recorded.
@@ -68,8 +68,8 @@ func LegacyDir(base, kind, root string) string {
 // identity returns the stable identity of the repository behind root: its default
 // remote, normalized so the ssh and https spellings of one repository agree.
 //
-// A checkout with no readable remote - no git, no config, no remote declared, or a
-// remote too unusual to reduce with confidence - identifies as pathIdentity(root), so a
+// A checkout with no readable remote (no git, no config, no remote declared, or a
+// remote too unusual to reduce with confidence) identifies as pathIdentity(root), so a
 // repository that never grows a remote still keys a store of its own.
 //
 // Changing the remote re-keys the repository and orphans what was written under the old
@@ -224,7 +224,7 @@ func remoteURL(commonDir string) string {
 		// Keys are case-insensitive, values are not. Matching the key
 		// case-sensitively while the section header above is folded made `URL =` read
 		// as a repository with no remote at all, which lands on the path key and
-		// splits the store - the failure this package exists to close, arriving
+		// splits the store: the failure this package exists to close, arriving
 		// quietly.
 		if !ok || !strings.EqualFold(strings.TrimSpace(k), "url") {
 			continue

@@ -17,7 +17,7 @@ import (
 //
 // SymbolGaps is not optional decoration. Every verb here can be asked about a code symbol,
 // and the symbol shards are loaded lazily, so a lookup that returns nothing has two very
-// different meanings - no such node, or nobody looked. The probe is what lets the response
+// different meanings: no such node, or nobody looked. The probe is what lets the response
 // say which, and it is the whole reason Answer rides the query result.
 type resolver interface {
 	KnowledgeGraph(ctx context.Context, refresh bool) (*knowledge.Graph, error)
@@ -139,7 +139,7 @@ func (s *Service) FindPath(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// ok=false is an unresolvable ENDPOINT, which is the caller's mistake and an error.
-	// out.Found=false is two real nodes with no chain between them, which is an answer -
+	// out.Found=false is two real nodes with no chain between them, which is an answer;
 	// collapsing the two would report "no path" for a typo.
 	out, ok := g.Path(from, to)
 	if !ok {
@@ -173,7 +173,7 @@ func (s *Service) FindDependents(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Resolve first: the caller may pass a reference rather than an id, and Dependents on an
-	// unknown id returns nil - which would report "nothing rebuilds" for a typo.
+	// unknown id returns nil, which would report "nothing rebuilds" for a typo.
 	matches := g.Resolve(name, 1)
 	if len(matches) == 0 {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+"; try `magus query "+name+"` for a wider search"))

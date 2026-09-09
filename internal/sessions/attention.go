@@ -18,7 +18,7 @@ import (
 //
 // Nothing else closes one. There is no expiry, no severity inference and no
 // auto-triage, because an event whose whole meaning is "blocked on a human" stops
-// meaning that the moment the tool answers it for them - see docs/doctrine.md,
+// meaning that the moment the tool answers it for them; see docs/doctrine.md,
 // "Manual on purpose".
 const (
 	KindAttentionOpen    = "attention_open"
@@ -48,7 +48,7 @@ type AttentionOpen struct {
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
 //
 // The message is whatever a producer piped to `magus session notify` on stdin, and in
-// practice that is a hook forwarding an agent's text - a prompt, a tool argument, a
+// practice that is a hook forwarding an agent's text: a prompt, a tool argument, a
 // transcript tail. The store is grow-only and every reader folds the WHOLE store
 // into memory, so one unbounded message is a cost every later read of this repository
 // pays. 4 KiB is far past what a person can act on from a queue row and far short of
@@ -96,12 +96,12 @@ type AttentionDispose struct {
 }
 
 // RequestID derives the identity of one blocked request from the session that raised
-// it and what o says. Exactly three of o's fields are read - Source, Where and
-// Message - and the result is stable: the same session and the same three values
+// it and what o says. Exactly three of o's fields are read (Source, Where and
+// Message), and the result is stable: the same session and the same three values
 // always name the same request, on any machine and in any worktree.
 //
-// That determinism is the whole dedupe mechanism. An agent re-fires a block freely -
-// a hook that runs on every prompt, a retried tool call - and each re-fire has to
+// That determinism is the whole dedupe mechanism. An agent re-fires a block freely
+// (a hook that runs on every prompt, a retried tool call), and each re-fire has to
 // land on the id already in the queue rather than adding another row a person has to
 // dispose of separately.
 //
@@ -110,7 +110,7 @@ type AttentionDispose struct {
 // rows for it would be two interruptions for one event.
 //
 // The LEASE is not an input either, for a different reason. A lease says which slice of work the
-// raising session belongs to - it is attribution, and identity here is "which block is this".
+// raising session belongs to; it is attribution, and identity here is "which block is this".
 // Feeding it in would re-key every open request the moment a fleet re-partitioned its leases: the
 // row a person was about to dispose of would vanish and an identical one would appear under a new
 // id, from a change that did not touch the block at all.
@@ -156,7 +156,7 @@ type AttentionRequest struct {
 //     block came back, and a queue that swallowed it would be hiding a live wait
 //     behind an answer that was given to a different one.
 //   - The first dispose closes the request. A later dispose of the same id is still a
-//     record in the store - nothing here rewrites one - but it only advances
+//     record in the store (nothing here rewrites one), but it only advances
 //     Disposes, and cannot change who closed the request or when.
 //   - A dispose naming an id with no open counts for nothing. It is not corruption:
 //     the open may sit in a file another process has not finished writing, or in a
@@ -233,7 +233,7 @@ func Attention(fold Fold) []AttentionRequest {
 	return out
 }
 
-// AttentionQueue is [Attention] narrowed to the requests nobody has disposed of - the
+// AttentionQueue is [Attention] narrowed to the requests nobody has disposed of: the
 // queue itself. Oldest first, so whatever has been waiting longest reads at the top.
 func AttentionQueue(fold Fold) []AttentionRequest {
 	all := Attention(fold)
@@ -288,7 +288,7 @@ func (e *DisposedError) Error() string {
 		e.ID, e.DisposedBy, time.UnixMilli(e.DisposedMs).Format(time.RFC3339))
 }
 
-// ResolveRequestID resolves ref - a full request id or an unambiguous prefix of one -
+// ResolveRequestID resolves ref (a full request id or an unambiguous prefix of one)
 // against every request in fold, disposed ones included.
 //
 // The prefix form exists because the id is a truncated digest: it is unguessable, so it
@@ -298,7 +298,7 @@ func (e *DisposedError) Error() string {
 //
 // Ambiguity is an error naming the candidates rather than a pick. An id addresses a
 // person's decision to close a block, and resolving a tie by any rule this function
-// could invent - oldest, first sorted - closes a request nobody chose.
+// could invent (oldest, first sorted) closes a request nobody chose.
 //
 // Disposed requests are candidates on purpose: a prefix that resolves to a closed
 // request has to report THAT (see [DisposeRequest]), not read as a typo.
@@ -344,7 +344,7 @@ func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
 //
 // Re-filing a block that is already open is a no-op reporting opened=false. An agent
 // hook may fire on every prompt, and the queue has to hold one row per block rather than
-// one per attempt. A block that was raised, disposed, and has come back opens again -
+// one per attempt. A block that was raised, disposed, and has come back opens again;
 // see [Attention] for why.
 //
 // start describes the writing invocation; its Command is set here, and the session id is

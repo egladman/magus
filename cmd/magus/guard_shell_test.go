@@ -23,7 +23,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		command string
 		// rule is the deny the command must earn, compared whole: the rule that fired
 		// plus what it fired on. A non-zero value is what makes a row a deny row, so
-		// there is no opt-out - a row that denies while declaring no rule lands on the
+		// there is no opt-out: a row that denies while declaring no rule lands on the
 		// pass-silently assertion below and fails.
 		//
 		// The identity is compared rather than the reason, which is prose written for
@@ -42,7 +42,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /repo && git stash", rule: wholeTree("git stash")},
 		// Restoring a stash used to be treated as safe. It is not, in a repository with
 		// more than one worktree: the stash stack is per-REPOSITORY, so an unqualified
-		// pop takes whatever sits at stash@{0} - often another checkout's work - and
+		// pop takes whatever sits at stash@{0} (often another checkout's work) and
 		// drops the entry once it applies. Naming the entry is the deliberate form.
 		// The rule is the SHARED-STACK one, not the whole-tree one: an unqualified
 		// restore is refused for taking whichever entry sits at stash@{0}.
@@ -53,7 +53,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git stash apply stash@{0}"},
 		// A PATH-SCOPED push moves only what it names, so the whole-tree reason
 		// does not reach it. This is also the bootstrap-deadlock escape CLAUDE.md
-		// documents - shelve the one hunk an old binary rejects, build, restore -
+		// documents (shelve the one hunk an old binary rejects, build, restore),
 		// which this rule denied, putting the documented answer out of reach.
 		{command: "git stash push -- magusfile.buzz"},
 		{command: "git stash push -m wip -- spells/github/actions/spell.buzz"},
@@ -111,7 +111,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git clean --force", rule: wholeTree("git clean")},
 		{command: "git clean -n"},
 		// READ-ONLY clean invocations. Matching any word containing one of fdxX denied
-		// both of these on the letters inside the flag NAME - "dry" and "exclude" - for
+		// both of these on the letters inside the flag NAME ("dry" and "exclude") for
 		// commands that delete nothing.
 		{command: "git clean --dry-run"},
 		{command: "git clean --exclude=build"},
@@ -127,7 +127,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 
 		// Every OTHER backend magus drives, which had no rules at all until 2026-09-08.
 		// The guard doc justified that by saying jj "snapshots the working copy and keeps
-		// an operation log, so its nearest equivalents are undoable" - true of jj, and
+		// an operation log, so its nearest equivalents are undoable", true of jj, and
 		// generalized to Mercurial without argument. hg has no operation log, and hg purge
 		// deletes untracked files with no backup, which is git clean -f's blast radius
 		// exactly. So an hg user had none of a git user's protection.
@@ -167,14 +167,14 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git restore -- x && git add -A", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git status && git add .", rule: denyRule{Name: denyRuleStageAll}},
 		{command: "git add -A && git push", rule: denyRule{Name: denyRuleStageAll}},
-		// Deliberate staging is still only advised - that IS the replacement.
+		// Deliberate staging is still only advised: that IS the replacement.
 		{command: "git add cmd/magus/agent.go", context: "magus-vcs-hygiene"},
 		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs-hygiene"},
 		// A raw tool denies only when a registered spell renders that exact base
 		// command and verb. Unsupported runners remain available: a guard funnels
 		// capability Magus has, never removes capability it does not.
 		// The raw-tool rule carries the RESOLVED command as its Arg, so a row pins
-		// both which rule fired and what it judged - the property every wrapper row
+		// both which rule fired and what it judged, the property every wrapper row
 		// below exists to prove.
 		{command: "go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "npm test"},
@@ -189,7 +189,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// test file through a shell heredoc was itself denied.
 		{command: "echo 'run go test ./... to check'"},
 		// A BACKSLASH-escaped separator is not a shell separator: it is a regex
-		// alternation inside a quoted argument. Peeling must not reintroduce this -
+		// alternation inside a quoted argument. Peeling must not reintroduce this:
 		// splitting the line into segments does, which is why peeling substitutes.
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
@@ -222,8 +222,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "nice -n 10 cargo build", rule: rawTool(`cargo build`)},
 		{command: "make deps && mise exec -- go generate ./...", rule: rawTool(`go generate ./...`)},
 		// env -S / --split-string takes its whole argument AS the command line and
-		// never reparses it, so a single token used to tunnel any command - git
-		// tier included - straight past the parsed rules. It is peeled like -c now.
+		// never reparses it, so a single token used to tunnel any command (git
+		// tier included) straight past the parsed rules. It is peeled like -c now.
 		// The git tier is what -S tunnelled, so these must land on the git reasons
 		// rather than on any raw-tool one.
 		{command: "env -S'git reset --hard HEAD~5'", rule: wholeTree("git reset --hard")},
@@ -255,7 +255,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "bash -c 'ls -la'"},
 		{command: "mise install"},
 		// `mise run <task>` runs a DECLARED mise task, not a smuggled command, so
-		// it is not peeled - peeling would misattribute the task's contents.
+		// it is not peeled; peeling would misattribute the task's contents.
 		{command: "mise run setup"},
 		// THE WRITE RULE. A build landing on a tracked path is a write, so only an
 		// absolute -o (the documented `/tmp/magus` dev loop) is exempt.
@@ -276,7 +276,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "mockery"},
 		// Trimming magus's own output with the shell. DENIED, not advised: as an
 		// advisory this fired repeatedly in one session while its own author kept
-		// piping magus into grep anyway - the same trained-reflex result the raw
+		// piping magus into grep anyway, the same trained-reflex result the raw
 		// tool advisory produced, so it gets the same answer.
 		// The PIPE reason, distinct from the redirect one below: a filter wanted one
 		// field, so it is the projection flags that are named.
@@ -294,7 +294,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", rule: denyRule{Name: denyRuleThrowawayCopy}},
 		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", rule: denyRule{Name: denyRuleThrowawayCopy}},
 		// Timing magus with the shell. Advisory: magus already prints per-target
-		// durations and a cached/ran verdict, and `-s` is what hides them - so the
+		// durations and a cached/ran verdict, and `-s` is what hides them, so the
 		// shell timer measures the one number magus gave you and drops the rest.
 		{command: "time magus run test .", context: "magus times itself"},
 		{command: "time ./magus run test . -s", context: "cached"},
@@ -346,10 +346,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// jq composes with -o json rather than fighting it.
 		{command: "magus graph export -o json | jq ."},
 		// Repo-wide code search: the graph answers from declared sources. Narrow on
-		// purpose - reading one file with grep is not a structural question.
+		// purpose: reading one file with grep is not a structural question.
 		// Denied, not advised: a repo-wide text search is the habit that keeps the
-		// graph unused, and an advisory is scrolled past. The reason must ROUTE -
-		// refs for code symbols, query for domain entities - because an agent that
+		// graph unused, and an advisory is scrolled past. The reason must ROUTE:
+		// refs for code symbols, query for domain entities, because an agent that
 		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
 		// The advisory TRANSLATES: it echoes the searched identifier back as the exact command,
 		// so the reader gets `magus refs funcName` to run, not just "consider refs".
@@ -372,7 +372,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "fd -e go", context: `magus query kind=file 'id=~\.go$'`},
 		{command: "fd -g '*.yaml'", context: `magus query kind=file 'id=~\.yaml$'`},
 		{command: "fd guard_ cmd/magus", context: `magus query kind=file id=~guard_`},
-		// A type filter is a tree listing, not a name question - the same reason
+		// A type filter is a tree listing, not a name question: the same reason
 		// `find . -type d` carries no -name and stays silent.
 		{command: "fd -t d"},
 		// egrep and fgrep are the grep family hint already models; the word
@@ -397,7 +397,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git status --porcelain"},
 		{command: "git diff --cached --stat"},
 		// Tree identity: a revision alone cannot identify a dirty tree, and
-		// checkpoint adds the patch digest that can. Advise - reading the revision
+		// checkpoint adds the patch digest that can. Advise: reading the revision
 		// is legitimate, and checkpoint is a superset rather than a substitute.
 		{command: "git rev-parse HEAD", context: "magus vcs checkpoint"},
 		{command: "git rev-parse --short HEAD", context: "magus vcs checkpoint"},
@@ -458,7 +458,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 // TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
 // suggestion, not a drop-in replacement. grep is textual and refs/query are semantic, so they
 // agree only when the pattern is a real symbol. The advisory hands back the exact command AND
-// hedges - an empty semantic result means the pattern was text, and grep was the right tool.
+// hedges: an empty semantic result means the pattern was text, and grep was the right tool.
 func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 	v := evaluateBashGuard(`grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
@@ -468,7 +468,7 @@ func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 // TestSearchAdvisoryLeadPrefersTheContentQuestion pins the lead's ordering on a
 // line carrying both a find and a search: the search answers the content
 // question, so its suggestion must outrank the file listing even though the
-// find comes first on the line - and the piped grep counts as repo-wide, since
+// find comes first on the line, and the piped grep counts as repo-wide, since
 // the find is what feeds it the tree.
 func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
 	v := evaluateBashGuard(`find . -name '*.go' | xargs grep -l HandleFoo`)
@@ -558,7 +558,7 @@ func TestEvaluateBashGuardWithScopedTranslator(t *testing.T) {
 
 // TestParseGuardCommands pins the resolution itself, separately from the
 // verdicts it feeds. The decision table above proves the verdicts are right;
-// this proves they are right for the right reason - that what the guard judges
+// this proves they are right for the right reason: that what the guard judges
 // is the command the shell would actually run.
 func TestParseGuardCommands(t *testing.T) {
 	tests := []struct {
@@ -674,7 +674,7 @@ func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 }
 
 // TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
-// are THIS repository's target names, not magus vocabulary - another magusfile
+// are THIS repository's target names, not magus vocabulary; another magusfile
 // declares whatever it likes. A verdict compiled into the binary that instructs
 // `magus run test` is therefore wrong in most workspaces it will ever judge, so a
 // message names a target only when it resolved one from the workspace's own
@@ -768,7 +768,7 @@ func TestGuardAdversarial(t *testing.T) {
 		{"redirected", "go test ./... > /dev/null 2>&1"},
 
 		// The write rule. `go build` produces a binary, so it is a write at EVERY
-		// destination - including the /tmp dev loop that used to be exempt.
+		// destination, including the /tmp dev loop that used to be exempt.
 		{"relative build output", "go build -o ./bin/magus ./cmd/magus"},
 		{"relative build output no dot", "go build -o bin/magus ./cmd/magus"},
 		{"absolute build output", "go build -o /tmp/magus ./cmd/magus"},
@@ -779,7 +779,7 @@ func TestGuardAdversarial(t *testing.T) {
 		{"go generate", "go generate ./..."},
 		{"wrapped write", "mise exec -- go generate ./..."},
 
-		// Destructive git still denies however it is REACHED - the safety property
+		// Destructive git still denies however it is REACHED, the safety property
 		// the old unanchored regexes existed for, kept by parsing both commands.
 		{"stash after cd", "cd /repo && git stash"},
 		{"stash in a subshell", "(cd libs/diagnostics && git stash)"},
@@ -842,8 +842,8 @@ func TestGuardAdversarial(t *testing.T) {
 		{"magus affected", "magus affected ci"},
 
 		// DESTRUCTIVE GIT COMMANDS AS PROSE. These denied until the git rules moved
-		// onto the parser, and the cost was concrete: writing the magus-vcs-hygiene skill -
-		// the document whose entire subject is these commands - through a heredoc
+		// onto the parser, and the cost was concrete: writing the magus-vcs-hygiene skill
+		// (the document whose entire subject is these commands) through a heredoc
 		// was blocked twice in one session.
 		{"stash named in a heredoc", "cat <<'EOF' > s.md\nNever run git stash here.\nEOF"},
 		{"stash named in an echo", "echo 'never run git stash to verify a build'"},
@@ -941,7 +941,7 @@ func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
 // that merely ADVISES used to answer first and return, so appending `git commit`
 // to an otherwise-denied line downgraded the whole verdict to an advisory. That is
 // not hypothetical: the observed command cd'd into a scratchpad copy, sent four
-// magus runs to /dev/null, and ended in `git commit` - and the guard said "advise".
+// magus runs to /dev/null, and ended in `git commit`, and the guard said "advise".
 func TestDenyOutranksHeldAdvisory(t *testing.T) {
 	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
 
@@ -955,7 +955,7 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 			"appending %q must not downgrade a deny to an advisory", suffix)
 	}
 
-	// The advisory still surfaces when nothing denies - holding it must not drop it.
+	// The advisory still surfaces when nothing denies: holding it must not drop it.
 	plain := evaluateBashGuard("git commit -q -m x")
 	assert.Empty(t, plain.Deny)
 	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
@@ -963,7 +963,7 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 
 // TestOutputGuardNamesTheReplacement pins the REASON each output denial gives,
 // because a deny that only prohibits teaches the next reach for a workaround. The
-// pattern being reinforced is "ask magus for the field" - so the pipe denial has
+// pattern being reinforced is "ask magus for the field", so the pipe denial has
 // to name the projection flags, and the redirect denial has to name --tee. Two
 // distinct messages, because the right replacement differs by shape: a filter
 // wanted one value, a redirect wanted a copy of the whole thing.
@@ -987,7 +987,7 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
 // denied in favour of. This assertion was inverted while the message argued there was
-// deliberately no `magus vcs` wrapper - by then `vcs add` had shipped as exactly that
+// deliberately no `magus vcs` wrapper; by then `vcs add` had shipped as exactly that
 // wrapper, so the deny was talking an agent out of the command built to replace it.
 // `git add -- <paths>` stays named: a hand-picked subset is still fine.
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
@@ -1003,7 +1003,7 @@ func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 // difficulty of this rule: `git rev-parse` answers repository-layout questions as
 // well as identity ones, and only the identity forms have a magus superset.
 //
-// A deny would be wrong twice over - reading a revision is legitimate, and
+// A deny would be wrong twice over: reading a revision is legitimate, and
 // checkpoint ADDS to it rather than replacing it.
 func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 	t.Parallel()
@@ -1055,7 +1055,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 // reserved charm nobody declared.
 //
 // ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
-// is none - magus has no verb that re-resolves dependencies on its own.
+// is none: magus has no verb that re-resolves dependencies on its own.
 func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
@@ -1091,7 +1091,7 @@ func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 }
 
 // TestGuardDeniesInPlaceSed: `-i` is the one sed flag that WRITES, and the two
-// implementations read each other's spelling as garbage - GNU takes `sed -i 's/x/y/' f` as
+// implementations read each other's spelling as garbage: GNU takes `sed -i 's/x/y/' f` as
 // an edit while BSD reads that script as the backup suffix, and `sed -i ”` inverts it. A
 // command that worked where it was written mangles the file on the next machine, and it has
 // already written by the time anyone looks. Reading with sed is untouched.
@@ -1119,7 +1119,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 }
 
 // TestGuardDeniesScriptedRewrite: `sed -i` is denied, so the next thing to hand is a
-// python one-liner that substitutes and writes - the same edit, by a route the sed rule
+// python one-liner that substitutes and writes: the same edit, by a route the sed rule
 // cannot see. This is not hypothetical: a `\.Sum\b` rewrite aimed at one proto field also
 // rewrote the OTel SDK's metricdata.Sum and a histogram data point's dp.Sum, because a
 // pattern cannot tell one project's symbol from a dependency's symbol of the same name.
@@ -1151,7 +1151,7 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 
 // TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
 // agent trusts the graph at all. `magus refs` answers "unknown, not absent" when a project
-// is not indexed, and an agent that reads that as "no matches" falls back to a text match -
+// is not indexed, and an agent that reads that as "no matches" falls back to a text match,
 // which is exactly the fallback the advisory exists to prevent.
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()
@@ -1163,7 +1163,7 @@ func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 // TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
 //
 // A receipt claims a PERSON read something. An agent able to mint one turns the measure into
-// a formality it satisfies on the way past - and it would, because stamping the changeset is
+// a formality it satisfies on the way past, and it would, because stamping the changeset is
 // the obvious tidy-up at the end of a task. The guard is the right place because of what it
 // sees: it is wired into agent hosts, so everything reaching it came from an agent, and a
 // person at a terminal never meets this rule.
@@ -1203,7 +1203,7 @@ func TestGuardAllowsReadingTheReport(t *testing.T) {
 
 // The pattern this caught was mine, run perhaps twenty times in one session: format, then
 // lint, then generate, as separate invocations. `lint` needs `format` needs `generate`, so
-// the last one alone does all three - every earlier call was a workspace reload to redo work
+// the last one alone does all three: every earlier call was a workspace reload to redo work
 // the next call redid anyway.
 //
 // An advisory rather than a deny: two independent targets on one line is real work, and only

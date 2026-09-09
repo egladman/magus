@@ -7,9 +7,9 @@ import (
 
 // Peak resident memory, collected per target execution.
 //
-// The exec layer already knows this number - the kernel counted it, and
+// The exec layer already knows this number (the kernel counted it, and
 // run.ExecResult.MaxRSSBytes reads it off the same ProcessState the exit code
-// comes from - but the code that DECIDES what may run alongside what is the
+// comes from), but the code that DECIDES what may run alongside what is the
 // shard planner, several layers up, and nothing carried the number between
 // them. This is that carrier, and it is deliberately the same shape as the
 // return capture above it in this package: a context-scoped collector written
@@ -51,7 +51,7 @@ func WithPeakRSS(ctx context.Context) context.Context {
 // RecordPeakRSS reports one process's peak resident memory in bytes. Calls with
 // a non-positive value are ignored: the platforms that cannot report this
 // (windows, wasm) and a process that never started both yield zero, and zero
-// means UNKNOWN rather than "used nothing" - a planner that averaged it in
+// means UNKNOWN rather than "used nothing": a planner that averaged it in
 // would read an unmeasurable target as a free one.
 func RecordPeakRSS(ctx context.Context, bytes int64) {
 	if bytes <= 0 {

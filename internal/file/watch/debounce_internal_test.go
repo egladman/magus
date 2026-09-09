@@ -18,7 +18,7 @@ import (
 // events under backpressure and cannot deliver a precise count under CPU load. An
 // earlier version of this assertion went through the real filesystem and needed a
 // warm-up write, a drain, a dropped t.Parallel, and three tuned constants
-// (100ms/300ms/10s) - and still failed in CI. It was measuring the OS scheduler.
+// (100ms/300ms/10s), and still failed in CI. It was measuring the OS scheduler.
 //
 // The debounce here is longer than the test can possibly take, so the timer is
 // guaranteed NOT to fire mid-burst. Closing the event channel then makes loop

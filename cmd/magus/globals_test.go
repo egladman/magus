@@ -122,7 +122,7 @@ func TestSplitTargetFromArgs(t *testing.T) {
 
 // TestSplitTargetFromArgsLocalFlags proves why the prescan takes the command's own
 // flags. Without them a value-taking local flag reads as a bool here, so its value is
-// hoisted out as a positional - which one flag survives by luck of ordering, and a
+// hoisted out as a positional, which one flag survives by luck of ordering, and a
 // REPEATED one does not: the first --skip ends up holding the second as its value.
 func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 	args := []string{"generate", "--skip", "docs", "--skip", "console"}
@@ -155,7 +155,7 @@ func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
 // The comparison runs against the CLI as built, not against its source. Each documented
 // command is invoked with -h, which makes cmdParse bind every flag and then stop at
 // flag.ErrHelp before the command does any work; recordFlagSet captures the fully bound
-// set on the way through. A source scan cannot do this - it sees neither the config flags
+// set on the way through. A source scan cannot do this: it sees neither the config flags
 // generated from the schema nor the display flags, so it reports --dry-run as
 // undocumented when it is simply global.
 //
@@ -221,7 +221,7 @@ var modeArgv = map[string][][]string{
 	//
 	// watch is deliberately NOT probed. It is a long-running file watcher that starts
 	// watching before -h can stop it, so probing it hangs the test rather than reading
-	// its flags. Its man-page flags stay unverified, and the skip says so out loud -
+	// its flags. Its man-page flags stay unverified, and the skip says so out loud,
 	// which is the honest outcome for a command this check cannot safely enter.
 	"describe": {{"describe", "targets"}, {"describe", "projects"}},
 }
@@ -235,7 +235,7 @@ func argvsFor(name string) [][]string {
 }
 
 // recordedFlagsUnder is the union of everything a probe bound: the record filed under the
-// name itself, plus every record filed under a key extending it. The union is the point -
+// name itself, plus every record filed under a key extending it. The union is the point:
 // a multi-mode command files one record per mode ("affected build", "affected build
 // --plan"), and the man page describes the command, not one mode of it.
 func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
@@ -258,8 +258,8 @@ func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
 }
 
 // flagProbes expands one man-page command into the invocations that actually bind flags.
-// A command with subcommands binds nothing itself - `magus server -h` prints its own
-// usage and parses nothing - so its children are what get probed.
+// A command with subcommands binds nothing itself (`magus server -h` prints its own
+// usage and parses nothing), so its children are what get probed.
 func flagProbes(cmd cli.Command) []flagProbe {
 	if len(cmd.Children) == 0 {
 		if !cmd.HasFlags() {
@@ -281,7 +281,7 @@ func flagProbes(cmd cli.Command) []flagProbe {
 // are therefore read straight from argv before any FlagSet exists: `magus affected
 // --explain <project>` and `--plan` each dispatch to a different command path with its
 // own flags (parseExplainArgs, and the --plan scan in affectedCmd). They are real, they
-// are documented correctly, and they can never appear in a recorded flag set - so they
+// are documented correctly, and they can never appear in a recorded flag set, so they
 // are excluded rather than "fixed" out of the man page.
 var modeSelectors = map[string]map[string]bool{
 	"affected": {"explain": true, "plan": true, "impact": true},
@@ -380,7 +380,7 @@ func TestOutputRefusalIgnoresAmbientGlobal(t *testing.T) {
 }
 
 // The check rides cmdParse, so it fires on the real parse path for every spelling of the
-// flag - including one written AFTER the positional, which reorderFlagsFirst hoists.
+// flag, including one written AFTER the positional, which reorderFlagsFirst hoists.
 func TestCmdParseRefusesUnsupportedOutput(t *testing.T) {
 	prev := global.output
 	t.Cleanup(func() { global.output = prev })

@@ -109,7 +109,7 @@ func TestDenySiblingCheckoutFailsOpen(t *testing.T) {
 }
 
 // git accepts a RELATIVE gitdir, and writes one for a worktree created inside the
-// repository it belongs to - which is exactly this repo's `.claude/worktrees/`
+// repository it belongs to, which is exactly this repo's `.claude/worktrees/`
 // layout. Reading it as absolute resolves it against the wrong directory and the
 // rule silently stops firing in the case it was written for.
 func TestDenySiblingCheckoutResolvesARelativeGitdir(t *testing.T) {
@@ -141,7 +141,7 @@ func TestDenySiblingCheckoutAllowsASubmodule(t *testing.T) {
 // test harness for the rule itself: `printf '%s' "cd <sibling> && ls" | ./magus
 // session hook` mentions magus and contains the text of a cd, and the regex this
 // rule inherited read that as relocating into the sibling. Anything that names a
-// checkout while running magus - a note, a message, a --root - hits the same trap.
+// checkout while running magus (a note, a message, a --root) hits the same trap.
 func TestDenySiblingCheckoutIgnoresAPathInsideAQuotedArgument(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)

@@ -30,7 +30,7 @@ const (
 	// sigFileName is the artifact-tar member holding the detached signature envelope.
 	sigFileName = "signature.json"
 	// compat(until: no store still serves "ed25519" envelopes): sigAlg is the
-	// pre-domain scheme - a bare ed25519 signature over the manifest bytes alone.
+	// pre-domain scheme: a bare ed25519 signature over the manifest bytes alone.
 	// Still ACCEPTED so artifacts signed by a released magus keep verifying;
 	// never produced. Dropping it early turns every pre-upgrade remote entry into
 	// a full miss on both sides of the rollout.
@@ -40,8 +40,8 @@ const (
 	// imports fail with "unsupported alg", so a store still serving them says so
 	// loudly rather than silently degrading.
 	sigAlg = "ed25519"
-	// sigAlgV2 is what magus produces now: ed25519 over signedPayload - a domain tag,
-	// the length-prefixed manifest, and the extra members' digests.
+	// sigAlgV2 is what magus produces now: ed25519 over signedPayload (a domain tag,
+	// the length-prefixed manifest, and the extra members' digests).
 	sigAlgV2 = "ed25519-domain-v2"
 	// keyIDLen is the hex length of a derived keyid (first 8 bytes of SHA-256(pubkey)).
 	keyIDLen = 16
@@ -54,7 +54,7 @@ const (
 // log, the output descriptor, the key inputs): one content hash per cache-relative
 // path. The signature is computed over the manifest bytes CONCATENATED with the
 // canonical rendering of that map (signedPayload), so one signature still
-// authenticates the whole artifact - the manifest already commits to every cas blob,
+// authenticates the whole artifact: the manifest already commits to every cas blob,
 // and Members now commits to everything else. An envelope without Members is a
 // pre-Members producer: its manifest and blobs verify exactly as before, and the
 // unauthenticated extras are dropped on import rather than trusted.
@@ -232,7 +232,7 @@ func newVerifier(pubkeys [][]byte) (*verifier, error) {
 // that treats any error as "reject and fall back to a local build" fails closed.
 // Extra members are authenticated by the same call: the caller passes the (path ->
 // content sha256) map it actually received, and it must match the signed Members map
-// exactly - a tampered, added, or dropped log is a verification failure, not a
+// exactly: a tampered, added, or dropped log is a verification failure, not a
 // silently-trusted file. domain separates object KINDS, so a signature over an output
 // bundle can never verify as a cache artifact.
 //

@@ -9,7 +9,7 @@ import (
 
 // TestShowcaseUpToDate is the same drift gate the core loop gets, for the same
 // reason: the picture is a pure function of a committed capture, so CI can
-// assert the two agree. Both palettes are checked - a variant nothing gates is
+// assert the two agree. Both palettes are checked: a variant nothing gates is
 // a variant that goes stale.
 func TestShowcaseUpToDate(t *testing.T) {
 	capture := repoFile(t, showCapture)
@@ -37,7 +37,7 @@ func TestShowcaseCaptureIsClean(t *testing.T) {
 
 // TestShowcaseFramesDropTheTeardown pins where a frame ends. The recorder marks
 // each frame as it is taken, so the bytes after the LAST mark are the session
-// exiting - not a frame, and rendering them would end the animation on a shell
+// exiting, not a frame, and rendering them would end the animation on a shell
 // prompt instead of on the surface the beat was about.
 func TestShowcaseFramesDropTheTeardown(t *testing.T) {
 	frames := showcaseFrames("first" + frameMark + "second" + frameMark + "exit\n")

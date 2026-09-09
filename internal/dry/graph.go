@@ -9,7 +9,7 @@
 // js/wasm and is unit-testable on the host against the real interpreter.
 //
 // It is a thin adapter over the real engine, not a parallel implementation: the
-// genuinely shared, pure logic is imported, not re-derived - command decoding
+// genuinely shared, pure logic is imported, not re-derived: command decoding
 // (spell.DecodeCommandValue), charm application (spell.ApplyCharms), ward checks
 // (ward.Check), and the magus.* module surface (parity-guarded against
 // bindings.MagusModuleKeys). Only the legitimately different pieces live here: the
@@ -19,7 +19,7 @@
 //
 // It lives at internal/dry because it can share a package with neither counterpart:
 // the high-level runner is the host-only public API, and the subprocess primitive
-// (internal/proc) forks processes - both pull in os/exec, syscall, and platform
+// (internal/proc) forks processes; both pull in os/exec, syscall, and platform
 // build tags. Compiling to js/wasm means it MUST NOT import internal/proc,
 // internal/cache, or the root magus engine; one such import would break that build.
 // It stays a leaf over the pure, shared logic (internal/spellruntime, internal/ward, types).
@@ -78,7 +78,7 @@ type Tracer struct {
 	cur string
 
 	// charms is the evaluation's active charm set (from a `run t:charm`
-	// invocation), so magus.has_charm(name) reports true under a charm - e.g.
+	// invocation), so magus.has_charm(name) reports true under a charm, e.g.
 	// `run release:cd` takes the cd branch. Empty for graph/ls.
 	charms []string
 

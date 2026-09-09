@@ -101,7 +101,7 @@ func WithVersion(v string) Option {
 // WithoutWorkspaceProviders opens the workspace without running its wired workspace
 // providers (magus\workspace.provider), leaving only the magusfile-declared projects.
 //
-// It exists for a caller inspecting a tree that is not a working checkout - `magus
+// It exists for a caller inspecting a tree that is not a working checkout: `magus
 // graph diff --rev` exports a bare revision to a temp dir, with no node_modules, no
 // installed toolchain and no VCS metadata. A provider shells out to a foreign tool
 // that needs all three, so running it there fails the open and takes the whole

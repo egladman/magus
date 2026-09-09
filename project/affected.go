@@ -231,8 +231,8 @@ func newProjectIndex(ctx context.Context, w *types.Workspace) *projectIndex {
 	globs := make(map[string][]string, len(w.Projects))
 	for path, p := range w.Projects {
 		globs[path] = p.DeclaredGlobs()
-		// Tolerated exactly as the cache walk tolerates it - an unparsable pattern
-		// matches nothing and fails nothing - but SAID, once per index rather than
+		// Tolerated exactly as the cache walk tolerates it (an unparsable pattern
+		// matches nothing and fails nothing), but SAID, once per index rather than
 		// once per file. Silent, it reads as a declared input while keying nothing,
 		// and MGS1028 then advises declaring a path the project already "declares".
 		if bad := types.InvalidGlobs(globs[path]); len(bad) > 0 {
@@ -272,24 +272,24 @@ func (idx *projectIndex) projectForFile(file string) (string, bool) {
 // Three rules, and the order they compose in is the whole design:
 //
 //  1. A project whose DIRECTORY contains the file owns it. Containment is the most
-//     specific claim there is, and it is what makes today's affected sets correct -
+//     specific claim there is, and it is what makes today's affected sets correct:
 //     a broad ANCESTOR glob (the root's "**/*.go" reaches every nested Go file in this
 //     very repo) must not add the ancestor as a second seed on every child edit.
 //  2. Every project that declares the file from OUTSIDE its own tree seeds it too.
 //     A reaching glob ("../proto/**" declared by docs/) moves that project's cache key
 //     just as surely as a file in its own directory does, so it seeds ALONGSIDE the
-//     containment owner rather than instead of it - and where no directory contains the
+//     containment owner rather than instead of it, and where no directory contains the
 //     file at all, the reaching declarers are the whole answer, in place of the root
 //     project that merely happens to sit above them.
 //  3. Otherwise the root project seeds it anyway. That catch-all is load-bearing and
 //     stays: a config nobody declares still changes what a build MEANS, and seeding
 //     is the only reason editing one reruns anything at all. It is reported rather
-//     than narrowed - see the declared return, MGS1028, and doctor's advice.
+//     than narrowed; see the declared return, MGS1028, and doctor's advice.
 //
 // declared answers for the CONTAINMENT seed, because that is the question MGS1028 asks:
 // whether the project a file reruns by sitting inside it has a cache key the edit moves.
-// A file that no directory contains is declared by construction - its seeds are exactly
-// the projects declaring it - and only rule 3 leaves it false there. A file whose owner
+// A file that no directory contains is declared by construction (its seeds are exactly
+// the projects declaring it), and only rule 3 leaves it false there. A file whose owner
 // declares nothing while a reaching glob does is reported undeclared for BOTH seeds,
 // which overstates the reaching one; the owner's problem is the real one and the caller
 // carries a single flag per file.

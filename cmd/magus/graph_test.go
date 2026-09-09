@@ -94,7 +94,7 @@ func TestStripRuntimeAttrsLeavesGraphIntact(t *testing.T) {
 // problem for a checked-in export: committing anything moves the churn, so the artifact
 // invalidates itself and the drift gate fires on the very commit that regenerated it. This
 // repo's committed graph carried four git attrs on 204 file nodes, churn on 142 dirs, and
-// 345 authored edges - all of it a function of history rather than of the tree.
+// 345 authored edges, all of it a function of history rather than of the tree.
 func TestStripUnreproducibleDropsGitHistory(t *testing.T) {
 	out := types.KnowledgeGraphOutput{
 		Nodes: []types.KnowledgeNode{
@@ -159,7 +159,7 @@ func TestOpenViaBrowserEnv(t *testing.T) {
 // TestEncodeFragmentDeterminism confirms that render.EncodeFragmentRaw produces
 // byte-for-byte identical output for the same input across two calls. This relies
 // on gzip.NewWriter leaving the header ModTime at its zero value by default, so the
-// compressed stream is deterministic - a necessary property for stable #data= URL
+// compressed stream is deterministic: a necessary property for stable #data= URL
 // fragments in MAGUS.md. The test exercises the shared encoder that both the render
 // package (per-project MAGUS.md deep links) and cmd/magus (graph open) use, proving
 // browser wire-format parity is preserved when a single implementation is used.

@@ -19,7 +19,7 @@ import (
 
 // upstream is a TLS test server standing in for the real API, plus a resolver wired
 // to reach it. The grant's host is the server's own host:port, so the forwarder makes
-// a genuine verified TLS connection to it - the production code path, not a relaxed
+// a genuine verified TLS connection to it: the production code path, not a relaxed
 // one. Only the trust anchor is test-supplied.
 func upstream(t *testing.T, h http.HandlerFunc) (*httptest.Server, *Resolver, types.SecretGrant) {
 	t.Helper()
@@ -154,7 +154,7 @@ func TestEndpointMemoizesPerGrant(t *testing.T) {
 
 // TestEndpointClosesWithRun: the listener belongs to the run, not to the machine. This
 // is what makes the design "no separate service" rather than "a service magus starts
-// for you" - nothing survives the run to be stopped later.
+// for you": nothing survives the run to be stopped later.
 func TestEndpointClosesWithRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(ContextWithInvocationID(context.Background(), "inv-"+t.Name()))
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
@@ -261,7 +261,7 @@ func TestEndpointRootPath(t *testing.T) {
 
 // TestEndpointRebindsAfterContextEnds is the memo-liveness fix. The Resolver outlives
 // a single run (it is per workspace Open), so a cached entry whose context has ended
-// used to hand back a URL on a RELEASED port - which under a local-attacker model
+// used to hand back a URL on a RELEASED port, which under a local-attacker model
 // means another process can bind it and receive the child's whole request stream.
 //
 // Delete the f.ctx.Err() check in OpenEndpoint and this fails.
@@ -314,7 +314,7 @@ func TestEndpointTokenMustBeAWholeSegment(t *testing.T) {
 }
 
 // TestEndpointPreservesEncodedPath: trimming the DECODED path turned an encoded
-// separator into a real one, so "/v1/a%2Fb" reached the upstream as "/v1/a/b" - the
+// separator into a real one, so "/v1/a%2Fb" reached the upstream as "/v1/a/b": the
 // proxy silently addressing a different resource than the child asked for.
 func TestEndpointPreservesEncodedPath(t *testing.T) {
 	var gotRequestURI string
@@ -332,7 +332,7 @@ func TestEndpointPreservesEncodedPath(t *testing.T) {
 }
 
 // TestEndpointIgnoresConnectionHeader: ReverseProxy removes every header NAMED in
-// Connection, and it does so AFTER Rewrite - so a caller holding the token could send
+// Connection, and it does so AFTER Rewrite, so a caller holding the token could send
 // "Connection: X-Api-Key" and have the proxy strip the credential straight back off,
 // producing the silently-unauthenticated request this design refuses to make.
 func TestEndpointIgnoresConnectionHeader(t *testing.T) {
@@ -358,7 +358,7 @@ func TestEndpointIgnoresConnectionHeader(t *testing.T) {
 
 // TestEndpointOverwritesCallerSetHeader is the case that decides whether Tier 2 works
 // at all with the clients it exists for. An earlier version refused a request that
-// already set the granted header, on symmetry with ApplyGrants - which made the endpoint
+// already set the granted header, on symmetry with ApplyGrants, which made the endpoint
 // unusable with openai-python, the Anthropic SDK, and essentially every API library,
 // since they all set their auth header unconditionally from a key they insist on being
 // given and offer no way to suppress it.
@@ -389,9 +389,9 @@ func TestEndpointOverwritesCallerSetHeader(t *testing.T) {
 }
 
 // TestEndpointStreamsWithoutBuffering: an SSE completion is the marquee reason to point
-// an agent at an endpoint. Wrapping the proxy in http.TimeoutHandler broke this - Go's
+// an agent at an endpoint. Wrapping the proxy in http.TimeoutHandler broke this (Go's
 // timeoutWriter implements no Flusher, so ReverseProxy cannot flush and buffers the whole
-// response - and no test caught it because every other test drives a complete response.
+// response), and no test caught it because every other test drives a complete response.
 func TestEndpointStreamsWithoutBuffering(t *testing.T) {
 	release := make(chan struct{})
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {
@@ -472,9 +472,9 @@ func TestEndpointRejectsNonLoopbackHost(t *testing.T) {
 // http.DefaultTransport.
 //
 // A test hook rather than an Option, deliberately. The upstream hop is always https
-// in production and must stay that way - an endpoint that could be aimed at a plaintext
+// in production and must stay that way (an endpoint that could be aimed at a plaintext
 // upstream would undo the only guarantee this design makes about the leg magus
-// controls - so there is no legitimate caller for this outside a test, and an
+// controls), so there is no legitimate caller for this outside a test, and an
 // exported Option would invite one.
 func (r *Resolver) setEndpointTransport(rt http.RoundTripper) {
 	r.endpointTransport = rt
@@ -483,15 +483,15 @@ func (r *Resolver) setEndpointTransport(rt http.RoundTripper) {
 // TestEndpointRefusedOutsideARun is the lifetime gate, and it replaces a test that
 // checked the wrong thing. The first version refused a context with no Done channel,
 // which no production path produces: cmd/magus/main.go builds the root context from
-// watchInterrupts(context.Background()), so PRELOAD - where a magusfile's top level runs,
-// and which `magus ls`, `describe` and `graph` all reach - sailed straight through and
+// watchInterrupts(context.Background()), so PRELOAD (where a magusfile's top level runs,
+// and which `magus ls`, `describe` and `graph` all reach) sailed straight through and
 // would have bound a credential forwarder with a stable token for the whole process life.
 //
 // The run id is the honest gate: an endpoint belongs to a run, and preload has none.
 func TestEndpointRefusedOutsideARun(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
 
-	// Cancellable, like preload's context really is - and still refused.
+	// Cancellable, like preload's context really is, and still refused.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_, err := res.OpenEndpoint(ctx, g)
@@ -548,7 +548,7 @@ func TestEndpointResolveFailureDoesNotEchoProviderError(t *testing.T) {
 // for a daemon's whole life: a fresh token plus a base URL plus seven encoded forms of
 // each, per rebind, per run, all scanned linearly by Redact on the output hot path.
 //
-// A resolved CREDENTIAL is never reclaimed - it stays valid wherever it was sent. An
+// A resolved CREDENTIAL is never reclaimed: it stays valid wherever it was sent. An
 // endpoint token is only meaningful while its listener is up.
 func TestEndpointReclaimsRedactionOnShutdown(t *testing.T) {
 	_, res, g := upstream(t, func(w http.ResponseWriter, r *http.Request) {})
@@ -576,7 +576,7 @@ func TestEndpointReclaimsRedactionOnShutdown(t *testing.T) {
 
 // TestEndpointsAreScopedToOneRun replaces an earlier refcount test. Two concurrent runs
 // wanting the same grant now get two sockets and two TOKENS, which is the point: a token
-// leaked from one run - into a log, a child's argv, a crash dump - authorizes nothing in
+// leaked from one run (into a log, a child's argv, a crash dump) authorizes nothing in
 // any other run. One run finishing also cannot close a socket another is still using,
 // which is the lifetime bug sharing required a refcount to avoid.
 func TestEndpointsAreScopedToOneRun(t *testing.T) {
@@ -626,7 +626,7 @@ func TestEndpointsAreScopedToOneRun(t *testing.T) {
 
 // TestEndpointIgnoresProxyEnvironment: the no-CA argument rests on magus making an
 // ordinary verified TLS connection upstream itself. Honoring HTTPS_PROXY would delegate
-// exactly the interception this design refuses to perform - the destination is disclosed
+// exactly the interception this design refuses to perform: the destination is disclosed
 // to the proxy, and if the proxy's CA is trusted the guarantee is gone.
 func TestEndpointIgnoresProxyEnvironment(t *testing.T) {
 	tr, ok := endpointTransport().(*http.Transport)

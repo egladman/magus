@@ -16,7 +16,7 @@ package std
 // (Buzz's os.exit hard-exits the process), os.sleep is cancellable (Buzz's
 // blocks), crypto.*_file hashes a file (Buzz's hash only takes a string), and
 // crypto.*_hex returns hex where Buzz's crypto.hash returns the RAW digest
-// bytes - the equivalence once claimed here is what shipped v0.4.2's
+// bytes; the equivalence once claimed here is what shipped v0.4.2's
 // SHA256SUMS as raw digests.
 var buzzStdlibEquiv = map[string]string{
 	"fs.exists":              "fs.exists",

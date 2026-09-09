@@ -26,7 +26,7 @@ const maxIOFanout = 40
 // project's path before matching the workspace-relative node paths. Only existing nodes
 // are linked: an output glob with no matching node (a path magus does not model, or a
 // not-yet-produced file) contributes no edge, never a phantom. This is the seam that
-// self-labels a generated file - `docs/spells/go.md` gains an incoming `produces` edge
+// self-labels a generated file: `docs/spells/go.md` gains an incoming `produces` edge
 // from content_generate, so the doc layer needs no separate "is it generated" test.
 func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]string) Shard {
 	s := Shard{Name: ioShardName}
@@ -77,7 +77,7 @@ func assembleIO(projects []types.TargetGraphProject, pathToNode map[string]strin
 			// in TargetGraph): a same-project input's owner is this project, a
 			// cross-project input's is the other one. path.Join(Project, Glob) yields the
 			// workspace-relative file path uniformly, matched against the file node in the
-			// owning project directly - never re-anchored to the consumer's path.
+			// owning project directly, never re-anchored to the consumer's path.
 			if len(n.ReadsFiles) > 0 {
 				pats := make([]string, len(n.ReadsFiles))
 				for i, ref := range n.ReadsFiles {

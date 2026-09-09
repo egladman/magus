@@ -50,7 +50,7 @@ var unknownOrigin = origin.Origin{Agent: "unknown"}
 
 // sseHeartbeat is how often the Streamable-HTTP server pings an open GET (SSE)
 // stream. mark3labs disables heartbeats by default; enabling them keeps a
-// long-lived server-to-client stream from being closed by an idle timeout - a
+// long-lived server-to-client stream from being closed by an idle timeout, a
 // no-op on a pure loopback client, but the correct default the moment the
 // endpoint is reached through any proxy or gateway (e.g. a non-loopback bind).
 const sseHeartbeat = 30 * time.Second
@@ -147,7 +147,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 	// The activity trail is an append-only JSONL sidecar under the cache dir (next to the
 	// journal run logs). Writes are stateless (open/append/close per event). Rotate here trims
 	// it once at construction; keeping it bounded thereafter belongs to the daemon's
-	// rotate-activities maintenance job, which is the ONLY trigger - a second one driven off
+	// rotate-activities maintenance job, which is the ONLY trigger: a second one driven off
 	// this wrapper's own append counter would bound MCP traffic while leaving every other
 	// producer (agent hooks especially) unbounded. An empty cacheDir makes every trail call a
 	// no-op, so a read-only or dirless workspace never blocks serving.
@@ -162,7 +162,7 @@ func buildServer(opts Options, log *slog.Logger, hooks *mcpserver.Hooks, originF
 
 // HTTPHandler builds the MCP Streamable-HTTP handler for daemon mode: it
 // validates opts, wires per-session origin tracking, and returns the bare MCP
-// handler. It mounts no routes and opens no listener - the daemon package owns
+// handler. It mounts no routes and opens no listener: the daemon package owns
 // the HTTP server assembly (guards, health routes, console) so this package
 // need not depend on the httpx server core, the dashboard bridge, or the file
 // watcher. The returned handler is a path-agnostic http.Handler; the daemon
@@ -215,8 +215,8 @@ func HTTPHandler(opts Options) (http.Handler, error) {
 	return mcpserver.NewStreamableHTTPServer(srv,
 		mcpserver.WithHeartbeatInterval(sseHeartbeat),
 		// Lift the client's User-Agent off the live *http.Request into the request
-		// context so the initialize hook can capture it. stdio has no equivalent -
-		// it carries no request headers - so this signal is HTTP-only by nature.
+		// context so the initialize hook can capture it. stdio has no equivalent
+		// (it carries no request headers), so this signal is HTTP-only by nature.
 		mcpserver.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
 			return withUserAgent(ctx, r.Header.Get("User-Agent"))
 		}),

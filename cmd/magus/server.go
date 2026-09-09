@@ -159,8 +159,8 @@ func serverStart(ctx context.Context, args []string) error {
 // in the launching process before the daemon is built. It returns done==true when it fully
 // handled the request (the caller returns exitCode without building a daemon): a daemon was
 // already running (idempotent no-op), a detached child was spawned and became ready, or
-// spawning failed. It returns done==false only for the foreground daemon - an explicit
-// --foreground, or the re-execed detached child (marked by daemonDetachEnv) - which then
+// spawning failed. It returns done==false only for the foreground daemon: an explicit
+// --foreground, or the re-execed detached child (marked by daemonDetachEnv), which then
 // builds and runs the daemon in-process.
 func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []string) (exitCode int, done bool) {
 	if os.Getenv(daemonDetachEnv) != "" {
@@ -199,7 +199,7 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 //
 // One socket per user serves every workspace, so "already running" answered the question the
 // caller asked and not the one they meant. Starting the daemon from a second worktree returns 0
-// with nothing loaded from THIS tree, and the console then shows the tree it was started in -
+// with nothing loaded from THIS tree, and the console then shows the tree it was started in,
 // which reads as the command having worked. The roots are already on the status wire; the message
 // simply never said them.
 //
@@ -222,9 +222,9 @@ func servingSuffix(st *proc.StatusReply) string {
 // inherit removed.
 //
 // MAGUS_DAEMON_SOCKET: a child inheriting it believes it is already adopted, binds no
-// socket, and reports the parent's - leaving a daemon `server stop` cannot find.
+// socket, and reports the parent's, leaving a daemon `server stop` cannot find.
 //
-// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY -
+// The invocation ancestry and recursion depth, because THE DAEMON DESCENDS FROM NOBODY:
 // the same rule submitJob already applies to a job's context. A run starts the daemon,
 // so without this the daemon's process environment permanently records that one run's
 // ancestry, and every workspace it serves would read those refs as its own: claims
@@ -310,7 +310,7 @@ const consoleReadyTimeout = 20 * time.Second
 // the user asked for none.
 //
 // root names the workspace the child will serve. One socket per user serves every
-// workspace, so a daemon started from here is authoritative for whoever connects next -
+// workspace, so a daemon started from here is authoritative for whoever connects next;
 // saying which tree it came up in is what stops it reading as "the daemon", the same
 // reason servingSuffix exists on the `server start` path.
 func ensureConsoleDaemon(ctx context.Context, addr, root string) error {
@@ -387,13 +387,13 @@ const (
 	// The bound exists because auto-start reversed a documented promise: `magus ls`
 	// inside a `docker build` layer leaving an orphan was the objection that rejected
 	// global auto-start, and a run inside one is the same shape. A daemon a person
-	// STARTED has no such bound - they said what they wanted, and `magus server stop`
+	// STARTED has no such bound: they said what they wanted, and `magus server stop`
 	// is how they unsay it.
 	//
 	// Ten minutes: longer than the gap between commands in an active edit-run loop, so
 	// an interactive session never pays the restart, and short enough that a machine
 	// left alone reclaims the process within one interruption. Cheap to be wrong about
-	// in either direction - a restart costs a second, and the daemon holds nothing a
+	// in either direction: a restart costs a second, and the daemon holds nothing a
 	// run cannot rebuild.
 	admissionIdleExit = 10 * time.Minute
 
@@ -442,7 +442,7 @@ var spawnAdmissionDaemon = func() (pid int, logPath string, err error) {
 func ensureAdmissionDaemon(ctx context.Context, addr string) string {
 	// ONE address for all three steps. Spawning against the configured address while
 	// waiting on the default meant any non-default daemon.address timed out after the
-	// full readiness window and then reaped the healthy daemon it had just started -
+	// full readiness window and then reaped the healthy daemon it had just started:
 	// a minute of latency per command, ending in a SIGKILL of the thing that worked.
 	if proc.SocketLive(ctx, addr) {
 		return addr
@@ -470,7 +470,7 @@ func ensureAdmissionDaemon(ctx context.Context, addr string) string {
 //
 // It checks WHO it is about to kill. The pid was Release()d to detach the child, so
 // this process is not its parent any more and the number is free for reuse the moment
-// it exits - and the two callers reach here precisely when something went wrong, which
+// it exits, and the two callers reach here precisely when something went wrong, which
 // is when that is likeliest. A daemon answering on sock under a different pid means
 // ours is already gone and the number belongs to somebody else now. An empty sock skips
 // that half and checks liveness only, for a caller with no socket address to ask.
@@ -689,11 +689,11 @@ func serverJob(ctx context.Context, args []string) error {
 // The link is UNAUTHENTICATED and the token stays one shell substitution away, which is the
 // same call liveExplorerLink already made and for the same reason: a fragment is never
 // transmitted on the document GET, so embedding the token read as safe, but the line is
-// still a credential written to stdout - and stdout is scrollback, a captured run log, a
+// still a credential written to stdout, and stdout is scrollback, a captured run log, a
 // termcast, and the context of whatever agent ran the command. This repository has already
 // rotated tokens that escaped that way.
 //
-// The terminal check stays, but it is no longer a secrecy measure - it is that this line
+// The terminal check stays, but it is no longer a secrecy measure: it is that this line
 // invites somebody to go look at something, and the VCS refresh hook is not somebody. A
 // suggestion nobody can act on is noise in a log.
 func printJobWatchHint(w *os.File) {
@@ -711,7 +711,7 @@ func printJobWatchHint(w *os.File) {
 // the running pool, where a submitted job appears and deep-links to its live log. Returns
 // "" when the console is disabled.
 //
-// It NEVER embeds the bearer token - see printJobWatchHint - so it also no longer depends on
+// It NEVER embeds the bearer token (see printJobWatchHint), so it also no longer depends on
 // a token being loadable. It used to return "" when auth.Load failed, which meant a reader
 // with no token yet was shown nothing at all rather than the URL plus the command that mints
 // one.
@@ -747,7 +747,7 @@ func serverJobUsage() {
 // serverRotateActivities is the worker for the rotate-activities job: it trims the workspace
 // activity trail back to its cap and garbage-collects orphaned payload blobs. It runs inside the
 // daemon when dispatched as a job (reusing the warm workspace) and works standalone with no
-// daemon too. The trail lives under the workspace cache dir - the same base the MCP handler
+// daemon too. The trail lives under the workspace cache dir, the same base the MCP handler
 // writes and the ActivityService reads. Normally reached via `server job rotate-activities`.
 func serverRotateActivities(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server rotate-activities", args, func(fs *flag.FlagSet) {
@@ -869,7 +869,7 @@ func installRefreshHooks(ctx context.Context) {
 //
 // It exists because editing magus.yaml otherwise meant restarting the daemon: the daemon
 // keeps a workspace warm across invocations, and each one captured its config when it
-// loaded. Nothing was stale in a way that looked broken - the setting simply had no
+// loaded. Nothing was stale in a way that looked broken: the setting simply had no
 // effect until something evicted the workspace, which is a TTL away and invisible.
 //
 // Deliberately not a `server job`: a job is dispatched against a workspace, so it would
@@ -897,7 +897,7 @@ func serverReload(ctx context.Context, args []string) error {
 	addr, err := resolveDaemonAddr(ctx, socket)
 	if err != nil {
 		// No daemon means nothing is holding a stale config: every one-shot command reads
-		// magus.yaml as it runs. Saying so and exiting 0 is the honest answer - this is
+		// magus.yaml as it runs. Saying so and exiting 0 is the honest answer: this is
 		// "make sure nothing is holding an old config", and nothing is.
 		fmt.Fprintln(os.Stderr, "magus: no running daemon; every command already reads the current config")
 		return nil //nolint:nilerr // no daemon is the success case here: nothing is holding an old config
@@ -954,7 +954,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("server %s: %w", jobs.NameCheckReview, err)
 	}
 	// The PERSISTED watermark, not a session. This runs in its own process, so the store's
-	// in-memory session map is empty by construction - reading it was a gate that could never
+	// in-memory session map is empty by construction: reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
 	store := changeset.NewStore(m.CacheDir())
 	seen := store.LoadSeenThreads()
@@ -971,7 +971,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	}
 	// Reachability is READ here, unlike on the surfaces that render what they could get. An
 	// unreachable forge answers with an EMPTY list, and every number below is derived from that
-	// list - so reporting anyway meant "3 remarks live only on the host" when the true figure was
+	// list, so reporting anyway meant "3 remarks live only on the host" when the true figure was
 	// fifteen, or silence about a merge whose whole conversation was unreadable. "Nothing was
 	// said" and "I could not ask" are opposite facts, and this is the one place that can still
 	// tell them apart.
@@ -989,7 +989,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's - see DiffSession.SeenThreads for why it cannot be the job's.
+	// The watermark is the READER's; see DiffSession.SeenThreads for why it cannot be the job's.
 	if unseen := (types.DiffSession{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),

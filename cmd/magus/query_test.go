@@ -89,7 +89,7 @@ func TestSplitQueryNegations(t *testing.T) {
 
 // TestReportRefLookupError_NoDoubledConsulted guards the RefNotFoundError rendering
 // bug: Error() already reads `...; consulted: local cache`, so the wrapper must not
-// append a second "(consulted: ...)". m is nil here on purpose - this branch exercises
+// append a second "(consulted: ...)". m is nil here on purpose: this branch exercises
 // the not-exist rendering in isolation, and a nil Magus must skip the suggestion rather
 // than panic (the txtar coverage exercises the suggestion with a real workspace).
 func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
@@ -106,7 +106,7 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 }
 
 // newQueryTestWorkspace opens a real (cache-backed) single-project workspace bound to a
-// spell providing target "build" - the matched-ref suggestion needs IdentifyRef, which
+// spell providing target "build": the matched-ref suggestion needs IdentifyRef, which
 // needs a live cache (ComputeTargetKey returns types.ErrNoCache on an Inspect workspace).
 func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 	t.Helper()
@@ -130,7 +130,7 @@ func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 // scripts cannot express: IdentifyRef needs a real cache-backed workspace and a ref
 // that is a live target's PREDICTED key, which a static fixture file cannot pin (the
 // key is a content hash). Here the ref is computed via ComputeTargetKey exactly like a
-// real run would mint it, then looked up before anything ever produced it - the
+// real run would mint it, then looked up before anything ever produced it: the
 // not-exist path must invert it back to a `magus run build` suggestion, with the root
 // project omitted since the target lives at ".".
 func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
@@ -159,7 +159,7 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 
 // TestShowOutputIdentity_RevisionRendering drives showOutputIdentity end to end in a real git
 // workspace: a target's descriptor is stamped with the revision HEAD was at when it
-// ran (CurrentRevision, resolved once by executeStages), and --identity must render it -
+// ran (CurrentRevision, resolved once by executeStages), and --identity must render it:
 // silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
 func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
@@ -213,12 +213,12 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 // TestPrintIdentifyRefSuggestion_MultipleMatches covers printIdentifyRefSuggestion's
 // default case (len(matches) > 1): "any of:" plus every match's command, not just
 // one. A ref match is a content-hash prefix, so forcing a real collision takes many
-// distinct targets rather than a hand-picked one - this computes the ACTUAL live
+// distinct targets rather than a hand-picked one: this computes the ACTUAL live
 // keys for 32 targets and uses whichever first hex digit two of them really land
 // on (a hardcoded prefix would be asserting on a guess, not on printIdentifyRefSuggestion's
 // behavior). A collision is CERTAIN rather than likely: a first hex digit has 16
 // values and this keys 32 targets, so pigeonhole forces at least one pair. Keep the
-// count above 16 if you change it - dropping to a "probably enough" number trades a
+// count above 16 if you change it: dropping to a "probably enough" number trades a
 // guarantee for a flake.
 func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 	const spellName = "zzz-query-multi-spell"
@@ -272,7 +272,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 
 // TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError covers the other uncovered
 // branch: when m.IdentifyRef itself errors (types.ErrNoCache on an Inspect
-// workspace, the one case IdentifyRef propagates rather than swallowing - see its
+// workspace, the one case IdentifyRef propagates rather than swallowing; see its
 // doc), printIdentifyRefSuggestion must print nothing at all, not even the
 // unconditional "share it with --publish" hint that follows every other path. A
 // best-effort suggestion must never partially render around an error it hit.

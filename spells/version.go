@@ -19,8 +19,8 @@ import (
 //	bash --version                GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)
 //
 // Mixing those into the cache key verbatim makes it depend on things that are not the
-// tool's version - the commit golangci-lint was built from, the Go version it was built
-// WITH, docker's build hash, the host's OS/arch - so two machines running the identical
+// tool's version (the commit golangci-lint was built from, the Go version it was built
+// WITH, docker's build hash, the host's OS/arch), so two machines running the identical
 // version compute different keys and share no cache.
 //
 // So a probe result is EXTRACTED before use, then narrowed to the component the spell
@@ -45,8 +45,8 @@ var versionPattern = regexp.MustCompile(`v?(\d+)\.(\d+)(?:\.(\d+))?(?:-([0-9A-Za
 // tool is allowed to print something magus cannot parse, and refusing to run because
 // of it would be a worse failure than a coarse cache key.
 //
-// The `v` prefix is not decoration. golang.org/x/mod/semver - whose Major/MajorMinor
-// ARE the narrowing this file needs - requires it and returns "" without it, so
+// The `v` prefix is not decoration. golang.org/x/mod/semver (whose Major/MajorMinor
+// ARE the narrowing this file needs) requires it and returns "" without it, so
 // emitting canonical form here is what lets those functions be used directly instead
 // of wrapped.
 func ExtractVersion(output string) (string, bool) {
@@ -71,14 +71,14 @@ func ExtractVersion(output string) (string, bool) {
 // VersionComponent names how much of a probed version reaches the cache key.
 //
 // The values are the SemVer spec's own component names, and the same strings
-// node-semver's inc() accepts and diff() returns - nothing here is magus vocabulary a
+// node-semver's inc() accepts and diff() returns; nothing here is magus vocabulary a
 // reader has to learn. It is a defined type rather than a bare string so a Go SDK
 // caller cannot typo one silently; a magusfile spelling is checked at decode.
 type VersionComponent string
 
 const (
 	// VersionNone is the zero value: no extraction happens and the probe's whole
-	// output keys the cache. It is not a component - it is the ABSENCE of a request
+	// output keys the cache. It is not a component; it is the ABSENCE of a request
 	// to find one, and it is the default precisely because guessing which number in
 	// a tool's output is its version is a guess magus should not make unasked.
 	VersionNone VersionComponent = ""
@@ -87,13 +87,13 @@ const (
 	// VersionMinor extracts a semver and keeps major.minor, so patch releases share one.
 	VersionMinor VersionComponent = "minor"
 	// VersionPatch extracts a semver and keeps major.minor.patch. It narrows nothing a
-	// team has to reason about - two builds of one version agree - so it is the right
+	// team has to reason about (two builds of one version agree), so it is the right
 	// declaration for a tool that pads its version line with build identity.
 	VersionPatch VersionComponent = "patch"
 )
 
 // KeyFunc returns the narrowing this component names, as the same func(string) string
-// shape golang.org/x/mod/semver already exports - so a Go SDK caller can pass
+// shape golang.org/x/mod/semver already exports, so a Go SDK caller can pass
 // semver.Major directly instead of going through a VersionComponent at all.
 //
 // It errors rather than falling back, because an unknown component reaching here is a
@@ -159,7 +159,7 @@ func VersionToken(output string, key VersionKey) (token string, note string) {
 	}
 	raw := strings.TrimSpace(output)
 	if key.UpTo == VersionNone {
-		// No extraction was asked for, so none happens. Not a degradation - the
+		// No extraction was asked for, so none happens. Not a degradation: the
 		// default, and the only answer that cannot silently discard something the
 		// tool considered part of its identity.
 		return raw, ""
@@ -216,7 +216,7 @@ const (
 	VerdictTooOld
 	// VerdictTooNew means the version is at or above Below.
 	VerdictTooNew
-	// VerdictUnknown means the comparison could not be made - an unparsable probed
+	// VerdictUnknown means the comparison could not be made: an unparsable probed
 	// version, or a bound that is not a version. It is never a violation: a window
 	// magus cannot evaluate must not fail a build, the same way an unprobeable tool
 	// is not "too old".
@@ -262,7 +262,7 @@ func (b VersionBounds) Check(version string) Verdict {
 //
 // Exported so a declaration is validated with the SAME parser that later compares
 // it. Validating with a second, looser one accepts bounds Check then cannot read,
-// and every Check against that tool degrades to VerdictUnknown - a window that
+// and every Check against that tool degrades to VerdictUnknown, a window that
 // silently constrains nothing, which is the failure a declared bound exists to
 // prevent.
 func ValidBound(s string) bool {
@@ -346,7 +346,7 @@ func tighter(candidate, current string, want int) bool {
 // entry through the Command.Bin it already names.
 type Tool struct {
 	// Probe is the command that prints this binary's version, its result narrowed by
-	// Key and mixed into the cache key. A zero Command means magus never asks -
+	// Key and mixed into the cache key. A zero Command means magus never asks,
 	// correct for a tool that cannot report one, where Key.Const supplies the token.
 	//
 	// A Command rather than a bare argv so it matches Ready below: both are "run this
@@ -364,7 +364,7 @@ type Tool struct {
 	//
 	// It is the fourth question about a tool, after does it exist, what version, and is
 	// it usable. Without it a too-old binary fails with whatever that tool says about
-	// an unrecognized flag - the same misleading failure readiness exists to prevent,
+	// an unrecognized flag, the same misleading failure readiness exists to prevent,
 	// one step over. Checked against the extracted version, so it needs Probe.
 	//
 	// It states what the OPS need, not what a repo has qualified: "go::test does not

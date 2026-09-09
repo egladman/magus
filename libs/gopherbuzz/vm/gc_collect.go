@@ -9,14 +9,14 @@ import "context"
 // cannot provide that: runtime.SetFinalizer runs on its own goroutine at an
 // unspecified later time, and this VM is single-goroutine, so a finalizer could
 // neither call back safely nor arrive before `gc\collect()` returned. The
-// assertion upstream writes - collect, then immediately check the callback ran -
+// assertion upstream writes (collect, then immediately check the callback ran)
 // is unsatisfiable that way.
 //
 // What IS knowable synchronously is Buzz reachability: the VM owns its roots
 // (globals, the operand stack, every frame's env and receiver), so it can mark
 // what a program can still reach and treat the rest as garbage. Go still owns the
 // memory; this decides only WHEN a collect() callback fires. An object the VM has
-// dropped may well still be alive in Go, and that is fine - the callback is about
+// dropped may well still be alive in Go, and that is fine: the callback is about
 // the program's view, not the allocator's.
 
 // vmCtxKey retrieves the running VM from the context a host callable receives.
@@ -24,7 +24,7 @@ type vmCtxKey struct{}
 
 // FromContext returns the VM whose call is in progress, or nil. A host module needs
 // it for the rare operation that is about the interpreter itself rather than about
-// its arguments - `gc\collect()` is the whole of that set today.
+// its arguments; `gc\collect()` is the whole of that set today.
 func FromContext(ctx context.Context) *VM {
 	v, _ := ctx.Value(vmCtxKey{}).(*VM)
 	return v
@@ -106,7 +106,7 @@ func (vm *VM) CollectUnreachable() (int, error) {
 	seen := map[any]bool{}
 	// Every VM from the requesting one up to the root is executing right now, so its
 	// frames are roots whether or not its fiber handle is on an operand stack at this
-	// instant - an inline `resume &work()` never binds one. Fibers reachable by value
+	// instant: an inline `resume &work()` never binds one. Fibers reachable by value
 	// are picked up by the mark itself (see markFib).
 	for v := vm; v != nil; v = v.gcParent {
 		markVMRoots(v, live, seen)
@@ -210,7 +210,7 @@ func markVMRoots(vm *VM, live map[*objectInst]bool, seen map[any]bool) {
 }
 
 // markFib walks a fiber: its cached return value and the whole VM it suspended on.
-// A suspended fiber's locals are live - the program can still resume it - so its
+// A suspended fiber's locals are live (the program can still resume it), so its
 // frames are roots for as long as the fiber handle itself is reachable.
 func markFib(fb *fibObj, live map[*objectInst]bool, seen map[any]bool) {
 	if fb == nil || seen[fb] {

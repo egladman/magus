@@ -13,7 +13,7 @@ import (
 // pair costs in rows, and borderCols what the vertical edges cost in columns.
 //
 // Constants rather than options: a boundary that some runs draw and others do
-// not would make the one thing it communicates - which lines hold still -
+// not would make the one thing it communicates (which lines hold still)
 // depend on configuration.
 const (
 	borderRowsPerEdge = 1
@@ -33,7 +33,7 @@ const (
 // magus had more than one component setting them: two [region]s at once, each
 // computing row arithmetic from a different height, with only an unconditional
 // ResetScrollMargins on the way out keeping the shell usable. That is a mop, not
-// an owner - it cannot help while the run is still going.
+// an owner; it cannot help while the run is still going.
 //
 // So the margins are set here once, by whoever owns the whole zone, and every
 // consumer asks for rows instead of taking the terminal.
@@ -84,8 +84,8 @@ var (
 // A package-level singleton rather than something threaded through call sites,
 // because the thing it guards IS process-global: there is one terminal behind
 // stderr, and a second Zone over it would recreate exactly the two-owners
-// problem [Zone] exists to end. Consumers that cannot see each other - the
-// cache's log handler, a Buzz notify call, a daemon job - have to arrive at the
+// problem [Zone] exists to end. Consumers that cannot see each other (the
+// cache's log handler, a Buzz notify call, a daemon job) have to arrive at the
 // same owner without being introduced.
 //
 // Tests build their own with [NewZone] instead of reaching for this.
@@ -178,12 +178,12 @@ func (z *Zone) Acquire(rows int) *Lease {
 
 // Enabled reports whether this lease has rows on a real terminal. It is a cheap
 // pre-check for a caller deciding whether to COMPUTE something it would only
-// display - the cache asks before sampling pool occupancy - and not the
+// display (the cache asks before sampling pool occupancy) and not the
 // authority on whether a given paint landed. [Lease.Set] answers that.
 //
 // Takes the zone's lock because `released` is written under it by Release and
-// Zone.Close, and Close runs from the process exit path - including the
-// signal-driven one - while the run's own goroutines are still asking.
+// Zone.Close, and Close runs from the process exit path (including the
+// signal-driven one) while the run's own goroutines are still asking.
 func (l *Lease) Enabled() bool {
 	if l == nil || l.zone == nil {
 		return false
@@ -240,12 +240,12 @@ func (l *Lease) Release() error {
 	return err
 }
 
-// HitTest maps an absolute terminal row - the coordinate space a mouse event
-// arrives in - to the lease that owns it and the index of that row within the
+// HitTest maps an absolute terminal row (the coordinate space a mouse event
+// arrives in) to the lease that owns it and the index of that row within the
 // lease's band.
 //
 // The zone already knows where every band sits because it put them there, so a
-// caller passes Row from an [Event] and never computes a row itself - there is no
+// caller passes Row from an [Event] and never computes a row itself; there is no
 // second copy of the layout to drift.
 //
 // Reports false for any row outside the reserved zone, including all the ordinary
@@ -273,7 +273,7 @@ func (z *Zone) HitTest(row int) (lease *Lease, index int, ok bool) {
 
 // SetTitle captions the zone's top rule, costing no row.
 //
-// On the Zone rather than a Lease because the rule is the zone's - there is one
+// On the Zone rather than a Lease because the rule is the zone's: there is one
 // box however many leases stack inside it, so a caption is a property of the
 // whole, and two leases both claiming it would fight. The run's status line is
 // the intended caller: it describes the band, not any one band's rows.
@@ -291,7 +291,7 @@ func (z *Zone) SetTitle(left, right string) (rendered bool, err error) {
 }
 
 // Width reports the columns a row of this lease can use, or 0 when it cannot
-// draw. It is what a caller needs to know whether its text FITS - the notifier
+// draw. It is what a caller needs to know whether its text FITS; the notifier
 // scrolls a message only when it does not.
 func (l *Lease) Width() int {
 	if l == nil || l.zone == nil {
@@ -342,9 +342,9 @@ func (z *Zone) HitSpan(row, col int) (key string, ok bool) {
 // Grow enlarges this lease to rows.
 //
 // It returns only an error, deliberately. It used to return a bool as well, in
-// the same position as [Lease.Set]'s and meaning something else - Set's reports
+// the same position as [Lease.Set]'s and meaning something else (Set's reports
 // whether the paint reached the terminal, Grow's reported whether the model
-// changed - so a caller reading the two alike was wrong at one of them. A
+// changed), so a caller reading the two alike was wrong at one of them. A
 // caller that needs to know whether it actually got rows asks [Lease.Rows],
 // which is unambiguous.
 //

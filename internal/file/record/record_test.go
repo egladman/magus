@@ -23,7 +23,7 @@ type owner struct {
 // name-then-value lines. This is the whole reason records exist rather than a json.Marshal.
 //
 // It used to be one FILE per field, which cost a mkdir, a create per field, a RemoveAll of the
-// previous record and a rename - about 26 syscalls, measured at 670us. This shape is a create
+// previous record and a rename, about 26 syscalls, measured at 670us. This shape is a create
 // and a rename. The per-field cat became a whole-record cat, which is the better one to have
 // when something is stuck: every field at once rather than five reads to assemble them.
 func TestARecordIsOneCattableFile(t *testing.T) {

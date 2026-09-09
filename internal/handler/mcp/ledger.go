@@ -14,14 +14,14 @@ import (
 
 // ledgerTool (magus_ledger) records the lease ledger an orchestrating agent
 // declares: one row per lease, in the vocabulary the magus-multi-agent
-// skill defines. It is one write door onto internal/ledger - magus\ledger's put, register
-// and clear (internal/interp/bindings/ledger_ns.go) are the other - and the console's
+// skill defines. It is one write door onto internal/ledger; magus\ledger's put, register
+// and clear (internal/interp/bindings/ledger_ns.go) are the other, and the console's
 // /api/v1/ledger endpoint is the read door onto the same file.
 //
 // It records and refuses nothing. This tool does not check that a worker stayed inside its
 // owned paths and does not block a write outside them; the AGENT GUARD is what reads these
-// rows to grade a write, and it is elsewhere. The one verdict here - register's, on whether
-// a worker's reported base is the checkpoint its lease was handed - is returned and stored
+// rows to grade a write, and it is elsewhere. The one verdict here (register's, on whether
+// a worker's reported base is the checkpoint its lease was handed) is returned and stored
 // as a fact, and the registration succeeds whatever it says, because a ledger that started
 // refusing is a ledger agents route around. See types.Lease.
 type ledgerTool struct{ store *ledger.Store }

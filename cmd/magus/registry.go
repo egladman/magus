@@ -60,7 +60,7 @@ func (e *wsEntry) load(_ context.Context, lim *cache.Limiter, budget *cache.Mach
 		}
 		// The budget is held HERE, so hand it over directly: a workspace inside the
 		// daemon that dialled the daemon's socket would be waiting on itself. Only when
-		// there IS one - a registry built without a budget (every test that does) must
+		// there IS one: a registry built without a budget (every test that does) must
 		// not hand the cache an admitter that arbitrates nothing.
 		if budget != nil {
 			opts = append(opts, workspace.WithMachineAdmitter(cache.LocalAdmitter{Budget: budget}))
@@ -341,7 +341,7 @@ func (r *wsRegistry) status() []proc.Workspace {
 			continue // still loading or failed
 		}
 		// This workspace's cache is long-lived in the daemon, so its counters accumulate
-		// across every adopted run - the live cache activity the /dashboard shows.
+		// across every adopted run: the live cache activity the /dashboard shows.
 		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
 			Root:         e.root,
@@ -359,7 +359,7 @@ func (r *wsRegistry) status() []proc.Workspace {
 	return out
 }
 
-// activityWorkspaces returns every loaded workspace paired with its cache dir - the trails the
+// activityWorkspaces returns every loaded workspace paired with its cache dir: the trails the
 // daemon-wide ActivityService merges. It walks the SAME entries map as status(), so the activity
 // view and the status view can never disagree about which workspaces exist, and it takes the cache
 // dir off the already-open Magus rather than resolving root -> cache dir a second way.
@@ -415,7 +415,7 @@ func (r *wsRegistry) janitor(ctx context.Context) {
 //
 // This is `magus server reload`. It is eviction rather than a config PATCH on purpose:
 // the daemon holds open workspaces that each captured a config when they loaded, not a
-// config object to overwrite - so dropping them makes the next load read magus.yaml
+// config object to overwrite, so dropping them makes the next load read magus.yaml
 // through exactly the path a cold start uses, and there is no second code path that could
 // disagree with it about what the file means.
 //

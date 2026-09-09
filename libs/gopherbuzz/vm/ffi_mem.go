@@ -207,7 +207,7 @@ func AllocFFI(n int) (uintptr, error) {
 // Buffer hands its accumulated contents to C in one step, rather than looping
 // through the per-scalar ffi.write path.
 //
-// The block is a pinned Go slice, so this is an ordinary copy - no unsafe write
+// The block is a pinned Go slice, so this is an ordinary copy: no unsafe write
 // through the address. A short block is an error rather than a truncating copy: the
 // caller sized the allocation and a mismatch means it got the size wrong.
 func WriteFFIBytes(addr uintptr, b []byte) error {
@@ -384,7 +384,7 @@ func signExtend(u uint64, size int, signed bool) int64 {
 
 // UnionLayout computes a C union's layout: every member starts at offset 0, the
 // whole is as wide as the widest member, and its alignment is the strictest of
-// them - then rounded up so an array of the union stays aligned, the same rule
+// them, then rounded up so an array of the union stays aligned, the same rule
 // StructLayout applies to a struct's tail.
 func UnionLayout(fieldTypes []string) (size, align int, offsets []int, err error) {
 	return UnionLayoutWith(fieldTypes, nil)
@@ -469,15 +469,15 @@ func AllocCString(s string) (uintptr, error) {
 // equal to the one that went in. Empty for a null pointer.
 //
 // Untagged, alongside AllocCString, because a Buffer reads pointer fields back on
-// every platform - putting it behind the FFI build tag broke the non-FFI builds.
+// every platform; putting it behind the FFI build tag broke the non-FFI builds.
 // The deref is the same unsafe read AllocFFI's pinned block already relies on.
 func ReadCString(addr uintptr) string {
 	if addr == 0 {
 		return ""
 	}
 	// Read out of the pinned slice this package allocated, not by dereferencing
-	// the address. That is this file's stated contract - "read*/write* operate
-	// only on memory this package allocated (looked up in a registry)" - and
+	// the address. That is this file's stated contract, "read*/write* operate
+	// only on memory this package allocated (looked up in a registry)", and
 	// ReadCString was the one place breaking it, which is also why it was the one
 	// place vet reported a possible misuse of unsafe.Pointer.
 	memMu.Lock()

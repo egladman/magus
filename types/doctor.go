@@ -23,21 +23,21 @@ type DoctorCheckStatus string
 // DoctorAdvice is for a convention magus RECOMMENDS: how targets are named,
 // whether every project binds a language spell, whether a spell target carries a
 // doc comment. These are conventions that have worked well, documented so you can
-// take them - not requirements, because magus does not get to decide how your
+// take them, not requirements, because magus does not get to decide how your
 // repository is laid out. `ci` is the one reserved target, and everything past it
 // is yours.
 //
 // The distinction is not cosmetic. When doctor had only ok and fail, a convention
 // check had two options: fail (and dictate) or not exist. What actually happened
-// is that each one grew its own private escape hatch - no_language for language
-// coverage, and briefly allow_bespoke_name for target naming - so the config
+// is that each one grew its own private escape hatch (no_language for language
+// coverage, and briefly allow_bespoke_name for target naming), so the config
 // surface grew one key per opinion, and taking magus's advice became mandatory
 // unless you wrote a paragraph explaining yourself. Advice that exits zero needs
 // no escape hatch at all.
 //
 // There is deliberately no switch that promotes advice to failure. A knob for
 // that would just be the imposition again with an opt-in label on it, and the
-// workspace that wants a convention enforced can enforce it - in its own lint
+// workspace that wants a convention enforced can enforce it: in its own lint
 // target, with its own tools, on its own terms. magus reports what it noticed and
 // gets out of the way.
 const (
@@ -62,13 +62,13 @@ type Evidence string
 //
 // EvidenceMeasured means magus observed the actual state: it walked the tree, dialed the
 // socket, parsed the file, ran the probe. EvidenceDeclared means magus read what the
-// workspace ASSERTS - a magusfile declaration, a config key - and took it at its word
+// workspace ASSERTS (a magusfile declaration, a config key) and took it at its word
 // without confirming it, so the finding is only as true as the declaration. Those two
 // differ exactly where it matters: a declared memory_mb and a measured peak disagreeing
 // is what checkMemoryDeclarations exists to report.
 //
-// EvidenceInferred means the answer came from a derived model - the knowledge graph,
-// static extraction, a near-miss heuristic - which can be stale, partial, or wrong in
+// EvidenceInferred means the answer came from a derived model (the knowledge graph,
+// static extraction, a near-miss heuristic), which can be stale, partial, or wrong in
 // ways the source it models is not.
 //
 // EvidenceUnknown means the check did not run. It is not a pass. A skipped check
@@ -92,7 +92,7 @@ type DoctorCheck struct {
 	// it to EvidenceMeasured.
 	Evidence Evidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// Fix is the magus command that remedies this finding, as argv without the leading
-	// "magus" - nil when there is nothing mechanical to run. `doctor --fix` runs it; with
+	// "magus", nil when there is nothing mechanical to run. `doctor --fix` runs it; with
 	// no --fix it is printed, so the report always names the cure even when it is not
 	// applying it.
 	//
@@ -100,7 +100,7 @@ type DoctorCheck struct {
 	// safety property: --fix can only do things you could have typed yourself and can
 	// inspect afterwards, and a check whose remedy needs judgment (narrow this glob, or
 	// accept the volatility?) simply declares no Fix and stays a report. It is also why a
-	// config remedy is `config set ...` rather than a writer of its own - there is exactly
+	// config remedy is `config set ...` rather than a writer of its own: there is exactly
 	// one thing in magus that edits config, and this is not a second one.
 	Fix []string `json:"fix,omitempty" yaml:"fix,omitempty"`
 }
@@ -117,7 +117,7 @@ type DoctorSummary struct {
 	// Unknown counts checks that did not run, and is deliberately carved OUT of OK
 	// rather than added beside it: "44 ok" that silently included six checks which
 	// never looked was the number this field exists to stop reporting. It is not a
-	// failure and does not affect the exit status - nothing was found to be wrong,
+	// failure and does not affect the exit status: nothing was found to be wrong,
 	// because nothing was looked at.
 	Unknown int `json:"unknown" yaml:"unknown"`
 }

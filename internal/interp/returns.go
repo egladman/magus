@@ -22,7 +22,7 @@ import (
 // A map is rejected on purpose despite serializing fine: it carries no verbs, so
 // it can never chain, and allowing it invites targets to return arbitrary
 // structures that dead-end at the CLI. A number or bool is rejected for the same
-// reason - a target reporting a count returns a str, which is what the CLI prints
+// reason: a target reporting a count returns a str, which is what the CLI prints
 // either way. Objects, functions and userdata are live references to interpreter
 // state and mean nothing once the session closes.
 //

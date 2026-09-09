@@ -8,11 +8,11 @@
 //   - each entry is meaningful on its own, so a reader can understand one file
 //     without the others;
 //   - entries are added and removed one at a time, so adding is a copy and removing
-//     is an `rm` - both of which work when the tool that owns them does not; and
+//     is an `rm`, both of which work when the tool that owns them does not; and
 //   - separate writers would otherwise contend on one file, which is a lock, a
 //     retry, and a stale-lock heuristic that all disappear here.
 //
-// It does NOT pay for a log or a time series - no entry means anything alone,
+// It does NOT pay for a log or a time series: no entry means anything alone,
 // nobody hand-authors one, and one file per record is thousands of files. magus's
 // run history stays a single file for exactly that reason.
 package dropin
@@ -28,7 +28,7 @@ import (
 
 // Entry is one file found in a drop-in directory.
 type Entry struct {
-	// Name is the filename with its extension removed - the identity a human uses
+	// Name is the filename with its extension removed: the identity a human uses
 	// to talk about the entry, and the thing `rm <name>.<ext>` removes.
 	Name string
 	Path string
@@ -41,7 +41,7 @@ type Entry struct {
 // A missing directory yields no entries and no error: nothing configured is a
 // normal state, not a failure. A file that cannot be READ is an error, because
 // silently skipping it would present a smaller configuration as if it were the
-// whole one - the failure mode a drop-in directory is most prone to.
+// whole one: the failure mode a drop-in directory is most prone to.
 //
 // ext is given without a dot ("json", "yaml"). Anything else in the directory is
 // ignored, which is what lets a writer stage a complete temp file under another
@@ -107,7 +107,7 @@ func ValidName(name string) error {
 //
 // A complete temp file is written first and then hard-linked into place. Both
 // halves matter: the temp name does not carry ext, so Read never globs it, and
-// the link is atomic and fails when the destination exists - which makes it the
+// the link is atomic and fails when the destination exists, which makes it the
 // uniqueness check as well as the publication.
 //
 // Creating the final path with O_EXCL and writing into it afterwards is the

@@ -11,7 +11,7 @@ import (
 
 // Collector is a narrow, proto-free accessor over an in-process metrics ManualReader.
 // It exists so a caller (the daemon's dashboard aggregation) can read raw OTel
-// metricdata - histogram buckets and counters - without a network hop and without this
+// metricdata (histogram buckets and counters) without a network hop and without this
 // package importing the generated dashboard proto. It is deliberately NOT a method on the
 // fat Provider interface: only the local-collect daemon path needs it, so it is reached by
 // a concrete type assertion via CollectorFrom rather than by widening every Provider.

@@ -20,7 +20,7 @@ import (
 // local Buzz spells lost their version probe, language, and opaque flag because
 // spell_buzz.go built the spell without those options while spell.go passed all of
 // them. The descriptor decoded correctly the whole time, so nothing downstream could
-// tell a dropped hook from an undeclared one - a declared version probe simply never
+// tell a dropped hook from an undeclared one: a declared version probe simply never
 // ran and never entered the cache key, and a local spell's toolchain could drift with
 // nothing invalidating.
 //
@@ -35,9 +35,9 @@ import (
 // split or renamed.
 func TestSpellOptionsApplied(t *testing.T) {
 	// The optional hooks that carry behaviour onto a spell, keyed by the option that
-	// applies each - what a construction path either calls or forgets.
+	// applies each: what a construction path either calls or forgets.
 	// Matched WITH the open paren. Without it "WithVersionProbe" is a substring of
-	// "WithVersionProbeNamed", so the unnamed probe could never fail independently -
+	// "WithVersionProbeNamed", so the unnamed probe could never fail independently;
 	// a mutation test caught this test lying about its own coverage.
 	wantOptions := []string{
 		"WithTools(",

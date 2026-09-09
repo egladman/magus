@@ -43,7 +43,7 @@ func TestParseHgConflicts(t *testing.T) {
 // This guards a bug that shipped and was caught only by running hg: the first
 // implementation probed `hg status -nd`, reasoning that a deleted file would show as
 // missing. It does not. During a merge Mercurial keeps the local side in the working
-// tree, so the file EXISTS and `status -nd` reports nothing - every modify/delete was
+// tree, so the file EXISTS and `status -nd` reports nothing; every modify/delete was
 // silently classified as a content conflict, which regeneration cannot settle.
 func TestParseHgRemovalCandidates(t *testing.T) {
 	const out = `local (working copy): 1503fcb585e5
@@ -72,7 +72,7 @@ file: gone.txt (state "u")
 // tip is the newest commit in the repository, so once you have committed anything it is
 // YOUR commit: ChangedFiles then compared the checkout against itself, `magus affected`
 // reported nothing affected, and a working branch built nothing at all. Measured on
-// Mercurial 7.x - on a named branch `--rev tip` returns empty where `--rev default` names
+// Mercurial 7.x: on a named branch `--rev tip` returns empty where `--rev default` names
 // the changed file.
 //
 // The assertion runs through ChangedFiles rather than reading Base() as a string, because

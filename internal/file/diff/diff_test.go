@@ -87,7 +87,7 @@ func TestGlobBaseDirs(t *testing.T) {
 	t.Run("deep dir", func(t *testing.T) { check(t, "a/b/c/**/*.go", "a/b/c") })
 	// A mid-segment wildcard: the wildcard lands inside the LAST path segment,
 	// not right after a "/". The base dir must trim back to the last "/" before
-	// the wildcard ("gen"), not stop at the wildcard itself ("gen/index" - a
+	// the wildcard ("gen"), not stop at the wildcard itself ("gen/index", a
 	// nonexistent directory, since "index*.html" is a filename pattern, not a
 	// path component).
 	t.Run("mid-segment wildcard", func(t *testing.T) { check(t, "gen/index*.html", "gen") })
@@ -122,7 +122,7 @@ func TestHashContent_GlobFilterKeepsTheAnswerAboutOutputs(t *testing.T) {
 	assert.Empty(t, DiffContent(pre, snap(declared)),
 		"a write outside every declared output glob is not non-deterministic output")
 
-	// Unfiltered, the same pair of snapshots reports it - which is what shipped, and what
+	// Unfiltered, the same pair of snapshots reports it, which is what shipped, and what
 	// told a maintainer a generator was unstable when none had run.
 	unfilteredPre := snap(everything)
 	write(filepath.Join("node_modules", ".pnpm-state.json"), `{"at":3}`)
@@ -162,7 +162,7 @@ func TestHashContent_RootIsNotAGlob(t *testing.T) {
 	}
 }
 
-// A typo in a magusfile must not become a gate that passes forever - and unlike the
+// A typo in a magusfile must not become a gate that passes forever, and unlike the
 // walk-then-match version, this must hold with no matching file and an empty directory.
 func TestHashContent_MalformedGlobIsAnError(t *testing.T) {
 	dir := t.TempDir()
@@ -173,7 +173,7 @@ func TestHashContent_MalformedGlobIsAnError(t *testing.T) {
 	assert.Contains(t, err.Error(), "[a-")
 }
 
-// The absence of a filter must not mean "hash everything" - that is the false positive above.
+// The absence of a filter must not mean "hash everything"; that is the false positive above.
 func TestHashContent_NoGlobsHashesNothing(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.json"), []byte("1"), 0o644))

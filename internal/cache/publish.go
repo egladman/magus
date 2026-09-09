@@ -25,7 +25,7 @@ import (
 // It exists because the two things a team wants to share are asymmetric. A PASSING
 // run's output travels automatically inside the remote cache artifact, because that
 // artifact is going to be pushed anyway. A FAILING run is never cached and never
-// pushed - and a failure is the output humans most want to hand to a teammate. So
+// pushed, and a failure is the output humans most want to hand to a teammate. So
 // publishing is explicit (`magus query output <ref> --publish`), and what it uploads
 // is deliberately NOT a cache artifact:
 //
@@ -148,7 +148,7 @@ func writeBundle(s *signer, w io.Writer, meta, output []byte) error {
 
 // fetchBundle resolves a ref against the remote bundle namespace, verifying the
 // signature before returning anything. It is the remote half of ByRef: consulted only
-// when the local store has no such ref. A ref must be exact here - a remote store
+// when the local store has no such ref. A ref must be exact here: a remote store
 // cannot be scanned for prefixes the way a local directory can.
 func (c *Cache) fetchBundle(ctx context.Context, ref string) ([]byte, OutputBundle, error) {
 	if c.remote == nil || !c.remote.Active(ctx) {
@@ -223,7 +223,7 @@ func (c *Cache) readBundle(r io.Reader) ([]byte, OutputBundle, error) {
 	}
 	if legacy {
 		// A pre-domain envelope covers only the metadata, leaving the captured bytes
-		// unauthenticated - and the bytes are the entire point of a bundle. There are
+		// unauthenticated, and the bytes are the entire point of a bundle. There are
 		// no such bundles in the wild (the format is new), so refuse rather than
 		// invent a degraded mode.
 		return nil, OutputBundle{}, errors.New("output bundle: signature predates domain separation; refusing - ask the publisher to republish with a current magus (no legacy output bundles are supported)")
@@ -304,7 +304,7 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 }
 
 // RefNotFoundError reports a ref that resolved in none of the stores consulted, and
-// names them. "Not found" is only actionable if the reader knows where magus looked -
+// names them. "Not found" is only actionable if the reader knows where magus looked;
 // a foreign ref that was never published looks identical to a mistyped one otherwise.
 type RefNotFoundError struct {
 	Ref    string

@@ -150,7 +150,7 @@ func TestMaterializeArtifactWritesBytesAndMode(t *testing.T) {
 // TestMaterializeArtifactReportsEviction is the failure that must never be quiet.
 // The store evicts LRU blobs, so a version can be listed from a surviving manifest
 // with no bytes behind it. Reported as success with an empty file, a diff would show
-// no differences and the reader would conclude the artifact was unchanged - the most
+// no differences and the reader would conclude the artifact was unchanged: the most
 // misleading wrong answer available.
 func TestMaterializeArtifactReportsEviction(t *testing.T) {
 	c := testCacheDir(t)

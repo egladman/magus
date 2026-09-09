@@ -12,7 +12,7 @@ import (
 )
 
 // symsFixture: S1 is defined in pkg/a and referenced in pkg/b; S2 only in pkg/a. So
-// S1's routing spans both shards, S2's spans one - the reverse-lookup discrimination.
+// S1's routing spans both shards, S2's spans one, the reverse-lookup discrimination.
 func symsFixture(t *testing.T) (string, Inputs) {
 	cacheDir, in := buildFixture(t)
 	in.Symbols = map[string][]types.KnowledgeSymbol{
@@ -73,7 +73,7 @@ func TestMergeSymbolShardsByIDFallsBackWithoutRouting(t *testing.T) {
 
 // TestMergeSymbolShardsByIDFallsBackWhenStale: a routing file whose ShardsKey no
 // longer matches the manifest (shards changed since it was written) must NOT be
-// trusted - it falls back to load-all rather than under-loading.
+// trusted: it falls back to load-all rather than under-loading.
 func TestMergeSymbolShardsByIDFallsBackWhenStale(t *testing.T) {
 	cacheDir, in := symsFixture(t)
 	build(t, cacheDir, BuildOptions{}, in)
@@ -95,7 +95,7 @@ func TestMergeSymbolShardsByIDFallsBackWhenStale(t *testing.T) {
 
 // TestMergeSymbolShardsByIDFallsBackOnRoutingMiss: a symbol: ref that is not an exact
 // indexed ID (a fuzzy symbol:Name) yields no routed shards, so it loads all rather
-// than nothing - otherwise the later fuzzy resolve would have no symbols to match.
+// than nothing; otherwise the later fuzzy resolve would have no symbols to match.
 func TestMergeSymbolShardsByIDFallsBackOnRoutingMiss(t *testing.T) {
 	cacheDir, in := symsFixture(t)
 	build(t, cacheDir, BuildOptions{}, in)

@@ -15,7 +15,7 @@ func init() { Register(Sort) }
 // Sort is the "sort" host module: the orderings a build tool actually needs over
 // a list of strings.
 //
-// Buzz's list.sort takes a comparator, so ordering is not strictly missing - but
+// Buzz's list.sort takes a comparator, so ordering is not strictly missing, but
 // the language has no `<` on str, which means even a plain alphabetical sort is a
 // hand-written byte loop (docs/lib/text.buzz carries one, strLess). strings.compare
 // gave that a primitive; this gives the three orderings worth not rewriting.

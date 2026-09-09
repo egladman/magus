@@ -26,9 +26,9 @@ func init() { Register(Crypto) }
 
 // Crypto is the "crypto" host module: content digests for checksum manifests
 // (SHA256SUMS for release assets), Ed25519 signing, and HMAC. Not a general
-// crypto toolkit - there is no encryption. SHA-256/512 are the strong defaults;
+// crypto toolkit: there is no encryption. SHA-256/512 are the strong defaults;
 // SHA-1 and MD5 exist for interop with legacy checksums and are not
-// collision-resistant - never use them for anything security-relevant.
+// collision-resistant; never use them for anything security-relevant.
 //
 // Signing is here so a magusfile can publish a signed artifact without a Go program in
 // the middle. Two things about its shape:
@@ -181,7 +181,7 @@ var Crypto = Module{
 // Bytes in and bytes out, which is the whole point: the result keys the next call
 // in a signing chain, and a str would not survive the round trip. It moved here
 // from internal/interp/bindings/crypto_bytes.go once a byte-list type tag existed
-// to declare it with - as an undeclared companion it worked but was invisible to
+// to declare it with; as an undeclared companion it worked but was invisible to
 // `magus describe modules`, the knowledge graph and the docs, and untyped in the
 // checker.
 func CryptoHmacSha256(_ context.Context, key, data []byte) ([]byte, error) {

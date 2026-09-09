@@ -98,7 +98,7 @@ func TestRunConfigCmd_UnknownSubcommand(t *testing.T) {
 
 // TestRunConfigCmd_NoArgs pins that a missing subcommand is a USAGE ERROR, not a
 // quiet success. It previously returned nil, so `magus config` exited 0 and a script
-// could not tell a bare invocation from one that did work - and it disagreed with
+// could not tell a bare invocation from one that did work, and it disagreed with
 // `magus man`, which exited 1 for the same mistake. Usage errors exit 2 across the CLI.
 func TestRunConfigCmd_NoArgs(t *testing.T) {
 	cfg := config.Defaults()
@@ -161,7 +161,7 @@ var affectedOnlyFlags = map[string]string{
 	// run.go and affected.go as SOURCE: the scan looked only inside the affected
 	// function, so everything bound by affectedPlan, affectedImpact and bisect was
 	// invisible to it. Comparing the documented surfaces instead makes them visible,
-	// which is the point - they are exceptions, not omissions.
+	// which is the point: they are exceptions, not omissions.
 	"explain":             "mode selector: reports why a project is in the set instead of running",
 	"plan":                "mode selector: emits a CI shard plan for the affected set",
 	"max-shards":          "pairs with --plan",
@@ -223,7 +223,7 @@ func TestRunAffectedFlagParity(t *testing.T) {
 // source scan this replaced walked run.go and affected.go for fs.Bool-style calls,
 // which was the only way to ask "what does this command bind" while each command
 // bound its own list by hand. Both now bind from the registry via a generated
-// binder, so there is nothing to scrape - and a scan would find zero and pass
+// binder, so there is nothing to scrape, and a scan would find zero and pass
 // vacuously if it were not for its own emptiness check.
 func registryFlagNames(t *testing.T, command string) map[string]struct{} {
 	t.Helper()

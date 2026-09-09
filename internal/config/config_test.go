@@ -22,7 +22,7 @@ func TestDefaults_VolatilityEnabled(t *testing.T) {
 
 // TestCacheIncludeDefaultsOff pins the OFF default deliberately, against the pull to
 // "fix" it toward the safe-looking direction. Keying the host platform is not what makes
-// a replay safe - Manifest.Platform refuses a cross-platform hit whatever these say - and
+// a replay safe (Manifest.Platform refuses a cross-platform hit whatever these say), and
 // a key free of host facts is what lets an output ref name the same run on every machine
 // (see internal/cache's TestCacheKeyUnaffectedByPlatform). Turning these on by default
 // would break that and rekey every existing entry.

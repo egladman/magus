@@ -2,7 +2,7 @@
 // renders the flag-binding, schema-field, bind and env artifacts derived from it.
 //
 // It lives beside the schema it interprets rather than in the tool that invokes it,
-// because everything here encodes what internal/config's struct tags MEAN - the
+// because everything here encodes what internal/config's struct tags MEAN: the
 // yaml-path derivation, the MAGUS_* env-var naming, the flag-kind switch. A tag
 // added to config.go and a reader that does not know about it are one edit apart,
 // and that edit is easier to get right when the two sit in the same directory.

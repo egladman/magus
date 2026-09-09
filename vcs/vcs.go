@@ -17,8 +17,8 @@ import (
 )
 
 // builtin is probed IN ORDER by autodetect, so the most specific marker has to come
-// first. `jj git init` writes both .jj and .git - git is jj's storage backend, not a
-// second VCS - so a colocated repo satisfies git's claim too. With git first, every
+// first. `jj git init` writes both .jj and .git (git is jj's storage backend, not a
+// second VCS), so a colocated repo satisfies git's claim too. With git first, every
 // colocated jj workspace resolved to git, and the revision magus recorded was git's
 // HEAD, which lags jj's working-copy commit (@) until jj syncs refs. That put a
 // revision on an output ref describing a tree other than the one built, and
@@ -87,7 +87,7 @@ func Resolve(_ context.Context, root, runtimeBase string, opts types.VCSOptions)
 			}
 		}
 		if v == nil {
-			// Nothing claimed the directory. The default is git - named explicitly
+			// Nothing claimed the directory. The default is git, named explicitly
 			// rather than taken as builtin[0], which now heads a list ordered by
 			// marker specificity rather than by which VCS is the sane fallback.
 			v = gitVCS{}
@@ -183,7 +183,7 @@ func checkRef(ref string) error {
 // Both sides are symlink-resolved before being related, and that is load-bearing rather
 // than defensive: every backend reports a root with symlinks already resolved, while dir
 // arrives as the caller wrote it. On macOS a path under /var is really /private/var, so
-// relating the two unresolved yields "../../../.." and a prefix that matches nothing -
+// relating the two unresolved yields "../../../.." and a prefix that matches nothing,
 // which silently filters every file out instead of failing. The same happens anywhere a
 // repository is reached through a symlinked parent.
 //
@@ -220,11 +220,11 @@ func repoPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, p
 // backends that speak Mercurial's pathspec syntax (hg and sl).
 //
 // It is a silent-wrong-answer fix, not a nicety. An hg pathspec defaults to the "relpath"
-// kind - a literal path - so a caller-supplied GLOB matches nothing, and hg reports that by
+// kind (a literal path), so a caller-supplied GLOB matches nothing, and hg reports that by
 // writing "gen/**: No such file or directory" to STDERR while exiting 0 with empty stdout.
 // The drivers read stdout, so the answer came back "no files changed". Callers pass globs:
 // magus.diagnoseDrift hands DirtyFiles a project's declared output globs verbatim, so under
-// hg and sl the generate drift gate reported every project clean having matched nothing -
+// hg and sl the generate drift gate reported every project clean having matched nothing,
 // in CI, with no diagnostic. git and jj both handle "gen/**" natively, which is why only
 // these two were wrong. Measured on Mercurial 7.x and Sapling 0.2.x.
 //
@@ -296,7 +296,7 @@ func parseTags(out, pattern string) ([]types.VCSTag, error) {
 // version: "libs/gopherbuzz/v0.1.0" -> ("libs/gopherbuzz/", 0.1.0), "v0.3.0"
 // -> ("", 0.3.0). A name with no "/" has an empty prefix. A version portion
 // that fails to parse (an annotated tag like "checkpoint", or a namespaced
-// non-release tag the pattern filter let through) is not an error - it
+// non-release tag the pattern filter let through) is not an error; it
 // leaves Version at its zero value. Parses with Masterminds/semver, the same
 // library std/semver.go's SemverParse uses; the two can't share a call
 // because vcs can't import std (std already imports vcs).
@@ -333,7 +333,7 @@ func splitTagVersion(name string) (prefix string, version types.SemverVersion) {
 // backend printed it. The driver always knows.
 //
 // A line SHORTER than width is passed through whole rather than sliced away. Slicing
-// would silently turn a short path into "", dropping a changed file from the result -
+// would silently turn a short path into "", dropping a changed file from the result,
 // and a caller cannot tell an empty answer from a clean tree.
 func trimStatusColumns(lines []string, width int) []string {
 	out := make([]string, 0, len(lines))

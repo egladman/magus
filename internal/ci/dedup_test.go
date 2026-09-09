@@ -80,7 +80,7 @@ func TestDedup_MixedHashCoarsensToApprox(t *testing.T) {
 	if res.RedundantBuilds != 1 {
 		t.Errorf("RedundantBuilds = %d, want 1", res.RedundantBuilds)
 	}
-	if res.RedundantMs != 100 { // 100+200 - max(200) = 100
+	if res.RedundantMs != 100 { // `100+200 - max(200) = 100`
 		t.Errorf("RedundantMs = %d, want 100", res.RedundantMs)
 	}
 }

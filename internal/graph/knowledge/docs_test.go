@@ -58,7 +58,7 @@ func TestDocHeadingsIgnoresCodeFences(t *testing.T) {
 
 // TestAssembleDocsEmitsSectionNodes checks the retrieval unit: a page node plus one node per
 // heading, each a citable pointer, with a heading contained by its enclosing heading rather
-// than by the page - so the graph mirrors the outline and a nested query stays scoped.
+// than by the page, so the graph mirrors the outline and a nested query stays scoped.
 func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n# Top\n\nintro\n\n## Sub\n\nbody\n")
@@ -140,7 +140,7 @@ func TestAssembleDocs(t *testing.T) {
 	root := t.TempDir()
 	// The CURRENT (post-reorg) layout: codes under reference/codes, spells under
 	// concepts/spells, modules under reference/buzz. The matchers anchor on filename +
-	// path segment, not a fixed prefix, so these must produce documents edges - the exact
+	// path segment, not a fixed prefix, so these must produce documents edges: the exact
 	// thing the reorg silently broke.
 	writeFile(t, root, "docs/reference/codes/sandbox/MGS2010.md", "# MGS2010\nRelated to MGS2001. See [go spell](../../../concepts/spells/go.md).\n")
 	writeFile(t, root, "docs/concepts/spells/go.md", "# go\nThe go spell.\n")
@@ -290,7 +290,7 @@ func TestFindDocFiles_NoVCSIndexesEverything(t *testing.T) {
 
 // TestFindDocFiles_ExcludesDeclaredNotes is the guard against the quietest failure in the
 // notes design: this walk takes EVERY .md in the workspace, not just docs/, so a notes
-// store would silently arrive in @docs as kind:doc on the next build - conflating
+// store would silently arrive in @docs as kind:doc on the next build, conflating
 // human-authored notes with documentation, which is the one distinction the store exists
 // to draw.
 //

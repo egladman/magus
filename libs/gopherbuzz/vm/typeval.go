@@ -4,7 +4,7 @@ import "strings"
 
 // typeObj is a Buzz TYPE used as a value: what `<[str]>` denotes and what
 // `typeof x` evaluates to. name is the canonical spelling of the type, and it is
-// the whole payload - two type values are equal exactly when their canonical
+// the whole payload: two type values are equal exactly when their canonical
 // spellings match.
 //
 // A canonical spelling rather than a structural type graph is deliberate. Buzz's

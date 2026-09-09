@@ -44,7 +44,7 @@ type DedupResult struct {
 func Dedup(misses []MissBuild) DedupResult {
 	// If ANY event lacks a hash (older reports omit it), the hash can't be trusted to
 	// tell a same-input rebuild from a different-input one, so the whole analysis drops
-	// it and groups by (project, target) - the approximation Approx advertises. Detected
+	// it and groups by (project, target): the approximation Approx advertises. Detected
 	// up front to keep grouping uniform: mixing hash and no-hash keys for one target
 	// would split it and undercount.
 	approx := false

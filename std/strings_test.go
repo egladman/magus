@@ -55,7 +55,7 @@ func TestStringsEllipsis(t *testing.T) {
 // enforced one. types.Normalize (hand-rolled, no lo dependency) is what resolves
 // every target, charm and spell op; strings\kebabCase (samber/lo) is what a Buzz
 // author can call, and it is the version the runnable examples in
-// docs/concepts/targets.md execute in the browser playground - the plain
+// docs/concepts/targets.md execute in the browser playground; the plain
 // playground does not wire the magus module.
 //
 // They agree today by construction: types.kebabCase is documented as mirroring
@@ -77,7 +77,7 @@ func TestKebabCaseMatchesNormalize(t *testing.T) {
 
 func TestStringsUpperFirst(t *testing.T) {
 	ctx := context.Background()
-	// Unlike capitalize, the remainder keeps its casing - that difference is the
+	// Unlike capitalize, the remainder keeps its casing; that difference is the
 	// whole reason both exist.
 	got, err := StringsUpperFirst(ctx, "hELLO")
 	require.NoError(t, err)

@@ -43,7 +43,7 @@ func TestAdoptionIdentityPassThrough(t *testing.T) {
 }
 
 // A stamped dirty build's display version is `git describe --dirty`, which every dirty
-// build of one commit shares - the daemon built at one dirty state and a client rebuilt
+// build of one commit shares: the daemon built at one dirty state and a client rebuilt
 // at another carry the SAME string while running different code. Passing it through let
 // the stale daemon adopt the newer client and execute the run with old code. The
 // identity must therefore be the executable file's, never the shared string.

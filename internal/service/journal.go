@@ -17,7 +17,7 @@ const sweepStopTimeout = 15 * time.Second
 
 // Journal persists which services a daemon has started so a NEW daemon can reap
 // orphans left by a previous one that died without a graceful shutdown (SIGKILL,
-// power loss - the case ordinary teardown misses). Each hosted service is one file
+// power loss: the case ordinary teardown misses). Each hosted service is one file
 // recording its stop command; [Journal.Sweep], run at daemon startup, replays those
 // stop commands to shut down any survivors.
 //
@@ -104,7 +104,7 @@ func (j *Journal) Sweep(ctx context.Context) SweepResult {
 		cctx, cancel := context.WithTimeout(ctx, sweepStopTimeout)
 		// Reap through the shared primitive so a replayed stop honors the sandbox
 		// policy and MAGUS_LEVEL like any other magus subprocess. Quiet discards the
-		// output; the error is ignored - a wedged or already-dead orphan must not
+		// output; the error is ignored: a wedged or already-dead orphan must not
 		// stall the sweep.
 		_, _ = run.Exec(cctx, e.Stop.Bin, e.Stop.Args, run.ExecOptions{Quiet: true})
 		cancel()

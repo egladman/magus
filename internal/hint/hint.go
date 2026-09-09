@@ -3,7 +3,7 @@
 // (this file), the canonical MCP tool names and follow-up lines (mcptool.go),
 // the canonical CLI command paths shown in user-facing output (clicommand.go),
 // and the did-you-mean edit distance every "unknown X" site measures with
-// (nearest.go). It stays a near-leaf - stdlib plus types - so an emitter
+// (nearest.go). It stays a near-leaf (stdlib plus types), so an emitter
 // anywhere in the tree can render a hint without acquiring a dependency set
 // to get command strings.
 //
@@ -73,7 +73,7 @@ const (
 
 // Translator holds the workspace facts the syntactic translation may use. All
 // of them are optional: a zero-option Translator still translates, it just
-// cannot scope. It is not a graph - it never queries one - and the name would
+// cannot scope. It is not a graph (it never queries one), and the name would
 // collide with knowledge.Graph in the callers that hold both.
 type Translator struct {
 	projects []string
@@ -119,8 +119,8 @@ type toolSpec struct {
 // take values) and ag's boolean -t/-D (rg's -t and grep's -D take values).
 const commonValueShorts = "ABCm"
 
-// searchTools is both the membership set - a name absent from it is not a
-// search - and the per-tool facts the parse depends on.
+// searchTools is both the membership set (a name absent from it is not a
+// search) and the per-tool facts the parse depends on.
 var searchTools = map[string]toolSpec{
 	"grep":  {valueShorts: "dD"},
 	"egrep": {valueShorts: "dD"},
@@ -410,7 +410,7 @@ func (sa *searchArgs) valueShort(c byte) bool {
 // It is deliberately a suggestion, not a promise. grep is TEXTUAL and the
 // graph is SEMANTIC: they agree only when the pattern names something the
 // graph models, and a bare word like "error" matches the identifier shape
-// without being one. So the wording hedges - an empty result means the
+// without being one. So the wording hedges: an empty result means the
 // pattern was text, and grep was the right tool. A grep-accurate translator
 // is not worth building; an honest "try this" is.
 func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
@@ -428,7 +428,7 @@ func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 	scope := t.scope(paths)
 	if !prose {
 		// A non-recursive grep, or one pointed only at files, reads those files
-		// rather than asking a repo-wide question - no graph equivalent. The
+		// rather than asking a repo-wide question, no graph equivalent. The
 		// prose case stays: a docsection query replaces scanning the .md itself.
 		if !sa.recursive {
 			return nil
@@ -734,7 +734,7 @@ func globToRe(glob string, basenameOnly, foldCase bool) (string, bool) {
 // scope maps a search's directory operands onto a configured project and
 // renders the query filter. File operands are skipped: a file names one
 // document, not a project's worth of them. Longest prefix wins. Applied to
-// query suggestions only - refs takes no filters.
+// query suggestions only; refs takes no filters.
 //
 // The filter is an anchored regex rather than project=<path>, because query
 // matches a project EXACTLY and a node resolves to the LONGEST project owning

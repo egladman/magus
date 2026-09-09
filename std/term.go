@@ -27,7 +27,7 @@ func init() { Register(Term) }
 //
 // THE RULE THAT SHAPES THIS MODULE: magus does not ask. Its own doctrine is that
 // the CLI reads context rather than prompting, because a prompt in a
-// non-interactive run does not degrade - it HANGS, and a hung CI job reports as a
+// non-interactive run does not degrade: it HANGS, and a hung CI job reports as a
 // timeout half an hour later with nothing to read. tty.Pick's own doc says the
 // caller is expected to have already checked that stdin and stderr are terminals.
 // "Expected to" is not a guarantee, so this module does not rely on it: pick
@@ -112,7 +112,7 @@ var Term = Module{
 //
 // BOTH, not either: the picker reads keys from stdin and paints to stderr, so one
 // without the other is a half-usable prompt. `magus run x < /dev/null` on a
-// terminal is the case that makes this concrete - stderr is a TTY, stdin is not,
+// terminal is the case that makes this concrete: stderr is a TTY, stdin is not,
 // and a prompt would block forever on a read that can never arrive.
 func TermIsInteractive(_ context.Context) (bool, error) {
 	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), nil
@@ -205,12 +205,12 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 	}
 	if message == "" {
 		// A no-op rather than a raise. Everything else about this call is
-		// best-effort - no terminal, no room, both silently drop - so failing
+		// best-effort (no terminal, no room, both silently drop), so failing
 		// on one input would be the only way it could ever interrupt a run.
 		return nil
 	}
 	// 0 is "the caller omitted it", because that is what the generated binding
-	// passes for an absent optional int - so "pin this until something displaces
+	// passes for an absent optional int, so "pin this until something displaces
 	// it" needs its own spelling, and a negative ttl is it.
 	ttl := defaultNotifyTTL
 	switch {

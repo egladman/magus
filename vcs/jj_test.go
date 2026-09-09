@@ -36,7 +36,7 @@ func TestParseJJConflicts(t *testing.T) {
 
 // TestConflictsDoesNotSwallowRealFailures pins the stderr-based discriminator.
 //
-// Reading `out` - STDOUT - cannot discriminate: vcsOutputRaw returns ("", err) on any
+// Reading `out` (STDOUT) cannot discriminate: vcsOutputRaw returns ("", err) on any
 // failure, so `strings.Contains(out, "No conflicts") || out == ""` is unconditionally true on
 // the error path and the real-failure branch below it is unreachable. jj missing from PATH, a
 // directory that is not a jj repo, a cancelled context and a permission error would all report

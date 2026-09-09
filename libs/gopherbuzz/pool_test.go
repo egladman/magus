@@ -120,7 +120,7 @@ func TestDispatchKeepsSiblingAncestorsPrivate(t *testing.T) {
 // under real contention: every caller of one target either starts it or parks on its
 // entry, so the target runs once and every caller sees that run's result. The existing
 // memo coverage dispatches sequentially, where the second call always resolves an
-// already-CLOSED entry - the cheap half of the path, and the half a cache hit would
+// already-CLOSED entry: the cheap half of the path, and the half a cache hit would
 // hide.
 func TestMemoSubscribersShareOneRun(t *testing.T) {
 	const callers = 8
@@ -162,7 +162,7 @@ func TestMemoSubscribersShareOneRun(t *testing.T) {
 // TestDispatchSiblingFailureLetsPeersFinish covers the error path of a fan-out: one
 // sibling failing must not abandon the peers already in flight, and must still record
 // its outcome in the memo. A Complete skipped on the error path leaves a permanently
-// in-flight entry, which is silent until some later need subscribes to it and hangs -
+// in-flight entry, which is silent until some later need subscribes to it and hangs,
 // so the second Dispatch below, not the first, is the assertion that matters.
 func TestDispatchSiblingFailureLetsPeersFinish(t *testing.T) {
 	var entered sync.WaitGroup

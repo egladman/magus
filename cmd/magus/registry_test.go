@@ -146,7 +146,7 @@ func BenchmarkRegistryAcquireParallel(b *testing.B) {
 
 // TestEvictAllDropsIdleKeepsBusy pins `magus server reload`. The daemon keeps a workspace
 // warm across invocations and each one captured its config when it loaded, so editing
-// magus.yaml had no effect until something evicted the entry - a TTL away, and invisible.
+// magus.yaml had no effect until something evicted the entry: a TTL away, and invisible.
 // Reload drops them so the next command reopens and re-reads.
 //
 // A workspace with a run in flight is deliberately kept: swapping a running build's config

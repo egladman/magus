@@ -30,7 +30,7 @@ const (
 	ServeCanceled                      // ctx was canceled (Ctrl-C)
 )
 
-// BlobServer hands a single blob to a hosted page over a loopback [Server], then STOPS - a
+// BlobServer hands a single blob to a hosted page over a loopback [Server], then STOPS: a
 // one-shot handoff, not a standing service. It inherits the server's loopback bind and wraps
 // its route in the same stack as every other loopback endpoint: [RequireLoopbackPeer]
 // (defense in depth over the bind), [CORS] (locked to the single site origin), and
@@ -90,7 +90,7 @@ func (b *BlobServer) SourceURL() string {
 }
 
 // WaitServed blocks until the page fetches the blob (then a short grace for a reload), or
-// the max wait elapses, or ctx is canceled - and shuts the server down before returning the
+// the max wait elapses, or ctx is canceled, and shuts the server down before returning the
 // outcome.
 func (b *BlobServer) WaitServed(ctx context.Context) ServeOutcome {
 	defer b.stop()

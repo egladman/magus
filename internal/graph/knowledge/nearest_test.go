@@ -37,7 +37,7 @@ func TestNearestNodeCorrectsATypo(t *testing.T) {
 	// The full workspace-relative path works too, so a pasted path with one slip lands.
 	assert.Equal(t, "file:cmd/magus/guard_shell.go", g.NearestNode("cmd/magus/guard_shel.go"))
 	// A qualifier-separated id: the leaf of "target:.:build" is "build". A doc
-	// heading of the same name is exactly as close, and loses on kindRank - the
+	// heading of the same name is exactly as close, and loses on kindRank: the
 	// reader asked about a thing, not about prose describing one.
 	assert.Equal(t, "target:.:build", g.NearestNode("buld"))
 }

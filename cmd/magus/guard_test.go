@@ -37,7 +37,7 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 //     stale.
 //   - Every listed decision must RENDER distinctly. writeGuardVerdict's text
 //     arm falls through to "pass" for anything it does not know, so a decision
-//     added to the list but not to the renderer would report itself as a pass -
+//     added to the list but not to the renderer would report itself as a pass:
 //     the quietest possible wrong answer.
 //
 // A decision that fails either direction is not a contract a host glue can be
@@ -91,7 +91,7 @@ func TestHookCmd(t *testing.T) {
 		// The display flags live on a package global and default to whatever it
 		// already holds, so one case passing -o json would otherwise leak into
 		// every later case. Harmless in the real CLI (one command per process),
-		// load-bearing here - and the reason this reset exists rather than a
+		// load-bearing here, and the reason this reset exists rather than a
 		// local output flag, which is what the command used to have.
 		global = globalFlags{}
 		ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: auditDir, workspace: "/repo/magus"})
@@ -312,7 +312,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	assert.Equal(t, "file.read", got.Action, "a reach is recorded under its own label, not as a write")
 
 	// "observed", not "guard: pass". The trail already distinguishes the two, and recording
-	// a verdict here would have every read claim the guard ran and cleared it - the exact
+	// a verdict here would have every read claim the guard ran and cleared it: the exact
 	// conflation --observe exists to remove. The wire verdict the host reads is still pass.
 	assert.Equal(t, "observed", got.Preview)
 
@@ -366,7 +366,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 
 // TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
 // shipped observe template actually uses. That template extracts the path with jq and pipes
-// plain text rather than the whole event, so nothing about the envelope is available to it -
+// plain text rather than the whole event, so nothing about the envelope is available to it;
 // without the flag the transcript link exists only for hosts that pipe raw JSON, which is
 // none of the ones magus ships a template for.
 func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
@@ -392,7 +392,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 
 // TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
 // has nothing to report, and an observation with no subject is dropped like any other empty
-// one rather than being invented as "." - which would claim a reach the host never described.
+// one rather than being invented as ".", which would claim a reach the host never described.
 func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 	global = globalFlags{}
 	dir := t.TempDir()
@@ -516,7 +516,7 @@ func TestHookPathMode(t *testing.T) {
 }
 
 // TestDecodeHookEnvelope pins reading a host's hook payload directly. Without it, wiring
-// the guard means `jq -r .tool_input.command | magus session hook` - an extra dependency on the
+// the guard means `jq -r .tool_input.command | magus session hook`: an extra dependency on the
 // critical path of every tool call, in the one place that must not fail.
 func TestDecodeHookEnvelope(t *testing.T) {
 	cmdPayload := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash",` +
@@ -548,7 +548,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 }
 
 // TestHookCmd_EnvelopeWithNothingToJudge pins the arm that produced false denies: a host
-// envelope for a tool the guard has no rule for - a todo list, a search - carries no
+// envelope for a tool the guard has no rule for (a todo list, a search) carries no
 // command, path or prompt, and used to fall through to being judged as the literal JSON.
 // The shell rules then read a denied command QUOTED inside the payload as the command
 // about to run, so writing a todo that says not to run `sed -i` was itself blocked.
@@ -594,8 +594,8 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 }
 
 // TestGuardDenyPrintsItsReasonOnce: text mode already renders the full reason to stdout, and
-// every guard template this repo ships reads the verdict from stdout - one discards stderr
-// outright - so an unconditional stderr copy reached nobody who lacked another channel and
+// every guard template this repo ships reads the verdict from stdout (one discards stderr
+// outright), so an unconditional stderr copy reached nobody who lacked another channel and
 // simply printed a kilobyte-plus reason twice to a terminal. A structured format renders no
 // prose, so there stderr is the only readable channel and keeps it.
 func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {

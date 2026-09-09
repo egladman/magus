@@ -15,7 +15,7 @@ import (
 //
 // It runs the probes nowhere: doctor answers questions about the workspace, and
 // forking `docker info` to render a report would make a read-only command depend on a
-// daemon being up - the very coupling readiness exists to make legible. The runner
+// daemon being up, the very coupling readiness exists to make legible. The runner
 // enforces; this only says what WOULD be enforced, so someone hitting MGS3004 can see
 // where the gate came from without reading a spell.
 func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorCheck {
@@ -66,7 +66,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 	details := make([]string, 0, len(gates))
 	// Declaring a gate is not a finding. Starting at advice made every workspace whose
 	// spells reach docker or podman permanently yellow, including one where --probe had
-	// just confirmed every tool was up - and a level that cannot be cleared is one people
+	// just confirmed every tool was up, and a level that cannot be cleared is one people
 	// learn to skip past, taking the real ones with it. Only a failed probe lowers this.
 	status := types.DoctorOK
 	var down int

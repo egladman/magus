@@ -120,7 +120,7 @@ func TestReadAllSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 // also defeat attention dedupe, because dedupe IS a search for a later record.
 //
 // Both lines are written raw, because the write-time bound means no current magus
-// produces the first one - an older binary, or a hand-edited file, does.
+// produces the first one; an older binary, or a hand-edited file, does.
 func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -142,8 +142,8 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	assert.Equal(t, "needs a decision", open[0].Message)
 }
 
-// A session id is reached twice whenever it is reused - a resumed agent session, a
-// retried command - and the second writer has to continue the numbering rather than
+// A session id is reached twice whenever it is reused (a resumed agent session, a
+// retried command), and the second writer has to continue the numbering rather than
 // restart it, or (Session, Seq) stops identifying one record.
 func TestOpenResumesTheSequenceOfAnExistingSession(t *testing.T) {
 	t.Parallel()

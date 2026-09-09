@@ -15,7 +15,7 @@ import (
 // memoryTool (magus_memory) is a repository's durable memory: a set of
 // discrete, categorized memory RECORDS that persist across sessions, models, and agent
 // hosts. Each record is one typed pointer into the magus domain (a saved query, a graph
-// node, an output ref, a command, a doc) - the payload is the ref, never free prose;
+// node, an output ref, a command, a doc): the payload is the ref, never free prose;
 // only a decision/plan carries a one-line caption. Records live in the user's XDG state
 // directory keyed by repository (worktrees share them), NOT in the repo. The store and
 // schema live in internal/memory; this tool is the agent-facing door onto it. The console

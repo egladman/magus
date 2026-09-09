@@ -2599,7 +2599,9 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
-                   "libs/testlayout/go.sum", "libs/testlayout/**/*.go");
+                   "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
+                   "libs/commentdash/go.mod", "libs/commentdash/go.sum",
+                   "libs/commentdash/**/*.go");
     proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
@@ -2630,10 +2632,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
     // key; readsFiles does it by content instead. Its .custom-gcl.yml pins the
-    // golangci-lint release and the testlayout globs cover the rule, while
+    // golangci-lint release and the in-repo linter globs cover the rules, while
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
-    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go");
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go",
+                   "libs/commentdash/**/*.go");
     // The tree this target analyzes, restated for the reason the same block on `test`
     // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
     // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this

@@ -32,8 +32,8 @@
 // A file, however, is not grow-only: [Prune] deletes whole session files whose
 // newest fact has aged out, and [Open] runs it opportunistically so the store bounds
 // itself without a daemon. Two rules keep that from destroying history a reader is
-// still using - a still-open attention request pins every file naming it, and a
-// request's records are deleted as a unit - and [Prune] documents why each is
+// still using (a still-open attention request pins every file naming it, and a
+// request's records are deleted as a unit), and [Prune] documents why each is
 // necessary. Because another process can prune while this one is folding, every
 // reader here treats a file that disappears mid-read as absent rather than damaged.
 package sessions
@@ -79,7 +79,7 @@ const (
 )
 
 // Record is one fact, and one JSONL line. Payload stays raw so a reader can hand a
-// record it does not understand straight through - the field is the schema's escape
+// record it does not understand straight through; the field is the schema's escape
 // hatch, and decoding it eagerly would turn an unknown kind into a parse error.
 type Record struct {
 	V       int             `json:"v"`
@@ -105,7 +105,7 @@ type Record struct {
 //
 // SpanID is the exception and the one identity magus asserts: this session mints it
 // (trail.NewSpanID). A child that reports this value as its ParentSpanID is what makes
-// ancestry readable across sessions, so no chain of ancestors is stored anywhere - the
+// ancestry readable across sessions, so no chain of ancestors is stored anywhere: the
 // relation is derived from records, the way a process tree is derived from PPIDs.
 type SessionStart struct {
 	Host         string `json:"host,omitempty"`
@@ -148,7 +148,7 @@ const fileExt = ".jsonl"
 // The hash keys on repository IDENTITY rather than the checkout path, which is the
 // whole point: every worktree AND every clone of one repo resolves to the same
 // directory, so a session started in one is visible from another. Both this and
-// internal/memory.Dir key through repoid, deliberately - they answer "state that
+// internal/memory.Dir key through repoid, deliberately: they answer "state that
 // belongs to the repo, not to the checkout", and must not drift into disagreeing
 // about what a repo is.
 func Dir(root string) (string, error) {
@@ -184,7 +184,7 @@ type Writer struct {
 // Opening also prunes the store at [DefaultRetention], which is what keeps a
 // grow-only store bounded without a daemon or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
-// fail the open - see [Prune].
+// fail the open; see [Prune].
 //
 // A session id that already has a file is RESUMED rather than restarted: see
 // [Writer.resume].
@@ -203,7 +203,7 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 
 // resume continues the numbering an earlier writer left in the session file.
 //
-// Two processes reach one file whenever a session id is reused - a retried command, a
+// Two processes reach one file whenever a session id is reused: a retried command, a
 // daemon and a CLI sharing an invocation id. Starting every writer at seq 1 makes
 // (Session, Seq) stop identifying one record: the second process stamps numbers the
 // first already used, and the fold's tie-break then interleaves two runs' facts
@@ -213,7 +213,7 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 // because it is a different invocation with its own command line, and the store
 // says so rather than inheriting the first one's.
 //
-// A fresh session, which is the common case, costs one failed open - the file does
+// A fresh session, which is the common case, costs one failed open: the file does
 // not exist until the first fact.
 func (w *Writer) resume() {
 	records, _, _ := readFile(w.path)
@@ -230,7 +230,7 @@ func (w *Writer) resume() {
 // The first call also writes the session-start record, so seq 1 is always the start.
 // An [AttentionOpen] payload is stored with its Message clamped to
 // [MaxMessageBytes]. Errors are returned rather than swallowed, but callers on the
-// run path must not fail a build over one - a store that can break a build is worse
+// run path must not fail a build over one: a store that can break a build is worse
 // than no store.
 func (w *Writer) Append(kind string, payload any) error {
 	// The message bound is applied HERE rather than at the producer because it
@@ -292,7 +292,7 @@ type Fold struct {
 	Records []Record
 
 	// Sessions counts the session files read, INCLUDING any that contributed no
-	// usable record - the difference between "no sessions" and "sessions nobody
+	// usable record: the difference between "no sessions" and "sessions nobody
 	// could parse" is the thing a reader most needs to see.
 	Sessions int
 
@@ -337,7 +337,7 @@ func ReadAll(dir string) (Fold, error) {
 }
 
 // sortRecords puts a fold in the (Ts, Session, Seq) order every reader downstream is
-// specified against - [Attention]'s collapse rules in particular are defined over it.
+// specified against; [Attention]'s collapse rules in particular are defined over it.
 // Anything that assembles a [Fold] outside [ReadAll] has to apply it too.
 func sortRecords(records []Record) {
 	slices.SortStableFunc(records, func(a, b Record) int {
@@ -354,7 +354,7 @@ func sortRecords(records []Record) {
 // maxLineBytes is the longest line readFile will try to decode. A record carries no
 // bodies (a target ref, not its output) and [MaxMessageBytes] bounds the one
 // free-text field a producer controls, so a line past this was written by something
-// that did not agree with those rules - an older magus, or a hand-edited file. It is
+// that did not agree with those rules: an older magus, or a hand-edited file. It is
 // skipped like any other unusable line, and only itself.
 const maxLineBytes = 1 << 20
 
@@ -364,7 +364,7 @@ const maxLineBytes = 1 << 20
 // The vanished case is separated from the unreadable one because pruning can delete a
 // file between a caller's directory listing and this open. Nothing was lost that the
 // caller could have read, so counting it as damage would report corruption every time
-// housekeeping ran. Any OTHER open failure - a permission, a device error - is real
+// housekeeping ran. Any OTHER open failure (a permission, a device error) is real
 // and counts as a skipped line, on the same reasoning as a corrupt tail: a partial
 // history beats a refused one.
 func readFile(path string) (records []Record, skipped int, vanished bool) {
@@ -382,7 +382,7 @@ func readFile(path string) (records []Record, skipped int, vanished bool) {
 		line, over, err := readLine(br, maxLineBytes)
 		if over {
 			// One oversized line costs one record and nothing else. Stopping the file
-			// here - which is what a bufio.Scanner does on ErrTooLong - would hide every
+			// here (which is what a bufio.Scanner does on ErrTooLong) would hide every
 			// LATER record, and a later record is exactly what the attention queue looks
 			// for: with the tail invisible, no dispose is ever found and every request in
 			// the file re-opens forever.
@@ -449,7 +449,7 @@ type Summary struct {
 // Summarize groups a fold into one entry per session, most recent activity first.
 //
 // A record whose kind this build does not know still counts toward Facts and still
-// advances LastMs - a session that did something magus cannot yet describe is
+// advances LastMs: a session that did something magus cannot yet describe is
 // still a session that was active, and hiding it would be a worse lie than showing
 // it with an empty target list.
 func Summarize(fold Fold) []Summary {

@@ -6,13 +6,13 @@ package hint
 // teaches the flow once for free; the FollowUp functions add the paid,
 // context-sensitive part: at most one terse follow-up line, returned only where
 // the tool name plus the call outcome make a next step obvious. Three outcomes
-// earn a line - an error (recover with the naming tool), a success that found
+// earn a line: an error (recover with the naming tool), a success that found
 // nothing (recover in the layer this tool does not cover), and a success that
 // mints an ID the agent will chain. A plain non-empty SUCCESS gets nothing: a
 // blanket "related tools" footer on every call is pure context tax, and output
 // bytes are the agent's measured context cost (see magus.mcp.tool.output.size).
 
-// ToolName is a canonical MCP tool name - the "magus_"-prefixed identifier the
+// ToolName is a canonical MCP tool name, the "magus_"-prefixed identifier the
 // daemon registers. Declaring each once here makes a tool rename a compile error
 // at every cross-link site rather than silent drift: the MCP Registry entries
 // (internal/handler/mcp) bind their Name to these constants, the hint maps below
@@ -54,7 +54,7 @@ const (
 )
 
 // AllToolNames is every declared tool-name constant, for the drift test to walk.
-// Keep new constants registered here - TestAllDeclaredToolsAreRegistered reads
+// Keep new constants registered here; TestAllDeclaredToolsAreRegistered reads
 // this file and fails if a declaration is missing, the way a hand-maintained
 // list cannot.
 var AllToolNames = []ToolName{
@@ -82,7 +82,7 @@ var errorHints = map[ToolName]string{
 	ToolRefs:        "next: locate a symbol with " + ToolQuery.String(),
 }
 
-// emptyHints maps a tool to the line an EMPTY but successful result earns - a
+// emptyHints maps a tool to the line an EMPTY but successful result earns, a
 // call that worked and found nothing, which no other map covers because it is
 // not an error.
 //
@@ -99,7 +99,7 @@ var emptyHints = map[ToolName]string{
 
 // staticChainHints maps a tool to a chain hint returned on a SUCCESS that always
 // leads somewhere fixed. Only tools whose whole purpose is to feed a follow-up
-// tool belong here - never general read tools, which get no footer.
+// tool belong here, never general read tools, which get no footer.
 var staticChainHints = map[ToolName]string{
 	ToolAffectedPlan: "next: run the affected set with " + ToolRunAffected.String(),
 }

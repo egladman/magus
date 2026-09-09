@@ -14,8 +14,8 @@ import (
 // work in: the reserved band, the rule the zone draws above it, and a scrolling
 // area worth reading above that.
 //
-// Named here rather than reaching into tty because it is a REPORTING threshold -
-// what to warn a reader about - and the zone enforces its own limit regardless.
+// Named here rather than reaching into tty because it is a REPORTING threshold
+// (what to warn a reader about), and the zone enforces its own limit regardless.
 const minInteractiveHeight = 15
 
 // checkTerminal reports what the terminal in front of magus can actually do.
@@ -23,7 +23,7 @@ const minInteractiveHeight = 15
 // It PROBES rather than infers wherever it can. Every other question here is
 // answered from an environment variable or a descriptor, but whether a click
 // can be resolved against an inline view depends on the terminal answering a
-// cursor-position query - and terminals differ, silently. Asking is the only
+// cursor-position query, and terminals differ, silently. Asking is the only
 // honest answer, and it is the one capability a reader cannot look up.
 //
 // Nothing here is a Fail. A terminal that cannot do these things is not broken
@@ -83,13 +83,13 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 
 	var degraded []string
 	// Quiet admits only errors, and the live pool sample that drives the status
-	// row is emitted at info - so the band still pins failures and never shows
+	// row is emitted at info, so the band still pins failures and never shows
 	// progress. Worth saying, because the row simply not appearing looks like a
 	// terminal problem and is not one.
 	//
 	// The LEVEL is what --quiet moves; only --silent sets Log.Silent. Testing the flag
 	// this names meant asking the level too, or the one case a reader is most likely to
-	// hit - the plain -q - was the one case the advice stayed silent about.
+	// hit (the plain -q) was the one case the advice stayed silent about.
 	if r.opts.cfg.Log.IsSilent() || r.opts.cfg.Log.SlogLevel() > slog.LevelInfo {
 		degraded = append(degraded, "quiet, silent, or a log level above info is set, so the live status row is suppressed; failures still pin")
 	}
@@ -130,7 +130,7 @@ func (r *runner) checkTerminal() types.DoctorCheck {
 // answered.
 //
 // This is the capability that decides whether the mouse is usable on a view
-// drawn wherever the cursor happened to be - a picker, a watch frame. A reserved
+// drawn wherever the cursor happened to be: a picker, a watch frame. A reserved
 // band can be hit-tested from geometry magus chose; an inline one cannot, so the
 // terminal has to be asked, and a terminal that does not implement the query
 // simply says nothing.

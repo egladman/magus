@@ -20,14 +20,14 @@ import (
 // magusfileSpellName is the internal driver that dispatches a magusfile's own
 // exported targets. It is bound implicitly for every project (see the "spells"
 // handling below), so a magusfile's targets run whether or not the author lists
-// it - and since listing it therefore changes nothing, listing it is now an
+// it, and since listing it therefore changes nothing, listing it is now an
 // error rather than a no-op that implies otherwise. See magusfileNotASpellErr.
 const magusfileSpellName = "magusfile"
 
 // magusfileNotASpellErr is the migration diagnostic for a magusfile that still
 // declares the magusfile driver as one of its spells, or imports it.
 //
-// A spell is a library of tool-native ops for ONE TOOLCHAIN - go-build,
+// A spell is a library of tool-native ops for ONE TOOLCHAIN: go-build,
 // cargo-clippy, eslint (docs/concepts/spells.md, whose built-in table has never
 // listed magusfile). The magusfile driver adapts no toolchain and contributes no
 // ops; it is what makes the file you are writing runnable at all. Binding it was
@@ -261,7 +261,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			opts = append(opts, workspace.WithRegisteredSpell(name))
 		}
 		// The magusfile spell is bound whether or not it was listed. It is not a
-		// language adapter you opt into like go or buf - it is what makes the file
+		// language adapter you opt into like go or buf: it is what makes the file
 		// you are writing runnable at all, so listing it should never have been the
 		// author's job. Before this, declaring ANY spell replaced the default set and
 		// dropped it, and the project's own targets stopped dispatching: the run
@@ -272,7 +272,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 		//
 		// Unconditional: declaring it is now an error (see magusfileNotASpellErr), so
 		// there is no author-listed case left to avoid double-binding against. Order
-		// no longer matters for the primary slot either - an internal registration
+		// no longer matters for the primary slot either: an internal registration
 		// never claims it (spells.WithInternal).
 		opts = append(opts, workspace.WithRegisteredSpell(magusfileSpellName))
 	}
@@ -299,7 +299,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	}
 	// tools maps a bin name to the version window this project requires of it:
 	// {"node": {"min": "22", "below": "25"}}. A plain nested map rather than a
-	// VersionBounds literal, matching watch_ignore above - a magusfile does not import
+	// VersionBounds literal, matching watch_ignore above: a magusfile does not import
 	// magus/spell, so the spell-side type is not nameable here.
 	//
 	// Inherited only by explicit import: a project writes `import "project/.." as root`
@@ -396,7 +396,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			// drift says what happens when this target's declared output moves under a
 			// read-only run. Absent means the default, which already gates a target that
-			// declares output - so this key exists to downgrade or switch off, not to
+			// declares output, so this key exists to downgrade or switch off, not to
 			// switch on.
 			//
 			// An unknown value is a load error rather than the default: "of" or "warm"
@@ -489,7 +489,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			// timeout is a DURATION STRING, not memory_mb's integer: magus.yaml already
 			// spells the workspace-wide ceiling that way (target_timeout: 30m), and one
 			// quantity written two ways teaches a reader to check both. Malformed is a
-			// load error for the same reason slots is - a ceiling that silently decoded
+			// load error for the same reason slots is: a ceiling that silently decoded
 			// to "unbounded" would look exactly like the guard working.
 			if tv, ok := pv.MapGet("timeout"); ok {
 				if !tv.IsStr() {

@@ -41,8 +41,8 @@ func TestAssembleNotes(t *testing.T) {
 }
 
 // TestAssembleNotes_UnresolvedAnchorEmitsNoEdge is the guard against putting a phantom in
-// the graph. An anchor that names nothing is a real condition - a renamed symbol, a deleted
-// file - and the honest report is `magus notes verify`, not an edge every consumer then has
+// the graph. An anchor that names nothing is a real condition (a renamed symbol, a deleted
+// file), and the honest report is `magus notes verify`, not an edge every consumer then has
 // to defend against.
 func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 	known := map[string]bool{"project:.": true}
@@ -80,7 +80,7 @@ func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
 // TestPrivateNotesShardIsNeverExported is the one property that makes a notes location
 // outside the repository safe to support at all. @notes is exportable because its content
 // is already committed to the repo everyone clones; a personal note is on one machine and
-// in nobody's repo, so pushing that shard would leak private content into a shared cache -
+// in nobody's repo, so pushing that shard would leak private content into a shared cache,
 // the same hazard @memory's exclusion exists to prevent.
 func TestPrivateNotesShardIsNeverExported(t *testing.T) {
 	assert.True(t, isLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")

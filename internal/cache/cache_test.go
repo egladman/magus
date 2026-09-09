@@ -210,7 +210,7 @@ func TestNoCacheAlwaysRuns(t *testing.T) {
 
 // TestSkipReplayForcesRerunButStillSnapshots verifies the magus run --no-cache
 // contract: a Step with SkipReplay=true never replays a hit (fn runs every
-// time), but - unlike NoCache - it still snapshots on success, so a later
+// time), but (unlike NoCache) it still snapshots on success, so a later
 // ordinary run (SkipReplay=false) hits the refreshed entry instead of missing
 // or replaying something stale.
 func TestSkipReplayForcesRerunButStillSnapshots(t *testing.T) {
@@ -567,8 +567,8 @@ func casArchive(t *testing.T, name string, content []byte, mod time.Time) *bytes
 
 // TestImportRejectsPoisonedBlob verifies Cache.Import refuses a CAS blob whose
 // content does not hash to the name it is stored under. Without this an archive
-// could seat bytes that never hash to their content-address, and replay - which
-// never re-hashes on read - would serve them as a legitimate output.
+// could seat bytes that never hash to their content-address, and replay (which
+// never re-hashes on read) would serve them as a legitimate output.
 func TestImportRejectsPoisonedBlob(t *testing.T) {
 	good := []byte("authentic blob bytes")
 	sum := sha256.Sum256(good)

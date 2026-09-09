@@ -89,8 +89,8 @@ func readFrame(r io.Reader) (typeName string, line []byte, err error) {
 // It deliberately imposes no wall-clock timeout beyond what ctx itself carries: an
 // adopted run can hold this connection open for as long as the daemon-side build
 // takes (documented elsewhere as "many minutes"), so a fixed deadline here would
-// kill a healthy long-running call. Only ctx cancellation - the caller's own
-// context.WithTimeout, or a parent giving up - ends the read early; a wedged daemon
+// kill a healthy long-running call. Only ctx cancellation (the caller's own
+// context.WithTimeout, or a parent giving up) ends the read early; a wedged daemon
 // that never replies is exactly the case this unblocks (see readFrame's callers in
 // client.go, none of which previously had any way to observe ctx once past Dial).
 func readFrameCtx(ctx context.Context, conn net.Conn) (typeName string, line []byte, err error) {

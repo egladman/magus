@@ -13,7 +13,7 @@ import (
 // so the suffix is readable straight off the ID.
 //
 // The grammar, not SymbolInformation.Kind, because Kind is optional and scip-typescript
-// sets it on nothing - the same trap that silently produced no call edges for an entire
+// sets it on nothing, the same trap that silently produced no call edges for an entire
 // language. Testing the attr here would exclude packages for Go and list every namespace
 // for TypeScript, which is the inconsistency this lens exists on the other side of.
 const namespaceSuffix = "/"
@@ -24,7 +24,7 @@ const namespaceSuffix = "/"
 // from a symbol defined elsewhere, and no reference from another file.
 //
 // Both clauses are needed and they are deliberately symmetric on same-file use. The calls
-// edge is the sharp one - it names the caller, so an unreferenced function is genuinely
+// edge is the sharp one: it names the caller, so an unreferenced function is genuinely
 // uncalled rather than merely unmentioned. The file-reference clause covers what a call
 // edge cannot be: a struct, a field, a constant, which are referenced and never called.
 // Applying the same-file rule to only one of them would hide every function used once in
@@ -91,7 +91,7 @@ func (g *Graph) referencedElsewhere(id string, defFiles map[string]bool) bool {
 		switch e.Relation {
 		case types.RelationCalls:
 			// The caller is a symbol, so compare where IT is defined against where this
-			// one is - otherwise a helper called once from its own file reads as used
+			// one is; otherwise a helper called once from its own file reads as used
 			// while a type used in exactly that position does not.
 			if !g.definedWithin(e.Source, defFiles) {
 				return true

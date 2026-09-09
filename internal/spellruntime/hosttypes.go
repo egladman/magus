@@ -4,8 +4,8 @@ import _ "embed"
 
 // This file holds the generated Buzz `object` mirrors of every host-METHOD return type
 // (target.go's mirrors are what a spell op WRITES). Each ships with the declarations of
-// the import path whose method returns it - proc.exec returns ExecResult, so ExecResult
-// ships with "os" - so a spell already doing `import "os";` can annotate `> ExecResult`
+// the import path whose method returns it (proc.exec returns ExecResult, so ExecResult
+// ships with "os"), so a spell already doing `import "os";` can annotate `> ExecResult`
 // with no second import.
 //
 // Ordering within each bundle matters: a struct-valued field mirrors as its Go type's
@@ -50,8 +50,8 @@ var URLSource string
 //
 // SemverVersionSource is ALSO co-located into the "vcs" bundle: vcs.tags returns [Tag]
 // and Tag.version is a SemverVersion, so `import "vcs";` alone still needs it in scope.
-// An import line inside vcs's bundle cannot reach "semver" - a synthetic module's
-// companion source is only collected, never executed, so an import inside it is inert -
+// An import line inside vcs's bundle cannot reach "semver" (a synthetic module's
+// companion source is only collected, never executed, so an import inside it is inert),
 // hence duplicating the generated string into both bundles at assembly time.
 //
 //go:generate go run ../../cmd/magus-utils types -type SemverVersion -out gen/types/semverversion.buzz
@@ -82,7 +82,7 @@ var TagSource string
 
 // ProjectEntrySource / ProjectsSource are the generated Buzz mirrors of
 // types.ProjectEntry and types.ProjectsOutput: what magus.ls returns. They close
-// a documented gap - magus.ls's own doc told readers to annotate `> Projects`
+// a documented gap: magus.ls's own doc told readers to annotate `> Projects`
 // while no such type existed, so the annotation it recommended did not compile.
 // Ship with "magus" (magus.ls is a magus.* method, not a bare-import host module).
 // ProjectEntry must precede Projects (Projects.projects is [ProjectEntry]).
@@ -95,7 +95,7 @@ var ProjectEntrySource string
 //go:embed gen/types/projects.buzz
 var ProjectsSource string
 
-// AffectedSource / GraphSource are magus.affected's and magus.graph's returns -
+// AffectedSource / GraphSource are magus.affected's and magus.graph's returns:
 // the in-process verbs beside ls, which had the same annotation gap Projects did.
 // Ship with "magus".
 //
@@ -161,9 +161,9 @@ var TargetGraphSource string
 
 // TargetRunSource / RunSource are the generated Buzz mirrors of one run and the
 // targets in it (types.StatusTargetRun and types.StatusRun), the same shape
-// `magus status` reports. They exist so a caller can ITERATE a run - each target's
+// `magus status` reports. They exist so a caller can ITERATE a run: each target's
 // state (queued/running/passed/failed/cached), how long it took, and the output ref
-// it minted - rather than parsing magus's own console output back out of a string.
+// it minted, rather than parsing magus's own console output back out of a string.
 //
 // TargetRun precedes Run, because Run.targets is a list of it and a struct-valued
 // field mirrors as its bare type name, which must already be declared.

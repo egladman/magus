@@ -46,7 +46,7 @@ func TestReceiptCarriesNoIdentity(t *testing.T) {
 	//
 	// Preserved is admitted on the same ground and is worth arguing separately, because it
 	// is the one field a checkpoint MINTS rather than reads. It is a backend-native handle
-	// to a captured tree - a commit id, a shelf name - so it identifies CONTENT. The commit
+	// to a captured tree (a commit id, a shelf name), so it identifies CONTENT. The commit
 	// object behind a git handle does carry an author, but that is the repository's own
 	// identity in the repository's own store, which every commit already carries and this
 	// package neither adds to nor publishes. What lands in a receipt is the handle.
@@ -125,7 +125,7 @@ func TestDigestFile(t *testing.T) {
 // what the notes store wants.
 //
 // A note asks whether prose still describes code, so reformatting must not fire. A receipt
-// asks whether a person saw these bytes - and in Python, YAML, or a Makefile, whitespace IS
+// asks whether a person saw these bytes, and in Python, YAML, or a Makefile, whitespace IS
 // the change. An earlier version reused the notes digest and a receipt survived every one
 // of the edits below, attesting to content nobody had seen.
 func TestDigestFileIsByteExact(t *testing.T) {
@@ -149,7 +149,7 @@ func TestDigestFileIsByteExact(t *testing.T) {
 
 // A re-ack must not silently drop the note explaining why a file was covered in bulk.
 // Losing it turns a stamped receipt into one that reads as though somebody sat down with
-// the file - the exact conflation the reason exists to prevent.
+// the file, the exact conflation the reason exists to prevent.
 func TestRecordKeepsAnEarlierReasonWhenTheNewOneIsBlank(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()

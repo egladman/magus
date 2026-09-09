@@ -62,7 +62,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	// No code, no file/stdin argument, and an interactive terminal: open the REPL,
-	// which loads the magusfile at cwd when there is one - magus reads its context
+	// which loads the magusfile at cwd when there is one: magus reads its context
 	// rather than being told about it, and a REPL opened in a workspace is a REPL on
 	// that workspace. Outside one it simply has nothing to autoload.
 	// A non-terminal stdin (pipe, redirect, heredoc) falls through to script mode.
@@ -80,7 +80,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// Put the workspace on the script's context when there is one.
 	//
 	// Without this every workspace-reading member of the magus module raised MGS1022 from
-	// a script - `magus\projects`, `affected`, `projectGraph`, `where`, `insight` - and the
+	// a script (`magus\projects`, `affected`, `projectGraph`, `where`, `insight`), and the
 	// error told the reader to reach for the forking `magus\cmd` instead. That advice was
 	// sound only because nothing had put the workspace here: the process had already loaded
 	// one (loadMagus is a sync.Once singleton, so this is the same instance the dispatcher
@@ -96,7 +96,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// absences indistinguishable at the point a reader sees them: MGS1022 says "no
 	// workspace on the context" either way, so a script inside a workspace that simply
 	// failed to load reads as a script that was never in one, and the advice it gives
-	// ("fork instead") is then wrong. This is not hypothetical - it is what a green
+	// ("fork instead") is then wrong. This is not hypothetical: it is what a green
 	// local run and a red CI run of the same script looked like, with nothing in
 	// between to tell them apart.
 	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
@@ -135,7 +135,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	// Warnings (e.g. BZZ3001 unused imports) never fail Exec, so they only reach
-	// the user if something prints them after the fact - print to stderr, matching
+	// the user if something prints them after the fact; print to stderr, matching
 	// how every other magus diagnostic (and the -t failure lines below) stays off
 	// stdout, which carries structured output only. -q/-s suppress them like any
 	// other non-error progress output.

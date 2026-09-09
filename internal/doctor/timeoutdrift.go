@@ -19,8 +19,8 @@ const (
 	crowdingRatio = 0.75
 
 	// looseRatio is where a ceiling stops bounding anything a human would wait for. A
-	// guard is SUPPOSED to sit well above the measurements - this repository's own
-	// declarations run 7x and 20x their worst recorded run - so the threshold has to be
+	// guard is SUPPOSED to sit well above the measurements (this repository's own
+	// declarations run 7x and 20x their worst recorded run), so the threshold has to be
 	// far enough out that a correctly written one never trips it. At a hundred times
 	// the worst run on record, a hung target still holds its locks for most of a day.
 	looseRatio = 100

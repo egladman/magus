@@ -11,7 +11,7 @@ import (
 //
 // A CONVENTION, never a per-tool shape: a registry of per-tool patterns rots, so magus
 // implements documented standards once and tools opt in. The flag that produces it
-// (`-f gnu`, `--format=gcc`) belongs in the op's own args - magus never rewrites argv,
+// (`-f gnu`, `--format=gcc`) belongs in the op's own args; magus never rewrites argv,
 // which would collide with charms and contradict what `magus describe` prints.
 type DiagnosticFormat string
 
@@ -44,7 +44,7 @@ var gnuLine = regexp.MustCompile(`^(.+?):(\d+)(?::(\d+))?:\s+(.*)$`)
 
 // gnuProgram strips the optional leading program name GNU allows ("hadolint:Dockerfile").
 // Two characters minimum, which is what keeps a Windows drive letter ("C:\src\x.go")
-// out of it - the file group cannot tell the two apart, but a drive is always one char.
+// out of it: the file group cannot tell the two apart, but a drive is always one char.
 var gnuProgram = regexp.MustCompile(`^[A-Za-z0-9_.\-]{2,}:(.+)$`)
 
 // gnuTail splits the part after the location into severity, code and message. A code

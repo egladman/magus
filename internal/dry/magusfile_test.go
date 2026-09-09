@@ -30,7 +30,7 @@ func TestDiagnostics_MultipleErrorsSorted(t *testing.T) {
 }
 
 // New-in-0.6 syntax (expression-body / arrow functions) must lint clean through
-// Diagnostics - the checker accepts it, so the editor must not squiggle it.
+// Diagnostics: the checker accepts it, so the editor must not squiggle it.
 func TestDiagnostics_ArrowBodyClean(t *testing.T) {
 	got := Diagnostics(context.Background(), "export fun triple(x: int) > int => x * 3;")
 	assert.Empty(t, got, "arrow-body function should lint clean, got %+v", got)

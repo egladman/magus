@@ -110,7 +110,7 @@ func TestParseIndexRefLineCap(t *testing.T) {
 }
 
 // An indexer that reports no language leaves every symbol unlabeled, which silently
-// empties `magus query language:<lang>` for that whole ecosystem - scip-typescript sets
+// empties `magus query language:<lang>` for that whole ecosystem; scip-typescript sets
 // Document.Language on nothing. The spell's declared language is what magus already used
 // to decide the project was symbol-capable, so it fills the gap.
 func TestParseIndexFallsBackToDeclaredLanguage(t *testing.T) {
@@ -199,7 +199,7 @@ func fnDoc(refs ...*scip.Occurrence) *scip.Document {
 			Range:       []int32{0, 5, 11},
 			// The packed 4-element form is what scip-go emits: [startLine, startChar,
 			// endLine, endChar]. The typed oneof is never set, so reading it would find
-			// nothing - that is the whole point of going through EnclosingSourceRange.
+			// nothing; that is the whole point of going through EnclosingSourceRange.
 			EnclosingRange: []int32{0, 0, 9, 1},
 		},
 		{Symbol: calleeMoniker, SymbolRoles: int32(scip.SymbolRole_Definition), Range: []int32{20, 5, 11}},
@@ -243,7 +243,7 @@ func TestParseIndexAttributesCalls(t *testing.T) {
 	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Callee()."), "the callee calls nothing")
 }
 
-// A reference outside every enclosing range - a package-level declaration, an import -
+// A reference outside every enclosing range (a package-level declaration, an import)
 // belongs to no body and must not be attributed to whichever definition happens to be
 // nearest.
 func TestParseIndexCallsIgnoresOccurrencesOutsideAnyBody(t *testing.T) {
@@ -277,7 +277,7 @@ func TestParseIndexCallsDropsSelfEdge(t *testing.T) {
 	assert.Empty(t, callsOf(t, syms, "gomod example.com/foo Caller()."))
 }
 
-// A callee the workspace never defines has nothing to navigate to, so it gets no edge -
+// A callee the workspace never defines has nothing to navigate to, so it gets no edge;
 // its usage is still recorded by the referencing file's `references` edge.
 func TestParseIndexCallsSkipsCalleeDefinedElsewhere(t *testing.T) {
 	const external = "scip-go gomod example.com/dep v1 Helper()."
@@ -392,7 +392,7 @@ func syntheticIndex(tb testing.TB, docs, funcsPerDoc, refsPerFunc int, enclosing
 
 // BenchmarkParseIndex guards the attribution walk against going quadratic. The claim it
 // defends: per-reference cost grows with nesting depth and log(definitions), not with the
-// document's definition count - so sweeping funcsPerDoc by 64x must not cost anything
+// document's definition count, so sweeping funcsPerDoc by 64x must not cost anything
 // close to 64x per reference.
 func BenchmarkParseIndex(b *testing.B) {
 	for _, enclosing := range []bool{false, true} {
@@ -429,7 +429,7 @@ func TestParseMonikerStripsVersion(t *testing.T) {
 // Callability is read off SCIP's descriptor grammar, not off the optional
 // SymbolInformation.Kind. The grammar is normative in the spec (`<method> ::= <name> '('
 // (<method-disambiguator>)? ').'`), so it holds for every conforming indexer, while Kind
-// is optional and routinely unset - scip-typescript populates it on none of this
+// is optional and routinely unset: scip-typescript populates it on none of this
 // workspace's 9137 console symbols, so a kind-based rule produced no calls at all for
 // TypeScript while looking like it worked.
 //
@@ -438,8 +438,8 @@ func TestParseMonikerStripsVersion(t *testing.T) {
 // silently contributing no call edges: if one of these stops classifying, the language it
 // stands for has gone dark.
 //
-// Note the dependency this does NOT add. parseMoniker already requires the grammar - it
-// reads Descriptors[n-1].Name for the label - so a moniker that does not conform fails
+// Note the dependency this does NOT add. parseMoniker already requires the grammar (it
+// reads Descriptors[n-1].Name for the label), so a moniker that does not conform fails
 // ParseSymbol, yields ok=false, and the symbol never enters the graph at all. The suffix
 // is a field of a structure ingestion already requires to be well formed.
 func TestParseMonikerReportsCallableFromDescriptor(t *testing.T) {

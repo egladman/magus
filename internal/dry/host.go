@@ -32,7 +32,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// A native module, not a global: the playground must make you write
 	// `import "magus"` exactly as a magusfile does. Bound as a global it resolved
 	// without the import, so a snippet that ran here failed the moment it was pasted
-	// into a real magusfile - a Run button validating syntax the language rejects
+	// into a real magusfile; a Run button validating syntax the language rejects
 	// teaches worse than no Run button. Every other module beside it (the WASM set
 	// above, the spells below) is already registered this way.
 	sess.SetNativeModule("magus", buildMagus(sess, tr))
@@ -53,11 +53,11 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// Target/Command/Service object types instead of failing with `undefined type
 	// "Service"`. The real runtime (internal/interp/bindings) instead ships each
 	// host-returned type (ExecResult, Commit, ...) with its OWNING module (os, fs,
-	// vcs, ...) - but this sandbox never registers os/fs/http/vcs as real importable
+	// vcs, ...), but this sandbox never registers os/fs/http/vcs as real importable
 	// modules at all (they're IO, excluded from WASMCompatibleMagusModules), so
 	// there is no owning-module import for a probed buffer to reach those types
 	// through. Bundling them here, under the one import path this sandbox does
-	// wire, is this dry-only host's deliberate simplification - it keeps every
+	// wire, is this dry-only host's deliberate simplification; it keeps every
 	// previously-typeable field (a magusfile's `> ExecResult`, `> Commit`, ...)
 	// resolvable without also having to fake functional os/fs/http/vcs bindings.
 	// The session's import lookup order (native, then declarations, then resolver)
@@ -95,7 +95,7 @@ func fn(name string, f func(context.Context, []vm.Value) (vm.Value, error)) vm.V
 }
 
 // buildMagus builds the tracing `magus` module. It MUST cover the same member
-// surface the real bindings register (internal/interp/bindings: MagusModuleKeys) -
+// surface the real bindings register (internal/interp/bindings: MagusModuleKeys);
 // a magusfile referencing a member this host omits would fail to evaluate. The guard
 // test TestMagusSurfaceMatchesBindings enforces that parity. Members the dry run
 // doesn't meaningfully act on are stubbed; only structure-declaring members
@@ -113,7 +113,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 	// Dependency and footprint declarations live only on the magus.Context a target
 	// receives (ctx.needs / ctx.glob / ctx.readsFiles / ctx.writesFiles; see buildCtx), not on
-	// the magus.* global - mirroring the real bindings.
+	// the magus.* global, mirroring the real bindings.
 
 	// magus.cache.<...>: a namespace in the real module (cache.remote, ...); stub as
 	// a no-op so cache.remote(github) at magusfile top level doesn't blow up.
@@ -122,7 +122,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("cache", cache)
 
 	// magus.ci.<...>: selects the CI provider spell in the real module.
-	// Stubbed no-op for the same reason as cache.remote - a magusfile calls
+	// Stubbed no-op for the same reason as cache.remote: a magusfile calls
 	// it at top level, and the dry playground evaluates that without a VM
 	// able to resolve a spell.
 	ci := vm.NewMap()
@@ -130,7 +130,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("ci", ci)
 
 	// magus.review.<...>: selects the spell that connects this workspace to wherever its
-	// changes are discussed. Stubbed for the same reason as the two above - a magusfile calls
+	// changes are discussed. Stubbed for the same reason as the two above: a magusfile calls
 	// it at top level, and the playground has no VM able to resolve a spell handle.
 	review := vm.NewMap()
 	review.MapSet("provider", fn("magus.review.provider", retNull))
@@ -140,7 +140,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// through it in the real module. provider() stubs to a no-op like the two above.
 	//
 	// read() returns a PLACEHOLDER rather than null or the real value. A dry run must
-	// not resolve credentials at all - it would shell out to a vault, prompt for an
+	// not resolve credentials at all: it would shell out to a vault, prompt for an
 	// unlock, or fail the trace on a laptop that simply has no token exported, none of
 	// which a structure-only pass has any business doing. But a magusfile commonly
 	// feeds the result straight into a string, so null would make the trace die on a
@@ -169,7 +169,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// grant() and endpoint() validate exactly like the real namespace and then do
 	// nothing. A grant registers a rule rather than resolving anything, so there is no
-	// credential work for a dry run to avoid here - only the validation, which is the
+	// credential work for a dry run to avoid here: only the validation, which is the
 	// part a structure-only pass most wants to run.
 	//
 	// endpoint() returns a SYNTACTICALLY REAL but unroutable loopback URL. Null would
@@ -196,7 +196,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// ctx.has_charm (see buildCtx).
 	m.MapSet("hasCharm", fn("magus.hasCharm", traceHasCharm(tr)))
 
-	// magus.log.* - the emitting members, grouped as they are in the real bindings.
+	// magus.log.*: the emitting members, grouped as they are in the real bindings.
 	// hint rides along here rather than with the runtime-only stubs below because it
 	// emits, and a dry run should show it in target order like any other message.
 	logNS := vm.NewMap()
@@ -212,7 +212,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	m.MapSet("log", logNS)
 
 	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
-	// must not actually fail, so it traces the code and message and returns - the point
+	// must not actually fail, so it traces the code and message and returns; the point
 	// of the probe is which branch a target would take, not that it aborts there.
 	m.MapSet("raise", fn("magus.raise", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		tr.addOp("raise", strArg(args, 0), strArg(args, 1))
@@ -221,7 +221,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 
 	// magus.run(argv, opts?) recursively invokes `magus run <argv>`. The dry run
 	// can't re-enter the runner, so it traces the invocation (the target and any
-	// :charm suffix from argv[0]) as an op - the one imperative alternative to a
+	// :charm suffix from argv[0]) as an op, the one imperative alternative to a
 	// ctx.needs() DAG edge.
 	m.MapSet("run", fn("magus.run", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if ref := firstListStr(args); ref != "" {
@@ -245,8 +245,8 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}
 
 	// The in-process read-only verbs return workspace data on the real module. A dry
-	// run has no workspace, so each is stubbed with its result SHAPE - an empty but
-	// correctly-keyed record - so field access (magus.ls().projects, .affected) still
+	// run has no workspace, so each is stubbed with its result SHAPE (an empty but
+	// correctly-keyed record), so field access (magus.ls().projects, .affected) still
 	// resolves instead of blowing up on null.
 	m.MapSet("projects", fn("magus.projects", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
@@ -344,7 +344,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		// "absent" case, but the mirror declares it non-optional (types.InsightReport
 		// carries a VolatilityReport by value), so the checker types
 		// `.volatility.targets` as always present while a null hands the run a member
-		// access on nothing - which aborts the target body mid-trace and still reports
+		// access on nothing, which aborts the target body mid-trace and still reports
 		// OK, the silent-truncation failure the shaped stubs above exist to avoid.
 		volatility := vm.NewMap()
 		volatility.MapSet("threshold", vm.FloatValue(0))
@@ -390,7 +390,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	}))
 	// magus.ledger.<...>: a namespace in the real module. A dry run neither reads nor
 	// writes the real ledger file, so list() reports it empty and put() echoes a
-	// shaped-but-zero row rather than the one a script asked to record - the same "no
+	// shaped-but-zero row rather than the one a script asked to record, the same "no
 	// real effect" rule diagnoseDrift documents above.
 	ledgerNS := vm.NewMap()
 	ledgerNS.MapSet("list", fn("magus.ledger.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
@@ -464,7 +464,7 @@ func insightLens(listKeys ...string) vm.Value {
 // function argument, keyed by the function's declared name (FunName) run through the
 // same normalizer as the real binding's resolveTargetFun; a glob(...) list arg is
 // flattened to its handles. Cross-project handles aren't modeled in the single-file dry
-// run - there's no sibling project in the sandbox - so a non-function argument is
+// run (there's no sibling project in the sandbox), so a non-function argument is
 // skipped, best-effort.
 func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) {
 	return func(_ context.Context, args []vm.Value) (vm.Value, error) {
@@ -532,8 +532,8 @@ func traceHasCharm(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, erro
 }
 
 // buildCtx builds the magus.Context value a target receives as its first argument in a
-// dry run. Its methods mirror the tracing magus.* members - needs/glob trace and expand
-// graph edges, has_charm reads the active charm set - so a ctx-form body traces exactly
+// dry run. Its methods mirror the tracing magus.* members (needs/glob trace and expand
+// graph edges, has_charm reads the active charm set), so a ctx-form body traces exactly
 // as the old global form did. File declarations are inert: the dry graph reads the footprint
 // statically (describe.Extract), never by tracing the body.
 func buildCtx(tr *Tracer) vm.Value {
@@ -662,7 +662,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 				//
 				// skip_cache is a REASON, not a flag, and this path must reject the
 				// bare `true` for the same reason the real binding does. A Buzz string
-				// is truthy, so the old `sv.Bool()` accepted both forms - which meant
+				// is truthy, so the old `sv.Bool()` accepted both forms, which meant
 				// the Playground and the editor's diagnostics stayed green on a
 				// magusfile that `magus run` refuses to load.
 				if sv, ok := pv.MapGet("skip_cache"); ok {
@@ -797,7 +797,7 @@ func splitTargetRef(ref string) (target string, charms []string) {
 	for _, c := range strings.Split(ref[i+1:], ",") {
 		// Charms canonicalize exactly as the target does. ParseTarget normalizes
 		// both halves on the real run path; normalizing only the target here made
-		// the tracer disagree with the run it exists to predict - `--dry-run
+		// the tracer disagree with the run it exists to predict: `--dry-run
 		// lint:no_cache` took the un-charmed branch while the real `lint:no_cache`
 		// took the charmed one.
 		if c = strings.TrimSpace(c); c != "" {
@@ -810,20 +810,20 @@ func splitTargetRef(ref string) (target string, charms []string) {
 // normalizeTarget maps an export name, a depends_on argument, or a name typed at
 // the console to its canonical kebab-case target key (regen_pgo -> regen-pgo,
 // goBuild -> go-build, HTTPServer -> http-server). It delegates to the real magus
-// normalizer so the sandbox resolves names exactly like `magus run` does - any
+// normalizer so the sandbox resolves names exactly like `magus run` does: any
 // casing or separator lands on the same target.
 func normalizeTarget(name string) string {
 	return types.Normalize(name)
 }
 
-// addPureMagus installs the magus.* members that are pure computation - no
-// workspace, no registry, no IO - so they answer honestly wherever they appear.
+// addPureMagus installs the magus.* members that are pure computation (no
+// workspace, no registry, no IO), so they answer honestly wherever they appear.
 //
 // Shared by both playground hosts on purpose. The tracer (buildMagus) needs them
 // because a magusfile example may call them; PLAIN Eval needs them because that is
 // the mode with a Run button, where a snippet's trailing value is what the reader
 // sees. Stubbing a pure function in either would turn a live doc into a decorative
-// one - docs/concepts/targets.md teaches normalization by running it.
+// one; docs/concepts/targets.md teaches normalization by running it.
 //
 // Everything else on the magus surface depends on a workspace and stays stubbed in
 // the tracer / absent in plain mode, which is why this is a small explicit list
@@ -850,19 +850,19 @@ func pureMagus() vm.Value {
 // secretGrantStubArg is the dry-run counterpart to bindings.secretGrantArg: read a
 // secret-grant object, reject what the real namespace would reject.
 //
-// Returns only an error - the dry run has no use for the grant itself, and both
+// Returns only an error: the dry run has no use for the grant itself, and both
 // callers were discarding it.
 //
 // The field READ is duplicated (a dozen lines, and the packages cannot share a helper
 // without internal/dry depending on the bindings layer it exists to stand in for); the
-// RULES are not - both call types.SecretGrant.Normalize, which is where every
+// RULES are not: both call types.SecretGrant.Normalize, which is where every
 // judgment about a malformed grant lives. Duplicating the extraction is safe because
 // it has no rules in it; duplicating the validation would not be. The message must
 // stay in step with the real one, including its example: the dry run is the pass most
 // likely to surface this error, so giving the user less to work with than the real
 // namespace does inverts the point.
 func secretGrantStubArg(method string, args []vm.Value) error {
-	// MapView, not IsMap - see bindings.secretGrantArg. An object INSTANCE is tagObject,
+	// MapView, not IsMap; see bindings.secretGrantArg. An object INSTANCE is tagObject,
 	// not tagMap, so the documented spelling was rejected here too.
 	// Length first: indexing args[0] to build the view before checking it exists
 	// panics on a no-argument call instead of reporting the error below.

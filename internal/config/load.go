@@ -45,7 +45,7 @@ func UserConfigDir() (string, error) {
 
 // UserStateDir returns the base directory for magus's user-global STATE:
 // runtime secrets (the MCP token store) and history. State is deliberately
-// separate from config - config may be shared, synced, or committed to a
+// separate from config: config may be shared, synced, or committed to a
 // dotfiles repo, and secrets must never ride along with it. It honors
 // XDG_STATE_HOME on every platform, falling back to %LocalAppData% on Windows
 // and ~/.local/state elsewhere (the XDG Base Directory default).
@@ -67,13 +67,13 @@ func UserStateDir() (string, error) {
 
 // UserCacheDir returns the base directory for magus's user-global CACHE:
 // data magus fetched and can fetch again. The distinction from state is what
-// deleting it costs - losing state loses history nothing can rebuild, losing
+// deleting it costs: losing state loses history nothing can rebuild, losing
 // cache costs a download.
 //
 // Separate from the workspace's .magus/ deliberately. That directory is
 // documented as safe to delete, it is per-worktree (this repo runs dozens), and a
 // signed remote snapshot is the one thing in it that no local command could
-// regenerate - `magus clean --cache` on a disconnected machine would leave a hole
+// regenerate; `magus clean --cache` on a disconnected machine would leave a hole
 // only a human carrying a file could fill.
 //
 // It honors XDG_CACHE_HOME on every platform, falling back to %LocalAppData% on
@@ -228,7 +228,7 @@ func loadFileInto(cfg Config, path string) (Config, error) {
 	}
 	// Probe for unknown keys: use a strict decoder and discard the error
 	// (we still accept the file), but log a warning so users notice typos.
-	// io.EOF is an EMPTY document, not a malformed one - a magus.yaml holding
+	// io.EOF is an EMPTY document, not a malformed one; a magus.yaml holding
 	// only comments would otherwise warn about "unknown keys ... detail=EOF".
 	var probe Config
 	dec := yaml.NewDecoder(bytes.NewReader(data))
@@ -261,8 +261,8 @@ func mergeConfig(dst, src Config) Config {
 // mergeOverlay is mergeConfig for an overlay decoded from the YAML in data,
 // settling the one thing non-zero-wins cannot express: a plain bool written as
 // `false`. Absent and false both decode to false, so without the document's own
-// key set every bool defaulting true - daemon.enabled, ci.record_runs,
-// volatility.enabled, volatility.annotate_gha - is impossible to turn off from
+// key set every bool defaulting true (daemon.enabled, ci.record_runs,
+// volatility.enabled, volatility.annotate_gha) is impossible to turn off from
 // magus.yaml, however plainly it is written there. Only bools consult the key
 // set; every other kind keeps non-zero-wins, which is what lets a partial
 // overlay inherit the tier beneath it.
@@ -388,7 +388,7 @@ func findWorkspaceRoot() string {
 
 // ExtractFlag pre-scans args for -config/--config (and its -c/--c short form) so the
 // config file can be loaded before each subcommand registers its real flag set. -c is
-// case-sensitive and distinct from -C (short for --root, bound in cmd/magus/main.go) -
+// case-sensitive and distinct from -C (short for --root, bound in cmd/magus/main.go);
 // matching is exact, so -C is never read as config here. Scanning stops at "--": past
 // that separator the tokens belong to a forwarded tool, not to magus.
 func ExtractFlag(args []string) string {

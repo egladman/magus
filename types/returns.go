@@ -14,7 +14,7 @@ type Returns map[string]any
 //
 // The project path alone is not enough. Two targets can run against one project
 // in a single process, and a project-keyed sink lets the second target's
-// snapshot inherit the first target's value - written into a DURABLE cache
+// snapshot inherit the first target's value, written into a DURABLE cache
 // entry, so the wrong value then replays on every later hit.
 type returnKey struct {
 	project string
@@ -37,8 +37,8 @@ type returnCaptureKey struct{}
 // hands back a copy. The exit capture needs neither, because it is scoped to a
 // single target invocation on one goroutine.
 //
-// Callers that only need the sink installed - every engine entry point, so that
-// the cache snapshots a value regardless of who dispatched the run - want
+// Callers that only need the sink installed (every engine entry point, so that
+// the cache snapshots a value regardless of who dispatched the run) want
 // [EnsureReturnCapture] instead.
 func WithReturnCapture(ctx context.Context) (context.Context, func(target string) Returns) {
 	r := &returnCapture{vals: map[returnKey]any{}}
@@ -59,8 +59,8 @@ func WithReturnCapture(ctx context.Context) (context.Context, func(target string
 // engine calls on the way in.
 //
 // Without it the sink existed only where the CLI happened to install it (`run`
-// and `affected`), so every other entry point - the MCP run tool, `magus x`,
-// the merge driver, the symbol indexer - executed with no sink and the cache
+// and `affected`), so every other entry point (the MCP run tool, `magus x`,
+// the merge driver, the symbol indexer) executed with no sink and the cache
 // snapshotted Value: nil into a durable entry. Warming a target through MCP and
 // then asking `magus run <target> -o json` for its value reported none, because
 // the entry that replayed had never recorded one.
@@ -79,13 +79,13 @@ func EnsureReturnCapture(ctx context.Context) context.Context {
 // present. It is a no-op outside a captured run.
 //
 // A nil value is dropped rather than stored, and that is load-bearing twice
-// over. It keeps a `> void` target - nearly every target that exists - from
+// over. It keeps a `> void` target (nearly every target that exists) from
 // making "returned null" indistinguishable from "returned nothing at all",
 // which is the difference between a field being absent and being
 // present-but-null in the rendered result. It also lets the several spells
 // serving one target fan in: the spell that returned something wins over the
 // ones that returned nothing, whatever order they finish in. Do NOT "fix" this
-// into clearing the key - that would have the last void spell erase the value a
+// into clearing the key: that would have the last void spell erase the value a
 // sibling produced. Staleness across DIFFERENT targets is prevented by the key,
 // not by clearing.
 func RecordReturn(ctx context.Context, project, target string, v any) {
@@ -106,8 +106,8 @@ func RecordReturn(ctx context.Context, project, target string, v any) {
 //
 // A [str] return is a []string on the run that executed the target, but the same
 // value replayed from a cache HIT has been through JSON and arrives as []any. Left
-// alone, the two runs render differently - the text form printed "[alpha beta]" for
-// the replay where the fresh run printed one item per line - which defeats the point
+// alone, the two runs render differently (the text form printed "[alpha beta]" for
+// the replay where the fresh run printed one item per line), which defeats the point
 // of storing it, since a hit is supposed to be indistinguishable from a miss.
 func normalizeReturn(v any) any {
 	items, ok := v.([]any)

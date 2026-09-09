@@ -11,7 +11,7 @@ import (
 )
 
 // This file renders `magus explain` and `magus path` as compact, human-readable
-// text - the DEFAULT output for both the CLI and the MCP tools. It replaces the
+// text, the DEFAULT output for both the CLI and the MCP tools. It replaces the
 // old adjacency notation (`<--uses-- op:go:go-build [op]`), which forced the reader
 // to mentally invert the arrow. Here the edge direction is folded into a natural
 // verb (active when the focus node is the source, passive when it is the target),
@@ -28,7 +28,7 @@ import (
 //
 // A note is the only thing on this card a person wrote, and the only thing a rebuild cannot
 // recover. Left in first-seen order it sorted after the out-edges, which on a real project
-// meant landing past 65 `contains` and 104 `depends on` entries - present in the output and
+// meant landing past 65 `contains` and 104 `depends on` entries, present in the output and
 // unreadable in practice. Delivery is the whole problem this store has: prose nobody meets
 // at the moment they need it may as well not be written, so the one group that carries it
 // goes first.
@@ -39,7 +39,7 @@ var proseFirst = map[types.RelationID]bool{types.RelationAnnotates: true}
 //
 // An UNDECLARED relation still renders, as its own name with a "-> "/"<- " marker so
 // the direction survives. That is deliberate: a graph on disk can carry an edge this
-// binary's vocabulary does not know - an older store, or a shard a newer magus wrote -
+// binary's vocabulary does not know (an older store, or a shard a newer magus wrote),
 // and a reader meeting it should see the edge, not a blank.
 func phraseFor(relation types.RelationID, active bool) string {
 	if d, ok := types.KnowledgeRelation(relation); ok {
@@ -131,7 +131,7 @@ type relationGroup struct {
 }
 
 // relationGroups buckets a node's edges by (direction, relation) in first-seen
-// order - out edges (active voice) first, then in edges (passive) - and labels
+// order (out edges (active voice) first, then in edges (passive)), and labels
 // each with its verb plus a count when more than one, so a reader never miscounts
 // a long list. The bucket order within out/in follows the deterministic edge order
 // Explain already produces.

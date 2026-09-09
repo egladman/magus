@@ -214,7 +214,7 @@ type Graph struct {
 	fwdT     []int32
 	revOff   []int32 // CSR reverse adjacency
 	revT     []int32
-	topo     []ID // Kahn order (dependents before deps - see TopoOrder)
+	topo     []ID // Kahn order (dependents before deps; see TopoOrder)
 
 	cl          *bitClosure // lazy transitive closure
 	closureOnce sync.Once

@@ -10,7 +10,7 @@ import (
 )
 
 // TestAssembleVCSAuthors: an author gets a node with an `authored` edge to each node-backed
-// file they touched (uncapped - the history window is the only bound); a file with no graph
+// file they touched (uncapped: the history window is the only bound); a file with no graph
 // node contributes no author or edge.
 func TestAssembleVCSAuthors(t *testing.T) {
 	fileNodePaths := map[string]bool{"a.buzz": true, "b.buzz": true}

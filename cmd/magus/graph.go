@@ -32,7 +32,7 @@ import (
 
 // `magus graph` is the graph meta-home: the workspace's graphs as objects.
 // query/explain/path READ the knowledge graph (daily retrieval verbs); graph
-// owns the graph ITSELF - emit the project dependency DAG (deps), export the
+// owns the graph ITSELF: emit the project dependency DAG (deps), export the
 // merged knowledge graph for external tools (export), and report its shape
 // (stats). One home instead of surfaces scattered across describe and insight.
 
@@ -56,7 +56,7 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 	case "diff":
 		return graphDiff(ctx, root, rest)
 	case "verify":
-		// compat(until: no installed skill or published doc still names `graph verify` -
+		// compat(until: no installed skill or published doc still names `graph verify`;
 		// observe by grepping a fresh `magus agent install` tree and the released docs
 		// for the string): every checkout whose skills predate v39 still tells an agent
 		// to run this, and "unknown subcommand" routes them nowhere.
@@ -94,7 +94,7 @@ func graphUsage() {
 // (runs each symbol-capable project's scip op to refresh its cached SCIP index) and
 // then forces a full knowledge-graph rebuild, re-ingesting those indexes. It exists
 // because building is otherwise implicit (cache-first, on read), which leaves no obvious
-// way to say "refresh everything now" - especially the symbol indexes, which the daemon
+// way to say "refresh everything now", especially the symbol indexes, which the daemon
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
@@ -142,7 +142,7 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// graphDeps emits the project dependency DAG - the standalone home of the view
+// graphDeps emits the project dependency DAG, the standalone home of the view
 // `magus run <target> --graph` and `magus affected <target> --graph` scope to a
 // run (those flags remain as scoped passthroughs).
 func graphDeps(ctx context.Context, root string, args []string) error {
@@ -181,7 +181,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 // graph (projects, targets, spells, ops, charms, modules, methods, diagnostics,
 // docs, buzz sources), persists it as fingerprinted shards under
 // <cache>/knowledge, and writes the node-link export. The cache-first loader
-// makes building implicit - there is no separate build subcommand.
+// makes building implicit: there is no separate build subcommand.
 func graphExport(ctx context.Context, root string, args []string) error {
 	var ef *gen.GraphExportFlags
 	pos, err := cmdParse("graph export", args, func(fs *flag.FlagSet) {
@@ -291,7 +291,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 
-	// text / wide: a routing summary, not a data dump - counts by kind and relation.
+	// text / wide: a routing summary, not a data dump (counts by kind and relation).
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	fmt.Printf("knowledge graph (schema v%d): %d nodes, %d edges\n\n", out.SchemaVersion, out.NodeCount, out.EdgeCount)
 	fmt.Println("nodes by kind:")
@@ -310,8 +310,8 @@ func graphExport(ctx context.Context, root string, args []string) error {
 // the source tree, leaving an artifact that regenerates byte-identically anywhere.
 //
 // Two kinds qualify, for the same reason and not the obvious one. Locally OBSERVED data
-// (run timings, output refs, coverage) varies by machine. Git HISTORY - author nodes,
-// per-file churn, the dir_commits roll-up, prose staleness - varies by COMMIT, and that is
+// (run timings, output refs, coverage) varies by machine. Git HISTORY (author nodes,
+// per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
 // the sharper problem for a checked-in export: committing anything changes the churn, so
 // the artifact invalidates itself and the drift gate fires on the commit that just fixed
 // it. The @dirs shard calls its inputs deterministic, which is true per HEAD and is not the
@@ -356,7 +356,7 @@ func stripUnreproducible(g *types.KnowledgeGraphOutput) {
 }
 
 // graphStats reports the knowledge graph's shape: god nodes, orphans, and doc
-// coverage. It reads the graph cache-first rather than git history - the
+// coverage. It reads the graph cache-first rather than git history, the
 // structural companion to insight's history lenses (insight report embeds it).
 func graphStats(ctx context.Context, root string, args []string) error {
 	var sf *gen.GraphStatsFlags
@@ -465,7 +465,7 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 }
 
 // loadKnowledgeGraphForRefs builds the domain graph and merges the symbol shards a
-// `magus refs` lookup needs - targeted to ref's shards via the xref routing index when
+// `magus refs` lookup needs: targeted to ref's shards via the xref routing index when
 // ref is an exact symbol ID, else all symbol shards. Symbols are per-workspace, so
 // refs does not take --global.
 func loadKnowledgeGraphForRefs(ctx context.Context, root string, refresh bool, ref string) (*knowledge.Graph, error) {
@@ -587,7 +587,7 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 // defaultExploreURL is the hosted, data-agnostic Graph Explorer. `open` points a
 // browser at this page with the workspace's graph delivered PRIVATELY: either in a
 // URL fragment (default) or fetched from an ephemeral loopback server (--serve).
-// Either way the graph stays on the machine - the site only serves static assets.
+// Either way the graph stays on the machine: the site only serves static assets.
 const defaultExploreURL = "https://eli.gladman.cc/magus/console/graph/"
 
 // fragmentWarnBytes is a conservative ceiling on the encoded fragment. The whole
@@ -620,8 +620,8 @@ type explorerOptions struct {
 // openExplorer delivers the graph to the Graph Explorer.
 //
 // It used to be `magus graph export --open`, its own subcommand with its own flags. Opening a
-// viewer was spelled two ways across the CLI - a subcommand here, a --open FLAG on
-// `magus query output` - for one act. It is a flag everywhere now, and export is its
+// viewer was spelled two ways across the CLI (a subcommand here, a --open FLAG on
+// `magus query output`) for one act. It is a flag everywhere now, and export is its
 // host because export is already the verb that emits the graph: -o json hands it to
 // another tool, --open hands it to the viewer.
 func openExplorer(ctx context.Context, root string, o explorerOptions, pos []string) error {
@@ -649,7 +649,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 
 	// Zero-arg default for the interactive open: when no explicit delivery mode is
 	// chosen and no --targets, probe the ACTUAL console first (not just the proc
-	// socket - a proc daemon can be up with no bridge running). If it is reachable,
+	// socket: a proc daemon can be up with no bridge running). If it is reachable,
 	// use --follow for an always-fresh view; otherwise fall through to fragment mode.
 	// Skip the auto-probe under --print: that flag exists for scriptable, copyable
 	// output, so its URL must be deterministic (the static data fragment) rather than
@@ -774,7 +774,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 }
 
 // graphOpenServe hands the graph to the hosted page over an ephemeral 127.0.0.1 server,
-// then STOPS - a one-shot handoff, not a standing service. The loopback bind, CORS lock,
+// then STOPS: a one-shot handoff, not a standing service. The loopback bind, CORS lock,
 // serve-once, and grace-then-shutdown all live in internal/httpx (shared with the live log
 // stream); this wraps them with the graph-specific URL (#src=) and the user-facing
 // messages. The graph is delivered browser <-> loopback and never leaves the machine.
@@ -812,7 +812,7 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	return nil
 }
 
-// openBrowser launches a browser for a URL and does not wait - the browser owns the
+// openBrowser launches a browser for a URL and does not wait: the browser owns the
 // tab from there. It honors the freedesktop/de-facto BROWSER convention first, so a
 // user can force a specific browser on any platform (e.g.
 // `BROWSER=firefox magus query out1a2b3c --open`); only when BROWSER is unset or every
@@ -844,8 +844,8 @@ func openBrowser(raw string) error {
 // safeBrowserURL parses raw and returns it only if it is an http(s) URL, re-serialized
 // from the parsed form.
 //
-// The base of every URL magus opens is overridable - `--url` for the explorer,
-// MAGUS_LOG_VIEWER_URL for the log viewer - so what reaches the opener is not a
+// The base of every URL magus opens is overridable (`--url` for the explorer,
+// MAGUS_LOG_VIEWER_URL for the log viewer), so what reaches the opener is not a
 // constant, and it is handed to a program as an argument. Two things follow. A string
 // beginning with "-" would be read by the opener as a FLAG rather than a URL, which the
 // scheme check rules out. And a scheme like file: or a shell-ish string is not something
@@ -913,7 +913,7 @@ const probeLiveBridgeTimeout = 2 * time.Second
 // bridge check (internal/doctor/checks_mcp.go probeBridgeReachability). A
 // daemon-status probe alone is not enough: daemonStatus("") accepts ANY
 // reachable proc socket (Mode=="proc"), which is a different transport than
-// the console this URL targets - a proc-mode daemon with no bridge running
+// the console this URL targets: a proc-mode daemon with no bridge running
 // would otherwise let a token be printed for an address nothing is listening
 // on. A 401/403 response proves the guarded route exists (auth runs before
 // the handler); connection refused/timeout means the bridge is down.
@@ -948,9 +948,9 @@ func liveBridgeReachable(ctx context.Context) bool {
 // graphOpenLive opens the Graph Explorer served BY the running daemon from its own
 // loopback origin (http://<host>/console/graph/). Under the daemon-origin grammar the origin
 // names which daemon; the page loads both itself and its graph data from that one loopback
-// origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical -
+// origin, so the graph never leaves the machine. The clean /console/graph/ path is canonical:
 // the daemon serves the shell for it and the console's boot router opens the graph surface.
-// There is no #live= host directive and no hosted explorer base - the --url flag governs only
+// There is no #live= host directive and no hosted explorer base: the --url flag governs only
 // the static (--data/--targets/--serve) modes, not --follow.
 //
 // The token is loaded from the on-disk token file written by auth.Save/SaveNew.

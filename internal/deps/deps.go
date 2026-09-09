@@ -7,7 +7,7 @@
 // needed a toolchain on PATH, a populated module cache, or the network would make a
 // graph build fail for reasons that have nothing to do with the workspace. Asking the
 // ecosystem's own tool (`go list -m all`, `pnpm list --json`) is the more correct
-// answer to a different question - where a package sits ON DISK - and that question is
+// answer to a different question (where a package sits ON DISK), and that question is
 // only ever asked about a package that is already there.
 //
 // Go is the ecosystem this can serve from the manifest alone: go.mod require lines are
@@ -35,7 +35,7 @@ const managerGo = "gomod"
 // Replace directives are applied rather than reported alongside: a replaced module
 // builds as its replacement, so recording the original requirement would describe
 // something that is not on disk. A replacement pointing at a local directory has no
-// version at all and is DROPPED - there is no pin to record, and a local path is not
+// version at all and is DROPPED: there is no pin to record, and a local path is not
 // a third-party dependency in any sense this graph means.
 //
 // A missing or unparsable go.mod yields no packages and no error. Every caller is a
@@ -64,7 +64,7 @@ func GoModule(path string) []types.KnowledgePackage {
 		}
 		replaced[r.Old.Path] = replacement{
 			version: r.New.Version,
-			// A replacement with no version is a filesystem path - that is precisely how
+			// A replacement with no version is a filesystem path; that is precisely how
 			// the go.mod grammar distinguishes the two forms.
 			local: r.New.Version == "",
 		}

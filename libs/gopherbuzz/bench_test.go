@@ -583,7 +583,7 @@ while (i < haystack.len()) {
 
 // BenchmarkStrByteScanMultibyte is BenchmarkStrByteScan's twin for a string the ASCII
 // fast path REJECTS. The isASCII test is all-or-nothing, so one accented character in a
-// document puts every lookup in it on the multibyte path - which is not a corner case:
+// document puts every lookup in it on the multibyte path, which is not a corner case:
 // 31 of the magus docs' 200 Markdown sources contain one, and a CPU profile of the site
 // render attributed 14% of the whole build to this single method.
 func BenchmarkStrByteScanMultibyte(b *testing.B) {
@@ -607,8 +607,8 @@ while (i < haystack.len()) {
 }
 
 // The benchmarks below cover the language surface gopherbuzz gained after the set
-// above was written - fibers, match, closures over cells, optionals, mut
-// collections, higher-order collection methods, static dispatch and tuples - so the
+// above was written (fibers, match, closures over cells, optionals, mut
+// collections, higher-order collection methods, static dispatch and tuples), so the
 // benchmark set tracks what conformance now tests rather than lagging it.
 
 // BenchmarkFiberForeach drives a generator fiber 1 000 times through foreach, the
@@ -651,7 +651,7 @@ final __r = resolve f;`,
 	benchRun(b, chunk, env)
 }
 
-// BenchmarkMatchEnum measures an exhaustive match over an enum subject - the arm
+// BenchmarkMatchEnum measures an exhaustive match over an enum subject: the arm
 // comparison is enum-case identity, and no else arm is present.
 func BenchmarkMatchEnum(b *testing.B) {
 	chunk, env := benchSetup(b,
@@ -677,7 +677,7 @@ while (i < 25000) {
 }
 
 // BenchmarkMatchRange measures range arms, which dispatch on CONTAINMENT rather
-// than equality - a different comparison path from the enum and literal arms.
+// than equality: a different comparison path from the enum and literal arms.
 func BenchmarkMatchRange(b *testing.B) {
 	chunk, env := benchSetup(b, "",
 		`var n = 0;
@@ -830,7 +830,7 @@ while (i < 20000) {
 }
 
 // BenchmarkStaticCall measures a static method call, which resolves on the TYPE
-// value and binds no receiver - a different dispatch path from BenchmarkMethodCall.
+// value and binds no receiver: a different dispatch path from BenchmarkMethodCall.
 func BenchmarkStaticCall(b *testing.B) {
 	chunk, env := benchSetup(b,
 		`object Point {

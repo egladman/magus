@@ -54,7 +54,7 @@ type AffectedComputer interface {
 
 // Inspector reads the structured facts of a workspace without evaluating anything:
 // what projects, targets, charms, and files exist, and how a specific target
-// resolves. Organized on one axis - List* enumerates a declaration (cheap), Evaluate*
+// resolves. Organized on one axis: List* enumerates a declaration (cheap), Evaluate*
 // resolves one (it costs), Classify* and TargetGraph say what they do.
 type Inspector interface {
 	// ListCharms builds the inverse charm index: every charm name a target in the

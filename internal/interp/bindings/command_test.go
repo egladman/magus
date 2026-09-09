@@ -42,7 +42,7 @@ func serviceOp() spells.Op {
 // TestRunCommandResolvesCwdAgainstContext proves a command op with no explicit cwd
 // runs in the context working directory (the project dir the magusfile runner sets via
 // std.WithCwd), not the process cwd. This is what lets a spell op invoked from a
-// subproject target - go["go-run"] from docs/ - resolve its relative paths correctly.
+// subproject target (go["go-run"] from docs/) resolve its relative paths correctly.
 func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 	dir := t.TempDir()
 	ctx := std.WithCwd(context.Background(), dir)
@@ -56,7 +56,7 @@ func TestRunCommandResolvesCwdAgainstContext(t *testing.T) {
 }
 
 // TestRunCommandSupervisesServiceDependency proves runCommand routes a service op to
-// the supervisor (not a foreground fork) when supervision is active - the case of a
+// the supervisor (not a foreground fork) when supervision is active: the case of a
 // service reached via magus.needs.
 func TestRunCommandSupervisesServiceDependency(t *testing.T) {
 	rr := &recordRunner{}
@@ -84,7 +84,7 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 
 // TestExecCommandReportsCancellationNotExitCode proves a child killed because the
 // RUN was cancelled reports the cancellation, not a verdict on the tool. A killed
-// process has no exit code of its own - ExitCode() is -1 - so synthesizing "exited
+// process has no exit code of its own (ExitCode() is -1), so synthesizing "exited
 // 1" for it is indistinguishable from the tool genuinely failing, and is printed
 // with a `reproduce:` line that does not reproduce. That is the shape that made a
 // sibling project's failure surface as `docs content-generate: go exited 1` with no
@@ -117,7 +117,7 @@ func TestExecCommandReportsRealExitCode(t *testing.T) {
 // started (binary missing from PATH) reports run.Exec's classified error, not a
 // fabricated "exited 1". A process with no PID has no exit code of its own, and
 // synthesizing one discards the MGS3003 tool-not-on-PATH diagnostic that explains
-// WHY it failed - the same shape TestExecCommandReportsCancellationNotExitCode
+// WHY it failed, the same shape TestExecCommandReportsCancellationNotExitCode
 // pins for the cancellation case.
 func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
 	_, err := execCommand(context.Background(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true)
@@ -199,8 +199,8 @@ func hintOp() spells.Op {
 	}}
 }
 
-// TestRunCommandAdvisesOnRealFailure covers the WIRING - the tee, the fire condition, and
-// the sink - rather than adviceFor in isolation. Every defect the review found lived in
+// TestRunCommandAdvisesOnRealFailure covers the WIRING (the tee, the fire condition, and
+// the sink) rather than adviceFor in isolation. Every defect the review found lived in
 // these lines and none of them were reachable from a unit test of the matcher.
 func TestRunCommandAdvisesOnRealFailure(t *testing.T) {
 	run6 := func(ctx context.Context, op spells.Op) string {
@@ -287,7 +287,7 @@ func TestRunCommandDefaultArgs(t *testing.T) {
 }
 
 // logInvocationOp is a Command that appends one line per invocation to a log
-// file - every arg of that invocation, space-separated - so a test can tell
+// file (every arg of that invocation, space-separated) so a test can tell
 // how many times it ran and with what argv, without a real tool on PATH.
 func logInvocationOp(sources []string, each bool) spells.Op {
 	return spells.Op{Command: spells.Command{
@@ -299,7 +299,7 @@ func logInvocationOp(sources []string, each bool) spells.Op {
 }
 
 // writeSourceFixture lays out a small tree under dir: two source files at the
-// root, one nested under a subdirectory, and one under thirdparty/ - a name
+// root, one nested under a subdirectory, and one under thirdparty/: a name
 // NOT in the core project.IgnoreDirs default, so pruning it proves the
 // exclusion came from a declared ignore dir (commandOpts.ignoreDirs), not the
 // walk's always-on defaults. Returns the sorted list of the three files an
@@ -315,7 +315,7 @@ func writeSourceFixture(t *testing.T, dir string) []string {
 	return []string{"a.txt", "b.txt", filepath.Join("sub", "c.txt")}
 }
 
-// logLines reads path's lines, or nil if it does not exist - the empty-match
+// logLines reads path's lines, or nil if it does not exist: the empty-match
 // case must never create it.
 func logLines(t *testing.T, path string) []string {
 	t.Helper()
@@ -332,7 +332,7 @@ func logLines(t *testing.T, path string) []string {
 }
 
 // TestRunCommandSourcesBatchesAllMatches proves the default (SourcesEach
-// unset) mode invokes Bin ONCE with every matched file appended to argv - the
+// unset) mode invokes Bin ONCE with every matched file appended to argv: the
 // `xargs` (no -n1) shape shellcheck relies on.
 func TestRunCommandSourcesBatchesAllMatches(t *testing.T) {
 	dir := t.TempDir()
@@ -402,7 +402,7 @@ func TestRunCommandSourcesEachInvokesPerFile(t *testing.T) {
 }
 
 // TestRunCommandSourcesEmptyMatchIsNoop proves a Sources glob matching nothing
-// runs Bin ZERO times and reports success - the engine-side `xargs -r` - rather
+// runs Bin ZERO times and reports success (the engine-side `xargs -r`) rather
 // than invoking it with no files or failing.
 func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
 	dir := t.TempDir()
@@ -420,7 +420,7 @@ func TestRunCommandSourcesEmptyMatchIsNoop(t *testing.T) {
 // TestRunCommandSourcesHonorsIgnoreDirs proves a declared ignore dir (threaded
 // through commandOpts.ignoreDirs, as dispatchOp threads a spell's own
 // mgs_listIgnoreDirs) is pruned from the Sources walk WITHOUT the op's own
-// glob naming it - the mechanism spells/bash/spell.buzz's shellcheck op relies
+// glob naming it: the mechanism spells/bash/spell.buzz's shellcheck op relies
 // on for "worktrees"/"node_modules" instead of hardcoding a find prune.
 func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 	dir := t.TempDir()
@@ -436,7 +436,7 @@ func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.NotContains(t, lines[0], "skip.txt", "a file under a declared ignore dir must never reach argv")
 
-	// Without the declared ignore dir, the same file DOES survive the walk -
+	// Without the declared ignore dir, the same file DOES survive the walk,
 	// proving the exclusion above came from opts.ignoreDirs, not the glob.
 	require.NoError(t, os.Remove(logFile))
 	_, err = runCommand(ctx, op, commandOpts{env: map[string]string{"LOGFILE": logFile}})
@@ -448,8 +448,8 @@ func TestRunCommandSourcesHonorsIgnoreDirs(t *testing.T) {
 
 // TestResolveRunnerRefs pins the $NAME token rule directly: a token shaped
 // like a reference resolves against refs or errors naming the op and the
-// reference; anything else - a normal arg, a $ that is not a whole bare
-// identifier - passes through untouched.
+// reference; anything else (a normal arg, a $ that is not a whole bare
+// identifier) passes through untouched.
 func TestResolveRunnerRefs(t *testing.T) {
 	refs := map[string]string{"MAGUS": "/path/to/magus", "MAGUS_LEVEL": "1"}
 
@@ -496,7 +496,7 @@ func TestRunCommandResolvesMagusRef(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dir, "level.txt"))
 	require.NoError(t, err)
 	// Not hardcoded to "1": this test process's own MAGUS_LEVEL is whatever
-	// invoked it (0 when run directly, higher under a nested magus run - see
+	// invoked it (0 when run directly, higher under a nested magus run; see
 	// run.CurrentLevel), and the child is always one past that.
 	want := strconv.Itoa(run.CurrentLevel() + 1)
 	assert.Equal(t, want, string(got), "MAGUS_LEVEL is this process's level plus one for the child")

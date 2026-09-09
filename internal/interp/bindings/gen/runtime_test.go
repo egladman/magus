@@ -61,7 +61,7 @@ func TestAnyMapValNestsBuzzObject(t *testing.T) {
 //
 // The compiler lowers both `Enum.case` and an inferred `.case` to the enum MEMBER,
 // so a host method declaring an enum argument is handed an enum value, not a str.
-// Str returned "" for it, and the host then reported a supplied argument as unset -
+// Str returned "" for it, and the host then reported a supplied argument as unset:
 // exactly the failure vm.Value.EnumValue's doc calls "the one failure mode a typed
 // enum was adopted to prevent". It had been fixed on the decode path and missed here.
 func TestStrUnwrapsAnEnumCase(t *testing.T) {

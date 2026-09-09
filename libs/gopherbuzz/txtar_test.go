@@ -20,12 +20,12 @@ import (
 //
 // The FORMAT is golang.org/x/tools' txtar; the reader below is gopherbuzz's own.
 // rogpeppe/go-internal (which provides one) is a dependency of the magus module,
-// not of gopherbuzz's, and gopherbuzz's module stays deliberately lean - a
+// not of gopherbuzz's, and gopherbuzz's module stays deliberately lean: a
 // twenty-line parser is cheaper than a dependency that only tests use.
 //
 // This does NOT replace the `@expect` fixtures under testdata/: those are also
 // round-tripped through the bytecode codec, which reads them in their own shape.
-// txtar is for the case @expect cannot express - a program spread over several
+// txtar is for the case @expect cannot express: a program spread over several
 // files, which is exactly where the interesting import behavior lives.
 
 // txtarFile is one file in an archive.

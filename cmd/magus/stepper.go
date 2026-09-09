@@ -18,7 +18,7 @@ import (
 //
 // BOTH, always, and that is the point of one function rather than two calls.
 // The gate advertises [r]epl in its prompt, and the REPL is attached
-// separately - so for as long as this repo has had stepping, every install site
+// separately, so for as long as this repo has had stepping, every install site
 // wired the gate, none wired the REPL, and pressing r printed "(no REPL
 // available outside a magusfile run)" every time. Installing them together is
 // what makes the advertised key impossible to leave dead.
@@ -31,8 +31,8 @@ func withStepGate(ctx context.Context) context.Context {
 // about to run.
 //
 // A fresh session rather than the magusfile's own: the point of stopping here is
-// to look at the WORKSPACE - read the file the command is about to consume,
-// check what a tool reports, try the command's own arguments - and the full
+// to look at the WORKSPACE (read the file the command is about to consume,
+// check what a tool reports, try the command's own arguments), and the full
 // host surface (fs, os, vcs, http) is what answers that. The magusfile's locals
 // are a different question, and `magus buzz` already answers it.
 //

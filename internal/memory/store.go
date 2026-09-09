@@ -6,7 +6,7 @@
 // (internal/handler/memory).
 //
 // There is NO knowledge-graph shard over these records. This comment used to name an
-// "@memory shard" among the consumers and it does not exist - knowledge.Inputs has a
+// "@memory shard" among the consumers and it does not exist: knowledge.Inputs has a
 // Notes field and no Memory one, and AssembleShards builds nothing for it. So a record
 // is invisible to `magus query`, carries no edges to what it points at, and cannot be
 // drift-checked: nothing anchors it. See RefKind on what that costs.
@@ -124,7 +124,7 @@ type Verification struct {
 }
 
 // nameRE is the record name shape: a kebab slug. It doubles as the on-disk basename,
-// so it must be filesystem-safe - lowercase alphanumerics joined by single hyphens,
+// so it must be filesystem-safe: lowercase alphanumerics joined by single hyphens,
 // no slashes or dots, which keeps a name from escaping the records directory.
 var nameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
@@ -133,7 +133,7 @@ var nameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 const recordsSubdir = "records"
 
 // cursorFile is the single "where did I leave off" snapshot beside the record set. It
-// is NOT a record and never becomes a graph node - a cursor, not an accumulating log.
+// is NOT a record and never becomes a graph node: a cursor, not an accumulating log.
 const cursorFile = "cursor.md"
 
 // Dir resolves the per-repository memory directory:
@@ -624,7 +624,7 @@ func marshalRecord(r Record) []byte {
 //
 // It delegates rather than reimplementing the temp-file-and-rename dance, because the
 // obvious hand-rolled version gets two things wrong and both are silent. It does not fsync
-// before the rename, so a crash can make the rename durable while the bytes are not -
+// before the rename, so a crash can make the rename durable while the bytes are not,
 // leaving a truncated file behind a comment promising that cannot happen. And
 // os.CreateTemp creates 0600, which the rename carries through, so entries end up
 // owner-only when the surrounding files are not.

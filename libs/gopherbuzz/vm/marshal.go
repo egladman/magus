@@ -36,13 +36,13 @@ import (
 //
 // v10 gives OpIs.B a meaning: 1 marks a nullable annotation (`x is int?`), and A
 // now holds a compile-time-reduced base name rather than the raw identifier. An
-// older VM ignores B, so `null is int?` would answer false instead of true - a
+// older VM ignores B, so `null is int?` would answer false instead of true: a
 // wrong answer rather than a crash, which is exactly the case the version guard
 // exists to catch.
 //
 // v11 adds the bitwise opcodes OpBAnd/OpBOr/OpBXor/OpShl/OpShr/OpBNot. An older
 // VM has no case and no default handler for them, so it would abort with
-// "unknown opcode" partway through a chunk - after any side effects already
+// "unknown opcode" partway through a chunk, after any side effects already
 // executed. The guard turns that into a clean load-time rejection.
 //
 // v12 adds static object fields: ObjectDecl serializes a second ObjField block,

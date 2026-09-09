@@ -14,7 +14,7 @@ import (
 // lineEmitter taps a step's subprocess output as it is written. Each tapped writer
 // redacts any resolved secret (see [lineTap.Write]) and otherwise passes bytes through
 // unchanged, then splits them into lines and emits one structured output
-// [journal.Event] per line - tagged with the owning project/target/stream - to the
+// [journal.Event] per line (tagged with the owning project/target/stream) to the
 // capture logger on ctx (the invocation journal + live stream). The per-ref output
 // store keeps the raw bytes, NOT these events, so nothing is stored twice.
 //
@@ -73,7 +73,7 @@ func (c *lineEmitter) emit(stream, text string) {
 //
 // Safe for concurrent use, which is a requirement rather than a courtesy: ONE pair of
 // taps is put on the context for a whole target body (captureRun), and a target that
-// fans out - `ctx.needs(lint, test)`, the shape every `ci` target has - runs those
+// fans out (`ctx.needs(lint, test)`, the shape every `ci` target has) runs those
 // children concurrently, so several goroutines reach the same tap. Unguarded, two
 // writers tore the buf slice header and magus PANICKED mid-run with
 // "slice bounds out of range [128:0]" at the reslice below, killing the writer

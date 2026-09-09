@@ -23,7 +23,7 @@ import (
 // This is the third instance of one extension point, not a third mechanism:
 // magus\cache.remote wires a cache backend and magus\ci.provider wires a CI
 // provider the same way, and in all three magus knows nothing about the foreign
-// system - it invokes contract functions by name and reads what comes back.
+// system: it invokes contract functions by name and reads what comes back.
 //
 // NAMING: "provider" in this file always means a workspace provider. The unrelated
 // WithTelemetryProvider in workspace.go takes an observability.Provider; nothing
@@ -35,7 +35,7 @@ import (
 
 // ProviderRunner invokes spellName's list_projects contract against the workspace at
 // root and returns the records it reported, undecoded. It returns the wire record
-// (spells.ProvidedProject) rather than options so the result stays serializable -
+// (spells.ProvidedProject) rather than options so the result stays serializable,
 // which is what lets [AddProvidedProjects] cache it instead of shelling out to the
 // foreign tool on every magus command.
 type ProviderRunner func(ctx context.Context, spellName, root string) ([]spells.ProvidedProject, error)
@@ -54,7 +54,7 @@ func RegisterProviderRunner(fn ProviderRunner) {
 
 // AddProvidedProjects runs each wired provider in order and adds the projects it
 // reports to ws. It is a no-op when no provider was wired, which is every workspace
-// that does not have one - so the cost of the mechanism to everyone else is one nil
+// that does not have one, so the cost of the mechanism to everyone else is one nil
 // check per open.
 //
 // cache says where a provider's answer is remembered between commands; a zero value
@@ -125,7 +125,7 @@ func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []
 
 // projectOptions turns one reported record into the ProjectOption values a
 // magusfile's magus\project({...}) would have produced. Routing through the SAME
-// constructors is what keeps one vocabulary for project configuration - and one
+// constructors is what keeps one vocabulary for project configuration, and one
 // validation path: WithDependsOn resolves and rejects paths here exactly as it does
 // for a hand-authored dependency, and WithRegisteredSpell rejects an unknown spell.
 func projectOptions(pp spells.ProvidedProject) []ProjectOption {
@@ -181,7 +181,7 @@ func reportProvidedCollision(ctx context.Context, spellName, rel, owner string) 
 //
 // A provider is code that shelled out to another tool, so its answer is the least
 // trustworthy input in the load path: this rejects rather than repairs. The symlink
-// resolution is the half a lexical check misses - a link inside the tree pointing
+// resolution is the half a lexical check misses: a link inside the tree pointing
 // outside is textually clean, and would otherwise become a project whose Dir is the
 // exec cwd and source-hash root for a directory outside the workspace.
 func resolveProvidedPath(root, spellName, reported string) (string, error) {
@@ -214,7 +214,7 @@ func resolveProvidedPath(root, spellName, reported string) (string, error) {
 	// Lstat, and a symlink is refused outright rather than followed-and-contained.
 	// Discovery does not follow symlinked directories either (see workspace.md), so
 	// accepting one here would make a provided project reachable by a route a declared
-	// one is not - and two reported paths pointing at one real directory would become
+	// one is not, and two reported paths pointing at one real directory would become
 	// two projects sharing a cwd, an output set, and a source hash.
 	if info.Mode()&os.ModeSymlink != 0 {
 		return "", reject("the path is a symlink; magus does not follow symlinked directories into projects")

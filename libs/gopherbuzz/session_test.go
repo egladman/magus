@@ -633,7 +633,7 @@ export fun who() > str { return "beta"; }
 // an inferred enum case reach a host method empty.
 //
 // A native module registers a Go map for the runtime and a declaration source for the
-// checker, and resolveImport deliberately does not EXECUTE that source - executing
+// checker, and resolveImport deliberately does not EXECUTE that source: executing
 // would redefine the functions the native value already provides. An enum has no
 // native counterpart to collide with, and skipping it left the compiler's lowering of
 // `.case` (a real member lookup, ns\Enum.case) with nothing to find.

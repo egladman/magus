@@ -27,7 +27,7 @@ import (
 // often a project re-indexes (the min interval), dispatches only when no other work is
 // running, and cancels itself the moment a user run is starved for a slot. Each run
 // goes through the normal m.Run path, so it is cached and shows up as an ordinary
-// journaled job - transparent, not hidden background magic.
+// journaled job: transparent, not hidden background magic.
 
 const (
 	defaultSymbolQuiet       = 60 * time.Second // sources must be this quiet before a re-index
@@ -108,7 +108,7 @@ func (si *symbolIndexer) mark(paths []string) {
 		changed = true
 	}
 	si.mu.Unlock()
-	// A capable project's sources changed, so its index freshness may have too - drop
+	// A capable project's sources changed, so its index freshness may have too; drop
 	// the memo so the dashboard reflects it. Outside the lock (onChange takes its own).
 	if changed {
 		si.fireChange()
@@ -164,7 +164,7 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 	si.mu.Lock()
 	if st := si.state[proj]; st != nil {
 		// Optimistically clear dirty; a change landing during the run re-marks it. lastRun
-		// is stamped only after a run that actually executes (below), NOT here - stamping
+		// is stamped only after a run that actually executes (below), NOT here: stamping
 		// up front would let a yield-cancelled run throttle its own retry by minInterval.
 		st.dirty = false
 	}
@@ -276,8 +276,8 @@ type capableProject struct {
 	language string // canonical language of the project's symbol-capable spell
 }
 
-// matchProject returns the symbol-capable project that owns absPath - the one whose
-// directory is the longest path-prefix of the file - or ok=false when none does. The
+// matchProject returns the symbol-capable project that owns absPath (the one whose
+// directory is the longest path-prefix of the file), or ok=false when none does. The
 // trailing-separator guard stops a project dir from claiming a sibling with a shared
 // name prefix.
 func matchProject(absPath string, projects []capableProject) (string, bool) {
@@ -345,7 +345,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 
 	wctx, cancel := context.WithCancel(ctx)
 	// BuiltinIgnore skips the cache dir (so the indexer's own output never triggers a
-	// re-index loop), VCS metadata, and editor temporaries - the same filter the warm
+	// re-index loop), VCS metadata, and editor temporaries: the same filter the warm
 	// graph watcher uses.
 	watcher, err := watch.New(wctx, watch.WithRoot(m.Root()), watch.WithIgnore(watch.BuiltinIgnore))
 	if err != nil {
@@ -365,8 +365,8 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}, nil
 }
 
-// symbolCapableLanguage reports whether a project is symbol-capable - bound to a spell
-// that exposes the reserved scip op - and the language of that spell. The single source
+// symbolCapableLanguage reports whether a project is symbol-capable (bound to a spell
+// that exposes the reserved scip op) and the language of that spell. The single source
 // of truth for "which projects get indexed", so the auto-indexer, ReindexSymbols, and
 // status reporting cannot disagree.
 func symbolCapableLanguage(p *types.Project) (string, bool) {
@@ -393,8 +393,8 @@ func (m *Magus) symbolCapableProjects() []capableProject {
 
 // symbolStatusCache memoizes SymbolIndexStatus so a dashboard status push does not
 // re-stat every project's sources on each tick. Like the warm graph, the cache is
-// trusted only while a watcher invalidates it (watched); without one - a one-shot CLI,
-// or the daemon with auto-indexing disabled - every call recomputes, so it can never go
+// trusted only while a watcher invalidates it (watched); without one (a one-shot CLI,
+// or the daemon with auto-indexing disabled) every call recomputes, so it can never go
 // stale.
 type symbolStatusCache struct {
 	mu      sync.Mutex

@@ -79,7 +79,7 @@ var Magus = Module{
 			// because it is TYPED many times a day; a magusfile member is read far more
 			// often than it is written, and reads inside a checked signature next to
 			// `magus\targets()`. Naming the plural noun it returns is what makes the
-			// pair legible - see std.CamelCase, which leaves a single word alone.
+			// pair legible; see std.CamelCase, which leaves a single word alone.
 			Name:    "projects",
 			Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSON round-trip.",
 			Args:    nil,
@@ -256,7 +256,7 @@ var Magus = Module{
 
 		// Everything below is Extern: DECLARED here, BOUND by
 		// internal/interp/bindings/buzz.go via MapSet onto the magus namespace at run
-		// time. They are here so the checker knows they exist - without a declaration a
+		// time. They are here so the checker knows they exist: without a declaration a
 		// namespace member is unknown, and an unknown member used to type-check as
 		// `any` rather than being reported. Keep this set in step with buildMagusNS;
 		// TestMagusExternsMatchBindings holds the two together.
@@ -293,7 +293,7 @@ var Magus = Module{
 			Args:    []Arg{{Name: "name", Type: TypeString}},
 			Returns: []Ret{{Type: TypeString}},
 			// NOT Raises. The binding's only failure is a non-string argument, and the
-			// declared `str` parameter now rejects that statically - so the raise is
+			// declared `str` parameter now rejects that statically, so the raise is
 			// unreachable for any call the checker admits. Declaring it would force a
 			// try/catch around a pure string transform, including in the `magus buzz -e`
 			// one-liners where there is no enclosing function to propagate from.
@@ -313,17 +313,17 @@ var Magus = Module{
 			Extern: true,
 		},
 	},
-	// Each namespace below is reached THROUGH rather than called -
-	// `magus\cache.remote(<spell>)` - so it is declared as an object with static
+	// Each namespace below is reached THROUGH rather than called
+	// (`magus\cache.remote(<spell>)`), so it is declared as an object with static
 	// extern methods; see std.Namespace for why that, and not a nested module.
 	//
 	// log/cache/ci/secret/workspace are PROVIDER namespaces: a magusfile selects or
 	// reads through them, and none of those calls is Raises. Every one is made at the
 	// TOP LEVEL of a magusfile, where there is no enclosing function to declare !> and
-	// nothing to catch with, so declaring them raising would make them unwritable -
+	// nothing to catch with, so declaring them raising would make them unwritable,
 	// the same reason magus\project is not Raises. ledger is the one exception: its
 	// methods are ordinary calls made from inside a target or script, not top-level
-	// declarations, so they ARE Raises - the same reason magus\secret.read is too.
+	// declarations, so they ARE Raises, the same reason magus\secret.read is too.
 	Namespaces: []Namespace{
 		{
 			Name: "log",
@@ -567,8 +567,8 @@ func errNoWorkspace(member string) error {
 // MagusProjects lists the workspace's projects from the workspace already open on ctx.
 //
 // The first of the read-only verbs served IN-PROCESS. The typed methods below it fork a
-// full magus subprocess via runMagus - a spawn, a second workspace load, a JSON encode
-// and a Buzz-side parse - to answer a question this process already holds.
+// full magus subprocess via runMagus (a spawn, a second workspace load, a JSON encode
+// and a Buzz-side parse) to answer a question this process already holds.
 //
 // The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
 // present for every magusfile target. A bare Buzz script has none, hence the guard.
@@ -587,7 +587,7 @@ func MagusProjects(ctx context.Context) (types.ProjectsOutput, error) {
 //
 // It serves the workspace on the context when there is one and forks a nested magus
 // when there is not, because the caller asking for the target graph is asking the same
-// question either way - which magusfile it came from is magus's problem, not a name the
+// question either way; which magusfile it came from is magus's problem, not a name the
 // caller should have to choose between. These were two methods once; the split leaked an
 // implementation detail into the surface, and calling the wrong one raised rather than
 // answering.
@@ -807,7 +807,7 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 // to is gone: the analysis was always the workspace's own, the CLI only rendered it,
 // and keeping a subcommand alive as an implementation detail of a host method is the
 // sprawl this removal is about. The cost is that a bare `magus buzz` script with no
-// workspace cannot ask - the same limit every other in-process verb here has.
+// workspace cannot ask, the same limit every other in-process verb here has.
 //
 // member names the caller so MGS1022 points at the method the author actually wrote.
 //
@@ -902,7 +902,7 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 
 // ledgerCacheDir is the structural seam for the one capability types.WorkspaceRepository
 // does not carry that opening a lease-ledger Store needs: the workspace's cache
-// directory. Satisfied by the real *magus.Magus the same way std.Analyzer is - recovered
+// directory. Satisfied by the real *magus.Magus the same way std.Analyzer is, recovered
 // by assertion so std and root magus name neither each other.
 type ledgerCacheDir interface {
 	CacheDir() string
@@ -911,7 +911,7 @@ type ledgerCacheDir interface {
 // ledgerStoreFromContext opens the lease ledger for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches ledger.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
-// already accepted for v1 (see internal/ledger/store.go) - a magusfile target is just
+// already accepted for v1 (see internal/ledger/store.go): a magusfile target is just
 // another such process.
 func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, error) {
 	ws := types.WorkspaceFromContext(ctx)
@@ -934,7 +934,7 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 
 // MagusListLedger backs magus\ledger.list (hand-bound in
 // internal/interp/bindings/ledger_ns.go, since a Namespace method has no Impl for
-// codegen to reflect a trampoline from - see std.Namespace). It answers with one typed
+// codegen to reflect a trampoline from; see std.Namespace). It answers with one typed
 // report; types.NewLeaseReport is the same constructor the magus_ledger MCP tool's
 // "list" op and the console's /api/v1/ledger route call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
@@ -970,7 +970,7 @@ func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.
 // returns the stored row and internal/ledger.RegistrationAdvice's reading of the verdict, the
 // same pair the magus_ledger tool's "register" op answers with.
 //
-// The verdict is a FACT, never a refusal - a diverged registration is recorded and
+// The verdict is a FACT, never a refusal: a diverged registration is recorded and
 // reported like any other. See types.Lease.
 func MagusRegisterLedger(ctx context.Context, id, base string) (types.Lease, string, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.register")
@@ -1004,7 +1004,7 @@ func MagusClearLedger(ctx context.Context) (int, error) {
 
 // MagusDescribeFile classifies paths as generated output, declared source, or
 // unclaimed. See runMagusJSON for why it forks rather than reading the workspace on
-// the context: this answer is wanted precisely where there is no workspace loaded -
+// the context: this answer is wanted precisely where there is no workspace loaded,
 // a `magus buzz` script deciding whether a changed file is worth a human's attention.
 func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
@@ -1013,7 +1013,7 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 // MagusDiff implements magus\diff: the annotated changeset, in reading order.
 //
 // It shells out to `magus diff` rather than reimplementing the join, which is the whole
-// point of exposing it here - a Buzz advisor writing a pull-request comment and the console
+// point of exposing it here: a Buzz advisor writing a pull-request comment and the console
 // surface then rank files by the SAME definition (types.Diff.SortForReading), and a change to
 // that order reaches both without either being edited.
 //
@@ -1028,8 +1028,8 @@ func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
 //
 // It forces `-o json` and quiet: the caller is consuming the value, not watching the
 // output, and letting a caller pass its own -o would hand back a shape T cannot decode.
-// The alternative - returning ExecResult and making every caller run the bytes through
-// jsonDecode - loses the type at the boundary, and annotating a decoded value back to a
+// The alternative (returning ExecResult and making every caller run the bytes through
+// jsonDecode) loses the type at the boundary, and annotating a decoded value back to a
 // mirror does NOT restore it: that compiles and silently reads null for every field.
 func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts map[string]any) (T, error) {
 	var out T
@@ -1042,7 +1042,7 @@ func runMagusJSON[T any](ctx context.Context, sub string, args []string, opts ma
 	}
 	res, runErr := runMagusSub(ctx, sub, append(append([]string(nil), args...), "-o", "json"), quiet)
 	// DECODE FIRST, exit status second. A report command exits non-zero precisely when
-	// it has something to report - doctor exits 1 because a check failed - and raising
+	// it has something to report (doctor exits 1 because a check failed), and raising
 	// there would throw away the very payload the caller asked for. A report that parsed
 	// IS the answer; the caller branches on it (summary.fail), which is strictly more
 	// than an exit code carries. Only an unparsable answer is a failure to answer.
@@ -1063,7 +1063,7 @@ func runMagusSub(ctx context.Context, sub string, args []string, opts map[string
 }
 
 // resolveRunDir picks the directory a nested magus runs in: the contextual project dir,
-// or opts.dir resolved RELATIVE to it - exactly as proc.exec's dir is, so the two spell the
+// or opts.dir resolved RELATIVE to it, exactly as proc.exec's dir is, so the two spell the
 // same idea the same way. An absolute opts.dir wins outright, and with no contextual dir
 // there is nothing to resolve against, so it is used as given.
 func resolveRunDir(ctx context.Context, opts map[string]any) string {
@@ -1103,7 +1103,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	full = append(full, args...)
 
 	// Re-inject the daemon socket vars: childEnv withholds them from subprocesses
-	// (the socket is unauthenticated - MGS2008), but a nested magus is a legitimate
+	// (the socket is unauthenticated: MGS2008), but a nested magus is a legitimate
 	// recursive invocation that needs daemon access. Passed as Env overrides, which
 	// childEnv layers last so they win; MAGUS/MAGUS_LEVEL are added by childEnv. The
 	// withheld set is run.DaemonForwardVars, so this re-injection stays in lockstep.
@@ -1122,7 +1122,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	// Run in the contextual project dir; "" inherits the process cwd (the
 	// behavior for magusfile targets that run under a process chdir). opts.dir
 	// redirects it, resolved RELATIVE to that contextual dir exactly as proc.exec's
-	// dir is - a nested magus that must run somewhere else (a sibling project, a
+	// dir is: a nested magus that must run somewhere else (a sibling project, a
 	// directory of scripts) has no other way to say so, and reaching for
 	// proc.exec("magus", ...) to get it is the thing magus warns about.
 	dir := resolveRunDir(ctx, opts)
@@ -1146,8 +1146,8 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 			cmdErr = fmt.Errorf("magus.%s: %s: %w", label, strings.Join(full, " "), err)
 		case res.Code != 0:
 			// The child's own diagnostic is not repeated here. It reaches the console
-			// itself - printed by the child when it runs as its own process, and by
-			// proc.Forward when it was adopted - so folding it into this message too
+			// itself (printed by the child when it runs as its own process, and by
+			// proc.Forward when it was adopted), so folding it into this message too
 			// produced the same paragraph twice, once truncated into a `cause:` line.
 			// Under opts.quiet nothing streams by construction, and there the caller's
 			// own ExecResult.Stderr is the account of the failure.
@@ -1155,7 +1155,7 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 		}
 		if res.Started {
 			// Recorded even on a non-zero exit. A child that RAN said something, and
-			// that output is the answer for a command whose failure IS its report -
+			// that output is the answer for a command whose failure IS its report:
 			// doctor exits 1 because a check failed, and dropping stdout there left
 			// nothing to decode. The error is still returned alongside, so a caller
 			// that only wants the happy path is unaffected.
@@ -1182,12 +1182,12 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 //     a source input changed, so regeneration is expected; commit it.
 //   - outputs dirty, inputs byte-identical, running a DEV build -> MGS4005 EnvironmentalDrift:
 //     the committed form is produced by the pinned release (compat contract), so a dev
-//     build's differing output is version/tool skew - not the developer's change.
+//     build's differing output is version/tool skew, not the developer's change.
 //   - outputs dirty, inputs byte-identical, running a RELEASE build -> MGS4003
-//     NondeterministicOutput: same inputs and generator version, yet output differs - a
+//     NondeterministicOutput: same inputs and generator version, yet output differs: a
 //     reproducibility bug.
 //
-// It RETURNS the classification rather than throwing, so the gate owns the response -
+// It RETURNS the classification rather than throwing, so the gate owns the response:
 // fail on a clean-tree drift, warn on a mid-edit dirty one. The record is a plain map:
 //
 //	{ drifted: bool, code: str, message: str, url: str, files: []str }
@@ -1212,7 +1212,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 	// DirtyFiles, not Dirty: the verdict carries WHICH outputs drifted, and Dirty is
 	// defined in terms of this anyway, so naming them costs nothing extra. A gate that
 	// reports only "something drifted" sends its reader to reproduce the run just to
-	// learn what a status call already knew - and a gate fires precisely when the
+	// learn what a status call already knew, and a gate fires precisely when the
 	// reader is looking at a CI log rather than the tree.
 	dirtyFiles, err := v.DirtyFiles(ctx, dir, outputs)
 	if err != nil {

@@ -53,6 +53,40 @@ docs/concepts/cache.md:340 error MD032/blanks-around-lists Lists should be surro
 	assert.Contains(t, string(excerpt), "MD032", "the actual diagnostic must survive")
 }
 
+// A linter finding carries no diagnostic KEYWORD, so before findingLine existed this
+// log matched nothing and fell back to a tail: the reader got whichever tool ran last
+// (mockery's template chatter, measured) and not the one line the run failed on.
+func TestFailureExcerptFindsAKeywordlessLinterFinding(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	for range 300 {
+		b.WriteString("INF Executing template file=/x/types/gen/mocks/inspector.go version=v3.5.4\n")
+	}
+	b.WriteString("internal/interp/ceiling.go:58:56: comment uses a spaced hyphen as an em-dash aside; write a colon instead (commentdash)\n")
+	for range 300 {
+		b.WriteString("INF Writing template to file file=/x/types/gen/mocks/observer.go version=v3.5.4\n")
+	}
+
+	excerpt, omitted := failureExcerpt([]byte(b.String()), maxFailureExcerptLines)
+
+	assert.Contains(t, string(excerpt), "ceiling.go:58:56", "the finding is the only line the reader wants")
+	assert.Positive(t, omitted, "and the surrounding chatter is omitted, not shown")
+}
+
+// The anchor and the letters-only extension are what keep findingLine off the two
+// shapes that otherwise read as file:line:col: a log timestamp and a host:port.
+func TestFailureExcerptIgnoresTimestampsAndPorts(t *testing.T) {
+	t.Parallel()
+	for _, line := range []string{
+		"2026-09-09T13:21:11.393224000-04:00 INF Executing template version=v3.5.4",
+		"listening on 127.0.0.1:8080: ready",
+		"see https://example.com:8443/docs: the guide",
+	} {
+		assert.NotRegexpf(t, findingLine, line, "%q must not read as a finding", line)
+	}
+	assert.Regexp(t, findingLine, "cmd/magus/run.go:12:3: something is wrong", "but a real finding must")
+}
+
 // TestFailureExcerptKeepsTheKeywordsThatMatter guards the other direction: tightening
 // the match must not stop recognizing an ordinary diagnostic.
 func TestFailureExcerptKeepsTheKeywordsThatMatter(t *testing.T) {
@@ -116,7 +150,7 @@ func TestFailureExcerptPinsRealTestFailureAgainstLaterNoise(t *testing.T) {
 // rule above, and guards the mistake made while implementing it: ranking a structural
 // marker above keyword noise must not become an EXEMPTION from the budget. A broadly
 // failing `go test ./...` is nothing but structural markers, and exempting them turned
-// the excerpt back into the full log dump failureExcerpt exists to prevent - while
+// the excerpt back into the full log dump failureExcerpt exists to prevent, while
 // reporting omitted=0, so nothing on screen said the output had been let through.
 func TestFailureExcerptHonoursLimitWhenEveryLineIsStructural(t *testing.T) {
 	t.Parallel()

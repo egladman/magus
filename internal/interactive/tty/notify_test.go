@@ -112,7 +112,7 @@ func TestNotifierDropsTheOldestOnOverflow(t *testing.T) {
 	n.mu.Unlock()
 	assert.Equal(t, []string{"two", "three"}, got)
 	// The band GROWS to make room for the second notification, and growing
-	// rebuilds the region - which redraws every row it holds. So the buffer
+	// rebuilds the region, which redraws every row it holds. So the buffer
 	// carries the frame that was correct before the third arrived; what matters
 	// is the LAST frame, which is the one on screen.
 	last := buf.String()[strings.LastIndex(buf.String(), cursorSave):]
@@ -249,8 +249,8 @@ func TestNotifierPinUpdatesInPlaceAndClears(t *testing.T) {
 
 func TestNotifierSleepsWhenNothingCanExpire(t *testing.T) {
 	t.Parallel()
-	// The long-running property: a band holding only pinned conditions - which
-	// have no deadline by design - gives the sweeper nothing to wait for, so it
+	// The long-running property: a band holding only pinned conditions (which
+	// have no deadline by design) gives the sweeper nothing to wait for, so it
 	// arms no timer and wakes zero times. A TUI left open all afternoon must be
 	// as close to free as a process doing nothing.
 	var buf ttyBuf
@@ -385,7 +385,7 @@ func TestAdvanceOnlyMovesWhatDoesNotFit(t *testing.T) {
 //
 // advance and marquee were covered as pure functions, which proved they could
 // scroll and nothing about whether anything ever CALLED them. The sweeper's
-// timer was armed only from expiry deadlines, and a pinned condition has none -
+// timer was armed only from expiry deadlines, and a pinned condition has none,
 // so the single message in magus long enough to need scrolling woke it zero
 // times. This asserts the wake-up, which is the part that was broken.
 func TestSweeperWakesForAScrollingMessage(t *testing.T) {

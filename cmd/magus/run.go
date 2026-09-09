@@ -214,8 +214,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	// Fault tolerance by design: a target only some projects serve should skip - not
-	// error - the projects that lack it when the scope is the workspace or several
+	// Fault tolerance by design: a target only some projects serve should skip (not
+	// error) the projects that lack it when the scope is the workspace or several
 	// projects, but a single project that does not serve it (or a name no project serves
 	// at all) is an error. This is the run counterpart to affected's tolerance.
 	if len(targets) > 0 {
@@ -232,7 +232,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	m.LogScope(ctx, scopeLabel, source)
 	// Surface the active charms up front, next to the projects header, so the run's
-	// state ("here's what's in effect") is visible before any work - and so a missing
+	// state ("here's what's in effect") is visible before any work, and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
 	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
 	// ci dispatches through RunCI, which drops the write-granting charms. Report what
@@ -244,7 +244,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	m.LogCache(ctx)
 	if len(targets) == 0 {
 		// Zero targets here means the fan-out found no projects at all in the resolved
-		// workspace - a degenerate or wrong-workspace resolution, not "nothing to do".
+		// workspace: a degenerate or wrong-workspace resolution, not "nothing to do".
 		// (A named target no project serves already errored in filterServedTargets above.)
 		// An adopted run that mis-resolved the client's workspace lands here; fail loudly,
 		// naming the workspace and target, so it can never pass with nothing executed.
@@ -370,7 +370,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 }
 
 // emitProjectNames is `-o name` for a run: the projects the run covered, one path per
-// line - the identity of what executed, and the form the next command takes as arguments.
+// line: the identity of what executed, and the form the next command takes as arguments.
 // Shared by run and affected so the two cannot disagree about what a run is named by.
 func emitProjectNames(m *magus.Magus, selection []types.Target) error {
 	projects := m.ResolveProjects(selection)
@@ -384,14 +384,14 @@ func emitProjectNames(m *magus.Magus, selection []types.Target) error {
 // runSelection is how one run's project selection is named on the command line: the
 // positionals, the --skip refs subtracted from them, and the directory they anchor
 // against. A struct rather than three parameters because the first two are same-typed
-// and adjacent, and transposing them is SILENT - the run would then cover exactly the
+// and adjacent, and transposing them is SILENT: the run would then cover exactly the
 // projects the caller asked to exclude.
 type runSelection struct {
 	// projects are the positional project args, empty when the caller named none.
 	projects []string
 	// skips are the --skip refs, subtracted after the selection resolves.
 	skips []string
-	// cwd is the caller's working directory (the client's, for an adopted run - see
+	// cwd is the caller's working directory (the client's, for an adopted run; see
 	// clientCwd); it anchors relative project args and the cwd-scope lookup. Resolving
 	// cwd-scope against the daemon's own os.Getwd() is exactly the mix-up that let a
 	// daemon adopt a run for an unrelated workspace and pass it vacuously, so the cwd is
@@ -514,8 +514,8 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 	for _, arg := range skips {
 		// A glob subtracts every workspace project it matches, in the same doublestar
 		// dialect declared sources use. It matches workspace-relative project paths
-		// directly - never anchored to the cwd, because "libs/*" should mean the same
-		// thing from anywhere - and a glob matching zero projects is the same typo an
+		// directly (never anchored to the cwd, because "libs/*" should mean the same
+		// thing from anywhere), and a glob matching zero projects is the same typo an
 		// unknown exact ref is.
 		if strings.ContainsAny(arg, "*?[") {
 			matched := false
@@ -563,11 +563,11 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 }
 
 // filterServedTargets keeps only the (project, target) pairs whose project actually
-// defines the target, so a fan-out never runs - or misreports "[pass]" for - a project
+// defines the target, so a fan-out never runs (or misreports "[pass]" for) a project
 // that lacks it. It errors when nothing serves the target: a single project in scope
 // names that project (you asked for it explicitly), otherwise it reads as an unknown
 // target across the selection. When some projects serve it and others don't, the ones
-// that don't are dropped with a warning - the tolerant multi-project behavior.
+// that don't are dropped with a warning: the tolerant multi-project behavior.
 func filterServedTargets(ctx context.Context, m *magus.Magus, targets []types.Target, targetName string) ([]types.Target, error) {
 	return applyTargetFilter(targets, targetName, buildDefinesTarget(ctx, m), func(path string) string { return projectLabelFor(m, path) })
 }
@@ -605,7 +605,7 @@ func applyTargetFilter(targets []types.Target, targetName string, defines func(p
 // buildDefinesTarget returns a predicate reporting whether a project defines a target,
 // covering BOTH sources of runnable targets: magusfile-declared targets (the target
 // graph's nodes) and spell ops (each bound spell's Targets). Neither set alone is
-// complete - the magusfile spell exposes no ops, and spell ops are not graph nodes.
+// complete: the magusfile spell exposes no ops, and spell ops are not graph nodes.
 func buildDefinesTarget(ctx context.Context, m *magus.Magus) func(path, target string) bool {
 	byProject := map[string]map[string]bool{}
 	add := func(path, name string) {
@@ -646,7 +646,7 @@ func projectLabelFor(m *magus.Magus, path string) string {
 }
 
 // cwdAnchor returns cwd as a slash path relative to root, the anchor for
-// resolving relative project args. It falls back to "." - the workspace root -
+// resolving relative project args. It falls back to "." (the workspace root)
 // when cwd is empty, cannot be made relative to root, or lies OUTSIDE it.
 //
 // That last case is what `--root <path>` selects: the caller is standing
@@ -769,7 +769,7 @@ type runOutput struct {
 // A dry run reports no artifacts: nothing executed, so any file matching an output
 // glob is left over from a previous run and reporting it would claim this invocation
 // produced it. It DOES report the return value, because a dry run evaluates the
-// target body under a tracing context - the value is real, and omitting it made
+// target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one, while
 // `--then value` printed it.
 func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns) error {
@@ -799,7 +799,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		}
 		// Bucket by the project that DECLARED the glob, in one pass. This used to ask
 		// FindOutputProducer inside the per-project loop, which was O(projects x
-		// artifacts) with a workspace walk per pair and - worse - got the nil case
+		// artifacts) with a workspace walk per pair and (worse) got the nil case
 		// backwards: an artifact no project's tree claimed failed the
 		// `owner.Path != p.Path` guard for every project, so it was reported N times
 		// in an N-project result. The declaring project is already on the artifact and
@@ -827,7 +827,7 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 // the flag at its default with nothing said, and for the shard pair that default is
 // dangerous: NShards 0 means "do not shard", so a matrix job with a malformed
 // MAGUS_N_SHARDS ran the entire selection in every job and reported success.
-// Returning it keeps the decision with the caller - an unknown flag is still a
+// Returning it keeps the decision with the caller: an unknown flag is still a
 // silent no-op, because that is a wiring mistake and not something a user set.
 func envDefault(fs *flag.FlagSet, name, value string) error {
 	if value == "" {
@@ -850,7 +850,7 @@ func envDefault(fs *flag.FlagSet, name, value string) error {
 //
 // Both names come from the command registry rather than from a literal. The
 // second one used to be spelled "wait" right here, beside a constant for the
-// first - and a flag whose name is a literal in one place and a constant in
+// first, and a flag whose name is a literal in one place and a constant in
 // another is a rename waiting to go half-applied.
 var localOnlyFlags = []string{gen.FlagRunDetach, gen.FlagRunWait}
 
@@ -882,7 +882,7 @@ func withoutDetachFlag(args []string) []string {
 // so a caller can watch it instead of blocking or sleeping.
 //
 // It requires a PERSISTENT daemon (`magus server start`), and says so rather than falling
-// back. A per-process proc server - which magus starts for ordinary commands - dies when
+// back. A per-process proc server (which magus starts for ordinary commands) dies when
 // this invocation exits, so submitting there would queue work that is silently dropped:
 // the caller would be told it detached, and nothing would ever run. Refusing is the only
 // honest answer, and the remedy is one command.
@@ -910,7 +910,7 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 	// to poll. A "watch it with status --watch" hint gives an agent nothing to
 	// parse and no completion signal, and gives a human another window to
 	// babysit; the invocation id is addressable, and `query invocation` reads
-	// its journal - outcome, timings, the output refs of every target it ran -
+	// its journal (outcome, timings, the output refs of every target it ran)
 	// whenever the reader actually wants it.
 	if !wait {
 		fmt.Fprintf(os.Stderr, "magus: detached as %s\n  read it with: %s\n",
@@ -933,7 +933,7 @@ func detachToDaemon(ctx context.Context, root string, argv []string, wait bool) 
 //
 // Waiting on Status, never on FinishedMs: an interrupted run has no finished
 // event, and InvocationFromEvents backfills its finish time from the last event
-// it saw - so a timestamp says "something happened last", while a status is the
+// it saw, so a timestamp says "something happened last", while a status is the
 // only thing that says "this is over".
 func awaitInvocation(ctx context.Context, root, inv string) error {
 	m, err := loadMagus(ctx, root)
@@ -952,7 +952,7 @@ func awaitInvocation(ctx context.Context, root, inv string) error {
 		case <-time.After(delay):
 		}
 		// A log that does not exist yet is a run the daemon has not started, not
-		// an error - it is the ordinary first tick.
+		// an error: it is the ordinary first tick.
 		header, err := m.InvocationByID(inv)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("--wait: read run log for %s: %w", inv, err)

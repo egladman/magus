@@ -31,7 +31,7 @@ func TestCaptureAnchorRemembersTheLineAndItsContext(t *testing.T) {
 	assert.Equal(t, "d", got.Digest)
 }
 
-// A remark with no line under it - a file heading, or a line no hunk covers - has no text to
+// A remark with no line under it (a file heading, or a line no hunk covers) has no text to
 // remember. Zero rather than a guess, which is what makes the AnchorUnknown rung honest.
 func TestCaptureAnchorIsEmptyWhereThereIsNothingToRemember(t *testing.T) {
 	h := hunkAt(10, "a", "b")
@@ -175,7 +175,7 @@ func TestLocateAnchorIsLostWhenTheDeclarationWentWithIt(t *testing.T) {
 	assert.Equal(t, types.AnchorLost, rung)
 }
 
-// A patch with no funcname - the top of a file, or a language git has no pattern for - captures no
+// A patch with no funcname (the top of a file, or a language git has no pattern for) captures no
 // declaration, which is honest rather than a rung that silently never fires.
 func TestCaptureAnchorTakesNoDeclarationWhereGitNamedNone(t *testing.T) {
 	a := CaptureAnchor([]Hunk{hunkAt(1, "package main", "")}, 1)

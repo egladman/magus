@@ -23,7 +23,7 @@ func TestExcludedModules(t *testing.T) {
 	// internal/interp/bindings/gen/modules_wasm.go, which is what the playground
 	// actually installs. Keep the two together when a module is added: the list
 	// went stale once already, when the stdlib expansion added thirteen modules
-	// and nothing here noticed, so every one of them read as "excluded" - which
+	// and nothing here noticed, so every one of them read as "excluded", which
 	// would have told a playground user that base64 and math were unavailable.
 	available := []string{
 		"platform", "crypto", "env", "json", "time", "fmt", "markdown", "charm",
@@ -39,6 +39,6 @@ func TestExcludedModules(t *testing.T) {
 	}, got, "only the process/filesystem/network modules should be excluded")
 
 	// magus is available here (it is in the set), so it must never be reported as
-	// excluded - the point of sourcing the set from real registration.
+	// excluded: the point of sourcing the set from real registration.
 	assert.NotContains(t, got, "magus")
 }

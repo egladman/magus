@@ -26,7 +26,7 @@ type Capture struct {
 	Source Source
 	Tags   []string
 	// Entries are in the order they should be read, which is the caller's judgment rather
-	// than this package's - a review thread reads by file, a chat log by time.
+	// than this package's: a review thread reads by file, a chat log by time.
 	Entries []CaptureEntry
 }
 
@@ -34,7 +34,7 @@ type Capture struct {
 // transcript records who said something, and a store that tried to VERIFY that would be
 // making the authorship claim the capture exists to avoid making.
 type CaptureEntry struct {
-	// Subject is what the message was about, in the source's own terms - a file path for a
+	// Subject is what the message was about, in the source's own terms: a file path for a
 	// review comment. It becomes a file anchor, so a capture is findable from the code.
 	Subject string
 	// Locator narrows Subject within itself, rendered beside it and never parsed. A hunk
@@ -56,7 +56,7 @@ type CaptureEntry struct {
 //
 // Fails when there is nothing to capture. An empty transcript would be a note asserting that
 // a conversation happened and declining to say what was said, and it would fail Validate for
-// want of an anchor anyway - better to say which of the two went wrong.
+// want of an anchor anyway; better to say which of the two went wrong.
 func (c Capture) Note(name string) (Note, error) {
 	if strings.TrimSpace(c.Title) == "" {
 		return Note{}, errors.New("notes: a capture needs a title")
@@ -124,12 +124,12 @@ func captureAnchors(entries []CaptureEntry) ([]Anchor, error) {
 //
 // The preamble is not decoration. A note is prose someone stands behind, and this file is the
 // exception; a reader who meets it six months from now needs to know that before they quote
-// it at somebody. The frontmatter says the same thing in a form tools read - this says it in
+// it at somebody. The frontmatter says the same thing in a form tools read; this says it in
 // the form a human reads.
 //
 // Headings are SETEXT (a rule of dashes under the text) and speakers are a plain "name:", so
 // no line depends on a markdown renderer to make sense. A note body is untrusted by contract
-// and every magus surface therefore prints it as text - a `## path` heading is a real heading
+// and every magus surface therefore prints it as text: a `## path` heading is a real heading
 // only in an editor, and reads as literal hashes everywhere magus itself shows it. Setext is
 // a heading to a renderer AND an underline to a reader, which is the only form that works in
 // both places.
@@ -210,7 +210,7 @@ func HunkLocator(hunk int) string {
 //
 // A SEPARATE spelling from HunkLocator, not a shared "position": a hunk index is a coordinate
 // in one patch and a line number is a coordinate in a file, and a heading that blurred them
-// would leave a later reader unable to tell which they were looking at - by which time the
+// would leave a later reader unable to tell which they were looking at, by which time the
 // patch is long gone and only one of the two still means anything.
 func LineLocator(line int) string {
 	if line <= 0 {

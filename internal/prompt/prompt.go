@@ -6,7 +6,7 @@
 //
 //   - A section with a heading and nothing under it reads as "we looked and found nothing" when
 //     the truth is "nothing was added here". A section renders only once it receives CONTENT, and
-//     the sentence explaining a section is deliberately not content - see [Builder.Note].
+//     the sentence explaining a section is deliberately not content; see [Builder.Note].
 //   - A truncated list reads as a complete one. [Builder.Items] takes a limit and always states
 //     the remainder, so silently dropping the tail is not something a caller can express.
 //   - An unmeasured value rendered as a zero accuses. [Builder.Field] omits an empty value rather
@@ -29,8 +29,8 @@ import (
 //
 // It mirrors the skill catalog's two curated forms rather than sharing its type: a skill
 // variant carries template rendering, provenance and install stamping, none of which a prose
-// builder should depend on. The CONCEPT is shared on purpose - one source, two lengths, the short
-// one edited rather than truncated - and that is the part worth keeping consistent.
+// builder should depend on. The CONCEPT is shared on purpose (one source, two lengths, the short
+// one edited rather than truncated), and that is the part worth keeping consistent.
 type Variant int
 
 const (
@@ -111,7 +111,7 @@ func (b *Builder) Text(lines ...string) *Builder {
 // form states bare. Chained after the instruction it explains, a pair reads as one thought and
 // renders as one or two depending on the variant.
 //
-// It is a Note, not Text - a section whose only long-form addition is rationale still has nothing
+// It is a Note, not Text: a section whose only long-form addition is rationale still has nothing
 // to explain when there are no facts under it.
 func (b *Builder) Because(lines ...string) *Builder {
 	if b.variant != Full {
@@ -127,8 +127,8 @@ func (b *Builder) Because(lines ...string) *Builder {
 // free to drift from the installed one, and it would spend the reader's context on text their
 // tools already loaded. So what travels is the name.
 //
-// It takes a [fmt.Stringer] rather than a string so a caller passes a CHECKED reference - see
-// agent.MustSkill - instead of a bare literal nothing verifies. This package stays a prose
+// It takes a [fmt.Stringer] rather than a string so a caller passes a CHECKED reference (see
+// agent.MustSkill) instead of a bare literal nothing verifies. This package stays a prose
 // builder and does not know what a skill is beyond a name worth pointing at; whether it exists is
 // the referencing package's guarantee to make.
 func (b *Builder) Skill(ref fmt.Stringer, purpose string) *Builder {

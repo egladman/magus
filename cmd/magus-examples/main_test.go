@@ -40,7 +40,7 @@ func TestInject(t *testing.T) {
 
 // TestDocsHaveExampleMarkers: every example the generator produces has a marker pair on
 // the page it names, so `content-generate` can never render an example with nowhere to
-// land. Each example is checked against ITS OWN page rather than one shared file - an
+// land. Each example is checked against ITS OWN page rather than one shared file: an
 // example whose markers live on a different page than it declares is exactly the failure
 // that would otherwise surface as a generate error in CI.
 func TestDocsHaveExampleMarkers(t *testing.T) {

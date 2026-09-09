@@ -26,8 +26,8 @@ const (
 // IndexPath returns the absolute path of a project's cached SCIP index:
 // <cacheDir>/symbols/<hash>/index.scip, where <hash> is derived from the project's
 // absolute directory. Keying on a hash of the abs dir (rather than the workspace path)
-// lets the op-run side - which knows only the project dir - and the ingestion side -
-// which joins root and the project path - compute an identical location without either
+// lets the op-run side (which knows only the project dir) and the ingestion side
+// (which joins root and the project path) compute an identical location without either
 // re-deriving the other's view. projectAbsDir is cleaned first so trivially different
 // spellings of the same dir map to one index.
 func IndexPath(cacheDir, projectAbsDir string) string {

@@ -30,7 +30,7 @@ func (h serviceHost) Release(key string) { h.reg.Release(key) }
 // StopAll stops every hosted service and returns how many were stopped, leaving the
 // daemon running (the registry stays usable). context.Background: the RPC handler
 // that calls this has no per-request ctx to thread through today, and unlike daemon
-// teardown there is no already-cancelled parent ctx to work around here - Shutdown's
+// teardown there is no already-cancelled parent ctx to work around here; Shutdown's
 // own per-victim bounds (readiness timeout, stop grace) still apply regardless.
 func (h serviceHost) StopAll() int {
 	n := h.reg.Held()

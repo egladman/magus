@@ -145,7 +145,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	}
 	objects := newBuzzValueEmitter(m.Name)
 	for _, meth := range m.Methods {
-		// An Extern member has no Impl to wrap - internal/interp/bindings MapSets it
+		// An Extern member has no Impl to wrap; internal/interp/bindings MapSets it
 		// onto the namespace at run time. It is declared, not trampolined.
 		if meth.Extern {
 			continue
@@ -169,8 +169,8 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	// classification kept in three hand-maintained places (this map and the two
 	// Modules tables) is one nobody can keep true. It now has one source: std
 	// declares it, this tag and both tables are generated from it, and everything
-	// downstream - dry.WASMCompatibleMagusModules, and the docs generator's
-	// runs-in-the-browser marker through it - was already derived.
+	// downstream (dry.WASMCompatibleMagusModules, and the docs generator's
+	// runs-in-the-browser marker through it) was already derived.
 	if !m.WASM {
 		fmt.Fprintln(&b, "//go:build !wasm")
 		fmt.Fprintln(&b)
@@ -210,7 +210,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 }
 
 // implPackageOf returns the Go import path and local package identifier every
-// one of m's Method.Impl and Field.Resolver funcs share - "share" because one
+// one of m's Method.Impl and Field.Resolver funcs share; "share" because one
 // generated file makes one Register<Module> call under one import, so a
 // module whose Impls span two packages cannot be emitted as written. Errors
 // if m declares no Impl/Resolver at all (nothing to import) or if they
@@ -266,7 +266,7 @@ func emitBuzzField(w *bytes.Buffer, f std.Field, implPkg string) {
 // slice is named bzArgs to avoid colliding with host args named "args". The map
 // key is camelCased to match Buzz's convention (the snake_case descriptor name
 // stays the runtime label so errors still read e.g. "fs.readFile"). implPkg is
-// the local identifier meth.Impl's package is imported under - "std" for a
+// the local identifier meth.Impl's package is imported under: "std" for a
 // module still living in std's flat root, or e.g. "json" for one implemented
 // in a std/encoding leaf package (see implPackageOf).
 func emitBuzzMethod(w *bytes.Buffer, m std.Module, meth std.Method, objects *buzzValueEmitter, implPkg string) error {
@@ -402,7 +402,7 @@ func returnConv(ret std.Ret, goType reflect.Type, src string, objects *buzzValue
 // is what additionally admits the boundary types declared in spells (Charm, PatchOp,
 // Command, Service): they were registered all along, but a package-path test classified a
 // host method returning one as a SCALAR, so declaring its Object failed with "its Impl
-// returns a scalar" - naming neither the cause nor the fix.
+// returns a scalar", naming neither the cause nor the fix.
 //
 // The types-package arm is not redundant with the registry: several entries name a
 // *Record MIRROR (StatusRecord, CommitRecord) that exists only to be reflected over,
@@ -437,7 +437,7 @@ func objectName(goType reflect.Type) string {
 
 // buzzObjectName is the public Buzz object name for t, resolved through the boundary
 // registry. A Go type sometimes keeps a descriptive suffix while the Buzz surface exposes
-// the concise domain name - ProjectsOutput is Projects, ImpactResult is Impact.
+// the concise domain name: ProjectsOutput is Projects, ImpactResult is Impact.
 //
 // This USED to be a hand-written switch listing each rename, which made the registry and
 // the switch two sources of one truth: adding a renamed type compiled fine and then failed
@@ -452,7 +452,7 @@ func buzzObjectName(t reflect.Type) string {
 //
 // This is what licenses stating the object name in the descriptor at all. The name
 // is already derivable by reflection, so a hand-written copy is only safe while
-// something proves the copy right - otherwise it is a second source of truth that
+// something proves the copy right; otherwise it is a second source of truth that
 // drifts silently, and a wrong object name is worse than none: it tells an author to
 // annotate `> FileInfo` on a call that returns ExecResult, and the checker then
 // rejects correct code.

@@ -19,7 +19,7 @@ var (
 )
 
 // notAdoptedError is a proc sentinel for a forwarded call the daemon did not adopt:
-// the daemon is alive and answered, but will not take this call - its subcommand does
+// the daemon is alive and answered, but will not take this call: its subcommand does
 // not adopt a daemon, or the client's build/protocol is incompatible with the
 // daemon's. The caller runs the command locally, quietly, rather than warning. The
 // classification lives ON the error (a NotAdopted() bool method, in the spirit of
@@ -45,19 +45,19 @@ var (
 	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
 )
 
-// NotAdopted reports whether err - or any error it wraps - is a call the daemon did
+// NotAdopted reports whether err (or any error it wraps) is a call the daemon did
 // not adopt (a non-adoptable subcommand, or a build/protocol mismatch on an otherwise
 // adoptable one): the daemon answered but will not take the call, so a caller runs it
 // locally and quietly instead of treating it as a failure. Prefer this over matching
 // the individual sentinels: it stays correct as reasons are added and sees through
 // wrapping. Errors that do not implement NotAdopted() (e.g. a transport failure)
-// report false - treat those as genuine forward failures.
+// report false; treat those as genuine forward failures.
 func NotAdopted(err error) bool {
 	var e interface{ NotAdopted() bool }
 	return errors.As(err, &e) && e.NotAdopted()
 }
 
-// AlreadyReported reports whether err - or any error it wraps - says its failure has
+// AlreadyReported reports whether err (or any error it wraps) says its failure has
 // already been explained to the user, so its own text carries no information worth
 // showing. A dispatch that printed a diagnostic and then returned a bare sentinel is the
 // case: the sentinel's message describes magus's control flow, not the failure.
@@ -72,7 +72,7 @@ func AlreadyReported(err error) bool {
 	return errors.As(err, &e) && e.AlreadyReported()
 }
 
-// ExitCode reports the process status err - or any error it wraps - asks for, and
+// ExitCode reports the process status err (or any error it wraps) asks for, and
 // whether it asked at all. Same shape as NotAdopted and AlreadyReported above, and for
 // the same reason: the classification has to cross a process boundary that erases the
 // Go type. The CLI's own error types (a usage misuse exits 2, never 1) are in another
@@ -88,7 +88,7 @@ func ExitCode(err error) (int, bool) {
 // decodeWireError rebuilds a typed proc error from the message string a server sent
 // over the wire. The error crossed the daemon->client process boundary as plain text,
 // losing its Go type; matching that text back to the known sentinel restores errors.Is
-// and NotAdopted on the client. It is a decode, not a wrap - only ErrNotAdoptable
+// and NotAdopted on the client. It is a decode, not a wrap: only ErrNotAdoptable
 // carries trailing context, so that one case wraps the sentinel to keep it; an
 // unrecognized message becomes a plain error.
 func decodeWireError(msg string) error {

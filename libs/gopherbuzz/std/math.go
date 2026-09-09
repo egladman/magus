@@ -9,8 +9,8 @@ import (
 )
 
 // buzzPi is upstream's pi: the 14-digit literal buzz declares in src/lib/math.buzz.
-// It is NOT the nearest double to the real number - Go's math.Pi is
-// 3.141592653589793, this is 3.1415926535898 - so every result derived from it is
+// It is NOT the nearest double to the real number (Go's math.Pi is
+// 3.141592653589793, this is 3.1415926535898), so every result derived from it is
 // very slightly off.
 //
 // That is deliberate, and it REVERSES an earlier decision recorded in this same
@@ -20,7 +20,7 @@ import (
 // moved from upstream must not get different numbers here. Conformance wins on a
 // value that is upstream's to define.
 //
-// What it costs, precisely - the scope is smaller than the old note implied:
+// What it costs, precisely (the scope is smaller than the old note implied):
 //
 //	math\pi         3.1415926535898     was 3.141592653589793
 //	math\deg(2.0)   114.59155902616439  was 114.59155902616465

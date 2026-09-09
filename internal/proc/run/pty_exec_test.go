@@ -13,7 +13,7 @@ import (
 )
 
 // The point of the TTY option is that the child believes it is on a terminal.
-// Asserting that directly - by asking the child itself - is the only test that
+// Asserting that directly (by asking the child itself) is the only test that
 // cannot pass for the wrong reason: a pipe would make this print "pipe".
 func TestExecTTYChildSeesATerminal(t *testing.T) {
 	res, err := Exec(context.Background(), "sh",
@@ -61,7 +61,7 @@ func TestExecTTYMergesStderrIntoStdout(t *testing.T) {
 
 // The master read is what the pty branch cannot bound with WaitDelay, because
 // the copy is ours rather than exec.Cmd's. A reader that never ends must cost two
-// drain delays and then be cut loose - without the bound this test does not fail,
+// drain delays and then be cut loose; without the bound this test does not fail,
 // it hangs until the suite's timeout, which is the shape the fix exists to
 // prevent.
 func TestDrainPTYBoundsACopyThatNeverEnds(t *testing.T) {
@@ -102,7 +102,7 @@ func TestDrainPTYReturnsTheCopyResult(t *testing.T) {
 }
 
 // Stdin is replayed through the master by a goroutine, so the child must still
-// read it as typed input - and that goroutine must be done before the master is
+// read it as typed input, and that goroutine must be done before the master is
 // closed underneath it.
 func TestExecTTYReplaysStdinThroughTheMaster(t *testing.T) {
 	res, err := Exec(context.Background(), "sh", []string{"-c", "read line; echo got:$line"},

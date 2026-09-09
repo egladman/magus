@@ -18,7 +18,7 @@ import (
 // carrying it, whether the tree is dirty, and a digest of the uncommitted patch.
 //
 // It READS. Nothing here writes a tag, a stash, a ref, or a file, and nothing about
-// the tree is different afterwards - so a caller recording one per lease
+// the tree is different afterwards, so a caller recording one per lease
 // pays only the cost of the probes, and a checkpoint nobody kept has cost nothing.
 // magus emits the facts; whoever holds the ledger decides what they mean.
 //
@@ -147,12 +147,12 @@ func untrackedDigest(ctx context.Context, dir string, res types.VCSResolution) s
 }
 
 // patchDigestBytes is how much of the hash the digest keeps: 16 bytes, rendered as
-// 32 hex chars - the width internal/diff.PatchDigest uses, which is the whole point
+// 32 hex chars: the width internal/diff.PatchDigest uses, which is the whole point
 // (see patchDigest below). Still short enough to sit in a ledger cell.
 const patchDigestBytes = 16
 
 // patchDigest fingerprints a patch: sha256 over the text, first patchDigestBytes
-// bytes, hex - 32 characters.
+// bytes, hex: 32 characters.
 //
 // The algorithm deliberately matches the review session's patch digest
 // (internal/diff.PatchDigest: hex over sum[:16], NOT 16 hex characters), so the two

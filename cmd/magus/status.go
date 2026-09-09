@@ -31,7 +31,7 @@ const statusWatchMin = 15 * time.Second
 
 // bindStatus registers status's flags from the command registry and installs its
 // usage banner. The hand-written options struct this replaced described itself as
-// "the middle ground between loose per-flag vars and a declarative registry" - the
+// "the middle ground between loose per-flag vars and a declarative registry"; the
 // registry now exists, so the middle ground is gone.
 func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
 	return func(fs *flag.FlagSet) {
@@ -73,8 +73,8 @@ func status(ctx context.Context, args []string) error {
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
-	// One probe for both decisions. They are the same question - may this loop move the
-	// cursor - and asking it twice with different answers is how a repaint gets set up on a
+	// One probe for both decisions. They are the same question (may this loop move the
+	// cursor), and asking it twice with different answers is how a repaint gets set up on a
 	// terminal that cannot repaint: InlineView measures with CanRender, so a weaker gate here
 	// only ever produced a view that fell back to appending, one full frame per tick.
 	canRender := tty.CanRender(os.Stdout, tty.SystemProbe)
@@ -82,7 +82,7 @@ func status(ctx context.Context, args []string) error {
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// while retaining the last snapshot until the next real poll. Every other
-	// mode has no animation - only queryTick drives reprints - so it does not
+	// mode has no animation (only queryTick drives reprints), so it does not
 	// start a ticker it will never select on.
 	var animTick *time.Ticker
 	if useGrid {
@@ -122,7 +122,7 @@ func status(ctx context.Context, args []string) error {
 }
 
 // clampStatusWatch floors the poll interval at statusWatchMin. Zero passes
-// through untouched - it is the caller's "not watching" sentinel, answered with a
+// through untouched: it is the caller's "not watching" sentinel, answered with a
 // single snapshot before this runs. A NEGATIVE interval clamps rather than
 // passing through, because time.NewTicker panics on anything at or below zero:
 // `magus status --watch -1s` took the whole process down instead of polling.
@@ -160,7 +160,7 @@ func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFram
 }
 
 // gridEnabled returns true when the pool graphic should be rendered. canRender
-// must already account for TERM=dumb (see [tty.CanRender]) - the grid draws
+// must already account for TERM=dumb (see [tty.CanRender]): the grid draws
 // SGR colors and a braille spinner unconditionally, so a dumb terminal that
 // merely passed a bare TTY check would render them as garbage.
 func gridEnabled(opts OutputOptions, canRender bool) bool {
@@ -220,7 +220,7 @@ type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, erro
 // applyStatusPools reads every proc server in addrs and folds them onto the report.
 //
 // The first one that answers (the stable daemon when it is up) becomes THE pool: every
-// renderer that shows a single pool - the grid, the compact line - reads it, and its shared
+// renderer that shows a single pool (the grid, the compact line) reads it, and its shared
 // services are the ones reported. The rest ride along in Pools, which stays empty for the
 // single-server case so it never just repeats Pool. A server that died between discovery
 // and the query is dropped rather than failing the report; PoolError is set only when
@@ -1093,7 +1093,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 
 // paintStatusFrame draws one watch frame, redrawing in place when it can.
 //
-// The fallback is the old behavior - erase the screen and reprint - and it is
+// The fallback is the old behavior (erase the screen and reprint), and it is
 // kept for the one case the in-place redraw genuinely cannot serve: a frame as
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much

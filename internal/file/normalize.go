@@ -8,9 +8,9 @@ import (
 )
 
 // NormalizeWorkspacePath canonicalises a path-SHAPED string to the workspace-relative,
-// forward-slash form magus names files by, so the spellings a human actually produces -
-// shell tab-completion's "./a/b", an editor's "Copy Path" absolute, a Windows-side
-// agent's "a\b" - all name what a bare "a/b" names.
+// forward-slash form magus names files by, so the spellings a human actually produces
+// (shell tab-completion's "./a/b", an editor's "Copy Path" absolute, a Windows-side
+// agent's "a\b") all name what a bare "a/b" names.
 //
 // ok is false when input is not path-shaped, or when it is a path that cannot be placed
 // inside root; the returned string is then input, unchanged. Leaving it alone is the
@@ -18,7 +18,7 @@ import (
 // path would name a DIFFERENT file, which is worse than finding nothing.
 //
 // Path-shaped means a separator or a drive letter. A bare term ("guard_shell.go",
-// "hint") is never touched, and neither is anything holding "://" - path.Clean collapses
+// "hint") is never touched, and neither is anything holding "://"; path.Clean collapses
 // a URL's double slash.
 //
 // A leading "/" that is not a real path under root is read as anchored AT the workspace

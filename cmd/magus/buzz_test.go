@@ -13,7 +13,7 @@ import (
 // TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean drives the actual `magus buzz`
 // code path (buzzCmd, the same function main.go dispatches to) end-to-end: a script
 // with an unused import must print the BZZ3001 warning to stderr and still exit
-// clean (nil error, which main.go turns into exit 0) - the whole point of a warning
+// clean (nil error, which main.go turns into exit 0): the whole point of a warning
 // is that it never fails the run.
 func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 	dir := t.TempDir()
@@ -40,7 +40,7 @@ func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 
 // TestBuzzCmd_SilentSuppressesUnusedImportWarning verifies -s/--silent, the flag
 // this command's own progress/error output already respects, also gates the new
-// warning line - a silent run should stay silent.
+// warning line: a silent run should stay silent.
 func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "unused.buzz")

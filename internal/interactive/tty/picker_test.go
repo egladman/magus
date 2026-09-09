@@ -232,8 +232,8 @@ func TestSessionMatchAtIsInertWithoutAKnownPosition(t *testing.T) {
 
 // TestSessionAsksTheTerminalOnlyOnce is a LATENCY test, not a correctness one.
 //
-// Every position query is a full round trip to the terminal - microseconds
-// locally, an RTT over ssh - and the block changes height on any keystroke that
+// Every position query is a full round trip to the terminal (microseconds
+// locally, an RTT over ssh), and the block changes height on any keystroke that
 // filters the list past the visible rows. Querying per redraw put an RTT of lag
 // on most of the typing, on exactly the connection where lag already hurts.
 func TestSessionAsksTheTerminalOnlyOnce(t *testing.T) {
@@ -375,8 +375,8 @@ func TestSessionKeepsTheScreenCorrectAcrossRedraws(t *testing.T) {
 // TestSessionAlwaysDrawsSomethingOnAShortTerminal is the frozen-terminal bug.
 //
 // The picker asks for ten rows plus a prompt. On a terminal shorter than that,
-// the inline view refuses the block - erasing it would walk off the top of the
-// screen - and before the window was bounded the picker drew nothing at all,
+// the inline view refuses the block (erasing it would walk off the top of the
+// screen), and before the window was bounded the picker drew nothing at all,
 // while still reading keys in raw mode. A blank terminal with no echo and no
 // prompt is indistinguishable from a hung process, and an eleven-row window is
 // an ordinary split pane.
@@ -479,13 +479,13 @@ func TestSelectMarkIsOneGlyphEverywhere(t *testing.T) {
 
 // pickerChrome is what the box costs the picker in rows: a rule above and a
 // rule below. The prompt moved onto the top rule and the way out onto the
-// bottom, so the list itself keeps every line it had - the net cost is one row,
+// bottom, so the list itself keeps every line it had: the net cost is one row,
 // and the surface now looks like the run's band because it IS the same box.
 const pickerChrome = pickerRules
 
 // TestPickerDrawsTheSameBoxAsTheBand is the integration this closes: two lists a
 // reader drives identically must not look like two products. Position still
-// differs on purpose - the picker draws where the cursor is - but the frame,
+// differs on purpose (the picker draws where the cursor is), but the frame,
 // the corners and the captions come from one place.
 func TestPickerDrawsTheSameBoxAsTheBand(t *testing.T) {
 	t.Parallel()

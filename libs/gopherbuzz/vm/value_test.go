@@ -130,7 +130,7 @@ func TestValueStringCircular(t *testing.T) {
 
 func TestValueRawEqual(t *testing.T) {
 	// This is a scalar-only spec: RawEqual compares raw tag+num bits, so heap
-	// values (str, list, map, ...) are not covered here - under buzz_safe and
+	// values (str, list, map, ...) are not covered here: under buzz_safe and
 	// buzz_unsafe their num is 0 and any two same-tag heap values compare equal.
 	// Use Equal (see TestValueEqual) for heap and language-level equality.
 	// Scalars with same tag and payload must be equal.
@@ -145,7 +145,7 @@ func TestValueRawEqual(t *testing.T) {
 
 // TestValueEqual pins down Buzz `==` semantics as exposed by Value.Equal. This
 // source runs under every value representation (nanbox, buzz_safe, buzz_unsafe)
-// and must agree in all three - RawEqual would diverge here for the heap cases.
+// and must agree in all three: RawEqual would diverge here for the heap cases.
 func TestValueEqual(t *testing.T) {
 	// String content equality, including a string built at runtime (not a
 	// compile-time literal) versus a literal of the same content.

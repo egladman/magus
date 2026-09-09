@@ -434,7 +434,7 @@ func TestPry_EOFResumesContinue(t *testing.T) {
 }
 
 // A session advertising no driver reaches the debugger the same way it reaches
-// the REPL - which reports it and keeps prompting. Pry dereferenced the driver
+// the REPL, which reports it and keeps prompting. Pry dereferenced the driver
 // instead, so a breakpoint under an engine with no REPL driver panicked on the
 // first line typed.
 func TestPry_NoDriverReportsError(t *testing.T) {
@@ -847,7 +847,7 @@ func TestCompleteFindsNothingQuietly(t *testing.T) {
 
 // TestWordStartTreatsBuzzMemberAccessAsOneWord pins the tokenizer against Buzz's
 // own syntax: a member access is a dot and a namespace is a backslash, so neither
-// may end a word - completing "fs.wri" has to see "fs." to know what it is.
+// may end a word: completing "fs.wri" has to see "fs." to know what it is.
 func TestWordStartTreatsBuzzMemberAccessAsOneWord(t *testing.T) {
 	assert.Equal(t, 0, wordStart("fs.wri", 6), "a dotted member is one word")
 	assert.Equal(t, 0, wordStart(`magus\Con`, 9), "a namespace is one word")

@@ -17,7 +17,7 @@ import (
 
 // TestCacheHeadersOnAnOpenWorkspace: the four header emitters are no-ops on an
 // Inspect workspace and reach the cache logger on an opened one. Nothing observable
-// comes back, so what this pins is that the live-cache path runs at all - the
+// comes back, so what this pins is that the live-cache path runs at all: the
 // Inspect path is covered by TestCacheOperationsWithoutOpenCache.
 func TestCacheHeadersOnAnOpenWorkspace(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
@@ -48,7 +48,7 @@ func TestCacheStatsAndDiskBytesOnAnOpenWorkspace(t *testing.T) {
 }
 
 // TestExportImportCacheRoundTrip: Export writes the whole cache as a gzip tar and
-// Import reads one back. An empty cache is the interesting case - it must produce a
+// Import reads one back. An empty cache is the interesting case: it must produce a
 // well-formed archive rather than nothing.
 func TestExportImportCacheRoundTrip(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
@@ -71,7 +71,7 @@ func TestPruneCacheDryRunRemovesNothing(t *testing.T) {
 }
 
 // TestPruneRemoteCacheNeedsABackend: pruning a remote is not a silent no-op when
-// none is wired - "there is no remote" and "the remote had nothing" are different
+// none is wired: "there is no remote" and "the remote had nothing" are different
 // answers, and only one of them means the retention policy ran.
 func TestPruneRemoteCacheNeedsABackend(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)

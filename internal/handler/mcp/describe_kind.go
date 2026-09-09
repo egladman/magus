@@ -68,7 +68,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	// at all, which is why it never went through Inspector.
 	case "charms":
 		// ListCharms reads the workspace's own default_charms set (m.cfg.DefaultCharms)
-		// off the receiver, so - unlike the old DescribeCharms(ctx, nil) this replaced -
+		// off the receiver, so (unlike the old DescribeCharms(ctx, nil) this replaced)
 		// the "applies without a :suffix" marking is populated here too, not just on
 		// the CLI path.
 		charms, err := t.ws.ListCharms(ctx)
@@ -98,7 +98,7 @@ func (t *describeKindTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 }
 
 // spellReport wraps the inventory in the wire envelope. Count is derived here, at
-// the one place that serializes, rather than carried on the inventory itself - the
+// the one place that serializes, rather than carried on the inventory itself: the
 // narrowing below used to have to remember to set it.
 func spellReport(entries []types.Spell) types.SpellReport {
 	return types.SpellReport{Definition: types.SpellDefinition, Count: len(entries), Spells: entries}
@@ -163,7 +163,7 @@ func describeTargetByName(ctx context.Context, ws types.Inspector, name string) 
 var _ spells.Driver = (*describeKindTool)(nil)
 
 // describeFileTool classifies paths against the workspace's declared source and
-// output globs - the read half of generated-file hygiene. Lives here with the
+// output globs, the read half of generated-file hygiene. Lives here with the
 // other describe tool: one file per feature, and this is describe's file noun.
 type describeFileTool struct {
 	ws types.Inspector

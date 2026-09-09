@@ -14,9 +14,9 @@ import (
 // The interactive showcase: a real session, driven by real keystrokes, that
 // walks the surfaces a reader cannot see in a transcript.
 //
-// core-loop.capture shows what magus PRINTS. This shows what it DRAWS - the
+// core-loop.capture shows what magus PRINTS. This shows what it DRAWS (the
 // pinned band, the failure tree beside its captured output, the picker
-// searching the knowledge graph - none of which appear in a piped log, and all
+// searching the knowledge graph), none of which appear in a piped log, and all
 // of which are the reason the terminal work exists.
 //
 // The frames are marked as they are taken rather than inferred afterwards.
@@ -85,7 +85,7 @@ func recordShowcase(dir string) error {
 // showcaseScript is the demo, as keystrokes.
 //
 // Written as data rather than a shell script because the interesting beats are
-// INSIDE magus - selecting a failure, tabbing focus, typing into the picker -
+// INSIDE magus (selecting a failure, tabbing focus, typing into the picker),
 // where a shell has no way to reach.
 func showcaseScript() []showcaseStep {
 	const (
@@ -113,14 +113,14 @@ func showcaseScript() []showcaseStep {
 		// 4. Move the selection: the preview follows it.
 		{keys: down, settle: 900 * time.Millisecond, frame: true},
 
-		// 5. Focus swaps which view is large - the golden ratio in motion.
+		// 5. Focus swaps which view is large, the golden ratio in motion.
 		{keys: tab, settle: 900 * time.Millisecond, frame: true},
 		{keys: tab, settle: 700 * time.Millisecond, frame: true},
 
 		// 6. [o] prints the whole captured output into the TRANSCRIPT, where it
 		//    is ordinary scrollback: no box, no padding, no divider, so it can
 		//    be selected and copied the way any other terminal text can. That
-		//    is the answer to "the band's two columns share rows" - the band is
+		//    is the answer to "the band's two columns share rows": the band is
 		//    for reading, the transcript is for taking.
 		{keys: "o", settle: 1400 * time.Millisecond, frame: true},
 
@@ -186,7 +186,7 @@ func renderShowcase(capture string, theme screen.Theme) (string, error) {
 // against it.
 //
 // The SAME fixture the core loop uses, so both recordings show one product
-// rather than two invented ones - and so a change to the demo projects is
+// rather than two invented ones, and so a change to the demo projects is
 // visible in both.
 func recordShowcaseSession() error {
 	dir, err := os.MkdirTemp("", "magus-showcase.*")

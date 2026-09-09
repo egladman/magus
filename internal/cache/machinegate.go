@@ -53,7 +53,7 @@ var machineWaiterSeq atomic.Int64
 
 // ExitCodeMachineBusy is the process status a machine-budget refusal asks for: 75,
 // EX_TEMPFAIL. It lives here rather than beside the CLI's other exit codes because the
-// error is built here and has to state its own code - the daemon runs an adopted step
+// error is built here and has to state its own code: the daemon runs an adopted step
 // in its own process and reads the code off the error, having lost the Go type.
 //
 // The workspace lock's own contention error picks the same number for the same reason
@@ -120,8 +120,8 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 // ancestry says we cannot tell which claims are our parent's.
 //
 // It asks ancestorInvocations rather than the context, so the two agree on what this run
-// knows. Reading ctx alone made every library consumer blind by construction - the
-// variable was in the process the whole time - and refused an in-process SDK run against
+// knows. Reading ctx alone made every library consumer blind by construction (the
+// variable was in the process the whole time), and refused an in-process SDK run against
 // its own parent's claim.
 func blindToOwnAncestry(ctx context.Context) bool {
 	return runPkg.CurrentLevel() > 0 && len(ancestorInvocations(ctx)) == 0
@@ -213,7 +213,7 @@ func machineWaiterID(c types.MachineClaim) string {
 // the competing set.
 //
 // The CLI and the daemon stamp ancestry onto ctx at their own entry points; a LIBRARY
-// caller does not, and admission is the THIRD entry point to need this - the project
+// caller does not, and admission is the THIRD entry point to need this: the project
 // lock hit it first and fixed it the same way (see acquireLocks). Without the fallback
 // a Go test driving magus in-process reads an empty ancestry however deep inside a
 // magus process tree it is running, so it cannot be excused from the claim its own

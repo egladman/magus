@@ -85,7 +85,7 @@ func TestTimeoutDeclarationsStaysQuiet(t *testing.T) {
 }
 
 // An undeclared target is unbounded on purpose, so there is no declaration to keep
-// honest and no finding to make - however long it has run.
+// honest and no finding to make, however long it has run.
 func TestTimeoutDeclarationsIgnoresUndeclaredTargets(t *testing.T) {
 	path := durationHistoryWith(t, ".", map[string]time.Duration{"go/go-test": 15 * time.Minute})
 	got := runnerFor(path).checkTimeoutDeclarations([]*types.Project{

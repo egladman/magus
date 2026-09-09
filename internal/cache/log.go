@@ -97,6 +97,18 @@ type PrettyHandler struct {
 	// Per RUN rather than a constant line, because a run that minted none would
 	// otherwise explain a notation nothing on screen uses.
 	mintedRef bool
+	// blocked groups a root failure with the dependent targets whose failure
+	// only restated it, so one cause is printed once and the targets it took
+	// down are named in a single line at the summary. blockedAt indexes into it
+	// by cause; both are per RUN and cleared by resetRun.
+	//
+	// Ordering assumption: a dependency fails before its dependents, so the root
+	// reports first and becomes the key holder. Nothing enforces that. If some
+	// path ever reported a dependent first, the dependent would hold the key and
+	// the real root would be listed as blocked by it. That reads no worse than
+	// printing every restatement in full, which is what happens today.
+	blockedAt map[causeKey]int
+	blocked   []blockedGroup
 	// rowFailure maps each band row to the index in the drawn failure list it
 	// shows, or -1 for a row that is not a failure (a project header). Written
 	// by band, read by HitFailure.
@@ -114,7 +126,7 @@ type PrettyHandler struct {
 	// now reads the clock, so a caller rendering to a picture can hold it still.
 	//
 	// The status row carries elapsed time, which makes an otherwise pure
-	// function of the records a function of WHEN it ran - and the documentation
+	// function of the records a function of WHEN it ran, and the documentation
 	// renderer commits its output, where a live clock is drift on every run.
 	// Never nil: the constructors default it.
 	now func() time.Time
@@ -214,7 +226,7 @@ func PoolGauge(running, capacity int) string {
 		marks = append(marks, slotIdle)
 	}
 	// SPACED, not butted together. Contiguous blocks read as one bar being
-	// filled - a proportion - and this is not a proportion: it is eight
+	// filled (a proportion), and this is not a proportion: it is eight
 	// discrete slots, and a reader should be able to count them. The space is
 	// what makes them countable.
 	//
@@ -244,17 +256,17 @@ func (h *PrettyHandler) paintStatus() {
 // The status row is reserved unconditionally rather than latched on first use.
 // The old Region latched it so a handler that never showed a status line did
 // not pay a blank row for the option, but a run reports pool occupancy as soon
-// as work starts, so the row was claimed in every case that mattered - and
+// as work starts, so the row was claimed in every case that mattered, and
 // latching cost the oldest visible failure whenever it happened late.
 func (h *PrettyHandler) band() []tty.Line {
 	// NO_COLOR applies here too. It is easy to miss, because the band only
-	// exists on a terminal and color is what makes it readable - but the
+	// exists on a terminal and color is what makes it readable, but the
 	// variable says any non-empty value disables color, without an exception
 	// for the parts an author is fond of. Position and wording already carry
 	// the meaning: the status line is on top, failures below it.
 	//
 	// The selection is the one thing that CANNOT be dropped, since it is not
-	// decoration - it says which row a keypress will act on, and without it the
+	// decoration: it says which row a keypress will act on, and without it the
 	// prompt is unusable. Reverse video is not a color, so it stays.
 	color := h.wantsColor()
 	var dim tty.SGR
@@ -268,7 +280,7 @@ func (h *PrettyHandler) band() []tty.Line {
 	// sideways once a second; pinned right, the counters hold still and the
 	// eye stops chasing them.
 	// The status goes in the box's TOP RULE, not in a row of its own. It
-	// describes the band, so the frame is where it belongs - and it stops
+	// describes the band, so the frame is where it belongs, and it stops
 	// costing a row, which on a run with nothing wrong was the difference
 	// between a two-row band and a three-row one.
 	left, elapsed := h.status.render(h.now())
@@ -278,13 +290,13 @@ func (h *PrettyHandler) band() []tty.Line {
 	// PRUNED to what went wrong, so a run with nothing wrong draws no tree.
 	//
 	// rowFailure is built here because only this loop knows which rows are
-	// targets and which are headers - hit-testing by position resolved a click
+	// targets and which are headers: hit-testing by position resolved a click
 	// one row off.
 	drawn := h.drawnLocked()
 	// BUDGETED before drawing, because a tree costs a header row as well as a
 	// row per failure and the band's ceiling did not move when it stopped being
 	// a flat list. Rows past the ceiling are dropped by Lease.Set, silently, and
-	// the "+N more" count was computed from rows DRAWN - so a band that had
+	// the "+N more" count was computed from rows DRAWN, so a band that had
 	// discarded two failures reported none hidden while the title said four
 	// failed. Deciding what fits here is what makes that count honest.
 	drawn = drawn[:fitsInBand(drawn, h.ceilingLocked())]
@@ -347,7 +359,7 @@ func (h *PrettyHandler) band() []tty.Line {
 			Style: dim,
 		})
 		// Kept in step. rowFailure is a parallel array, and its whole
-		// justification is that the code DRAWING a row records what it is - so
+		// justification is that the code DRAWING a row records what it is, so
 		// a row appended without an entry silently shifts every index below it.
 		// Harmless today only because nothing clickable follows.
 		h.rowFailure = append(h.rowFailure, -1)
@@ -358,7 +370,7 @@ func (h *PrettyHandler) band() []tty.Line {
 // withPreview folds the selected failure's output into a second column.
 //
 // The divider and the right column are appended to each row as SPANS, so the
-// existing layout does the alignment and clipping - there is no second region,
+// existing layout does the alignment and clipping; there is no second region,
 // no pty, and nothing here that could hold content the handler did not produce.
 // A vertical split drawn by the terminal would need DECSLRM, which is not
 // portable; composing the columns into rows magus already repaints is.
@@ -370,7 +382,7 @@ func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
 		return rows
 	}
 	// The band is capped (see repaint), so the preview is windowed to what will
-	// actually be drawn - and the window is taken from the END.
+	// actually be drawn, and the window is taken from the END.
 	//
 	// Assigning preview[i] to row i showed the FIRST lines of a tail that was
 	// collected precisely because the last ones matter: a reader saw
@@ -391,7 +403,7 @@ func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
 		// Anything the row aligned RIGHT was aligned against the whole terminal,
 		// which is no longer where its column ends: a duration would sail past
 		// the divider and land beyond the output. So the left column is
-		// flattened here - its right-aligned spans are padded into place inside
+		// flattened here: its right-aligned spans are padded into place inside
 		// the split column and then laid out left, which is the only way a
 		// row-global alignment can serve a column.
 		var left, tail []tty.Span
@@ -425,13 +437,13 @@ func (h *PrettyHandler) withPreview(rows []tty.Line, dim tty.SGR) []tty.Line {
 //
 // A write error is deliberately NOT latched into h.err. The bool is the signal
 // callers act on, and latching would short-circuit the printf helpers on
-// exactly the path where the terminal is already misbehaving - swallowing the
+// exactly the path where the terminal is already misbehaving, swallowing the
 // cause and reproduce lines a reader needs most.
 func (h *PrettyHandler) repaint() bool {
 	rows := h.band()
 	// The band is sized to what it HAS, not to what it might one day hold.
 	// It used to lease six rows from the first paint, so a run with nothing
-	// wrong reserved five blank rows for failures that never came - and once
+	// wrong reserved five blank rows for failures that never came, and once
 	// the zone drew a box around them, the emptiness became the most visible
 	// thing on screen. Growing on demand costs one Grow per new failure and
 	// gives the scrolling transcript back the rows nobody was using.
@@ -467,8 +479,8 @@ func (h *PrettyHandler) ensureLease() {
 // non-TTY writer disables it.
 func NewPrettyHandler(w io.Writer, level slog.Level) *PrettyHandler {
 	// One handler per terminal, for the same reason there is one tty.Zone: the
-	// display is process-scoped because the terminal is. Two handlers - the
-	// CLI's process-wide default and the Cache's own - became two views of one
+	// display is process-scoped because the terminal is. Two handlers (the
+	// CLI's process-wide default and the Cache's own) became two views of one
 	// run holding half its state each, so failures pinned by one were
 	// unreachable from the other.
 	//
@@ -498,8 +510,8 @@ var (
 )
 
 // StderrHandler returns the process's display handler if one was built, or nil.
-// It is how a caller that did not construct the handler - the CLI's exit path,
-// offering an interactive prompt over the run's pinned failures - reaches the
+// It is how a caller that did not construct the handler (the CLI's exit path,
+// offering an interactive prompt over the run's pinned failures) reaches the
 // one holding them.
 func StderrHandler() *PrettyHandler {
 	stderrPrettyMu.Lock()
@@ -542,7 +554,7 @@ func newPrettyHandlerZone(w io.Writer, level slog.Level, p tty.Probe, z *tty.Zon
 
 // stickyRegionRows is how many terminal rows this handler leases: one for the
 // live pool status line, five for failures. Small on purpose, so the scrolling
-// output above stays the main view - and so a second consumer of the zone (a
+// output above stays the main view, and so a second consumer of the zone (a
 // notification band) can still be granted rows on an ordinary 24-row terminal.
 const stickyRegionRows = 6
 
@@ -596,7 +608,7 @@ func (h *PrettyHandler) printf(format string, args ...any) {
 	}
 	// Redacted at the funnel, not per record type. This handler renders a dozen kinds
 	// (run.exec, cache.stage, charms, ...) and any of them can carry a value a magusfile
-	// read through magus\secret.read - run.exec does, because it echoes the argv of a
+	// read through magus\secret.read: run.exec does, because it echoes the argv of a
 	// command a target may have passed a token to. Redacting each kind separately is the
 	// rule that gets forgotten when the thirteenth is added; this is every line the
 	// handler will ever print, in one place.
@@ -621,7 +633,7 @@ func (h *PrettyHandler) WithGroup(_ string) slog.Handler      { return h }
 // Handle renders one record. It deliberately does NOT skip on ctx.Err(): a handler must
 // not treat cancellation as permission to drop output. The check that used to live here
 // was inert for as long as it existed, because every call site reached slog through
-// Logger.Info/Warn/..., which passes context.Background() - Err() was never non-nil. Once
+// Logger.Info/Warn/..., which passes context.Background(); Err() was never non-nil. Once
 // the run path started passing its REAL context (so records could reach the secret
 // resolver), it woke up and began eating exactly the lines that matter most: in a
 // concurrent run, the first failure cancels the errgroup, and every [pass]/[fail] that
@@ -667,7 +679,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 		h.paintStatus()
 		// The ONE run event that earns a notification. It is not information
-		// about the run - it is the run having stopped, for an unbounded time,
+		// about the run; it is the run having stopped, for an unbounded time,
 		// on something only the user can shorten: go see what that process is,
 		// or wait for it. Everything else magus knows during a run is either
 		// passive (a cache hit, a pool sample, a summary) or already pinned
@@ -737,11 +749,16 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.paintStatus()
 	case "cache.summary":
 		elapsed := recordDur(r, "elapsed")
-		// A dry run ends with the same footer a real one does - that is the whole
-		// point of routing it through this event - but it cannot borrow the real
+		// A dry run ends with the same footer a real one does (that is the whole
+		// point of routing it through this event), but it cannot borrow the real
 		// wording: nothing executed, so "cached / ran / failed" would all read 0
 		// for a plan that intends to run plenty. Dry-ness is stated here and
 		// nowhere else in the run, so the two outputs differ in one line.
+
+		// Ahead of the counts, because it is the list that turns the one printed
+		// failure back into the full set of targets that stopped.
+		h.printBlocked(colorize)
+
 		lead := "summary: "
 		if colorize {
 			lead = "\nSummary: "
@@ -761,7 +778,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		//
 		// UNLESS there are failures still pinned on a live band. Releasing then
 		// would erase, at the exact moment they became actionable, the list a
-		// reader is about to be offered - so the rows are held and whoever runs
+		// reader is about to be offered, so the rows are held and whoever runs
 		// the prompt gives them back. Nothing leaks if no prompt follows: the
 		// process exit path releases every lease regardless.
 		if !h.hasPinnedFailures() || !h.lease.Enabled() {
@@ -776,7 +793,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 	case "cache.dry":
 		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes), and
 		// no duration for the same reason. Everything else matches the executed
-		// line - including the repro command underneath - so a plan and a run read
+		// line (including the repro command underneath), so a plan and a run read
 		// the same way and only the glyph and the footer say which one you got.
 		h.printf("%s %s\n", glyph(colorize, "dry", colDim), label)
 		h.printRepro(recordStr(r, "project"), recordStr(r, "target"))
@@ -785,7 +802,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// per-PROCESS, so the two have to be separated explicitly or a process
 		// that outlives one run reports the sum of every run it has ever seen.
 		// That is invisible in a one-shot CLI and wrong the moment anything
-		// long-lived - a TUI left open, the daemon - drives more than one.
+		// long-lived (a TUI left open, the daemon) drives more than one.
 		h.resetRun()
 		label := recordStr(r, "label")
 		source := recordStr(r, "source")
@@ -880,7 +897,7 @@ const (
 	// These name the palette tty already defines rather than restating the
 	// codes, so a wrong sequence stays a compile error in one place. The file
 	// used both spellings before, which is how they were free to drift.
-	colDimGreen = tty.SGRDimGreen // cached (passed without running) - low signal
+	colDimGreen = tty.SGRDimGreen // cached (passed without running): low signal
 	colGreen    = tty.SGRGreen    // ran and passed
 	colRed      = tty.SGRRed      // failed
 	colYellow   = tty.SGRYellow   // warning
@@ -942,7 +959,7 @@ func (h *PrettyHandler) printRepro(project, target string) {
 		return
 	}
 	// Unindented: nothing else on screen uses depth, so the indent bought grouping
-	// that adjacency already gives while costing copy fidelity - a reader selecting
+	// that adjacency already gives while costing copy fidelity: a reader selecting
 	// the line got leading whitespace they had to strip.
 	h.printf("%s\n", hint.Run.With(target, project))
 }
@@ -950,7 +967,7 @@ func (h *PrettyHandler) printRepro(project, target string) {
 // failureReport is one failure as printFailure needs it.
 //
 // A struct rather than a parameter list because the list had five adjacent
-// strings - label, project, target, cause, ref, logPath - and any two of them
+// strings (label, project, target, cause, ref, logPath), and any two of them
 // transposed compiles cleanly and prints a plausible, wrong failure. Named
 // fields make the same mistake unwriteable.
 type failureReport struct {
@@ -961,6 +978,20 @@ type failureReport struct {
 	cause   string
 	ref     string
 	logPath string
+}
+
+// causeKey identifies a failure by its project and by its cause with every
+// dependency hop stripped, which is exactly what a root failure and each target
+// it blocked have in common.
+type causeKey struct {
+	project string
+	cause   string
+}
+
+// blockedGroup is one root failure and the targets suppressed under it.
+type blockedGroup struct {
+	root    string   // heading of the target that reported the cause first
+	blocked []string // targets whose failure only restated it, in report order
 }
 
 // printFailure keeps the failure and every useful next step together so a reader
@@ -977,6 +1008,9 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	heading := label
 	if target != "" {
 		heading += " " + target
+	}
+	if h.suppressBlocked(heading, project, target, cause) {
+		return
 	}
 	h.ensureLease()
 	pinned := false
@@ -1000,9 +1034,9 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		pinned = h.repaint()
 	}
 	if !pinned {
-		// A failure is a RECORD, not a view: when it cannot be pinned - no
-		// terminal, no room, a window that shrank mid-run, a write that failed
-		// - it still has to reach the user, so it goes to the scrolling output
+		// A failure is a RECORD, not a view: when it cannot be pinned (no
+		// terminal, no room, a window that shrank mid-run, a write that failed)
+		// it still has to reach the user, so it goes to the scrolling output
 		// instead. This is the branch tty.Lease.Set's bool exists for.
 		//
 		// A write error here is deliberately not latched: latching would
@@ -1036,7 +1070,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 			// The command is a hyperlink to the captured log on disk, so the ref
 			// can be REACHED from the transcript as well as retyped. This is the
 			// only way to make something up there actionable: those rows scroll,
-			// so magus cannot hit-test a click on them - they belong to the
+			// so magus cannot hit-test a click on them; they belong to the
 			// terminal's own selection. Terminals without OSC 8 get the plain
 			// command, which is what a reader copies anyway.
 			h.printf("  %s\n", tty.Colorize("inspect: "+h.linkify(full, logPath), colDim))
@@ -1057,6 +1091,92 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	}
 }
 
+// suppressBlocked files this failure under the root that already reported the
+// same cause and says whether it was suppressed.
+//
+// It runs before anything is printed or pinned. A suppressed failure that had
+// already taken a slot in the failure ring would push a real one out of the band.
+//
+// Counters are deliberately untouched: a blocked target did fail, and the
+// summary has to keep saying so. This changes what is printed, not what is counted.
+func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) bool {
+	if cause == "" {
+		return false
+	}
+	sig, viaDeps := causeSignature(cause)
+	key := causeKey{project: project, cause: sig}
+	i, known := h.blockedAt[key]
+	if !known {
+		if h.blockedAt == nil {
+			h.blockedAt = make(map[causeKey]int)
+		}
+		h.blockedAt[key] = len(h.blocked)
+		h.blocked = append(h.blocked, blockedGroup{root: heading})
+		return false
+	}
+	if !viaDeps {
+		return false
+	}
+	name := target
+	if name == "" {
+		name = heading
+	}
+	h.blocked[i].blocked = append(h.blocked[i].blocked, name)
+	return true
+}
+
+// printBlocked names, once per root, the targets whose failure was suppressed as
+// a restatement of it. A run that blocked nothing prints nothing.
+func (h *PrettyHandler) printBlocked(colorize bool) {
+	for _, g := range h.blocked {
+		if len(g.blocked) == 0 {
+			continue
+		}
+		line := "blocked by " + g.root + ": " + strings.Join(g.blocked, ", ")
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s\n", line)
+	}
+}
+
+// causeSignature reduces a cause to what a root failure and everything it
+// blocked share: the messages with their dependency hops stripped, in order and
+// without repeats. A target that composes several failing chains restates the
+// same message once per chain, so the repeats have to collapse or its signature
+// could never match the root's.
+//
+// The second return says every line arrived through a dependency. A cause with
+// no hops is the target's own failure, and a target reporting its own failure is
+// never suppressed however familiar the message looks.
+func causeSignature(cause string) (sig string, viaDeps bool) {
+	var msgs []string
+	seen := make(map[string]bool)
+	viaDeps = true
+	for _, part := range strings.Split(cause, "\n") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		hops, msg := splitHopChain(part)
+		if len(hops) == 0 {
+			viaDeps = false
+		}
+		if msg == "" {
+			msg = part
+		}
+		if seen[msg] {
+			continue
+		}
+		seen[msg] = true
+		msgs = append(msgs, msg)
+	}
+	if len(msgs) == 0 {
+		return cause, false
+	}
+	return strings.Join(msgs, "\n"), viaDeps
+}
+
 func failureCauseExcerpt(cause string) string {
 	const maxRunes = 240
 	cause = strings.Join(strings.Fields(cause), " ")
@@ -1074,23 +1194,44 @@ func failureCauseExcerpt(cause string) string {
 //
 // The hops are not guessed: every ctx.needs hop wraps the message again, so each
 // marker names the segment that follows it, and the markers are read before being
-// removed. Guessing from shape cannot work - `exec`, `config.json` and
+// removed. Guessing from shape cannot work: `exec`, `config.json` and
 // `./main.go:5:2` all look like target names.
 //
 // The leading segment joins the path when any marker follows it. Everything else
 // is the message, colons and all.
 func hopChain(cause string) string {
-	const marker = "ctx.needs"
+	hops, message := splitHopChain(cause)
+	// Drawing a path needs two hops to be worth it, and a chain with nothing
+	// under it has no message to hang off one. Both fall back to the cause with
+	// the markers removed. This is a RENDERING choice; splitHopChain still
+	// reports the hops and the message it found, which is what lets a
+	// single-hop dependent be matched against the root it restates.
+	if len(hops) < 2 || message == "" {
+		return strings.ReplaceAll(cause, hopMarker+": ", "")
+	}
+	return strings.Join(hops, " -> ") + ": " + message
+}
+
+// hopMarker is the plumbing prefix every ctx.needs hop wraps a cause in.
+const hopMarker = "ctx.needs"
+
+// splitHopChain separates a cause into the dependency hops that carried it and
+// the message underneath, without deciding how either is rendered.
+//
+// The message is the half that identifies a failure across a cascade: every hop
+// wraps the same text again, so a root and each of its dependents produce a
+// byte-identical message here.
+func splitHopChain(cause string) (hops []string, message string) {
 	segs := strings.Split(cause, ": ")
-	var hops, rest []string
+	var rest []string
 	pending := false // the previous segment was a marker, so this one is a hop
 	for i, seg := range segs {
 		switch {
-		case seg == marker:
-			// rest is empty at the top of every iteration - the loop breaks the
-			// moment it is not - so there is nothing to guard against here.
+		case seg == hopMarker:
+			// rest is empty at the top of every iteration (the loop breaks the
+			// moment it is not), so there is nothing to guard against here.
 			pending = true
-		case pending || (i == 0 && len(segs) > 1 && segs[1] == marker):
+		case pending || (i == 0 && len(segs) > 1 && segs[1] == hopMarker):
 			hops = append(hops, seg)
 			pending = false
 		default:
@@ -1100,10 +1241,7 @@ func hopChain(cause string) string {
 			break
 		}
 	}
-	if len(hops) < 2 || len(rest) == 0 {
-		return strings.ReplaceAll(cause, marker+": ", "")
-	}
-	return strings.Join(hops, " -> ") + ": " + strings.Join(rest, ": ")
+	return hops, strings.Join(rest, ": ")
 }
 
 // failureCauses splits a joined failure into one line per independent cause and
@@ -1128,7 +1266,7 @@ func failureCauses(cause string) []string {
 // blank line.
 //
 // The id stays the LAST token on its own line, which is what makes a double-click
-// select exactly it - the property that matters most, because a ref's whole job is
+// select exactly it: the property that matters most, because a ref's whole job is
 // to be copied into `magus x <ref>` or `magus query output <ref>`. The label is
 // what makes it findable in a wall of build output; the blank line is what stops it
 // reading as stray output from the target above.
@@ -1147,7 +1285,7 @@ func (h *PrettyHandler) printRef(ref string) {
 // printRefLegend says once, at the end of a run, what the bare ids above are.
 //
 // Without it a reader who has not met output refs has fourteen characters and no
-// verb - often an AGENT in a fresh worktree with no magus skills installed, for
+// verb: often an AGENT in a fresh worktree with no magus skills installed, for
 // which the transcript is the only surface guaranteed to reach it.
 //
 // One line per run, and only when a ref was minted, so it never explains a
@@ -1193,7 +1331,7 @@ func recordStrs(r slog.Record, key string) []string {
 // recordDur reads a duration attr, accepting both spellings callers use.
 //
 // slog.Int64("duration", int64(d)) arrives as KindInt64 and slog.Duration(...)
-// as KindDuration, and this used to accept only the first - so a caller using
+// as KindDuration, and this used to accept only the first, so a caller using
 // the obvious constructor got a silent zero. internal/handler/mcp logs exactly
 // that shape. Harmless today only because the one reader of those records
 // ignores the field, which is not a property worth relying on.
@@ -1276,7 +1414,7 @@ func recordInt(r slog.Record, key string) int {
 // none or it was too small to explain anything.
 //
 // The threshold is deliberate. A number that appears on every line stops being read, and
-// a 30ms cache probe is not why your build felt slow - so this stays silent until remote
+// a 30ms cache probe is not why your build felt slow, so this stays silent until remote
 // waiting is both material in absolute terms and a real share of the step. What survives
 // is the case worth interrupting for: most of your wait was the network, not your build.
 func remoteSuffix(remote, total time.Duration) string {
@@ -1313,7 +1451,7 @@ func (h *PrettyHandler) blockedMessage() string {
 	// The PROJECT is named here, and that is not decoration. It used to be
 	// stated on the status row; moving the status into the box's title dropped
 	// the clause, and with it the only thing on screen saying WHICH project was
-	// blocked - a reader saw a pid and had to guess what it was holding.
+	// blocked: a reader saw a pid and had to guess what it was holding.
 	what := "the workspace lock"
 	if h.status.blocked != "" {
 		what = "the lock on " + h.status.blocked
@@ -1326,8 +1464,8 @@ func (h *PrettyHandler) blockedMessage() string {
 
 // Failure is one failed target, as the pinned band holds it.
 //
-// It carries what an ACTION needs - which project, which target, which captured
-// output - alongside the line the reader sees. The band used to hold only the
+// It carries what an ACTION needs (which project, which target, which captured
+// output) alongside the line the reader sees. The band used to hold only the
 // rendered heading, which meant the failures were on screen and unreachable:
 // everything needed to rerun one was known at the moment it was formatted and
 // thrown away immediately afterwards.
@@ -1345,7 +1483,7 @@ type Failure struct {
 	// than only baked into Heading.
 	//
 	// A single pre-formatted string cannot be laid out. Durations are the one
-	// column a reader scans down - "which of these was slow" - and that only
+	// column a reader scans down ("which of these was slow"), and that only
 	// works if they share a right edge, which needs them separable from the
 	// text they follow. Heading stays for the plain-output path, where there
 	// is no column to align to.
@@ -1355,7 +1493,7 @@ type Failure struct {
 // SetFocus moves focus between the two views, which resizes them: the focused
 // one takes the golden ratio's major share.
 //
-// Resizing on focus rather than offering a drag handle is deliberate - there is
+// Resizing on focus rather than offering a drag handle is deliberate: there is
 // no pointer contract to invent, and the pane you are working in is the one
 // that should be big.
 func (h *PrettyHandler) SetFocus(f PaneFocus) {
@@ -1383,7 +1521,7 @@ func (h *PrettyHandler) ToggleFocus() PaneFocus {
 // SetPreview gives the band a right-hand column: the captured output of
 // whatever is selected. Nil or empty returns it to a single column.
 //
-// This is the "two views, one run" surface. It is deliberately not two PANES -
+// This is the "two views, one run" surface. It is deliberately not two PANES:
 // nothing here manages a terminal, and a caller cannot put arbitrary content in
 // it. Both columns are things this handler already owns, which is the line
 // between showing a reader their run and becoming a multiplexer.
@@ -1401,7 +1539,7 @@ func (h *PrettyHandler) SetPreview(lines []string) {
 // the other the minor.
 //
 // phiMajor is 1/phi. The two shares sum to 1, so the divider lands at the same
-// place whichever view has focus - the panes trade sizes rather than the layout
+// place whichever view has focus: the panes trade sizes rather than the layout
 // reflowing around a third number.
 //
 // A ratio rather than a fixed column because a fixed one is only ever right at
@@ -1451,7 +1589,7 @@ const (
 // straight through.
 //
 // Reports false for the status row, for an empty ring slot, and for any row
-// outside this handler's band - including a click on another consumer's rows.
+// outside this handler's band, including a click on another consumer's rows.
 func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -1462,7 +1600,7 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 	// Indexed against the DRAWN list, not the ring, and through rowFailure,
 	// which band builds as it draws.
 	//
-	// Every attempt to re-derive this has resolved a click one row off - worse
+	// Every attempt to re-derive this has resolved a click one row off: worse
 	// than not resolving, since it reruns a target the reader did not point at.
 	// The band skips empty slots and its rows are not all failures (a project
 	// header names no target), so the mapping is recorded by the code that draws
@@ -1486,7 +1624,7 @@ func (h *PrettyHandler) HitFailure(row int) (Failure, bool) {
 // previewBandRows is the band's ceiling while a second column is showing.
 //
 // Taller than the one-column ceiling on purpose: the tree and the output share
-// the rows, so at six the tree took five and left the log ONE line - of a tail
+// the rows, so at six the tree took five and left the log ONE line, of a tail
 // collected precisely because the last lines matter. This is a deliberate
 // interaction a reader opened, not a background band, so it may take the room;
 // it goes back to stickyRegionRows the moment the preview is cleared.
@@ -1510,7 +1648,7 @@ func fitsInBand(drawn []Failure, ceiling int) int {
 	// The overflow row is budgeted only once it is known to be needed. Reserving
 	// it unconditionally cost the last failure its row: five failures in a
 	// six-row band is one header plus five rows, which fits exactly, yet the
-	// loop stopped at four and spent the sixth row on "+1 more" - so the fifth
+	// loop stopped at four and spent the sixth row on "+1 more", so the fifth
 	// pinned failure was never drawable at all. The guard that was meant to
 	// catch this compared n and rows AFTER the loop had already truncated, and
 	// both of its arms returned the same n.
@@ -1559,7 +1697,7 @@ func (h *PrettyHandler) drawnLocked() []Failure {
 	}
 	// SORTED by project, because the band draws a tree and a tree needs its
 	// children adjacent. Ring order is arrival order, and under a pool of eight
-	// failures interleave across projects by default - so "start a header when
+	// failures interleave across projects by default, so "start a header when
 	// the project changes" was run-length encoding, not grouping: api, std, api
 	// drew TWO api headers and a five-failure band spent half its rows on
 	// repeated titles. Stable, so within a project the arrival order the ring
@@ -1574,7 +1712,7 @@ func (h *PrettyHandler) drawnLocked() []Failure {
 // not a row.
 //
 // Drawn order, not arrival order. The ring keeps a failure in the row it was
-// painted into, so once it has wrapped the oldest entry sits in the middle -
+// painted into, so once it has wrapped the oldest entry sits in the middle,
 // and the list has to match the screen, because a reader picks by position.
 func (h *PrettyHandler) Failures() []Failure {
 	h.mu.Lock()
@@ -1652,8 +1790,8 @@ func (h *PrettyHandler) releaseBand() error {
 // link that is dead half the time is worse than no link. The log file is
 // written before the failure is ever printed, so locally this one cannot be.
 //
-// "Locally" is load-bearing - over ssh the path names a file on the remote
-// machine and the terminal would resolve it locally - which is why
+// "Locally" is load-bearing (over ssh the path names a file on the remote
+// machine and the terminal would resolve it locally), which is why
 // tty.WantsHyperlinks refuses there rather than this deciding it.
 func (h *PrettyHandler) linkify(text, path string) string {
 	if path == "" || !tty.WantsHyperlinks(h.w, h.probe) {
@@ -1669,7 +1807,7 @@ func (h *PrettyHandler) linkify(text, path string) string {
 // resetRun clears everything that describes ONE run, leaving what describes the
 // terminal. Callers hold h.mu.
 //
-// Terminal ownership - the zone, the lease, the notification band - is
+// Terminal ownership (the zone, the lease, the notification band) is
 // process-scoped and must survive across runs; counters, the elapsed clock, the
 // pinned failures and the selection describe a single run and must not.
 //
@@ -1681,8 +1819,10 @@ func (h *PrettyHandler) resetRun() {
 	h.failureAt = 0
 	h.selected = -1
 	h.mintedRef = false
+	h.blockedAt = nil
+	h.blocked = nil
 	// The preview belongs to a failure from the run that just ended. Left set,
-	// a rerun drew rows of the PREVIOUS run's log beside an empty tree - stale
+	// a rerun drew rows of the PREVIOUS run's log beside an empty tree: stale
 	// content pinned on a surface whose whole promise is that it holds still.
 	h.preview = nil
 	h.rowFailure = h.rowFailure[:0]
@@ -1696,7 +1836,7 @@ func (h *PrettyHandler) resetRun() {
 // presentation, drawn into adjacent leases of the same zone. The command owns the
 // VERBS; this owns what a reader is told and what a click resolves to.
 //
-// Keeping them together also keeps the docs honest - a renderer that cannot
+// Keeping them together also keeps the docs honest: a renderer that cannot
 // import an unexported const hand-copies the strings, and the drift gate then
 // compares that copy against itself while the terminal says something else.
 const (
@@ -1764,7 +1904,7 @@ func NewPrettyHandlerFor(w io.Writer, level slog.Level, p tty.Probe, now func() 
 // Exposed so a second consumer can lease rows from the SAME owner: the failure
 // prompt puts its instruction row directly beneath the band, and two zones over
 // one terminal each compute their margins from their own row arithmetic and
-// overwrite each other - the exact failure tty.Zone exists to prevent. In
+// overwrite each other: the exact failure tty.Zone exists to prevent. In
 // production both sides reach the same singleton through standard error and the
 // sharing is invisible; for any other writer it has to be asked for.
 func (h *PrettyHandler) Zone() *tty.Zone { return h.zone }
@@ -1772,7 +1912,7 @@ func (h *PrettyHandler) Zone() *tty.Zone { return h.zone }
 // previewDivider separates the band's two columns.
 // previewDivider separates the two views, with a column of air on BOTH sides.
 //
-// Without the leading space the left column ran straight into it - a duration
+// Without the leading space the left column ran straight into it: a duration
 // touching the rule reads as a rendering fault rather than as a boundary, and
 // the line stops looking like a line.
 const previewDivider = " │ "

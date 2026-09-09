@@ -18,7 +18,7 @@ const (
 var documentableKinds = []string{types.KindDiagnostic, types.KindSpell, types.KindModule}
 
 // Stats computes the knowledge-graph analytics behind `magus graph stats`: god
-// nodes (highest degree - where risk concentrates), orphans (isolated docs,
+// nodes (highest degree, where risk concentrates), orphans (isolated docs,
 // unused spells), and doc coverage per documentable kind. kind, when non-empty,
 // scopes every section to that node kind. Deterministic and LLM-free.
 func (g *Graph) Stats(kind string) types.KnowledgeStats {
@@ -111,11 +111,11 @@ func (g *Graph) godNodes(kind string) []types.KnowledgeGodNode {
 }
 
 // orphanNodes returns neglected nodes and the TRUE count of fully isolated ones. An isolated node (any
-// kind, in+out == 0) is the core data-quality signal - the builder minted it but linked nothing to it, so
+// kind, in+out == 0) is the core data-quality signal: the builder minted it but linked nothing to it, so
 // it is undiscoverable in the graph. The returned slice is a SAMPLE capped at maxOrphans (a graph can hold
 // hundreds of isolated diagnostic codes; listing them all would drown the report), sorted by ID; isolated
 // is the full total so the caller can say "showing N of M". The spell case is a SEMANTIC orphan (it has
-// edges - it contains ops - but nothing uses them), so it is reported regardless of the cap's isolated
+// edges: it contains ops, but nothing uses them), so it is reported regardless of the cap's isolated
 // sampling and does not count toward isolated.
 func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolated int) {
 	var isolatedOrphans, spellOrphans []types.KnowledgeOrphan
@@ -125,7 +125,7 @@ func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolat
 		}
 		if len(g.in[id])+len(g.out[id]) == 0 {
 			// Spells are edge-light by design: a structural spell (provides no ops) and an unused builtin
-			// are EXPECTED to be unlinked, not data-quality gaps - the spell case below governs the one
+			// are EXPECTED to be unlinked, not data-quality gaps; the spell case below governs the one
 			// spell orphan that matters (a declared op-provider nothing runs, which has edges). So a
 			// 0-degree spell is skipped rather than counted as isolated.
 			if n.Kind == types.KindSpell {
@@ -146,7 +146,7 @@ func (g *Graph) orphanNodes(kind string) (sample []types.KnowledgeOrphan, isolat
 	}
 	// The isolated list is a SAMPLE capped at maxOrphans (a graph can hold hundreds of isolated nodes;
 	// isolated reports the true total). Spell orphans are FEW (bounded by the declared spells) and are the
-	// semantic orphan that matters, so they are always reported - appended after the cap, never truncated.
+	// semantic orphan that matters, so they are always reported: appended after the cap, never truncated.
 	slices.SortFunc(isolatedOrphans, func(a, b types.KnowledgeOrphan) int { return cmp.Compare(a.ID, b.ID) })
 	if len(isolatedOrphans) > maxOrphans {
 		isolatedOrphans = isolatedOrphans[:maxOrphans]

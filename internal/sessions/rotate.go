@@ -22,7 +22,7 @@ const DefaultRetention = 30 * 24 * time.Hour
 //
 // Deleting is all it does. Nothing here rolls a file over, renames one, or truncates
 // one: a session file is append-only or absent, and a truncation would produce a
-// third state - a file whose beginning is missing - that no reader in this package is
+// third state (a file whose beginning is missing) that no reader in this package is
 // written to expect. A retain of zero or less disables pruning entirely.
 //
 // It is best-effort and reports nothing: every failure path leaves the store exactly
@@ -38,7 +38,7 @@ const DefaultRetention = 30 * 24 * time.Hour
 //   - Delete the file holding the dispose while the open survives, and
 //     [AttentionQueue] RESURRECTS a request a person already answered.
 //   - Delete the file holding a still-open request, and the queue silently loses a
-//     wait nobody has answered - an expiry, which this package does not have.
+//     wait nobody has answered: an expiry, which this package does not have.
 //
 // Two rules close both, and both are decidable from the store alone, because pruning
 // reads exactly the fold a reader would:
@@ -71,8 +71,8 @@ func prune(dir string, retain time.Duration, keep string) {
 	// Modification time is a cheap pre-filter, never the retention test: a file it
 	// calls young is left alone unread, and one it calls stale still has to prove it by
 	// its records below. The filter can therefore only ever spare a file that could
-	// have gone - a copy or a restore rewrites a modification time without touching a
-	// record - and never delete one that should have stayed. That is what makes the
+	// have gone (a copy or a restore rewrites a modification time without touching a
+	// record) and never delete one that should have stayed. That is what makes the
 	// common case, a store with nothing old enough to delete, cost a ReadDir and no
 	// file reads at all.
 	var names []string
@@ -134,7 +134,7 @@ func prune(dir string, retain time.Duration, keep string) {
 		openIDs[req.ID] = true
 	}
 
-	// Exempting one file can expose another - two requests can share a file - so this
+	// Exempting one file can expose another (two requests can share a file), so this
 	// runs to a fixed point rather than in one pass. It only ever removes candidates,
 	// so it converges in at most one round per file.
 	for changed := true; changed; {

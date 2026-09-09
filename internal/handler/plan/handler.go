@@ -20,7 +20,7 @@ import (
 // concrete service, matching insightSource and diffSource above.
 //
 // TargetGraph is the same call `magus describe graph -o json` makes and the same bytes
-// gen/target-graph.json holds, read from the loaded workspace rather than from that file -
+// gen/target-graph.json holds, read from the loaded workspace rather than from that file:
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
 type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
@@ -89,7 +89,7 @@ type planResponse struct {
 }
 
 // Handler serves GET /api/v1/plan: the target DAG magus derives for plain work, with
-// live per-node state. Every run has a plan - the engine computes one to dispatch at all -
+// live per-node state. Every run has a plan (the engine computes one to dispatch at all),
 // and this is that plan, not a document anybody authored.
 //
 // With no ?target the server picks the anchor itself, because the question a reader has in
@@ -174,7 +174,7 @@ func (h *Handler) resolveAnchor(raw string, index planTargets, report types.Stat
 // reader just triggered and is waiting to watch.
 //
 // A pool entry identifies its work by the invocation's ARGV, so this reads argv the way
-// `magus status` does (parseRunning, cmd/magus/status.go) - narrower, because a plan needs
+// `magus status` does (parseRunning, cmd/magus/status.go), narrower, because a plan needs
 // only the target: it covers every project defining it, and the project argument may be a
 // fuzzy name that only the run itself resolves to a path.
 func runningAnchor(pool *types.StatusOutput, root string) string {
@@ -265,7 +265,7 @@ func indexPlanTargets(graph types.TargetGraphOutput) planTargets {
 // planClosure derives the nodes and edges of an anchor's plan: the anchor in every project
 // that defines it, plus everything those anchors reach through same-project dependencies and
 // cross-project target imports. A dependency no project declares is dropped rather than
-// emitted as a dangling endpoint - the engine would refuse the run, and a node with no
+// emitted as a dangling endpoint: the engine would refuse the run, and a node with no
 // definition has nothing to report a state for.
 //
 // The project-level pass at the end draws the ordering the engine imposes on top of the
@@ -398,7 +398,7 @@ func runningNodes(runs []types.StatusRun) map[planKey]bool {
 
 // runningInvocations is the COARSE half: a pool entry names the argv a run was invoked with,
 // never the node executing inside it, so it can only answer "a run of target X is in
-// flight". Every node with that target name is therefore marked running - which is true of
+// flight". Every node with that target name is therefore marked running, which is true of
 // an anchor dispatched across the workspace, and deliberately loose about which project's
 // step holds a slot at this instant. It exists so a run the daemon did not adopt (no journal
 // events, so nothing in runningNodes) still shows as live rather than as idle.

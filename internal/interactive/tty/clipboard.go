@@ -9,7 +9,7 @@ import (
 // clipboardLimit is the most we will put on the wire in one OSC 52.
 //
 // Terminals cap the sequence and differ about where, and one that is over its
-// limit typically drops the WHOLE thing rather than truncating - so a copy that
+// limit typically drops the WHOLE thing rather than truncating, so a copy that
 // silently did nothing would be worse than one that says it took the tail. 64 KiB
 // is comfortably under every limit worth caring about and is far more captured
 // output than anybody pastes.
@@ -25,7 +25,7 @@ const clipboardLimit = 64 << 10
 // reader has to already know.
 //
 // So magus does not ask anyone to select. A keypress puts the exact text on the
-// clipboard, with no frame, no padding, no divider and no escape sequences - and
+// clipboard, with no frame, no padding, no divider and no escape sequences, and
 // OSC 52 travels through ssh and tmux, which is where a build actually runs.
 //
 // Only ever on an explicit keystroke. A tool that wrote the clipboard on its own

@@ -22,7 +22,7 @@ type ProjectOption struct {
 // ProjectOptions is the ONE list of recognized magus.project keys.
 //
 // One list because there were two: the engine's and a parallel copy in the dry-run
-// host, which had already drifted - the dry copy silently rejected a key the engine
+// host, which had already drifted: the dry copy silently rejected a key the engine
 // accepted, so a magusfile could pass a real run and fail a preview. A shared table in
 // a near-leaf package is the only shape where that cannot recur.
 var ProjectOptions = []ProjectOption{

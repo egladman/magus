@@ -59,8 +59,8 @@ func TestUnreferencedTreatsSameFileCallLikeSameFileReference(t *testing.T) {
 		"both are confined to one file, so both are worth surfacing (sorted by ID)")
 }
 
-// A package or namespace is never called or referenced in this model - its imports are
-// file-to-file edges - so listing them would report the workspace's shape, not its code.
+// A package or namespace is never called or referenced in this model (its imports are
+// file-to-file edges), so listing them would report the workspace's shape, not its code.
 // The test is here because the exclusion reads the SCIP descriptor grammar off the node
 // ID rather than SymbolInformation.Kind, which scip-typescript never populates.
 func TestUnreferencedSkipsNamespaces(t *testing.T) {

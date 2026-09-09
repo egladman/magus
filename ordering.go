@@ -253,10 +253,10 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		}
 		// Verifiers (no declared writes) never re-run here. Settling exists to fix
 		// stale bytes a later writer invalidated, and a target that declares no
-		// writes has no bytes to fix - its product is a verdict, re-verified by the
+		// writes has no bytes to fix: its product is a verdict, re-verified by the
 		// next invocation anyway (it is skip-cache, see below). Without this guard a
-		// docs prose move re-ran root's security scan - needs(generate) plus
-		// govulncheck plus trivy - on the silent post-batch tail, and a
+		// docs prose move re-ran root's security scan (needs(generate) plus
+		// govulncheck plus trivy) on the silent post-batch tail, and a
 		// network-stalled scanner there wedged the 2026-09-04 gate for over an hour
 		// with every project lock held and nothing visibly running.
 		if !node.DeclaredWrites {
@@ -294,7 +294,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		types.ActiveDispatchFromContext(ctx).Mark(p.Path)
 		types.ActiveDispatchFromContext(ctx).Mark(p.Dir)
 		// Through RunAside, not straight at the interpreter: a re-run here holds every
-		// project lock, so it has to appear where the batch's steps appear - a limiter
+		// project lock, so it has to appear where the batch's steps appear: a limiter
 		// slot, a machine claim `magus status` names, the inflight set, and a journal
 		// result event with its captured log. Dispatched bare it was invisible to all
 		// four, and a stalled settle read as a finished run that forgot to exit.

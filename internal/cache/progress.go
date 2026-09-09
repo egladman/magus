@@ -7,8 +7,8 @@ import (
 )
 
 // Progress is one invocation's liveness heartbeat: when something last moved, and what
-// it was. Every accounting edge beats it - a step taking or handing back its seat
-// ([Cache.admit]) and every line of subprocess output - so "is anything happening?" is
+// it was. Every accounting edge beats it (a step taking or handing back its seat
+// ([Cache.admit]) and every line of subprocess output), so "is anything happening?" is
 // one comparison rather than a poll across the limiter, the inflight set and the
 // journal.
 //

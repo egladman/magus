@@ -23,7 +23,7 @@ type runSource interface {
 }
 
 // RunHandler serves /api/v1/diff/run: the reader asks a question about the change in front
-// of them - does this still pass? - and gets the answer from the machine the code is on.
+// of them (does this still pass?) and gets the answer from the machine the code is on.
 //
 // This is the one review capability that cannot have a provider gap. It asks the local workspace
 // rather than a forge, so it works identically on GitHub, GitLab, a fork, or no forge at all, and
@@ -42,7 +42,7 @@ type RunHandler struct {
 	cacheDir string
 	version  string
 	// socket returns the daemon's proc socket address to submit to, and submitFn/statusFn are
-	// the proc entry points - injectable so the submit and poll paths are testable without a
+	// the proc entry points, injectable so the submit and poll paths are testable without a
 	// live daemon.
 	socket   func() string
 	submitFn func(ctx context.Context, addr string, argv []string, version string) (string, error)
@@ -50,7 +50,7 @@ type RunHandler struct {
 }
 
 // NewRunHandler returns the inline-run handler. A nil workspace declares no targets, so every
-// request is refused as undeclared - which is what a daemon with no workspace can honestly say.
+// request is refused as undeclared, which is what a daemon with no workspace can honestly say.
 func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logger) *RunHandler {
 	h := &RunHandler{
 		workspace: workspace,
@@ -66,9 +66,9 @@ func NewRunHandler(workspace runSource, cacheDir, version string, log *slog.Logg
 
 // diffRunRequest names the work: a declared target and the project to run it for.
 //
-// The patch digest the reader is looking at is NOT here. Staleness is a client-side comparison -
-// the surface knows which digest it rendered against when the verdict arrived, and greys the
-// verdict out when its own digest moves - so sending it to the daemon would only give it a second
+// The patch digest the reader is looking at is NOT here. Staleness is a client-side comparison
+// (the surface knows which digest it rendered against when the verdict arrived, and greys the
+// verdict out when its own digest moves), so sending it to the daemon would only give it a second
 // place to be wrong.
 type diffRunRequest struct {
 	Target  string `json:"target"`
@@ -80,7 +80,7 @@ type diffRunResponse struct {
 	Target  string `json:"target"`
 	Project string `json:"project"`
 	// State is one of: running, passed, failed, unknown. "unknown" means no run of this target
-	// has finished on this machine yet - distinct from a run that finished and failed.
+	// has finished on this machine yet, distinct from a run that finished and failed.
 	State string `json:"state"`
 	// Started reports that THIS request started the run, as opposed to finding one already in
 	// flight. The surface says "already running" rather than appearing to start a second one.

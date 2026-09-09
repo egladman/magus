@@ -189,7 +189,7 @@ func TestRunAllRunAfterOrdersAcrossTargets(t *testing.T) {
 }
 
 // TestRunAllRunAfterUpstreamFailureReleasesWaiter verifies a RunAfter waiter is
-// released - and failed - when its writer step fails, not left blocked: markDone
+// released (and failed) when its writer step fails, not left blocked: markDone
 // runs on every exit path, and the waiter reads the writer's real verdict.
 func TestRunAllRunAfterUpstreamFailureReleasesWaiter(t *testing.T) {
 	root, c := openCache(t)
@@ -439,8 +439,8 @@ func TestRunAllDependencyFailureCancelsDependents(t *testing.T) {
 	assert.False(t, bRan, "B's fn ran even though its dependency A failed")
 }
 
-// TestDepBarrierWaitForDepsFailsOnFailedUpstream drives depBarrier directly - no
-// goroutines, no errgroup - so it pins the defect rather than racing for it: markDone
+// TestDepBarrierWaitForDepsFailsOnFailedUpstream drives depBarrier directly (no
+// goroutines, no errgroup), so it pins the defect rather than racing for it: markDone
 // signalling only "done" and not "succeeded" let a dependent proceed on a failed
 // upstream, because markDone fires as a defer inside the upstream's own goroutine,
 // strictly before errgroup cancels the shared ctx. Marking done-with-error and then
@@ -473,7 +473,7 @@ func TestDepBarrierWaitForDepsSucceedsOnPassedUpstream(t *testing.T) {
 // TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled pins the tie-break. When
 // an upstream fails AND a sibling has already cancelled the group, both the barrier
 // channel and ctx.Done() are ready, and a bare select over the two picks uniformly at
-// random - so the error naming the actual dependency would appear only about half the
+// random, so the error naming the actual dependency would appear only about half the
 // time and the same failure would report differently run to run. Both are ready on
 // every iteration here, so a regression to the random form fails this quickly rather
 // than flaking in CI.
@@ -536,7 +536,7 @@ func TestRunAllDependencyCycleThreeNode(t *testing.T) {
 
 // TestFormatCycle pins the rendering of a node-key cycle. The keys join project and
 // target with a control byte, so the naive %v puts an unprintable character in front of
-// the user - and this is the error they see when a build order cannot be satisfied, which
+// the user, and this is the error they see when a build order cannot be satisfied, which
 // is exactly when the text has to be readable.
 func TestFormatCycle(t *testing.T) {
 	cycle := []string{DepKey("site", "build"), DepKey("producer", "build"), DepKey("site", "build")}
@@ -575,7 +575,7 @@ func TestRunAllNoDependencies(t *testing.T) {
 // TestRunAllKeepsGoingPastAnIndependentFailure pins the default: a failing step does
 // not cancel peers that do not depend on it. Before this, errgroup cancelled the whole
 // group on the first error, so one project's failure killed every unrelated project
-// mid-flight and a run could only ever report one failure - which is how a broken npm
+// mid-flight and a run could only ever report one failure, which is how a broken npm
 // advisory in `console` took down `docs` and hid what `docs` would have said.
 func TestRunAllKeepsGoingPastAnIndependentFailure(t *testing.T) {
 	root, c := openCache(t)

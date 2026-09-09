@@ -4,9 +4,9 @@
 // It is the deterministic sibling of magus-termcast, which records a real
 // session through a pseudo-terminal. Both are right, for different subjects. The
 // core loop is a sequence of commands anyone can type, so recording it for real
-// is the truthful thing to do. The surfaces here are conditions - a run stalled
+// is the truthful thing to do. The surfaces here are conditions (a run stalled
 // on another process's lock, a target that failed, a prompt waiting on a
-// choice - and staging those in a real shell reliably enough to record is
+// choice), and staging those in a real shell reliably enough to record is
 // painful.
 //
 // So these are rendered instead of recorded: the frames come from driving the
@@ -14,7 +14,7 @@
 // stream and the layout are exactly what a terminal would receive. What is
 // staged is the scenario, not the rendering.
 //
-// The output is deterministic - no timestamps, no randomness - which is what
+// The output is deterministic (no timestamps, no randomness), which is what
 // lets it be committed and checked for drift like every other generated file.
 package main
 
@@ -113,7 +113,7 @@ func runBand(t screen.Theme) (string, error) {
 }
 
 // lockWaiting: the one run event that earns a notification. A pinned condition,
-// not a toast - it stays until the lock clears, because the wait is unbounded.
+// not a toast; it stays until the lock clears, because the wait is unbounded.
 func lockWaiting(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
 	z := tty.NewZone(s, tty.FixedProbe(cols, rows))
@@ -137,7 +137,7 @@ func lockWaiting(t screen.Theme) (string, error) {
 // The band is drawn by a REAL PrettyHandler fed real records, not composed here.
 // Hand-writing its rows meant the picture stated a status line magus never
 // emits and missed the selection marker entirely once the band grew one, while
-// the drift gate - which compares the renderer to itself - stayed green
+// the drift gate (which compares the renderer to itself) stayed green
 // throughout.
 func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
@@ -168,7 +168,7 @@ func failurePrompt(t screen.Theme) (string, error) {
 		}
 	}
 	h.SetSelection(0)
-	// Focus on the OUTPUT, so the golden ratio gives it the major share - this
+	// Focus on the OUTPUT, so the golden ratio gives it the major share; this
 	// is the picture of a reader reading a failure, not navigating the list.
 	h.SetFocus(cache.FocusPreview)
 	// The second view: the selected failure's captured output, beside the tree
@@ -198,8 +198,8 @@ func failurePrompt(t screen.Theme) (string, error) {
 //
 // Frozen entirely and the status row reads "0ns", which is not what a run in
 // progress looks like; live and the committed SVG changes on every render. So
-// it answers the first call - which is what the handler records as the run's
-// start - and a fixed moment later for every call after it. Deterministic
+// it answers the first call (which is what the handler records as the run's
+// start) and a fixed moment later for every call after it. Deterministic
 // because the sequence of calls is.
 func demoClock() func() time.Time {
 	start := time.Unix(0, 0).UTC()

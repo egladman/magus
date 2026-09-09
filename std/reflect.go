@@ -95,7 +95,7 @@ func bareName(qualified string) string {
 }
 
 // MethodImplPackage returns the Go import path and local package identifier
-// of m.Impl - e.g. ("github.com/egladman/magus/std", "std") for a method still
+// of m.Impl: e.g. ("github.com/egladman/magus/std", "std") for a method still
 // implemented in std's own flat root, or
 // ("github.com/egladman/magus/std/encoding/json", "json") for one implemented
 // in a std/encoding leaf package. Both empty if Impl is nil or not a function.
@@ -103,7 +103,7 @@ func bareName(qualified string) string {
 // The magus-utils bindings generator used to assume every Impl lived in
 // package std and hardcoded the "std." call qualifier; that stopped holding
 // once std/encoding split nine modules into their own packages, so the
-// qualifier - and the import it needs - now has to come from wherever the
+// qualifier (and the import it needs) now has to come from wherever the
 // Impl actually is.
 func MethodImplPackage(m Method) (importPath, pkgIdent string) {
 	return implPackage(m.Impl)

@@ -1,4 +1,4 @@
-// Package langservice provides editor language features - completion and hover -
+// Package langservice provides editor language features (completion and hover)
 // for Buzz magusfiles, driven by a build-time snapshot of the magus host module
 // surface (see cmd/langservice-manifest and manifest_data.go). It is pure
 // computation with no host, filesystem, or process access, so it compiles into
@@ -34,8 +34,8 @@ type Field struct {
 }
 
 // Module is one importable magus host module and its surface, as captured by the
-// manifest generator. The manifest is the full authoring surface - every module a
-// magusfile may reference - independent of which modules actually execute in the
+// manifest generator. The manifest is the full authoring surface (every module a
+// magusfile may reference), independent of which modules actually execute in the
 // browser. Which ones run there is decided at runtime by ExcludedModules against the
 // interpreter's real registration, not baked in here.
 type Module struct {
@@ -61,11 +61,11 @@ func lookupModule(name string) (Module, bool) {
 	return m, ok
 }
 
-// ExcludedModules returns the manifest modules NOT in available - the host modules
+// ExcludedModules returns the manifest modules NOT in available: the host modules
 // a magusfile can name but that don't run in the browser playground (they need a
 // process, filesystem, or network). The caller passes the set the interpreter
 // actually registered (dry.PlaygroundHostModules), so the excluded list is derived
-// from real wiring rather than a hand-kept flag - a module wired into the playground
+// from real wiring rather than a hand-kept flag: a module wired into the playground
 // simply never appears here. The playground renders the result as a "not available
 // here" notice.
 func ExcludedModules(available []string) []Module {

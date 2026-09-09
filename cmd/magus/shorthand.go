@@ -78,8 +78,8 @@ func installShorthandCmd(args []string) error {
 // reports the as-invoked path on macOS, so running this through an existing mgs
 // link would otherwise point the new link at a link. EvalSymlinks pins it to the
 // real file. This does not borrow selfupdate.ResolveTargetPath because the
-// shorthand has nothing to do with updating, and -tags noselfupdate builds -
-// which still get install-shorthand - do not link that package in.
+// shorthand has nothing to do with updating, and -tags noselfupdate builds
+// (which still get install-shorthand) do not link that package in.
 func runningBinaryPath() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {

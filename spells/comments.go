@@ -2,7 +2,7 @@ package spells
 
 // Language is what mgs_getLanguage declares: the canonical language name and,
 // when the spell can declare it honestly, the language's comment and string
-// syntax. One method, one typed answer - the syntax is not a separate
+// syntax. One method, one typed answer: the syntax is not a separate
 // declaration a spell can forget beside the name.
 type Language struct {
 	Name string `json:"name,omitempty"`
@@ -19,7 +19,7 @@ type Language struct {
 // (internal/ci's comment stripper), never per-language Go.
 //
 // The shape is seeded from scc's languages.json (github.com/boyter/scc, MIT
-// license) - the schema is adopted, not the dataset: a spell declares only
+// license); the schema is adopted, not the dataset: a spell declares only
 // what it can declare HONESTLY. The bash spell deliberately declares nothing:
 // heredocs make comment tokens content in a way this shape cannot express,
 // and a false "comment-only" costs trust in every gate refusal after it. A

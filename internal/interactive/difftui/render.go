@@ -55,7 +55,7 @@ func Chrome(m *Model) int {
 // Frame composes what the viewer looks like right now.
 //
 // It returns a string rather than writing one so [tty.InlineView] can rewrite only the rows
-// that differ - moving the cursor changes two lines and costs two lines of terminal traffic.
+// that differ: moving the cursor changes two lines and costs two lines of terminal traffic.
 //
 // color is decided by the caller, from [tty.WantsColor], and is a parameter rather than
 // something read here so the model stays as testable as it is: false must produce the plain
@@ -134,7 +134,7 @@ func rowText(r Row, color bool) string {
 // lineText colors one line of a hunk and draws the part that changed harder than the rest.
 //
 // It cuts the PLAIN text and styles each piece separately, which is what makes it impossible to
-// slice an escape sequence in half - the mistake that turns a viewer into a corrupted screen
+// slice an escape sequence in half: the mistake that turns a viewer into a corrupted screen
 // rather than a slightly wrong one. Each piece closes its own style, so nothing bleeds into the
 // next.
 func lineText(r Row) string {

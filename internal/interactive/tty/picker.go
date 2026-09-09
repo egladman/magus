@@ -6,7 +6,7 @@
 // verified that stdin and stderr are TTYs.
 //
 // It is driven by keys OR the mouse. Hovering moves the highlight, a click
-// selects, a double click chooses - so nothing has to be remembered to use it.
+// selects, a double click chooses, so nothing has to be remembered to use it.
 // The mouse needs the terminal to report where the cursor is; one that will not
 // leaves the picker keyboard-only, which is what it always was.
 
@@ -31,7 +31,7 @@ const pickerRules = 2
 //
 // One constant rather than one per surface: the picker and the run's failure
 // band are two lists a reader learns to drive the same way, and they were
-// marking the current row with different characters - so the same gesture
+// marking the current row with different characters, so the same gesture
 // looked like a different affordance depending on which one was open. A ">" is
 // a keyboard character standing in for a pointer; a triangle IS one, and it
 // belongs to the same geometric family as the pool gauge's squares.
@@ -64,7 +64,7 @@ type PickOptions struct {
 	// show, best first.
 	//
 	// It exists so a picker can search something larger than the list it was
-	// opened with - the knowledge graph rather than the projects a caller can
+	// opened with: the knowledge graph rather than the projects a caller can
 	// enumerate up front. The caller keeps the mapping from label back to
 	// meaning; this type only draws strings.
 	//
@@ -95,7 +95,7 @@ func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []stri
 
 	// One input session for keys AND mouse. The picker used to decode keys
 	// itself, which meant two decoders in one package disagreeing about which
-	// control bytes exist - Ctrl-N and Ctrl-P were documented here and dropped
+	// control bytes exist: Ctrl-N and Ctrl-P were documented here and dropped
 	// on the floor, because they are below 0x20 and fell through to "printable".
 	input, err := OpenInput(in, out, p)
 	if err != nil {
@@ -151,7 +151,7 @@ func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []stri
 			}
 			// Left button only, which also means the WHEEL is left alone. The
 			// wheel is how a reader scrolls their own transcript, and magus
-			// does not take it on any surface - a picker that swallowed it
+			// does not take it on any surface: a picker that swallowed it
 			// would break scrollback for the seconds it is open, which is the
 			// behavior that makes other tools unusable inside tmux.
 			if !ev.Press || ev.Button != MouseLeft {
@@ -355,9 +355,9 @@ func (s *session) frame() string {
 	//
 	// The picker used to be a bare list with its hint jammed onto the prompt
 	// row, which made two surfaces a reader drives identically look like two
-	// different products. Position still differs on purpose - this is drawn
+	// different products. Position still differs on purpose (this is drawn
 	// where the cursor is, because `magus x` is a command you type and its list
-	// belongs where you typed it - but the LOOK does not.
+	// belongs where you typed it), but the LOOK does not.
 	//
 	// The prompt rides the top rule and the way out rides the bottom, so
 	// neither costs a row of the list.
@@ -404,7 +404,7 @@ func (s *session) innerWidth() int {
 // away, clamped to the last row when growing pushed the screen up.
 //
 // The round trip it avoids is a full RTT over ssh, and the block changes height
-// on any keystroke that filters past the visible rows - so querying per redraw
+// on any keystroke that filters past the visible rows, so querying per redraw
 // put an RTT of lag on most of the typing, on the connection where lag is
 // already the problem.
 //
@@ -446,7 +446,7 @@ func (s *session) reposition(oldLines, newLines int) {
 //
 // Without the bound, a terminal shorter than the configured rows makes
 // [InlineView.Paint] refuse the block and the picker draw NOTHING while still in
-// a raw-mode read loop - indistinguishable from a hung process, on an eleven-row
+// a raw-mode read loop, indistinguishable from a hung process, on an eleven-row
 // split pane rather than an exotic case.
 //
 // Two rows are held back: one for the prompt, and one so the block stays strictly
@@ -459,7 +459,7 @@ func (s *session) maxRows() int {
 	}
 	// The box's two rules come out of the budget as well as the row the caller
 	// is standing on. Without that a short terminal drew a list that did not
-	// fit, pushing its own prompt off the top - which reads as the picker
+	// fit, pushing its own prompt off the top, which reads as the picker
 	// having hung rather than as a window being small.
 	if limit := height - 1 - pickerRules; max > limit {
 		max = limit
@@ -542,7 +542,7 @@ func (s *session) locate() {
 // matchAt maps an absolute terminal row to the match index drawn on it, if any.
 //
 // Items sit directly above the prompt line, so the topmost is `visible` rows up
-// from it. A click on the prompt, or anywhere off the block, matches nothing -
+// from it. A click on the prompt, or anywhere off the block, matches nothing,
 // and must not be treated as a selection.
 func (s *session) matchAt(row int) (int, bool) {
 	if !s.mouseOK || s.visible == 0 || len(s.matches) == 0 {

@@ -26,7 +26,7 @@ const (
 //
 // Exec is the KERNEL layer's input: landlock grants execve where it is set, and Read
 // alone is enough for dlopen/mmap without permitting execve. checkAccess below does
-// not consult it - CheckExec passes on Read, and TestCheckExecRequiresReadNotExec
+// not consult it: CheckExec passes on Read, and TestCheckExecRequiresReadNotExec
 // pins that. So on a host with no landlock (darwin, or a kernel below 5.13) a
 // read-only rule does not stop an exec, and Exec: false on a rule is a request the
 // kernel layer carries out or nobody does.
@@ -97,7 +97,7 @@ func normalizePath(path string) (string, error) {
 	// The path does not exist yet (a write target). Walk up to the nearest ancestor
 	// that DOES exist, resolve that, and re-attach the missing tail.
 	//
-	// COST: this branch is roughly 3x the resolved one - 150 allocs/op and ~23us against
+	// COST: this branch is roughly 3x the resolved one: 150 allocs/op and ~23us against
 	// 47 allocs/op and ~8.3us (BenchmarkCheckReadCtx/missing vs /existing in
 	// internal/sandbox, Apple M5 darwin/arm64, 6 runs). Treat the ratio as the durable
 	// figure; the absolute numbers track TMPDIR depth, because the dominant cost in BOTH
@@ -106,13 +106,13 @@ func normalizePath(path string) (string, error) {
 	//
 	// It matters because callers hit it in loops: fs.glob consults CheckReadCtx once per
 	// match, so a check over paths not on disk pays the multiplier per path. Filter to
-	// paths that exist before checking, or memoize per run - resolution is pure for a
+	// paths that exist before checking, or memoize per run: resolution is pure for a
 	// given tree.
 	//
 	// Resolving only the immediate parent was not enough: when the parent is also missing,
 	// the fallback kept the whole path lexical, so a symlink above it went unresolved.
 	// Rule paths ARE resolved, so the two forms could never match and the write was
-	// denied - every nested create on a workspace under a symlink, which on macOS is any
+	// denied, every nested create on a workspace under a symlink, which on macOS is any
 	// path under /var or /tmp.
 	missing := []string{}
 	dir := abs

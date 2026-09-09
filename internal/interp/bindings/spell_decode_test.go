@@ -24,7 +24,7 @@ func TestAMistypedFieldNamesItselfRatherThanZeroing(t *testing.T) {
 }
 
 // Absent and null are the ZERO VALUE, not an error. A Buzz object carries every declared field,
-// so "declared nothing" and "did not declare" are one statement and must decode alike -
+// so "declared nothing" and "did not declare" are one statement and must decode alike;
 // otherwise two spellings of the same answer produce two different records.
 func TestAbsentAndNullBothReadAsTheZeroValue(t *testing.T) {
 	for _, m := range []map[string]any{{}, {"repo": nil, "number": nil}} {

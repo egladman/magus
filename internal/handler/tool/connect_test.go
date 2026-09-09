@@ -109,7 +109,7 @@ func TestListToolsReprobesAfterTheTTL(t *testing.T) {
 }
 
 // A failed probe is cached like any other reading. Caching only successes left the tools
-// that are absent - the population this view exists to show - re-forking every request,
+// that are absent (the population this view exists to show) re-forking every request,
 // which is the fork loop the TTL was written to prevent.
 func TestListToolsCachesAFailedProbe(t *testing.T) {
 	calls := 0
@@ -139,8 +139,8 @@ func TestListToolsReportsUnreadableOutputAsUnknown(t *testing.T) {
 	assert.NotNil(t, row.ProbeTime, "the probe ran, so the row carries when")
 }
 
-// Two spells declaring the same bin ask different questions - the argv comes from the
-// spell - so they must not share one cached answer.
+// Two spells declaring the same bin ask different questions (the argv comes from the
+// spell), so they must not share one cached answer.
 func TestListToolsKeysTheCacheBySpell(t *testing.T) {
 	calls := 0
 	prober := func(name string) *spells.Spell {
@@ -228,8 +228,8 @@ func TestVerdictMatchesTheCLIDiagnostics(t *testing.T) {
 		{"inside", spells.VersionBounds{Min: "1.21"}, "v1.26.5", toolv1.Verdict_VERDICT_INSIDE, ""},
 		{"below the floor", spells.VersionBounds{Min: "2.0"}, "v1.4.2", toolv1.Verdict_VERDICT_TOO_OLD, "MGS3005"},
 		{"at the ceiling", spells.VersionBounds{Below: "25"}, "v25.0.0", toolv1.Verdict_VERDICT_TOO_NEW, "MGS3006"},
-		// An unprobeable tool is not a violation - the same call the CLI's window check
-		// makes - and must never render as INSIDE, which would read as "checked, fine".
+		// An unprobeable tool is not a violation (the same call the CLI's window check
+		// makes) and must never render as INSIDE, which would read as "checked, fine".
 		{"unprobed", spells.VersionBounds{Min: "2.0"}, "", toolv1.Verdict_VERDICT_UNKNOWN, ""},
 		{"unparsable bound", spells.VersionBounds{Min: "latest"}, "v1.0.0", toolv1.Verdict_VERDICT_UNKNOWN, ""},
 	} {

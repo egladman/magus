@@ -77,14 +77,14 @@ func TestNumericLiteralEval(t *testing.T) {
 }
 
 // TestStandaloneExport covers upstream's `export name;` form, where a declaration is
-// written plainly and exported by a separate statement - the shape upstream's own
+// written plainly and exported by a separate statement: the shape upstream's own
 // tests/utils/testing.buzz uses.
 //
 // It used to parse and then VANISH. `export` parses the statement that follows and
 // sets IsExported on it, but a bare name parses as an expression statement, matched
 // none of the declaration cases, and fell through with the export silently dropped:
 // the name stayed invisible to importers and nothing said why. That is the failure
-// this pins - a silently-ignored export is worse than an unsupported one.
+// this pins: a silently-ignored export is worse than an unsupported one.
 func TestStandaloneExport(t *testing.T) {
 	// The declaration may come BEFORE the export statement...
 	prog, err := buzz.ParseEmbedded("object Foo { n: int = 1 }\nexport Foo;\n")

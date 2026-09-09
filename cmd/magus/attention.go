@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The attention queue: blocks waiting on a person - what agents raised, and the one
-// command that closes one. Both subverbs live under sessionCmd.
+// The attention queue: blocks waiting on a person (what agents raised, and the one
+// command that closes one). Both subverbs live under sessionCmd.
 //
 // Discovery is automated and disposition is not, which is the whole shape of the
 // feature (docs/doctrine.md, "Manual on purpose"). There is no expiry, no
@@ -212,7 +212,7 @@ func attentionDispose(root string, args []string) error {
 }
 
 // disposeError gives each refusal from [sessions.DisposeRequest] its next step. The
-// store decides WHICH refusal applies - that is the identity contract - and this decides
+// store decides WHICH refusal applies (that is the identity contract), and this decides
 // what a person does about it, which is why the store path and the listing command are
 // added here rather than baked into the sentinel.
 func disposeError(err error, ref, dir string) error {
@@ -234,7 +234,7 @@ func disposeError(err error, ref, dir string) error {
 // ---- producer ----
 
 // recordAttentionOpen normalizes an event into an [sessions.AttentionOpen] and files it.
-// The write lifecycle - dedupe, id derivation, the record itself - belongs to
+// The write lifecycle (dedupe, id derivation, the record itself) belongs to
 // [sessions.OpenRequest]; what stays here is the two gates that decide whether an event
 // is a request at all, and the flattening of the event onto the store's string fields.
 //
@@ -249,7 +249,7 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		// An empty agent session is not an id, it is the absence of one, and
 		// [sessions.RequestID] would happily digest it: every producer that sent
 		// none would collapse onto ONE request, and a single dispose would close blocks
-		// nobody had read. No id, no durable request - the same graceful path as no
+		// nobody had read. No id, no durable request: the same graceful path as no
 		// repository, because the notification itself still fires.
 		noteMissingAttentionSource()
 		return nil
@@ -270,7 +270,7 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		Severity: string(ev.Severity),
 		Source:   sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
 		Where:    attentionWhere(ev.Where),
-		// Not an input to the id, on purpose - see sessions.RequestID. It rides the payload so
+		// Not an input to the id, on purpose; see sessions.RequestID. It rides the payload so
 		// the queue can say WHOSE work is blocked without the row's identity moving when a
 		// fleet re-partitions.
 		Lease:   trail.LeaseFromEnv(),
@@ -286,8 +286,8 @@ func recordAttentionOpen(root string, ev types.Event) error {
 // resolveRootOrEmpty resolves the repository a per-repository store belongs to,
 // falling back to workspace discovery when the caller passed no --root.
 //
-// notify runs with no workspace loaded - it has to work from a hook, in whatever
-// directory the agent happens to be in - so root arrives empty unless --root was
+// notify runs with no workspace loaded (it has to work from a hook, in whatever
+// directory the agent happens to be in), so root arrives empty unless --root was
 // passed. Left that way, every caller would key the store on nothing and share one
 // bogus queue across every repository on the machine. An unresolvable root returns
 // empty, which the caller reads as "not in a repository".
@@ -317,7 +317,7 @@ func attentionWhere(where *types.EventLocation) string {
 
 // noteAttentionOpenFailure reports a queue write that did not happen, without failing
 // the notification. notify is invoked from agent hooks, where a non-zero exit
-// interrupts the very session the notification exists to help - but a request that
+// interrupts the very session the notification exists to help, but a request that
 // silently never reached the queue is a block nobody will ever be shown, so it says
 // so rather than swallowing it.
 func noteAttentionOpenFailure(err error) {
@@ -326,8 +326,8 @@ func noteAttentionOpenFailure(err error) {
 }
 
 // noteMissingAttentionSource reports the one event shape that cannot become a durable
-// request. Like [noteAttentionOpenFailure] it leaves the notification itself alone -
-// the desktop alert still fires - and says what the producer has to change, because
+// request. Like [noteAttentionOpenFailure] it leaves the notification itself alone
+// (the desktop alert still fires) and says what the producer has to change, because
 // an agent whose blocks never reach the queue has no other symptom.
 func noteMissingAttentionSource() {
 	slog.Warn("magus session notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",

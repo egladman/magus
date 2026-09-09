@@ -178,7 +178,7 @@ func TestPlanReportsAnUnreadableHistory(t *testing.T) {
 
 // TestApplyUnionSandboxIsInertWithoutAnOptIn: the daemon applies a kernel policy
 // only when some workspace asked for one. No roots, or roots that never enable
-// sandboxing, must leave the process unconfined - applying a policy nobody
+// sandboxing, must leave the process unconfined: applying a policy nobody
 // requested would break every other workspace the daemon serves.
 func TestApplyUnionSandboxIsInertWithoutAnOptIn(t *testing.T) {
 	ctx := context.Background()

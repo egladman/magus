@@ -25,7 +25,7 @@ func AllowGet(w http.ResponseWriter, r *http.Request) bool {
 }
 
 // MaxWireBodyBytes caps the request body a daemon HTTP handler will read into memory.
-// It is generous for real payloads - a unified diff, a patch, a review remark - but
+// It is generous for real payloads (a unified diff, a patch, a review remark) but
 // bounds an authenticated or LAN-reachable client (a connector-token MCP client, a
 // share viewer) so a multi-gigabyte POST cannot exhaust daemon memory. The proc socket
 // path caps its frames separately (internal/proc).

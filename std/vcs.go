@@ -160,7 +160,7 @@ func resolveVCS(ctx context.Context) (types.VCSDriver, string) {
 	}
 	res, err := vcs.Resolve(ctx, wd, "", types.VCSOptions{})
 	if err != nil {
-		// A resolve failure (transient error, ctx cancellation) is not "no VCS" - do
+		// A resolve failure (transient error, ctx cancellation) is not "no VCS": do
 		// not poison the cache for this cwd with it, or every later call in the
 		// process would replay this one failure forever.
 		return nil, ""
@@ -212,7 +212,7 @@ func VcsRoot(ctx context.Context) (string, error) {
 //
 // The probe runs at EffectiveCwd, matching resolveVCS and vcs.status. An empty dir means
 // the PROCESS cwd, which would resolve the driver from the target's directory and then
-// run it somewhere else - identical only while both sit in the same repository.
+// run it somewhere else, identical only while both sit in the same repository.
 func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 	v, defaultBase := resolveVCS(ctx)
 	if v == nil {
@@ -242,8 +242,8 @@ func VcsChangedFiles(ctx context.Context, base string) ([]types.Path, error) {
 
 // vcsDir is the directory every vcs probe runs in: the target's, not the process's.
 //
-// runBuzz deliberately does NOT os.Chdir - it carries the target's directory on the
-// context so projects can execute concurrently without corrupting a shared process cwd -
+// runBuzz deliberately does NOT os.Chdir (it carries the target's directory on the
+// context so projects can execute concurrently without corrupting a shared process cwd),
 // so passing "" means the PROCESS cwd, a different place. resolveVCS already picks the
 // driver from EffectiveCwd.
 //
@@ -292,8 +292,8 @@ func VcsRef(ctx context.Context) (string, error) {
 
 // VcsStatus reports the working tree's uncommitted state as a typed Status.
 //
-// Handing a magusfile the backend's own status lines - git porcelain, hg status, jj diff
-// --name-only - would make every caller reimplement the parsing and know which VCS it is on.
+// Handing a magusfile the backend's own status lines (git porcelain, hg status, jj diff
+// --name-only) would make every caller reimplement the parsing and know which VCS it is on.
 // DirtyFiles answers in paths, so there is nothing here to reimplement.
 //
 // Paths carry the repository root as their base: a VCS reports from the root while a
@@ -344,7 +344,7 @@ func VcsIsDirty(ctx context.Context, paths []string) (bool, error) {
 		// RAISE. This is the drift-gate primitive: `is_dirty(["MAGUS.md"])` is how a
 		// generate target asks "did my output change?". Reporting false when the probe
 		// FAILED answers "clean" to a question that was never actually asked, so the gate
-		// passes having checked nothing - the one outcome a gate must never produce
+		// passes having checked nothing: the one outcome a gate must never produce
 		// silently. No VCS at all is still false above; that is a known state, not a
 		// failed probe.
 		return false, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
@@ -374,7 +374,7 @@ func VcsDirtyDiff(ctx context.Context, paths []string) (string, error) {
 
 // VcsCommit resolves rev (empty = current revision) to its commit object. It
 // RAISES when no VCS is resolved and RAISES when the revision can't be looked
-// up - a caller uses vcs.name() to test for a VCS first, and try/catch for a
+// up: a caller uses vcs.name() to test for a VCS first, and try/catch for a
 // revision that may not exist.
 func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 	v, _ := resolveVCS(ctx)
@@ -393,7 +393,7 @@ func VcsCommit(ctx context.Context, rev string) (types.Commit, error) {
 }
 
 // VcsHistory returns up to limit recent commits (newest first) as objects, or an
-// empty list when no VCS is resolved. It RAISES when the query fails - an empty
+// empty list when no VCS is resolved. It RAISES when the query fails: an empty
 // list there would read as "no history" for "could not read history".
 func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 	v, _ := resolveVCS(ctx)
@@ -409,7 +409,7 @@ func VcsHistory(ctx context.Context, limit int) ([]types.Commit, error) {
 
 // VcsDescribe returns a human-readable version string from the nearest tag (see
 // the driver Describe methods), or "" when no VCS is resolved or the backend has
-// no describe concept. It RAISES when the query fails - "" is reserved for the
+// no describe concept. It RAISES when the query fails: "" is reserved for the
 // two no-op cases above, not for a probe that could not run.
 func VcsDescribe(ctx context.Context) (string, error) {
 	v, _ := resolveVCS(ctx)
@@ -434,7 +434,7 @@ func VcsTags(ctx context.Context, pattern string) ([]types.VCSTag, error) {
 	// Those return "" for a failed query because a magusfile reading vcs.ref()
 	// outside a repo wants a blank, not an exception. Tags differ: resolveVCS
 	// already covers "no VCS", a repository with no tags exits 0 with no output,
-	// so a non-nil error here is a real fault - git missing, not a repository, or
+	// so a non-nil error here is a real fault: git missing, not a repository, or
 	// a malformed pattern. Swallowing it would report "no releases" for "could not
 	// read releases", which is exactly the confusion a release page must not make.
 	return v.Tags(ctx, vcsDir(ctx), pattern)
@@ -458,7 +458,7 @@ func vcsExe(ctx context.Context) (string, error) {
 // VcsCmd runs the active VCS binary with args.
 //
 // This replaced vcs.exe, which handed back a PATH and left every caller to write
-// proc.exec(<the vcs binary>, [...]) - two calls, and a silent no-op when the path came back
+// proc.exec(<the vcs binary>, [...]): two calls, and a silent no-op when the path came back
 // empty because no VCS was resolved. Returning an ExecResult also puts the escape hatch
 // on the same typed footing as magus.cmd and proc.exec instead of a bare string. "exe" was
 // the wrong word besides: it reads as a Windows file extension, and the value is a

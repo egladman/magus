@@ -58,8 +58,8 @@ func (d DaemonAdmitter) call(ctx context.Context, reqType string, req any, wantT
 		return fmt.Errorf("proc: %s: invalid address: %w", reqType, err)
 	}
 	// The timeout covers DIAL as well as the exchange. A daemon whose accept queue is
-	// full is not dead - the socket file is there and the connection simply never
-	// completes - so a dial outside the bound hangs the caller for as long as the daemon
+	// full is not dead (the socket file is there and the connection simply never
+	// completes), so a dial outside the bound hangs the caller for as long as the daemon
 	// stays sick, which for a release means holding a local limiter slot the whole time.
 	ctx, cancel := context.WithTimeout(ctx, admitTimeout)
 	defer cancel()

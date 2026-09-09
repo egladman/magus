@@ -1,0 +1,98 @@
+// magusfile.buzz for commentdash, a standalone Go module (github.com/egladman/magus/libs/commentdash)
+// at libs/commentdash: a static analyzer reporting a Go comment that spells an
+// em-dash with a spaced hyphen. Its own module (not part of the magus module)
+// because golangci-lint compiles a plugin INTO its binary rather than loading one
+// at runtime, so the rule has to be a dependency someone can pin at a version,
+// which is what makes it a project here rather than a package in the magus tree.
+//
+//   magus run build libs/commentdash   compile the analyzer and the plugin glue
+//   magus run test libs/commentdash    run the analysistest suite
+//   magus run ci libs/commentdash      lint, build, and test
+//
+// Nothing in the magus module imports it, and nothing should: the consumer is
+// `golangci-lint custom`, which reads libs/testlayout/.custom-gcl.yml. One binary
+// carries every in-repo plugin, so that file names this module too.
+
+import "magus";
+import "../../tools/drift" as drift;
+
+// go spell claims **/*.go and the module files. This file's own export-fun targets
+// need no declaration: magus binds the magusfile driver to every project.
+import "magus/spell/go";
+// Imported for its dprint op only, NOT added to the spells list: binding markdown here
+// would also claim this tree's **/*.md for markdownlint, which the root project lints.
+import "magus/spell/markdown";
+import "../../spells/golang/gomod" as gomod;
+
+import "fs";
+
+magus\project({
+    "spells": [go],
+    // MAGUS.md is declared per-target on index_generate, not here: see the root magusfile.
+    "targets": {
+        // Drift-gates MAGUS.md via git status: run alone, every time.
+        "generate": {"skip_cache": "drift-gates MAGUS.md via git status; a replay would skip the check", "exclusive": true},
+        // index-generate renders `magus describe graph -o markdown`, so its output is a
+        // function of the WHOLE knowledge graph. Its declared inputs (the magusfiles and
+        // the sibling indexes) are the only part of that a glob can name, so any other
+        // change leaves the key unmoved: a cache hit then replays a MAGUS.md built
+        // before it and REVERTS the committed one, which the drift gate above correctly
+        // reports as drift. Every other library carries the same opt-out.
+        "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
+    },
+});
+
+// A pure library, so the pipeline is the Go lifecycle plus index-generate, matching
+// libs/testlayout. Each target delegates to the go spell's ops.
+
+export fun preflight(ctx: magus\Context, args: [str]) > void {}
+
+// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+export fun generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    gomod\replaceWorkspaceModules(ctx, go, "libs/commentdash");
+    ctx.needs(index_generate);
+}
+
+// Renders MAGUS.md (target catalog plus graph) from this magusfile.
+export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared so `magus vcs resolve` can find the target that settles a conflict here:
+    // it matches per-TARGET outputs, and the project-level outputs list is not enough.
+    ctx.writesFiles("MAGUS.md");
+    // Every MAGUS.md embeds the same graph-derived routing tables, so a graph change
+    // anywhere can invalidate this file with nothing in this tree moving. The graph is
+    // unkeyable (see skip_cache above), but a routing change always rewrites the
+    // originating project's own index, so a sibling MAGUS.md moving in the diff is the
+    // keyable signal, and declaring them seeds this project into `magus affected`.
+    // Relative, not <alias>\file(): the cross form also unions a depends_on edge, which
+    // would put this project in EVERY owner change's affected set, not just index moves.
+    ctx.readsFiles("../../**/MAGUS.md");
+    final doc = magus\describe(["graph", "-o", "markdown"], {"quiet": true}).stdout;
+    fs\writeFile("MAGUS.md", doc + "\n");
+}
+
+export fun format(ctx: magus\Context, args: [str]) > void {
+    // Declared because the markdown spell is NOT in this project's spell list: the
+    // dprint OP is imported on its own, so the spell's `**/*.md` claim never joins
+    // these sources. Without this the cache key does not move when only markdown
+    // changes, and format:rw replays a pass without running dprint at all.
+    //
+    // The glob mirrors this project's dprint.json `includes` (./**/*.md); keep the two
+    // in step.
+    ctx.readsFiles("**/*.md");
+    ctx.needs(generate);
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+    markdown["dprint"](ctx);
+}
+// go-vet only, as in libs/testlayout. Deliberately NOT golangci-lint: this module
+// is what a custom golangci-lint binary is built FROM, and linting it with a binary
+// that carries it is a bootstrap nobody needs.
+export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
+export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }
+
+// The anchor `magus affected ci` keys off; fans out lint/build/test after format.
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(lint, build, test);
+}

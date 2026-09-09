@@ -76,7 +76,7 @@ func TestTypeErrorRendersCode(t *testing.T) {
 }
 
 // TestTypeErrorNoCodeRendersPlain pins that an unclassified error (empty Code) renders as a plain message
-// with no [BZZ] tag and no see: link - matching Rust/TS, where an error either earns a code or has none.
+// with no [BZZ] tag and no see: link, matching Rust/TS, where an error either earns a code or has none.
 func TestTypeErrorNoCodeRendersPlain(t *testing.T) {
 	got := typeError{Line: 2, Col: 1, Msg: "void function cannot return a value"}.Error()
 	want := "buzz: line 2:1: void function cannot return a value"
@@ -87,7 +87,7 @@ func TestTypeErrorNoCodeRendersPlain(t *testing.T) {
 
 // TestTypeErrorAsDiagnostic pins the errors.As bridge an embedder branches on. magus sits
 // above this module and its lowest layers below it, so nothing outside this package can name
-// typeError - without As the BZZ code is reachable only by substring-matching a sentence
+// typeError; without As the BZZ code is reachable only by substring-matching a sentence
 // written for humans, and the one caller that tried instead matched nothing at all.
 func TestTypeErrorAsDiagnostic(t *testing.T) {
 	// Wrapped the way a workspace load wraps it, so this exercises the chain rather than a

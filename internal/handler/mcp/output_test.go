@@ -16,7 +16,7 @@ import (
 
 // fakeOutputReader is a hand-built outputReader: it returns canned bytes and a
 // descriptor, or a chosen error, from OutputByRef, canned matches, or a chosen
-// error, from IdentifyRef, and a caller-supplied rendering from RefMatchCommand -
+// error, from IdentifyRef, and a caller-supplied rendering from RefMatchCommand,
 // so outputTool.Invoke is unit-testable without a real workspace cache or
 // *magus.Magus.
 type fakeOutputReader struct {
@@ -138,7 +138,7 @@ func TestOutputToolInvokeNotExistOneMatch(t *testing.T) {
 // second review round flagged: when RefMatchCommand's rendering required
 // --no-default-charms (the match is the bare CI variant of a target in a
 // workspace with configured default_charms), the message must say plainly that
-// magus_run_target cannot reproduce this ref - there is no --no-default-charms
+// magus_run_target cannot reproduce this ref: there is no --no-default-charms
 // escape hatch over MCP (see run.go's effectiveCharms), so an MCP-only agent
 // following the command as literally printed would apply the workspace's
 // defaults anyway and mint a different ref.
@@ -178,7 +178,7 @@ func TestOutputToolInvokeNotExistSeveralMatches(t *testing.T) {
 }
 
 // TestOutputToolInvokeNotExistIdentifyRefErrors pins the fallback: when IdentifyRef
-// itself errors, the plain not-found message survives unchanged - a best-effort
+// itself errors, the plain not-found message survives unchanged: a best-effort
 // suggestion must never replace a lookup failure with a different one.
 func TestOutputToolInvokeNotExistIdentifyRefErrors(t *testing.T) {
 	reader := fakeOutputReader{err: fs.ErrNotExist, identifyErr: errors.New("cache unavailable")}

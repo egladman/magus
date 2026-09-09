@@ -11,10 +11,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Query is deterministic name resolution and retrieval over the knowledge graph -
+// Query is deterministic name resolution and retrieval over the knowledge graph:
 // no LLM. It reuses magus's existing fuzzy-finding score (interactive.LeafScore,
 // which powers `magus x`/`magus where`), generalized from project paths to node
-// IDs and labels. The fielded grammar here is a pragmatic subset - field:value
+// IDs and labels. The fielded grammar here is a pragmatic subset: field:value
 // matchers (kind/project/relation/id), free-text terms (AND), and negation; the
 // full boolean grammar (OR/parens/wildcards) and the search.js conformance
 // fixture are a later increment.
@@ -34,7 +34,7 @@ var lazyLayerKinds = []string{types.KindSymbol, types.KindFile, types.KindDir}
 // SeedsLazyLayer reports whether an input targets the lazily-loaded @symbols shards, so a
 // caller knows to merge them into the default graph: a symbol: ID, any kind the layer holds
 // (incl. wildcard), a defines/references/calls relation, or any language filter. It must
-// agree with scoreNode - a match that reaches those shards without seeding here returns
+// agree with scoreNode: a match that reaches those shards without seeding here returns
 // empty. Over-eager is safe: it only loads shards a later filter may discard.
 func SeedsLazyLayer(input string) bool {
 	if strings.Contains(input, types.KindSymbol+":") { // an explicit symbol: node ID
@@ -52,7 +52,7 @@ func SeedsLazyLayer(input string) bool {
 			return true
 		}
 	}
-	// A kind or id regex that could reach the lazy layer seeds it too - over-seeding is safe
+	// A kind or id regex that could reach the lazy layer seeds it too; over-seeding is safe
 	// (a later filter discards), an unseeded symbol shard silently omits every code symbol.
 	if slices.ContainsFunc(lazyLayerKinds, func(lk string) bool { return matchesAnyRe(lk, q.reFields["kind"]) }) || len(q.reFields["id"]) > 0 {
 		return true
@@ -65,7 +65,7 @@ func SeedsLazyLayer(input string) bool {
 	return slices.ContainsFunc(q.fields["relation"], func(r string) bool {
 		// calls spans both layers: buzz function->function lives in the default graph,
 		// symbol->symbol only in the symbol shards. Seeding on it loads shards a buzz-only
-		// query does not need, which is the safe direction - the alternative is a
+		// query does not need, which is the safe direction: the alternative is a
 		// relation:calls query that silently omits every code symbol.
 		// A query field is whatever the caller typed, so it is compared as text rather
 		// than assumed to name a declared relation.
@@ -97,7 +97,7 @@ func CouldMatchLazyLayer(input string) bool {
 	if len(kinds) == 0 {
 		return true // no kind filter, so the layer was in scope and simply was not loaded
 	}
-	// Every explicit kind is outside the lazy layer (and no wildcard reaches it -
+	// Every explicit kind is outside the lazy layer (and no wildcard reaches it;
 	// SeedsLazyLayer already returned false, so none does), which excludes it outright.
 	return false
 }
@@ -232,7 +232,7 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 			continue
 		}
 		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
-		// Prose whose subject moved on is LABELED, never reordered - see stalenessLabel for
+		// Prose whose subject moved on is LABELED, never reordered; see stalenessLabel for
 		// why ranking on it is the wrong repair. The label travels with the match so a caller
 		// can show "400 days behind its subject" beside the result and let the reader judge.
 		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
@@ -338,7 +338,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 	// Every positive term must match (AND); score is the sum of best per-term
 	// leaf-anchored scores against ID and label, with a small credit for a doc hit.
 	// A wildcard term is a boolean glob filter (no fuzzy score), matched against ID and
-	// label - NOT the doc (prose is not glob-shaped, unlike the plain-substring path
+	// label, NOT the doc (prose is not glob-shaped, unlike the plain-substring path
 	// which does search the doc). It contributes a flat credit so it ranks like a doc
 	// hit, not a leaf match.
 	total := 0
@@ -395,7 +395,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 	// Seeds are ranked (best match first); cap them at the budget so a query that
 	// matches thousands of nodes (e.g. a common term across every project) returns
 	// the top budget matches, not the whole graph. Without this the budget only
-	// bounds neighborhood expansion, not the seed set - so the node count could
+	// bounds neighborhood expansion, not the seed set, so the node count could
 	// exceed the documented "max nodes = budget" contract.
 	for _, s := range seeds {
 		if len(visited) >= budget {
@@ -458,7 +458,7 @@ func (g *Graph) Neighborhood(seeds []string, budget int, relations []string) *Gr
 
 // Query resolves the input to seeds and returns the ranked matches plus their
 // neighborhood subgraph, bounded by budget. It is the unpaged view: every match, in
-// one response - QueryPage with a zero offset and no limit, so the two cannot drift.
+// one response: QueryPage with a zero offset and no limit, so the two cannot drift.
 func (g *Graph) Query(input string, budget int) types.KnowledgeQueryOutput {
 	return g.QueryPage(input, budget, 0, 0)
 }
@@ -593,7 +593,7 @@ func (g *Graph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	// The definition's line lives on the symbol node's Source ("path:line"); the
 	// defines edge provenance carries only the path. Surface the line on the def site
 	// so an agent can jump straight to the definition and edit it without reading the
-	// whole file - the same file:line refs already gives for references.
+	// whole file, the same file:line refs already gives for references.
 	defFile, defLine, _ := splitPathLine(n.Source)
 	for _, e := range g.in[id] {
 		file := strings.TrimPrefix(e.Source, types.KindFile+":")
@@ -690,7 +690,7 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 // Deliberately narrower than blastRadius below, which is a different question wearing a similar
 // name: blastRadius counts everything that reaches a node by ANY relation, so a doc that
 // documents a spell is in it. This walks `depends_on` alone, which is what "what rebuilds if I
-// change this" means - and the two diverge hard. Nothing depends_on a spell (a target USES one),
+// change this" means, and the two diverge hard. Nothing depends_on a spell (a target USES one),
 // so a spell's blastRadius is in the hundreds while its Dependents is empty, and both are
 // correct answers to their own question.
 //
@@ -723,7 +723,7 @@ func (g *Graph) Dependents(id string) []string {
 // natural direction, over ANY relation. It is unbounded (walks the whole reachable
 // component); a budget/cap for hub nodes on very large graphs is Phase 8 scale work.
 //
-// A REACH measure, not a rebuild one - see Dependents above, which answers "what rebuilds"
+// A REACH measure, not a rebuild one; see Dependents above, which answers "what rebuilds"
 // over depends_on alone. The two diverge to the point of contradiction on a spell.
 func (g *Graph) blastRadius(id string) int {
 	g.ensureAdj()
@@ -866,7 +866,7 @@ func (g *Graph) projectOf(n types.KnowledgeNode, id string) (string, bool) {
 // Guarded by projMu for the same reason ensureAdj is guarded by adjMu: this runs
 // on the query path against a *Graph the daemon's warm graph can hand to several
 // concurrent requests, so a bare nil check would let two first-queries race
-// writing g.projPaths - a concurrent map/slice write that crashes the process.
+// writing g.projPaths, a concurrent map/slice write that crashes the process.
 func (g *Graph) projectPaths() []string {
 	g.projMu.Lock()
 	defer g.projMu.Unlock()
@@ -921,7 +921,7 @@ func matchesAnyRe(s string, res []*regexp.Regexp) bool {
 }
 
 // globMatch reports whether s matches a case-insensitive glob where '*' matches any run
-// of characters, separators ('/', ':') included - node IDs are full of them, so path.Match's
+// of characters, separators ('/', ':') included; node IDs are full of them, so path.Match's
 // slash-significance would surprise. No '*' means exact match. Middle segments match
 // leftmost without backtracking, which is correct because the surrounding '*' absorb any slack.
 func globMatch(pattern, s string) bool {

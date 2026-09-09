@@ -353,7 +353,7 @@ func TestAssembleOpTools(t *testing.T) {
 
 	assert.True(t, hasEdge(out, opID, tID, types.RelationUses), "go-build op uses the go tool")
 	assert.True(t, hasEdge(out, "op:go:go-test", tID, types.RelationUses), "go-test op uses the SAME tool")
-	// The spell that owns the ops uses the tool too - the spell<->tool link, deduped.
+	// The spell that owns the ops uses the tool too: the spell<->tool link, deduped.
 	assert.True(t, hasEdge(out, "spell:go", tID, types.RelationUses), "the go spell uses the go tool")
 
 	// The function-op carries no argv and links to no tool.
@@ -608,7 +608,7 @@ func TestAssembledEdgesAreAllDeclared(t *testing.T) {
 
 // TestEveryDeclaredRelationIsExercised is what makes the check above worth anything. It
 // reads only the shapes the fixture happens to produce, so a declared relation nothing
-// emits is a vocabulary entry no test has ever seen - and the two that were missing when
+// emits is a vocabulary entry no test has ever seen, and the two that were missing when
 // this was written, annotates and rationale_for, are exactly the two whose inputs the
 // fixture did not supply.
 //

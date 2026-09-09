@@ -144,7 +144,7 @@ var Platform = Module{
 // The boundary carries a Go int, so a machine with more memory than an int can
 // hold reports UNKNOWN rather than a truncated figure. That is only reachable on
 // a 32-bit host with over 2GB, where a silently wrapped number would size a
-// magusfile's parallelism off nonsense - see the deferred 32-bit plan.
+// magusfile's parallelism off nonsense; see the deferred 32-bit plan.
 func PlatformMemory(ctx context.Context) (int, error) {
 	b := mem.UsableBytes(ctx)
 	if b <= 0 || b > int64(math.MaxInt) {

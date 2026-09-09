@@ -118,7 +118,7 @@ func (discardTTY) Fd() uintptr                 { return 2 }
 
 // countingTTY records how many bytes reach the terminal. For an interactive
 // surface that is the number that matters: ns/op measures composition, but what
-// a reader actually waits on is the terminal parsing and rendering the bytes -
+// a reader actually waits on is the terminal parsing and rendering the bytes,
 // and, over ssh, the link carrying them.
 type countingTTY struct{ n int }
 
@@ -128,7 +128,7 @@ func (*countingTTY) Fd() uintptr                   { return 2 }
 // BenchmarkPickerMouseSweep is one pointer sweep down the list.
 //
 // Any-event tracking reports every CELL the pointer crosses, not every row, and
-// a row is as wide as the terminal - so a diagonal sweep across ten items is
+// a row is as wide as the terminal, so a diagonal sweep across ten items is
 // dozens of events of which only ten change anything. The two variants are the
 // picker before and after the redraw is guarded on the highlight actually
 // moving.
@@ -215,7 +215,7 @@ func statusFrame(spinner rune) string {
 }
 
 // BenchmarkWatchFrame is one second of a watch view. Grid mode animates at
-// 150ms, so this cost repeats for as long as the view is open - and over ssh,
+// 150ms, so this cost repeats for as long as the view is open, and over ssh,
 // on the wire the whole time. The two variants are the block rewritten whole
 // and the block diffed.
 func BenchmarkWatchFrame(b *testing.B) {

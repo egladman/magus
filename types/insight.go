@@ -177,9 +177,9 @@ type InsightView struct {
 	Trend     TrendOutput     `json:"trend"      yaml:"trend"`
 	// Volatility stays a POINTER here while InsightReport's is a value, and the two
 	// are not carelessly out of step: this is the console's wire shape, where absent
-	// and empty say different things. docs/reference/api/insight.md commits to it -
-	// null renders "no runs recorded yet", an empty report renders "no volatile
-	// targets" - and volatilityToProto maps nil to a nil message to preserve it.
+	// and empty say different things. docs/reference/api/insight.md commits to it
+	// (null renders "no runs recorded yet", an empty report renders "no volatile
+	// targets"), and volatilityToProto maps nil to a nil message to preserve it.
 	// InsightReport has no such reader: it crosses into Buzz, where the mirror
 	// declares the field non-optional so a magusfile reaches .volatility.targets
 	// without a nil guard.
@@ -193,7 +193,7 @@ type InsightView struct {
 // Volatility is a VALUE, not a pointer, so the Buzz mirror declares it non-optional and
 // a caller reads report.volatility.targets without a nil guard. An empty Targets list is
 // what "the run-outcome axis had nothing to say" means, which is the same test every
-// consumer already made. Deliberately unlike InsightView's pointer above - see the note
+// consumer already made. Deliberately unlike InsightView's pointer above; see the note
 // there for why the console shape keeps a distinction this one does not need.
 type InsightReport struct {
 	Hotspots   HotspotOutput    `json:"hotspots"    yaml:"hotspots"`
@@ -214,8 +214,8 @@ type InsightReport struct {
 //
 // It exists so both entry points agree on ONE vocabulary. The CLI declared this
 // shape privately and the Buzz surface could not see it, so `magus\insight`
-// forked a whole magus - a process spawn, a second workspace load, a JSON encode and
-// a Buzz-side parse - to reach methods the calling process already had.
+// forked a whole magus (a process spawn, a second workspace load, a JSON encode and
+// a Buzz-side parse) to reach methods the calling process already had.
 //
 // Volatility and Unreferenced take no options because they read their whole source
 // workspace-wide: the run-history file and the symbol index have no commit window to

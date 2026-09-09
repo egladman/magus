@@ -11,7 +11,7 @@ import (
 )
 
 // No same-named source file, deliberately: this asserts one property across
-// every type in the package at once, which is the point - a new entry point
+// every type in the package at once, which is the point: a new entry point
 // that forgets its gate fails here rather than in somebody's CI log.
 //
 // TestNothingIsWrittenToANonTerminal is the backstop for this whole package.
@@ -21,7 +21,7 @@ import (
 // the property across the whole surface at once, so a new entry point that
 // forgets to check fails HERE rather than in somebody's CI log.
 //
-// A bytes.Buffer has no Fd(), which is the strongest form of "not a terminal" -
+// A bytes.Buffer has no Fd(), which is the strongest form of "not a terminal",
 // stronger than a probe that says no, because no amount of probe confusion can
 // make one appear.
 func TestNothingIsWrittenToANonTerminal(t *testing.T) {
@@ -111,7 +111,7 @@ func TestHyperlinkIsNeverEmittedOffATerminal(t *testing.T) {
 // the one a descriptor check alone gets wrong.
 //
 // TERM=dumb declares a terminal that understands no escape sequences, but the
-// pty behind emacs shell-mode IS a terminal - so every "is this a tty" check
+// pty behind emacs shell-mode IS a terminal, so every "is this a tty" check
 // says yes, and the cursor addressing and scroll margins go out to something
 // that renders them as literal garbage.
 func TestNothingIsRenderedOnADumbTerminal(t *testing.T) {

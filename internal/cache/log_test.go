@@ -121,7 +121,7 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		// held while a cause was always ONE error whose message happened to wrap.
 		// It stopped holding once errors.Join made a cause routinely carry several
 		// INDEPENDENT failures, because flattening then ran two unrelated ones into
-		// a single sentence with no boundary - see
+		// a single sentence with no boundary; see
 		// TestFailureCausesSplitsAndStripsPlumbing for the real string that produced.
 		// Scannability is now served by a hanging indent instead of by one line.
 		assert.Contains(t, out, "cause: compile failed:\n       undefined: Widget",
@@ -519,7 +519,7 @@ func TestPrettyHandlerSummaryReleasesStickyRegion(t *testing.T) {
 		slog.String("error", "boom"),
 	)), "Handle cache.error")
 	// Everything the summary itself writes, isolated from what came before it.
-	// The band GROWS as failures arrive, and a grow rebuilds the region - which
+	// The band GROWS as failures arrive, and a grow rebuilds the region, which
 	// resets the margins on its way to setting new ones. Asserting over the
 	// whole transcript would see that earlier reset and read it as a teardown
 	// the summary did not perform.
@@ -628,7 +628,7 @@ func TestStatusLineRender(t *testing.T) {
 		// The blocked state deliberately does NOT appear here: it is announced
 		// once, as the pinned notification, which is bold and carries the
 		// remedy. Saying it in both places said the same facts twice for one
-		// event. The fields are still set - blockedMessage reads them.
+		// event. The fields are still set: blockedMessage reads them.
 		{"a blocked run does not repeat itself here", statusLine{capacity: 8, blocked: "web/api"}, "□ □ □ □ □ □ □ □ (0/8)"},
 		{"nor when the holder is known", statusLine{capacity: 8, blocked: ".", blockedBy: "pid 71557 (magus run serve)"}, "□ □ □ □ □ □ □ □ (0/8)"},
 		{
@@ -811,8 +811,8 @@ func TestPrettyHandlerIsUnchangedWithoutSecrets(t *testing.T) {
 
 // TestPrettyHandlerPrintsAfterCancellation pins that a cancelled context does NOT silence
 // a record. PrettyHandler is the DEFAULT handler, and it used to early-return on
-// ctx.Err(). That was inert for as long as it existed - every call site logged through
-// slog.Logger.Info, which passes context.Background() - so nothing noticed. When the run
+// ctx.Err(). That was inert for as long as it existed (every call site logged through
+// slog.Logger.Info, which passes context.Background()), so nothing noticed. When the run
 // path began passing its real context (so records could reach the secret resolver), the
 // check woke up and started eating output: in a concurrent run the first failure cancels
 // the errgroup, so every [pass]/[fail] line that finished afterwards, the [summary]
@@ -837,7 +837,7 @@ func TestPrettyHandlerPrintsAfterCancellation(t *testing.T) {
 // TestFailureCausesSplitsAndStripsPlumbing pins the readability of the `cause:`
 // line, using the exact string a real `magus run ci .` produced. Two independent
 // failures were joined by errors.Join with a newline and then flattened by
-// strings.Fields, so they ran together into one sentence with no boundary -
+// strings.Fields, so they ran together into one sentence with no boundary:
 // "dprint exited 20 test: ctx.needs: advice-test: ..." reads as a single clause
 // and names neither failure clearly.
 func TestFailureCausesSplitsAndStripsPlumbing(t *testing.T) {
@@ -894,6 +894,157 @@ func TestHopChainUsesTheMarkersNotGuesswork(t *testing.T) {
 	}
 }
 
+// anchorsStale is the root cause the docs cascade below is built from: the one
+// real failure, before any dependent wrapped it.
+const anchorsStale = "buzz: uncaught error: diagram anchors are stale: 2 finding(s)"
+
+// failEvent drives one cache.error through a handler.
+func failEvent(t *testing.T, h *PrettyHandler, project, target, cause string) {
+	t.Helper()
+	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.error",
+		slog.String("project", project), slog.String("target", target),
+		slog.Int64("duration", int64(time.Second)),
+		slog.String("error", cause), slog.String("ref", "out177c63a16c3e"))), target)
+}
+
+func summaryEvent(t *testing.T, h *PrettyHandler, errors int) {
+	t.Helper()
+	require.NoError(t, h.Handle(context.Background(), buildRecord("cache.summary",
+		slog.Int("hits", 0), slog.Int("misses", 0), slog.Int("errors", errors),
+		slog.Int64("elapsed", int64(time.Second)))), "summary")
+}
+
+// docsCascade replays the run this dedup exists for: one stale-anchor failure in
+// docs, and six targets that compose it and restate its message through one, two
+// and three dependency hops.
+func docsCascade(t *testing.T, h *PrettyHandler) {
+	t.Helper()
+	oneHop := "ctx.needs: diagrams-generate: " + anchorsStale
+	twoHop := "ctx.needs: generate: " + oneHop
+	threeHop := "ctx.needs: format: " + twoHop
+
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "generate", oneHop)
+	failEvent(t, h, "docs", "format", twoHop)
+	failEvent(t, h, "docs", "lint", threeHop)
+	failEvent(t, h, "docs", "build", twoHop)
+	failEvent(t, h, "docs", "test", threeHop)
+	// ci composes all four chains, so its cause restates the same message four
+	// times over. Its signature has to collapse to the root's or the target with
+	// the most restatements would be the one that escapes suppression.
+	failEvent(t, h, "docs", "ci", strings.Join([]string{oneHop, twoHop, threeHop, "ctx.needs: build: " + twoHop}, "\n"))
+}
+
+func TestBlockedCascadeReportsTheRootOnce(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	docsCascade(t, h)
+	summaryEvent(t, h, 7)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "diagram anchors are stale"),
+		"the cause is printed once, not once per dependent")
+	assert.Contains(t, out, "blocked by docs diagrams-generate: generate, format, lint, build, test, ci",
+		"and the targets it stopped are named in report order")
+	assert.Equal(t, 1, strings.Count(out, "reproduce: "),
+		"only the root is worth rerunning; a dependent reruns into the same failure")
+	// The run this replaces printed 39 lines: five per failure, seven failures,
+	// plus the summary. The cause is worth reading once.
+	assert.Equal(t, 7, strings.Count(out, "\n"),
+		"one failure block, one blocked-by line, one summary")
+}
+
+// TestBlockedCascadeLeavesTheRootPinned is why suppression has to happen before
+// the failure reaches the ring: the band holds five rows and this cascade is
+// seven failures, so suppressed restatements that still took a slot would evict
+// the one failure worth looking at.
+func TestBlockedCascadeLeavesTheRootPinned(t *testing.T) {
+	var buf ttyBuf
+	h := newTerminalHandler(&buf)
+	docsCascade(t, h)
+
+	got := h.Failures()
+	require.Len(t, got, 1)
+	assert.Equal(t, "diagrams-generate", got[0].Target)
+}
+
+// TestBlockedLeavesIndependentFailuresAlone: suppression keys on the cause, so
+// two roots that failed for different reasons both have to survive it.
+func TestBlockedLeavesIndependentFailuresAlone(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	// Same project, and it did arrive through a dependency, so only the message
+	// separates it from the root above.
+	failEvent(t, h, "docs", "link-check", "ctx.needs: crawl: 4 dead links")
+	failEvent(t, h, "api", "build", "go exited 1")
+	summaryEvent(t, h, 3)
+
+	out := buf.String()
+	assert.Contains(t, out, "diagram anchors are stale")
+	assert.Contains(t, out, "4 dead links")
+	assert.Contains(t, out, "go exited 1")
+	assert.NotContains(t, out, "blocked by", "no failure here restates another")
+}
+
+// TestBlockedKeepsADependentWithItsOwnFailure guards the case that makes this
+// safe to do at all: a dependent that failed for its OWN reason is not a
+// restatement of anything, however far down the chain it sits.
+func TestBlockedKeepsADependentWithItsOwnFailure(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "lint", "ctx.needs: generate: markdownlint exited 1")
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Contains(t, out, "diagram anchors are stale")
+	assert.Contains(t, out, "markdownlint exited 1")
+	assert.NotContains(t, out, "blocked by")
+}
+
+// TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage: two targets that ran the
+// same broken tool independently report the same message and neither depends on
+// the other. Message equality alone would fold the second into the first and
+// claim a dependency that does not exist, so a failure with no hops is never
+// suppressed.
+func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	const missing = "config.json: missing key: name"
+	failEvent(t, h, "docs", "lint", missing)
+	failEvent(t, h, "docs", "test", missing)
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, missing), "both targets failed on their own")
+	assert.NotContains(t, out, "blocked by")
+}
+
+// TestBlockedSuppressionDoesNotChangeTheCount is the line between presentation
+// and bookkeeping: a blocked target did fail, and the footer must keep saying so.
+func TestBlockedSuppressionDoesNotChangeTheCount(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, "docs", "diagrams-generate", anchorsStale)
+	failEvent(t, h, "docs", "generate", "ctx.needs: diagrams-generate: "+anchorsStale)
+	failEvent(t, h, "docs", "build", "ctx.needs: generate: ctx.needs: diagrams-generate: "+anchorsStale)
+
+	assert.Equal(t, 3, h.status.failed, "three targets failed, whatever was printed")
+	summaryEvent(t, h, 3)
+	assert.Contains(t, buf.String(), "3 failed")
+}
+
 // TestHitFailureResolvesAClickToTheTargetThatFailed is the property that makes
 // the band actionable rather than merely visible.
 func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
@@ -947,7 +1098,7 @@ func TestHitFailureResolvesAClickToTheTargetThatFailed(t *testing.T) {
 // TestPrettyHandlerResetsPerRunStateAcrossRuns is the long-lived-process
 // property: this handler is per-PROCESS, but everything it shows is per-RUN.
 //
-// Anything that outlives a single run - a TUI left open, the daemon - drives
+// Anything that outlives a single run (a TUI left open, the daemon) drives
 // more than one through the same handler, and without the split the second run
 // reports the first one's failures and a clock that started before it did.
 func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
@@ -987,8 +1138,8 @@ func TestPrettyHandlerResetsPerRunStateAcrossRuns(t *testing.T) {
 // TestNoEscapeSequencesEverReachAPipe is the CI persona's one demand, as a
 // gate rather than a promise.
 //
-// Everything this package gained - a pinned band, notifications, a selection
-// highlight, hyperlinked refs - emits escape sequences, and every one of them
+// Everything this package gained (a pinned band, notifications, a selection
+// highlight, hyperlinked refs) emits escape sequences, and every one of them
 // is supposed to be gated on the writer being a terminal. Gates are easy to add
 // and easy to forget, and the failure mode is not subtle: a CI log full of
 // \x1b[2m garbage, in the output people read when something is already broken.
@@ -1066,7 +1217,7 @@ func TestBandHonoursNoColor(t *testing.T) {
 //
 // A click resolves through tty.Zone's row arithmetic into this handler's band
 // layout. If those two ever disagree by one row, clicking a failure reruns a
-// DIFFERENT target than the one under the pointer - silently, and destructively,
+// DIFFERENT target than the one under the pointer, silently, and destructively,
 // since rerunning is an action. Both sides were tested against their own idea of
 // where the rows are; neither was tested against where the text actually landed.
 //
@@ -1143,7 +1294,7 @@ func TestRecordBoolSurvivesAWrongType(t *testing.T) {
 }
 
 // TestRecordDurAcceptsBothSpellings guards the silent zero. A caller reaching
-// for slog.Duration - the obvious constructor - used to get 0 back, because
+// for slog.Duration (the obvious constructor) used to get 0 back, because
 // only the Int64 spelling was accepted.
 func TestRecordDurAcceptsBothSpellings(t *testing.T) {
 	t.Parallel()
@@ -1157,7 +1308,7 @@ func TestRecordDurAcceptsBothSpellings(t *testing.T) {
 }
 
 // TestPrettyHandlerRefLegend covers the one line that makes a bare output ref
-// actionable to a reader who has never met one - most often an agent, in a fresh
+// actionable to a reader who has never met one: most often an agent, in a fresh
 // worktree, under a tool that installed no magus skills.
 func TestPrettyHandlerRefLegend(t *testing.T) {
 	t.Parallel()

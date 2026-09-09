@@ -11,15 +11,15 @@ import (
 // Coverage ingestion is OBSERVED, not extracted: it parses the Go coverage profile
 // magus produces (`magus run coverage` writes coverage.out) and folds a per-file (and
 // per-symbol) covered-statement ratio onto the file/symbol nodes SCIP already minted.
-// It never churns the deterministic @symbols shards it annotates - the ratio is
+// It never churns the deterministic @symbols shards it annotates: the ratio is
 // volatile local run data, so it rides an isolated @coverage shard, re-derived each
 // build and excluded from remote export, exactly as the @runtime timing overlay does.
 // This mirrors the run-history pattern: an overlay of partial typed nodes whose attrs
 // merge onto the real nodes order-independently once the symbol shards are loaded.
 
 // coverageShardName is the isolated shard holding the observed coverage overlay. Like
-// @symbols it is omitted from the default graph (its merge targets - Go file and symbol
-// nodes - are themselves lazy) and pulled in alongside the symbol shards; like @runtime
+// @symbols it is omitted from the default graph (its merge targets, Go file and symbol
+// nodes, are themselves lazy) and pulled in alongside the symbol shards; like @runtime
 // it is local-only, never pushed to a remote.
 const coverageShardName = "@coverage"
 
@@ -148,7 +148,7 @@ func lineOf(part string) (int, bool) {
 
 // coverageAttrs renders the covered/total ratio into the attr map shared by file and
 // symbol nodes. An empty map (total == 0) means "no instrumented statements", so no
-// node is emitted - a file with zero statements is not the same as a covered one.
+// node is emitted; a file with zero statements is not the same as a covered one.
 func coverageAttrs(covered, total int) map[string]string {
 	if total == 0 {
 		return nil
@@ -162,14 +162,14 @@ func coverageAttrs(covered, total int) map[string]string {
 }
 
 // assembleCoverage builds the isolated @coverage overlay: a partial file node per
-// covered file carrying the file-level ratio, and - when the file's symbols are known
-// from the SCIP ingestion - a partial symbol node per function carrying its own ratio.
+// covered file carrying the file-level ratio, and (when the file's symbols are known
+// from the SCIP ingestion) a partial symbol node per function carrying its own ratio.
 // Symbol attribution is a nearest-preceding-definition heuristic: each coverage block is
 // credited to the symbol with the greatest definition line at or before the block's
 // start line (the enclosing declaration), so a block above the first symbol (imports,
-// package-level init) contributes only to the file total. It is best-effort - SCIP gives
+// package-level init) contributes only to the file total. It is best-effort (SCIP gives
 // a symbol's definition line, not its body's end, so a package-level statement wedged
-// between two functions can be mis-credited - but it is exact for the common case of
+// between two functions can be mis-credited), but it is exact for the common case of
 // top-level functions and methods, which is what "which function lacks coverage" needs.
 // All nodes are partial (ID + kind + attrs): they merge onto the real file/symbol nodes
 // the @symbols shards define, whichever shard the loader reaches first.

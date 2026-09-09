@@ -40,7 +40,7 @@ import (
 // first (target functions passed to ctx.needs, in source order), then the names
 // matched by each ctx.glob pattern; self-edges and duplicates are dropped.
 // CrossDependencies hold cross-project edges (from project imports). Chain is the same
-// composition as an ORDERED list - every ctx.needs argument, local and cross alike, in
+// composition as an ORDERED list: every ctx.needs argument, local and cross alike, in
 // the order the body writes them. Charms are the has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
 	nodes, _, _ := extractNodes(source)
@@ -185,11 +185,11 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// Per-target cache footprint: ctx.readsFiles(...) / ctx.writesFiles(...).
 					// Every argument must be a string literal; a non-literal one is not
 					// collected, so len(globs) < len(args) means the call had a computed
-					// argument - flag it so the load path can decide (a computed glob is
+					// argument; flag it so the load path can decide (a computed glob is
 					// invisible to this static read).
-					// A declaration member called on something OTHER than the target's ctx - an
+					// A declaration member called on something OTHER than the target's ctx (an
 					// aliased derivation (final e = ctx.withEnv(...); e.withCwd(..)), or a context
-					// parameter named something other than ctx - is invisible to this static read
+					// parameter named something other than ctx) is invisible to this static read
 					// in exactly the same way, and is flagged the same way.
 					if me, isMember := e.Callee.(*ast.MemberExpr); isMember && !me.Namespaced &&
 						ctxDeclNames[me.Name] && !ctxRooted(me.Object) {
@@ -201,7 +201,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 						attributedIO[ast.NodePos(e.Callee)] = true
 						// recognized counts every argument the static read could attribute:
 						// a string literal, or (for inputs) a <alias>.file("lit") cross ref.
-						// recognized < len(args) means a computed argument slipped through -
+						// recognized < len(args) means a computed argument slipped through;
 						// flag it by kind so the load path can reject the footprint ones.
 						recognized := len(globs)
 						switch kind {
@@ -234,7 +234,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									// types/describe.go) despite the identical shape, so this
 									// conversion is the one place that boundary is explicitly and
 									// visibly crossed. If OutputRef ever grows a field InputRef
-									// lacks, this fails to compile instead of silently zeroing it -
+									// lacks, this fails to compile instead of silently zeroing it;
 									// do not collapse it back into a field-by-field struct literal.
 									node.WritesFiles = appendUniq(node.WritesFiles, types.OutputRef(ref))
 								}
@@ -243,7 +243,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// Iterate the globs ioCall already collected rather than
 							// re-walking Args: recognized is seeded from len(globs), so
 							// counting the same literals again pushed it past len(Args) and
-							// left the DynamicIO guard dead for this kind - a computed second
+							// left the DynamicIO guard dead for this kind: a computed second
 							// argument would have passed silently, under-declaring the key
 							// the guard exists to protect.
 							for _, g := range globs {
@@ -276,7 +276,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							}
 						case "envInputs":
 							// Names only: the value is read when the key is computed, so a
-							// literal name is all the static read needs - and all it can get.
+							// literal name is all the static read needs, and all it can get.
 							for _, g := range globs {
 								node.EnvAllow = appendUniq(node.EnvAllow, g)
 							}
@@ -284,9 +284,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// (key, value) pairs, canonicalized the way withEnv canonicalizes
 							// its map so buildStep can fold them straight into the key. An odd
 							// literal count means a key whose value the static read could not
-							// pair - an observation in the source that contributes nothing to
+							// pair (an observation in the source that contributes nothing to
 							// the key, which is the under-declaration this whole surface exists
-							// to reject - so trip the same guard a computed argument trips, and
+							// to reject), so trip the same guard a computed argument trips, and
 							// record NOTHING: pairing what is left over invents observations
 							// from a list magus has just said it cannot read.
 							if len(globs)%2 != 0 {
@@ -351,7 +351,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// Cross-project edge: <alias>.<target>, where <alias> came from an
 					// `import "project/<path>"`. The project path is left as written; the
 					// caller resolves it later. The reserved `.file` member is a path
-					// resolver, not a target, so skip it - it must not mint a phantom
+					// resolver, not a target, so skip it; it must not mint a phantom
 					// cross-dependency (it is handled as a cross-input via crossFileArg).
 					if id, ok := e.Object.(*ast.IdentExpr); ok && e.Name != types.CrossFileMember {
 						if proj, ok := projectAliases[id.Name]; ok {
@@ -429,7 +429,7 @@ func RemovedContextMethods(source string) []RemovedContextMethod {
 }
 
 // UnreachedIO returns every ctx.readsFiles/writesFiles member access in source that the
-// per-target walk did not reach - a call in an unreferenced or indirectly-dispatched
+// per-target walk did not reach: a call in an unreferenced or indirectly-dispatched
 // helper, or the identifier used as a value. Such a declaration never enters any cache
 // key, so surfacing it turns a silent footprint omission into a diagnostic (the loud
 // counterpart to the DynamicIO hard error, which only catches a non-literal argument in
@@ -469,7 +469,7 @@ type spellHit struct {
 	spell, op string
 }
 
-// ctxCall reports whether e is a ctx.<name>(...) call - a target declaring through the
+// ctxCall reports whether e is a ctx.<name>(...) call, a target declaring through the
 // magus.Context it received (ctx.needs, ctx.glob). The declaration surface lives only on
 // the context, read here statically off the source text so the graph never runs a body.
 func ctxCall(e *ast.CallExpr, name string) bool {
@@ -507,7 +507,7 @@ var ctxExecNames = map[string]bool{"withEnv": true, "withCwd": true}
 
 // flagDynamic records that a declaration named `kind` carried something the static read
 // could not attribute, split by which half of the surface it belongs to. The two halves
-// earn different treatment, and no condition over runtime policy can tell them apart -
+// earn different treatment, and no condition over runtime policy can tell them apart:
 // policy is only loaded on the CLI path, so scoping on it made a bare library caller's
 // magus.Open reject a magusfile the CLI accepts.
 //
@@ -532,7 +532,7 @@ func flagDynamic(node *types.TargetGraphNode, kind string) {
 }
 
 // ctxRooted reports whether n bottoms out at the `ctx` identifier, so a CHAINED
-// derivation - ctx.withEnv({...}).withCwd("..") - is recognized as well as a direct
+// derivation (ctx.withEnv({...}).withCwd("..")) is recognized as well as a direct
 // call. Without walking the spine only the first link is seen, and the rest of the
 // chain silently under-declares the cache key: the precise stale-hit risk these
 // overrides exist to close.
@@ -555,7 +555,7 @@ func ctxRooted(n ast.Node) bool {
 // kind and the string-literal glob arguments. ok is false for any
 // other call. Only string literals are collected; the caller detects a non-literal
 // (dynamic) argument as len(globs) < len(e.Args) and rejects it at load. A call with no
-// arguments is recognized (ok=true) but contributes no globs - harmless.
+// arguments is recognized (ok=true) but contributes no globs, harmless.
 func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 	me, ok := e.Callee.(*ast.MemberExpr)
 	if !ok {
@@ -579,7 +579,7 @@ func ioCall(e *ast.CallExpr) (kind string, globs []string, ok bool) {
 // <alias> names a project import in aliases. It returns the cross-project file input as
 // an InputRef (the dep project path as written and the file path relative to it) so
 // ctx.readsFiles(alias.file("x")) registers a cross-project input without hand-counting
-// "..". ok is false for any other argument shape - notably a computed, non-literal rel,
+// "..". ok is false for any other argument shape, notably a computed, non-literal rel,
 // which the caller treats as dynamic (DynamicIO).
 func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool) {
 	call, ok := arg.(*ast.CallExpr)
@@ -608,8 +608,8 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 	return types.InputRef{Project: proj, Glob: lit.Val}, true
 }
 
-// secretUseCall reports whether e reaches for a credential - `magus\secret.read(...)` or
-// `magus\secret.endpoint(...)` - and returns the reference when it is a literal at the
+// secretUseCall reports whether e reaches for a credential (`magus\secret.read(...)` or
+// `magus\secret.endpoint(...)`) and returns the reference when it is a literal at the
 // call site. Matched structurally rather than by rendered text, so an aliased import or
 // stray whitespace cannot hide it.
 //
@@ -621,12 +621,12 @@ func crossFileArg(arg ast.Node, aliases map[string]string) (types.InputRef, bool
 //
 // The REFERENCE comes back only for read, whose argument is a string literal. An
 // endpoint takes an object, usually a `final` declared elsewhere, so the reference is not
-// at the call site and this returns "" - the use is still recorded, the name is not.
+// at the call site and this returns ""; the use is still recorded, the name is not.
 // Resolving that identifier would mean evaluating the magusfile, which is exactly what a
 // static read refuses to do.
 //
 // The shape is a member access on a NAMESPACED member: magus\secret is the namespace
-// access, .read hangs off it. Only the direct call is recognized - a use behind a helper
+// access, .read hangs off it. Only the direct call is recognized; a use behind a helper
 // the static walk cannot reach is invisible here, like an unreached ctx.readsFiles
 // (MGS1004). It under-reports rather than over-reports, which is the right direction for
 // a check whose remedy is to opt a target OUT of the cache.
@@ -657,8 +657,8 @@ func secretUseCall(e *ast.CallExpr) (string, bool) {
 }
 
 // charmCall returns the literal charm name a has_charm("name") read names, and ok=true.
-// It matches both receivers a target can read a charm through - the magus.has_charm
-// global query and the ctx.has_charm form on the received context - so either makes the
+// It matches both receivers a target can read a charm through (the magus.has_charm
+// global query and the ctx.has_charm form on the received context), so either makes the
 // charm visible to the static charm inventory (the charm/target-collision and
 // has_charm-typo doctor checks). Unlike needs/inputs/outputs, has_charm keeps its global
 // form, so both spellings must be scanned.
@@ -848,8 +848,8 @@ func lastPathSegment(p string) string {
 }
 
 // appendUniq appends v to s unless it is already present, keeping declaration order.
-// One generic replaces the four near-identical copies this file grew - one per element
-// type - which differed only in their signatures.
+// One generic replaces the four near-identical copies this file grew (one per element
+// type), which differed only in their signatures.
 func appendUniq[T comparable](s []T, v T) []T {
 	if slices.Contains(s, v) {
 		return s

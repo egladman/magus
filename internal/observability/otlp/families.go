@@ -255,7 +255,7 @@ func (p *otelProvider) RecordBuzzVMFault(ctx context.Context, kind string) {
 
 // agentInstruments is the agent-surface family: magus.lease.*, magus.attention.* and
 // magus.review.*, the three places a fleet of agents and the people working with them meet.
-// Every producer here runs in the daemon, which is what makes them collectable at all - the
+// Every producer here runs in the daemon, which is what makes them collectable at all; the
 // CLI halves of the same surfaces (raising an attention request, the guard grading a write)
 // live in one-shot processes and are recorded to the activity trail instead.
 //

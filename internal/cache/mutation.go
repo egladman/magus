@@ -32,7 +32,7 @@ func (c *Cache) fingerprintSources(ctx context.Context, s *Step) (sourceFingerpr
 // mutatedSources returns the changed source files no declared glob claims, sorted.
 //
 // A source that DISAPPEARED counts: deleting an input is a write, and the key then
-// describes a file that is not there. One that appeared does not - a target may
+// describes a file that is not there. One that appeared does not: a target may
 // produce a file a broad source glob would have matched, which is MGS1028's question.
 func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []string) []string {
 	declared := compileGlobs(append(slices.Clone(updates), ownedOutputs...))

@@ -24,7 +24,7 @@ func linear(b *testing.B, n int) *Graph {
 	return g
 }
 
-// binTree builds a balanced binary tree with depth d (n = 2^d - 1 nodes).
+// binTree builds a balanced binary tree with depth d (n = `2^d - 1` nodes).
 // Node i depends on its children 2i+1 and 2i+2.
 func binTree(b *testing.B, nodes int) *Graph {
 	b.Helper()

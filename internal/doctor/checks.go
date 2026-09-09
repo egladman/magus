@@ -96,7 +96,7 @@ func (*runner) checkStaleServiceSuppressions(projects []*types.Project) types.Do
 // It does NOT sniff files to guess a language: a guess that is right most of the
 // time still decides something about your repository you did not declare.
 //
-// ADVICE, not failure - a project with no language pack is a legitimate shape.
+// ADVICE, not failure: a project with no language pack is a legitimate shape.
 func (*runner) checkLanguageCoverage(projects []*types.Project) types.DoctorCheck {
 	var noLang []string
 	exempt := 0
@@ -167,7 +167,7 @@ func (*runner) checkCITarget(projects []*types.Project) types.DoctorCheck {
 // checkSpellDocs requires a doc comment on every function-handler target of each
 // workspace-local Buzz spell. Only those targets opt in (DocRequiredTargets);
 // built-ins and record-style {cmd,args} ops, whose handler comments aren't
-// captured, are skipped - so the check enforces the convention exactly where the
+// captured, are skipped, so the check enforces the convention exactly where the
 // Buzz interpreter can verify it.
 func (*runner) checkSpellDocs(spells []*spells.Spell) types.DoctorCheck {
 	const name = "spell-target-docs"
@@ -207,13 +207,13 @@ func (r *runner) checkGraphBounds() types.DoctorCheck {
 }
 
 // checkGraphBounds fails when the committed knowledge graph holds a node naming a
-// location outside the workspace - the sibling of checkSymlinks, for the artifact the
-// workspace publishes rather than the filesystem.
+// location outside the workspace (the sibling of checkSymlinks, for the artifact the
+// workspace publishes rather than the filesystem).
 //
 // The graph is committed, rendered into the docs site and shared through the remote
 // cache, so one machine's absolute path reaches all three. internal/symbols guards
 // ingest; this notices if a future extractor gets around it, which is why it reads the
-// merged artifact and keys on the node ID - several kinds carry their path only there.
+// merged artifact and keys on the node ID: several kinds carry their path only there.
 //
 // Import nodes are exempt: their ID is the specifier the source literally wrote.
 func checkGraphBounds(root string) types.DoctorCheck {
@@ -435,7 +435,7 @@ func (r *runner) cacheDir() string {
 // doctor` gives the whole picture rather than only the target you happened to run.
 //
 // A skip_cache target is excluded rather than reported. Never replaying is what that
-// policy MEANS - a drift gate replaying would skip the check it exists to perform - so
+// policy MEANS (a drift gate replaying would skip the check it exists to perform), so
 // counting it here fails a workspace for being correct, and a check that fires on the
 // correct state is one people learn to ignore. The journal cannot tell the two apart on
 // its own: "ran, did not replay" looks identical whether the target was forbidden to
@@ -489,8 +489,8 @@ func (r *runner) checkCacheYield(projects []*types.Project) types.DoctorCheck {
 	// Two causes produce an identical journal, and the old wording asserted the first.
 	// It is wrong for a version-stamped binary: go-build embeds `git describe` and the
 	// commit hash in its ldflags, so every commit legitimately mints a new key and no
-	// footprint change will ever make it replay. magus cannot tell these apart - the key
-	// is opaque and there is no VCS input primitive - so the reader is given both.
+	// footprint change will ever make it replay. magus cannot tell these apart (the key
+	// is opaque and there is no VCS input primitive), so the reader is given both.
 	details = append(details,
 		"two causes look the same here: the target declares a footprint wider than it reads, so unrelated edits keep busting its key; or its key deliberately carries volatile state (a version stamp, a commit hash), which no footprint change will fix. Compare its declared inputs against what it actually reads before assuming the first")
 	return types.DoctorCheck{
@@ -548,7 +548,7 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	// The driver is ASKED whether the ref resolves, rather than this check hand-writing a
 	// probe per backend. Switching on res.Name over four literal names and building the argv
 	// here would make this the only place outside vcs/ that shells out to a VCS binary, and
-	// would degrade a NEW backend to "no probe available; skipped" - a silent pass for the
+	// would degrade a NEW backend to "no probe available; skipped": a silent pass for the
 	// one check whose whole job is catching an unreachable base ref. FindCommit is on the
 	// required interface, so every backend answers it by construction.
 	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
@@ -707,7 +707,7 @@ var bespokePhaseFragmentNames = map[string]bool{
 // lint, so `magus affected ci` covers it without a target the pipeline can forget.
 //
 // ADVICE, not failure. `ci` is the one reserved target and the rest of the layout
-// belongs to whoever wrote it. Nothing promotes this to a failure - see the
+// belongs to whoever wrote it. Nothing promotes this to a failure; see the
 // DoctorAdvice doc for why that switch does not exist.
 //
 // Reported per project, not once per name: two projects naming a target "security"
@@ -745,7 +745,7 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 // displayPath renders an absolute path for a check detail, workspace-relative
 // where that is possible and absolute where it is not. r.root is empty on some
 // call paths (the daemon passes the workspace through r.ws instead), and
-// filepath.Rel against an empty root fails - which silently produced details
+// filepath.Rel against an empty root fails, which silently produced details
 // naming no file at all, the one thing a detail line exists to do.
 func (r *runner) displayPath(abs string) string {
 	root := r.root
@@ -761,7 +761,7 @@ func (r *runner) displayPath(abs string) string {
 }
 
 // checkUnreachedFootprintDecls is MGS1004: a ctx.readsFiles/writesFiles call the static
-// extractor can't reach from a target body - one in an unreferenced or
+// extractor can't reach from a target body: one in an unreferenced or
 // indirectly-dispatched helper, or the identifier used as a value. Such a declaration
 // never enters a cache key, so the target silently under-declares its footprint (a
 // stale-hit risk). A warning, not a load error: an orphan may just be dead code.
@@ -796,14 +796,14 @@ func (r *runner) checkUnreachedFootprintDecls(projects []*types.Project) types.D
 }
 
 // checkCacheableSecretReads is MGS1026: a cacheable target that calls magus\secret.read.
-// A resolved credential contributes nothing to the cache key - deliberately, since hashing
-// one would write it into cache metadata - so rotating or revoking it invalidates nothing.
+// A resolved credential contributes nothing to the cache key (deliberately, since hashing
+// one would write it into cache metadata), so rotating or revoking it invalidates nothing.
 //
 // The resulting failure is silent and green: an authentication target's sources rarely
 // change, so it becomes a permanent cache hit that never authenticates and reports success,
 // and the push that follows fails with the registry's 401 far from the cause.
 //
-// A warning, not a load error - a target may legitimately produce a cacheable artifact from
+// A warning, not a load error: a target may legitimately produce a cacheable artifact from
 // a credential, and only the author knows. The remedy is skip_cache with a reason.
 func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.DoctorCheck {
 	const name = "cacheable-secret-reads"
@@ -853,7 +853,7 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.D
 			// ctx.writesFiles REPLACES the project and spell baseline for its target rather
 			// than adding to it, so a restated baseline glob is only pointless when the
 			// declaration restates NOTHING ELSE. Once the target names a glob the baseline
-			// lacks - a cross-project tree, a narrower path - dropping the restated one
+			// lacks (a cross-project tree, a narrower path), dropping the restated one
 			// silently removes it from the target's snapshot, which is the opposite of
 			// what this check would be advising.
 			if !slices.ContainsFunc(refs, func(ref types.OutputRef) bool {
@@ -948,12 +948,12 @@ func (r *runner) checkDeadOutputGlobs(projects []*types.Project) types.DoctorChe
 }
 
 // checkOutputOwnedByTwoTargets is MGS1020: one output glob declared by two targets in
-// the SAME project - typically a generator and a formatter that both rewrite a gen/ tree.
+// the SAME project, typically a generator and a formatter that both rewrite a gen/ tree.
 // MGS4002 covers the cross-project shape.
 //
 // Not an ordering problem, which is why it earns a diagnostic rather than a scheduling
 // fix: whichever runs last wins and the other's drift gate fails on the next run, at
-// every ordering. The fix is ownership - if generated output needs formatting, the
+// every ordering. The fix is ownership: if generated output needs formatting, the
 // GENERATOR formats it as its final step.
 //
 // Only DECLARED writes are visible, so a formatter that omits ctx.writesFiles is
@@ -1001,7 +1001,7 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 // ADVICE, never a failure, and the doctrine at types/doctor.go decides that rather
 // than taste: which files are build inputs is the workspace's judgment. A LICENSE
 // nobody's cache key reads is correctly undeclared, and a checker that failed on it
-// would be dictating a layout. What magus can say is that the seeding is happening -
+// would be dictating a layout. What magus can say is that the seeding is happening:
 // the cost is real and invisible, and every entry here is either a declaration
 // somebody forgot or a rerun somebody is paying for on purpose.
 //
@@ -1074,7 +1074,7 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Do
 // doublestar, not filepath.Glob: filepath.Glob's `*` does not cross separators, so the
 // rewrite this replaced (`**` -> `*`) turned `gen/**/*.js` into `gen/*/*.js` and matched
 // nothing two directories deep. A project whose only real output lived at gen/a/b/c.js
-// therefore had that glob reported as dead (MGS1018) - a false positive in the check
+// therefore had that glob reported as dead (MGS1018), a false positive in the check
 // whose entire design rationale is avoiding them.
 func globOutputs(dir, glob string) ([]string, error) {
 	rels, err := doublestar.Glob(os.DirFS(dir), glob)
@@ -1096,7 +1096,7 @@ func globOutputs(dir, glob string) ([]string, error) {
 // emptiness: a directory argument makes it print the tracked files underneath instead of the
 // directory itself, and comparing those names against the globbed ones would never line up.
 // A hit set mixing tracked and untracked files reads as "not evidence", which under-reports
-// rather than over-reports - the right way to be wrong for a check whose failure mode is
+// rather than over-reports: the right way to be wrong for a check whose failure mode is
 // training people to ignore it.
 func provesBuilt(ctx context.Context, reporter types.TrackedFileReporter, dir string, hits []string) bool {
 	if reporter == nil {
@@ -1161,7 +1161,7 @@ func declaredTargetNames(path string) []string {
 // omitted return arrows, non-optional fiber yields) and plain syntax errors.
 //
 // Every magusfile is parsed before returning, so one run reports everything wrong
-// rather than stopping at the first failure - what makes it useful in the CI
+// rather than stopping at the first failure, what makes it useful in the CI
 // preflight target: one `magus doctor` surfaces all magusfile problems at once.
 func (r *runner) checkMagusfileSyntax(projects []*types.Project) types.DoctorCheck {
 	const name = "magusfile-syntax"
@@ -1392,7 +1392,7 @@ func (r *runner) checkStaleShadowAcks() types.DoctorCheck {
 
 // checkWorkspaceRegistration reports whether this workspace is currently
 // loaded in the multi-workspace daemon and how many other workspaces are
-// present. Informational only - a workspace not yet loaded is normal (it
+// present. Informational only: a workspace not yet loaded is normal (it
 // loads on first use).
 func (r *runner) checkWorkspaceRegistration() types.DoctorCheck {
 	d := r.opts.daemonInfo
@@ -1552,7 +1552,7 @@ func (r *runner) checkSpellContract() types.DoctorCheck {
 // verdicts through a months-old /tmp binary while denying things and printing
 // reasons, with every bypass being fixed that session still open in the enforcer.
 //
-// So the resolved path is reported always, not only on failure - "which binary is
+// So the resolved path is reported always, not only on failure: "which binary is
 // judging me?" has no other way to be asked. The staleness test is deliberately
 // coarse (binary mtime against the newest tracked .go file).
 func (r *runner) checkGuardBinary() types.DoctorCheck {
@@ -1597,7 +1597,7 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 // The observer is silent by design when absent, because interrupting on every read would be
 // worse than the gap. The cost of that choice is that a hook writing nothing is
 // indistinguishable from an agent that read nothing, and both are indistinguishable from a
-// human having written the file - so the diff surface's "written by X, after reading Y" claim
+// human having written the file, so the diff surface's "written by X, after reading Y" claim
 // degrades into an agent name and no evidence, with nothing anywhere saying so.
 //
 // Measured in this repository: 3252 events, zero reads, correct wiring, green doctor. The
@@ -1644,7 +1644,7 @@ func (r *runner) checkObserverRecording() types.DoctorCheck {
 		// Wired, recording, and still useless for its actual purpose. Measured on this
 		// repository while writing this check: 4 reads against 272 writes and 1709 shell
 		// commands, which renders as "written by <agent>" with no reading trail on essentially
-		// every file - the same missing evidence as reads==0, arriving one rung quieter.
+		// every file: the same missing evidence as reads==0, arriving one rung quieter.
 		// Advice rather than fail: this is a degraded signal, not a broken workspace.
 		return types.DoctorCheck{
 			Name: name, Status: types.DoctorAdvice,
@@ -1711,7 +1711,7 @@ func newestGoSource(root string) (time.Time, string) {
 }
 
 // guardTemplateBasenames are the shipped templates a config FILE names by
-// filename - see docs/guides/integrations/agents/. A self-contained template
+// filename; see docs/guides/integrations/agents/. A self-contained template
 // that a host discovers by placing it in a directory, rather than being
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
@@ -1774,7 +1774,7 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 
 // guardReferencedTemplates finds every known template basename mentioned in a
 // config's bytes and resolves each to a file on disk: first relative to the
-// workspace root (the dogfooded shape - `sh docs/guides/.../foo.sh`), then
+// workspace root (the dogfooded shape: `sh docs/guides/.../foo.sh`), then
 // relative to the config's own directory, then as written. A single config
 // commonly names two (this repository's own .claude/settings.json wires the
 // command and path templates as separate hooks), so this checks every
@@ -1826,12 +1826,12 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 //
 // A MISSING marker is a finding, not a pass, and this is the case that
 // motivated the whole check. The marker postdates the templates themselves, so
-// a copy carrying none is older than versioning - the single most likely thing
+// a copy carrying none is older than versioning, the single most likely thing
 // to be broken, and the exact shape of the plugin that invoked a removed
 // subcommand for weeks while its host reported nothing. Measured on a real
 // machine 2026-08-12: a plugin installed under ~/.config/opencode/plugins/,
 // still calling a subcommand magus had removed and passing its argument in
-// argv, graded healthy under the first version of this function - which
+// argv, graded healthy under the first version of this function, which
 // returned "" whenever it found no marker.
 //
 // Only ever called on a file already identified AS a template. A wiring-only
@@ -1871,7 +1871,7 @@ func guardTemplateMarkerProblem(path string, body []byte) string {
 // names (or, for a self-contained template, the file itself) carries a
 // current magus-guard-template marker.
 //
-// Layer B never executes a candidate config's command string - jq or a
+// Layer B never executes a candidate config's command string: jq or a
 // host-relative path may only make sense inside the host's own event loop.
 // The canary plus the marker comparison is the honest, portable probe; full
 // end-to-end execution is guard_templates.txtar's job, which runs in CI
@@ -1974,8 +1974,8 @@ func hookConfigFiles(candidate string) []string {
 	return out
 }
 
-// guardCanaryBudget bounds the canary. Generous for what it runs - one `magus
-// hook` that has to load the workspace to answer - but bounded because doctor
+// guardCanaryBudget bounds the canary. Generous for what it runs (one `magus
+// hook` that has to load the workspace to answer), but bounded because doctor
 // is interactive and a hung binary must not hang the report. Injected rather
 // than hardcoded at the call site so a test on a loaded machine can raise it
 // without loosening what ships.
@@ -2103,7 +2103,7 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 
 // checkAgentSkills grades the INSTALLED agent skills against the running binary. An
 // upgrade that bumps the skill or knowledge-schema version leaves every checkout's copy
-// behind, and a stale skill does not fail loudly - it quietly teaches an agent last
+// behind, and a stale skill does not fail loudly; it quietly teaches an agent last
 // release's verbs.
 //
 // AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
@@ -2140,7 +2140,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 
 	switch {
 	case len(stale) > 0:
-		// An ORPHANED skill - one a rename left behind - stays stale however often it is
+		// An ORPHANED skill (one a rename left behind) stays stale however often it is
 		// reinstalled, because --force rewrites only the names magus ships. Naming it as
 		// the remedy would make --fix run forever. No Fix rather than a pruning one:
 		// --prune deletes directories the caller has not reviewed, which is the
@@ -2217,7 +2217,7 @@ const (
 // checkSelfStalingOutputs is MGS1019: a COMMITTED generated file whose bytes contain this
 // repository's own HEAD commit, which is a build that can never be clean.
 //
-// The loop closes on itself - committing a source change moves HEAD, HEAD is an input to
+// The loop closes on itself: committing a source change moves HEAD, HEAD is an input to
 // the file, so the file committed alongside the source is stale the instant it lands. The
 // only fixed point is a second commit containing nothing but regenerated output, which is
 // why such a repository grows a trail of "refresh generated metadata" commits.
@@ -2226,7 +2226,7 @@ const (
 // hash into the same files, and only the committing stopped. A backend that cannot answer
 // "is this path tracked?" skips rather than guesses.
 //
-// Matching HEAD's OWN hash keeps it precise - a lockfile or fixture full of other hashes
+// Matching HEAD's OWN hash keeps it precise: a lockfile or fixture full of other hashes
 // cannot match.
 func (r *runner) checkSelfStalingOutputs(projects []*types.Project) types.DoctorCheck {
 	const name = "self-staling-outputs"
@@ -2371,8 +2371,8 @@ func isHexByte(data []byte, i int) bool {
 // checkGeneratedDrift reports declared outputs that moved with no declared INPUT of the
 // producing project dirty to account for them.
 //
-// Otherwise the first thing to notice is CI's drift gate - least context, longest
-// feedback loop, usually on someone else's change - while the same condition is visible
+// Otherwise the first thing to notice is CI's drift gate (least context, longest
+// feedback loop, usually on someone else's change), while the same condition is visible
 // locally from VCS status magus already reads.
 //
 // Advice, never fail: an output moving without an input is legitimate mid-work.
@@ -2421,7 +2421,7 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 // checkConcurrencySizing reports a configured concurrency that does not fit this machine.
 //
 // The default already fits (NumCPU, capped at 8), so this only ever fires on an explicit
-// setting - which is exactly the one nobody revisits. A number chosen on a laptop follows
+// setting, which is exactly the one nobody revisits. A number chosen on a laptop follows
 // the repo onto a 32-core workstation and leaves it mostly idle; the same number carried
 // onto a small CI runner oversubscribes it, and oversubscription is the worse direction
 // because the work still completes, just slower, so nothing ever points at the cause.
@@ -2462,7 +2462,7 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 // checkUnmatchableSourceGlobs is MGS1029: a source glob whose static directory prefix
 // lands inside a tree the expansion walk prunes wholesale (project.IgnoreDirs: gen,
 // vendor, node_modules, target). The walk never descends, so the pattern matches
-// nothing and contributes no cache key - the target replays while the files it named
+// nothing and contributes no cache key; the target replays while the files it named
 // change underneath it.
 //
 // FAIL, not advice, which is where this parts company with MGS1028. An undeclared file
@@ -2470,7 +2470,7 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 // cannot mean what it says. Nobody writes "gen/*.binpb" hoping it matches nothing.
 //
 // Only PATTERNS are reported. A wildcard-free path names one file and is resolved by
-// stat rather than the walk, so it reaches the key from inside a pruned tree normally -
+// stat rather than the walk, so it reaches the key from inside a pruned tree normally;
 // that is the fix this check is the residue of. Letting a pattern in too is what
 // pruning exists to prevent: a bare **/*.js would start hashing all of node_modules.
 func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.DoctorCheck {
@@ -2528,14 +2528,14 @@ func prunedPrefix(glob string) (string, bool) {
 //
 // Harmless until the bytes change. Then the owning project regenerates it, the claiming project
 // sees a declared source move underneath a target it is running, and reports the write as an
-// undeclared source mutation - against a file that is generated by definition. The report names a
+// undeclared source mutation, against a file that is generated by definition. The report names a
 // real conflict and blames the wrong thing, which is the worst shape a diagnostic has.
 //
 // Static, so it holds whether or not anything is drifting today. That is the value: this repository
 // carried the conflict on every project's MAGUS.md for as long as the markdown spell has claimed
 // **/*.md, and only the one whose content went stale ever surfaced it.
 //
-// EXACT output paths only, matched against the other project's globs - the decidability line
+// EXACT output paths only, matched against the other project's globs: the decidability line
 // MGS4002 already draws. Whether two globs can overlap is undecidable in general; whether a pattern
 // matches one literal path is not.
 //

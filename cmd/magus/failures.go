@@ -71,7 +71,7 @@ const previewRows = 10
 //
 // Called when the selection MOVES, never from the paint path: resolving this
 // opens a file, and the band repaints from a timer. An unreadable log is not an
-// error - the column simply stays empty, and the ref is still printed in the
+// error: the column simply stays empty, and the ref is still printed in the
 // transcript for anyone who wants the whole thing.
 func loadPreview(f cache.Failure, width int) []string {
 	if f.LogPath == "" {
@@ -79,7 +79,7 @@ func loadPreview(f cache.Failure, width int) []string {
 	}
 	// The TAIL is read, not the whole file. This runs on every selection change,
 	// including mouse motion across the band, and a failed build's captured log
-	// is routinely tens of megabytes - so slurping it was a full read and a full
+	// is routinely tens of megabytes, so slurping it was a full read and a full
 	// line-split per pointer movement, synchronously under the handler's mutex.
 	fh, err := os.Open(f.LogPath)
 	if err != nil {
@@ -266,8 +266,8 @@ func showHint(l *tty.Lease, w io.Writer) error {
 
 // dispatchFailureKeys is the event loop, split from the terminal handling above
 // so a test can feed it events without a pty.
-// It returns no error on purpose. Every way this loop can end - an exhausted
-// reader, a closed terminal, the user pressing escape - is an ANSWER, because
+// It returns no error on purpose. Every way this loop can end (an exhausted
+// reader, a closed terminal, the user pressing escape) is an ANSWER, because
 // the prompt is an offer made after the run already succeeded or failed on its
 // own terms. An error return here would advertise a failure mode that cannot
 // happen and force every caller to handle it.
@@ -289,7 +289,7 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 		if ev.Kind == tty.EventMouse {
 			// The wheel is deliberately NOT taken here, and that is not a gap in
 			// the mouse support. The whole band is on screen at once, so there
-			// is nothing to scroll WITHIN it - while the wheel is how a reader
+			// is nothing to scroll WITHIN it, while the wheel is how a reader
 			// scrolls back through the build output above, which magus never
 			// takes. Binding it would trade the transcript for nothing.
 			// TestFailurePromptIgnoresReleasesAndTheWheel pins this.
@@ -298,7 +298,7 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 			}
 			// A click on the row that NAMES an action takes it. One click, not
 			// two: these are buttons, and the row-versus-button distinction is
-			// the same one every list makes - items select, buttons activate.
+			// the same one every list makes: items select, buttons activate.
 			// Checked before the failure rows because the hint row is not one.
 			if !ev.Motion && hints != nil {
 				if key, ok := hints.HitSpan(ev.Row, ev.Col); ok {
@@ -385,7 +385,7 @@ func dispatchFailureKeys(next func() (tty.Event, error), h failureBand, hints hi
 // copyFailure puts the selected failure's captured output on the system
 // clipboard, and says so where the reader is looking.
 //
-// The answer to "the two columns cannot be drag-selected" - they cannot, and no
+// The answer to "the two columns cannot be drag-selected": they cannot, and no
 // arrangement of them can be, because terminals select linearly. So nobody is asked
 // to select: the text goes to the clipboard exactly as the tool emitted it, through
 // a sequence that survives ssh and tmux.

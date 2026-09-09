@@ -110,7 +110,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	// A spell gets the SCRIPT surface, the same one `magus buzz` sees: the members that
 	// declare into a workspace being loaded raise MGS1022, the rest work. Without this
 	// `import "magus"` fails outright with BZZ2001, which reads as "the module does not
-	// exist" - the failure mode buildMagusNS explicitly rejects for the script surface.
+	// exist": the failure mode buildMagusNS explicitly rejects for the script surface.
 	// Note the in-process readers (ls, targets, graph) still raise here: a spell has no
 	// workspace on its context, so it must reach for the forking members (cmd, describe).
 	RegisterMagusNamespace(ctx, sess)

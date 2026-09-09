@@ -34,7 +34,7 @@ func WithGraphObserver(o Observer) GraphOption {
 	}
 }
 
-// TopoSort returns project paths in topological order (dependents before dependencies -
+// TopoSort returns project paths in topological order (dependents before dependencies;
 // see View's doc comment for the measured example).
 func (g *Graph) TopoSort() []string {
 	return g.repo.TopoSort()
@@ -90,7 +90,7 @@ func (g *Graph) Project(path string) *Project      { return g.projects[path] }
 // DAG flattened to plain data a magusfile can walk.
 //
 // Nodes are in topological order, so a caller that just iterates gets a valid
-// build order without sorting anything itself - which is the question a magusfile
+// build order without sorting anything itself, which is the question a magusfile
 // asks the graph most often. dependsOn is the direct-predecessor set per node, so
 // the caller can still reconstruct the edges.
 type GraphView struct {

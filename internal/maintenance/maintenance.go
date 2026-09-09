@@ -22,7 +22,7 @@ import (
 // checkInterval is how often the scheduler wakes to look for a due job. It is deliberately coarse
 // and unrelated to the per-job intervals (hours to days): the tick only decides WHEN to look, and
 // a job runs at most once per its configured interval regardless. Keeping it coarse is what makes
-// the scheduler low-key - a quiet daemon does a cheap idle check four times an hour, not a poll.
+// the scheduler low-key: a quiet daemon does a cheap idle check four times an hour, not a poll.
 const checkInterval = 15 * time.Minute
 
 // unusable bounds runDue's "this scheduler will never run anything" warning to one line per
@@ -98,7 +98,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 	base, addr := opts.Trail(), opts.Socket()
 	if base == "" || addr == "" {
 		// Not "not up yet". Both are published during startup, so a tick that still finds
-		// one empty is a scheduler that will never run a job for the daemon's whole life -
+		// one empty is a scheduler that will never run a job for the daemon's whole life,
 		// and it used to reach that state in silence, which is how mcp.enabled: false came
 		// to disable every scheduled job with nothing said. Once, because the condition
 		// does not change and a line every quarter hour is a line people filter.

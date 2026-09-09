@@ -10,7 +10,7 @@ import (
 
 	// hostmodules is the union of std's self-registered modules (import
 	// triggers their init registration) and std/encoding's explicitly
-	// aggregated ones - see its doc.
+	// aggregated ones; see its doc.
 	"github.com/egladman/magus/internal/hostmodules"
 )
 

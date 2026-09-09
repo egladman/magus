@@ -30,7 +30,7 @@ import (
 //
 // That is a threat-model decision, not a convenience one. A CA in your trust store is
 // a universal interception capability, and the adversary it would supposedly defend
-// against - a process already executing as you - can read the CA, read magus's
+// against (a process already executing as you) can read the CA, read magus's
 // memory, or hook the TLS library anyway. Installing one to contain a process that is
 // already inside the boundary it protects makes the machine weaker, not safer. See
 // docs/concepts/secrets.md.
@@ -53,7 +53,7 @@ const endpointListenAddr = "127.0.0.1:0"
 const endpointShutdownGrace = 2 * time.Second
 
 // endpointIdleTimeout closes a kept-alive connection nobody is using. Without it any
-// local process could hold a connection - and a server goroutine - open for the
+// local process could hold a connection (and a server goroutine) open for the
 // forwarder's whole life just by connecting.
 const endpointIdleTimeout = 90 * time.Second
 
@@ -78,7 +78,7 @@ const endpointResponseHeaderTimeout = 60 * time.Second
 //     verified TLS connection upstream itself", and the whole no-CA position rests on
 //     it. Honoring an ambient proxy variable would undercut exactly that: a CONNECT
 //     tunnel still protects the body, but the destination is disclosed to the proxy, and
-//     if the proxy's CA is in the trust store the guarantee is gone entirely - which is
+//     if the proxy's CA is in the trust store the guarantee is gone entirely, which is
 //     the interception this design refuses to perform and should not delegate either.
 //
 // The cost is stated rather than hidden: a workspace that genuinely requires an egress
@@ -117,13 +117,13 @@ func (f *forwarder) alive() bool {
 }
 
 // endpointKey identifies a forwarder: the WHOLE grant, so two grants differing only by
-// header or prefix get their own endpoint rather than silently sharing one - matching
-// the identity [Resolver.AddGrant] enforces - plus the RUN that opened it.
+// header or prefix get their own endpoint rather than silently sharing one (matching
+// the identity [Resolver.AddGrant] enforces), plus the RUN that opened it.
 //
 // The run is part of the key so a token cannot outlive the run that was handed it. Two
 // concurrent runs wanting the same grant get two sockets and two tokens, which costs a
-// file descriptor and buys the property that matters: a token leaked from one run - into
-// a log, a child's argv, a crash dump - authorizes nothing in any other run. It also
+// file descriptor and buys the property that matters: a token leaked from one run (into
+// a log, a child's argv, a crash dump) authorizes nothing in any other run. It also
 // removes the refcount that sharing required, and with it a whole class of
 // lifetime bug (whose context owns the listener when two runs hold it?).
 type endpointKey struct {
@@ -143,13 +143,13 @@ func keyFor(invocation string, g types.SecretGrant) endpointKey {
 //
 // Named for what it does. It is not an accessor beside ProviderName/Timeouts: it binds
 // a TCP listener, spawns goroutines and mints a token. "Origin" was also wrong twice
-// over - types.ProjectOrigin already claims that word on the magusfile surface, and an
+// over: types.ProjectOrigin already claims that word on the magusfile surface, and an
 // origin is scheme+host+port by definition while this returns a base URL WITH a path.
 //
 // Memoized per grant, so a magusfile naming the same endpoint in three targets binds
 // one socket. The memo is liveness-checked: the Resolver outlives a single run (it is
 // per workspace Open), so a cached entry whose context has ended would otherwise hand
-// back a dead URL on a RELEASED port - and under a local-attacker model another
+// back a dead URL on a RELEASED port, and under a local-attacker model another
 // process that then binds that port receives the child's whole request stream.
 func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (string, error) {
 	if r == nil {
@@ -166,8 +166,8 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 	//
 	// Gated on the run id rather than on ctx.Done() == nil, which was the first attempt
 	// and does not work: cmd/magus/main.go builds the root context from
-	// watchInterrupts(context.Background()), so preload - where a magusfile's TOP LEVEL
-	// is evaluated, and which `magus ls`, `describe` and `graph` all reach - has a
+	// watchInterrupts(context.Background()), so preload (where a magusfile's TOP LEVEL
+	// is evaluated, and which `magus ls`, `describe` and `graph` all reach) has a
 	// perfectly good Done channel and sailed straight through. It would have bound a
 	// credential-forwarding listener with a stable token for the whole process life,
 	// reachable by any local process that ever saw the URL.
@@ -205,7 +205,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 //
 // The base URL carries a RANDOM PATH TOKEN, and a request that does not present it is
 // refused. Without one, every process on the machine can reach the port and spend the
-// credential - the forwarder would be a local oracle handing out authenticated access
+// credential: the forwarder would be a local oracle handing out authenticated access
 // to anyone who guessed a port number. The token rides in the URL magus gives the
 // child, so a tool that takes a base URL needs no extra wiring to send it.
 //
@@ -231,7 +231,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 
 	// The token is registered SEPARATELY from the base URL, not only as part of it.
 	// Redaction is literal substring matching, so a child that logs the request path
-	// alone - "GET /<tok>/v1/models", the ordinary access-log shape - would print the
+	// alone ("GET /<tok>/v1/models", the ordinary access-log shape) would print the
 	// token in the clear if only the composite URL were registered.
 	r.registerRedactable(tok)
 
@@ -240,7 +240,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		ErrorHandler: endpointErrorHandler(g),
 		// Without this, ReverseProxy logs transport errors through the process-global
 		// log package straight to stderr, outside NewRedactingHandler and outside the
-		// capture tap - the two things that keep a credential out of magus's output.
+		// capture tap, the two things that keep a credential out of magus's output.
 		ErrorLog: slogErrorLog(runCtx, "secret.endpoint.proxy"),
 	}
 	proxy.Transport = endpointTransport()
@@ -256,7 +256,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 		// memory. An SSE completion is the marquee use case for pointing an agent at an
 		// endpoint, so a forwarder that cannot stream is a forwarder that does not work.
 		//
-		// The risky wait is bounded on the OUTBOUND leg instead - see endpointTransport -
+		// The risky wait is bounded on the OUTBOUND leg instead (see endpointTransport),
 		// which caps how long an upstream may stall before answering without capping how
 		// long it may take to finish answering.
 		ReadHeaderTimeout: 10 * time.Second,
@@ -297,7 +297,7 @@ func (r *Resolver) startForwarder(runCtx context.Context, key endpointKey, g typ
 //
 // The credential MUST be attached inside Rewrite, not on the inbound request.
 // ReverseProxy strips hop-by-hop headers from its outbound clone BEFORE Rewrite runs,
-// honoring whatever the caller named in Connection - so a local process holding the
+// honoring whatever the caller named in Connection, so a local process holding the
 // token could send "Connection: Authorization" and have the proxy remove the
 // credential magus had just set, sending an unauthenticated request upstream. Setting
 // it in Rewrite puts it past that point. Measured: this exact test failed before the
@@ -342,12 +342,12 @@ func (r *Resolver) rewriteFor(g types.SecretGrant, tok string) func(*httputil.Pr
 		pr.Out.Header.Del("Upgrade")
 		// Referer and Origin routinely carry the full loopback URL a child was given,
 		// token included, and the upstream is the one party in this design that is
-		// assumed hostile. The endpoint URL is credential-equivalent - it is registered
-		// for redaction as one - so it does not get forwarded.
+		// assumed hostile. The endpoint URL is credential-equivalent (it is registered
+		// for redaction as one), so it does not get forwarded.
 		pr.Out.Header.Del("Referer")
 		pr.Out.Header.Del("Origin")
 
-		// Attached LAST, after every strip - see grantValueKey.
+		// Attached LAST, after every strip; see grantValueKey.
 		if v, ok := pr.In.Context().Value(grantValueKey{}).(string); ok {
 			pr.Out.Header.Set(g.Header, v)
 		}
@@ -378,7 +378,7 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if !loopbackHost(req.Host) {
 			// The listener is loopback-only, so a non-loopback Host means the request
-			// arrived through a name that resolves here - the DNS-rebinding shape.
+			// arrived through a name that resolves here: the DNS-rebinding shape.
 			// Closed categorically rather than relied on the token alone.
 			http.NotFound(w, req)
 			return
@@ -402,7 +402,7 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 			http.Error(w, "magus secret endpoint: could not resolve the granted credential; see the magus log", http.StatusBadGateway)
 			return
 		}
-		// Reveal where the credential crosses into the outbound header - see rewriteFor.
+		// Reveal where the credential crosses into the outbound header; see rewriteFor.
 		proxy.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), grantValueKey{}, g.Prefix+v.Reveal())))
 	})
 }
@@ -410,7 +410,7 @@ func (r *Resolver) endpointHandler(runCtx context.Context, g types.SecretGrant, 
 // endpointErrorHandler renders an upstream transport failure.
 //
 // The response body is written straight to the socket and is NOT passed through the
-// redaction rail - that covers captured subprocess output, journal text, cache logs
+// redaction rail: that covers captured subprocess output, journal text, cache logs
 // and slog records, none of which this is. So it deliberately carries only the host
 // and the error, and must never be extended to echo a header or a request.
 func endpointErrorHandler(g types.SecretGrant) func(http.ResponseWriter, *http.Request, error) {
@@ -457,8 +457,8 @@ func endpointToken() (string, error) {
 }
 
 // slogErrorLog adapts net/http's *log.Logger error sink onto slog, so a proxy or
-// server error travels the same path every other magus log line does - including the
-// redacting handler - instead of being written raw to stderr.
+// server error travels the same path every other magus log line does (including the
+// redacting handler) instead of being written raw to stderr.
 func slogErrorLog(ctx context.Context, msg string) *log.Logger {
 	return log.New(slogWriter{ctx: ctx, msg: msg}, "", 0)
 }
@@ -480,7 +480,7 @@ func (w slogWriter) Write(p []byte) (int, error) {
 //
 // Lock order is endpointMu then mu, matching OpenEndpoint. unregisterRedactable takes
 // mu itself, so it is called outside the endpointMu critical section only because
-// nothing requires them together - not because the order is optional.
+// nothing requires them together, not because the order is optional.
 func (r *Resolver) forgetEndpoint(key endpointKey, tok, base string) {
 	r.endpointMu.Lock()
 	if f, ok := r.endpoints[key]; ok && f.baseURL == base {

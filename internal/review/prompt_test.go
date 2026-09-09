@@ -21,7 +21,7 @@ func promptFor(t *testing.T, rev types.Diff, overlap []types.BranchChange) strin
 
 // TestPromptAsksForFindingsNotProse pins the instruction the whole feature exists for. A prompt
 // that lets a model draft the review turns a colleague's review into generated text, which is the
-// thing this was built to prevent - and it would be a silent regression, since the output would
+// thing this was built to prevent, and it would be a silent regression, since the output would
 // still look like a perfectly good prompt.
 func TestPromptAsksForFindingsNotProse(t *testing.T) {
 	out := promptFor(t, types.Diff{Base: "main"}, nil)
@@ -77,7 +77,7 @@ func TestPromptReportsOnlyTheOverlappingPaths(t *testing.T) {
 
 // TestPromptOmitsSectionsWithNothingInThem. An empty section is a heading over silence, and
 // silence under "Other branches changing these same files" reads as "nobody else is touching
-// this" - a claim nothing checked. The builder enforces it; this states it about the document.
+// this", a claim nothing checked. The builder enforces it; this states it about the document.
 func TestPromptOmitsSectionsWithNothingInThem(t *testing.T) {
 	rev := types.Diff{Base: "main", Files: []types.DiffFile{{Path: "a.go"}}}
 
@@ -100,7 +100,7 @@ func TestPromptCarriesWhatCouldNotBeMeasured(t *testing.T) {
 }
 
 // TestPromptSaysHowMuchItLeftOut. The changeset is ranked, so a cap takes the tail rather than an
-// arbitrary slice - but a silently truncated list reads as a complete one, and a reader who
+// arbitrary slice, but a silently truncated list reads as a complete one, and a reader who
 // believes they have seen every file is worse off than one who knows they have not.
 func TestPromptSaysHowMuchItLeftOut(t *testing.T) {
 	rev := types.Diff{Base: "main"}

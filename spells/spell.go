@@ -180,14 +180,14 @@ func (s *Spell) DeclarationDirGlobs() []string { return s.declarationDirGlobs }
 // A manifest answers two questions that happen to share a file. It carries the
 // project's own VERSION, which is what this was originally for, and it declares the
 // project's DEPENDENCIES, which is what its lock candidates lead to. Go is the case
-// that makes them look like one question - go.mod holds both - and npm is the case
+// that makes them look like one question (go.mod holds both) and npm is the case
 // that separates them, since package.json pins neither its own resolved dependency
 // versions nor, in a workspace, the lockfile's location.
 //
 // Do not confuse this with three adjacent but distinct facts: Sources
 // (mgs_listRequiredGlobs) answers "what feeds my targets" and often already lists
 // a manifest AND its lockfiles as cache/affected inputs (package.json and
-// pnpm-lock.yaml among **/*.ts and friends) - that is a different question from
+// pnpm-lock.yaml among **/*.ts and friends); that is a different question from
 // "what declares this project". DeclarationFiles answers "a directory holding this
 // file IS a project of mine" (discovery), used today only by the magusfile spell.
 // VersionProbe is the TOOLCHAIN's version (`go version`), which feeds cache keys,
@@ -243,7 +243,7 @@ func (s *Spell) HasVersionProbe() bool {
 }
 
 // ProbeVersion runs one tool's version argv in dir and returns its raw output. It
-// returns "" for a tool that declares no argv - including one whose version is a
+// returns "" for a tool that declares no argv, including one whose version is a
 // constant, where the caller reads Tool.Key.Const instead of spawning anything.
 func (s *Spell) ProbeVersion(ctx context.Context, tool, dir string) (string, error) {
 	t, ok := s.tools[tool]
@@ -318,14 +318,14 @@ func WithOpaque() Option {
 // user binds, keeping it out of every surface that enumerates spells.
 //
 // It exists for exactly one registration: `magusfile`. A spell is defined as a
-// library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint) -
+// library of tool-native ops for ONE TOOLCHAIN (go-build, cargo-clippy, eslint);
 // see docs/concepts/spells.md, whose built-in table has never listed magusfile.
 // The magusfile registration adapts no toolchain and contributes no ops; it reuses
 // the driver interface so a magusfile's own targets dispatch through the same
 // path. Registering it plainly made the code contradict the docs: `magus describe
 // spells` listed a spell the reference says does not exist, and because every
 // project is DISCOVERED by having a magusfile, `magus ls` stamped
-// "spell: magusfile" on all of them - a field that told a reader nothing, since it
+// "spell: magusfile" on all of them, a field that told a reader nothing, since it
 // was true by construction.
 func WithInternal() Option {
 	return func(s *Spell) { s.internal = true }
@@ -422,7 +422,7 @@ const ModulePrefix = "magus/spell/"
 //
 // Reported as a STRING on the spell descriptor record rather than resolved to a handle.
 // A handle can only come from a literal import, because internal/describe reads
-// spell imports statically to build the target graph - so a dynamically resolved
+// spell imports statically to build the target graph, so a dynamically resolved
 // spell would drop the target-uses-spell edge and under-report the graph without
 // failing. Handing back the path keeps discovery dynamic and the import static:
 // you look the spell up, then write the import yourself.

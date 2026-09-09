@@ -75,7 +75,7 @@ type ImpactResult struct {
 	AffectedProjects []ImpactProject `json:"affected_projects,omitempty" yaml:"affected_projects,omitempty"`
 	// ChangedSymbols is the changed-symbol caller overlay: every symbol defined in a
 	// changed source file, with how widely it is referenced repo-wide. It is what a
-	// plain difftool structurally cannot show - the reach of an edited definition.
+	// plain difftool structurally cannot show: the reach of an edited definition.
 	// Populated by Enrich when a symbol index is loaded; empty (with a Note) otherwise.
 	// Flattened across files and sorted by descending reference count so the
 	// widest-reach change leads.

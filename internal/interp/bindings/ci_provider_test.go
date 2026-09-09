@@ -26,7 +26,7 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 
 // A provider whose handler raises must say so. The error was discarded here, so
 // a spell that failed on every annotation reported success for the life of the
-// build - and the adapter is the only layer that can tell the two apart.
+// build, and the adapter is the only layer that can tell the two apart.
 func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	boom := errors.New("handler raised")
 	a := &spellAnnotator{drv: &stubDriver{err: boom}}
@@ -42,7 +42,7 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 }
 
 // The last_green_run contract, decoded. Inheritance is an optimization, so
-// every shape but a complete {run, commit} record reads as "no green run" -
+// every shape but a complete {run, commit} record reads as "no green run",
 // including the raised error, which the annotate ops above must NOT swallow.
 func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
 	drv := &stubDriver{resp: spells.InvokeResponse{Data: map[string]any{
