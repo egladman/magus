@@ -1084,9 +1084,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	require.Len(t, out, 1)
 	assert.Equal(t, []types.ChainStep{
 		{Target: "generate"},
-		{Project: "api", Target: "build", Stage: 1},
-		{Target: "build", Stage: 1},
-	}, out[0].Chain, "invocation order across both ctx.needs calls, cross step resolved, the second call staged")
+		{Project: "api", Target: "build", CallIndex: 1},
+		{Target: "build", CallIndex: 1},
+	}, out[0].Chain, "invocation order across both ctx.needs calls, cross step resolved, the second call indexed")
 
 	leaf, err := m.EvaluateTarget(context.Background(), types.Target{Path: ".", Name: "generate"})
 	require.NoError(t, err, "EvaluateTarget")

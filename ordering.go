@@ -158,26 +158,14 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			}
 			return cache.DepKey(owner.Path, cs.Target), true
 		}
-		for _, cs := range chain {
-			needs, ok := keyOf(cs)
-			if !ok {
-				continue
-			}
-			// Recorded on the node, not just walked: inside one step ctx.needs is the
-			// only sequencing there is, and it is what decides whether a same-step
-			// overlap is ordered or unschedulable.
-			if n := byKey[key]; !slices.Contains(n.Needs, needs) {
-				n.Needs = append(n.Needs, needs)
-			}
-			walk(ownerOf(cs), cs.Target, stepKey, seen)
+		// Recorded on the node, not just walked: inside one step ctx.needs is the only
+		// sequencing there is, and it is what decides whether a same-step overlap is
+		// ordered or unschedulable. Set once; a node two steps reach has one chain.
+		if n := byKey[key]; n.Needs == nil {
+			n.Needs = cache.ChainCalls(chain, keyOf)
 		}
-		for member, earlier := range cache.StageAfter(chain, keyOf) {
-			n := byKey[member]
-			for _, e := range earlier {
-				if !slices.Contains(n.After, e) {
-					n.After = append(n.After, e)
-				}
-			}
+		for _, cs := range chain {
+			walk(ownerOf(cs), cs.Target, stepKey, seen)
 		}
 	}
 

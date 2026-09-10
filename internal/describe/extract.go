@@ -108,9 +108,9 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 		// calls into a helper — e.g. image_build → build_variant → docker[...] —
 		// keeps them attributed rather than silently dropping them.
 		visited := map[string]bool{fn.Name: true}
-		// One ctx.needs call is one stage; the count survives a hop into a helper because
-		// the helper's calls run in this body's sequence too.
-		stage := 0
+		// The count survives a hop into a helper because the helper's ctx.needs calls run
+		// in this body's sequence too.
+		call := 0
 		var walk func(body *ast.BlockStmt)
 		walk = func(body *ast.BlockStmt) {
 			if body == nil {
@@ -138,7 +138,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// Exact edge: a target function passed by reference.
 								if key := norm(arg.Name); slices.Contains(names, key) {
 									node.Dependencies = appendUniq(node.Dependencies, key)
-									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, Stage: stage})
+									node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: key, CallIndex: call})
 								}
 							case *ast.MemberExpr:
 								// Cross-project step (<alias>.<target>). The MemberExpr walk
@@ -147,7 +147,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 								// it is recognized again here rather than read back from there.
 								if id, ok := arg.Object.(*ast.IdentExpr); ok && arg.Name != types.CrossFileMember {
 									if proj, ok := projectAliases[id.Name]; ok {
-										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), Stage: stage})
+										node.Chain = appendChainStep(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name), CallIndex: call})
 									}
 								}
 							case *ast.CallExpr:
@@ -169,13 +169,13 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									for _, m := range types.MatchTargetPatterns(names, patterns) {
 										if m != node.Name {
 											node.Dependencies = appendUniq(node.Dependencies, m)
-											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, Stage: stage})
+											node.Chain = appendChainStep(node.Chain, types.ChainStep{Target: m, CallIndex: call})
 										}
 									}
 								}
 							}
 						}
-						stage++
+						call++
 					}
 					if name, ok := charmCall(e); ok {
 						node.Charms = appendUniq(node.Charms, name)
@@ -855,7 +855,7 @@ func lastPathSegment(p string) string {
 // One generic replaces the four near-identical copies this file grew (one per element
 // type), which differed only in their signatures.
 // appendChainStep keeps the first mention of a target: a body that names the same
-// target in two ctx.needs calls runs it once, at the earlier stage, because the memo
+// target in two ctx.needs calls runs it once, at the earlier call, because the memo
 // serves the second call.
 func appendChainStep(chain []types.ChainStep, step types.ChainStep) []types.ChainStep {
 	for _, have := range chain {

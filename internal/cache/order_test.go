@@ -230,13 +230,13 @@ func badgeFixture(ordered bool) []TargetNode {
 		Writes: []string{"assets/coverage.svg"}, DeclaredWrites: true,
 	}
 	if ordered {
-		badge.Needs = []string{DepKey(".", "generate")}
+		badge.Needs = [][]string{{DepKey(".", "generate")}}
 	}
 	return []TargetNode{
 		{Project: ".", Target: "ci", Steps: []string{step},
-			Needs: []string{DepKey(".", "generate"), DepKey(".", "coverage-badge")}},
+			Needs: [][]string{{DepKey(".", "generate"), DepKey(".", "coverage-badge")}}},
 		{Project: ".", Target: "generate", Steps: []string{step},
-			Needs: []string{DepKey(".", "mocks-generate")}},
+			Needs: [][]string{{DepKey(".", "mocks-generate")}}},
 		{Project: ".", Target: "mocks-generate", Steps: []string{step},
 			Writes: []string{"**/gen/mocks/*.go"}, DeclaredWrites: true},
 		badge,
@@ -306,7 +306,7 @@ func TestFindSameStepConflictsIgnoresCrossStepAndWriterFirst(t *testing.T) {
 	writerFirst := []TargetNode{
 		{Project: ".", Target: "gen", Steps: []string{ci},
 			Writes: []string{"gen/**/*.go"}, DeclaredWrites: true,
-			Needs: []string{DepKey(".", "read")}},
+			Needs: [][]string{{DepKey(".", "read")}}},
 		{Project: ".", Target: "read", Steps: []string{ci},
 			Reads: []string{"**/*.go"}, DeclaredReads: true},
 	}
@@ -364,16 +364,16 @@ func TestCrossProjectConflictAdvisesInsteadOfRefusing(t *testing.T) {
 		"a same-project pair is refused, not advised")
 }
 
-// TestStageAfterOrdersLaterCallsAfterEarlierOnes: the docs lint shape, `ctx.needs(format);
+// TestChainCallsGroupsByCall: the docs lint shape, `ctx.needs(format);
 // ctx.needs(conventions);`, where format reaches the generators conventions reads. The
-// second call is ordered after the first by the body, and that has to reach the
-// predicate as edges or every staged composer reads as unordered.
-func TestStageAfterOrdersLaterCallsAfterEarlierOnes(t *testing.T) {
+// second call is ordered after the first by the body, and that has to survive on the
+// node or every composer with two calls reads as unordered.
+func TestChainCallsGroupsByCall(t *testing.T) {
 	t.Parallel()
 	chain := []types.ChainStep{
 		{Target: "format"}, {Project: "gone", Target: "lint"},
-		{Target: "conventions", Stage: 1}, {Target: "spelling", Stage: 1},
-		{Target: "links", Stage: 2},
+		{Target: "conventions", CallIndex: 1}, {Target: "spelling", CallIndex: 1},
+		{Target: "links", CallIndex: 2},
 	}
 	keyOf := func(cs types.ChainStep) (string, bool) {
 		if cs.Project == "gone" {
@@ -381,35 +381,44 @@ func TestStageAfterOrdersLaterCallsAfterEarlierOnes(t *testing.T) {
 		}
 		return DepKey("docs", cs.Target), true
 	}
-	assert.Equal(t, map[string][]string{
-		DepKey("docs", "conventions"): {DepKey("docs", "format")},
-		DepKey("docs", "spelling"):    {DepKey("docs", "format")},
-		DepKey("docs", "links"):       {DepKey("docs", "format"), DepKey("docs", "conventions"), DepKey("docs", "spelling")},
-	}, StageAfter(chain, keyOf), "a step that resolves to nothing neither orders nor is ordered")
-	assert.Empty(t, StageAfter([]types.ChainStep{{Target: "a"}, {Target: "b"}}, keyOf), "one call, no stages")
+	calls := ChainCalls(chain, keyOf)
+	assert.Equal(t, [][]string{
+		{DepKey("docs", "format")},
+		{DepKey("docs", "conventions"), DepKey("docs", "spelling")},
+		{DepKey("docs", "links")},
+	}, calls, "a step that resolves to nothing neither orders nor is ordered")
+
+	n := TargetNode{Needs: calls}
+	assert.Equal(t, []string{DepKey("docs", "format"), DepKey("docs", "conventions"), DepKey("docs", "spelling")},
+		n.MembersBefore(DepKey("docs", "links")))
+	assert.Nil(t, n.MembersBefore(DepKey("docs", "format")), "nothing precedes the first call")
+	assert.Nil(t, n.MembersBefore(DepKey("docs", "nobody")), "not a member")
+	assert.Equal(t, [][]string{{DepKey("docs", "a"), DepKey("docs", "b")}},
+		ChainCalls([]types.ChainStep{{Target: "a"}, {Target: "b"}}, keyOf), "one call")
+	assert.Empty(t, ChainCalls([]types.ChainStep{{Project: "gone", Target: "a"}}, keyOf), "no empty call is kept")
 }
 
-func TestDeclaredNodesHonorsStages(t *testing.T) {
+func TestDeclaredNodesHonorsTheCallOrder(t *testing.T) {
 	t.Parallel()
 	p := ciFixtureProject(false)
 	// The badge stays unaware of the generator; ci's body runs it in a second call.
-	p.TargetChains["ci"] = []types.ChainStep{{Target: "generate"}, {Target: "coverage-badge", Stage: 1}}
+	p.TargetChains["ci"] = []types.ChainStep{{Target: "generate"}, {Target: "coverage-badge", CallIndex: 1}}
 	assert.Empty(t, FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil),
 		"a later ctx.needs call is ordered after the earlier one")
 }
 
-// TestStageOrderReachesUnderTheLaterComposer is the docs ci shape: `ctx.needs(generate,
+// TestCallOrderReachesUnderTheLaterComposer is the docs ci shape: `ctx.needs(generate,
 // lint, test); ctx.needs(build);` with the render under build reading pages that format,
-// under lint, rewrites. The render never names format; build's stage does, and nothing
+// under lint, rewrites. The render never names format; build's call does, and nothing
 // under build starts before build does.
-func TestStageOrderReachesUnderTheLaterComposer(t *testing.T) {
+func TestCallOrderReachesUnderTheLaterComposer(t *testing.T) {
 	t.Parallel()
 	p := &types.Project{
 		Path: "docs", Name: "docs",
 		TargetChains: map[string][]types.ChainStep{
-			"ci":    {{Target: "generate"}, {Target: "lint"}, {Target: "build", Stage: 1}},
+			"ci":    {{Target: "generate"}, {Target: "lint"}, {Target: "build", CallIndex: 1}},
 			"lint":  {{Target: "format"}},
-			"build": {{Target: "generate"}, {Target: "site-generate", Stage: 1}},
+			"build": {{Target: "generate"}, {Target: "site-generate", CallIndex: 1}},
 		},
 		TargetInputs:  map[string][]types.InputRef{"site-generate": {{Glob: "**/*.md"}}},
 		TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "*.md"}}},

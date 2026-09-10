@@ -2767,9 +2767,8 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared here, not only sequenced by lint's two ctx.needs stages: the chain a
-    // composer records is a flat list, so the ordering MGS4008 can see is the edge
-    // the reader itself declares. This compiles libs/testlayout, which gofmt rewrites.
+    // This compiles libs/testlayout, which gofmt rewrites, so the edge is this
+    // target's own rather than a detail of how lint sequences its calls.
     ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",

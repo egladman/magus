@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   is an over-approximation, and a refusal may not rest on a guess. Nor on a pattern: the
   refusal stands on a file in the tree both globs match, and on one project, since a pair
   split across two is advice rather than a refusal. A later `ctx.needs` call in the
-  composer's body counts as ordering everything an earlier call ran, which each chain step
-  now records as its stage. Where the wedge is
+  composer's body counts as ordering everything an earlier call ran, and everything under
+  a later call's members with it; each chain step records which call named it. Where the
+  wedge is
   reached anyway, the concurrency pool now knows who holds its slots and what each holder is
   waiting on, and refuses the wait once every slot is held by a step that is itself waiting,
   naming every holder (MGS3013). Waiting for the per-key cache lock and waiting for an

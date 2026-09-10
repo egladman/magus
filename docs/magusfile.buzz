@@ -509,9 +509,9 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    // build renders every page format rewrites in place, so the render waits for lint's
-    // format stage rather than racing it (MGS4008). Two calls, not an edge on build:
-    // a site built alone from unformatted markdown is a fine site.
+    // build renders every page format rewrites in place, so the render waits for the
+    // format under lint rather than racing it (MGS4008). Two calls, not an edge on
+    // build: a site built alone from unformatted markdown is a fine site.
     ctx.needs(generate, lint, test);
     ctx.needs(build);
 }

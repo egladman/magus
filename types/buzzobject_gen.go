@@ -302,9 +302,9 @@ func (v UpdateRef) BuzzObject() BuzzObject {
 
 func (v ChainStep) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"project": v.Project,
-		"target":  v.Target,
-		"stage":   v.Stage,
+		"project":   v.Project,
+		"target":    v.Target,
+		"callIndex": v.CallIndex,
 	}
 }
 

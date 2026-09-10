@@ -261,7 +261,7 @@ func buzzValueMagusChainStep(v types.ChainStep) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("target", vm.StrValue(v.Target))
-	out.MapSet("stage", vm.IntValue(int64(v.Stage)))
+	out.MapSet("callIndex", vm.IntValue(int64(v.CallIndex)))
 	return out
 }
 

@@ -40,17 +40,37 @@ type TargetNode struct {
 	// A fallback reader provably never sees files under them, so writes landing
 	// wholly inside one derive no edge.
 	IgnoreDirs []string
-	// Needs are the node keys this target dispatches with ctx.needs, directly. They are
-	// the only sequencing that exists INSIDE a step, so they are what decides whether a
-	// same-step overlap is ordered or unschedulable; see FindSameStepConflicts.
-	Needs []string
-	// After are the node keys that complete before this target STARTS: the members of
-	// the earlier ctx.needs calls in the body that composes it (StageAfter). Kept apart
-	// from Needs because the two order different things. A need completes before this
-	// target's own work and says nothing about its sibling members; an After edge holds
-	// for everything this target composes as well, since none of it can start before
-	// the target does.
-	After []string
+	// Needs are the node keys this target dispatches with ctx.needs, one slice per call
+	// in body order. They are the only sequencing that exists INSIDE a step: a call fans
+	// its members out unordered and returns when all of them have run, so the members of
+	// one call are siblings, every call completes before this target's own work, and a
+	// later call starts after the earlier ones have completed. That is what decides
+	// whether a same-step overlap is ordered or unschedulable; see FindSameStepConflicts.
+	Needs [][]string
+}
+
+// Members is every node key this target dispatches, in body order.
+func (n TargetNode) Members() []string {
+	var out []string
+	for _, call := range n.Needs {
+		out = append(out, call...)
+	}
+	return out
+}
+
+// MembersBefore lists the members of the ctx.needs calls before the one naming member:
+// the nodes that have completed before member starts, by this composer's own
+// sequencing. Nil when member is in the first call or is not one of this target's
+// members.
+func (n TargetNode) MembersBefore(member string) []string {
+	var out []string
+	for _, call := range n.Needs {
+		if slices.Contains(call, member) {
+			return out
+		}
+		out = append(out, call...)
+	}
+	return nil
 }
 
 // Key returns the node's scheduling identity, shared with the step barrier.
@@ -540,11 +560,7 @@ func WorkspaceOverlapWitness(root string) OverlapWitness {
 //
 // Deterministic: results are sorted by step, then writer, then reader.
 func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) []SameStepConflict {
-	byKey := make(map[string]TargetNode, len(nodes))
-	for _, n := range nodes {
-		byKey[n.Key()] = n
-	}
-	composers := composersOf(nodes)
+	order := newNodeOrder(nodes)
 	var out []SameStepConflict
 	for w := range nodes {
 		for r := range nodes {
@@ -565,7 +581,7 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) []SameSte
 			if witness != nil && !witness(write, read, nodes[r].IgnoreDirs) {
 				continue
 			}
-			if orderedAfter(byKey, composers, nodes[r].Key(), nodes[w].Key()) || orderedAfter(byKey, composers, nodes[w].Key(), nodes[r].Key()) {
+			if order.runsAfter(nodes[r].Key(), nodes[w].Key()) || order.runsAfter(nodes[w].Key(), nodes[r].Key()) {
 				continue
 			}
 			out = append(out, SameStepConflict{
@@ -591,33 +607,45 @@ func sharedStep(a, b TargetNode) (string, bool) {
 	return "", false
 }
 
-// composersOf inverts the Needs edges: for each node key, the composers whose chains
-// dispatch it. An After edge on a composer holds for everything under it, and this is
-// how the walk up to those composers is made.
-func composersOf(nodes []TargetNode) map[string][]string {
-	out := map[string][]string{}
+// nodeOrder answers ordering questions over one collection of nodes: the nodes by key
+// and, inverted from their Needs, the composers that dispatch each one.
+type nodeOrder struct {
+	byKey     map[string]TargetNode
+	composers map[string][]string
+}
+
+func newNodeOrder(nodes []TargetNode) nodeOrder {
+	o := nodeOrder{byKey: make(map[string]TargetNode, len(nodes)), composers: map[string][]string{}}
 	for _, n := range nodes {
-		for _, member := range n.Needs {
-			out[member] = append(out[member], n.Key())
+		o.byKey[n.Key()] = n
+		for _, member := range n.Members() {
+			o.composers[member] = append(o.composers[member], n.Key())
 		}
+	}
+	return o
+}
+
+// membersBefore lists the nodes that have completed by the time key starts: the earlier
+// calls of every composer that dispatches it. The member's node is shared by every
+// composer reaching it, and the call index is each composer's own.
+func (o nodeOrder) membersBefore(key string) []string {
+	out := make([]string, 0, len(o.composers[key]))
+	for _, c := range o.composers[key] {
+		out = append(out, o.byKey[c].MembersBefore(key)...)
 	}
 	return out
 }
 
-// orderedAfter reports whether later's own work runs after earlier has completed, so
-// the body's sequencing already puts earlier first.
-//
-// Two ways that holds. later's own edges reach earlier: a need completes before later's
-// work, an After edge before later starts, and from there every edge of every node
-// reached completes before that node does, so the closure over both kinds is sound.
-// Or a composer above later carries an After edge that reaches earlier: nothing under
-// that composer starts before it does. A composer's NEEDS do not count from up there,
-// because those are later's own siblings, fanned out unordered beside it.
+// runsAfter reports whether later's own work runs after earlier has completed, so the
+// body's sequencing already puts earlier first: later's own needs and members-before
+// reach earlier, or the members-before of a composer above later do, since nothing
+// under a composer starts before it does. A composer's needs never count from up there;
+// those are later's siblings, fanned out unordered beside it.
 //
 // Every walk is bounded by the node count, which is what keeps a chain the loader
 // somehow admitted with a cycle in it from spinning here.
-func orderedAfter(byKey map[string]TargetNode, composers map[string][]string, later, earlier string) bool {
-	if completesBefore(byKey, later, earlier, true) {
+func (o nodeOrder) runsAfter(later, earlier string) bool {
+	if o.reaches(append(o.byKey[later].Members(), o.membersBefore(later)...), earlier) {
 		return true
 	}
 	seen := map[string]bool{later: true}
@@ -625,12 +653,12 @@ func orderedAfter(byKey map[string]TargetNode, composers map[string][]string, la
 	for len(queue) > 0 {
 		k := queue[0]
 		queue = queue[1:]
-		for _, c := range composers[k] {
+		for _, c := range o.composers[k] {
 			if seen[c] {
 				continue
 			}
 			seen[c] = true
-			if completesBefore(byKey, c, earlier, false) {
+			if o.reaches(o.membersBefore(c), earlier) {
 				return true
 			}
 			queue = append(queue, c)
@@ -639,16 +667,11 @@ func orderedAfter(byKey map[string]TargetNode, composers map[string][]string, la
 	return false
 }
 
-// completesBefore reports whether target completes before from's own work, walking
-// from's After edges, its Needs too when ownNeeds is set, and both kinds of edge on
-// every node reached past the first hop.
-func completesBefore(byKey map[string]TargetNode, from, target string, ownNeeds bool) bool {
-	first := byKey[from].After
-	if ownNeeds {
-		first = append(slices.Clone(first), byKey[from].Needs...)
-	}
-	seen := map[string]bool{from: true}
-	queue := first
+// reaches reports whether target is one of from or completes before one of them does,
+// walking the needs and the members-before of every node reached.
+func (o nodeOrder) reaches(from []string, target string) bool {
+	seen := map[string]bool{}
+	queue := from
 	for len(queue) > 0 {
 		k := queue[0]
 		queue = queue[1:]
@@ -659,9 +682,8 @@ func completesBefore(byKey map[string]TargetNode, from, target string, ownNeeds 
 			continue
 		}
 		seen[k] = true
-		n := byKey[k]
-		queue = append(queue, n.Needs...)
-		queue = append(queue, n.After...)
+		queue = append(queue, o.byKey[k].Members()...)
+		queue = append(queue, o.membersBefore(k)...)
 	}
 	return false
 }
@@ -800,22 +822,9 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 			}
 			return DepKey(owner.Path, cs.Target), true
 		}
+		node.Needs = ChainCalls(chain, keyOf)
 		for _, cs := range chain {
-			memberKey, ok := keyOf(cs)
-			if !ok {
-				continue
-			}
-			node.Needs = append(node.Needs, memberKey)
 			walk(lookupOwner(proj, cs, lookup), cs.Target)
-		}
-		for memberKey, earlier := range StageAfter(chain, keyOf) {
-			// Every member walked above exists; a step keyOf rejected has no entry.
-			member := byKey[memberKey]
-			for _, e := range earlier {
-				if !slices.Contains(member.After, e) {
-					member.After = append(member.After, e)
-				}
-			}
 		}
 	}
 	walk(p, composer)
@@ -855,36 +864,32 @@ func lookupOwner(proj *types.Project, cs types.ChainStep, lookup func(path strin
 	return lookup(cs.Project)
 }
 
-// StageAfter lists, per chain member, the members of the earlier ctx.needs calls in the
-// same body. One call fans its arguments out unordered and returns when all of them have
-// run, so a later stage starts after every earlier one has completed, by the composer's
-// own sequencing; a collector records that as the member's After edges. keyOf names a
-// step's node and says no for a step that resolves to nothing, which then neither
-// orders nor is ordered.
-//
-// The edges land on the member's node, shared with every composer that reaches it. A
-// target one composer runs in a later stage so carries that ordering into another
-// composer that fans it out with the same writer in one call, and that pair goes
-// unreported; both composers have to be scheduled in one invocation for it to matter.
-func StageAfter(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) map[string][]string {
-	out := map[string][]string{}
-	var earlier, current []string
-	stage := 0
+// ChainCalls groups a chain's steps by the ctx.needs call that named them, in body
+// order, as TargetNode.Needs wants them. keyOf names a step's node and says no for a
+// step that resolves to nothing, which then neither orders nor is ordered; a call left
+// with no member is dropped rather than kept empty.
+func ChainCalls(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) [][]string {
+	var out [][]string
+	var call []string
+	index := 0
+	flush := func() {
+		if len(call) > 0 {
+			out = append(out, call)
+		}
+		call = nil
+	}
 	for _, cs := range chain {
 		key, ok := keyOf(cs)
 		if !ok {
 			continue
 		}
-		if cs.Stage != stage {
-			earlier = append(earlier, current...)
-			current = nil
-			stage = cs.Stage
+		if cs.CallIndex != index {
+			flush()
+			index = cs.CallIndex
 		}
-		current = append(current, key)
-		if len(earlier) > 0 {
-			out[key] = slices.Clone(earlier)
-		}
+		call = append(call, key)
 	}
+	flush()
 	return out
 }
 
