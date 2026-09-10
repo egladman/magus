@@ -258,16 +258,25 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Locat
 	return &narrowed
 }
 
-// workerLease returns the live worker row leaseID names. A root lease, a row that is not
-// live, and a writable row with no declared owned paths all report false: none of them
-// states a boundary narrower than the workspace. Liveness is types.LeaseState.Live, the
-// same test the guard applies, so a row the guard ignores is one the sandbox ignores.
+// workerLease returns the live row leaseID names when it states a boundary narrower than
+// the workspace: a read-only row of any tier, or a worker row with owned paths. A writable
+// root lease and a writable row with nothing declared report false. Liveness is
+// types.LeaseState.Live, the same test the guard applies, so a row the guard ignores is
+// one the sandbox ignores.
 func workerLease(rows []types.Lease, leaseID string) (types.Lease, bool) {
 	for _, l := range rows {
 		if l.ID != leaseID {
 			continue
 		}
-		if l.Parent == "" || !l.State.Live() || (len(l.OwnedPaths) == 0 && !l.ReadOnly) {
+		if !l.State.Live() {
+			return types.Lease{}, false
+		}
+		// Read-only is a boundary whatever the row's place in the tree: a root row that
+		// declares it gets no writes either, rather than the whole checkout.
+		if l.ReadOnly {
+			return l, true
+		}
+		if l.Parent == "" || len(l.OwnedPaths) == 0 {
 			return types.Lease{}, false
 		}
 		return l, true
@@ -291,13 +300,26 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 		forbiddenAbs = append(forbiddenAbs, filesystem.ResolveRulePath(filepath.Join(root, filepath.FromSlash(path.Clean(f)))))
 	}
 
-	rootFS := os.DirFS(root)
+	// Containment is checked on the RESOLVED path, after symlinks: a declared `..` or a
+	// symlink out of the checkout would otherwise turn an owned path into a grant on
+	// whatever it points at, and the root itself is never a grant, because a lease that
+	// owns the whole checkout is not a worker.
+	rootAbs := filesystem.ResolveRulePath(root)
 	matched := make([]string, 0, len(owned))
+	grant := func(abs string) {
+		abs = filesystem.ResolveRulePath(abs)
+		if abs == rootAbs || !filesystem.Under(abs, rootAbs) {
+			return
+		}
+		matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+	}
+	rootFS := os.DirFS(root)
 	for _, g := range owned {
 		pattern := strings.TrimPrefix(path.Clean(filepath.ToSlash(g)), "/")
 		if !strings.ContainsAny(pattern, "*?[{") {
-			abs := filesystem.ResolveRulePath(nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))))
-			matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+			if abs := nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))); abs != "" {
+				grant(abs)
+			}
 			continue
 		}
 		hits, err := doublestar.Glob(rootFS, pattern)
@@ -305,8 +327,7 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 			continue
 		}
 		for _, h := range hits {
-			abs := filesystem.ResolveRulePath(filepath.Join(root, filepath.FromSlash(h)))
-			matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+			grant(filepath.Join(root, filepath.FromSlash(h)))
 		}
 	}
 
@@ -322,20 +343,21 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 	return out
 }
 
-// nearestExisting walks up from abs to the first path that exists, stopping at root: the
-// directory a not-yet-created file will land in.
+// nearestExisting walks up from abs to the first path that exists below root: the
+// directory a not-yet-created file will land in. It reports "" for a path outside root
+// and for one whose every ancestor below root is missing, because the only thing left to
+// grant then is the checkout itself.
 func nearestExisting(root, abs string) string {
+	if !filesystem.Under(abs, root) {
+		return ""
+	}
 	for abs != root {
 		if _, err := os.Lstat(abs); err == nil {
 			return abs
 		}
-		parent := filepath.Dir(abs)
-		if parent == abs {
-			break
-		}
-		abs = parent
+		abs = filepath.Dir(abs)
 	}
-	return root
+	return ""
 }
 
 // splitAroundForbidden returns what may be granted for abs: abs itself when no forbidden

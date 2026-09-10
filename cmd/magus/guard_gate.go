@@ -301,8 +301,8 @@ func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string
 
 // vcsMutation names the git operation a parsed command performs when it is one a
 // worker must leave to the orchestrator, or "" for anything else. Global options
-// before the subcommand (-C <dir>, -c k=v) are skipped so a relocated commit is still a
-// commit. Only git is read: the guard's command grammar knows no other VCS, and a
+// before the subcommand (-C <dir>, -c k=v, --work-tree <dir>) are skipped so a relocated
+// commit is still a commit. Only git is read: the guard's command grammar knows no other VCS, and a
 // name here that promised more would be a rule nothing enforces.
 //
 // `git stash list` and `git stash show` read the stash rather than moving work onto
@@ -316,7 +316,8 @@ func vcsMutation(c guardCommand) string {
 	for i := 0; i < len(c.Args); i++ {
 		a := c.Args[i]
 		if strings.HasPrefix(a, "-") {
-			if a == "-C" || a == "-c" {
+			switch a {
+			case "-C", "-c", "--work-tree", "--git-dir", "--namespace":
 				i++
 			}
 			continue

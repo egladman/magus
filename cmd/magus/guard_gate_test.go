@@ -312,6 +312,7 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 	for _, command := range []string{
 		"git commit -q -m done",
 		"git -C /tmp/elsewhere commit -m done",
+		"git --work-tree /tmp/elsewhere commit -m done",
 		"git push origin main",
 		"git stash push -u -m wip",
 		"git reset --hard HEAD",

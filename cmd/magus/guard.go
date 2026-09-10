@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -307,7 +308,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// case is also the common one, so a rule that speaks there is a rule the
 		// reader learns to skip.
 		if verdict.Decision == "pass" && commandRunsGate(input.Value) {
-			full, brief := adviseRepeatGate(workspaceRunsDir(globalCfg.Cache.Dir), time.Now())
+			full, brief := adviseRepeatGate(workspaceRunsDir(hookActivityTrail(ctx).base), time.Now())
 			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
@@ -669,12 +670,19 @@ func hookActivityTrail(ctx context.Context) hookActivityLocation {
 }
 
 // hookActivityLocationAt resolves the workspace holding dir, or the process cwd for "".
+// The process cwd's workspace is the one globalCfg was loaded for, so its resolved config
+// applies; another checkout reads its own magus.yaml, because a cache dir configured in
+// the orchestrator's tree says nothing about where a worker's cache lives.
 func hookActivityLocationAt(dir string) hookActivityLocation {
 	root, err := magus.FindRoot(dir)
 	if err != nil {
 		return hookActivityLocation{}
 	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	var opts []magus.Option
+	if dir == "" {
+		opts = append(opts, magus.WithLoadedConfig(globalCfg))
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, opts...)
 	if err != nil {
 		return hookActivityLocation{}
 	}
@@ -686,9 +694,10 @@ func hookActivityLocationAt(dir string) hookActivityLocation {
 // process cwd is then the orchestrator's tree rather than the worker's: the marker bound
 // with `magus session lease` lives in the worker's checkout, so the envelope's cwd is the
 // only thing that finds it. A location already pinned (a test's) wins, and a cwd magus
-// cannot resolve to a workspace changes nothing.
+// cannot resolve to a workspace changes nothing. A relative cwd is ignored rather than
+// resolved against the hook process, whose directory is the thing it must not stand for.
 func hookContextAt(ctx context.Context, cwd string) context.Context {
-	if cwd == "" {
+	if !filepath.IsAbs(cwd) {
 		return ctx
 	}
 	if _, pinned := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); pinned {

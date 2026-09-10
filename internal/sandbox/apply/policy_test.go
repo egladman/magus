@@ -239,6 +239,41 @@ func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "nowhere", "x.txt")), "a glob that matches nothing still grants nothing")
 }
 
+// TestNarrowToLeaseNeverGrantsOutsideTheCheckout is the containment rule: an owned path
+// that escapes the root through `..`, through a symlink, or by having no existing ancestor
+// below the root grants nothing, because the alternative is a grant on the checkout or on
+// whatever the link points at.
+func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
+	outside := filesystem.ResolveRulePath(t.TempDir())
+	root, cacheDir := leaseWorkspace(t, types.Lease{
+		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
+		OwnedPaths: []string{"../" + filepath.Base(outside) + "/x.txt", "link/x.txt", "nowhere/deeper/new.go", "."},
+	})
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
+
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+
+	assert.Equal(t, "fleet/w1", p.Lease)
+	assert.Error(t, p.CheckWrite(filepath.Join(outside, "x.txt")), "a `..` path is not a grant on the sibling")
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "link", "x.txt")), "a symlink out of the checkout is not a grant on its target")
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "x.txt")), "a path with no existing ancestor below the root grants nothing, not the root")
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
+}
+
+// TestNarrowToLeaseGrantsAReadOnlyRootNoWrites keeps a read-only declaration a boundary
+// at every tier: a root row that declares it is not the orchestrator's full grant.
+func TestNarrowToLeaseGrantsAReadOnlyRootNoWrites(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Lease{
+		ID: "fleet/root", State: types.StateRunning, ReadOnly: true,
+	})
+
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/root")
+
+	assert.Equal(t, "fleet/root", p.Lease)
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
+	assert.NoError(t, p.CheckRead(filepath.Join(root, "pkg", "a", "x.txt")))
+}
+
 // TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone covers the rows that state no boundary
 // narrower than the workspace. A root lease is the orchestrator and owns the checkout; the
 // rest are rows the sandbox has nothing to derive from.
