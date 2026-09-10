@@ -1423,6 +1423,11 @@
             }
           ],
           "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "benchmarks/agent/reports/*.md"
+            }
+          ],
           "modifies_existing_files": [
             {
               "glob": "benchmarks/agent/report.md"
@@ -1871,6 +1876,14 @@
             {
               "project": ".",
               "glob": "CHANGELOG.md"
+            },
+            {
+              "project": ".",
+              "glob": "benchmarks/agent/reports/*.md"
+            },
+            {
+              "project": ".",
+              "glob": "benchmarks/BENCHMARKS.md"
             }
           ],
           "reads_secrets": false,
@@ -1895,6 +1908,9 @@
             },
             {
               "glob": "changelog.md"
+            },
+            {
+              "glob": "benchmarks/*.md"
             }
           ],
           "modifies_existing_files": [

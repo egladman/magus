@@ -120,7 +120,8 @@ itself. Override with `BENCH_FIXTURE_REPO` only for runner self-tests.
 `provision_failed`, `probe_failed`, `control_error`, or a control verdict
 (`control_golden_ok`, `control_golden_failed`, `control_null_ok`,
 `control_null_failed`). `control` is `golden`, `null`, or empty for a scored
-run; the extractor skips the first two.
+run; the extractor records the first two as control rows the report's Controls
+table reads, and never scores them.
 
 Timings are runner-side and tool-agnostic: `time_to_first_edit_ms` is the first
 poll at which the worktree differs from how seeding and provisioning left it,
@@ -300,6 +301,17 @@ The analysis is a Go package under `internal/bench/` with one binary,
 `cmd/benchreport`; `internal/bench/README.md` has the invocations, and
 `magus run agent-bench-report .` builds it and runs the whole pipeline over
 `results/`.
+
+## Publishing a run
+
+`results/` is gitignored, so a run that is worth keeping is published as its
+report: `magus run agent-bench-report . -- --publish <date>-<model>` writes the
+rendered report to `reports/<date>-<model>.md` with the run's environment
+stamped after the title (date, scored runs, models, the magus build the trials
+recorded, the host). That directory is committed, and the docs project mirrors
+every file in it onto the site under Benchmarks, so a number a reader meets
+there traces back to a date, a build and a machine. Pass `--results <dir>` for
+a tree other than `results/`, as the Opus pilot did.
 
 ## Not built yet
 

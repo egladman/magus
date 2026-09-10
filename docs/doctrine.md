@@ -384,6 +384,9 @@ This repository is built with agents at scale: 113,430 agent-run shell commands
 in twenty-one days. Our own oversight lapsed too. In 22 of 203 recent sessions
 the guard was not running, and those sessions carried 17% of all commands. The
 only reason that number exists is that we went looking for it.[^agent-commands-2026-09]
+Whether the surface earns its cost is measured the same way rather than
+asserted: [Benchmarks](benchmarks.md) publishes every run beside the
+environment that produced it, controls first.
 
 ## Where this is strained
 

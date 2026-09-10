@@ -20,7 +20,9 @@ import "archive";
 import "crypto";
 import "serialize";
 import "io";
+import "encoding/json";
 import "std";
+import "time";
 import "semver";
 
 import "magus/spell/go";
@@ -2809,7 +2811,9 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     // as modified rather than written: a declared output lands in .gitattributes, and an
     // ignored path there names a file that can never be tracked.
     ctx.modifiesExistingFiles("benchmarks/agent/report.md");
+    ctx.writesFiles("benchmarks/agent/reports/*.md");
     var results = "results";
+    var publish = "";
     var synthetic = false;
     var i = 0;
     while (i < args.len()) {
@@ -2819,8 +2823,11 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         } else if (args[i] == "--results" and i + 1 < args.len()) {
             results = args[i + 1];
             i = i + 2;
+        } else if (args[i] == "--publish" and i + 1 < args.len()) {
+            publish = args[i + 1];
+            i = i + 2;
         } else {
-            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --results <dir>)";
+            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --results <dir>, --publish <name>)";
         }
     }
     // The binary lands outside the tree: under benchmarks/agent it would be a path
@@ -2848,6 +2855,41 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         proc\exec(bin, step);
     }
     magus\log.info("benchmark report written to benchmarks/agent/report.md");
+    if (publish != "") {
+        publish_report(agent, results, publish);
+    }
+}
+
+// publish_report commits a rendered report under benchmarks/agent/reports with the
+// environment stamped after its title, the way BENCHMARKS.md carries its own: a
+// number on the docs site has to trace to a date, a build and a machine. The docs
+// project mirrors every file in that directory into a page.
+fun publish_report(agent: str, results: str, name: str) > void !> any {
+    final report = fs\readFile(fs\join(agent, "report.md"));
+    final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
+    var models = "";
+    foreach (model in analysis["models"]) {
+        if (models != "") { models = models + ", "; }
+        models = models + "{model}";
+    }
+    // The magus that ran the trials, from the first run's own record; the version
+    // string carries a second line when a daemon of another build was up.
+    var version = "unknown";
+    foreach (entry in fs\listDir(fs\join(agent, results))) {
+        final meta = fs\join(agent, results, entry, "meta.json");
+        if (fs\exists(meta)) {
+            final record = json\parse(fs\readFile(meta));
+            version = "{record["magus_version"]}".split("\n")[0];
+            break;
+        }
+    }
+    final stamp = "Published " + time\nowIso() + " from `" + results + "`: {analysis["runs"]} scored run(s), "
+        + "model(s) " + models + ", " + version + ", host " + os\platform().join("/") + ".";
+    final title = report.split("\n")[0];
+    fs\mkdirAll(fs\join(agent, "reports"));
+    fs\writeFile(fs\join(agent, "reports", name + ".md"),
+        report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
+    magus\log.info("benchmark report published to " + fs\join(agent, "reports", name + ".md"));
 }
 
 // Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at
