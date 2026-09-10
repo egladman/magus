@@ -88,6 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The PR advice comment leads with the files no project claims.** The section is ranked
+  first rather than posted in the order its step ran, and it now names what an undeclared
+  file costs: the containing project reruns on every touch while the cache key stays put,
+  and a file that really is an input replays a verdict computed under the rules it just
+  changed. The fix is a snippet naming the file, the deliberately undeclared case still
+  reads as correct, and MGS1028 carries the argument in full.
 - **The MCP tool catalog is generated from the `std.Magus` descriptor.** It was the one
   agent-facing surface with no generator behind it: 22 hand-written descriptors and ~22 KB
   of prose beside a descriptor that already generates the Buzz bindings, the checker

@@ -458,7 +458,11 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 // dprint.json at the workspace root), so `format` here is a dependency edge and nothing
 // else. This project only lints prose; see docs/concepts/generated-files.md.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, conventions);
+    // A stage of its own, ahead of conventions: format reaches content-generate, and a page
+    // generated for the first time is absent from disk while the two fan out together, so
+    // every link to it reads as missing-link on that one run.
+    ctx.needs(format);
+    ctx.needs(conventions);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
     // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
     ctx.needs(textsearch\lint);

@@ -1,9 +1,9 @@
 // Comment when a pull request changes files no project declares.
 //
-// An unclaimed path invalidates no cache key and feeds no target, so nothing in the
-// pipeline reads it: the green check below says nothing whatsoever about those files.
-// That is the most misleading state CI can be in, because it looks identical to a change
-// that was actually verified.
+// Seeding and keying disagree here, which is why this section leads the comment: the file
+// pulls its containing project into the affected set by directory containment, and enters
+// no cache key. So the reruns are paid and cannot change the answer, and a file that IS an
+// input replays a verdict computed under the rules it just changed. See MGS1028.
 //
 // Usually it means a project's `sources` glob is too narrow, or the file belongs to a
 // directory nobody declared as a project yet.
@@ -28,17 +28,22 @@ fun changed(base: str, head: str) > [str] !> any {
 }
 
 fun body(files: [str], total: int) > str {
-    final parts = mut ["**" + "{files.len()}" + " of the " + "{total}" + " files in this pull "
+    final parts = mut ["A file no project declares still reruns its containing project on "
+        + "every touch, and the cache key never moves: work paid for an answer that cannot "
+        + "change. When the file really is an input (a lint rule set, a toolchain pin, a "
+        + "formatter config), that same gap lets a verdict computed under the old rules "
+        + "replay.\n\n"
+        + "**" + "{files.len()}" + " of the " + "{total}" + " files in this pull "
         + "request are claimed by no project:**\n\n"];
     foreach (f in files) { parts.append("- `" + f + "`\n"); }
     return parts.join("")
-        + "\nNo project declares them as sources, so they invalidate no cache key and "
-        + "feed no target. Whatever the checks below report, they did not check these.\n\n"
-        + "If that is wrong, widen the owning project's `sources` in its magusfile - or "
-        + "declare the directory as a project if it is not one yet. If they belong "
-        + "outside the build (an editor config, a note to yourself), this is correct and "
-        + "still worth knowing.\n\n"
-        + "`magus describe file <path>` explains any one of them.\n";
+        + "\nDeclare the ones that are inputs in the owning project's `magus\\project`:\n\n"
+        + "```buzz\nmagus\\project(\{\n    \"sources\": [\"" + files[0] + "\"],\n\});\n```\n\n"
+        + "If a file belongs outside the build (a LICENSE, an editor config, a note to "
+        + "yourself), leaving it undeclared is correct: declaring it would only make an "
+        + "unrelated edit invalidate a cache.\n\n"
+        + "`magus describe file <path>` explains any one of them, and MGS1028 carries the "
+        + "seeding-versus-keying argument in full.\n";
 }
 
 fun main() > void !> any {
@@ -81,9 +86,21 @@ fun main() > void !> any {
 }
 
 
-test "body says the checks did not verify the unclaimed files" {
+test "body leads with the rerun cost and the stale verdict" {
     final text = body([".editorconfig"], total: 4);
-    std\assert(text.indexOf("1 of the 4 files") != null, message: "counts them against the change");
-    std\assert(text.indexOf("did not check these") != null, message: "says the green check is silent on them");
-    std\assert(text.indexOf("sources") != null, message: "names the fix");
+    std\assert(text.indexOf("cache key never moves") < text.indexOf("1 of the 4 files"),
+        message: "the cost comes before the list");
+    std\assert(text.indexOf("old rules") != null, message: "and the stale verdict beside it");
+    std\assert(text.indexOf("```buzz\nmagus\\project(\{\n    \"sources\": [\".editorconfig\"],")
+        != null, message: "the fix is a snippet naming the file");
+    std\assert(text.indexOf("MGS1028") != null, message: "cites the argument in full");
+}
+
+test "the fix snippet reaches the comment unrewritten" {
+    // compose deep-links glossary terms, and `project` and `sources` are both in it.
+    final rendered = advice\compose("", name: section, title: "Files no project claims (1)",
+        body: body([".editorconfig"], total: 4));
+    std\assert(rendered.indexOf("```buzz\nmagus\\project(\{") != null,
+        message: "the snippet still runs when pasted");
+    std\assert(rendered.indexOf("[MGS1028](") != null, message: "and the code is clickable");
 }
