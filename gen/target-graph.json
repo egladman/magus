@@ -1450,7 +1450,7 @@
           "doc": "Runs a benchmark manifest with a login the launching shell never held.",
           "reads_secrets": true,
           "secret_refs": [
-            "claude-bench-token"
+            "CLAUDE_BENCH_TOKEN"
           ]
         },
         {

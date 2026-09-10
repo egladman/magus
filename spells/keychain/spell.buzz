@@ -5,12 +5,15 @@
 //   import "spells/keychain" as secrets;
 //   magus\secret.provider(secrets);
 //
-//   final token = magus\secret.read("claude-bench-token");
+//   final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+//
+// A reference is a keychain SERVICE name. Spell it like a shell variable, so the same
+// line reads through the environment provider wherever this one is not selected.
 //
 // A person stores the value once, at a prompt that never echoes it and never lands in a
 // shell history or a transcript:
 //
-//   security add-generic-password -a "$USER" -s claude-bench-token -w
+//   security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w
 //
 // This is what lets a magus run resolve a credential on a laptop with NOTHING exported
 // into the shell, which matters most when the shell is an agent's: the agent runs the
@@ -25,6 +28,10 @@ import "magus/spell";
 
 import "proc";
 export fun mgs_getName() > str { return "keychain"; }
+
+export fun mgs_getTools() > {str: Tool} {
+    return {"security": Tool{probe = Command{bin = "security", args = ["help"]}}};
+}
 
 
 // has reports whether haystack contains needle; see spells/onepassword for why this is
@@ -64,7 +71,9 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
                 + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
                 + "which prompts for the value and never echoes it.";
         }
-        if (has(err, "User interaction is not allowed") or has(err, "denied")) {
+        // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
+        // are the three refusals `security` words differently; the remedy is the same.
+        if (has(err, "User interaction is not allowed") or has(err, "User canceled") or has(err, "keychain is locked")) {
             throw "keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
                 + "Always Allow when the keychain asks about `security`.";
         }

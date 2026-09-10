@@ -64,14 +64,16 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus\cache.remote(github);
 }
 
-// The macOS keychain is the secret provider on a Mac outside CI, so a laptop run
-// resolves a credential with nothing exported into its shell and nothing in the
-// transcript of whoever typed the command. CI keeps the built-in environment provider,
-// the only thing that can read a repository secret. The host decides, not a knob: a
-// provider is an environment decision (docs/concepts/secrets/providers.md), and a
-// reference written for one provider is a typo under the other.
+// The macOS keychain is the secret provider when the person launching the run asks
+// for it, so a laptop run resolves a credential with nothing exported into its shell
+// and nothing in the transcript of whoever typed the command. Opt-in rather than
+// every Mac outside CI: the environment provider is what image-login and the release
+// targets read on a laptop too, and a keychain that answers for every reference would
+// break each of them until its item was stored. A reference is written to be legal
+// under both (a shell name, which the keychain takes as a service name), so the same
+// magusfile line reads a repository secret in CI and a keychain item here.
 import "spells/keychain" as keychain;
-if (os\platform()[0] == "darwin" and (os\env("CI") ?? "") == "") {
+if (os\env("MAGUS_SECRET_PROVIDER") == "keychain") {
     magus\secret.provider(keychain);
 }
 
@@ -2811,7 +2813,7 @@ export fun agent_bench_test(ctx: magus\Context, args: [str]) > void !> any {
     }
     final root = vcs\root();
     docker["docker-run"](ctx, {"args": [
-        "-v", root + "/benchmarks/agent:/w", "-w", "/w/analysis", image,
+        "-v", root + "/benchmarks/agent:/w", "-w", "/w/analysis", "-e", "PYTHONDONTWRITEBYTECODE=1", image,
         "python3", "-m", "unittest", "discover", "-v",
     ]});
 }
@@ -2836,16 +2838,18 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         if (args[i] == "--synthetic") {
             synthetic = true;
             i = i + 1;
-        } else {
-            if (i + 1 < args.len()) {
-                if (args[i] == "--image") { image = args[i + 1]; }
-                if (args[i] == "--results") { results = args[i + 1]; }
-            }
+        } else if ((args[i] == "--image" or args[i] == "--results") and i + 1 < args.len()) {
+            if (args[i] == "--image") { image = args[i + 1]; }
+            if (args[i] == "--results") { results = args[i + 1]; }
             i = i + 2;
+        } else {
+            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --image <img>, --results <dir>)";
         }
     }
     final root = vcs\root();
-    final mount = ["-v", root + "/benchmarks/agent:/w", image, "python3"];
+    // No bytecode cache: the mount is the checkout, and a root-owned __pycache__ in it
+    // is a file nothing declared and git would not ignore.
+    final mount = ["-v", root + "/benchmarks/agent:/w", "-e", "PYTHONDONTWRITEBYTECODE=1", image, "python3"];
     var steps = mut [];
     // The synthetic tree is the pipeline's own control, the way the runner's golden
     // and null runs are: a known results tree must produce a report before a real
@@ -2872,13 +2876,14 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
 // provider under the reference below, handed to run.sh as the one environment variable
 // the runner's scrub keeps, and redacted from everything magus captures. It never
 // touches argv, which the run log records, and it never has to be exported by the
-// person, or the agent, typing this command: `magus run agent-bench-run . -- <manifest>`,
-// defaulting to pilot.manifest. Every run is paid work that writes results/, so it
-// never replays from cache.
+// person, or the agent, typing this command:
+// `MAGUS_SECRET_PROVIDER=keychain magus run agent-bench-run . -- <manifest>`, defaulting
+// to pilot.manifest. Every run is paid work that writes results/, so it never replays
+// from cache.
 export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
     var manifest = "pilot.manifest";
     if (args.len() > 0) { manifest = args[0]; }
-    final token = magus\secret.read("claude-bench-token");
+    final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
     os\withEnv({"CLAUDE_CODE_OAUTH_TOKEN": token}, callback: fun () > void !> any {
         proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent", opts: {});
     });

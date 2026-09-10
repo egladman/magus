@@ -81,15 +81,22 @@ service name of a generic password in the login keychain, and a person stores th
 value once at a prompt that never echoes it:
 
 ```sh
-security add-generic-password -a "$USER" -s claude-bench-token -w
+security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w
 ```
 
 ```buzz
 import "./spells/keychain" as keychain;
-magus\secret.provider(keychain);
+if (os\env("MAGUS_SECRET_PROVIDER") == "keychain") {
+    magus\secret.provider(keychain);
+}
 
-final token = magus\secret.read("claude-bench-token");
+final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
 ```
+
+Spell the reference like a shell variable and select the provider from the
+environment rather than from the platform: the same line then reads a repository
+secret in CI through the environment provider, and a laptop that has not stored the
+item keeps every other secret-reading target working.
 
 The shape earns its keep when the shell running magus is an agent's. Nothing is
 exported into that shell, so nothing reaches its transcript: the agent runs the
