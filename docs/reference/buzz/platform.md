@@ -20,10 +20,10 @@ Normalize an architecture identifier (x86_64, aarch64, armv7l, ...) to canonical
 
 **Signature:** `platform\arch(name, [style]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/platform.go#L229)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
-| `style` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+| `style`   | `string` | yes      |             |
 
 **Returns:** string
 
@@ -33,10 +33,10 @@ Normalize an OS identifier (Darwin, macOS, win, ...) to canonical Go GOOS (darwi
 
 **Signature:** `platform\os(name, [style]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/platform.go#L239)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
-| `style` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+| `style`   | `string` | yes      |             |
 
 **Returns:** string
 

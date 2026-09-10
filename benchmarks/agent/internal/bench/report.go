@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
+	"github.com/egladman/magus/internal/render/md"
 )
 
 // Below this the paired deltas are directional at best; Terminal-Bench runs 5.
@@ -52,38 +52,15 @@ func interval(bounds [2]*float64, digits int) string {
 	return "[" + numFloat(bounds[0], digits) + ", " + numFloat(bounds[1], digits) + "]"
 }
 
-type row []string
+// row is a table row. An alias, not a defined type, so []row is the [][]string
+// the renderer takes.
+type row = []string
 
-// table renders a markdown table with every column padded to its widest cell,
-// which is the form dprint writes, so a report that is committed and mirrored
-// into the docs passes the formatter instead of being excluded from it.
+// table renders a markdown table in dprint's form, which is what lets the
+// report be committed and mirrored into the docs without excluding it from the
+// formatter.
 func table(header row, rows []row) []string {
-	widths := make([]int, len(header))
-	for i, cell := range header {
-		widths[i] = utf8.RuneCountInString(cell)
-	}
-	for _, r := range rows {
-		for i, cell := range r {
-			widths[i] = max(widths[i], utf8.RuneCountInString(cell))
-		}
-	}
-	line := func(r row) string {
-		cells := make([]string, len(header))
-		for i := range header {
-			cells[i] = r[i] + strings.Repeat(" ", widths[i]-utf8.RuneCountInString(r[i]))
-		}
-		return "| " + strings.Join(cells, " | ") + " |"
-	}
-	dashes := make(row, len(header))
-	for i, w := range widths {
-		dashes[i] = strings.Repeat("-", w)
-	}
-	lines := make([]string, 0, 2+len(rows))
-	lines = append(lines, line(header), line(dashes))
-	for _, r := range rows {
-		lines = append(lines, line(r))
-	}
-	return lines
+	return md.TableLines(header, nil, rows)
 }
 
 func section(title, blurb string, body []string) []string {

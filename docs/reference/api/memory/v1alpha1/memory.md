@@ -61,8 +61,8 @@ Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-15
 
 Source: [memory.proto:133](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L133).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field     | Type   | # | Description                                        |
+| --------- | ------ | - | -------------------------------------------------- |
 | `content` | string | 1 | UNTRUSTED; empty when the cursor was never written |
 
 Used by: [GetCursor (response)](memory.md#getcursor), [UpdateCursor (response)](memory.md#updatecursor).
@@ -71,10 +71,10 @@ Used by: [GetCursor (response)](memory.md#getcursor), [UpdateCursor (response)](
 
 Source: [memory.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L120).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `name` | string | 1 | _string.min_len: 1_ Non-empty: an empty name identifies no record, and allow\_missing would then swallow it as a silent no-op rather than reporting the mistake. |
-| `allow_missing` | bool | 2 | true => deleting an absent record is a no-op |
+| Field           | Type   | # | Description                                                                                                                                                      |
+| --------------- | ------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | string | 1 | _string.min_len: 1_ Non-empty: an empty name identifies no record, and allow\_missing would then swallow it as a silent no-op rather than reporting the mistake. |
+| `allow_missing` | bool   | 2 | true => deleting an absent record is a no-op                                                                                                                     |
 
 Used by: [DeleteMemory (request)](memory.md#deletememory).
 
@@ -98,10 +98,10 @@ Used by: [GetCursor (request)](memory.md#getcursor).
 
 Source: [memory.proto:94](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L94).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `page_size` | int32 | 1 | _int32.lte: 1000; int32.gte: 0_ Bounded at the same tier as ListActivity rather than left open: the store ignores the field today, so the ceiling costs nothing now and is the request a paginating store would have to honor later. Not shared with the other list RPCs as a common message - AIP-158 keeps these flat, and a shared one could carry only a single ceiling for every caller (ListEvents deliberately allows 5000). |
-| `page_token` | string | 2 |  |
+| Field        | Type   | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page_size`  | int32  | 1 | _int32.lte: 1000; int32.gte: 0_ Bounded at the same tier as ListActivity rather than left open: the store ignores the field today, so the ceiling costs nothing now and is the request a paginating store would have to honor later. Not shared with the other list RPCs as a common message - AIP-158 keeps these flat, and a shared one could carry only a single ceiling for every caller (ListEvents deliberately allows 5000). |
+| `page_token` | string | 2 |                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Used by: [ListMemories (request)](memory.md#listmemories).
 
@@ -109,10 +109,10 @@ Used by: [ListMemories (request)](memory.md#listmemories).
 
 Source: [memory.proto:104](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L104).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `memories` | [repeated Memory](#memory) | 1 |  |
-| `next_page_token` | string | 2 | always empty until the store paginates |
+| Field             | Type                       | # | Description                            |
+| ----------------- | -------------------------- | - | -------------------------------------- |
+| `memories`        | [repeated Memory](#memory) | 1 |                                        |
+| `next_page_token` | string                     | 2 | always empty until the store paginates |
 
 Used by: [ListMemories (response)](memory.md#listmemories).
 
@@ -122,17 +122,17 @@ Memory is one record. name is the kebab-slug identity; refs are the required pay
 
 Source: [memory.proto:79](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L79).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `name` | string | 1 |  |
-| `type` | [MemoryType](#memorytype) | 2 |  |
-| `refs` | [repeated MemoryRef](#memoryref) | 3 |  |
-| `status` | string | 4 | free lifecycle string (accepted, superseded, done, stale, ...) |
-| `body` | string | 5 | UNTRUSTED prose caption; empty for a pointer |
-| `references` | repeated string | 6 | other record names (memory -> memory) |
-| `create_time` | Timestamp | 7 | output only |
-| `update_time` | Timestamp | 8 | output only |
-| `excerpt` | string | 9 | UNTRUSTED captured evidence, required on an elimination and rejected on every other type. It is copied in because an output ref resolves only from the checkout that produced it, and agent worktrees get deleted. |
+| Field         | Type                             | # | Description                                                                                                                                                                                                        |
+| ------------- | -------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`        | string                           | 1 |                                                                                                                                                                                                                    |
+| `type`        | [MemoryType](#memorytype)        | 2 |                                                                                                                                                                                                                    |
+| `refs`        | [repeated MemoryRef](#memoryref) | 3 |                                                                                                                                                                                                                    |
+| `status`      | string                           | 4 | free lifecycle string (accepted, superseded, done, stale, ...)                                                                                                                                                     |
+| `body`        | string                           | 5 | UNTRUSTED prose caption; empty for a pointer                                                                                                                                                                       |
+| `references`  | repeated string                  | 6 | other record names (memory -> memory)                                                                                                                                                                              |
+| `create_time` | Timestamp                        | 7 | output only                                                                                                                                                                                                        |
+| `update_time` | Timestamp                        | 8 | output only                                                                                                                                                                                                        |
+| `excerpt`     | string                           | 9 | UNTRUSTED captured evidence, required on an elimination and rejected on every other type. It is copied in because an output ref resolves only from the checkout that produced it, and agent worktrees get deleted. |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 
@@ -142,10 +142,10 @@ MemoryRef is one typed pointer: the payload of a record.
 
 Source: [memory.proto:71](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L71).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `kind` | [MemoryRefKind](#memoryrefkind) | 1 |  |
-| `target` | string | 2 | node id / path, output ref token, or a raw query/command string |
+| Field    | Type                            | # | Description                                                     |
+| -------- | ------------------------------- | - | --------------------------------------------------------------- |
+| `kind`   | [MemoryRefKind](#memoryrefkind) | 1 |                                                                 |
+| `target` | string                          | 2 | node id / path, output ref token, or a raw query/command string |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 
@@ -153,9 +153,9 @@ Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (reque
 
 Source: [memory.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L137).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `content` | string | 1 |  |
+| Field     | Type   | # | Description |
+| --------- | ------ | - | ----------- |
+| `content` | string | 1 |             |
 
 Used by: [UpdateCursor (request)](memory.md#updatecursor).
 
@@ -163,11 +163,11 @@ Used by: [UpdateCursor (request)](memory.md#updatecursor).
 
 Source: [memory.proto:109](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L109).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `memory` | [Memory](#memory) | 1 | _required_ Required: the payload IS the request. An upsert with no memory names nothing to create and carries nothing to write, so it can only be a client bug. |
-| `update_mask` | FieldMask | 2 | Names the fields to write; the rest keep what the record holds. Empty is a full replace HERE, because this caller is a person editing a form that submits every box, so an emptied one has to clear the field. |
-| `allow_missing` | bool | 3 | true => create when absent (AIP-134 upsert) |
+| Field           | Type              | # | Description                                                                                                                                                                                                    |
+| --------------- | ----------------- | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memory`        | [Memory](#memory) | 1 | _required_ Required: the payload IS the request. An upsert with no memory names nothing to create and carries nothing to write, so it can only be a client bug.                                                |
+| `update_mask`   | FieldMask         | 2 | Names the fields to write; the rest keep what the record holds. Empty is a full replace HERE, because this caller is a person editing a form that submits every box, so an emptied one has to clear the field. |
+| `allow_missing` | bool              | 3 | true => create when absent (AIP-134 upsert)                                                                                                                                                                    |
 
 Used by: [UpdateMemory (request)](memory.md#updatememory).
 
@@ -179,14 +179,14 @@ MemoryRefKind is the closed set a ref points at. node/doc/output name a magus-do
 
 Source: [memory.proto:61](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L61).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `MEMORY_REF_KIND_UNSPECIFIED` | 0 |  |
-| `MEMORY_REF_KIND_QUERY` | 1 |  |
-| `MEMORY_REF_KIND_NODE` | 2 |  |
-| `MEMORY_REF_KIND_OUTPUT` | 3 |  |
-| `MEMORY_REF_KIND_COMMAND` | 4 |  |
-| `MEMORY_REF_KIND_DOC` | 5 |  |
+| Value                         | # | Description |
+| ----------------------------- | - | ----------- |
+| `MEMORY_REF_KIND_UNSPECIFIED` | 0 |             |
+| `MEMORY_REF_KIND_QUERY`       | 1 |             |
+| `MEMORY_REF_KIND_NODE`        | 2 |             |
+| `MEMORY_REF_KIND_OUTPUT`      | 3 |             |
+| `MEMORY_REF_KIND_COMMAND`     | 4 |             |
+| `MEMORY_REF_KIND_DOC`         | 5 |             |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 
@@ -196,13 +196,13 @@ MemoryType is the subject axis of a record (stable, closed). pointer carries ref
 
 Source: [memory.proto:51](https://github.com/egladman/magus/blob/main/proto/magus/memory/v1alpha1/memory.proto#L51).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `MEMORY_TYPE_UNSPECIFIED` | 0 |  |
-| `MEMORY_TYPE_POINTER` | 1 |  |
-| `MEMORY_TYPE_DECISION` | 2 |  |
-| `MEMORY_TYPE_PLAN` | 3 |  |
-| `MEMORY_TYPE_ELIMINATION` | 4 |  |
+| Value                     | # | Description |
+| ------------------------- | - | ----------- |
+| `MEMORY_TYPE_UNSPECIFIED` | 0 |             |
+| `MEMORY_TYPE_POINTER`     | 1 |             |
+| `MEMORY_TYPE_DECISION`    | 2 |             |
+| `MEMORY_TYPE_PLAN`        | 3 |             |
+| `MEMORY_TYPE_ELIMINATION` | 4 |             |
 
 Used by: [ListMemories (response)](memory.md#listmemories), [UpdateMemory (request)](memory.md#updatememory), [UpdateMemory (response)](memory.md#updatememory).
 

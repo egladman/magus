@@ -20,10 +20,10 @@ Render a Mustache template against a context value (usually a name->value map; l
 
 **Signature:** `template\render(template, data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/template.go#L43)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `template` | `string` |  | |
-| `data` | `any` |  | |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `template` | `string` |          |             |
+| `data`     | `any`    |          |             |
 
 **Returns:** string
 
@@ -46,11 +46,11 @@ Render a Mustache template that includes partials via {{>name}}, resolving each 
 
 **Signature:** `template\renderPartials(template, data, partials) -> string` - [source](https://github.com/egladman/magus/blob/main/std/template.go#L54)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `template` | `string` |  | |
-| `data` | `any` |  | |
-| `partials` | `map[string]string` |  | |
+| Parameter  | Type                | Optional | Description |
+| ---------- | ------------------- | -------- | ----------- |
+| `template` | `string`            |          |             |
+| `data`     | `any`               |          |             |
+| `partials` | `map[string]string` |          |             |
 
 **Returns:** string
 

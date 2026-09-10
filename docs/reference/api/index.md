@@ -17,26 +17,26 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 
 ## Services
 
-| Service | Methods | Package |
-|---------|---------|--------|
-| [ActivityService](activity/v1alpha1/activity.md) | 2 | `magus.activity.v1alpha1` |
-| [GraphService](graph/v1alpha1/graph.md) | 7 | `magus.graph.v1alpha1` |
-| [InsightService](insight/v1alpha1/insight.md) | 1 | `magus.insight.v1alpha1` |
-| [JobService](job/v1alpha1/job.md) | 2 | `magus.job.v1alpha1` |
-| [MemoryService](memory/v1alpha1/memory.md) | 5 | `magus.memory.v1alpha1` |
-| [MetricsService](metrics/v1alpha1/metrics.md) | 2 | `magus.metrics.v1alpha1` |
-| [NotesService](notes/v1alpha1/notes.md) | 2 | `magus.notes.v1alpha1` |
-| [StatusService](status/v1alpha1/status.md) | 2 | `magus.status.v1alpha1` |
-| [TokenService](token/v1alpha1/token.md) | 3 | `magus.token.v1alpha1` |
-| [ToolService](tool/v1alpha1/tool.md) | 1 | `magus.tool.v1alpha1` |
-| [ViewerService](viewer/v1alpha1/viewer.md) | 7 | `magus.viewer.v1alpha1` |
+| Service                                          | Methods | Package                   |
+| ------------------------------------------------ | ------- | ------------------------- |
+| [ActivityService](activity/v1alpha1/activity.md) | 2       | `magus.activity.v1alpha1` |
+| [GraphService](graph/v1alpha1/graph.md)          | 7       | `magus.graph.v1alpha1`    |
+| [InsightService](insight/v1alpha1/insight.md)    | 1       | `magus.insight.v1alpha1`  |
+| [JobService](job/v1alpha1/job.md)                | 2       | `magus.job.v1alpha1`      |
+| [MemoryService](memory/v1alpha1/memory.md)       | 5       | `magus.memory.v1alpha1`   |
+| [MetricsService](metrics/v1alpha1/metrics.md)    | 2       | `magus.metrics.v1alpha1`  |
+| [NotesService](notes/v1alpha1/notes.md)          | 2       | `magus.notes.v1alpha1`    |
+| [StatusService](status/v1alpha1/status.md)       | 2       | `magus.status.v1alpha1`   |
+| [TokenService](token/v1alpha1/token.md)          | 3       | `magus.token.v1alpha1`    |
+| [ToolService](tool/v1alpha1/tool.md)             | 1       | `magus.tool.v1alpha1`     |
+| [ViewerService](viewer/v1alpha1/viewer.md)       | 7       | `magus.viewer.v1alpha1`   |
 
 ## Shared types
 
 A package with no service of its own: its types are documented here instead of on a service page, and a service that uses one links to it.
 
-| Package | File |
-|---------|------|
+| Package                                         | File                                     |
+| ----------------------------------------------- | ---------------------------------------- |
 | [magus.query.v1alpha1](query/v1alpha1/query.md) | `proto/magus/query/v1alpha1/query.proto` |
 
 ## Calling a method without a generated client

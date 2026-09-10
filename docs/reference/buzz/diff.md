@@ -20,13 +20,13 @@ Return a unified diff of a and b, or "" when they are identical - so the result 
 
 **Signature:** `diff\unified(a, b, [from_label], [to_label], [context]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/diff.go#L98)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `string` |  | |
-| `b` | `string` |  | |
-| `from_label` | `string` | yes | |
-| `to_label` | `string` | yes | |
-| `context` | `int` | yes | |
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `a`          | `string` |          |             |
+| `b`          | `string` |          |             |
+| `from_label` | `string` | yes      |             |
+| `to_label`   | `string` | yes      |             |
+| `context`    | `int`    | yes      |             |
 
 **Returns:** string
 
@@ -36,10 +36,10 @@ Report whether a and b are identical after normalizing line endings and a single
 
 **Signature:** `diff\equal(a, b) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/diff.go#L129)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `string` |  | |
-| `b` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `a`       | `string` |          |             |
+| `b`       | `string` |          |             |
 
 **Returns:** bool
 
@@ -49,10 +49,10 @@ Return a one-line summary of the change: "3 added, 1 removed", or "" when a and 
 
 **Signature:** `diff\stat(a, b) -> string` - [source](https://github.com/egladman/magus/blob/main/std/diff.go#L134)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `string` |  | |
-| `b` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `a`       | `string` |          |             |
+| `b`       | `string` |          |             |
 
 **Returns:** string
 

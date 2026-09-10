@@ -111,6 +111,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and a file that really is an input replays a verdict computed under the rules it just
   changed. The fix is a snippet naming the file, the deliberately undeclared case still
   reads as correct, and MGS1028 carries the argument in full.
+- **MAGUS.md is formatted with the rest of the repo's Markdown instead of excluded from it.**
+  One renderer now writes every generated Markdown table, padding each column to its widest
+  cell the way dprint does, so the routing index, the Buzz stdlib and spell references, the
+  config reference, the daemon API pages and the benchmark report all come out of the
+  generator in the formatter's own shape. CHANGELOG.md stays excluded: its generated block
+  and the prose around it still disagree.
 - **The MCP tool catalog is generated from the `std.Magus` descriptor.** It was the one
   agent-facing surface with no generator behind it: 22 hand-written descriptors and ~22 KB
   of prose beside a descriptor that already generates the Buzz bindings, the checker

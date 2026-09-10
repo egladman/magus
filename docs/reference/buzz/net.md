@@ -20,11 +20,11 @@ Block until a TCP connection to host:port succeeds, then return true; return fal
 
 **Signature:** `net\waitForPort(host, port, [timeout_ms]) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/net.go#L124)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `host` | `string` |  | |
-| `port` | `int` |  | |
-| `timeout_ms` | `int` | yes | |
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `host`       | `string` |          |             |
+| `port`       | `int`    |          |             |
+| `timeout_ms` | `int`    | yes      |             |
 
 **Returns:** bool
 
@@ -34,10 +34,10 @@ Report whether a TCP connection to host:port succeeds right now, with no waiting
 
 **Signature:** `net\isPortOpen(host, port) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/net.go#L98)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `host` | `string` |  | |
-| `port` | `int` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `host`    | `string` |          |             |
+| `port`    | `int`    |          |             |
 
 **Returns:** bool
 

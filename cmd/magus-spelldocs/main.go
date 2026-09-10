@@ -30,6 +30,7 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/spells"
 )
@@ -325,11 +326,10 @@ func writeArgsSection(b *strings.Builder, invoker string) {
 	}
 	fmt.Fprintf(b, "## Passing arguments to ops\n\n")
 	fmt.Fprintf(b, "Every op is invoked as `%s[\"<op>\"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:\n\n", invoker)
-	fmt.Fprintln(b, "| Key | Type | Description | Source |")
-	fmt.Fprintln(b, "|-----|------|-------------|--------|")
-	fmt.Fprintf(b, "| `args` | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | %s |\n", invoker, src("args"))
-	fmt.Fprintf(b, "| `stdin` | `str` | Data written to the command's standard input. | %s |\n", src("stdin"))
-	fmt.Fprintln(b)
+	b.WriteString(md.Table([]string{"Key", "Type", "Description", "Source"}, nil, [][]string{
+		{md.Code("args"), md.Code("[str]"), fmt.Sprintf("Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `%s[\"<op>\"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough.", invoker), src("args")},
+		{md.Code("stdin"), md.Code("str"), "Data written to the command's standard input.", src("stdin")},
+	}))
 	fmt.Fprintln(b)
 	fmt.Fprintf(b, "Working directory and environment are NOT options: they ride the context, as `%s[\"<op>\"](ctx.withCwd(\"sub\"))` and `%s[\"<op>\"](ctx.withEnv({\"CGO_ENABLED\": \"0\"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.\n\n", invoker, invoker)
 	fmt.Fprintf(b, "Charms (the `:charm` suffix, e.g. `magus run test:rw`) are orthogonal: they patch the base argv, while these options add to it. See [Charms](../charms.md).\n\n")
@@ -369,9 +369,7 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 		return fmt.Errorf("%s: missing %q marker after begin", path, spellListEnd)
 	}
 
-	var table strings.Builder
-	fmt.Fprintln(&table, "| Spell | Language | Ops | Purpose |")
-	fmt.Fprintln(&table, "|-------|----------|-----|---------|")
+	rows := make([][]string, 0, len(names))
 	for _, name := range names {
 		d := builtins[name]
 		meta := spellMeta[name]
@@ -380,10 +378,13 @@ func injectSpellList(path string, builtins map[string]spells.Descriptor, names [
 			lang = "-"
 		}
 		// Link is relative to docs/spells.md: spells/<name>.md -> /spells/<name>/.
-		fmt.Fprintf(&table, "| [`%s`](spells/%s.md) | %s | %d | %s |\n", name, name, lang, len(d.Ops), meta.description)
+		rows = append(rows, []string{
+			md.Link(md.Code(name), "spells/"+name+".md"), lang, strconv.Itoa(len(d.Ops)), meta.description,
+		})
 	}
+	table := strings.Join(md.TableLines([]string{"Spell", "Language", "Ops", "Purpose"}, nil, rows), "\n") + "\n"
 
-	rebuilt := src[:headEnd] + table.String() + src[ei:]
+	rebuilt := src[:headEnd] + table + src[ei:]
 	if rebuilt == src {
 		return nil // already up to date; avoid a needless write
 	}

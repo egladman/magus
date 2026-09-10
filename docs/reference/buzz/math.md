@@ -20,10 +20,10 @@ Round x to places decimal places, half away from zero. places defaults to 0 (the
 
 **Signature:** `math\round(x, [places]) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L108)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `x` | `float64` |  | |
-| `places` | `int` | yes | |
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `x`       | `float64` |          |             |
+| `places`  | `int`     | yes      |             |
 
 **Returns:** float64
 
@@ -33,9 +33,9 @@ Discard x's fractional part, rounding TOWARD ZERO - so -1.7 is -1, where floor g
 
 **Signature:** `math\trunc(x) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L124)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `x` | `float64` |  | |
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `x`       | `float64` |          |             |
 
 **Returns:** float64
 
@@ -45,11 +45,11 @@ Constrain x to the range lo..hi, returning lo when x is below it and hi when abo
 
 **Signature:** `math\clamp(x, lo, hi) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L127)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `x` | `float64` |  | |
-| `lo` | `float64` |  | |
-| `hi` | `float64` |  | |
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `x`       | `float64` |          |             |
+| `lo`      | `float64` |          |             |
+| `hi`      | `float64` |          |             |
 
 **Returns:** float64
 
@@ -59,9 +59,9 @@ Add every number in the list; an empty list sums to 0. Non-numeric items are ski
 
 **Signature:** `math\sum(nums) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L135)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `nums` | `[]float64` |  | |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `nums`    | `[]float64` |          |             |
 
 **Returns:** float64
 
@@ -71,9 +71,9 @@ The arithmetic mean. Raises on an empty list rather than returning 0, because 0 
 
 **Signature:** `math\mean(nums) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L153)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `nums` | `[]float64` |  | |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `nums`    | `[]float64` |          |             |
 
 **Returns:** float64
 
@@ -83,9 +83,9 @@ The middle value, averaging the two middle values for an even count. Prefer it t
 
 **Signature:** `math\median(nums) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L163)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `nums` | `[]float64` |  | |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `nums`    | `[]float64` |          |             |
 
 **Returns:** float64
 
@@ -95,9 +95,9 @@ The smallest number in the list. Distinct from Buzz's own minInt/minDouble, whic
 
 **Signature:** `math\min(nums) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L179)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `nums` | `[]float64` |  | |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `nums`    | `[]float64` |          |             |
 
 **Returns:** float64
 
@@ -107,9 +107,9 @@ The largest number in the list. Distinct from Buzz's own maxInt/maxDouble, which
 
 **Signature:** `math\max(nums) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/math.go#L191)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `nums` | `[]float64` |  | |
+| Parameter | Type        | Optional | Description |
+| --------- | ----------- | -------- | ----------- |
+| `nums`    | `[]float64` |          |             |
 
 **Returns:** float64
 

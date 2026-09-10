@@ -5,6 +5,11 @@
 // instead of at every call site. Every block method leaves exactly one blank
 // line after itself, so blocks compose without callers tracking spacing.
 //
+// Tables come out in dprint's normal form, every column padded to its widest
+// cell. That is not cosmetic: magus commits its generated Markdown, and a
+// generated file the formatter would rewrite has to be excluded from it, after
+// which nothing formats it at all.
+//
 // It is a builder, not a renderer: output goes wherever the caller writes it
 // (emit, never render). Cell and label text is taken verbatim: inputs are
 // sanitized at graph ingest, and generated docs deliberately embed inline
@@ -16,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"unicode/utf8"
 )
 
 // Align is a table column alignment, rendered as the GFM delimiter cell.
@@ -27,15 +33,42 @@ const (
 	Center              // :-:
 )
 
-// delimiter returns the GFM delimiter-row cell for the alignment.
-func (a Align) delimiter() string {
+// delimiterOf returns the GFM delimiter-row cell for the alignment, filling a
+// column of the given width.
+func (a Align) delimiterOf(width int) string {
 	switch a {
 	case Right:
-		return "--:"
+		return strings.Repeat("-", width-1) + ":"
 	case Center:
-		return ":-:"
+		return ":" + strings.Repeat("-", width-2) + ":"
 	}
-	return "---"
+	return strings.Repeat("-", width)
+}
+
+// pad fills a cell out to the column width, putting the spare space where the
+// alignment wants the text: a centered cell that cannot split its padding
+// evenly leans left, as dprint does.
+func (a Align) pad(cell string, width int) string {
+	spare := width - utf8.RuneCountInString(cell)
+	switch a {
+	case Right:
+		return strings.Repeat(" ", spare) + cell
+	case Center:
+		return strings.Repeat(" ", spare/2) + cell + strings.Repeat(" ", spare-spare/2)
+	}
+	return cell + strings.Repeat(" ", spare)
+}
+
+// minWidth is the narrowest column the alignment can be written in: a colon at
+// each end still needs a dash between them.
+func (a Align) minWidth() int {
+	switch a {
+	case Right:
+		return 2
+	case Center:
+		return 3
+	}
+	return 1
 }
 
 // Builder accumulates a Markdown document. The zero value is ready to use.
@@ -114,24 +147,65 @@ func (b *Builder) Table(header []string, align []Align, rows [][]string) {
 	if len(rows) == 0 {
 		return
 	}
-	b.buf.WriteString("| ")
-	b.buf.WriteString(strings.Join(header, " | "))
-	b.buf.WriteString(" |\n|")
-	for i := range header {
-		var a Align
-		if i < len(align) {
-			a = align[i]
+	for _, line := range TableLines(header, align, rows) {
+		b.buf.WriteString(line)
+		b.buf.WriteByte('\n')
+	}
+	b.buf.WriteByte('\n')
+}
+
+// Table renders a GFM table as a Markdown block: the padded lines plus the
+// blank line that ends the block. For a generator that assembles its page as a
+// string rather than through a Builder.
+func Table(header []string, align []Align, rows [][]string) string {
+	return strings.Join(TableLines(header, align, rows), "\n") + "\n\n"
+}
+
+// TableLines renders a GFM table as its lines, every column padded to its
+// widest cell and no column narrower than its delimiter needs. That is the form
+// dprint writes, so a generated file can be committed and still pass the
+// formatter instead of earning an entry in dprint.json's excludes. Callers that
+// build a page with fmt.Fprintf join the lines themselves; Builder.Table is the
+// same table with the block spacing.
+//
+// Width is counted in runes, which matches dprint for everything magus emits
+// (ASCII plus the occasional narrow symbol) and understates a wide CJK cell.
+func TableLines(header []string, align []Align, rows [][]string) []string {
+	widths := make([]int, len(header))
+	for i, cell := range header {
+		widths[i] = max(utf8.RuneCountInString(cell), alignAt(align, i).minWidth())
+	}
+	for _, r := range rows {
+		for i, cell := range r {
+			widths[i] = max(widths[i], utf8.RuneCountInString(cell))
 		}
-		b.buf.WriteString(a.delimiter())
-		b.buf.WriteByte('|')
 	}
-	b.buf.WriteByte('\n')
-	for _, row := range rows {
-		b.buf.WriteString("| ")
-		b.buf.WriteString(strings.Join(row, " | "))
-		b.buf.WriteString(" |\n")
+	line := func(cells []string) string {
+		padded := make([]string, len(header))
+		for i := range header {
+			padded[i] = alignAt(align, i).pad(cells[i], widths[i])
+		}
+		return "| " + strings.Join(padded, " | ") + " |"
 	}
-	b.buf.WriteByte('\n')
+	delimiters := make([]string, len(header))
+	for i, w := range widths {
+		delimiters[i] = alignAt(align, i).delimiterOf(w)
+	}
+	lines := make([]string, 0, 2+len(rows))
+	lines = append(lines, line(header), line(delimiters))
+	for _, r := range rows {
+		lines = append(lines, line(r))
+	}
+	return lines
+}
+
+// alignAt is the alignment of column i: Left past the end of align, so a caller
+// may pass nil or a short slice.
+func alignAt(align []Align, i int) Align {
+	if i < len(align) {
+		return align[i]
+	}
+	return Left
 }
 
 // CodeBlock writes a fenced code block with one line per entry.

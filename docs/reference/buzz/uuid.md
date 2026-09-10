@@ -36,9 +36,9 @@ A cryptographically random lowercase hex string of n bytes (2*n characters); err
 
 **Signature:** `uuid\randomHex(n) -> string` - [source](https://github.com/egladman/magus/blob/main/std/uuid.go#L79)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `n` | `int` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `n`       | `int` |          |             |
 
 **Returns:** string
 
@@ -48,9 +48,9 @@ A cryptographically random URL-safe base64 token from n bytes of entropy (no pad
 
 **Signature:** `uuid\randomToken(n) -> string` - [source](https://github.com/egladman/magus/blob/main/std/uuid.go#L91)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `n` | `int` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `n`       | `int` |          |             |
 
 **Returns:** string
 

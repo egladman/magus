@@ -20,10 +20,10 @@ Render Unix-millis as a string using a Go reference layout (UTC).
 
 **Signature:** `time\format(layout, unix_millis) -> string` - [source](https://github.com/egladman/magus/blob/main/std/time.go#L75)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `layout` | `string` |  | |
-| `unix_millis` | `float64` |  | |
+| Parameter     | Type      | Optional | Description |
+| ------------- | --------- | -------- | ----------- |
+| `layout`      | `string`  |          |             |
+| `unix_millis` | `float64` |          |             |
 
 **Returns:** string
 
@@ -33,10 +33,10 @@ Parse a string with a Go reference layout into Unix-millis (UTC); errors on mism
 
 **Signature:** `time\parse(layout, value) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go#L90)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `layout` | `string` |  | |
-| `value` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `layout`  | `string` |          |             |
+| `value`   | `string` |          |             |
 
 **Returns:** float64
 
@@ -46,9 +46,9 @@ Parse a Go duration string (e.g. "168h", "1h30m") into milliseconds; errors on m
 
 **Signature:** `time\parseDuration(duration) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go#L99)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `duration` | `string` |  | |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `duration` | `string` |          |             |
 
 **Returns:** float64
 
@@ -66,10 +66,10 @@ Add a Go duration string (e.g. "24h", "-1h30m") to a Unix-millis timestamp; retu
 
 **Signature:** `time\add(unix_millis, duration) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go#L109)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `unix_millis` | `float64` |  | |
-| `duration` | `string` |  | |
+| Parameter     | Type      | Optional | Description |
+| ------------- | --------- | -------- | ----------- |
+| `unix_millis` | `float64` |          |             |
+| `duration`    | `string`  |          |             |
 
 **Returns:** float64
 
@@ -79,10 +79,10 @@ Return a minus b in milliseconds (positive when a is later than b).
 
 **Signature:** `time\diff(a, b) -> float64` - [source](https://github.com/egladman/magus/blob/main/std/time.go#L119)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `float64` |  | |
-| `b` | `float64` |  | |
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `a`       | `float64` |          |             |
+| `b`       | `float64` |          |             |
 
 **Returns:** float64
 

@@ -62,10 +62,10 @@ Wrap s in the given style and close it again. Returns s UNCHANGED when the outpu
 
 **Signature:** `term\colorize(s, style) -> string` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L142)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `style` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `style`   | `string` |          |             |
 
 **Returns:** string
 
@@ -75,13 +75,13 @@ Prompt the reader to choose one of items and return its index. Type to filter (m
 
 **Signature:** `term\pick(items, [prompt], [initial_filter], [initial], [max_rows]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L150)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `items` | `[]string` |  | |
-| `prompt` | `string` | yes | |
-| `initial_filter` | `string` | yes | |
-| `initial` | `int` | yes | |
-| `max_rows` | `int` | yes | |
+| Parameter        | Type       | Optional | Description |
+| ---------------- | ---------- | -------- | ----------- |
+| `items`          | `[]string` |          |             |
+| `prompt`         | `string`   | yes      |             |
+| `initial_filter` | `string`   | yes      |             |
+| `initial`        | `int`      | yes      |             |
+| `max_rows`       | `int`      | yes      |             |
 
 **Returns:** int
 
@@ -117,11 +117,11 @@ Raise a notification into the band magus pins at the bottom of the terminal, whe
 
 **Signature:** `term\notify(message, [level], [ttl_ms])` - [source](https://github.com/egladman/magus/blob/main/std/term.go#L199)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `level` | `string` | yes | |
-| `ttl_ms` | `int` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `message` | `string` |          |             |
+| `level`   | `string` | yes      |             |
+| `ttl_ms`  | `int`    | yes      |             |
 
 **Example:**
 

@@ -19,10 +19,10 @@ StringMatch is one negatable string comparison against whatever field the compos
 
 Source: [query.proto:15](https://github.com/egladman/magus/blob/main/proto/magus/query/v1alpha1/query.proto#L15).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `value` | string | 1 |  |
-| `negate` | bool | 2 |  |
+| Field    | Type   | # | Description |
+| -------- | ------ | - | ----------- |
+| `value`  | string | 1 |             |
+| `negate` | bool   | 2 |             |
 
 Used by: [ListEvents (request)](../../viewer/v1alpha1/viewer.md#listevents), [StreamEvents (request)](../../viewer/v1alpha1/viewer.md#streamevents).
 
@@ -32,10 +32,10 @@ TimeRange bounds a query to items between since and until (inclusive); either bo
 
 Source: [query.proto:22](https://github.com/egladman/magus/blob/main/proto/magus/query/v1alpha1/query.proto#L22).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `since` | Timestamp | 1 |  |
-| `until` | Timestamp | 2 |  |
+| Field   | Type      | # | Description |
+| ------- | --------- | - | ----------- |
+| `since` | Timestamp | 1 |             |
+| `until` | Timestamp | 2 |             |
 
 Used by: [ListActivityEvents (request)](../../activity/v1alpha1/activity.md#listactivityevents), [ListEvents (request)](../../viewer/v1alpha1/viewer.md#listevents), [StreamEvents (request)](../../viewer/v1alpha1/viewer.md#streamevents).
 

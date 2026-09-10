@@ -20,10 +20,10 @@ Order two semver strings: -1 when a sorts before b, 0 when they are equal, 1 whe
 
 **Signature:** `semver\compare(a, b) -> int` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L103)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `string` |  | |
-| `b` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `a`       | `string` |          |             |
+| `b`       | `string` |          |             |
 
 **Returns:** int
 
@@ -33,9 +33,9 @@ Whether v parses as a semantic version. Use it instead of calling parse purely t
 
 **Signature:** `semver\isValid(v) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L157)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** bool
 
@@ -45,9 +45,9 @@ Canonical "vX.Y.Z" form of v, filling in missing components and discarding build
 
 **Signature:** `semver\canonical(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L168)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** string
 
@@ -57,9 +57,9 @@ The major prefix of v as a string: major("1.2.3") is "v1". This is the cache tok
 
 **Signature:** `semver\major(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L182)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** string
 
@@ -69,9 +69,9 @@ The major.minor prefix of v as a string: majorMinor("1.2.3") is "v1.2". This is 
 
 **Signature:** `semver\majorMinor(v) -> string` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L192)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** string
 
@@ -81,10 +81,10 @@ Whether v meets constraint, the full range syntax magus.yaml required_version us
 
 **Signature:** `semver\satisfies(v, constraint) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L205)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
-| `constraint` | `string` |  | |
+| Parameter    | Type     | Optional | Description |
+| ------------ | -------- | -------- | ----------- |
+| `v`          | `string` |          |             |
+| `constraint` | `string` |          |             |
 
 **Returns:** bool
 
@@ -94,9 +94,9 @@ Parse a semver string into {major, minor, patch, prerelease, metadata, original}
 
 **Signature:** `semver\parse(v) -> SemverVersion` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L116)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** map[string]any
 
@@ -106,9 +106,9 @@ Candidate next versions after v: {major, minor, patch}, each "vX.Y.Z" - the resu
 
 **Signature:** `semver\next(v) -> SemverNext` - [source](https://github.com/egladman/magus/blob/main/std/semver.go#L137)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `v` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `v`       | `string` |          |             |
 
 **Returns:** map[string]any
 

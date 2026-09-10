@@ -44,9 +44,9 @@ The files changed against the given base (defaults to vcs.base), each a Path car
 
 **Signature:** `vcs\changedFiles([base]) -> [Path]` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L216)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `base` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `base`    | `string` | yes      |             |
 
 **Returns:** any
 
@@ -64,9 +64,9 @@ The working tree's uncommitted state as {clean, files}: clean is true when nothi
 
 **Signature:** `vcs\status([paths]) -> Status` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L305)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `paths` | `[]string` | yes | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `paths`   | `[]string` | yes      |             |
 
 **Returns:** any
 
@@ -76,9 +76,9 @@ True if the working tree has uncommitted changes. Pass paths to scope the check 
 
 **Signature:** `vcs\isDirty([paths]) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L330)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `paths` | `[]string` | yes | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `paths`   | `[]string` | yes      |             |
 
 **Returns:** bool
 
@@ -88,9 +88,9 @@ The uncommitted changes to paths, as the active VCS's own unified diff; "" when 
 
 **Signature:** `vcs\dirtyDiff([paths]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L359)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `paths` | `[]string` | yes | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `paths`   | `[]string` | yes      |             |
 
 **Returns:** string
 
@@ -100,9 +100,9 @@ Resolve a revision (a VCS-native rev expression; omit for the current revision) 
 
 **Signature:** `vcs\commit([rev]) -> Commit` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L379)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `rev` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `rev`     | `string` | yes      |             |
 
 **Returns:** any
 
@@ -112,9 +112,9 @@ Up to limit recent commits, newest first; each is the same object vcs.commit ret
 
 **Signature:** `vcs\history([limit]) -> [Commit]` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L398)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `limit` | `int` | yes | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `limit`   | `int` | yes      |             |
 
 **Returns:** any
 
@@ -124,10 +124,10 @@ Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something 
 
 **Signature:** `vcs\cmd(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L466)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -137,9 +137,9 @@ Repository tags, newest first. Each is an object {name, date, id}: name as writt
 
 **Signature:** `vcs\tags([pattern]) -> [Tag]` - [source](https://github.com/egladman/magus/blob/main/std/vcs.go#L428)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `pattern` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `pattern` | `string` | yes      |             |
 
 **Returns:** any
 

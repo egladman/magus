@@ -20,9 +20,9 @@ Encode data as standard (padded) base64.
 
 **Signature:** `base64\encode(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L71)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Decode a standard (padded) base64 string; errors on malformed input.
 
 **Signature:** `base64\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L76)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -44,9 +44,9 @@ Encode data as URL-safe (padded) base64.
 
 **Signature:** `base64\urlEncode(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L85)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -56,9 +56,9 @@ Decode a URL-safe (padded) base64 string; errors on malformed input.
 
 **Signature:** `base64\urlDecode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/base64/base64.go#L90)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 

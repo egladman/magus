@@ -4,6 +4,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -233,7 +234,7 @@ func TestCodeListAndDedupe(t *testing.T) {
 func TestWriteArgsSectionNamesTheInvoker(t *testing.T) {
 	var b strings.Builder
 	writeArgsSection(&b, "go")
-	got := b.String()
+	got := unpadTables(b.String())
 
 	assert.Contains(t, got, "Every op is invoked as `go[\"<op>\"](ctx, opts?)`")
 	assert.Contains(t, got, "| `args` | `[str]` |")
@@ -290,7 +291,7 @@ func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
 	names := slices.Sorted(maps.Keys(builtins))
 	require.NoError(t, injectSpellList(path, builtins, names))
 
-	got := readFile(t, path)
+	got := unpadTables(readFile(t, path))
 	assert.Contains(t, got, "A spell is a plugin.")
 	assert.Contains(t, got, "More prose.")
 	assert.NotContains(t, got, "stale table")
@@ -307,7 +308,7 @@ func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
 	// Re-running is idempotent: an unchanged region is not rewritten, so the
 	// generate drift gate does not report a file that did not move.
 	require.NoError(t, injectSpellList(path, builtins, names))
-	assert.Equal(t, got, readFile(t, path))
+	assert.Equal(t, got, unpadTables(readFile(t, path)))
 }
 
 func TestInjectSpellListRefusesAMalformedPage(t *testing.T) {
@@ -337,4 +338,21 @@ func readFile(t *testing.T, path string) string {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	return string(b)
+}
+
+// tableCellPadding is the run of spaces a padded table row carries before a
+// column separator.
+var tableCellPadding = regexp.MustCompile(` +\|`)
+
+// unpadTables squeezes the column padding back out of every table row, so an
+// assertion names the cells rather than the widths the renderer chose. The
+// padding itself is pinned in internal/render/md.
+func unpadTables(page string) string {
+	lines := strings.Split(page, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "| ") {
+			lines[i] = tableCellPadding.ReplaceAllString(line, " |")
+		}
+	}
+	return strings.Join(lines, "\n")
 }

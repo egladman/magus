@@ -24,11 +24,11 @@ Escape hatch: run `magus <sub> <args>` for a subcommand with no dedicated method
 
 **Signature:** `magus\cmd(sub, args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L960)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `sub` | `string` |  | |
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `sub`     | `string`         |          |             |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -46,9 +46,9 @@ The TARGET dependency graph of every project: {projects}, each project {path, na
 
 **Signature:** `magus\targets([opts]) -> TargetGraph` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L824)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -58,9 +58,9 @@ Compute the VCS-affected project set against base (empty uses the configured bas
 
 **Signature:** `magus\affected([base]) -> Affected` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L838)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `base` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `base`    | `string` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -78,9 +78,9 @@ Return the project path containing dir, or null when dir is inside no project. S
 
 **Signature:** `magus\where(dir) -> string` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L853)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `dir` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `dir`     | `string` |          |             |
 
 **Returns:** string
 
@@ -90,11 +90,11 @@ Fail with a CODED diagnostic instead of a bare string, so a caller can branch on
 
 **Signature:** `magus\raise(code, message, [opts])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L881)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `code` | `string` |  | |
-| `message` | `string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `code`    | `string`         |          |             |
+| `message` | `string`         |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 ### run
 
@@ -102,10 +102,10 @@ Run `magus run <args>` recursively in the target's project directory and capture
 
 **Signature:** `magus\run(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L977)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -115,10 +115,10 @@ Run `magus describe <args>` in the target's project directory and capture its ou
 
 **Signature:** `magus\describe(args, [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L982)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -128,9 +128,9 @@ Every VCS-history lens as one typed report: {hotspots, affinity, ownership, tren
 
 **Signature:** `magus\insight([opts]) -> InsightReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1022)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -140,10 +140,10 @@ The VCS-affected set and WHY each project is in it: {base, changedFileCount, cha
 
 **Signature:** `magus\affectedImpact([base], [opts]) -> Impact` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1005)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `base` | `string` | yes | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `base`    | `string`         | yes      |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -153,10 +153,10 @@ Classify paths against the workspace's declared globs: for each, the owning proj
 
 **Signature:** `magus\describeFile(paths, [opts]) -> FileReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1239)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `paths` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `paths`   | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -166,9 +166,9 @@ Read the working tree's uncommitted changes, annotated and ordered by what they 
 
 **Signature:** `magus\diff([opts]) -> Diff` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1253)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -178,10 +178,10 @@ Validate the workspace and return what every check found: {workspace, checks, su
 
 **Signature:** `magus\doctor(args, [opts]) -> DoctorReport` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L998)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -191,10 +191,10 @@ List the OPEN attention requests of this repository's session store: {requests, 
 
 **Signature:** `magus\attention(args, [opts]) -> map[string]any` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L989)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `args` | `[]string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `args`    | `[]string`       |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -204,10 +204,10 @@ Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {
 
 **Signature:** `magus\diagnoseDrift(outputs, [inputs]) -> DriftResult` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L1430)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `outputs` | `[]string` |  | |
-| `inputs` | `[]string` | yes | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `outputs` | `[]string` |          |             |
+| `inputs`  | `[]string` | yes      |             |
 
 **Returns:** any
 
@@ -217,9 +217,9 @@ Invalidate the build cache. Escape hatch - prefer modeling missing inputs as Sou
 
 **Signature:** `magus\bustCache([project_path])` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L765)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `project_path` | `string` | yes | |
+| Parameter      | Type     | Optional | Description |
+| -------------- | -------- | -------- | ----------- |
+| `project_path` | `string` | yes      |             |
 
 ### hasCharm
 
@@ -227,9 +227,9 @@ True when execution charm `name` is active, letting a target body branch on a ch
 
 **Signature:** `magus\hasCharm(name) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/magus.go#L758)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 **Returns:** bool
 
@@ -239,10 +239,10 @@ Declare this directory's project: its spell, sources, outputs, and options. A ma
 
 **Signature:** `magus\project(config, [opts])`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `config` | `any` |  | |
-| `opts` | `any` | yes | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `config`  | `any` |          |             |
+| `opts`    | `any` | yes      |             |
 
 ### describeModule
 
@@ -250,9 +250,9 @@ The host modules magus exposes, with their fields, methods and rendered Buzz sig
 
 **Signature:** `magus\describeModule([name]) -> [Module]`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` | yes      |             |
 
 **Returns:** any
 
@@ -262,9 +262,9 @@ The canonical form of a magus entity name - a target, charm, or spell op. `build
 
 **Signature:** `magus\canonicalName(name) -> string`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 **Returns:** string
 
@@ -274,9 +274,9 @@ Log at error level, then abort the run with exit status 1.
 
 **Signature:** `magus\fatal([msg])`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `msg` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `msg`     | `string` | yes      |             |
 
 ### pry
 

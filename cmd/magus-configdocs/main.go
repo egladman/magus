@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/docs"
+	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/schema"
 )
 
@@ -61,13 +62,11 @@ func render() string {
 		fields := bySection[s]
 		sort.Slice(fields, func(i, j int) bool { return fields[i].YamlPath < fields[j].YamlPath })
 		fmt.Fprintf(&b, "## %s\n\n", s)
-		fmt.Fprintf(&b, "| Config key | Environment variable | Flag | Type |\n")
-		fmt.Fprintf(&b, "|------------|----------------------|------|------|\n")
+		rows := make([][]string, 0, len(fields))
 		for _, f := range fields {
-			fmt.Fprintf(&b, "| `%s` | `%s` | %s | %s |\n",
-				f.YamlPath, f.EnvVar, flagCell(f.Flag), kindLabel(f.Kind))
+			rows = append(rows, []string{md.Code(f.YamlPath), md.Code(f.EnvVar), flagCell(f.Flag), kindLabel(f.Kind)})
 		}
-		fmt.Fprintf(&b, "\n")
+		b.WriteString(md.Table([]string{"Config key", "Environment variable", "Flag", "Type"}, nil, rows))
 	}
 	return b.String()
 }

@@ -20,11 +20,11 @@ Extract the archive at src into dest. Returns a table with fields: files (extrac
 
 **Signature:** `archive\uncompress(src, dest, [opts]) -> UncompressResult` - [source](https://github.com/egladman/magus/blob/main/std/archive.go#L405)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `src` | `string` |  | |
-| `dest` | `string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `src`     | `string`         |          |             |
+| `dest`    | `string`         |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -34,11 +34,11 @@ Create an archive at dest from src (a file or directory). Format is inferred fro
 
 **Signature:** `archive\compress(src, dest, [opts]) -> CompressResult` - [source](https://github.com/egladman/magus/blob/main/std/archive.go#L474)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `src` | `string` |  | |
-| `dest` | `string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `src`     | `string`         |          |             |
+| `dest`    | `string`         |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -48,10 +48,10 @@ List the archive at src without extracting it, as entries of {name, size, is_dir
 
 **Signature:** `archive\list(src, [opts]) -> [ArchiveEntry]` - [source](https://github.com/egladman/magus/blob/main/std/archive.go#L193)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `src` | `string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `src`     | `string`         |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** any
 
@@ -61,11 +61,11 @@ Return the contents of the single entry named name inside the archive at src, wi
 
 **Signature:** `archive\readFile(src, name, [opts]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/archive.go#L274)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `src` | `string` |  | |
-| `name` | `string` |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `src`     | `string`         |          |             |
+| `name`    | `string`         |          |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** string
 

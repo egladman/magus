@@ -20,10 +20,10 @@ Format string args into the template using Go printf verbs (e.g. %s, %q). Return
 
 **Signature:** `fmt\sprintf(format, args...) -> string` - [source](https://github.com/egladman/magus/blob/main/std/fmt.go#L33)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `format` | `string` |  | |
-| `args` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `format`  | `string` |          |             |
+| `args`    | `string` |          |             |
 
 **Returns:** string
 

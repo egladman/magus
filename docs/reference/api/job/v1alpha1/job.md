@@ -39,13 +39,13 @@ Job is the full picture of one job: what it is, whether an instance is running n
 
 Source: [job.proto:58](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L58).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `name` | string | 1 | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `server job <name>` leaf takes. |
-| `description` | string | 2 |  |
-| `running` | bool | 3 | an instance is in flight right now |
-| `last_run` | [JobRun](#jobrun) | 4 | most recent completed run; unset if the job has not run this daemon session |
-| `target` | [ResourceSize](#resourcesize) | 5 | current size of what the job operates on (trail, cache, or logs) |
+| Field         | Type                          | # | Description                                                                                                                                                         |
+| ------------- | ----------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | string                        | 1 | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `server job <name>` leaf takes. |
+| `description` | string                        | 2 |                                                                                                                                                                     |
+| `running`     | bool                          | 3 | an instance is in flight right now                                                                                                                                  |
+| `last_run`    | [JobRun](#jobrun)             | 4 | most recent completed run; unset if the job has not run this daemon session                                                                                         |
+| `target`      | [ResourceSize](#resourcesize) | 5 | current size of what the job operates on (trail, cache, or logs)                                                                                                    |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -55,15 +55,15 @@ JobRun is one completed execution of a job.
 
 Source: [job.proto:69](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L69).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `invocation_id` | string | 1 |  |
-| `end_time` | Timestamp | 2 |  |
-| `duration` | Duration | 3 |  |
-| `ok` | bool | 4 | false when the run errored |
-| `error` | string | 5 | error text when ok is false |
-| `items_removed` | int64 | 6 | Per-run deltas, populated only by jobs that measure them (a rotate reports what it dropped). Zero when the job does not report a delta yet - additive, so a job starts reporting later without a contract change. e.g. trail events pruned, cache entries invalidated |
-| `bytes_reclaimed` | int64 | 7 | on-disk bytes freed |
+| Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
+| ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `invocation_id`   | string    | 1 |                                                                                                                                                                                                                                                                       |
+| `end_time`        | Timestamp | 2 |                                                                                                                                                                                                                                                                       |
+| `duration`        | Duration  | 3 |                                                                                                                                                                                                                                                                       |
+| `ok`              | bool      | 4 | false when the run errored                                                                                                                                                                                                                                            |
+| `error`           | string    | 5 | error text when ok is false                                                                                                                                                                                                                                           |
+| `items_removed`   | int64     | 6 | Per-run deltas, populated only by jobs that measure them (a rotate reports what it dropped). Zero when the job does not report a delta yet - additive, so a job starts reporting later without a contract change. e.g. trail events pruned, cache entries invalidated |
+| `bytes_reclaimed` | int64     | 7 | on-disk bytes freed                                                                                                                                                                                                                                                   |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -73,10 +73,10 @@ Paginated by contract so growth never forces a breaking change, though the regis
 
 Source: [job.proto:99](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L99).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `page_size` | int32 | 1 | _int32.lte: 1000; int32.gte: 0_ |
-| `page_token` | string | 2 |  |
+| Field        | Type   | # | Description                     |
+| ------------ | ------ | - | ------------------------------- |
+| `page_size`  | int32  | 1 | _int32.lte: 1000; int32.gte: 0_ |
+| `page_token` | string | 2 |                                 |
 
 Used by: [ListJobs (request)](job.md#listjobs).
 
@@ -84,10 +84,10 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 Source: [job.proto:103](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L103).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `jobs` | [repeated Job](#job) | 1 | every registered job, in a stable order |
-| `next_page_token` | string | 2 | empty while one page holds the registry |
+| Field             | Type                 | # | Description                             |
+| ----------------- | -------------------- | - | --------------------------------------- |
+| `jobs`            | [repeated Job](#job) | 1 | every registered job, in a stable order |
+| `next_page_token` | string               | 2 | empty while one page holds the registry |
 
 Used by: [ListJobs (response)](job.md#listjobs).
 
@@ -97,9 +97,9 @@ ResourceSize is the current magnitude of a job's target resource, for a caller t
 
 Source: [job.proto:85](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L85).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `size_bytes` | int64 | 1 | total on-disk bytes |
+| Field        | Type  | # | Description                                                 |
+| ------------ | ----- | - | ----------------------------------------------------------- |
+| `size_bytes` | int64 | 1 | total on-disk bytes                                         |
 | `item_count` | int64 | 2 | logical item count (trail events, cached entries, run logs) |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
@@ -108,8 +108,8 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Source: [job.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L90).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
+| ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name` | string | 1 | _string.pattern: `^jobs/[a-z][a-z0-9-]*$`_ name is the job's resource name, "jobs/{job}". An unregistered name is a NotFound error, not a SubmitState - the enum reports how a VALID submission resolved, and a name nobody registered never became a submission. |
 
 Used by: [RunJob (request)](job.md#runjob).
@@ -120,12 +120,12 @@ RunJobResponse reports what the submission did: whether the job started or coale
 
 Source: [job.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L49).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `state` | [SubmitState](#submitstate) | 1 |  |
-| `invocation_id` | string | 2 | the running job's invocation id (the new one, or the coalesced one) |
-| `console_url` | string | 3 | deep-link to this invocation's live log; empty when no console is mounted |
-| `job` | [Job](#job) | 4 | the job's descriptor plus its last-run and current-size metadata |
+| Field           | Type                        | # | Description                                                               |
+| --------------- | --------------------------- | - | ------------------------------------------------------------------------- |
+| `state`         | [SubmitState](#submitstate) | 1 |                                                                           |
+| `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)       |
+| `console_url`   | string                      | 3 | deep-link to this invocation's live log; empty when no console is mounted |
+| `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata          |
 
 Used by: [RunJob (response)](job.md#runjob).
 
@@ -137,10 +137,10 @@ SubmitState is the disposition of a trigger RPC. Both values are SUCCESS outcome
 
 Source: [job.proto:40](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L40).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `SUBMIT_STATE_UNSPECIFIED` | 0 |  |
-| `SUBMIT_STATE_SUBMITTED` | 1 | a new background job was started |
+| Value                          | # | Description                                                      |
+| ------------------------------ | - | ---------------------------------------------------------------- |
+| `SUBMIT_STATE_UNSPECIFIED`     | 0 |                                                                  |
+| `SUBMIT_STATE_SUBMITTED`       | 1 | a new background job was started                                 |
 | `SUBMIT_STATE_ALREADY_RUNNING` | 2 | an identical job was already in flight; coalesced, not restarted |
 
 Used by: [RunJob (response)](job.md#runjob).

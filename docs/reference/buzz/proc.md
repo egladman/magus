@@ -20,12 +20,12 @@ Run cmd directly (no shell; args are never shell-interpolated). Output streams l
 
 **Signature:** `proc\exec(cmd, [args], [dir], [opts]) -> ExecResult` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L359)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `cmd` | `string` |  | |
-| `args` | `[]string` | yes | |
-| `dir` | `string` | yes | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `cmd`     | `string`         |          |             |
+| `args`    | `[]string`       | yes      |             |
+| `dir`     | `string`         | yes      |             |
+| `opts`    | `map[string]any` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -35,10 +35,10 @@ Build the command line that runs `line` through the platform shell, WITHOUT runn
 
 **Signature:** `proc\shell(line, [shell]) -> ShellCommand` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L381)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `line` | `string` |  | |
-| `shell` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `line`    | `string` |          |             |
+| `shell`   | `string` | yes      |             |
 
 **Returns:** map[string]any
 
@@ -48,9 +48,9 @@ Resolve cmd against PATH and return its absolute path. RAISES when the command i
 
 **Signature:** `proc\which(cmd) -> string` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L194)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `cmd` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `cmd`     | `string` |          |             |
 
 **Returns:** string
 
@@ -60,10 +60,10 @@ Reserve n slots from magus's concurrency budget for the duration of callback. Us
 
 **Signature:** `proc\withSlots(n, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L501)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `n` | `int` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
+| Parameter  | Type                                                                        | Optional | Description |
+| ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `n`        | `int`                                                                       |          |             |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
 
 ### stdinIsTerminal
 

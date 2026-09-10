@@ -77,11 +77,11 @@ Command is the invoking command line and context - what was asked of magus.
 
 Source: [viewer.proto:73](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L73).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `arguments` | repeated string | 1 | the full argument vector, subcommand included (e.g. ["run", "build", "api"]) |
-| `cwd` | string | 3 | directory the command was invoked in |
-| `trigger` | [Trigger](#trigger) | 4 |  |
+| Field       | Type                | # | Description                                                                  |
+| ----------- | ------------------- | - | ---------------------------------------------------------------------------- |
+| `arguments` | repeated string     | 1 | the full argument vector, subcommand included (e.g. ["run", "build", "api"]) |
+| `cwd`       | string              | 3 | directory the command was invoked in                                         |
+| `trigger`   | [Trigger](#trigger) | 4 |                                                                              |
 
 _Reserved: 2._
 
@@ -91,21 +91,21 @@ Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (respo
 
 Source: [viewer.proto:115](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L115).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `time` | Timestamp | 1 | when the event occurred |
-| `project` | string | 2 | repo-relative project path |
-| `target` | string | 3 | target name, as the CLI spells it (with charms) |
-| `kind` | [Kind](#kind) | 4 |  |
-| `stream` | [Stream](#stream) | 5 | output events only |
-| `level` | string | 6 | info\|warn\|error, for magus events |
-| `status` | [Status](#status) | 7 | result events only |
-| `ref` | string | 8 | target-output ref, on result events |
-| `duration` | Duration | 9 | how long the target ran, on result events |
-| `text` | string | 10 | output line or message (raw; may contain ANSI) |
-| `command` | [Command](#command) | 11 | set only on the KIND\_STARTED event |
-| `magus_version` | string | 12 | set only on the KIND\_STARTED event |
-| `undeclared` | [repeated UndeclaredSeed](#undeclaredseed) | 13 | Set only on a KIND\_SCOPE event carrying no target: the projects this run selected on files nothing declares. It rides the run's own stream because it is a fact about this run's scope, and the readers that want it are already consuming these frames. |
+| Field           | Type                                       | #  | Description                                                                                                                                                                                                                                               |
+| --------------- | ------------------------------------------ | -- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `time`          | Timestamp                                  | 1  | when the event occurred                                                                                                                                                                                                                                   |
+| `project`       | string                                     | 2  | repo-relative project path                                                                                                                                                                                                                                |
+| `target`        | string                                     | 3  | target name, as the CLI spells it (with charms)                                                                                                                                                                                                           |
+| `kind`          | [Kind](#kind)                              | 4  |                                                                                                                                                                                                                                                           |
+| `stream`        | [Stream](#stream)                          | 5  | output events only                                                                                                                                                                                                                                        |
+| `level`         | string                                     | 6  | info\|warn\|error, for magus events                                                                                                                                                                                                                       |
+| `status`        | [Status](#status)                          | 7  | result events only                                                                                                                                                                                                                                        |
+| `ref`           | string                                     | 8  | target-output ref, on result events                                                                                                                                                                                                                       |
+| `duration`      | Duration                                   | 9  | how long the target ran, on result events                                                                                                                                                                                                                 |
+| `text`          | string                                     | 10 | output line or message (raw; may contain ANSI)                                                                                                                                                                                                            |
+| `command`       | [Command](#command)                        | 11 | set only on the KIND\_STARTED event                                                                                                                                                                                                                       |
+| `magus_version` | string                                     | 12 | set only on the KIND\_STARTED event                                                                                                                                                                                                                       |
+| `undeclared`    | [repeated UndeclaredSeed](#undeclaredseed) | 13 | Set only on a KIND\_SCOPE event carrying no target: the projects this run selected on files nothing declares. It rides the run's own stream because it is a fact about this run's scope, and the readers that want it are already consuming these frames. |
 
 Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
@@ -115,16 +115,16 @@ EventQuery filters an invocation's events server-side (for a large log). It is t
 
 Source: [viewer.proto:190](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L190).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `projects` | repeated string | 1 | repo-relative project paths |
-| `targets` | repeated string | 2 | target names |
-| `kinds` | repeated string | 3 | event kinds: output\|result\|exec\|scope\|warn\|... |
-| `streams` | repeated string | 4 | stdout\|stderr, for output events |
-| `levels` | repeated string | 5 | info\|warn\|error |
-| `status` | string | 6 | pass\|fail\|cached, for result events |
-| `text` | [repeated StringMatch](../../query/v1alpha1/query.md#stringmatch) | 7 | free-text matches against an event's text |
-| `time` | [TimeRange](../../query/v1alpha1/query.md#timerange) | 8 | event time window; since doubles as stream resume |
+| Field      | Type                                                              | # | Description                                         |
+| ---------- | ----------------------------------------------------------------- | - | --------------------------------------------------- |
+| `projects` | repeated string                                                   | 1 | repo-relative project paths                         |
+| `targets`  | repeated string                                                   | 2 | target names                                        |
+| `kinds`    | repeated string                                                   | 3 | event kinds: output\|result\|exec\|scope\|warn\|... |
+| `streams`  | repeated string                                                   | 4 | stdout\|stderr, for output events                   |
+| `levels`   | repeated string                                                   | 5 | info\|warn\|error                                   |
+| `status`   | string                                                            | 6 | pass\|fail\|cached, for result events               |
+| `text`     | [repeated StringMatch](../../query/v1alpha1/query.md#stringmatch) | 7 | free-text matches against an event's text           |
+| `time`     | [TimeRange](../../query/v1alpha1/query.md#timerange)              | 8 | event time window; since doubles as stream resume   |
 
 Used by: [ListEvents (request)](viewer.md#listevents), [StreamEvents (request)](viewer.md#streamevents).
 
@@ -132,8 +132,8 @@ Used by: [ListEvents (request)](viewer.md#listevents), [StreamEvents (request)](
 
 Source: [viewer.proto:176](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L176).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name` | string | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ A run's resource name: an output ref ("out<hex>") or an invocation id ("inv<base36>"). One field rather than a oneof because the two patterns are disjoint, so a single string still identifies exactly one run - and this service spelled the same identity three ways before (a oneof here, the same oneof on ListEvents, a bare string on StreamEvents). |
 
 Used by: [GetInvocation (request)](viewer.md#getinvocation).
@@ -142,8 +142,8 @@ Used by: [GetInvocation (request)](viewer.md#getinvocation).
 
 Source: [viewer.proto:266](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L266).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                                                                                                          |
+| ------ | ------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name` | string | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ The run to fetch whole: an output ref or an invocation id, the same identity GetInvocation takes. |
 
 Used by: [GetJournal (request)](viewer.md#getjournal).
@@ -152,8 +152,8 @@ Used by: [GetJournal (request)](viewer.md#getjournal).
 
 Source: [viewer.proto:248](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L248).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                        |
+| ------ | ------ | - | ------------------------------------------------------------------ |
 | `name` | string | 1 | _string.pattern: `^out[0-9a-f]+$`_ The output to read, by its ref. |
 
 Used by: [GetOutput (request)](viewer.md#getoutput).
@@ -162,8 +162,8 @@ Used by: [GetOutput (request)](viewer.md#getoutput).
 
 Source: [viewer.proto:252](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L252).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type  | # | Description                                               |
+| ------ | ----- | - | --------------------------------------------------------- |
 | `body` | bytes | 1 | The captured bytes, exactly as the subprocess wrote them. |
 
 Used by: [GetOutput (response)](viewer.md#getoutput).
@@ -174,15 +174,15 @@ Invocation is one `magus` command, launch to exit - the thing that produces a Jo
 
 Source: [viewer.proto:84](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L84).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `id` | string | 1 |  |
-| `command` | [Command](#command) | 2 |  |
-| `start_time` | Timestamp | 3 |  |
-| `end_time` | Timestamp | 4 | unset while still running |
-| `magus_version` | string | 5 |  |
-| `status` | [Status](#status) | 6 | Outcome, when the run reached one. The events carry this too (KIND\_FINISHED), but a listing reads run HEADERS without opening any journal, so a browser that had to decide pass from fail would otherwise open every file it lists. |
-| `size_bytes` | int64 | 7 | On-disk size of this run's journal. What a retention view needs to say which runs are worth keeping, and the same reason as above: available from the header alone. |
+| Field           | Type                | # | Description                                                                                                                                                                                                                          |
+| --------------- | ------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`            | string              | 1 |                                                                                                                                                                                                                                      |
+| `command`       | [Command](#command) | 2 |                                                                                                                                                                                                                                      |
+| `start_time`    | Timestamp           | 3 |                                                                                                                                                                                                                                      |
+| `end_time`      | Timestamp           | 4 | unset while still running                                                                                                                                                                                                            |
+| `magus_version` | string              | 5 |                                                                                                                                                                                                                                      |
+| `status`        | [Status](#status)   | 6 | Outcome, when the run reached one. The events carry this too (KIND\_FINISHED), but a listing reads run HEADERS without opening any journal, so a browser that had to decide pass from fail would otherwise open every file it lists. |
+| `size_bytes`    | int64               | 7 | On-disk size of this run's journal. What a retention view needs to say which runs are worth keeping, and the same reason as above: available from the header alone.                                                                  |
 
 Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListInvocations (response)](viewer.md#listinvocations).
 
@@ -192,10 +192,10 @@ Journal bundles an invocation header with its events - the whole thing for the o
 
 Source: [viewer.proto:139](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L139).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `invocation` | [Invocation](#invocation) | 1 |  |
-| `events` | [repeated Event](#event) | 2 |  |
+| Field        | Type                      | # | Description |
+| ------------ | ------------------------- | - | ----------- |
+| `invocation` | [Invocation](#invocation) | 1 |             |
+| `events`     | [repeated Event](#event)  | 2 |             |
 
 Used by: [GetJournal (response)](viewer.md#getjournal).
 
@@ -203,12 +203,12 @@ Used by: [GetJournal (response)](viewer.md#getjournal).
 
 Source: [viewer.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L201).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `parent` | string | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ The run that owns these events - the collection's parent, per AIP-132. |
-| `page_size` | int32 | 2 | _int32.lte: 5000; int32.gte: 0_ |
-| `page_token` | string | 3 |  |
-| `filter` | [EventQuery](#eventquery) | 4 | viewer-typed content + time filter |
+| Field        | Type                      | # | Description                                                                                                               |
+| ------------ | ------------------------- | - | ------------------------------------------------------------------------------------------------------------------------- |
+| `parent`     | string                    | 1 | _string.pattern: `^(out[0-9a-f]+\|inv[0-9a-z]+)$`_ The run that owns these events - the collection's parent, per AIP-132. |
+| `page_size`  | int32                     | 2 | _int32.lte: 5000; int32.gte: 0_                                                                                           |
+| `page_token` | string                    | 3 |                                                                                                                           |
+| `filter`     | [EventQuery](#eventquery) | 4 | viewer-typed content + time filter                                                                                        |
 
 Used by: [ListEvents (request)](viewer.md#listevents).
 
@@ -216,10 +216,10 @@ Used by: [ListEvents (request)](viewer.md#listevents).
 
 Source: [viewer.proto:208](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L208).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `events` | [repeated Event](#event) | 1 |  |
-| `next_page_token` | string | 2 | set when more events remain |
+| Field             | Type                     | # | Description                 |
+| ----------------- | ------------------------ | - | --------------------------- |
+| `events`          | [repeated Event](#event) | 1 |                             |
+| `next_page_token` | string                   | 2 | set when more events remain |
 
 Used by: [ListEvents (response)](viewer.md#listevents).
 
@@ -227,10 +227,10 @@ Used by: [ListEvents (response)](viewer.md#listevents).
 
 Source: [viewer.proto:257](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L257).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `page_size` | int32 | 1 | _int32.lte: 5000; int32.gte: 0_ |
-| `page_token` | string | 2 |  |
+| Field        | Type   | # | Description                     |
+| ------------ | ------ | - | ------------------------------- |
+| `page_size`  | int32  | 1 | _int32.lte: 5000; int32.gte: 0_ |
+| `page_token` | string | 2 |                                 |
 
 Used by: [ListInvocations (request)](viewer.md#listinvocations).
 
@@ -238,10 +238,10 @@ Used by: [ListInvocations (request)](viewer.md#listinvocations).
 
 Source: [viewer.proto:261](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L261).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `invocations` | [repeated Invocation](#invocation) | 1 |  |
-| `next_page_token` | string | 2 | set when more invocations remain |
+| Field             | Type                               | # | Description                      |
+| ----------------- | ---------------------------------- | - | -------------------------------- |
+| `invocations`     | [repeated Invocation](#invocation) | 1 |                                  |
+| `next_page_token` | string                             | 2 | set when more invocations remain |
 
 Used by: [ListInvocations (response)](viewer.md#listinvocations).
 
@@ -249,10 +249,10 @@ Used by: [ListInvocations (response)](viewer.md#listinvocations).
 
 Source: [viewer.proto:239](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L239).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `page_size` | int32 | 1 | _int32.lte: 5000; int32.gte: 0_ |
-| `page_token` | string | 2 |  |
+| Field        | Type   | # | Description                     |
+| ------------ | ------ | - | ------------------------------- |
+| `page_size`  | int32  | 1 | _int32.lte: 5000; int32.gte: 0_ |
+| `page_token` | string | 2 |                                 |
 
 Used by: [ListOutputs (request)](viewer.md#listoutputs).
 
@@ -260,10 +260,10 @@ Used by: [ListOutputs (request)](viewer.md#listoutputs).
 
 Source: [viewer.proto:243](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L243).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `outputs` | [repeated Output](#output) | 1 |  |
-| `next_page_token` | string | 2 | set when more outputs remain |
+| Field             | Type                       | # | Description                  |
+| ----------------- | -------------------------- | - | ---------------------------- |
+| `outputs`         | [repeated Output](#output) | 1 |                              |
+| `next_page_token` | string                     | 2 | set when more outputs remain |
 
 Used by: [ListOutputs (response)](viewer.md#listoutputs).
 
@@ -273,16 +273,16 @@ Output is one stored run's descriptor: what it was, how it went, and the ref tha
 
 Source: [viewer.proto:225](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L225).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `ref` | string | 1 | The key-derived portable id shared by every attempt of the step. |
-| `project` | string | 2 |  |
-| `target` | string | 3 |  |
-| `invocation` | string | 4 | The invocation that produced this output, empty when the run predates journalling. |
-| `failed` | bool | 5 |  |
-| `error` | string | 6 | Failure message; empty on success. |
-| `create_time` | Timestamp | 7 |  |
-| `duration` | Duration | 8 |  |
+| Field         | Type      | # | Description                                                                        |
+| ------------- | --------- | - | ---------------------------------------------------------------------------------- |
+| `ref`         | string    | 1 | The key-derived portable id shared by every attempt of the step.                   |
+| `project`     | string    | 2 |                                                                                    |
+| `target`      | string    | 3 |                                                                                    |
+| `invocation`  | string    | 4 | The invocation that produced this output, empty when the run predates journalling. |
+| `failed`      | bool      | 5 |                                                                                    |
+| `error`       | string    | 6 | Failure message; empty on success.                                                 |
+| `create_time` | Timestamp | 7 |                                                                                    |
+| `duration`    | Duration  | 8 |                                                                                    |
 
 Used by: [ListOutputs (response)](viewer.md#listoutputs).
 
@@ -290,10 +290,10 @@ Used by: [ListOutputs (response)](viewer.md#listoutputs).
 
 Source: [viewer.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L213).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `parent` | string | 1 | _string.pattern: `^inv[0-9a-z]+$`_ The invocation whose events stream. Named parent to match ListEvents; only a whole invocation streams, so this one does not take an output ref. |
-| `filter` | [EventQuery](#eventquery) | 2 | viewer-typed content filter; filter.time.since resumes the stream |
+| Field    | Type                      | # | Description                                                                                                                                                                        |
+| -------- | ------------------------- | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `parent` | string                    | 1 | _string.pattern: `^inv[0-9a-z]+$`_ The invocation whose events stream. Named parent to match ListEvents; only a whole invocation streams, so this one does not take an output ref. |
+| `filter` | [EventQuery](#eventquery) | 2 | viewer-typed content filter; filter.time.since resumes the stream                                                                                                                  |
 
 Used by: [StreamEvents (request)](viewer.md#streamevents).
 
@@ -301,9 +301,9 @@ Used by: [StreamEvents (request)](viewer.md#streamevents).
 
 Source: [viewer.proto:219](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L219).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `event` | [Event](#event) | 1 |  |
+| Field   | Type            | # | Description |
+| ------- | --------------- | - | ----------- |
+| `event` | [Event](#event) | 1 |             |
 
 Used by: [StreamEvents (response)](viewer.md#streamevents).
 
@@ -313,11 +313,11 @@ Event is one line of a structured invocation log - the atom of the stream. Most 
 
 Source: [viewer.proto:105](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L105).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `project` | string | 1 | repo-relative project path |
-| `files` | repeated string | 2 | the undeclared files that selected it |
-| `inputs` | repeated string | 3 | inputs is the subset of files that read as build INPUTS (a dependency lock, a linter rule set, a toolchain pin). It is the half that changes what a verdict means: a target selected anyway can still replay an answer computed under the rules the edit just replaced, because the file that replaced them keys nothing. |
+| Field     | Type            | # | Description                                                                                                                                                                                                                                                                                                               |
+| --------- | --------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project` | string          | 1 | repo-relative project path                                                                                                                                                                                                                                                                                                |
+| `files`   | repeated string | 2 | the undeclared files that selected it                                                                                                                                                                                                                                                                                     |
+| `inputs`  | repeated string | 3 | inputs is the subset of files that read as build INPUTS (a dependency lock, a linter rule set, a toolchain pin). It is the half that changes what a verdict means: a target selected anyway can still replay an answer computed under the rules the edit just replaced, because the file that replaced them keys nothing. |
 
 Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
@@ -329,17 +329,17 @@ Kind classifies an Event. Output events carry subprocess text; the rest carry ma
 
 Source: [viewer.proto:22](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L22).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `KIND_UNSPECIFIED` | 0 |  |
-| `KIND_STARTED` | 7 | Lifecycle events bracket the invocation: STARTED opens it (carries the command lineage + version), FINISHED closes it (carries the overall pass/fail outcome). |
-| `KIND_FINISHED` | 8 |  |
-| `KIND_EXEC` | 9 | Content events, produced between the lifecycle pair. a subprocess is about to run: the command line (groups the output below it) |
-| `KIND_OUTPUT` | 1 | a subprocess stdout/stderr line |
-| `KIND_RESULT` | 2 | a target finished (pass/fail/cached), with its ref + duration |
-| `KIND_SCOPE` | 4 | the run's project scope header |
-| `KIND_WARN` | 6 | a magus warning |
-| `KIND_SECRET` | 10 | A credential was READ: the reference and the provider that served it, never the value. Distinct from WARN because it is not a problem - it is the record that a build reached for something privileged, which is what an audit answers for. |
+| Value              | #  | Description                                                                                                                                                                                                                                 |
+| ------------------ | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KIND_UNSPECIFIED` | 0  |                                                                                                                                                                                                                                             |
+| `KIND_STARTED`     | 7  | Lifecycle events bracket the invocation: STARTED opens it (carries the command lineage + version), FINISHED closes it (carries the overall pass/fail outcome).                                                                              |
+| `KIND_FINISHED`    | 8  |                                                                                                                                                                                                                                             |
+| `KIND_EXEC`        | 9  | Content events, produced between the lifecycle pair. a subprocess is about to run: the command line (groups the output below it)                                                                                                            |
+| `KIND_OUTPUT`      | 1  | a subprocess stdout/stderr line                                                                                                                                                                                                             |
+| `KIND_RESULT`      | 2  | a target finished (pass/fail/cached), with its ref + duration                                                                                                                                                                               |
+| `KIND_SCOPE`       | 4  | the run's project scope header                                                                                                                                                                                                              |
+| `KIND_WARN`        | 6  | a magus warning                                                                                                                                                                                                                             |
+| `KIND_SECRET`      | 10 | A credential was READ: the reference and the provider that served it, never the value. Distinct from WARN because it is not a problem - it is the record that a build reached for something privileged, which is what an audit answers for. |
 
 _Reserved: 3, 5._
 
@@ -351,12 +351,12 @@ Status is a result event's outcome.
 
 Source: [viewer.proto:53](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L53).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `STATUS_UNSPECIFIED` | 0 |  |
-| `STATUS_PASS` | 1 |  |
-| `STATUS_FAIL` | 2 |  |
-| `STATUS_CACHED` | 3 |  |
+| Value                | # | Description |
+| -------------------- | - | ----------- |
+| `STATUS_UNSPECIFIED` | 0 |             |
+| `STATUS_PASS`        | 1 |             |
+| `STATUS_FAIL`        | 2 |             |
+| `STATUS_CACHED`      | 3 |             |
 
 Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
 
@@ -366,11 +366,11 @@ Stream identifies which pipe an output event came from.
 
 Source: [viewer.proto:46](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L46).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `STREAM_UNSPECIFIED` | 0 |  |
-| `STREAM_STDOUT` | 1 |  |
-| `STREAM_STDERR` | 2 |  |
+| Value                | # | Description |
+| -------------------- | - | ----------- |
+| `STREAM_UNSPECIFIED` | 0 |             |
+| `STREAM_STDOUT`      | 1 |             |
+| `STREAM_STDERR`      | 2 |             |
 
 Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
 
@@ -380,15 +380,15 @@ Trigger is how an invocation was spawned - the lineage a viewer surfaces ("this 
 
 Source: [viewer.proto:62](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L62).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `TRIGGER_UNSPECIFIED` | 0 |  |
-| `TRIGGER_RUN` | 1 | magus run |
-| `TRIGGER_AFFECTED` | 2 | magus affected |
-| `TRIGGER_CI` | 3 | magus ci / affected ci |
-| `TRIGGER_X` | 4 | magus x (interactive picker) |
-| `TRIGGER_WATCH` | 5 | magus watch |
-| `TRIGGER_DIRECT` | 6 | a directly invoked spell/op |
+| Value                 | # | Description                  |
+| --------------------- | - | ---------------------------- |
+| `TRIGGER_UNSPECIFIED` | 0 |                              |
+| `TRIGGER_RUN`         | 1 | magus run                    |
+| `TRIGGER_AFFECTED`    | 2 | magus affected               |
+| `TRIGGER_CI`          | 3 | magus ci / affected ci       |
+| `TRIGGER_X`           | 4 | magus x (interactive picker) |
+| `TRIGGER_WATCH`       | 5 | magus watch                  |
+| `TRIGGER_DIRECT`      | 6 | a directly invoked spell/op  |
 
 Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
 

@@ -25,12 +25,12 @@ Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fa
 
 **Signature:** `http\get(url, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L169)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
@@ -57,13 +57,13 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 **Signature:** `http\download(url, dest, [headers], [opts], [retry]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L183)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `dest` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `dest`    | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** int
 
@@ -73,13 +73,13 @@ Send a POST request with body; returns {status, body, headers}. opts (curl-style
 
 **Signature:** `http\post(url, body, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L244)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `body` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `body`    | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
@@ -112,14 +112,14 @@ Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, 
 
 **Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L250)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `method` | `string` |  | |
-| `url` | `string` |  | |
-| `body` | `string` | yes | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `method`  | `string`            |          |             |
+| `url`     | `string`            |          |             |
+| `body`    | `string`            | yes      |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
@@ -150,9 +150,9 @@ Start a static file server in the background from an options map and return the 
 
 **Signature:** `http\server(opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L262)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `opts` | `map[string]any` |  | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `opts`    | `map[string]any` |          |             |
 
 **Returns:** int
 
@@ -177,9 +177,9 @@ Byte length of the file at path. The companion to uploadChunked: the size a Cont
 
 **Signature:** `http\byteSize(path) -> int`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** int
 
@@ -189,13 +189,13 @@ Send the file at src as the request body. chunk_size > 0 sends it in slices (cap
 
 **Signature:** `http\upload_chunked(method, url, src, chunk_size, [headers]) -> any`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `method` | `string` |  | |
-| `url` | `string` |  | |
-| `src` | `string` |  | |
-| `chunk_size` | `int` |  | |
-| `headers` | `map[string]string` | yes | |
+| Parameter    | Type                | Optional | Description |
+| ------------ | ------------------- | -------- | ----------- |
+| `method`     | `string`            |          |             |
+| `url`        | `string`            |          |             |
+| `src`        | `string`            |          |             |
+| `chunk_size` | `int`               |          |             |
+| `headers`    | `map[string]string` | yes      |             |
 
 **Returns:** any
 

@@ -20,9 +20,9 @@ Render GitHub-Flavored Markdown to semantic HTML. Strips a leading YAML frontmat
 
 **Signature:** `markdown\toHtml(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L80)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `source` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Parse the leading YAML frontmatter block (a "---" fenced header at the top of th
 
 **Signature:** `markdown\frontmatter(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L94)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `source` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
 **Returns:** string
 
@@ -44,9 +44,9 @@ Return the Markdown body with any leading YAML frontmatter block removed (the so
 
 **Signature:** `markdown\stripFrontmatter(source) -> string` - [source](https://github.com/egladman/magus/blob/main/std/markdown.go#L117)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `source` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
 **Returns:** string
 
