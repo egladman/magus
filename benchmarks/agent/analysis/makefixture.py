@@ -134,6 +134,13 @@ def transcript_lines(arm, task, rep):
             "duration_ms": ARMS[arm]["wall_ms"] + 1000 * rep,
             "num_turns": spec["turns"],
             "total_cost_usd": 0.0,
+            # The host's own total, which extract prefers for output: a real record's
+            # per-turn output counts one streamed chunk each.
+            "usage": {
+                "input_tokens": per_input * spec["turns"],
+                "output_tokens": spec["output"] * spec["turns"],
+                "cache_read_input_tokens": spec["cache_read"] * spec["turns"],
+            },
         }
     )
     return lines

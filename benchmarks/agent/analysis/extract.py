@@ -141,6 +141,7 @@ def read_transcript(path, run_id, default_model):
     tool_result_bytes = 0
     init_model = None
     reported_cost = None
+    result_output = None
     saw_result = False
 
     with open(path, encoding="utf-8", errors="replace") as fh:
@@ -161,6 +162,9 @@ def read_transcript(path, run_id, default_model):
                 cost = rec.get("total_cost_usd")
                 if isinstance(cost, (int, float)):
                     reported_cost = float(cost)
+                usage = rec.get("usage")
+                if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
+                    result_output = usage["output_tokens"]
                 continue
             message = rec.get("message")
             if not isinstance(message, dict):
@@ -201,6 +205,17 @@ def read_transcript(path, run_id, default_model):
 
     if turns == 0:
         raise ExtractError("%s: transcript carries no assistant records" % run_id)
+
+    # An assistant record's usage carries the output of one streamed chunk, not the
+    # turn, so their sum runs a whole run's output at a twentieth of what the host
+    # bills (118 summed against 2628 in the result record, pilot 2026-09-10). The
+    # input and cache counters agree between the two, so only output is replaced,
+    # apportioned across models by the share each summed to.
+    if result_output is not None:
+        summed = sum(counts["output"] for counts in by_model.values())
+        for counts in by_model.values():
+            share = counts["output"] / summed if summed else 1.0 / len(by_model)
+            counts["output"] = int(round(result_output * share))
 
     totals = _empty_counts()
     for counts in by_model.values():

@@ -184,6 +184,23 @@ class TranscriptDefectCase(unittest.TestCase):
             extract.extract_run(self.run, PRICING)
         self.assertIn("input_tokens", str(ctx.exception))
 
+    def test_result_record_output_tokens_replace_the_chunk_sum(self):
+        usage = {"input_tokens": 10, "output_tokens": 2, "cache_read_input_tokens": 100}
+        self.write_transcript(
+            [
+                {"type": "system", "subtype": "init", "model": "claude-opus-5"},
+                {"type": "assistant", "message": {"id": "m1", "usage": usage, "content": []}},
+                {"type": "assistant", "message": {"id": "m2", "usage": usage, "content": []}},
+                {"type": "result", "subtype": "success",
+                 "usage": {"input_tokens": 20, "output_tokens": 900,
+                           "cache_read_input_tokens": 200}},
+            ]
+        )
+        record = extract.extract_run(self.run, PRICING)
+        self.assertEqual(record["tokens"]["output"], 900)
+        self.assertEqual(record["tokens"]["input"], 20, "input still comes from the turns")
+        self.assertEqual(record["tokens"]["cache_read"], 200)
+
     def test_transcript_with_no_assistant_records_raises(self):
         self.write_transcript([{"type": "system", "subtype": "init", "model": "claude-opus-5"}])
         with self.assertRaises(extract.ExtractError):
