@@ -28,7 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   refusal stands on a file in the tree both globs match, and on one project, since a pair
   split across two is advice rather than a refusal. A later `ctx.needs` call in the
   composer's body counts as ordering everything an earlier call ran, and everything under
-  a later call's members with it; each chain step records which call named it. The same
+  a later call's members with it; each chain step records which call named it. A cited
+  URL whose path names a file the VCS ignores is an upstream link, never a source: the
+  built binary at the root had been turning the docs site's own URL into a file node on
+  one machine and a link node on another. The same
   record makes a chain's memory claim honest: the members of one call run together, so
   their declarations now add, and the claim is the largest call rather than the largest
   member. Where the wedge is

@@ -326,11 +326,52 @@ func assembleLinks(root string, projects []types.TargetGraphProject, idx docInde
 	// A path that is both a markdown page and a file on disk always resolves to its DOC
 	// node: the graph models a page as prose, and the file node behind it would be the
 	// same page with nothing said about it.
+	// Comment citations are read up front, so every path a citation could name is known
+	// before any is resolved: the VCS is asked ONCE which of them it ignores. A path on
+	// disk the VCS ignores is a build product, not a source the workspace holds, and
+	// without this the built ./magus binary at the root turned the docs site's own URL
+	// into a file node here and a link node in CI, and the committed graph drifted
+	// between the two.
+	type sourceCites struct {
+		rel   string
+		found []sourceCite
+	}
+	var comments []sourceCites
+	for _, rel := range findCommentSources(root) {
+		src, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			continue
+		}
+		if found := commentCitations(rel, src); len(found) > 0 {
+			comments = append(comments, sourceCites{rel, found})
+		}
+	}
+	var candidates []string
+	for _, sc := range comments {
+		for _, cite := range sc.found {
+			if rel, ok := workspaceSourcePath(root, cite.Cite.Path); ok {
+				candidates = append(candidates, rel)
+			}
+		}
+	}
+	for _, dc := range cites.URLs {
+		if c, ok := parseCitation(dc.URL); ok {
+			if rel, ok := workspaceSourcePath(root, c.Path); ok {
+				candidates = append(candidates, rel)
+			}
+		}
+	}
+	slices.Sort(candidates)
+	held := map[string]bool{}
+	for _, rel := range dropVCSIgnored(root, slices.Compact(candidates)) {
+		held[rel] = true
+	}
+
 	resolveTarget := func(c citation) (id, class string) {
 		if target, ok := idx.resolveDocsURL(c); ok {
 			return target, "docs"
 		}
-		if rel, ok := workspaceSourcePath(root, c.Path); ok {
+		if rel, ok := workspaceSourcePath(root, c.Path); ok && held[rel] {
 			if idx.docs[rel] {
 				return docID(rel), "source"
 			}
@@ -339,15 +380,8 @@ func assembleLinks(root string, projects []types.TargetGraphProject, idx docInde
 		return noteLink(c), "upstream"
 	}
 
-	for _, rel := range findCommentSources(root) {
-		src, err := os.ReadFile(filepath.Join(root, rel))
-		if err != nil {
-			continue
-		}
-		found := commentCitations(rel, src)
-		if len(found) == 0 {
-			continue
-		}
+	for _, sc := range comments {
+		rel, found := sc.rel, sc.found
 		fID := noteFile(rel)
 		for _, sc := range found {
 			target, _ := resolveTarget(sc.Cite)

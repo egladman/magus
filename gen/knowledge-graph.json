@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5840,
-  "edge_count": 10395,
+  "edge_count": 10394,
   "relations": [
     {
       "id": "annotates",
@@ -39009,12 +39009,6 @@
       }
     },
     {
-      "id": "file:magus",
-      "kind": "file",
-      "label": "magus",
-      "source": "magus"
-    },
-    {
       "id": "file:magusfile.buzz",
       "kind": "file",
       "label": "magusfile.buzz",
@@ -49978,6 +49972,15 @@
       "source": "https://docs.sourcegraph.com/code_navigation/explanations/scip",
       "attrs": {
         "host": "docs.sourcegraph.com"
+      }
+    },
+    {
+      "id": "link:https://eli.gladman.cc/magus/",
+      "kind": "link",
+      "label": "https://eli.gladman.cc/magus/",
+      "source": "https://eli.gladman.cc/magus/",
+      "attrs": {
+        "host": "eli.gladman.cc"
       }
     },
     {
@@ -63978,14 +63981,6 @@
     },
     {
       "source": "doc:README.md",
-      "target": "file:magus",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "README.md"
-    },
-    {
-      "source": "doc:README.md",
       "target": "file:mise.toml",
       "relation": "documents",
       "confidence": "extracted",
@@ -63995,6 +63990,14 @@
     {
       "source": "doc:README.md",
       "target": "link:https://buzz-lang.dev/",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "link:https://eli.gladman.cc/magus/",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -64418,14 +64421,6 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
-      "target": "file:magus",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
-    },
-    {
-      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "link:https://buzz-lang.dev/",
       "relation": "references",
       "confidence": "extracted",
@@ -64435,6 +64430,14 @@
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "link:https://dagger.io/",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "target": "link:https://eli.gladman.cc/magus/",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -64658,15 +64661,15 @@
     },
     {
       "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
-      "target": "file:magus",
-      "relation": "documents",
+      "target": "link:https://docs.datadoghq.com/cli/",
+      "relation": "references",
       "confidence": "extracted",
       "score": 1,
       "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
       "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
-      "target": "link:https://docs.datadoghq.com/cli/",
+      "target": "link:https://eli.gladman.cc/magus/",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -112906,14 +112909,6 @@
     },
     {
       "source": "file:docs/engine/page.buzz",
-      "target": "file:magus",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/engine/page.buzz:40"
-    },
-    {
-      "source": "file:docs/engine/page.buzz",
       "target": "function:docs/engine/page.buzz:dependencyFigure",
       "relation": "contains",
       "confidence": "extracted",
@@ -113199,6 +113194,14 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/engine/page.buzz"
+    },
+    {
+      "source": "file:docs/engine/page.buzz",
+      "target": "link:https://eli.gladman.cc/magus/",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/page.buzz:40"
     },
     {
       "source": "file:docs/engine/path.buzz",
@@ -131470,14 +131473,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "coverage.buzz"
-    },
-    {
-      "source": "project:.",
-      "target": "file:magus",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magus"
     },
     {
       "source": "project:.",

@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -221,4 +222,34 @@ func TestCitedRankLiftsOnlyCitedProse(t *testing.T) {
 	assert.Equal(t, 0, g.citedRank(docID("docs/b.md"), types.KindDoc))
 	assert.Equal(t, 0, g.citedRank(fileID("x.go"), types.KindFile), "the boost is for prose, not for the citing code")
 	assert.Less(t, citedDocRank, kindRank(types.KindTarget), "a cited page must still lose to the entity a reader named")
+}
+
+// TestCitedPathTheVCSIgnoresIsALink is the built binary at the root: the docs site's own
+// URL has a path that names it, and it exists on the developer's disk but not in CI, so
+// the committed graph held a file node on one machine and a link node on the other. A
+// path the VCS ignores is a build product, and the citation is an upstream link.
+func TestCitedPathTheVCSIgnoresIsALink(t *testing.T) {
+	root := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		require.NoError(t, cmd.Run(), "git %v", args)
+	}
+	git("init", "-q")
+	writeFile(t, root, ".gitignore", "/magus\n")
+	writeFile(t, root, "magus", "binary")
+	writeFile(t, root, "mise.toml", "[tools]\n")
+	writeFile(t, root, "README.md", "# readme\n\nSee [the site](https://eli.gladman.cc/magus/) and [the tools](https://eli.gladman.cc/mise.toml).\n")
+
+	docShard, cites := assembleDocs(root, nil, nil, "")
+	links := assembleLinks(root, nil, newDocIndex(docShard.Nodes), cites)
+	g := mergeAll([]Shard{docShard, links}).Output()
+
+	_, ignored := nodeByID(g, fileID("magus"))
+	assert.False(t, ignored, "an ignored path is not a source the workspace holds")
+	_, link := nodeByID(g, linkID("https://eli.gladman.cc/magus/"))
+	assert.True(t, link, "so the citation is an upstream link")
+	_, tracked := nodeByID(g, fileID("mise.toml"))
+	assert.True(t, tracked, "and a path the VCS does not ignore is still the source it names")
 }
