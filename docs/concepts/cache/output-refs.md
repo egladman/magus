@@ -162,8 +162,10 @@ Env values never reach the store: a key line's value is replaced by a short dige
 The digest still changes when the value does, so a drifted variable is named without
 its contents being shown.
 
-For the LATEST log of a project or target (rather than a specific past execution),
-[`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
+There is no separate verb for the latest log: `magus query output <ref>` reads any
+execution from the ref its run printed, and a failure also prints the path of its
+persisted run log, the route when there is no ref to query. See
+[acting on a failed run](../../guides/debugging.md#acting-on-a-failed-run).
 
 ### What the ref does not depend on
 
@@ -333,9 +335,9 @@ hint: inputs unchanged since outcc49db1f, which failed: tsc exit 2; read it with
 Nothing is replayed and nothing is skipped: the target runs exactly as it would have,
 and the line is context rather than a verdict. It appears once per cache key, so an
 edit that moves the inputs mints a different ref and the hint speaks again; `-s` keeps
-it, and `--no-hints` drops it with every other hint. The target's result record carries
-`"hint_id": "unchanged-failure"` in `-o jsonl`, which is the stable id to count rather than
-the wording above.
+it, and `MAGUS_HINTS_ENABLED=false` (`hints.enabled: false` in `magus.yaml`) drops it with
+every other hint. The target's result record carries `"hint_id": "unchanged-failure"` in
+`-o jsonl`, which is the stable id to count rather than the wording above.
 
 ## Tips and tricks
 

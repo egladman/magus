@@ -192,9 +192,10 @@ done
 
 if [ -n "$session_stdout" ]; then
   cat "$work/events"
-else
-  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
+  # Nothing was delivered to magus, so the checkpoints stay where they were.
+  exit 0
 fi
+"$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 
 # Checkpoints are committed only once the stream has been delivered. A load that
 # failed leaves every offset where it was, so the retry re-reads the same records
