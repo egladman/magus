@@ -29,7 +29,8 @@ rather than switched.
 - `bash`, `git`, and `node` (every task check is stdlib node)
 - `jq`, which the arm probes use to read `settings.json` and doctor's output
 - the `claude` CLI, logged in (see below)
-- `docker`, for the analysis side only (`analysis/README.md`)
+- `docker`, for the analysis side (`analysis/README.md`) and for every
+  SWE-bench trial (below)
 
 `_selftest` is not an arm. It provisions nothing and exists so the runner can be
 exercised without the real recipes; `tasks/_placeholder` is its counterpart.
@@ -185,6 +186,115 @@ session gets under `--strict-mcp-config`. MCP registration is user-scoped, so
 without that flag the operator's own servers would leak their tool schemas
 into both arms' context windows.
 
+## SWE-bench Verified as a task source
+
+`--task swebench:<instance_id>` runs one instance of SWE-bench Verified (500
+real GitHub issues over twelve Python repos) instead of a fixture task. The
+arms, model, effort, caps and results schema are unchanged; what changes is
+where the trial runs, because the repo's Python environment exists only inside
+the instance's published Docker image.
+
+What is consumed, and from where:
+
+- The table itself, via the Hugging Face rows API (no auth). `swebench/fetch.sh`
+  downloads the five 100-row pages into `swebench/verified.jsonl` (ignored, about
+  9 MB, `hints_text` dropped, sorted by `instance_id`) and prints its sha256.
+  `swebench/verified.sha256` pins the digest a previous fetch observed; a fetch
+  that disagrees exits non-zero, so an upstream edit to the table is noticed
+  rather than graded against.
+- `swebench/pilot.jsonl`, committed: 24 whole rows chosen by rule, not by hand.
+  `swebench/pilot.sh` takes the first two instances of every repo by
+  `instance_id` (flask has only one), then the next instances by `instance_id`
+  from django and sympy until there are 24. A pilot needs nothing from the full
+  table.
+- The per-instance Docker images, from Epoch AI's registry
+  (`ghcr.io/epoch-research/swe-bench.eval.<arch>.<instance_id>`), which carries
+  every Verified instance for x86_64 and a best-effort arm64 set. The runner
+  picks the image for the host's own architecture and never runs emulated: wall
+  clock is a headline metric, and an emulated container is several times slower.
+  The dataset's own `image` field names the upstream Docker Hub build, which is
+  amd64 only; `BENCH_EMULATE=1` is the one way to use it on another host. An
+  arm64 image the registry calls untested is validated like every instance, by
+  its golden and null controls.
+- The log parsers from `swebench/harness/log_parsers/python.py` (MIT), ported to
+  Go in `swebench/cmd/swegrade` with the attribution in the source: the twelve
+  parser names the Verified set uses, which are four distinct parsers
+  (`pytest`, `pytest_options`, `pytest_v2`, `django`, `sympy`, `matplotlib`,
+  `seaborn` and their aliases). Nothing from the `swebench` Python package is
+  installed anywhere.
+
+How a container trial works, per rep:
+
+1. `swebench/images.sh` builds the trial image once per (instance, magus
+   binary): the instance image plus node LTS, `@anthropic-ai/claude-code`, `jq`,
+   and the given magus binary copied to `/usr/local/bin/magus`
+   (`swebench/bench.Dockerfile`). The tag carries a digest of the binary, so a
+   different build under test gets a different image.
+2. A trial container starts from it with the run directory mounted at `/work`
+   and this checkout mounted read-only at `/src`. `swebench/seed.sh` writes a
+   `magus.yaml` and a magusfile from `swebench/magusfile.buzz.tmpl` (one python
+   project at `/testbed`, a `test` target that forks pytest) and lists every
+   provisioning path in `.git/info/exclude`, so the agent starts from a clean
+   `git status`. The unchanged `arms/<arm>/provision.sh` and `probe.sh` then run
+   inside the container against `/testbed`; both arms provision and probe
+   there exactly as on a host worktree.
+3. `runner/agent.sh` runs inside the container with the same flags it uses on
+   the host, `problem_statement` as the prompt (`/work/prompt.md`, outside the
+   repo), and the transcript streaming to `/work/transcript.jsonl`. The
+   credential reaches the container by name through `docker exec -e`; it is
+   never on a command line, in a file, or in an image layer. `BENCH_TIMEOUT_S`
+   is enforced by coreutils `timeout` inside the container.
+4. `final.diff` is `git diff` of `/testbed` (untracked files included, the
+   provisioning paths excluded), and the trial container is removed.
+5. Grading runs in a **fresh** container from the instance image itself:
+   `swebench/grade.sh` applies `final.diff` with the reference harness's apply
+   ladder, then runs the row's `eval_script`, which resets the test files,
+   applies `test_patch` and runs the named tests. The log lands in `eval.log`
+   and is piped to `swegrade` (built as the `magus-bench/swegrade` image from
+   `swebench/grader.Dockerfile`, so the host needs no Go toolchain), which
+   writes the JSON verdict to `check.txt` and its exit status to `check.exit`.
+
+The golden control applies the row's gold `patch` in the trial container in
+place of an agent; the null control applies nothing. `meta.json` carries
+`"task_source": "swebench"` and `"instance_id"`, `fixture_sha` is the row's
+`base_commit`, and `task` is the `swebench:<id>` string, so the analysis reads
+these runs unchanged. Run ids use `swebench-<id>` in place of the task name.
+The run directory also keeps `row.json`, `gold.patch`, `test.patch`, `eval.sh`
+and `eval.log`. Budget and turn caps come from `swebench/meta.json`.
+
+`swegrade` grades the way `swebench/harness/grading.py` does: a FAIL_TO_PASS
+test resolves on PASSED or XFAIL, a PASS_TO_PASS test is maintained on PASSED,
+XFAIL or SKIPPED, a test the log never names counts as failed, a log carrying a
+harness failure marker (patch apply, reset, timeout) resolves nothing, and the
+truncated parametrized ids Verified carries resolve by prefix when every
+candidate agrees. Exit 0 is resolved, 1 is not, 2 is unusable input.
+
+The magus binary for this mode must be the linux build for the host's
+architecture (`arm64` on an Apple Silicon Mac, `amd64` elsewhere). From the
+workspace root:
+
+```sh
+magus run release-build . -- linux arm64
+mkdir -p dist/linux-arm64
+tar -xzf dist/magus_*_linux_arm64_static.tar.gz -C dist/linux-arm64 magus
+```
+
+`run.sh` refuses anything else at that path and prints those commands for the
+architecture it needs. Then, from `benchmarks/agent`:
+
+```sh
+./swebench/fetch.sh                                  # optional: the full table
+./run.sh --arm rampant --task swebench:pallets__flask-5014 --reps 1 \
+    --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-arm64/magus \
+    --control golden
+./run.sh --arm rampant --task swebench:pallets__flask-5014 --reps 1 \
+    --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-arm64/magus \
+    --control null
+./run.sh --manifest swebench/pilot.manifest          # 24 instances: controls, then 3 reps per arm
+```
+
+`RUNNER_AGENT` is not honored in this mode; the controls are the no-cost path.
+
 ## Analysis
 
 Python runs only in Docker, on the upstream `python:3.12-slim` image with
@@ -194,8 +304,9 @@ invocations, and `magus run agent-bench-report .` runs the whole pipeline over
 
 ## Not built yet
 
-- Containerized agent sessions. Runs execute on the host today, so host state is
-  a shared confound rather than an isolated one.
+- Containerized agent sessions for the fixture tasks. Those runs execute on the
+  host today, so host state is a shared confound rather than an isolated one;
+  only the SWE-bench source runs in a container.
 - MCP as a switch. Both arms hold it at zero (`arms/README.md`); measuring it
   needs an estimate of the tool-schema floor in the system prompt, which
   transcripts never show and the extractor does not model.
