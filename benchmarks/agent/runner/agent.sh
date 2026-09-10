@@ -21,7 +21,11 @@ effort=$6
 # export it from the worktree's .benchmark/env.sh, which provision.sh writes per
 # run (the pinned binary on PATH, the isolated CLAUDE_CONFIG_DIR, rotation off).
 # Every name that file exports rides through the scrub.
-env_keep=(HOME PATH USER LOGNAME SHELL TERM TMPDIR LANG LC_ALL ANTHROPIC_API_KEY ANTHROPIC_BASE_URL)
+#
+# Credentials pass through by NAME only: an API key, or the long-lived token `claude
+# setup-token` mints for headless use. The operator exports one of them before launching
+# the runner; nothing here reads, stores or prints a value.
+env_keep=(HOME PATH USER LOGNAME SHELL TERM TMPDIR LANG LC_ALL ANTHROPIC_API_KEY ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN)
 # shellcheck disable=SC2206 # RUNNER_ENV_EXTRA is a space-separated name list
 env_keep+=(${RUNNER_ENV_EXTRA:-})
 if [[ -f $wt/.benchmark/env.sh ]]; then
