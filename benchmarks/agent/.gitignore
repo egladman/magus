@@ -5,8 +5,9 @@
 results/*
 !results/.gitkeep
 __pycache__/
-# written by agent-bench-report from whatever results/ holds
-results-synthetic/
+# written by agent-bench-report from whatever results/ holds, and any other results
+# tree a manifest is pointed at (BENCH_RESULTS_DIR=results-opus)
+results-*/
 metrics.jsonl
 analysis.json
 report.md

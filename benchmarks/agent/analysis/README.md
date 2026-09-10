@@ -91,9 +91,12 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   not a failure; the report lists it under its caveats as an unknown outcome,
   excluded from every pass rate.
 - **control runs** - a run whose `meta.json` carries `control` (`golden` or
-  `null`) never launched an agent and has no transcript. The extractor skips it
-  with a note and it contributes no row; its verdict is the `exit_reason` the
-  runner recorded. A scored run without a transcript is still an error.
+  `null`) never launched an agent and has no transcript. The extractor writes a
+  record with only its identity, kind and check verdict; the report's Controls
+  section reads those to say whether each task's check discriminates (golden
+  passes, null fails), and a pass rate is flagged as not evidence until it does.
+  Controls never enter a cell or a pairing. A scored run without a transcript is
+  still an error.
 - **invariant_violations** - `tests_deleted` lists paths the diff deletes whose
   basename contains `_test.` or `.test.`. Deletion is the only violation read
   from a diff deterministically; everything else belongs in an acceptance check.

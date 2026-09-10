@@ -263,16 +263,49 @@ class TranscriptDefectCase(unittest.TestCase):
             extract.extract_run(self.run, PRICING)
         self.assertIn("transcript.jsonl is missing", str(ctx.exception))
 
-    def test_control_run_is_skipped_not_measured(self):
+    def test_control_run_carries_its_verdict_and_no_tokens(self):
         # Neither control writes a transcript, so the run must be recognized
-        # from meta.json alone rather than from what is missing beside it.
+        # from meta.json alone rather than from what is missing beside it, and
+        # its check verdict is what the report's Controls section reads.
         with open(os.path.join(self.run, "meta.json"), "r+", encoding="utf-8") as fh:
             meta = json.load(fh)
             meta.update({"control": "golden", "exit_reason": "control_golden_ok"})
             fh.seek(0)
             fh.truncate()
             json.dump(meta, fh)
-        self.assertIsNone(extract.extract_run(self.run, PRICING))
+        with open(os.path.join(self.run, "check.exit"), "w", encoding="utf-8") as fh:
+            fh.write("0\n")
+        record = extract.extract_run(self.run, PRICING)
+        self.assertEqual(record["control"], "golden")
+        self.assertTrue(record["success"])
+        self.assertNotIn("tokens", record)
+
+    def test_controls_must_discriminate_before_a_pass_rate_means_anything(self):
+        def control(kind, success):
+            return {
+                "run_id": "rampant-task-a-r1-%s" % kind,
+                "arm": "rampant",
+                "task": "task-a",
+                "rep": 1,
+                "model": "claude-opus-5",
+                "control": kind,
+                "success": success,
+            }
+
+        scored = [
+            synthetic_record("rampant", "task-a", 1, 1.0, 100),
+            synthetic_record("full", "task-a", 1, 1.0, 100),
+        ]
+        good = analyze.analyze(scored + [control("golden", True), control("null", False)], 1)
+        self.assertTrue(good["controls"]["task-a"]["discriminates"])
+        self.assertEqual(good["runs"], 2, "controls are not scored runs")
+
+        lax = analyze.analyze(scored + [control("golden", True), control("null", True)], 1)
+        self.assertFalse(lax["controls"]["task-a"]["discriminates"])
+
+        unverified = analyze.analyze(scored, 1)
+        self.assertFalse(unverified["controls"]["task-a"]["discriminates"])
+        self.assertEqual(unverified["controls"]["task-a"]["golden"]["n"], 0)
 
 
 def synthetic_record(arm, task, rep, dollars, tokens, success=True):

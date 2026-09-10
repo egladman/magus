@@ -273,7 +273,39 @@ def data_quality(records, by_arm_task_rep, tasks, arms):
     }
 
 
-def analyze(records, seed):
+def control_summary(controls, tasks):
+    """Per task, whether the checks discriminate: golden must pass, null must fail.
+
+    A pass rate means nothing until this holds, because a check that accepts an
+    untouched tree would grade every arm at 100%. A task with no control of one
+    kind is reported as unverified rather than assumed.
+    """
+    out = {}
+    for task in tasks:
+        cell = {}
+        for kind in ("golden", "null"):
+            runs = [r for r in controls if r["task"] == task and r.get("control") == kind]
+            cell[kind] = {
+                "n": len(runs),
+                "passes": sum(1 for r in runs if r.get("success") is True),
+                "run_ids": sorted(r["run_id"] for r in runs),
+            }
+        golden, null = cell["golden"], cell["null"]
+        cell["discriminates"] = (
+            golden["n"] > 0
+            and golden["passes"] == golden["n"]
+            and null["n"] > 0
+            and null["passes"] == 0
+        )
+        out[task] = cell
+    return out
+
+
+def analyze(all_records, seed):
+    controls = [r for r in all_records if r.get("control")]
+    records = [r for r in all_records if not r.get("control")]
+    if not records:
+        raise SystemExit("analyze: no scored runs, only %d control(s)" % len(controls))
     arms = sorted({r["arm"] for r in records})
     tasks = sorted({r["task"] for r in records})
     by_arm_task = {}
@@ -292,6 +324,7 @@ def analyze(records, seed):
         "arms": arms,
         "tasks": tasks,
         "models": models,
+        "controls": control_summary(controls, tasks),
         "cells": {
             "%s/%s" % (arm, task): cell_stats(by_arm_task[(arm, task)])
             for (arm, task) in sorted(by_arm_task)

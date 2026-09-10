@@ -1,0 +1,7 @@
+# The Sonnet pilot's grid under Opus 5, the model the scored baseline uses. Written
+# to its own results tree so the two models are never paired against each other:
+#   BENCH_RESULTS_DIR=results-opus ./run.sh --manifest pilot-opus.manifest
+--arm rampant --task merge-config-falsy --reps 1 --model claude-opus-5 --effort high --magus-binary ../../magus --control golden
+--arm rampant --task merge-config-falsy --reps 1 --model claude-opus-5 --effort high --magus-binary ../../magus --control null
+--arm rampant --task merge-config-falsy --reps 3 --model claude-opus-5 --effort high --magus-binary ../../magus
+--arm full --task merge-config-falsy --reps 3 --model claude-opus-5 --effort high --magus-binary ../../magus

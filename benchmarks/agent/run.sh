@@ -8,6 +8,9 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_DIR="${BENCH_RESULTS_DIR:-$HERE/results}"
+# Absolute for the same reason --magus-binary is made absolute below: the agent step
+# runs from inside the fixture worktree, where a relative results path names nothing.
+[[ $RESULTS_DIR == /* ]] || RESULTS_DIR="$PWD/$RESULTS_DIR"
 FIXTURE_REPO="${BENCH_FIXTURE_REPO:-$HERE/../large-monorepo/gen/repo}"
 TIMEOUT_S="${BENCH_TIMEOUT_S:-1800}"
 POLL_S="${BENCH_POLL_S:-0.5}"

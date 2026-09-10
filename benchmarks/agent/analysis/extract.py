@@ -351,9 +351,11 @@ REQUIRED_META = ("run_id", "arm", "task", "rep", "model")
 def extract_run(run_dir, pricing):
     """Build one metrics record for a single run directory.
 
-    Returns None for a control run (golden or null): no agent ran, so there is
-    no transcript to measure, and its verdict is already in meta.json's
-    exit_reason. A scored run without a transcript is still an error.
+    A control run (golden or null) yields a record with its identity, its
+    control kind and its check verdict and nothing else: no agent ran, so there
+    is no transcript to measure. The report reads those verdicts to say whether
+    the task's check discriminates at all. A scored run without a transcript is
+    still an error.
     """
     meta_path = os.path.join(run_dir, "meta.json")
     if not os.path.exists(meta_path):
@@ -365,7 +367,18 @@ def extract_run(run_dir, pricing):
             raise ExtractError("%s: meta.json has no %s" % (run_dir, field))
     run_id = meta["run_id"]
     if meta.get("control"):
-        return None
+        check_exit, success = read_check(run_dir)
+        return {
+            "run_id": run_id,
+            "arm": meta["arm"],
+            "task": meta["task"],
+            "rep": meta["rep"],
+            "model": meta["model"],
+            "control": meta["control"],
+            "exit_reason": meta.get("exit_reason"),
+            "check_exit": check_exit,
+            "success": success,
+        }
 
     transcript = read_transcript(os.path.join(run_dir, "transcript.jsonl"), run_id, meta.get("model"))
     check_exit, success = read_check(run_dir)
@@ -442,23 +455,19 @@ def main(argv=None):
     if not run_dirs:
         raise ExtractError("no run directories under %s" % args.results)
 
-    records = []
-    controls = 0
-    for run_dir in run_dirs:
-        record = extract_run(run_dir, pricing)
-        if record is None:
-            controls += 1
-            print("skipped %s: control run, nothing to measure" % os.path.basename(run_dir))
-        else:
-            records.append(record)
-    if not records:
+    records = [extract_run(run_dir, pricing) for run_dir in run_dirs]
+    controls = sum(1 for r in records if r.get("control"))
+    if controls == len(records):
         raise ExtractError("no scored runs under %s (%d control runs)" % (args.results, controls))
     records.sort(key=lambda r: r["run_id"])
     with open(args.out, "w", encoding="utf-8") as fh:
         for record in records:
             fh.write(json.dumps(record, sort_keys=True) + "\n")
-            print(summary_line(record))
-    print("wrote %d runs to %s (%d control runs skipped)" % (len(records), args.out, controls))
+            if record.get("control"):
+                print("%s: %s control, check=%s" % (record["run_id"], record["control"], record["check_exit"]))
+            else:
+                print(summary_line(record))
+    print("wrote %d runs to %s (%d of them controls)" % (len(records), args.out, controls))
     return 0
 
 

@@ -44,6 +44,34 @@ def interval(low, high, digits=2):
     return "[%s, %s]" % (num(low, digits), num(high, digits))
 
 
+def controls(analysis, out):
+    out.append("## Controls")
+    out.append("")
+    out.append(
+        "Whether each task's check can tell a solution from its absence: the golden "
+        "control applies the known solution and must pass, the null control touches "
+        "nothing and must fail. A pass rate below is only worth reading where both hold."
+    )
+    out.append("")
+    out.append("| task | golden (pass/n) | null (pass/n) | checks discriminate |")
+    out.append("| --- | --- | --- | --- |")
+    for task in analysis["tasks"]:
+        cell = analysis["controls"].get(task) or {}
+        golden = cell.get("golden") or {"passes": 0, "n": 0}
+        null = cell.get("null") or {"passes": 0, "n": 0}
+        if cell.get("discriminates"):
+            verdict = "yes"
+        elif golden["n"] == 0 or null["n"] == 0:
+            verdict = "UNVERIFIED (control missing)"
+        else:
+            verdict = "NO"
+        out.append(
+            "| %s | %d/%d | %d/%d | %s |"
+            % (task, golden["passes"], golden["n"], null["passes"], null["n"], verdict)
+        )
+    out.append("")
+
+
 def headline(analysis, out):
     out.append("## Headline: cost-of-pass")
     out.append("")
@@ -214,6 +242,12 @@ def caveats(analysis, out):
             "More than one model appears across runs (%s); the arm is no longer the only "
             "variable." % ", ".join(analysis["models"])
         )
+    unverified = [t for t in analysis["tasks"] if not analysis["controls"].get(t, {}).get("discriminates")]
+    if unverified:
+        lines.append(
+            "Checks not shown to discriminate for %s (see Controls); pass rates there are "
+            "not evidence." % ", ".join(unverified)
+        )
     out.append("## Caveats")
     out.append("")
     for line in lines:
@@ -236,6 +270,7 @@ def render(analysis):
         )
     )
     out.append("")
+    controls(analysis, out)
     headline(analysis, out)
     pareto(analysis, out)
     deltas(analysis, out)
