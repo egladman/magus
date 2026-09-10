@@ -258,7 +258,7 @@ func guardResponses(t *testing.T, name, body string) []string {
 		bodies = append(bodies, match[1])
 	}
 
-	funcs := template.FuncMap(sprig.HermeticTxtFuncMap())
+	funcs := sprig.HermeticTxtFuncMap()
 	var out []string
 	for _, match := range literalJSONObject.FindAllStringSubmatch(body, -1) {
 		out = append(out, match[1])

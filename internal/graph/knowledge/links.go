@@ -200,7 +200,7 @@ func cleanURLKeys(rel string) []string {
 			forms = append(forms, d)
 		}
 	}
-	var out []string
+	out := make([]string, 0, len(forms))
 	for _, f := range forms {
 		out = append(out, pathSuffixes(f)...)
 	}
