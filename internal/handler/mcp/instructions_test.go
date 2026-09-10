@@ -18,6 +18,7 @@ magus is a build orchestrator for multi-language monorepos.
 
 Discover:
   magus_describe          - list spells, targets, projects, workspaces, or mcp_tools
+  magus_describe_file     - classify changed paths: generated output, declared source, or unclaimed
   magus_where             - resolve a fuzzy project name to its absolute path
   magus_config_get        - view the resolved workspace config (read-only)
 
@@ -39,6 +40,12 @@ Knowledge graph:
   magus_path              - find a path between two graph nodes
   magus_refs              - list files that reference a symbol
   magus_stats             - summarize graph composition
+
+Work with people and other agents:
+  magus_diff              - join the review session a person has open: state, comment, suggest, resolve
+  magus_memory            - the per-repository memory of decisions, plans, and ruled-out hypotheses
+  magus_vcs_checkpoint    - record the working state's identity (revision, branch, patch digest)
+  magus_ledger            - declare the lease plan an orchestrator hands out: goals, paths, states
 
 Typical flow:
   Discover first: magus_describe (list spells/targets/projects/workspaces), magus_where (resolve a fuzzy project name to a path).
@@ -73,8 +80,16 @@ func TestServerInstructionsToolNamesResolve(t *testing.T) {
 
 	tokens := toolTokenRe.FindAllString(serverInstructions, -1)
 	assert.NotEmpty(t, tokens, "the instructions name no tools at all, so this test proves nothing")
+	named := map[string]bool{}
 	for _, tok := range tokens {
+		named[tok] = true
 		assert.Truef(t, declared[tok], "instructions name %q, which is not a declared hint.ToolName", tok)
 		assert.Truef(t, registered[tok], "instructions name %q, which is not a Registry[].Name", tok)
+	}
+	// The other direction: a tool the catalog mounts but the instructions never mention
+	// is one an agent learns about only by listing, which is the drift the hand-written
+	// prose invites.
+	for name := range registered {
+		assert.Truef(t, named[name], "Registry mounts %q, which the instructions never name", name)
 	}
 }

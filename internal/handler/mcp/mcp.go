@@ -2,7 +2,7 @@ package mcp
 
 // mcp.go is the dispatch pipeline that joins the tool CATALOG (Registry, in
 // registry.go) to the tool IMPLEMENTATIONS (the SpellDriver structs in the
-// per-tool files) and mounts them on the mark3labs MCP server: allMCPTools builds
+// per-tool files) and mounts them on the mark3labs MCP server: allToolDrivers builds
 // the drivers, registerTools pairs each with its descriptor, adapt bridges the
 // unified SpellDriver signature to the server's handler shape, and wrap layers the
 // per-call origin marker, request-scoped logger, stderr banner, and audit record.
@@ -136,7 +136,7 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 	return mcplib.NewTool(d.Name, opts...)
 }
 
-// allMCPTools constructs every MCP tool the daemon exposes. Each tool is a
+// allToolDrivers constructs every MCP tool the daemon exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
 func allToolDrivers(opts Options) []spells.Driver {
 	wsCfg := types.WorkspaceConfig{
@@ -209,7 +209,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 		}
 		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, adapt(t)))
 	}
-	// The loop above only checks Registry -> driver; a driver built into allMCPTools but
+	// The loop above only checks Registry -> driver; a driver built into allToolDrivers but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
 	// error anywhere. Check the other direction too.
 	if missing := unregisteredDrivers(tools, Registry); len(missing) > 0 {
