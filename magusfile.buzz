@@ -2830,6 +2830,11 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     } catch (e) {
         throw "agent-bench-report needs a docker daemon: the analysis runs in the benchmark image";
     }
+    // report.md is an ignored, regenerated artifact that the root's `**/*.md` source
+    // glob covers, so the race check reads its rewrite as a source mutation. Declared
+    // as modified rather than written: a declared output lands in .gitattributes, and an
+    // ignored path there names a file that can never be tracked.
+    ctx.modifiesExistingFiles("benchmarks/agent/report.md");
     var image = "python:3.12-slim";
     var results = "results";
     var synthetic = false;
