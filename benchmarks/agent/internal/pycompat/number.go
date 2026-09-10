@@ -23,7 +23,6 @@ func Int(i int64) Number { return Number{i: i} }
 // Float is a Python float.
 func Float(f float64) Number { return Number{isFloat: true, f: f} }
 
-
 // Int64 is the int's value; a float reports false.
 func (n Number) Int64() (int64, bool) {
 	if n.isFloat {

@@ -78,8 +78,8 @@ func wilsonInterval(successes, total int64) [2]*float64 {
 	return [2]*float64{&low, &high}
 }
 
-// percentile takes the value at floor(q * (n - 1)) of an already sorted list,
-// the index the Python's bootstrap used; it is not the nearest-rank
+// percentile takes the value at index `floor(q * (n - 1))` of an already sorted
+// list, the index the Python's bootstrap used; it is not the nearest-rank
 // definition, and the CIs pinned in testdata depend on this one.
 func percentile(sorted []float64, q float64) *float64 {
 	if len(sorted) == 0 {

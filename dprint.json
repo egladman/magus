@@ -29,6 +29,6 @@
   "excludes": [
     "./MAGUS.md",
     "./CHANGELOG.md",
-    "./benchmarks/agent/analysis/testdata/*.md"
+    "./benchmarks/agent/internal/bench/testdata/*.md"
   ]
 }
