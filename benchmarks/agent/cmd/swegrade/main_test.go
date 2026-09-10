@@ -35,13 +35,16 @@ func TestSwegradeResolved(t *testing.T) {
 func TestSwegradeUnresolved(t *testing.T) {
 	row := sampleRow(t)
 	cases := map[string]string{
-		"f2p failed":        "FAILED tests/t.py::new - boom\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
-		"f2p skipped":       "SKIPPED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
-		"f2p missing":       "PASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
-		"p2p regressed":     "PASSED tests/t.py::new\nERROR tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
-		"p2p missing":       "PASSED tests/t.py::new\nPASSED tests/t.py::param[a-b]\n",
-		"prefix disagrees":  "PASSED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\nFAILED tests/t.py::param[a-c]\n",
-		"exit code no fail": "PASSED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n" + markerEnd + "\n" + markerExitCode + ": 2\n",
+		"f2p failed":       "FAILED tests/t.py::new - boom\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
+		"f2p skipped":      "SKIPPED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
+		"f2p missing":      "PASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
+		"p2p regressed":    "PASSED tests/t.py::new\nERROR tests/t.py::old\nPASSED tests/t.py::param[a-b]\n",
+		"p2p missing":      "PASSED tests/t.py::new\nPASSED tests/t.py::param[a-b]\n",
+		"prefix disagrees": "PASSED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\nFAILED tests/t.py::param[a-c]\n",
+		// Upstream treats SKIPPED and FAILED candidates as agreeing (neither passes)
+		// and reports the lowest key, FAILED here, so the pass-to-pass test regresses.
+		"prefix skip vs fail": "PASSED tests/t.py::new\nPASSED tests/t.py::old\nFAILED tests/t.py::param[a-b]\nSKIPPED tests/t.py::param[a-c]\n",
+		"exit code no fail":   "PASSED tests/t.py::new\nPASSED tests/t.py::old\nPASSED tests/t.py::param[a-b]\n" + markerEnd + "\n" + markerExitCode + ": 2\n",
 	}
 	for name, body := range cases {
 		if v := grade(row, wrapped(body)); v.Resolved {

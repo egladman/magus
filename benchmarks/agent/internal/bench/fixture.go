@@ -1,4 +1,4 @@
-package analysis
+package bench
 
 import (
 	"fmt"
@@ -7,11 +7,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/analysis/pycompat"
+	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
 
-// FixtureModel is the model every synthetic run reports.
-const FixtureModel = "claude-opus-5"
+// fixtureModel is the model every synthetic run reports.
+const fixtureModel = "claude-opus-5"
 
 type armSpec struct {
 	turns, input, output, cacheRead, cacheWrite, resultBytes, distinctReads, wallMs int64
@@ -63,8 +63,8 @@ index 3333333..0000000
 -});
 `
 
-// FixtureRunID names a synthetic run the way the runner names a real one.
-func FixtureRunID(arm, task string, rep int64) string {
+// fixtureRunID names a synthetic run the way the runner names a real one.
+func fixtureRunID(arm, task string, rep int64) string {
 	return fmt.Sprintf("%s-%s-r%d-20260909T120000Z", arm, task, rep)
 }
 
@@ -88,9 +88,9 @@ func assistantTurn(spec armSpec, run fixtureRun, turn, perInput int64) map[strin
 	return map[string]any{
 		"type": "assistant",
 		"message": map[string]any{
-			"id":    fmt.Sprintf("msg_%s_%d", FixtureRunID(run.arm, run.task, run.rep), turn),
+			"id":    fmt.Sprintf("msg_%s_%d", fixtureRunID(run.arm, run.task, run.rep), turn),
 			"role":  "assistant",
-			"model": FixtureModel,
+			"model": fixtureModel,
 			"usage": fixtureUsage(spec, run, perInput),
 			"content": []any{
 				map[string]any{"type": "text", "text": fmt.Sprintf("turn %d", turn)},
@@ -132,7 +132,7 @@ func transcriptLines(run fixtureRun) []any {
 	spec := fixtureArms[run.arm]
 	perInput := spec.input + 100*(run.rep-1)
 	lines := []any{
-		map[string]any{"type": "system", "subtype": "init", "session_id": FixtureRunID(run.arm, run.task, run.rep), "model": FixtureModel},
+		map[string]any{"type": "system", "subtype": "init", "session_id": fixtureRunID(run.arm, run.task, run.rep), "model": fixtureModel},
 	}
 	for turn := int64(1); turn <= spec.turns; turn++ {
 		lines = append(lines, assistantTurn(spec, run, turn, perInput), toolResults(spec, turn))
@@ -192,13 +192,9 @@ func writeJSONL(file string, values []any) error {
 	return os.WriteFile(file, out, 0o644)
 }
 
-func writeText(file, text string) error {
-	return os.WriteFile(file, []byte(text), 0o644)
-}
-
 func writeRun(resultsDir string, run fixtureRun) error {
 	spec := fixtureArms[run.arm]
-	rid := FixtureRunID(run.arm, run.task, run.rep)
+	rid := fixtureRunID(run.arm, run.task, run.rep)
 	runDir := filepath.Join(resultsDir, rid)
 	if err := os.MkdirAll(runDir, 0o755); err != nil {
 		return err
@@ -208,7 +204,7 @@ func writeRun(resultsDir string, run fixtureRun) error {
 		"arm":           run.arm,
 		"task":          run.task,
 		"rep":           run.rep,
-		"model":         FixtureModel,
+		"model":         fixtureModel,
 		"effort":        "high",
 		"max_turns":     60,
 		"budget_usd":    5.0,
@@ -241,7 +237,7 @@ func writeRun(resultsDir string, run fixtureRun) error {
 		"final.diff": diff, "check.exit": checkExit, "check.txt": checkText,
 		"probe.txt": fmt.Sprintf("arm=%s %s\n", run.arm, probe),
 	} {
-		if err := writeText(filepath.Join(runDir, name), text); err != nil {
+		if err := os.WriteFile(filepath.Join(runDir, name), []byte(text), 0o644); err != nil {
 			return err
 		}
 	}

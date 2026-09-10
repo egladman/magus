@@ -17,7 +17,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/analysis"
+	"github.com/egladman/magus/benchmarks/agent/internal/bench"
 )
 
 const usage = `usage:
@@ -84,7 +84,7 @@ func parse(fs *flag.FlagSet, args []string) (string, error) {
 func extract(args []string) error {
 	fs := flag.NewFlagSet("extract", flag.ContinueOnError)
 	out := fs.String("o", "", "metrics.jsonl to write")
-	pricingFile := fs.String("p", "benchmarks/agent/analysis/pricing.json", "pricing table")
+	pricingFile := fs.String("p", "benchmarks/agent/pricing.json", "pricing table")
 	results, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -92,22 +92,20 @@ func extract(args []string) error {
 	if *out == "" {
 		return fmt.Errorf("-o is required")
 	}
-	pricing, err := analysis.LoadPricing(*pricingFile)
+	pricing, err := bench.LoadPricing(*pricingFile)
 	if err != nil {
 		return err
 	}
-	records, err := analysis.ExtractAll(results, pricing)
+	records, err := bench.ExtractAll(results, pricing)
 	if err != nil {
 		return err
 	}
-	var lines []byte
+	lines, err := bench.RecordsJSONL(records)
+	if err != nil {
+		return err
+	}
 	controls := 0
 	for _, record := range records {
-		line, err := record.JSON()
-		if err != nil {
-			return err
-		}
-		lines = append(append(lines, line...), '\n')
 		if record.Control != nil {
 			controls++
 		}
@@ -116,7 +114,7 @@ func extract(args []string) error {
 		return err
 	}
 	for _, record := range records {
-		fmt.Println(analysis.SummaryLine(record))
+		fmt.Println(bench.SummaryLine(record))
 	}
 	fmt.Printf("wrote %d runs to %s (%d of them controls)\n", len(records), *out, controls)
 	return nil
@@ -133,15 +131,15 @@ func analyze(args []string) error {
 	if *out == "" {
 		return fmt.Errorf("-o is required")
 	}
-	records, err := analysis.LoadRecords(metrics)
+	records, err := bench.LoadRecords(metrics)
 	if err != nil {
 		return err
 	}
-	a, err := analysis.Analyze(records, *seed)
+	a, err := bench.Analyze(records, *seed)
 	if err != nil {
 		return err
 	}
-	raw, err := analysis.AnalysisJSON(a)
+	raw, err := bench.AnalysisJSON(a)
 	if err != nil {
 		return err
 	}
@@ -162,11 +160,11 @@ func report(args []string) error {
 	if *out == "" {
 		return fmt.Errorf("-o is required")
 	}
-	a, err := analysis.LoadAnalysis(file)
+	a, err := bench.LoadAnalysis(file)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(*out, []byte(analysis.Render(a)+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(*out, []byte(bench.Render(a)), 0o644); err != nil {
 		return err
 	}
 	fmt.Printf("wrote %s\n", *out)
@@ -179,7 +177,7 @@ func makefixture(args []string) error {
 	if err != nil {
 		return err
 	}
-	results, err := analysis.BuildFixture(root)
+	results, err := bench.BuildFixture(root)
 	if err != nil {
 		return err
 	}

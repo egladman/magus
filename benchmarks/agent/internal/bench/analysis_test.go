@@ -1,4 +1,4 @@
-package analysis
+package bench
 
 import (
 	"bytes"
@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/benchmarks/agent/analysis/pycompat"
+	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
 
 func loadTestPricing(t *testing.T) PriceTable {
 	t.Helper()
-	pricing, err := LoadPricing("pricing.json")
+	pricing, err := LoadPricing(filepath.Join("..", "..", "pricing.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func fixtureRecords(t *testing.T) (string, map[string]RunRecord, []RunRecord) {
 
 func scoredRecord(t *testing.T, byID map[string]RunRecord, arm, task string, rep int64) *ScoredRun {
 	t.Helper()
-	r, ok := byID[FixtureRunID(arm, task, rep)]
+	r, ok := byID[fixtureRunID(arm, task, rep)]
 	if !ok || r.Scored == nil {
 		t.Fatalf("no scored run %s/%s/%d", arm, task, rep)
 	}
@@ -136,13 +136,13 @@ func TestBenchFixtureExtraction(t *testing.T) {
 		}
 	})
 	t.Run("missing check is unknown, not failure", func(t *testing.T) {
-		src := filepath.Join(results, FixtureRunID("full", "task-a", 2))
+		src := filepath.Join(results, fixtureRunID("full", "task-a", 2))
 		dst := filepath.Join(t.TempDir(), "run")
 		copyTree(t, src, dst)
 		if err := os.Remove(filepath.Join(dst, "check.exit")); err != nil {
 			t.Fatal(err)
 		}
-		r, err := ExtractRun(dst, loadTestPricing(t))
+		r, err := extractRun(dst, loadTestPricing(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -276,7 +276,7 @@ func (d defectRun) writeSingleTurn(model string, usage map[string]any) {
 }
 
 func (d defectRun) extract() (RunRecord, error) {
-	return ExtractRun(d.dir, loadTestPricing(d.t))
+	return extractRun(d.dir, loadTestPricing(d.t))
 }
 
 func (d defectRun) mustFail(want string) {
@@ -431,7 +431,7 @@ func TestBenchControlsMustDiscriminate(t *testing.T) {
 	}
 }
 
-func TestBenchWilsonInterval(t *testing.T) {
+func TestBenchwilsonInterval(t *testing.T) {
 	// The bounds are CPython's own output for the same arithmetic, so a
 	// reordered operation shows up as a last-bit difference here.
 	cases := []struct {
@@ -444,12 +444,12 @@ func TestBenchWilsonInterval(t *testing.T) {
 		{3, 3, 0.4385029682449546, 1.0},
 	}
 	for _, c := range cases {
-		got := WilsonInterval(c.successes, c.total)
+		got := wilsonInterval(c.successes, c.total)
 		if *got[0] != c.low || *got[1] != c.high {
 			t.Errorf("wilson(%d, %d) = [%v, %v], want [%v, %v]", c.successes, c.total, *got[0], *got[1], c.low, c.high)
 		}
 	}
-	if got := WilsonInterval(0, 0); got[0] != nil || got[1] != nil {
+	if got := wilsonInterval(0, 0); got[0] != nil || got[1] != nil {
 		t.Errorf("wilson(0, 0) = %v", got)
 	}
 }
@@ -459,7 +459,7 @@ func TestBenchCostOfPass(t *testing.T) {
 	for rep := int64(1); rep <= 3; rep++ {
 		failing = append(failing, syntheticRecord("rampant", "task-a", rep, 0.5, 100, false).Scored)
 	}
-	summary := ArmSummaryOf(failing)
+	summary := armSummary(failing)
 	if summary.PassRate != 0.0 || !summary.CostOfPassUSD.Infinite || summary.CostOfPassUSD.Value != nil {
 		t.Errorf("zero pass rate: %+v", summary.CostOfPassUSD)
 	}
@@ -468,7 +468,7 @@ func TestBenchCostOfPass(t *testing.T) {
 		syntheticRecord("full", "task-a", 2, 2.0, 100, true).Scored,
 		syntheticRecord("full", "task-a", 3, 3.0, 100, false).Scored,
 	}
-	summary = ArmSummaryOf(mixed)
+	summary = armSummary(mixed)
 	if *summary.Dollars.Mean != 2.0 || !almost(summary.PassRate, 2.0/3.0, 7) || !almost(*summary.CostOfPassUSD.Value, 3.0, 7) {
 		t.Errorf("mean=%v rate=%v cost=%v", *summary.Dollars.Mean, summary.PassRate, *summary.CostOfPassUSD.Value)
 	}
@@ -506,7 +506,7 @@ func TestBenchVerdictNeedsBothACleanCIAndATenPercentDelta(t *testing.T) {
 		records = append(records, syntheticRecord("full", "task-a", c.rep, 1.0, c.base-20, true))
 	}
 	row := pairedRow(t, records, 7, "total_billed_tokens")
-	if !row.CIExcludesZero || math.Abs(*row.Relative) >= MinRelativeDelta || row.Verdict != VerdictInconclusive {
+	if !row.CIExcludesZero || math.Abs(*row.Relative) >= minRelativeDelta || row.Verdict != VerdictInconclusive {
 		t.Errorf("got %+v", row)
 	}
 }
@@ -522,12 +522,12 @@ func TestBenchVerdictFiresWhenTheDeltaIsLargeAndClean(t *testing.T) {
 	}
 }
 
-func TestBenchHolm(t *testing.T) {
-	adjusted := Holm(map[string]*float64{"task-a": floatp(0.01), "task-b": floatp(0.04), "task-c": nil})
+func TestBenchholm(t *testing.T) {
+	adjusted := holm(map[string]*float64{"task-a": floatp(0.01), "task-b": floatp(0.04), "task-c": nil})
 	if !almost(*adjusted["task-a"], 0.02, 7) || !almost(*adjusted["task-b"], 0.04, 7) || adjusted["task-c"] != nil {
 		t.Errorf("got a=%v b=%v c=%v", *adjusted["task-a"], *adjusted["task-b"], adjusted["task-c"])
 	}
-	monotone := Holm(map[string]*float64{"a": floatp(0.03), "b": floatp(0.031), "c": floatp(0.032)})
+	monotone := holm(map[string]*float64{"a": floatp(0.03), "b": floatp(0.031), "c": floatp(0.032)})
 	if *monotone["a"] > *monotone["b"] || *monotone["b"] > *monotone["c"] {
 		t.Errorf("not monotone: %v %v %v", *monotone["a"], *monotone["b"], *monotone["c"])
 	}
@@ -536,23 +536,23 @@ func TestBenchHolm(t *testing.T) {
 	}
 }
 
-func TestBenchDescribe(t *testing.T) {
+func TestBenchdescribe(t *testing.T) {
 	f := func(v float64) *Number { return numberp(pycompat.Float(v)) }
-	spread := Describe([]*Number{f(4.0), nil, f(1.0), f(3.0), f(2.0)})
+	spread := describe([]*Number{f(4.0), nil, f(1.0), f(3.0), f(2.0)})
 	if spread.N != 4 || spread.Median.String() != "2.5" || spread.IQR[0].String() != "1.75" || spread.IQR[1].String() != "3.25" || *spread.Mean != 2.5 {
 		t.Errorf("got %+v", spread)
 	}
-	if Describe([]*Number{nil}).N != 0 {
+	if describe([]*Number{nil}).N != 0 {
 		t.Error("all-nil input must describe as empty")
 	}
 	// Counts keep their int form where a value is picked rather than
 	// interpolated, exactly as the Python's statistics module returned them.
 	i := func(v int64) *Number { return numberp(pycompat.Int(v)) }
-	ints := Describe([]*Number{i(5), i(1), i(3)})
+	ints := describe([]*Number{i(5), i(1), i(3)})
 	if ints.Median.String() != "3" || ints.IQR[0].String() != "2.0" || ints.IQR[1].String() != "4.0" || *ints.Mean != 3.0 {
 		t.Errorf("ints: %+v", ints)
 	}
-	one := Describe([]*Number{i(7)})
+	one := describe([]*Number{i(7)})
 	if one.Median.String() != "7" || one.IQR[0].String() != "7" || one.IQR[1].String() != "7" || *one.Mean != 7.0 {
 		t.Errorf("single: %+v", one)
 	}
@@ -575,7 +575,9 @@ func analysisJSON(t *testing.T, records []RunRecord) string {
 func TestBenchDeterminism(t *testing.T) {
 	_, _, records := fixtureRecords(t)
 	t.Run("same seed gives identical output", func(t *testing.T) {
-		if analysisJSON(t, records) != analysisJSON(t, records) {
+		first := analysisJSON(t, records)
+		second := analysisJSON(t, records)
+		if first != second {
 			t.Error("two runs with one seed differ")
 		}
 	})
@@ -623,7 +625,7 @@ func TestBenchDeterminism(t *testing.T) {
 	})
 	t.Run("report caveats are generated from the data", func(t *testing.T) {
 		text := Render(mustAnalyze(t, records, 42))
-		for _, want := range []string{"cost-of-pass", "pass^k", "null, not zero", FixtureRunID("full", "task-a", 3), "test file deleted", "n=3"} {
+		for _, want := range []string{"cost-of-pass", "pass^k", "null, not zero", fixtureRunID("full", "task-a", 3), "test file deleted", "n=3"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("report lacks %q", want)
 			}
@@ -647,13 +649,9 @@ func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
 // the summation order all do.
 func TestBenchPipelineMatchesPythonByteForByte(t *testing.T) {
 	_, _, records := fixtureRecords(t)
-	var metrics []byte
-	for _, r := range records {
-		line, err := r.JSON()
-		if err != nil {
-			t.Fatal(err)
-		}
-		metrics = append(append(metrics, line...), '\n')
+	metrics, err := RecordsJSONL(records)
+	if err != nil {
+		t.Fatal(err)
 	}
 	assertSameBytes(t, "metrics.jsonl", metrics)
 	metricsFile := filepath.Join(t.TempDir(), "metrics.jsonl")
@@ -670,7 +668,7 @@ func TestBenchPipelineMatchesPythonByteForByte(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertSameBytes(t, "analysis.json", raw)
-	assertSameBytes(t, "report.md", []byte(Render(a)+"\n"))
+	assertSameBytes(t, "report.md", []byte(Render(a)))
 }
 
 func assertSameBytes(t *testing.T, name string, got []byte) {

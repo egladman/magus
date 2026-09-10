@@ -145,7 +145,7 @@ swebench_run_one() {
     bench_image=$("$SWEBENCH_DIR/images.sh" "$image" "$platform" "$magus_binary") ||
         die "building the trial image for $id failed"
     docker build -q -t "$SWEBENCH_GRADER_IMAGE" -f "$SWEBENCH_DIR/grader.Dockerfile" \
-        "$SWEBENCH_DIR/cmd/swegrade" >/dev/null || die "building $SWEBENCH_GRADER_IMAGE failed"
+        "$HERE/cmd/swegrade" >/dev/null || die "building $SWEBENCH_GRADER_IMAGE failed"
     magus_version=$(docker run --rm --platform "$platform" "$bench_image" magus --version 2>/dev/null || true)
     magus_version=${magus_version:-unknown}
 

@@ -1,12 +1,12 @@
-// Package analysis turns an agent benchmark results tree into a report in
-// three stages: Extract (runs to metrics), Analyze (metrics to statistics)
-// and Render (statistics to markdown). Each stage only reads artifacts, so a
+// Package bench turns an agent benchmark results tree into a report in three
+// stages: Extract (runs to metrics), Analyze (metrics to statistics) and
+// Render (statistics to markdown). Each stage only reads artifacts, so a
 // scored run is analyzed as often as wanted without re-running an agent. The
 // record types here are the file formats: metrics.jsonl carries one ScoredRun
 // or ControlRun per line, analysis.json one Analysis.
-package analysis
+package bench
 
-import "github.com/egladman/magus/benchmarks/agent/analysis/pycompat"
+import "github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 
 // Number is a JSON number that remembers whether it was an int or a float.
 type Number = pycompat.Number
@@ -100,16 +100,19 @@ type ScoredRun struct {
 	WallMs               *Number             `json:"wall_ms"`
 	TimeToFirstEditMs    *Number             `json:"time_to_first_edit_ms"`
 	TimeToDoneMs         *Number             `json:"time_to_done_ms"`
-	Effort               *string             `json:"effort"`
-	MaxTurns             *Number             `json:"max_turns"`
-	BudgetUSD            *Number             `json:"budget_usd"`
-	MagusBinary          *string             `json:"magus_binary"`
-	MagusVersion         *string             `json:"magus_version"`
-	FixtureSha           *string             `json:"fixture_sha"`
-	Started              *string             `json:"started"`
-	Ended                *string             `json:"ended"`
-	ExitReason           *string             `json:"exit_reason"`
-	Control              *string             `json:"control"`
+	// The meta.json passthrough: written as null when the runner recorded
+	// nothing, and a row may omit the key entirely, so these are the fields a
+	// reader does not require (the bench tag is what LoadRecords consults).
+	Effort       *string `json:"effort"        bench:"optional"`
+	MaxTurns     *Number `json:"max_turns"     bench:"optional"`
+	BudgetUSD    *Number `json:"budget_usd"    bench:"optional"`
+	MagusBinary  *string `json:"magus_binary"  bench:"optional"`
+	MagusVersion *string `json:"magus_version" bench:"optional"`
+	FixtureSha   *string `json:"fixture_sha"   bench:"optional"`
+	Started      *string `json:"started"       bench:"optional"`
+	Ended        *string `json:"ended"         bench:"optional"`
+	ExitReason   *string `json:"exit_reason"   bench:"optional"`
+	Control      *string `json:"control"       bench:"optional"`
 }
 
 // RunRecord is one line of metrics.jsonl: exactly one of the two is set.

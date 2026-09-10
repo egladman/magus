@@ -218,14 +218,17 @@ func parseDjango(log string) statusMap {
 		if strings.HasSuffix(line, " ... FAIL") {
 			m[strings.SplitN(line, " ... FAIL", 2)[0]] = statusFailed
 		}
-		if strings.HasPrefix(line, "FAIL:") {
-			m[strings.Fields(line)[1]] = statusFailed
+		// A bare "FAIL:" or a logging line such as "ERROR:django.request:..." has
+		// no second field; upstream raises there, and a grader that panics exits
+		// with a stack trace where a verdict was promised.
+		if fields := strings.Fields(line); strings.HasPrefix(line, "FAIL:") && len(fields) > 1 {
+			m[fields[1]] = statusFailed
 		}
 		if strings.HasSuffix(line, " ... ERROR") {
 			m[strings.SplitN(line, " ... ERROR", 2)[0]] = statusError
 		}
-		if strings.HasPrefix(line, "ERROR:") {
-			m[strings.Fields(line)[1]] = statusError
+		if fields := strings.Fields(line); strings.HasPrefix(line, "ERROR:") && len(fields) > 1 {
+			m[fields[1]] = statusError
 		}
 		if strings.HasPrefix(line, "ok") && havePrev {
 			m[prevTest] = statusPassed

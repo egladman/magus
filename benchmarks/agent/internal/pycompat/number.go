@@ -23,8 +23,6 @@ func Int(i int64) Number { return Number{i: i} }
 // Float is a Python float.
 func Float(f float64) Number { return Number{isFloat: true, f: f} }
 
-// IsFloat reports whether the value is a float rather than an int.
-func (n Number) IsFloat() bool { return n.isFloat }
 
 // Int64 is the int's value; a float reports false.
 func (n Number) Int64() (int64, bool) {
@@ -94,7 +92,7 @@ func (n Number) TrueDiv(k int64) float64 {
 // String is repr(n).
 func (n Number) String() string {
 	if n.isFloat {
-		return FloatRepr(n.f)
+		return floatRepr(n.f)
 	}
 	return strconv.FormatInt(n.i, 10)
 }
@@ -104,7 +102,7 @@ func (n Number) MarshalJSON() ([]byte, error) { return []byte(n.String()), nil }
 
 // UnmarshalJSON classifies the literal the way json.loads does.
 func (n *Number) UnmarshalJSON(data []byte) error {
-	v, err := ParseNumber(string(data))
+	v, err := parseNumber(string(data))
 	if err != nil {
 		return err
 	}
@@ -112,9 +110,9 @@ func (n *Number) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ParseNumber classifies a JSON number literal: a fraction or an exponent
+// parseNumber classifies a JSON number literal: a fraction or an exponent
 // makes it a float, anything else an int.
-func ParseNumber(literal string) (Number, error) {
+func parseNumber(literal string) (Number, error) {
 	if strings.ContainsAny(literal, ".eE") {
 		f, err := strconv.ParseFloat(literal, 64)
 		if err != nil {
@@ -129,10 +127,10 @@ func ParseNumber(literal string) (Number, error) {
 	return Int(i), nil
 }
 
-// FloatRepr is repr(f) for a Python float: the shortest digits that round
+// floatRepr is repr(f) for a Python float: the shortest digits that round
 // trip, positional between 1e-4 and 1e16, exponent form outside, and always a
 // fraction or an exponent so the text reads back as a float.
-func FloatRepr(f float64) string {
+func floatRepr(f float64) string {
 	sci := strconv.FormatFloat(f, 'e', -1, 64)
 	sign := ""
 	if sci[0] == '-' {

@@ -24,9 +24,9 @@ type Random struct {
 	index int
 }
 
-// NewRandomInt seeds like random.Random(n) for an int n: the magnitude is cut
+// newRandomInt seeds like random.Random(n) for an int n: the magnitude is cut
 // into little-endian 32-bit words and fed to init_by_array.
-func NewRandomInt(seed int64) *Random {
+func newRandomInt(seed int64) *Random {
 	u := uint64(seed)
 	if seed < 0 {
 		u = uint64(-seed)
@@ -133,9 +133,9 @@ func (r *Random) Float64() float64 {
 	return (a*67108864.0 + b) * (1.0 / 9007199254740992.0)
 }
 
-// GetRandBits is getrandbits(k) for 0 <= k <= 64: whole 32-bit words are drawn
+// getRandBits is getrandbits(k) for 0 <= k <= 64: whole 32-bit words are drawn
 // low word first and a partial last word keeps its top bits.
-func (r *Random) GetRandBits(k int) uint64 {
+func (r *Random) getRandBits(k int) uint64 {
 	if k <= 0 {
 		return 0
 	}
@@ -158,9 +158,9 @@ func (r *Random) GetRandBits(k int) uint64 {
 // bits, so the draw sequence matches CPython's _randbelow_with_getrandbits.
 func (r *Random) RandRange(n int) int {
 	k := bits.Len(uint(n))
-	v := r.GetRandBits(k)
+	v := r.getRandBits(k)
 	for v >= uint64(n) {
-		v = r.GetRandBits(k)
+		v = r.getRandBits(k)
 	}
 	return int(v)
 }

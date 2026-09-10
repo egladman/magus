@@ -26,5 +26,9 @@
   // AGENTS.md was excluded here for the same reason and no longer is: no generator writes
   // it. `magus agent install` PRINTS its block for a human to paste, so dprint formats the
   // file once and nothing puts it back.
-  "excludes": ["./MAGUS.md", "./CHANGELOG.md"]
+  "excludes": [
+    "./MAGUS.md",
+    "./CHANGELOG.md",
+    "./benchmarks/agent/analysis/testdata/*.md"
+  ]
 }

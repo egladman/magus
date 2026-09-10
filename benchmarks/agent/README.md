@@ -216,7 +216,7 @@ What is consumed, and from where:
   arm64 image the registry calls untested is validated like every instance, by
   its golden and null controls.
 - The log parsers from `swebench/harness/log_parsers/python.py` (MIT), ported to
-  Go in `swebench/cmd/swegrade` with the attribution in the source: the twelve
+  Go in `cmd/swegrade` with the attribution in the source: the twelve
   parser names the Verified set uses, which are four distinct parsers
   (`pytest`, `pytest_options`, `pytest_v2`, `django`, `sympy`, `matplotlib`,
   `seaborn` and their aliases). Nothing from the `swebench` Python package is
@@ -297,7 +297,7 @@ architecture it needs. Then, from `benchmarks/agent`:
 ## Analysis
 
 The analysis is a Go package under `analysis/`, standard library only, with
-one binary, `benchreport`; `analysis/README.md` has the invocations, and
+one binary, `benchreport`; `internal/bench/README.md` has the invocations, and
 `magus run agent-bench-report .` builds it and runs the whole pipeline over
 `results/`.
 

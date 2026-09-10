@@ -1,4 +1,4 @@
-// swegrade turns a SWE-bench eval log into a verdict.
+// Command swegrade turns a SWE-bench eval log into a verdict.
 //
 //	swegrade --instance <row.json> < eval.log
 //
@@ -16,12 +16,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 )
 
@@ -129,9 +129,9 @@ func grade(row instance, log string) verdict {
 		v.PassToPass[name] = statusMissing
 	}
 
-	sm, reason := parseLog(parsers[row.LogParser], log)
-	if reason != "" {
-		v.Error = reason
+	sm, err := parseLog(parsers[row.LogParser], log)
+	if err != nil {
+		v.Error = err.Error()
 		return v
 	}
 
@@ -164,14 +164,14 @@ func passing(status string) bool {
 // interleave stdout and stderr across the markers. A recorded non-zero test
 // exit status with no failure parsed means the log is not describing the run
 // that happened, and is rejected too.
-func parseLog(parse func(string) statusMap, log string) (statusMap, string) {
+func parseLog(parse func(string) statusMap, log string) (statusMap, error) {
 	for _, marker := range badMarkers {
 		if strings.Contains(log, marker) {
-			return nil, "log carries " + strconv.Quote(marker)
+			return nil, fmt.Errorf("log carries %q", marker)
 		}
 	}
 	if !strings.Contains(log, markerStart) || !strings.Contains(log, markerEnd) {
-		return nil, "log carries no test output markers, so the test patch never ran"
+		return nil, errors.New("log carries no test output markers, so the test patch never ran")
 	}
 	region := strings.SplitN(log, markerStart, 2)[1]
 	region = strings.SplitN(region, markerEnd, 2)[0]
@@ -179,7 +179,7 @@ func parseLog(parse func(string) statusMap, log string) (statusMap, string) {
 	if len(sm) == 0 {
 		sm = parse(log)
 	}
-	if g := exitCodeLine.FindStringSubmatch(log); g != nil && g[1] != "0" && len(sm) > 0 {
+	if g := exitCodeLine.FindStringSubmatch(log); len(g) > 1 && g[1] != "0" && len(sm) > 0 {
 		failed := false
 		for _, status := range sm {
 			if status == statusFailed || status == statusError {
@@ -188,10 +188,10 @@ func parseLog(parse func(string) statusMap, log string) (statusMap, string) {
 			}
 		}
 		if !failed {
-			return nil, "test command exited " + g[1] + " while the log reports no failure"
+			return nil, fmt.Errorf("test command exited %s while the log reports no failure", g[1])
 		}
 	}
-	return sm, ""
+	return sm, nil
 }
 
 // resolveStatus looks a dataset test id up in the parsed map, or MISSING. An id
@@ -211,6 +211,10 @@ func resolveStatus(name string, sm statusMap) string {
 		if !strings.HasPrefix(key, name) {
 			continue
 		}
+		// Upstream's _resolve_case compares passing alone, so SKIPPED and FAILED
+		// candidates count as agreeing and the lowest key decides. Kept as it is
+		// because a verdict that differs from upstream is a grading bug here,
+		// whatever one thinks of the rule.
 		if found && passing(status) != passing(sm[lowest]) {
 			return statusMissing
 		}

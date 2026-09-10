@@ -1,4 +1,4 @@
-package analysis
+package bench
 
 import (
 	"bufio"
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/egladman/magus/benchmarks/agent/analysis/pycompat"
+	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
 
-const usdPerToken = 1_000_000.0
+const tokensPerPriceUnit = 1_000_000.0
 
 // A transcript records the dated model id the API served
 // (claude-opus-5-20260301); the pricing table is keyed by alias, so the date
@@ -106,11 +106,11 @@ func (u usageCounts) add(o usageCounts) usageCounts {
 
 func (u usageCounts) cost(r Rates) float64 {
 	total := 0.0
-	total += float64(u.input) * r.Input / usdPerToken
-	total += float64(u.output) * r.Output / usdPerToken
-	total += float64(u.cacheRead) * r.CacheRead / usdPerToken
-	total += float64(u.cacheWrite5m) * r.CacheWrite5m / usdPerToken
-	total += float64(u.cacheWrite1h) * r.CacheWrite1h / usdPerToken
+	total += float64(u.input) * r.Input / tokensPerPriceUnit
+	total += float64(u.output) * r.Output / tokensPerPriceUnit
+	total += float64(u.cacheRead) * r.CacheRead / tokensPerPriceUnit
+	total += float64(u.cacheWrite5m) * r.CacheWrite5m / tokensPerPriceUnit
+	total += float64(u.cacheWrite1h) * r.CacheWrite1h / tokensPerPriceUnit
 	return total
 }
 
@@ -279,8 +279,8 @@ type transcriptTally struct {
 	runID        string
 	defaultModel string
 	byModel      map[string]usageCounts
-	modelOrder   []string
 	seenMessages map[string]bool
+	seenToolUses map[string]bool
 	turns        int64
 	ttlAssumed   bool
 	toolCalls    map[string]int64
@@ -326,6 +326,16 @@ func (t *transcriptTally) take(rec any) error {
 }
 
 func (t *transcriptTally) takeAssistant(message map[string]any) error {
+	// The host streams one assistant record per content block, all carrying
+	// the message id, so the blocks are walked on every record and only the
+	// turn and its usage are counted once per id. Deduplicating the whole
+	// record threw away every tool call after a message's first block; the
+	// 2026-09-10 pilot reported 2 tool calls on a run that made 14.
+	for _, block := range blocks(message) {
+		if block["type"] == "tool_use" {
+			t.takeToolUse(block)
+		}
+	}
 	if id, ok := message["id"]; ok && id != nil {
 		key, err := pycompat.Marshal(id, 0)
 		if err != nil {
@@ -356,19 +366,19 @@ func (t *transcriptTally) takeAssistant(message map[string]any) error {
 	if model == "" {
 		return fmt.Errorf("%s: assistant record %d has no model", t.runID, t.turns)
 	}
-	if _, seen := t.byModel[model]; !seen {
-		t.modelOrder = append(t.modelOrder, model)
-	}
 	t.byModel[model] = t.byModel[model].add(counts)
-	for _, block := range blocks(message) {
-		if block["type"] == "tool_use" {
-			t.takeToolUse(block)
-		}
-	}
 	return nil
 }
 
+// takeToolUse counts one tool call, once per block id: a block is repeated
+// across the records of its message the same way the message id is.
 func (t *transcriptTally) takeToolUse(block map[string]any) {
+	if id, _ := block["id"].(string); id != "" {
+		if t.seenToolUses[id] {
+			return
+		}
+		t.seenToolUses[id] = true
+	}
 	name, _ := block["name"].(string)
 	if name == "" {
 		name = "unknown"
@@ -483,11 +493,15 @@ func jsonlLines(file string, visit func(line []byte) error) error {
 // metrics defect: silence there reads as a free run.
 func readTranscript(file, runID, defaultModel string) (*transcript, error) {
 	if _, err := os.Stat(file); err != nil {
-		return nil, fmt.Errorf("%s: transcript.jsonl is missing", runID)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%s: transcript.jsonl is missing", runID)
+		}
+		return nil, fmt.Errorf("%s: transcript.jsonl: %w", runID, err)
 	}
 	tally := &transcriptTally{
 		runID: runID, defaultModel: defaultModel,
-		byModel: map[string]usageCounts{}, seenMessages: map[string]bool{}, toolCalls: map[string]int64{},
+		byModel: map[string]usageCounts{}, seenMessages: map[string]bool{}, seenToolUses: map[string]bool{},
+		toolCalls: map[string]int64{},
 	}
 	err := jsonlLines(file, func(line []byte) error {
 		if len(bytes.TrimSpace(line)) == 0 {
@@ -508,15 +522,19 @@ func readTranscript(file, runID, defaultModel string) (*transcript, error) {
 // readGuardEvents counts guard denials, advisories and skill loads in the
 // magus activity trail. captured is false when no trail exists; the caller
 // must keep that null rather than substituting zero, which would read as a
-// guard that never fired. A malformed line is skipped, not fatal.
+// guard that never fired. A trail that exists but cannot be read is an error,
+// not a third thing folded into null. A malformed line is skipped, not fatal.
 func readGuardEvents(file string) (events GuardEvents, captured bool, err error) {
-	if _, err := os.Stat(file); err != nil {
-		return GuardEvents{}, false, nil
+	if _, statErr := os.Stat(file); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return GuardEvents{}, false, nil
+		}
+		return GuardEvents{}, false, statErr
 	}
 	err = jsonlLines(file, func(line []byte) error {
-		doc, err := pycompat.Unmarshal(line)
-		if err != nil {
-			return nil
+		doc, unmarshalErr := pycompat.Unmarshal(line)
+		if unmarshalErr != nil {
+			return nil //nolint:nilerr // a malformed line is skipped by design; the rest of the trail still counts
 		}
 		event, ok := doc.(map[string]any)
 		if !ok || event["kind"] != "agent_command" {
@@ -567,7 +585,8 @@ func readInvariantViolations(file string) (InvariantViolations, error) {
 			parts := strings.Fields(line)
 			current = ""
 			if len(parts) >= 4 {
-				current = dropTwoChars(parts[2])
+				// The token is "a/<path>"; the prefix is two ASCII bytes.
+				current = parts[2][2:]
 			}
 		} else if strings.HasPrefix(line, "deleted file mode") && current != "" {
 			name := path.Base(current)
@@ -581,19 +600,6 @@ func readInvariantViolations(file string) (InvariantViolations, error) {
 	}
 	sort.Strings(deleted)
 	return InvariantViolations{TestsDeleted: deleted}, nil
-}
-
-// dropTwoChars is s[2:] over code points, which is what the Python sliced off
-// a diff header's "a/" prefix.
-func dropTwoChars(s string) string {
-	n := 2
-	for i := range s {
-		if n == 0 {
-			return s[i:]
-		}
-		n--
-	}
-	return ""
 }
 
 // readCheckExit reads check.exit as the run's outcome. Absent or unreadable
@@ -707,14 +713,14 @@ func setOptionalNumber(meta map[string]any, runDir, name string, dst **Number) e
 	return nil
 }
 
-// ExtractRun builds one metrics record for a single run directory.
+// extractRun builds one metrics record for a single run directory.
 //
 // A control run (golden or null) yields a record with its identity, its
 // control kind and its check verdict and nothing else: no agent ran, so there
 // is no transcript to measure. The report reads those verdicts to say whether
 // the task's check discriminates at all. A scored run without a transcript is
 // still an error.
-func ExtractRun(runDir string, pricing PriceTable) (RunRecord, error) {
+func extractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 	meta, err := loadMeta(runDir)
 	if err != nil {
 		return RunRecord{}, err
@@ -743,7 +749,7 @@ func ExtractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 			return RunRecord{}, fmt.Errorf("%s: meta.json control '%v' is not golden or null", runDir, control)
 		}
 		var exitReason *string
-		if err = setOptionalString(meta, runDir, "exit_reason", &exitReason); err != nil {
+		if err := setOptionalString(meta, runDir, "exit_reason", &exitReason); err != nil {
 			return RunRecord{}, err
 		}
 		return RunRecord{Control: &ControlRun{
@@ -774,12 +780,7 @@ func ExtractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 	}
 	run := &ScoredRun{
 		RunID: runID, Arm: arm, Task: task, Rep: repInt, Model: model,
-		Tokens: tr.tokens(),
-		// The host's own bill wins when it recorded one: the table is a floor
-		// kept for transcripts that end without a result record, and it
-		// disagreed with the host by a constant 0.665x on Sonnet 5 and 1.663x
-		// on Opus 5 in the 2026-09-10 pilot, which is a table error rather
-		// than noise.
+		Tokens:               tr.tokens(),
 		Dollars:              tableDollars,
 		TableDollarsUSD:      tableDollars,
 		ReportedCostUSD:      tr.reportedCostUSD,
@@ -801,6 +802,10 @@ func ExtractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 	if captured {
 		run.GuardEvents = &guard
 	}
+	// The host's own bill wins when it recorded one: the table is a floor kept
+	// for transcripts that end without a result record, and it disagreed with
+	// the host by a constant 0.665x on Sonnet 5 and 1.663x on Opus 5 in the
+	// 2026-09-10 pilot, which is a table error rather than noise.
 	if tr.reportedCostUSD != nil && *tr.reportedCostUSD != 0 {
 		run.Dollars = *tr.reportedCostUSD
 	}
@@ -808,12 +813,12 @@ func ExtractRun(runDir string, pricing PriceTable) (RunRecord, error) {
 		"effort": &run.Effort, "magus_binary": &run.MagusBinary, "magus_version": &run.MagusVersion,
 		"fixture_sha": &run.FixtureSha, "started": &run.Started, "ended": &run.Ended, "exit_reason": &run.ExitReason,
 	} {
-		if err = setOptionalString(meta, runDir, name, dst); err != nil {
+		if err := setOptionalString(meta, runDir, name, dst); err != nil {
 			return RunRecord{}, err
 		}
 	}
 	for name, dst := range map[string]**Number{"max_turns": &run.MaxTurns, "budget_usd": &run.BudgetUSD} {
-		if err = setOptionalNumber(meta, runDir, name, dst); err != nil {
+		if err := setOptionalNumber(meta, runDir, name, dst); err != nil {
 			return RunRecord{}, err
 		}
 	}
@@ -871,10 +876,16 @@ func ExtractAll(results string, pricing PriceTable) ([]RunRecord, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A run directory is one that carries meta.json; anything else under the
+	// tree (a stray file, a checkout, a scratch directory) is not a run and is
+	// left alone rather than failing the whole extraction.
 	var runDirs []string
 	for _, entry := range entries {
 		dir := filepath.Join(results, entry.Name())
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "meta.json")); err == nil {
 			runDirs = append(runDirs, dir)
 		}
 	}
@@ -884,7 +895,7 @@ func ExtractAll(results string, pricing PriceTable) ([]RunRecord, error) {
 	records := make([]RunRecord, 0, len(runDirs))
 	controls := 0
 	for _, dir := range runDirs {
-		record, err := ExtractRun(dir, pricing)
+		record, err := extractRun(dir, pricing)
 		if err != nil {
 			return nil, err
 		}

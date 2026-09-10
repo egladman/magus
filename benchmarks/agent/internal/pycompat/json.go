@@ -36,15 +36,6 @@ func encode(buf *bytes.Buffer, v reflect.Value, indent, depth int) error {
 		buf.WriteString(n.String())
 		return nil
 	}
-	if v.Type() == reflect.TypeFor[json.Number]() {
-		literal, _ := v.Interface().(json.Number)
-		n, err := ParseNumber(literal.String())
-		if err != nil {
-			return err
-		}
-		buf.WriteString(n.String())
-		return nil
-	}
 	switch v.Kind() {
 	case reflect.Pointer, reflect.Interface:
 		if v.IsNil() {
@@ -61,7 +52,7 @@ func encode(buf *bytes.Buffer, v reflect.Value, indent, depth int) error {
 	case reflect.Float32, reflect.Float64:
 		buf.WriteString(jsonFloat(v.Float()))
 	case reflect.String:
-		buf.WriteString(QuoteASCII(v.String()))
+		buf.WriteString(quoteASCII(v.String()))
 	case reflect.Slice, reflect.Array:
 		return encodeList(buf, v, indent, depth)
 	case reflect.Map:
@@ -112,7 +103,7 @@ func jsonFloat(f float64) string {
 	case math.IsInf(f, -1):
 		return "-Infinity"
 	}
-	return FloatRepr(f)
+	return floatRepr(f)
 }
 
 func newline(buf *bytes.Buffer, indent, depth int) {
@@ -164,7 +155,7 @@ func encodeObject(buf *bytes.Buffer, items []item, indent, depth int) error {
 		if indent > 0 {
 			newline(buf, indent, depth+1)
 		}
-		buf.WriteString(QuoteASCII(it.key))
+		buf.WriteString(quoteASCII(it.key))
 		buf.WriteString(": ")
 		if err := encode(buf, it.value, indent, depth+1); err != nil {
 			return err
@@ -177,10 +168,10 @@ func encodeObject(buf *bytes.Buffer, items []item, indent, depth int) error {
 	return nil
 }
 
-// QuoteASCII is json's ensure_ascii string form: everything outside
+// quoteASCII is json's ensure_ascii string form: everything outside
 // printable ASCII becomes a lowercase \uXXXX escape, astral code points as a
 // surrogate pair, and the solidus is left alone.
-func QuoteASCII(s string) string {
+func quoteASCII(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
 	for _, r := range s {
@@ -234,7 +225,7 @@ func Unmarshal(data []byte) (any, error) {
 func convert(v any) (any, error) {
 	switch x := v.(type) {
 	case json.Number:
-		return ParseNumber(x.String())
+		return parseNumber(x.String())
 	case map[string]any:
 		for k, item := range x {
 			c, err := convert(item)

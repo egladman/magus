@@ -16,11 +16,11 @@ output over the synthetic tree, which the tests reproduce exactly.
 ## Invocations
 
 Every command takes one positional argument and `-o` for the file it writes.
-`extract` reads `pricing.json` from `benchmarks/agent/analysis/` relative to
+`extract` reads `pricing.json` from `benchmarks/agent/` relative to
 the working directory unless `-p` names another table.
 
 ```sh
-magus run go::go-build . -- -o /tmp/benchreport ./benchmarks/agent/analysis/cmd/benchreport
+magus run go::go-build . -- -o /tmp/benchreport ./benchmarks/agent/cmd/benchreport
 
 /tmp/benchreport extract benchmarks/agent/results -o benchmarks/agent/metrics.jsonl
 /tmp/benchreport analyze benchmarks/agent/metrics.jsonl -o benchmarks/agent/analysis.json --seed 20260902

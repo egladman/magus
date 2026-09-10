@@ -2826,7 +2826,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     // nothing declares and git would not ignore.
     final bin = fs\join(fs\tempDir("benchreport-"), "benchreport");
     go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
-        "args": ["-o", bin, "./benchmarks/agent/analysis/cmd/benchreport"],
+        "args": ["-o", bin, "./benchmarks/agent/cmd/benchreport"],
     });
     final agent = "benchmarks/agent";
     var steps = mut [];
@@ -2839,7 +2839,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         results = "results-synthetic/results";
     }
     steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl"),
-                  "-p", fs\join(agent, "analysis", "pricing.json")]);
+                  "-p", fs\join(agent, "pricing.json")]);
     steps.append(["analyze", fs\join(agent, "metrics.jsonl"), "-o", fs\join(agent, "analysis.json"),
                   "--seed", "20260902"]);
     steps.append(["report", fs\join(agent, "analysis.json"), "-o", fs\join(agent, "report.md")]);

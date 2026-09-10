@@ -1,7 +1,8 @@
-package analysis
+package bench
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -70,7 +71,8 @@ func table(header []string, rows [][]string) []string {
 	for i := range dashes {
 		dashes[i] = "---"
 	}
-	lines := []string{"| " + strings.Join(header, " | ") + " |", "| " + strings.Join(dashes, " | ") + " |"}
+	lines := make([]string, 0, 2+len(rows))
+	lines = append(lines, "| "+strings.Join(header, " | ")+" |", "| "+strings.Join(dashes, " | ")+" |")
 	for _, row := range rows {
 		lines = append(lines, "| "+strings.Join(row, " | ")+" |")
 	}
@@ -222,15 +224,15 @@ func passRatesSection(a *Analysis) []string {
 
 func caveatsSection(a *Analysis) []string {
 	lines := []string{"## Caveats", ""}
-	for _, line := range CaveatLines(a) {
+	for _, line := range caveatLines(a) {
 		lines = append(lines, "- "+line)
 	}
 	return append(lines, "")
 }
 
-// CaveatLines is one caveat per fact in the data that limits what the tables
+// caveatLines is one caveat per fact in the data that limits what the tables
 // above can claim.
-func CaveatLines(a *Analysis) []string {
+func caveatLines(a *Analysis) []string {
 	quality := a.DataQuality
 	keys := sortedKeys(a.Cells)
 	var lines []string
@@ -287,26 +289,21 @@ func CaveatLines(a *Analysis) []string {
 	return lines
 }
 
-// Render is report.md without its final newline: every table and every
-// caveat is generated from the analysis, so a report can never claim more
-// than the data behind it.
+// Render is the whole of report.md: every table and every caveat is generated
+// from the analysis, so a report can never claim more than the data behind it.
 func Render(a *Analysis) string {
 	models := strings.Join(a.Models, " and ")
 	if models == "" {
 		models = "unrecorded"
 	}
-	lines := []string{
+	head := []string{
 		"# Harness-effectiveness benchmark",
 		"",
 		fmt.Sprintf("%d runs, %d task(s), arms %s, model(s) %s, bootstrap seed %d.",
 			a.Runs, len(a.Tasks), strings.Join(a.Arms, " and "), models, a.Seed),
 		"",
 	}
-	lines = append(lines, controlsSection(a)...)
-	lines = append(lines, headlineSection(a)...)
-	lines = append(lines, paretoSection(a)...)
-	lines = append(lines, deltasSection(a)...)
-	lines = append(lines, passRatesSection(a)...)
-	lines = append(lines, caveatsSection(a)...)
-	return strings.Join(lines, "\n")
+	lines := slices.Concat(head, controlsSection(a), headlineSection(a), paretoSection(a),
+		deltasSection(a), passRatesSection(a), caveatsSection(a))
+	return strings.Join(lines, "\n") + "\n"
 }

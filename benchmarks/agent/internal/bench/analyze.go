@@ -1,4 +1,4 @@
-package analysis
+package bench
 
 import (
 	"bytes"
@@ -6,25 +6,22 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"reflect"
 	"sort"
+	"strings"
 
-	"github.com/egladman/magus/benchmarks/agent/analysis/pycompat"
+	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
 
-// BootstrapIters is the resample count behind every paired CI.
-const BootstrapIters = 10000
+// bootstrapIters is the resample count behind every paired CI.
+const bootstrapIters = 10000
 
 const z95 = 1.959963984540054
 
-// MinRelativeDelta is the relative size a paired delta must clear before it
+// minRelativeDelta is the relative size a paired delta must clear before it
 // earns a verdict, on top of the CI excluding zero. A significant 2 percent
 // difference is not a finding.
-const MinRelativeDelta = 0.10
-
-const (
-	treatmentArm = ArmFull
-	baselineArm  = ArmRampant
-)
+const minRelativeDelta = 0.10
 
 type metric struct {
 	name string
@@ -64,9 +61,9 @@ var metrics = []metric{
 	{"tool_result_bytes", intMetric(func(r *ScoredRun) int64 { return r.ToolResultBytes })},
 }
 
-// WilsonInterval is the Wilson score interval for a binomial proportion;
+// wilsonInterval is the Wilson score interval for a binomial proportion;
 // both bounds are nil when total is 0.
-func WilsonInterval(successes, total int64) [2]*float64 {
+func wilsonInterval(successes, total int64) [2]*float64 {
 	if total <= 0 {
 		return [2]*float64{}
 	}
@@ -81,7 +78,9 @@ func WilsonInterval(successes, total int64) [2]*float64 {
 	return [2]*float64{&low, &high}
 }
 
-// percentile is the nearest-rank percentile over an already sorted list.
+// percentile takes the value at floor(q * (n - 1)) of an already sorted list,
+// the index the Python's bootstrap used; it is not the nearest-rank
+// definition, and the CIs pinned in testdata depend on this one.
 func percentile(sorted []float64, q float64) *float64 {
 	if len(sorted) == 0 {
 		return nil
@@ -105,7 +104,7 @@ func bootstrapPaired(deltas []Number, seedKey string) bootstrap {
 		return bootstrap{}
 	}
 	rng := pycompat.NewRandomString(seedKey)
-	means := make([]float64, BootstrapIters)
+	means := make([]float64, bootstrapIters)
 	for i := range means {
 		total := 0.0
 		for range n {
@@ -123,14 +122,14 @@ func bootstrapPaired(deltas []Number, seedKey string) bootstrap {
 			atOrAbove++
 		}
 	}
-	p := math.Min(1.0, 2.0*float64(min(atOrBelow, atOrAbove))/float64(BootstrapIters))
-	p = math.Max(p, 1.0/float64(BootstrapIters))
+	p := math.Min(1.0, 2.0*float64(min(atOrBelow, atOrAbove))/float64(bootstrapIters))
+	p = math.Max(p, 1.0/float64(bootstrapIters))
 	return bootstrap{ciLow: percentile(means, 0.025), ciHigh: percentile(means, 0.975), p: &p}
 }
 
-// Holm adjusts a {key: p} mapping across the family of tasks
+// holm adjusts a {key: p} mapping across the family of tasks
 // (Holm-Bonferroni); a nil p stays nil.
-func Holm(pvalues map[string]*float64) map[string]*float64 {
+func holm(pvalues map[string]*float64) map[string]*float64 {
 	type ranked struct {
 		p   float64
 		key string
@@ -200,9 +199,9 @@ func quartiles(sorted []Number) [2]*Number {
 	return out
 }
 
-// Describe is median, IQR and mean together; a mean alone hides the spread
+// describe is median, IQR and mean together; a mean alone hides the spread
 // that matters. Nil values are dropped first.
-func Describe(values []*Number) Spread {
+func describe(values []*Number) Spread {
 	var clean []Number
 	for _, v := range values {
 		if v != nil {
@@ -252,14 +251,40 @@ func LoadRecords(file string) ([]RunRecord, error) {
 	return records, nil
 }
 
-var scoredFields = []string{
-	"run_id", "arm", "task", "rep", "model", "tokens", "dollars", "table_dollars_usd",
-	"reported_cost_usd", "cache_write_ttl_assumed", "turns", "tool_calls", "tool_calls_by_name",
-	"file_reads", "distinct_files_read", "re_read_rate", "tool_result_bytes", "guard_events",
-	"check_exit", "success", "invariant_violations", "wall_ms", "time_to_first_edit_ms", "time_to_done_ms",
+// RecordsJSONL is metrics.jsonl for records, one record per line, the inverse
+// of LoadRecords so the file is assembled in one place.
+func RecordsJSONL(records []RunRecord) ([]byte, error) {
+	var lines []byte
+	for _, record := range records {
+		line, err := record.JSON()
+		if err != nil {
+			return nil, err
+		}
+		lines = append(append(lines, line...), '\n')
+	}
+	return lines, nil
 }
 
-var controlFields = []string{"run_id", "arm", "task", "rep", "model", "control", "exit_reason", "check_exit", "success"}
+// The keys a metrics row must carry are the struct's own json tags, read
+// once, so a field added to the record cannot go unrequired by an oversight;
+// a field tagged bench:"optional" is the exception, declared where it lives.
+var (
+	scoredFields  = requiredJSONFields(reflect.TypeFor[ScoredRun]())
+	controlFields = requiredJSONFields(reflect.TypeFor[ControlRun]())
+)
+
+func requiredJSONFields(t reflect.Type) []string {
+	names := make([]string, 0, t.NumField())
+	for i := range t.NumField() {
+		field := t.Field(i)
+		name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+		if name == "" || name == "-" || field.Tag.Get("bench") == "optional" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
 
 func runFromJSON(line []byte) (RunRecord, error) {
 	var raw map[string]json.RawMessage
@@ -278,7 +303,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 	}
 	for _, name := range required {
 		if _, ok := raw[name]; !ok {
-			return RunRecord{}, fmt.Errorf("'%s'", name)
+			return RunRecord{}, fmt.Errorf("missing %q", name)
 		}
 	}
 	if isControl {
@@ -287,7 +312,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 			return RunRecord{}, err
 		}
 		if c.Control != ControlGolden && c.Control != ControlNull {
-			return RunRecord{}, fmt.Errorf("'%s' is not a valid ControlKind", c.Control)
+			return RunRecord{}, fmt.Errorf("control %q is not golden or null", c.Control)
 		}
 		return RunRecord{Control: &c}, nil
 	}
@@ -316,8 +341,8 @@ func scoredSuccesses(runs []*ScoredRun) []*bool {
 	return out
 }
 
-// CellStatsOf computes pass rates and metric spreads for one (arm, task) cell.
-func CellStatsOf(runs []*ScoredRun) CellStats {
+// cellStats computes pass rates and metric spreads for one (arm, task) cell.
+func cellStats(runs []*ScoredRun) CellStats {
 	n := int64(len(runs))
 	successes := countPasses(scoredSuccesses(runs))
 	var successful []*ScoredRun
@@ -329,18 +354,21 @@ func CellStatsOf(runs []*ScoredRun) CellStats {
 			successful = append(successful, run)
 		}
 	}
+	// A run with no check is unknown, not failed, and the caveat says it is
+	// excluded from the pass rate; graded is the denominator that makes that true.
+	graded := n - unknown
 	var passAt1 *float64
-	if n > 0 {
-		p := float64(successes) / float64(n)
+	if graded > 0 {
+		p := float64(successes) / float64(graded)
 		passAt1 = &p
 	}
 	passPowK := 0.0
-	if n > 0 && successes == n {
+	if graded > 0 && successes == graded {
 		passPowK = 1.0
 	}
 	return CellStats{
 		N: n, Successes: successes, UnknownOutcomes: unknown,
-		PassAt1: passAt1, PassAt1CI: WilsonInterval(successes, n), K: n, PassPowK: passPowK,
+		PassAt1: passAt1, PassAt1CI: wilsonInterval(successes, graded), K: n, PassPowK: passPowK,
 		Metrics: spreads(runs), MetricsSuccessOnly: spreads(successful),
 	}
 }
@@ -352,14 +380,14 @@ func spreads(runs []*ScoredRun) map[string]Spread {
 		for i, run := range runs {
 			values[i] = m.read(run)
 		}
-		out[m.name] = Describe(values)
+		out[m.name] = describe(values)
 	}
 	return out
 }
 
-// ArmSummaryOf is the arm-level pass rate and cost-of-pass: expected dollars
+// armSummary is the arm-level pass rate and cost-of-pass: expected dollars
 // per correct solution.
-func ArmSummaryOf(runs []*ScoredRun) ArmSummary {
+func armSummary(runs []*ScoredRun) ArmSummary {
 	n := int64(len(runs))
 	successes := countPasses(scoredSuccesses(runs))
 	dollars := make([]*Number, len(runs))
@@ -367,10 +395,16 @@ func ArmSummaryOf(runs []*ScoredRun) ArmSummary {
 		d := pycompat.Float(run.Dollars)
 		dollars[i] = &d
 	}
-	spread := Describe(dollars)
+	spread := describe(dollars)
+	var graded int64
+	for _, run := range runs {
+		if run.Success != nil {
+			graded++
+		}
+	}
 	passRate := 0.0
-	if n > 0 {
-		passRate = float64(successes) / float64(n)
+	if graded > 0 {
+		passRate = float64(successes) / float64(graded)
 	}
 	cost := CostOfPass{Infinite: true}
 	if passRate > 0 && spread.Mean != nil {
@@ -378,7 +412,7 @@ func ArmSummaryOf(runs []*ScoredRun) ArmSummary {
 		cost = CostOfPass{Value: &v}
 	}
 	return ArmSummary{
-		N: n, Successes: successes, PassRate: passRate, PassRateCI: WilsonInterval(successes, n),
+		N: n, Successes: successes, PassRate: passRate, PassRateCI: wilsonInterval(successes, graded),
 		Dollars: spread, CostOfPassUSD: cost,
 	}
 }
@@ -419,7 +453,7 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 		out.Relative = &rel
 	}
 	out.CIExcludesZero = boot.ciLow != nil && boot.ciHigh != nil && (*boot.ciLow > 0 || *boot.ciHigh < 0)
-	if out.CIExcludesZero && out.Relative != nil && math.Abs(*out.Relative) >= MinRelativeDelta {
+	if out.CIExcludesZero && out.Relative != nil && math.Abs(*out.Relative) >= minRelativeDelta {
 		out.Verdict = VerdictHigher
 		if deltaMean < 0 {
 			out.Verdict = VerdictLower
@@ -449,11 +483,11 @@ func pairedDeltas(c cells, tasks []string, seed int64) map[string]map[string]Pai
 		perTask := map[string]PairedDelta{}
 		pvalues := map[string]*float64{}
 		for _, task := range tasks {
-			delta := pairedDelta(c.byRep(treatmentArm, task), c.byRep(baselineArm, task), m, fmt.Sprintf("%d|%s|%s", seed, m.name, task))
+			delta := pairedDelta(c.byRep(ArmFull, task), c.byRep(ArmRampant, task), m, fmt.Sprintf("%d|%s|%s", seed, m.name, task))
 			perTask[task] = delta
 			pvalues[task] = delta.P
 		}
-		adjusted := Holm(pvalues)
+		adjusted := holm(pvalues)
 		for task, delta := range perTask {
 			delta.PHolm = adjusted[task]
 			perTask[task] = delta
@@ -576,6 +610,20 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 	if len(runs) == 0 {
 		return nil, fmt.Errorf("no scored runs, only %d control(s)", len(controls))
 	}
+	// A rep that ran twice leaves two directories, since run ids carry a
+	// timestamp; pairing would take whichever came last while the cell counted
+	// both, so the tree has to be cleaned up before it is read.
+	seen := map[cellKey]map[int64]string{}
+	for _, run := range runs {
+		key := cellKey{run.Arm, run.Task}
+		if seen[key] == nil {
+			seen[key] = map[int64]string{}
+		}
+		if other, dup := seen[key][run.Rep]; dup {
+			return nil, fmt.Errorf("%s/%s rep %d ran twice (%s and %s); keep one run directory", run.Arm, run.Task, run.Rep, other, run.RunID)
+		}
+		seen[key][run.Rep] = run.RunID
+	}
 	armSet, taskSet, modelSet := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	c := cells{}
 	for _, run := range runs {
@@ -588,11 +636,11 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		c[key] = append(c[key], run)
 	}
 	arms, tasks := sortedKeys(armSet), sortedKeys(taskSet)
-	cellStats := map[string]CellStats{}
+	cells := map[string]CellStats{}
 	for key, cellRuns := range c {
-		cellStats[key.arm+"/"+key.task] = CellStatsOf(cellRuns)
+		cells[key.arm+"/"+key.task] = cellStats(cellRuns)
 	}
-	armSummary := map[string]ArmSummary{}
+	summaries := map[string]ArmSummary{}
 	for _, arm := range arms {
 		var armRuns []*ScoredRun
 		for _, run := range runs {
@@ -600,19 +648,19 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 				armRuns = append(armRuns, run)
 			}
 		}
-		armSummary[arm] = ArmSummaryOf(armRuns)
+		summaries[arm] = armSummary(armRuns)
 	}
 	return &Analysis{
 		Seed:             seed,
-		BootstrapIters:   BootstrapIters,
-		MinRelativeDelta: MinRelativeDelta,
+		BootstrapIters:   bootstrapIters,
+		MinRelativeDelta: minRelativeDelta,
 		Runs:             int64(len(runs)),
 		Arms:             arms,
 		Tasks:            tasks,
 		Models:           sortedKeys(modelSet),
 		Controls:         controlSummary(controls, tasks),
-		Cells:            cellStats,
-		ArmSummary:       armSummary,
+		Cells:            cells,
+		ArmSummary:       summaries,
 		Paired:           pairedDeltas(c, tasks, seed),
 		DataQuality:      dataQuality(runs, c, tasks, arms),
 	}, nil
