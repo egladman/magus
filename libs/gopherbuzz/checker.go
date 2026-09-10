@@ -397,6 +397,9 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 			et := &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
 			c.types[v.Name] = et
 			c.define(v.Name, et, true)
+			// A local enum shadows a namespaced one of the same bare name; its cases
+			// compile to the bare name, not to the namespace the earlier one lived in.
+			delete(c.enumNS, v.Name)
 		}
 	}
 }
@@ -1220,19 +1223,26 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return types.Null // yield expression evaluates to null (the resumed value)
 	case *ast.FiberExpr:
 		calleeTyp := c.infer(v.Call.Callee)
+		argsResolved := true
 		if ft, ok := calleeTyp.(*types.FuncType); ok {
+			before := len(c.errors)
 			c.resolveNamedArgs(v.Call, ft)
+			argsResolved = len(c.errors) == before
 		} else {
 			v.Call.ArgNames = nil
 		}
 		// A fiber wraps an ordinary call, so its arguments get their parameter types the
 		// same way a direct call's do (inferCall). Inferring them bare left an anonymous
 		// `.{ ... }` argument as a map, so `&f(.{ points = 8 })` produced something
-		// whose methods did not exist.
+		// whose methods did not exist. A failed named-arg resolution already reported
+		// the mismatch, and the positions it left are not worth a second error each.
 		for i, a := range v.Call.Args {
 			if ft, ok := calleeTyp.(*types.FuncType); ok && i < len(ft.Params) {
 				want := c.resolveType(ft.Params[i])
-				c.checkArgType(ft, i, a, c.inferExpected(a, want), want)
+				got := c.inferExpected(a, want)
+				if argsResolved {
+					c.checkArgType(ft, i, a, got, want)
+				}
 				continue
 			}
 			c.infer(a)

@@ -149,14 +149,12 @@ type EnumType struct {
 // backingType is the primitive a case's value has, and the one a plain value must
 // have to be passed where the enum is expected.
 func (e *EnumType) backingType() Type {
-	switch e.Backing {
-	case "str":
+	// str or int, the two backings the checker and compiler model; see checker.go's
+	// `Backing == "str"` branches.
+	if e.Backing == "str" {
 		return Str
-	case "double":
-		return Double
-	default:
-		return Int
 	}
+	return Int
 }
 
 func (e *EnumType) TypeName() string { return e.Name }
@@ -254,8 +252,9 @@ func Compat(got, want Type) bool {
 	// A backed enum accepts a plain value of its backing type where it is declared:
 	// `enum<str> Layout` names the common layouts and takes any str, which is what keeps
 	// a host enum from closing a parameter that has no finite set of values (a timestamp
-	// layout, say). An unbacked enum numbers its cases from zero, so it reads as int.
-	if we, ok := want.(*EnumType); ok {
+	// layout, say). An unbacked enum is closed: its cases number from zero, but that is
+	// a representation, and taking any int would make every such parameter untyped.
+	if we, ok := want.(*EnumType); ok && we.Backing != "" {
 		return got.TypeName() == we.backingType().TypeName()
 	}
 	// An object is assignable to a protocol it declared conformance to. The check is
@@ -415,13 +414,8 @@ func (p *annotParser) parseUnmodified() Type {
 			// the list is what lets the params and the return arrow parse at all;
 			// without it the whole annotation degrades to a bare `fun()`.
 			if strings.HasPrefix(p.s[p.pos:], "::<") {
-				p.pos += 3
-				for p.peek() != '>' && p.peek() != 0 {
-					p.advance()
-				}
-				if p.peek() == '>' {
-					p.advance()
-				}
+				p.pos += 2
+				p.skipGeneric()
 			}
 			var params []Type
 			if p.peek() == '(' {

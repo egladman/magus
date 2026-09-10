@@ -49,6 +49,18 @@ func TestCompat_SameTypeName(t *testing.T) {
 	assert.True(t, Compat(Str, Str), "Compat(Str, Str)")
 }
 
+// A backed enum is open over its backing type; an unbacked one is closed, or every
+// parameter typed with it would take any int.
+func TestCompat_EnumBacking(t *testing.T) {
+	backed := &EnumType{Name: "Layout", Cases: []string{"rfc3339"}, Backing: "str"}
+	assert.True(t, Compat(Str, backed), "a str where a str-backed enum is expected")
+	assert.False(t, Compat(Int, backed), "an int where a str-backed enum is expected")
+
+	closed := &EnumType{Name: "Color", Cases: []string{"red", "green"}}
+	assert.False(t, Compat(Int, closed), "an int where an unbacked enum is expected")
+	assert.True(t, Compat(closed, closed))
+}
+
 func TestCompat_DifferentTypes(t *testing.T) {
 	assert.False(t, Compat(Int, Str), "Compat(Int, Str)")
 	assert.False(t, Compat(Bool, Double), "Compat(Bool, Double)")
