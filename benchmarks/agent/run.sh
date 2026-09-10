@@ -318,6 +318,15 @@ main() {
         { usage >&2; die "--arm, --task, --model, --effort and --magus-binary are required"; }
     [[ -z $control || $control == golden || $control == null ]] ||
         die "--control takes golden or null"
+    # Absolute before anything else reads it: the arm writes its directory onto the run's
+    # PATH and the runner cds into the worktree, where a relative path resolves to nothing.
+    # A manifest line cannot expand $PWD, so this is what lets one say ../../magus.
+    if [[ $magus_binary != /* ]]; then
+        local bin_dir
+        bin_dir=$(cd "$(dirname "$magus_binary")" 2>/dev/null && pwd) ||
+            die "--magus-binary $magus_binary: directory does not exist"
+        magus_binary=$bin_dir/$(basename "$magus_binary")
+    fi
 
     if ((dry)); then
         printf 'plan: fixture=%s arm=%s task=%s reps=%s model=%s effort=%s control=%s\n' \
