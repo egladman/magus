@@ -181,11 +181,14 @@ or `bash -c '...'` all reach the same verdict as the bare command.
 
 ## What magus explains
 
-An advise verdict carries context your host can inject while the call proceeds,
-which only Claude Code does in full. Cursor delivers nothing on a command advise
-and OpenCode logs it for the person. Codex differs in kind rather than degree: its
-PreToolUse REJECTS `additionalContext` and fails open on it, so sending one there
-disarmed the guard for that call, and magus now sends it nothing.
+An advise verdict carries context your host injects, and all four documented hosts
+now deliver it to the model. What differs is WHEN. Claude Code and Codex attach it
+to the call that is about to run, as `additionalContext` on the same pre-tool
+event that carries a deny. Cursor and OpenCode have no message channel on a
+gating event, so the explanation rides the post-tool event instead and lands with
+the call's result. Codex used to be sent nothing at all, on a reading of its hook
+contract its own current reference contradicts; the keys that make Codex mark a
+hook run failed are `continue`, `stopReason` and `suppressOutput`.
 
 - `git commit` and `git add <paths>`: classify the dirty tree first. Deliberate
   staging is the replacement the rule above points at, so it is never denied.

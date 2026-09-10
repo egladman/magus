@@ -15,7 +15,7 @@
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   HOST_ADVISE_BRANCH  the advise arm of that template
 #   GUARD_NO_ADVISE  set it when the host has no context-injection channel, so
-#                    an advise renders nothing rather than something it rejects
+#                    an advise renders nothing rather than a reply it rejects
 #   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
@@ -45,9 +45,9 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 11
+# magus-guard-template: 12
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
+# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -55,10 +55,12 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-# The advise arm is split out because not every host has one. Codex's PreToolUse
-# REJECTS additionalContext - it treats the key as an error and the hook then fails
-# OPEN - so an advisory sent there is not merely dropped, it disarms the guard for
-# that call. Codex sets GUARD_NO_ADVISE from codex-hooks.json and declares advise=none.
+# The advise arm is split out because not every host has one, and because a host
+# that REJECTS the key is worse off than one that ignores it: an unsupported field
+# can make the host mark the hook run failed and continue the call, so an advisory
+# it cannot take disarms the guard rather than merely going unread. No host shipped
+# here is in that position today, since both hosts wired to this file take
+# additionalContext, so the flag has no user and is kept for the one you may wire.
 # A plain `[ -n ... ] ||` cannot express "deliberately empty" - an empty value looks
 # unset and gets the default back - and ${VAR-default} is unusable here for the same
 # `}` reason as above. So the suppression is its own flag.

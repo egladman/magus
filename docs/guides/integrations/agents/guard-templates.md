@@ -1,6 +1,6 @@
 ---
 title: Guard hook templates
-description: The two POSIX sh templates Claude Code and Codex run for the magus guard - the variables that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
+description: The POSIX sh templates Claude Code and Codex run for the magus guard, the checkpoint and the post-compaction brief - the variables that adapt them to a host, the version marker that tells you when your copy is stale, and the full source of each.
 tags: [agents, guard, hooks, templates, claude code, codex]
 ---
 
@@ -18,10 +18,10 @@ the same gates as the rest of the workspace
 (`magus run lint docs/guides/integrations/agents` runs `tsc --noEmit`, Biome,
 and shellcheck).
 
-Two hosts run these two files: [Claude Code](claude-code.md) and
-[Codex](codex.md). [Cursor](cursor.md) and [OpenCode](opencode.md) each ship one
-self-contained file instead, on their own pages, because a host that needs three
-downloads to install a guard ends up without one.
+Two hosts run these files: [Claude Code](claude-code.md) and [Codex](codex.md).
+[Cursor](cursor.md) and [OpenCode](opencode.md) each ship one self-contained file
+instead, on their own pages, because a host that needs five downloads to install a
+guard ends up without one.
 
 ## Checking whether your copy is current
 
@@ -95,7 +95,7 @@ overrides and execs it, so there is one implementation to reason about.
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   HOST_ADVISE_BRANCH  the advise arm of that template
 #   GUARD_NO_ADVISE  set it when the host has no context-injection channel, so
-#                    an advise renders nothing rather than something it rejects
+#                    an advise renders nothing rather than a reply it rejects
 #   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
@@ -125,9 +125,9 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 10
+# magus-guard-template: 12
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
+# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -135,10 +135,12 @@ overrides and execs it, so there is one implementation to reason about.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-# The advise arm is split out because not every host has one. Codex's PreToolUse
-# REJECTS additionalContext - it treats the key as an error and the hook then fails
-# OPEN - so an advisory sent there is not merely dropped, it disarms the guard for
-# that call. Codex sets GUARD_NO_ADVISE from codex-hooks.json and declares advise=none.
+# The advise arm is split out because not every host has one, and because a host
+# that REJECTS the key is worse off than one that ignores it: an unsupported field
+# can make the host mark the hook run failed and continue the call, so an advisory
+# it cannot take disarms the guard rather than merely going unread. No host shipped
+# here is in that position today, since both hosts wired to this file take
+# additionalContext, so the flag has no user and is kept for the one you may wire.
 # A plain `[ -n ... ] ||` cannot express "deliberately empty" - an empty value looks
 # unset and gets the default back - and ${VAR-default} is unusable here for the same
 # `}` reason as above. So the suppression is its own flag.
@@ -339,9 +341,9 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 10
+# magus-guard-template: 12
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
+# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
@@ -349,10 +351,11 @@ wasteful, not destructive.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-# Same split, and the same reason, as in magus-guard-command.sh: a host whose
-# PreToolUse rejects additionalContext fails OPEN on one, so an advisory it cannot
-# take disarms the call rather than merely going unread. Codex wires BOTH surfaces
-# to PreToolUse, so it suppresses here too.
+# Same split, and the same reason, as in magus-guard-command.sh: a host that
+# REJECTS the context key can mark the hook run failed and continue the call, so an
+# advisory it cannot take disarms that call rather than merely going unread. No
+# host wired to this file is in that position; the flag is there for the one you
+# may wire.
 if [ -n "$GUARD_NO_ADVISE" ]; then
   HOST_ADVISE_BRANCH=''
 else
@@ -481,7 +484,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 10
+# magus-guard-template: 12
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -659,7 +662,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 10
+# magus-guard-template: 12
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
@@ -723,6 +726,14 @@ and the model can read the first.
 Run `magus session --brief` yourself to see exactly what a session will be
 handed; `-o json` is the same brief for a wrapper that wants to reshape it.
 
+Hosts disagree about what a session-start hook's stdout IS, so this template has
+two channels. Plain text is the default, for a host that adds stdout to the
+model's context. `REHYDRATE_FORMAT=json` wraps the same text in
+`{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":...}}`
+for a host that parses stdout as a reply and drops anything that is not one.
+There is still no `jq`: the escaping is done in the template, so a machine without
+it gets its checkout back like any other.
+
 It declares no `magus-guard-coverage` line, for the reason
 `magus-guard-observe.sh` declares none: it carries no verdict on any surface.
 
@@ -747,6 +758,18 @@ It declares no `magus-guard-coverage` line, for the reason
 #
 #   GUARD_MAGUS_BIN   path to the binary, when it is not on PATH
 #   REHYDRATE_RULES   your host's instruction file, relative to the workspace root
+#   REHYDRATE_FORMAT  set it to `json` for a host that reads stdout as a reply
+#
+# Two channels, because hosts disagree about what a session-start hook's stdout
+# IS. Some add plain stdout to the model's context, which is the default here.
+# Others parse stdout as a JSON reply and drop anything that is not one, so the
+# same text has to arrive as a string field:
+#
+#   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
+#
+# No jq, unlike this file's judging siblings. They need it to SELECT out of an
+# event; there is nothing to select here, only text to escape, and a machine
+# without jq should still get its checkout handed back.
 #
 # The rules line is the one host-shaped part, which is why it is a variable rather
 # than something magus prints: magus names the files it ships and can see
@@ -758,7 +781,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 11
+# magus-guard-template: 12
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.
@@ -785,13 +808,46 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   exit 0
 fi
 
-# stderr is discarded: a magus too old for `session --brief` prints its usage
-# there, and that would otherwise be injected as this hook's answer.
-"$GUARD_MAGUS_BIN" session --brief 2>/dev/null
+# JSON-escapes stdin into one string body: every control character but the line
+# break becomes a space (a raw one is not legal inside a JSON string), backslash
+# and quote are escaped, and the lines are joined with a literal \n.
+#
+# The read loop rather than a one-liner because the join has to survive a body
+# whose last line carries no newline; that line is what `read` reports as a
+# failure with the text still in hand.
+rehydrate_escape() {
+  tr '\001-\011\013-\037' '[ *]' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | {
+    escaped=''
+    while IFS= read -r line; do
+      escaped=$escaped$line'\n'
+    done
+    [ -z "$line" ] || escaped=$escaped$line
+    printf '%s' "$escaped"
+  }
+}
+
+# Captured rather than streamed, because the json arm has to wrap it. stderr is
+# discarded: a magus too old for `session --brief` prints its usage there, and
+# that would otherwise be injected as this hook's answer.
+brief=$("$GUARD_MAGUS_BIN" session --brief 2>/dev/null)
+
+# Nothing from magus is nothing to say, in either channel. The rules line trails
+# the brief and points back at it, so on its own it is a sentence about a block
+# that was never written, and an envelope carrying only that is worse than none.
+[ -n "$brief" ] || exit 0
 
 if [ -n "$guard_root" ] && [ -f "$guard_root/$REHYDRATE_RULES" ]; then
-  printf 'standing rules: %s; re-read it, the summary above is not it\n' "$REHYDRATE_RULES"
+  brief=$(printf '%s\nstanding rules: %s; re-read it, the summary above is not it' \
+    "$brief" "$REHYDRATE_RULES")
 fi
+
+if [ "$REHYDRATE_FORMAT" = 'json' ]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}' \
+    "$(printf '%s\n' "$brief" | rehydrate_escape)"
+  exit 0
+fi
+
+printf '%s\n' "$brief"
 
 exit 0
 ```

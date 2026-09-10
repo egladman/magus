@@ -129,9 +129,10 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
 async function hooks() {
   const plugin = MagusGuard as unknown as () => Promise<{
     "tool.execute.before": (
-      input: { tool: string },
+      input: { tool: string; callID: string },
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
+    "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
   }>;
   return await plugin();
 }
@@ -140,7 +141,7 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   await assert.rejects(
-    h["tool.execute.before"]({ tool: "bash" }, { args: { command: "git stash" } }),
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git stash" } }),
     /whole-tree/,
   );
 });
@@ -149,21 +150,34 @@ test("live: bash arm denies git stash with the whole-tree reason", { skip }, asy
 // DENIED, not advised - the plan this test was written from predates that rule.
 // git push stays an advise: a push can legitimately carry work-in-progress, so the
 // guard only reminds rather than blocks (see guardPushRe in cmd/magus/agent.go).
-test("live: bash arm advises on git push and logs non-empty context", { skip }, async () => {
+test("live: bash arm advises on git push and appends non-empty context", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"]({ tool: "bash" }, { args: { command: "git push origin main" } });
+    await h["tool.execute.before"](
+      { tool: "bash", callID: "c1" },
+      { args: { command: "git push origin main" } },
+    );
   });
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /\[magus guard\] .+\S/);
+  assert.deepEqual(warnings, [], "an advise is delivered to the model, not logged for the person");
+
+  const result = { output: "pushed" };
+  await h["tool.execute.after"]({ callID: "c1" }, result);
+  assert.match(result.output, /\[magus guard\] .+\S/);
 });
 
 test("live: edit arm passes on a path that is not a declared output", { skip }, async () => {
   stubBunWithRealChild(magusBin as string);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"]({ tool: "edit" }, { args: { filePath: "cmd/magus/agent.go" } });
+    await h["tool.execute.before"](
+      { tool: "edit", callID: "c1" },
+      { args: { filePath: "cmd/magus/agent.go" } },
+    );
   });
   assert.deepEqual(warnings, []);
+
+  const result = { output: "edited" };
+  await h["tool.execute.after"]({ callID: "c1" }, result);
+  assert.equal(result.output, "edited", "a pass leaves the tool result alone");
 });

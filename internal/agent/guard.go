@@ -99,7 +99,23 @@ var guardSurfaces = []string{"command", "path"}
 // could-not-judge firings, 99% of them same-session repeats, and one session took 913. A
 // copy that predates this keeps sending all of them, and a reader who has learned to skip
 // the notice skips the one that mattered too.
-const GuardTemplateVersion = 11
+//
+// 11: the set grew its first template that RECORDS instead of judging, one that says where
+// the work stood when a session stopped, and every file was restamped to keep the bump
+// total. Nothing an installed copy already did changed. The line exists so the ledger has no
+// hole: a version nobody explained reads as one nobody understood.
+//
+// 12: an advise now reaches the MODEL wherever a host has any channel for one. Two of the
+// four wired hosts delivered advisories nowhere: one suppressed the context key on a claim
+// its vendor's current reference contradicts, and one sent it on a gating event that
+// carries a message only with a denial, so the advisory collapsed into a plain allow. A
+// copy that predates this enforces every deny and silently drops every explanation, and
+// nothing in a session reveals that half the contract stopped arriving. Two smaller
+// changes ride along: a write is judged before it lands wherever a pre-write event exists
+// (a deny on an after-the-write event is a warning, not a block), and the brief a
+// compacted session is handed back renders as a JSON envelope on request, for a host that
+// parses a session-start hook's stdout as a reply rather than reading it as context.
+const GuardTemplateVersion = 12
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

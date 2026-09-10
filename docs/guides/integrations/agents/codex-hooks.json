@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex GUARD_NO_ADVISE=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -16,8 +16,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex GUARD_NO_ADVISE=1 sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
             "statusMessage": "magus guard: checking file"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "statusMessage": "magus: handing this checkout back"
           }
         ]
       }

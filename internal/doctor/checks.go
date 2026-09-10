@@ -1787,6 +1787,10 @@ var guardTemplateBasenames = []string{
 	// could not match the only name a config ever carries. TestGuardTemplateBasenames
 	// AreShipped is what makes the next rename fail loudly instead.
 	"magus-checkpoint.sh",
+	// Judges nothing either, and graded for the same reason: a stale copy of it hands a
+	// compacted session a brief the current binary would not have written, and the only
+	// sign is a model working from a summary that looked complete.
+	"magus-rehydrate.sh",
 }
 
 // guardWiringCandidates are the config locations a shipped host glue installs

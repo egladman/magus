@@ -418,15 +418,151 @@ var sessionRecipes = []string{
 // table they are checked against.
 const sessionGuideDoc = "docs/guides/integrations/agents/session-load.md"
 
-type hookSettings struct {
-	Hooks struct {
-		PreToolUse []struct {
-			Matcher string `json:"matcher"`
-			Hooks   []struct {
-				Command string `json:"command"`
-			} `json:"hooks"`
-		} `json:"PreToolUse"`
+// hookEntry is one wiring in a host's hook config: an optional matcher and the
+// commands it runs when the event fires.
+type hookEntry struct {
+	Matcher string `json:"matcher"`
+	Hooks   []struct {
+		Command string `json:"command"`
 	} `json:"hooks"`
+}
+
+// hookSettings is a host hook config keyed by EVENT NAME rather than by the one
+// event this file used to model. Every job magus does through a host is a hook on
+// some event, and a gate that reads only the pre-tool ones cannot tell a config
+// that records no checkpoint and rehydrates no compacted session from one that
+// does, which is exactly the parity question these files exist to answer.
+type hookSettings struct {
+	Hooks map[string][]hookEntry `json:"hooks"`
+}
+
+// shippedHookConfigs are the host hook configs this repository owns: the one it
+// dogfoods, and the one it ships for a reader to copy. Both are compared against
+// each other below, because "whatever magus does on one host it does on every host
+// that can express it" is a claim about these two files more than about any prose.
+var shippedHookConfigs = map[string]string{
+	"claude-code": dogfoodedHookConfig,
+	"codex":       hookTemplateDir + "/codex-hooks.json",
+}
+
+// hookConfigPage names the page each shipped config is documented on, so a wiring
+// present in the JSON and absent from the prose fails rather than shipping unread.
+var hookConfigPage = map[string]string{
+	"claude-code": hookTemplateDir + "/claude-code.md",
+	"codex":       hookTemplateDir + "/codex.md",
+}
+
+// hookConfigExemptions records a template one config deliberately does not run,
+// with the reason it does not. An exemption is the sanctioned way to differ; the
+// unsanctioned way is to differ silently, which is what the gate refuses.
+var hookConfigExemptions = map[string]map[string]string{
+	"codex": {
+		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
+			"so it earns one host's wiring rather than four; nothing in Codex prevents it",
+	},
+}
+
+// configTemplates returns the shipped templates a hook config's commands invoke.
+func configTemplates(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+	var cfg hookSettings
+	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
+
+	found := map[string]bool{}
+	for _, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			for _, h := range entry.Hooks {
+				for _, field := range strings.Fields(h.Command) {
+					if strings.HasPrefix(field, hookTemplateDir) {
+						found[filepath.Base(field)] = true
+					}
+				}
+			}
+		}
+	}
+	return found
+}
+
+// TestShippedHookConfigsWireTheSameJobs is the parity gate one level above the
+// coverage declarations: those say what a template CAN carry, this says whether a
+// host was actually wired to run it.
+//
+// The failure it prevents is the quiet one. A job added for one host, such as a
+// checkpoint or a post-compaction brief, is a one-line addition to that host's
+// config, and every other host keeps working, keeps passing, and silently does
+// less. Nothing surfaces the difference, because a hook that was never wired
+// produces no output to be missing.
+func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
+	wired := map[string]map[string]bool{}
+	for host, path := range shippedHookConfigs {
+		wired[host] = configTemplates(t, path)
+	}
+
+	for host, templates := range wired {
+		for other, otherTemplates := range wired {
+			if other == host {
+				continue
+			}
+			for name := range otherTemplates {
+				if templates[name] {
+					continue
+				}
+				why, exempt := hookConfigExemptions[host][name]
+				assert.True(t, exempt,
+					"%s runs %s and %s does not.\n"+
+						"Wire it there too, or record why that host does without it in hookConfigExemptions.\n"+
+						"A host doing less than another is a decision; a host doing less than another with\n"+
+						"nothing saying so is the gap this gate exists to refuse.",
+					shippedHookConfigs[other], name, shippedHookConfigs[host])
+				if exempt {
+					t.Logf("%s does not run %s: %s", host, name, why)
+				}
+			}
+		}
+	}
+
+	for host, exemptions := range hookConfigExemptions {
+		for name := range exemptions {
+			assert.False(t, wired[host][name],
+				"hookConfigExemptions says %s does not run %s, but %s invokes it. Drop the exemption.",
+				host, name, shippedHookConfigs[host])
+		}
+	}
+}
+
+// TestHostPagesDocumentTheWiringTheyShip closes the direction the embed gate
+// leaves open. TestHookTemplatesAreEmbeddedInTheGuide proves a template's SOURCE
+// is on a page; this proves the host's page names the event that runs it.
+//
+// A reader wires what the page tells them to. A config that grew an event the page
+// never mentions guards the repository and nobody else, which reads as the host
+// being incapable of that job rather than as documentation lagging behind.
+func TestHostPagesDocumentTheWiringTheyShip(t *testing.T) {
+	for host, path := range shippedHookConfigs {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, "read %s", path)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+
+		page := hookConfigPage[host]
+		require.NotEmpty(t, page, "host %q has a shipped config but no page in hookConfigPage", host)
+		body, err := os.ReadFile(page)
+		require.NoError(t, err, "read %s", page)
+		doc := string(body)
+
+		for event := range cfg.Hooks {
+			assert.Contains(t, doc, event,
+				"%s wires the %s event and %s never names it, so a reader copying from the page\n"+
+					"gets a quieter integration than the one this repository runs.", path, event, page)
+		}
+		for name := range configTemplates(t, path) {
+			assert.Contains(t, doc, name,
+				"%s runs %s and %s never names it", path, name, page)
+		}
+	}
 }
 
 // TestDogfoodedHookInvokesTheTemplate keeps this repository honest: its own
@@ -446,21 +582,26 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 
 	var cfg hookSettings
 	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
-	require.NotEmpty(t, cfg.Hooks.PreToolUse, "%s declares no PreToolUse hooks", dogfoodedHookConfig)
+	require.NotEmpty(t, cfg.Hooks["PreToolUse"], "%s declares no PreToolUse hooks", dogfoodedHookConfig)
 
-	for _, entry := range cfg.Hooks.PreToolUse {
-		require.NotEmpty(t, entry.Hooks, "matcher %q has no hooks", entry.Matcher)
-		for _, h := range entry.Hooks {
-			assert.Contains(t, h.Command, hookTemplateDir,
-				"the %q hook must invoke a template under %s rather than inline its own copy, "+
-					"so dogfooding exercises the file readers download", entry.Matcher, hookTemplateDir)
+	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook
+	// inlining its own copy of a template drifts from the file a reader downloads
+	// exactly as a guard hook would, and used to do so unwatched.
+	for event, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
+			for _, h := range entry.Hooks {
+				assert.Contains(t, h.Command, hookTemplateDir,
+					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
+						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
 
-			// The referenced file must exist: a hook pointing at a moved or
-			// renamed template fails open silently, which is the failure mode
-			// this whole arrangement exists to remove.
-			for _, field := range strings.Fields(h.Command) {
-				if strings.HasPrefix(field, hookTemplateDir) {
-					assert.FileExists(t, field, "%q hook references a template that does not exist", entry.Matcher)
+				// The referenced file must exist: a hook pointing at a moved or
+				// renamed template fails open silently, which is the failure mode
+				// this whole arrangement exists to remove.
+				for _, field := range strings.Fields(h.Command) {
+					if strings.HasPrefix(field, hookTemplateDir) {
+						assert.FileExists(t, field, "%s %q hook references a template that does not exist", event, entry.Matcher)
+					}
 				}
 			}
 		}
