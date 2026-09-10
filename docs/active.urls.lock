@@ -1,5 +1,11 @@
 affected/
 agents/
+benchmarks/
+benchmarks/2026-09-10/
+benchmarks/2026-09-10/anthropic/
+benchmarks/2026-09-10/anthropic/claude-opus-5/
+benchmarks/2026-09-10/anthropic/claude-sonnet-5/
+benchmarks/build-tools/
 blog/
 blog/2026/07/01/hello-blog/
 blog/2026/08/18/i-think-our-tools-are-the-problem/
@@ -207,6 +213,7 @@ guides/integrations/agents/guard/
 guides/integrations/agents/leases/
 guides/integrations/agents/notifications/
 guides/integrations/agents/opencode/
+guides/integrations/agents/session-load/
 guides/integrations/agents/skills/
 guides/integrations/ci/
 guides/integrations/daemon/
@@ -408,6 +415,7 @@ reference/codes/magusfile/MGS1029/
 reference/codes/magusfile/MGS1030/
 reference/codes/magusfile/MGS1031/
 reference/codes/magusfile/MGS1032/
+reference/codes/magusfile/MGS1033/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -473,6 +481,7 @@ reference/manpage/magus-graph/
 reference/manpage/magus-hook/
 reference/manpage/magus-init/
 reference/manpage/magus-insight/
+reference/manpage/magus-ledger/
 reference/manpage/magus-ls/
 reference/manpage/magus-man/
 reference/manpage/magus-mcp/
@@ -564,6 +573,7 @@ tags/audit/
 tags/auth/
 tags/authoring/
 tags/bash/
+tags/benchmarks/
 tags/bisect/
 tags/bounds/
 tags/breaking-changes/
@@ -656,6 +666,7 @@ tags/graphml/
 tags/grpc/
 tags/guard/
 tags/hang/
+tags/harness/
 tags/history/
 tags/hooks/
 tags/host-modules/
@@ -677,6 +688,8 @@ tags/jsonl/
 tags/keep-warm/
 tags/knowledge-graph/
 tags/landlock/
+tags/leases/
+tags/ledger/
 tags/lint/
 tags/linux/
 tags/load/
@@ -688,6 +701,7 @@ tags/macos/
 tags/magus-buzz/
 tags/magus-hook/
 tags/magus-init/
+tags/magus-ledger/
 tags/magus-memory/
 tags/magus-no-wait/
 tags/magus-query/
@@ -699,6 +713,7 @@ tags/magus-yaml/
 tags/magusfile/
 tags/markdown/
 tags/mcp/
+tags/measurement/
 tags/memory-mb/
 tags/memory/
 tags/mgs-1010/
@@ -728,6 +743,7 @@ tags/outputs/
 tags/ownership/
 tags/passthrough/
 tags/path/
+tags/performance/
 tags/permissions/
 tags/philosophy/
 tags/picker/
@@ -773,6 +789,7 @@ tags/self-update/
 tags/semver/
 tags/service-op/
 tags/services/
+tags/session/
 tags/setup/
 tags/sharding/
 tags/shared-services/
@@ -782,6 +799,7 @@ tags/shorthand/
 tags/signature/
 tags/signing/
 tags/skills/
+tags/skip-cache/
 tags/snapshot/
 tags/socket/
 tags/sources/

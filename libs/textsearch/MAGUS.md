@@ -70,9 +70,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint`                                   |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `build`, `lint`                                |
-| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `build`, `lint`                                |
+| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `lint`                                |
+| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `build`, `lint`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
@@ -192,16 +192,16 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 ## Project: libs/diagnostics
 
-| Target           | What it does                                                                    |
-| ---------------- | ------------------------------------------------------------------------------- |
-| `generate`       | Regenerates MAGUS.md.                                                           |
-| `format`         |                                                                                 |
-| `lint`           |                                                                                 |
-| `build`          |                                                                                 |
-| `test`           |                                                                                 |
-| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
-| `preflight`      |                                                                                 |
-| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.               |
+| Target           | What it does                                                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate`       | Regenerates MAGUS.md.                                                                                                                                      |
+| `format`         |                                                                                                                                                            |
+| `lint`           |                                                                                                                                                            |
+| `build`          |                                                                                                                                                            |
+| `test`           | The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured. |
+| `ci`             | The anchor `magus affected ci` keys off; fans out lint/build/test after format.                                                                            |
+| `preflight`      |                                                                                                                                                            |
+| `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile.                                                                                          |
 
 ## Project: libs/diagram
 

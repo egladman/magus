@@ -70,9 +70,9 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint`                                   |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `build`, `lint`                                |
-| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `build`, `lint`                                |
+| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
-| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `lint`                                |
+| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
 | libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `build`, `lint`                                |
 | libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
 | proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |

@@ -600,6 +600,9 @@ export fun renderRoot(site: Site) > void !> any {
     // src and srcset are climbed here. Quote-anchored, so a mention of "./assets/" in
     // prose is not an attribute and is left alone.
     html = html.split("\"./assets/").join("\"" + root + "assets/");
+    // The TypeScript coverage badge lives in the console's tree, not assets/, and
+    // render.buzz copies it to the site root under the same path.
+    html = html.split("\"./console/coverage.svg").join("\"" + root + "console/coverage.svg");
     // The README opens with "# magus" - the wordmark, which is the right heading for a
     // repository front page and the wrong one for a page whose tab, breadcrumb and section
     // nav all read "Development".

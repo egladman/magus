@@ -1041,8 +1041,26 @@
             "gha",
             "rw"
           ],
+          "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "test"
+            },
+            {
+              "project": "libs/diagnostics",
+              "target": "test"
+            }
+          ],
           "chain": [
             {
+              "target": "test"
+            },
+            {
+              "project": "libs/gopherbuzz",
+              "target": "test"
+            },
+            {
+              "project": "libs/diagnostics",
               "target": "test"
             }
           ],
@@ -1053,17 +1071,32 @@
             },
             {
               "project": ".",
+              "glob": "libs/gopherbuzz/coverage.out"
+            },
+            {
+              "project": ".",
+              "glob": "libs/diagnostics/coverage.out"
+            },
+            {
+              "project": ".",
               "glob": "assets/coverage.svg"
             },
             {
               "project": ".",
               "glob": "badge.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "coverage.buzz"
             }
           ],
           "reads_secrets": false,
           "writes_files": [
             {
               "glob": "assets/coverage.svg"
+            },
+            {
+              "glob": "coverage.merged.out"
             }
           ]
         },
@@ -1554,8 +1587,8 @@
         }
       ],
       "depends_on": [
-        "libs/gopherbuzz",
-        "libs/textsearch"
+        "libs/diagnostics",
+        "libs/gopherbuzz"
       ]
     },
     {
@@ -1576,9 +1609,19 @@
           "charms": [
             "rw"
           ],
+          "cross_dependencies": [
+            {
+              "project": "libs/textsearch",
+              "target": "test"
+            }
+          ],
           "chain": [
             {
               "target": "preflight"
+            },
+            {
+              "project": "libs/textsearch",
+              "target": "test"
             }
           ],
           "reads_secrets": false,
@@ -2730,6 +2773,7 @@
         },
         {
           "name": "test",
+          "doc": "The profile is a declared output: the root's coverage badge is one figure over every Go module, merged from each module's own run rather than re-measured.",
           "dependencies": [
             "format"
           ],
@@ -2746,7 +2790,12 @@
               "target": "format"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "coverage.out"
+            }
+          ]
         },
         {
           "name": "ci",
@@ -2936,7 +2985,12 @@
               "target": "format"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "coverage.out"
+            }
+          ]
         },
         {
           "name": "buzz-build",
@@ -3218,9 +3272,6 @@
           "dependencies": [
             "preflight"
           ],
-          "charms": [
-            "rw"
-          ],
           "chain": [
             {
               "target": "preflight"
@@ -3229,8 +3280,7 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "project": "../..",
-              "glob": "assets/textsearch-coverage.svg"
+              "glob": "coverage.lcov"
             }
           ]
         },

@@ -198,6 +198,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **One coverage badge per language.** The README carries a Go badge and a TypeScript badge,
+  and the TypeScript figure spans every TypeScript project with a suite (the console and
+  libs/textsearch), merged line by line from their lcov reports by the console's test target
+  and rendered at console/coverage.svg, which the docs site now copies beside the libs badges.
+  The per-project textsearch badge under assets/ is gone. CI's fail-fast generate gate no
+  longer skips the docs project: its generate step refreshes committed content only, so the
+  deferral it was written for no longer exists.
 - **The `relock` charm is now `update`.** One charm, one meaning: move a pinned copy of
   upstream state forward to what upstream serves today. Re-resolving a lockfile and
   refreshing a scanner's vulnerability database are the same grant, so they share a name,

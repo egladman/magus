@@ -62,6 +62,7 @@ console/gen/
 # rendered coverage.svg badge is committed; the profile is not.
 coverage.out
 coverage.hand.out
+coverage.merged.out
 
 # Local build artifacts: `go build ./cmd/<name>` at the repo root drops the bare
 # basename here. /magus-* is a wildcard so a newly added cmd/magus-* tool is covered

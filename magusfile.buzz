@@ -45,6 +45,8 @@ import "spells/golang/gomod" as gomod;
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
+// diagnostics is the other embedded module; the coverage badge reads its profile.
+import "project/libs/diagnostics" as diagnostics;
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -2451,6 +2453,29 @@ fun coverage_percent() > str !> any {
     return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
 }
 
+// merged_coverage_percent is the figure across every Go module: this module's
+// hand-written profile plus each embedded module's, stripped of generated files the same
+// way, concatenated under one mode line and totalled by `go tool cover` from the root,
+// whose go.mod replace directives let it resolve the embedded modules' packages. A
+// profile is a list of statement blocks, so concatenation IS the merge; the total is
+// exact, not an average of per-module percentages.
+fun merged_coverage_percent() > str !> any {
+    var merged = fs\readFile("coverage.hand.out");
+    if (!merged.endsWith("\n")) { merged = merged + "\n"; }
+    foreach (module in ["libs/gopherbuzz", "libs/diagnostics"]) {
+        final profile = cov\stripGenerated(fs\readFile(fs\join(module, "coverage.out")),
+            prefix: cov\modulePath(fs\readFile(fs\join(module, "go.mod"))) + "/");
+        // Drop the module's own "mode:" line; the merged file carries the first one.
+        var first = true;
+        foreach (line in profile.split("\n")) {
+            if (first) { first = false; continue; }
+            if (line != "") { merged = merged + line + "\n"; }
+        }
+    }
+    fs\writeFile("coverage.merged.out", content: merged);
+    return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.merged.out"]).stdout);
+}
+
 // Writes assets/coverage.svg, and is the only target that may.
 //
 // Split from test so the suite can be CACHED: the badge is a declared output, so a
@@ -2462,25 +2487,31 @@ fun coverage_percent() > str !> any {
 // so that suffix would pull a target that needs the race-enabled suite into the
 // drift gate.
 export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(test);
-    ctx.writesFiles("assets/coverage.svg");
-    // The three things the verdict is a function of, so this target caches honestly
-    // instead of opting out. coverage.hand.out carries the percentage and is a
-    // declared output of `test`, so a replayed suite still leaves it on disk;
-    // assets/coverage.svg is the committed file the check below compares against, so
-    // hand-editing it has to invalidate the pass; badge.buzz renders the bytes both
-    // branches produce. The charms are already in the key, which covers the two
-    // branches this body takes.
+    // One badge per LANGUAGE: the figure spans every Go module in the tree, merged from
+    // the profile each module's own suite already wrote, so nothing is measured twice.
+    // libs/commentdash, libs/testlayout and libs/textsearch's Go are packages of this
+    // module and are in coverage.out already; gopherbuzz and diagnostics carry their own
+    // go.mod, so their suites run in their own projects and land here as files.
+    ctx.needs(test, gopherbuzz\test, diagnostics\test);
+    ctx.writesFiles("assets/coverage.svg", "coverage.merged.out");
+    // The things the verdict is a function of, so this target caches honestly
+    // instead of opting out. coverage.hand.out carries this module's profile and is a
+    // declared output of `test`, so a replayed suite still leaves it on disk, as are the
+    // two module profiles; assets/coverage.svg is the committed file the check below
+    // compares against, so hand-editing it has to invalidate the pass; badge.buzz
+    // renders the bytes both branches produce. The charms are already in the key, which
+    // covers the two branches this body takes.
     //
     // A footprint REPLACES the project baseline rather than adding to it (see the note
     // on `test`), and that is the point here: the Go tree reaches this target only
-    // through the profile that ctx.needs(test) refreshes.
-    ctx.readsFiles("coverage.hand.out", "assets/coverage.svg", "badge.buzz");
+    // through the profiles that ctx.needs refreshes.
+    ctx.readsFiles("coverage.hand.out", "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
+                   "assets/coverage.svg", "badge.buzz", "coverage.buzz");
     // Only the CI runner writes or judges it. 105 non-test files carry a //go:build
     // constraint, so the ratio is a property of the machine: 67.6% on macOS against
     // 66.9% on Linux for one commit. A laptop that wrote it replaced CI's number.
     if (!ctx.hasCharm("gha")) { return; }
-    final badgePct = coverage_percent().split(".")[0];
+    final badgePct = merged_coverage_percent().split(".")[0];
     final wanted = badge\coverage("go coverage", percent: badgePct, radius: 3);
     if (ctx.hasCharm("rw")) {
         fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);

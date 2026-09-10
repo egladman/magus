@@ -31,21 +31,7 @@ import "proc";
 // informational) and does not run in ci, which uses the custom targets below.
 import "magus/spell/typescript";
 
-// badge renders the coverage SVG; cov extracts the percentage from the lcov report.
-import "../../badge" as badge;
 import "../../tools/toolchain-policy" as policy;
-import "../../coverage" as cov;
-import "lcov";
-
-// The badge is written into the ROOT project's assets/, not this project's own tree,
-// because the docs SSG copies exactly one directory into the site (docs/render.buzz
-// copies <root>/assets/). A badge sitting at libs/textsearch/coverage.svg is referenced
-// by the root README, never copied, and fails the site's asset-integrity gate - which is
-// how `magus run generate` was left red. Declaring it through the workspace handle rather
-// than writing behind magus's back is what keeps `magus clean`, the watch rebuild guard
-// and ownership lookup able to see it: writing another project's tree makes THAT project
-// depend on this one, so the site is always rendered after the badge exists.
-import "project/../.." as workspace;
 
 magus\project({
     // The shared node window, by explicit import (tools/toolchain-policy.buzz).
@@ -138,9 +124,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // name a .testcache bundle instead of the src/*.ts someone wrote.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    ctx.writesFiles(workspace\file("assets/textsearch-coverage.svg"));
-    final badge_path = fs\join("..", "..", "assets", "textsearch-coverage.svg");
-    final before = drift\hashes([badge_path]);
+    // The lcov report is a declared output, not a badge: the TypeScript badge is one
+    // figure across every TypeScript project, rendered by the console (the top of the
+    // TypeScript dependency graph) from this report and its own. Declaring it keeps a
+    // cache hit restoring the report the console reads.
+    ctx.writesFiles("coverage.lcov");
     install();
 
     final tests = fs\glob("src/**/*.test.ts");
@@ -160,13 +148,6 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
         "--test"];
     foreach (b in fs\glob(".testcache/**/*.test.js")) { run.append(b.value); }
     proc\exec("node", run, ".", {});
-
-    final pct = lcov\percent(fs\readFile("coverage.lcov"), keep: "src/");
-    fs\writeFile(badge_path, badge\coverage("textsearch coverage", percent: pct, radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift\changedSince(before, [badge_path]).len() > 0) {
-        throw "test: assets/textsearch-coverage.svg is stale; re-run `magus run test:rw libs/textsearch` and commit the badge";
-    }
 }
 
 // 'ci' is the anchor `magus affected ci` keys off: the lint gate and the unit tests.
