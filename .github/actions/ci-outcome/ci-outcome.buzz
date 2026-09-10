@@ -56,7 +56,7 @@ fun volatilitySection() > str !> any {
     // One typed read of the loaded workspace. This used to shell out twice - once for
     // `-o name` to decide whether to render anything, and again for `-o text` to get the
     // prose - and both answers are fields on the same report.
-    final report = magus\insight([]);
+    final report = magus\insight();
     var flagged = "";
     foreach (t in report.volatility.targets) {
         if (t.volatile) {

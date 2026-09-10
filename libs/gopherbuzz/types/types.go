@@ -390,6 +390,19 @@ func (p *annotParser) parseUnmodified() Type {
 	default:
 		if strings.HasPrefix(p.s[p.pos:], "fun") {
 			p.pos += 3
+			// A generic function type carries its type parameters before the
+			// parameter list (`fun::<C, D>() > int`). They are erased, so skipping
+			// the list is what lets the params and the return arrow parse at all;
+			// without it the whole annotation degrades to a bare `fun()`.
+			if strings.HasPrefix(p.s[p.pos:], "::<") {
+				p.pos += 3
+				for p.peek() != '>' && p.peek() != 0 {
+					p.advance()
+				}
+				if p.peek() == '>' {
+					p.advance()
+				}
+			}
 			var params []Type
 			if p.peek() == '(' {
 				p.advance()
