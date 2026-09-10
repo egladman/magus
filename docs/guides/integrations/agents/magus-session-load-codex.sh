@@ -124,10 +124,9 @@ done
 
 if [ -n "$session_stdout" ]; then
   cat "$work/events"
-  # Nothing was delivered to magus, so the checkpoints stay where they were.
-  exit 0
+else
+  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 fi
-"$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 
 mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
 while read -r mark position; do

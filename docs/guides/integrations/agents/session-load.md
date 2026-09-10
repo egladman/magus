@@ -126,7 +126,9 @@ Each one scopes to a repository (`HOST_REPO_ROOT`, defaulting to the git topleve
 of the current directory) and keeps a per-file checkpoint under
 `${XDG_STATE_HOME:-~/.local/state}/magus/session-load/<host>/`, so a re-run reads
 only what is new. The checkpoint moves only after the whole stream is delivered:
-a failed load is retried, never skipped.
+a failed load is retried, never skipped. `--stdout` delivers it to you, so it
+moves the checkpoint too; to look without consuming, point `SESSION_STATE_DIR` at
+a scratch directory for that run.
 
 Each file's header lists the variables it takes. Every one of them announces
 itself on stderr when it cannot run, rather than exiting quietly, because a
@@ -343,10 +345,9 @@ done
 
 if [ -n "$session_stdout" ]; then
   cat "$work/events"
-  # Nothing was delivered to magus, so the checkpoints stay where they were.
-  exit 0
+else
+  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 fi
-"$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 
 # Checkpoints are committed only once the stream has been delivered. A load that
 # failed leaves every offset where it was, so the retry re-reads the same records
@@ -491,10 +492,9 @@ done
 
 if [ -n "$session_stdout" ]; then
   cat "$work/events"
-  # Nothing was delivered to magus, so the checkpoints stay where they were.
-  exit 0
+else
+  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 fi
-"$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 
 mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
 while read -r mark position; do
@@ -634,10 +634,9 @@ done
 
 if [ -n "$session_stdout" ]; then
   cat "$work/events"
-  # Nothing was delivered to magus, so the checkpoints stay where they were.
-  exit 0
+else
+  "$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 fi
-"$SESSION_MAGUS_BIN" session load < "$work/events" || exit 1
 
 mkdir -p "$SESSION_STATE_DIR" 2>/dev/null || exit 0
 while read -r mark position; do
