@@ -7,8 +7,8 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { EventSchema, Kind, Status } from "@wire/viewer/v1alpha1/viewer_pb";
-import { consumeLiveToken, getLiveToken, fetchSSE, logsLink } from "../../lib/daemon";
-import { notify, matchAuthorMarker } from "../../lib/notifications";
+import { consumeLiveToken, getLiveToken, fetchSSE, logsLink, surfaceLink } from "../../lib/daemon";
+import { notify, matchAuthorMarker, undeclaredSeedNotice } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
@@ -103,6 +103,18 @@ function onLiveEvent(type: string, data: string): void {
       message: label + " failed.",
       link,
     });
+  }
+  // The run's scope frame carries the projects it selected on files nothing declares (MGS1028). It rides
+  // the same stream as the FAIL above rather than a channel of its own, and the tier is decided by
+  // undeclaredSeedNotice off the split magus already made, so this surface holds no opinion about which
+  // undeclared file is a build input. The deep-link is the diff filtered to unclaimed files, which is
+  // where those files can be looked at and declared.
+  if (ev.kind === Kind.SCOPE && ev.undeclared.length > 0) {
+    const input = undeclaredSeedNotice(
+      ev.undeclared,
+      surfaceLink("diff", liveNotifyHost, { role: "unclaimed" }),
+    );
+    if (input) notify(input);
   }
   // Author-declared markers: a build that prints `magus:alert:`/`magus:notice:` raises a bell/history
   // notification, matched frontend-side off the verbatim output line (no backend push). Keyed on the

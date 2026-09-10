@@ -99,6 +99,19 @@ message Invocation {
 // Event is one line of a structured invocation log - the atom of the stream. Most events
 // are output or result; the first event of an invocation is KIND_STARTED and carries the
 // command + magus_version (the run's identity), which every other event leaves unset.
+// UndeclaredSeed is one project a run selected on changed files that no project
+// declares (MGS1028): directory containment chose it, so the targets it reran could
+// not have answered differently. Rides KIND_SCOPE.
+message UndeclaredSeed {
+  string project = 1;          // repo-relative project path
+  repeated string files = 2;   // the undeclared files that selected it
+  // inputs is the subset of files that read as build INPUTS (a dependency lock, a
+  // linter rule set, a toolchain pin). It is the half that changes what a verdict
+  // means: a target selected anyway can still replay an answer computed under the
+  // rules the edit just replaced, because the file that replaced them keys nothing.
+  repeated string inputs = 3;
+}
+
 message Event {
   google.protobuf.Timestamp time = 1;    // when the event occurred
   string project = 2;                    // repo-relative project path
@@ -113,6 +126,12 @@ message Event {
 
   Command command = 11;                  // set only on the KIND_STARTED event
   string magus_version = 12;             // set only on the KIND_STARTED event
+
+  // Set only on a KIND_SCOPE event carrying no target: the projects this run
+  // selected on files nothing declares. It rides the run's own stream because it
+  // is a fact about this run's scope, and the readers that want it are already
+  // consuming these frames.
+  repeated UndeclaredSeed undeclared = 13;
 }
 
 // Journal bundles an invocation header with its events - the whole thing for the offline

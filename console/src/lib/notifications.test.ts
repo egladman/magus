@@ -7,6 +7,7 @@ import {
   estimateStorageBytes,
   humanBytes,
   daemonCacheOverThreshold,
+  undeclaredSeedNotice,
   LOCALSTORAGE_WARN_BYTES,
   DAEMON_CACHE_WARN_ABS_BYTES,
 } from "./notifications";
@@ -243,4 +244,57 @@ test("subscribe fires on change and unsubscribe stops it", () => {
   off();
   s.notify({ source: "Dashboard", message: "b" });
   assert.equal(hits, 2, "no more callbacks after unsubscribe");
+});
+
+// MGS1028's tier is the one admission decision this module makes from data rather than from a caller's
+// say-so, so both branches are pinned: an undeclared file that looks like a build input rings the bell
+// (a cached verdict may replay under rules that no longer apply), and everything else records silently.
+test("undeclaredSeedNotice: an input-looking file rings the bell", () => {
+  const n = must(
+    undeclaredSeedNotice(
+      [{ project: ".", files: [".golangci.yml", "LICENSE"], inputs: [".golangci.yml"] }],
+      "../diff/#role=unclaimed",
+    ),
+  );
+  assert.equal(n.important, true);
+  assert.equal(n.kind, "warn");
+  assert.equal(n.source, "Affected");
+  assert.match(n.message, /\.golangci\.yml/);
+  assert.deepEqual(n.link, { label: "Show unclaimed files", href: "../diff/#role=unclaimed" });
+});
+
+test("undeclaredSeedNotice: no input-looking file records silently", () => {
+  const n = must(
+    undeclaredSeedNotice([{ project: ".", files: ["LICENSE", "NOTES.md"], inputs: [] }]),
+  );
+  assert.equal(n.important, false);
+  assert.equal(n.kind, "ok");
+  assert.match(n.message, /2 changed file/);
+  assert.equal(n.link, undefined, "no href given, so the entry carries no action");
+});
+
+test("undeclaredSeedNotice: nothing undeclared raises nothing", () => {
+  assert.equal(undeclaredSeedNotice([]), null);
+  assert.equal(undeclaredSeedNotice([{ project: "." }]), null, "a seed with no files is not news");
+});
+
+test("undeclaredSeedNotice: the message counts past the names it spells out", () => {
+  const inputs = ["a/.nvmrc", "b/mise.toml", "c/go.sum", "d/uv.lock"];
+  const n = must(undeclaredSeedNotice([{ project: ".", files: inputs, inputs }]));
+  assert.match(n.message, /and 1 more/);
+  assert.ok(!n.message.includes("uv.lock"), "the fourth name is counted, not listed");
+});
+
+test("undeclaredSeedNotice: the dedupe key follows the files, not the run", () => {
+  const first = must(
+    undeclaredSeedNotice([{ project: ".", files: ["mise.toml"], inputs: ["mise.toml"] }]),
+  );
+  const again = must(
+    undeclaredSeedNotice([{ project: ".", files: ["mise.toml"], inputs: ["mise.toml"] }]),
+  );
+  assert.equal(first.key, again.key, "the same finding on a later run is the same entry");
+  const other = must(
+    undeclaredSeedNotice([{ project: ".", files: [".nvmrc"], inputs: [".nvmrc"] }]),
+  );
+  assert.notEqual(first.key, other.key);
 });

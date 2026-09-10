@@ -1,7 +1,9 @@
 package types
 
 import (
+	"path"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/spells"
 )
@@ -804,6 +806,65 @@ var magusMaintainedFiles = map[string]bool{
 // committed, rather than a target output or anything a project declares. The path is
 // workspace-relative and slash-separated, as FileEntry.Path and StagingPlan carry it.
 func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
+
+// buildInputNames are the exact base names that decide what a tool DOES rather
+// than what it reads: a resolved dependency lock, a linter's rule set, a
+// formatter's config, a pinned toolchain version. Lowercased for matching.
+var buildInputNames = map[string]bool{
+	// Dependency locks: the graph a build actually compiles against.
+	"go.sum": true, "go.mod": true, "go.work": true, "go.work.sum": true,
+	"package-lock.json": true, "npm-shrinkwrap.json": true, "pnpm-lock.yaml": true,
+	"yarn.lock": true, "bun.lock": true, "bun.lockb": true,
+	"cargo.lock": true, "composer.lock": true, "gemfile.lock": true,
+	"poetry.lock": true, "pdm.lock": true, "uv.lock": true, "pipfile.lock": true,
+	// Rule sets. Editing one means every verdict already in the cache was
+	// computed under rules that no longer apply.
+	".golangci.yml": true, ".golangci.yaml": true, ".golangci.toml": true,
+	"biome.json": true, "biome.jsonc": true, "dprint.json": true,
+	".editorconfig": true, ".clang-format": true, "rustfmt.toml": true,
+	".flake8": true, "ruff.toml": true, ".rubocop.yml": true, ".swiftlint.yml": true,
+	// Toolchain pins: which compiler, formatter or linter version ran.
+	".tool-versions": true, "mise.toml": true, ".mise.toml": true,
+	".nvmrc": true, ".node-version": true, ".python-version": true,
+	".ruby-version": true, ".go-version": true, ".terraform-version": true,
+}
+
+// buildInputPrefixes cover the config families that spell themselves several ways
+// (.eslintrc.json, eslint.config.mjs, .prettierrc.yaml, rust-toolchain.toml),
+// where the stem is the stable half and the extension is not.
+var buildInputPrefixes = []string{
+	".eslintrc", "eslint.config.",
+	".prettierrc", "prettier.config.",
+	".stylelintrc", "stylelint.config.",
+	".markdownlint",
+	"rust-toolchain",
+}
+
+// LooksLikeBuildInput reports whether a workspace-relative path reads as a build
+// INPUT: a dependency lock, a rule set, or a toolchain pin. A heuristic over the
+// base name, and it has to be one, because it is asked about files no project
+// declares, where there is no declaration to read the answer off.
+//
+// The path is slash-separated, as FileEntry.Path and the affected set carry it.
+//
+// ONE function rather than a list per caller, because the callers must not drift
+// on it: MGS1028 ranks an undeclared .golangci.yml ahead of an undeclared
+// LICENSE, and the console decides whether that seeding is worth interrupting a
+// reader over on the same answer. An unrecognized name reads as NOT an input,
+// which is the safe direction: a miss costs a quieter notice, a false hit costs
+// an interruption over somebody's editor config.
+func LooksLikeBuildInput(p string) bool {
+	name := strings.ToLower(path.Base(p))
+	if buildInputNames[name] {
+		return true
+	}
+	for _, prefix := range buildInputPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
 // count, items} envelope `magus describe ... -o json` emits. The Inspector method

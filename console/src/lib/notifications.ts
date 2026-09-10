@@ -12,13 +12,20 @@
 // Anything that fails one of those is PULL, and belongs on the dashboard or the activity trail, not
 // here. Do NOT add notifications that merely report progress or restate what a surface already shows.
 //
-// TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the four things that are genuinely
+// TWO TIERS. The BELL tier lights the unseen-dot; it is reserved for the five things that are genuinely
 // "stop and look" (the `important` opt-in below carries the rest: a share connect, a storage threshold,
 // an author-declared marker):
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
 //   - daemon health degraded/down       -> deep-link: the dashboard
 //   - a new remark on your review       -> deep-link: the diff surface
+//   - a rule set or toolchain pin nothing declares (MGS1028) -> deep-link: the diff, unclaimed files
+//
+// That last one earns the bell on the first half of the rule: a linter's rules or a pinned tool version
+// that no project declares keys nothing, so the verdict recorded under the OLD rules is still valid in
+// the cache and can replay under the new ones. The run you just watched go green checked something else.
+// An undeclared LICENSE is the same mechanism costing only a wasted rerun, and it is history tier, which
+// is the whole reason the tier is decided per changeset rather than per diagnostic.
 //
 // That last one is a DELIBERATE WIDENING of the rule above it, made 2026-08-26, and it is worth being
 // explicit rather than letting the list quietly grow. Every other entry earns the bell by changing what
@@ -220,6 +227,76 @@ export function matchAuthorMarker(line: string, source = "Build"): NotifyInput |
   const notice = hit(NOTICE_PREFIX);
   if (notice) return { source, kind: "ok", important: false, message: notice };
   return null;
+}
+
+// UNDECLARED SEEDS (MGS1028). A run reports, on its scope event, the projects it selected on changed
+// files that no project declares. magus has already split them: `inputs` is the subset it classified as
+// build inputs (a dependency lock, a linter rule set, a toolchain pin), decided by ONE classifier in the
+// engine (types.LooksLikeBuildInput) so this module holds no second opinion about which names count.
+export interface UndeclaredSeed {
+  readonly project: string;
+  readonly files?: readonly string[];
+  readonly inputs?: readonly string[];
+}
+
+// How many file names a message spells out before it starts counting. Three is what fits on a line the
+// reader takes in at a glance; the deep-link is where the full set lives.
+const SEED_NAME_CAP = 3;
+
+// nameList renders up to SEED_NAME_CAP names, counting the rest. Plain ASCII, Oxford-free.
+function nameList(names: readonly string[]): string {
+  if (names.length <= SEED_NAME_CAP) return names.join(", ");
+  return (
+    names.slice(0, SEED_NAME_CAP).join(", ") + " and " + (names.length - SEED_NAME_CAP) + " more"
+  );
+}
+
+// undeclaredSeedNotice turns a run's undeclared seeds into a notification, or null when there were none.
+//
+// The TIER is the whole decision, and it splits exactly where the admission doctrine does. An undeclared
+// file that looks like a build INPUT changes what you can trust: it keys nothing, so a verdict computed
+// under the rules it just replaced stays valid in the cache and can replay. That is the bell. Every other
+// undeclared file costs a rerun whose answer could not have differed, which is worth recording and not
+// worth interrupting for, so it records silently in the history tier.
+//
+// Pure, so the tier rule is unit-tested here and the caller owns only where-and-dedupe. `href` is the
+// deep-link the caller builds (the diff surface filtered to unclaimed files); omitted, the entry carries
+// no action.
+export function undeclaredSeedNotice(
+  seeds: readonly UndeclaredSeed[],
+  href?: string,
+): NotifyInput | null {
+  if (seeds.length === 0) return null;
+  const projects = seeds.map((s) => s.project);
+  const inputs = seeds.flatMap((s) => s.inputs ?? []);
+  const files = seeds.flatMap((s) => s.files ?? []);
+  if (files.length === 0 && inputs.length === 0) return null;
+  const link = href ? { label: "Show unclaimed files", href } : undefined;
+  if (inputs.length > 0) {
+    return {
+      source: "Affected",
+      kind: "warn",
+      important: true,
+      key: "mgs1028:input:" + inputs.join(","),
+      message:
+        "No project declares " +
+        nameList(inputs) +
+        ", so they key no cache. A verdict recorded under the rules they replaced can still replay.",
+      link,
+    };
+  }
+  return {
+    source: "Affected",
+    kind: "ok",
+    important: false,
+    key: "mgs1028:" + projects.join(","),
+    message:
+      files.length +
+      " changed file(s) selected " +
+      nameList(projects) +
+      " by directory containment while nothing declares them, so the targets they reran could not have answered differently.",
+    link,
+  };
 }
 
 // STORAGE ALERTS. Two storage stores can grow until they hurt: the browser's localStorage (the console's

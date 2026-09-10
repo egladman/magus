@@ -75,6 +75,7 @@ import {
   type ReviewInfo,
   type ReviewThread,
   type ReviewVerdict,
+  type ReviewRole,
   type BranchChange,
 } from "./session";
 import { setMarkdown } from "./markdown";
@@ -123,6 +124,17 @@ const CROSSHAIR: readonly string[] = [
   "M19 12h3",
 ];
 import type { SurfaceInstance } from "../standalone";
+
+// The roles a #role= deep-link may name, checked rather than cast: the fragment is whatever the
+// address bar holds, and a value outside the vocabulary must leave the index unfiltered rather than
+// hide every file.
+const ROLE_FILTERS: readonly ReviewRole[] = ["source", "output", "maintained", "unclaimed"];
+
+// hashRole reads the deep-link's role filter, empty when the fragment carries none.
+function hashRole(): ReviewRole | "" {
+  const raw = parseHash().role ?? "";
+  return ROLE_FILTERS.find((r) => r === raw) ?? "";
+}
 
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
@@ -199,6 +211,11 @@ interface State {
   // branchesUnsupported names the backend that cannot answer, empty when one did. It is what
   // keeps an empty map from reading as "nothing competes" on a backend that never looked.
   branchesUnsupported: string;
+  // roleFilter narrows the file index to one annotation role, set only by a deep-link (#role=). The
+  // notification center sends a reader here on "unclaimed" so the files nothing declares are the ones
+  // in front of them; it is cleared from the strip the filter renders, and there is no control that
+  // sets it, because arriving already narrowed is the only case it serves.
+  roleFilter: ReviewRole | "";
   overview: boolean;
   phase: Phase;
   collaboration: CollaborationState;
@@ -412,6 +429,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     pairs: [],
     branches: null,
     branchesUnsupported: "",
+    roleFilter: hashRole(),
     overview: false,
     phase: "loading",
     collaboration: demo ? "live" : "unavailable",
@@ -457,7 +475,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
   sidebarSpacer.append(sidebarWindow);
   sidebarIndex.append(sidebarSpacer);
   const sidebarGenerated = h("div", "console-diff-sidebar__generated");
-  sidebar.append(sidebarHead, sidebarFilterWrap, sidebarIndex, sidebarGenerated);
+
+  // The deep-link's filter says so on screen and offers its own way out. A narrowing the reader did
+  // not perform, with no control showing it, is a file index that silently lies about the changeset.
+  const roleStrip = h("div", "console-diff-rolefilter");
+  roleStrip.hidden = true;
+  const roleStripText = h("span", "console-diff-rolefilter__text");
+  const roleStripClear = h("button", "console-diff-rolefilter__clear");
+  roleStripClear.type = "button";
+  roleStripClear.textContent = "Show all";
+  roleStripClear.addEventListener("click", () => {
+    state.roleFilter = "";
+    renderSidebar();
+  });
+  roleStrip.append(roleStripText, roleStripClear);
+
+  sidebar.append(sidebarHead, sidebarFilterWrap, roleStrip, sidebarIndex, sidebarGenerated);
 
   const reopenBtn = h("button", "console-diff-reopen");
   reopenBtn.type = "button";
@@ -1860,14 +1893,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
       else groups.set(key, [{ o, i }]);
     });
     const needle = sidebarFilter.value.trim().toLocaleLowerCase();
+    const role = state.roleFilter;
+    roleStrip.hidden = !role;
+    if (role) roleStripText.textContent = "Showing " + role + " files only.";
     sidebarEntries = [];
     let shownTotal = 0;
     for (const [project, entries] of groups) {
-      const shown = needle
-        ? entries.filter(({ o }) =>
-            `${project}/${o.file.path}`.toLocaleLowerCase().includes(needle),
-          )
-        : entries;
+      // The typed filter and the deep-link's role filter AND together: a reader who arrived narrowed
+      // to one role and then types is narrowing what they were sent, not replacing it.
+      let shown = role ? entries.filter(({ o }) => o.annotation?.role === role) : entries;
+      if (needle)
+        shown = shown.filter(({ o }) =>
+          `${project}/${o.file.path}`.toLocaleLowerCase().includes(needle),
+        );
       if (shown.length === 0) continue;
       shownTotal += shown.length;
       sidebarEntries.push({ kind: "project", project, count: shown.length });

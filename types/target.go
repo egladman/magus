@@ -112,6 +112,13 @@ type Target struct {
 	Charms []string `json:"charms,omitempty"`                    // execution charms parsed from the "target:charm,..." suffix
 	Files  []string `json:"files,omitempty"`                     // changed files within project; populated by affected expansion
 
+	// Undeclared is the subset of Files that no project declares (MGS1028): they
+	// selected this project by directory containment while moving no cache key.
+	// Carried alongside Files, and for the same reason, because the expansion is
+	// the only place the answer exists and recomputing it downstream would mean a
+	// second opinion on which project's declaration counts.
+	Undeclared []string `json:"undeclared,omitempty" buzz:"undeclared"`
+
 	// Declared and DeclaredCharms are the raw spellings ParseTarget rewrote, empty
 	// when the caller already wrote canonical form. Provenance, not identity: Name
 	// and Charms above are what magus resolves against, and these only record how it

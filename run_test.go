@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -1440,4 +1441,64 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
 	assert.Contains(t, got, "status=retried_volatile")
 	assert.Contains(t, got, "reason=bootstrap")
+}
+
+// TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
+// targets produce one, that a project is reported once however many targets it
+// contributed, and the input/not-input split the notification tier keys on.
+func TestUndeclaredScopeEvent(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets []types.Target
+		want    []journal.UndeclaredSeed
+	}{
+		{
+			name:    "nothing undeclared emits nothing",
+			targets: []types.Target{{Path: "api", Name: "build", Files: []string{"api/main.go"}}},
+		},
+		{
+			name: "an input-looking file is split out",
+			targets: []types.Target{{
+				Path: ".", Name: "ci",
+				Files:      []string{".golangci.yml", "LICENSE"},
+				Undeclared: []string{".golangci.yml", "LICENSE"},
+			}},
+			want: []journal.UndeclaredSeed{{
+				Project: ".",
+				Files:   []string{".golangci.yml", "LICENSE"},
+				Inputs:  []string{".golangci.yml"},
+			}},
+		},
+		{
+			name: "no file reads as an input, so Inputs stays empty",
+			targets: []types.Target{{
+				Path: "docs", Name: "lint", Undeclared: []string{"docs/NOTES.txt"},
+			}},
+			want: []journal.UndeclaredSeed{{Project: "docs", Files: []string{"docs/NOTES.txt"}}},
+		},
+		{
+			name: "one project contributing several targets is reported once, in path order",
+			targets: []types.Target{
+				{Path: "web", Name: "build", Undeclared: []string{"web/.prettierrc"}},
+				{Path: "web", Name: "test", Undeclared: []string{"web/.prettierrc"}},
+				{Path: ".", Name: "build", Undeclared: []string{"mise.toml"}},
+			},
+			want: []journal.UndeclaredSeed{
+				{Project: ".", Files: []string{"mise.toml"}, Inputs: []string{"mise.toml"}},
+				{Project: "web", Files: []string{"web/.prettierrc"}, Inputs: []string{"web/.prettierrc"}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := undeclaredScopeEvent(tc.targets)
+			if tc.want == nil {
+				assert.False(t, ok)
+				assert.Equal(t, journal.Event{}, got)
+				return
+			}
+			assert.True(t, ok)
+			assert.Equal(t, journal.Event{Kind: journal.KindScope, Undeclared: tc.want}, got)
+		})
+	}
 }

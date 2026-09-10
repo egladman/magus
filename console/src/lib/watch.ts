@@ -15,7 +15,7 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind } from "@wire/activity/v1alpha1/activity_pb";
 import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { TokenService, TokenScope } from "@wire/token/v1alpha1/token_pb";
-import { createDaemonTransport, getLiveToken, logsLink, resolveDaemonHost } from "./daemon";
+import { createDaemonTransport, getLiveToken, resolveDaemonHost, surfaceLink } from "./daemon";
 import { showToast } from "./refresh-toast";
 import { mergedNotice, saidNotice } from "./review-notice";
 import {
@@ -27,15 +27,6 @@ import {
 } from "./notifications";
 
 const POLL_MS = 30_000;
-
-// surfaceLink deep-links a console surface by its canonical /console/<surface>/ clean path, the form
-// the shell's boot router opens. The re-attach fragment is taken from logsLink rather than rebuilt: a
-// console attached by #port= has no stored host, so a link that drops the fragment lands the reader on
-// a surface that cannot find the daemon.
-function surfaceLink(surface: string, host: string | null): string {
-  const hash = logsLink(host, {}).split("#")[1];
-  return "../" + surface + "/" + (hash ? "#" + hash : "");
-}
 
 // checkLocalStorageAlert warns once when the console's own localStorage footprint nears the browser quota.
 // Runs on mount regardless of daemon connectivity - it is the console's storage, not the daemon's.

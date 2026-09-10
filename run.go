@@ -121,6 +121,43 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
 }
 
+// undeclaredScopeEvent builds the run's scope event when any selected project was
+// seeded by files nothing declares (MGS1028), reporting false when none was.
+//
+// It is emitted HERE rather than from Affected because the journal only exists once
+// the invocation has opened, and the CLI expands the affected set before that. The
+// answer is not recomputed: it rides types.Target.Undeclared from the expansion, so
+// the event cannot disagree with what `magus affected --explain` prints.
+//
+// One event for the whole run, carrying no target, for the reason the CLI's own
+// MGS1028 hint gives: the fact is about the SCOPE, and a per-project frame would
+// have a reader dismissing the same finding once per project. Splitting the files
+// into Inputs is what lets a consumer tell a stale verdict from a wasted rerun.
+func undeclaredScopeEvent(targets []types.Target) (journal.Event, bool) {
+	var seeds []journal.UndeclaredSeed
+	seen := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		if len(t.Undeclared) == 0 || seen[t.Path] {
+			continue // several targets of one project describe one scope
+		}
+		seen[t.Path] = true
+		s := journal.UndeclaredSeed{Project: t.Path, Files: slices.Clone(t.Undeclared)}
+		for _, f := range t.Undeclared {
+			if types.LooksLikeBuildInput(f) {
+				s.Inputs = append(s.Inputs, f)
+			}
+		}
+		seeds = append(seeds, s)
+	}
+	if len(seeds) == 0 {
+		return journal.Event{}, false
+	}
+	slices.SortFunc(seeds, func(a, b journal.UndeclaredSeed) int {
+		return strings.Compare(a.Project, b.Project)
+	})
+	return journal.Event{Kind: journal.KindScope, Undeclared: seeds}, true
+}
+
 // redactError masks any resolved secret in err's MESSAGE while leaving the error chain
 // intact.
 //
@@ -155,6 +192,9 @@ func (e redactedError) Unwrap() error { return e.err }
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
 	ctx = attributeRun(ctx)
+	if scope, ok := undeclaredScopeEvent(targets); ok {
+		journal.Emit(ctx, scope)
+	}
 	type targetGroup struct {
 		name    string
 		targets []types.Target

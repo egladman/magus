@@ -1523,9 +1523,10 @@ func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef strin
 	out := make([]types.Target, len(r.Affected))
 	for i, path := range r.Affected {
 		out[i] = types.Target{
-			Path:  path,
-			Name:  target,
-			Files: r.FilesBySeed[path],
+			Path:       path,
+			Name:       target,
+			Files:      r.FilesBySeed[path],
+			Undeclared: r.UndeclaredBySeed[path],
 		}
 	}
 	return out, source, false, nil

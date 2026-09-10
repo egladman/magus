@@ -171,6 +171,33 @@
   inline-size: calc(100% - 2 * var(--console-pad));
 }
 
+/* The deep-link's role filter, stated over the index it narrows. The same inline-notice shape the
+   merged strip takes (a coloured left rule carrying the severity), at the compact tier the sidebar
+   declares, because it heads a rail rather than a surface. */
+.console-diff-rolefilter {
+  display: flex;
+  gap: var(--pf-t--global--spacer--sm);
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--pf-t--global--spacer--xs) var(--console-pad);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-start: 3px solid var(--console-accent);
+}
+
+.console-diff-rolefilter__text {
+  min-width: 0;
+}
+
+.console-diff-rolefilter__clear {
+  flex: 0 0 auto;
+  color: var(--pf-t--global--text--color--subtle);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* Virtualized file index. */
 .console-diff-sidebar__index {
   position: relative;

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A rule set nothing declares reaches the console's notification center.** A run's scope
+  event now carries the projects it selected on changed files no project declares
+  (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
+  linter config, lockfile or toolchain pin rings the bell, because it keys no cache and a
+  verdict recorded under the rules it replaced can still replay; anything else records
+  silently in the history tier. Both link to the review surface filtered to unclaimed files.
 - **A target whose inputs have not moved since it failed says so before it runs again.** A
   failure is not a cache entry, but its descriptor is still stored under the step's cache
   key, so a miss can check whether this exact tree has already been seen to fail. When it
