@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -352,4 +353,34 @@ func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedVCS(ctx, "", "git commit -m done"))
 	assert.Empty(t, denyLeaseScopedVCS(ctx, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
 	assert.Empty(t, denyLeaseScopedVCS(ctx, "harness/absent", "git commit -m done"))
+}
+
+// TestHookEnvelopeCwdLocatesTheWorkersCheckout pins the channel a host that runs its hooks
+// somewhere else reaches the worker's marker through: the envelope's cwd names the worker's
+// checkout, and the lease bound there scopes the verdict, whatever the hook process's own
+// directory is.
+func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	worker := narrowLease()
+	worker.Parent = "harness"
+	_, err = ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).Put(t.Context(), worker)
+	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, worker.ID))
+
+	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s1","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
+	var out bytes.Buffer
+	err = hookCmd(context.Background(), strings.NewReader(envelope), &out, []string{"-o", "name"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
+	assert.Equal(t, "deny\n", out.String())
+
+	events, err := trail.ReadRecent(cacheDir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
+	assert.Equal(t, worker.ID, events[0].Lease)
 }
