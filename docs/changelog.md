@@ -63,6 +63,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Cursor's post-compaction gap is named rather than approximated, because its `preCompact`
   returns a message for the person only, and the guide now carries a table of every job magus
   does through a host event, with the event that carries it or the reason nothing does.
+- **The hook configs magus ships are graded against the agent hosts' own schemas.** Claude
+  Code's `.claude/settings.json`, the `codex-hooks.json` wiring, and every hooks block the
+  Claude Code, Codex and Cursor guide pages embed now validate against a schema vendored
+  under `testdata/hostschemas/`: SchemaStore's for Claude Code settings and Codex hooks, and
+  OpenAI's own generated one for a Codex `PreToolUse` reply. The JSON the shipped guard
+  templates print is rendered from the template bodies in those files and graded the same
+  way, so a host renaming a field surfaces as a failing test rather than as a hook that
+  quietly stopped judging. Deliberately wrong event names are asserted to fail, because a
+  schema that only ever sees valid input cannot be told from an empty one. Claude Code and
+  Cursor publish nothing for hook stdout and Cursor nothing for `.cursor/hooks.json`, so
+  those three schemas are transcribed by hand from the reference pages and the
+  `@anthropic-ai/claude-agent-sdk` types and are recorded as ours, not theirs, in
+  `testdata/hostschemas/SOURCES.md` beside each file's URL, read date and digest. OpenCode
+  has no hook config to check; its plugin is type-checked against `@opencode-ai/plugin`
+  already. `HOST_SCHEMAS_MODE=verify magus buzz tools/host-schemas.buzz` re-fetches and
+  reports what moved upstream. No test reaches the network.
 - **A rule set nothing declares reaches the console's notification center.** A run's scope
   event now carries the projects it selected on changed files no project declares
   (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
