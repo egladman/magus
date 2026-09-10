@@ -259,7 +259,11 @@ When `sandbox.enabled` is true and the acting lease resolves to a live row with 
 script in that checkout gets a filesystem WRITE grant of exactly:
 
 - the `owned_paths`, resolved as globs against the workspace root (a glob that
-  matches nothing grants nothing);
+  matches nothing grants nothing). A LITERAL path that does not exist yet grants
+  the nearest directory above it that does, because a lease routinely owns a
+  file it was spawned to create and the guard already admits that write; only a
+  glob keeps the existing-files-only rule, since a typo in a glob is the case
+  that rule protects against;
 - the workspace cache directory and `$TMPDIR`, which a target needs to produce
   output at all.
 
@@ -269,8 +273,17 @@ the tree it is changing. A refusal is recorded on the trail as a
 hit rather than only that something was blocked.
 
 Nothing narrows for a ROOT lease (a row with no parent is the orchestrator, and
-it owns the checkout), for a lease id that names no live row, for a row with no
-owned paths, or when the sandbox is off.
+it owns the checkout), for a lease id that names no live row, for a writable row
+with no owned paths, or when the sandbox is off. A `read_only` row narrows to
+the cache directory and `$TMPDIR` alone, which is the sandbox's reading of the
+guard refusing every write under such a lease.
+
+Both tiers resolve the acting lease the same way, in this order: an explicit
+`--lease`, the `BAGGAGE` a worker inherited, then the marker `magus session
+lease <id>` bound to the checkout. A host runs its hooks from wherever it likes,
+so the guard locates that checkout from the `cwd` its hook envelope reports and
+falls back to the hook process's own directory only when the envelope carries
+none.
 
 A `forbidden_path` inside an owned one is refused, and it costs the directory
 holding it as well: both this policy and landlock are allowlists with no deny

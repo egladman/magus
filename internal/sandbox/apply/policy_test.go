@@ -221,6 +221,24 @@ func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "x.txt")))
 }
 
+// TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate is the create case: a lease
+// that owns a file not yet on disk can write it, because its directory is granted. A
+// glob keeps the existing-only rule, so the two cases sit side by side.
+func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
+	root, cacheDir := leaseWorkspace(t, types.Lease{
+		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
+		OwnedPaths: []string{"pkg/a/new.go", "pkg/nowhere/**"},
+	})
+
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+
+	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "new.go")))
+	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "sibling.go")),
+		"the grant is the directory the file lands in, which is what landlock can express")
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
+	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "nowhere", "x.txt")), "a glob that matches nothing still grants nothing")
+}
+
 // TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone covers the rows that state no boundary
 // narrower than the workspace. A root lease is the orchestrator and owns the checkout; the
 // rest are rows the sandbox has nothing to derive from.

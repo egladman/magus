@@ -281,7 +281,10 @@ func workerLease(rows []types.Lease, leaseID string) (types.Lease, bool) {
 //
 // A glob that matches nothing contributes nothing, and so does one that will not parse: an
 // owned path is a claim about files that exist, and inventing a rule for a path that does
-// not would grant a subtree on the strength of a typo.
+// not would grant a subtree on the strength of a typo. A LITERAL path is the exception,
+// because a lease routinely owns a file it is spawned to create: it grants its nearest
+// existing ancestor, which is the directory the new file lands in. The guard already
+// admits that write, and a kernel that refused it would be the two tiers disagreeing.
 func grantedPaths(root string, owned, forbidden []string) []string {
 	forbiddenAbs := make([]string, 0, len(forbidden))
 	for _, f := range forbidden {
@@ -292,6 +295,11 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 	matched := make([]string, 0, len(owned))
 	for _, g := range owned {
 		pattern := strings.TrimPrefix(path.Clean(filepath.ToSlash(g)), "/")
+		if !strings.ContainsAny(pattern, "*?[{") {
+			abs := filesystem.ResolveRulePath(nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))))
+			matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+			continue
+		}
 		hits, err := doublestar.Glob(rootFS, pattern)
 		if err != nil {
 			continue
@@ -312,6 +320,22 @@ func grantedPaths(root string, owned, forbidden []string) []string {
 		out = append(out, m)
 	}
 	return out
+}
+
+// nearestExisting walks up from abs to the first path that exists, stopping at root: the
+// directory a not-yet-created file will land in.
+func nearestExisting(root, abs string) string {
+	for abs != root {
+		if _, err := os.Lstat(abs); err == nil {
+			return abs
+		}
+		parent := filepath.Dir(abs)
+		if parent == abs {
+			break
+		}
+		abs = parent
+	}
+	return root
 }
 
 // splitAroundForbidden returns what may be granted for abs: abs itself when no forbidden
