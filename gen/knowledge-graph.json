@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5433,
-  "edge_count": 9692,
+  "node_count": 5425,
+  "edge_count": 9684,
   "relations": [
     {
       "id": "annotates",
@@ -1307,8 +1307,8 @@
       "label": "blog",
       "source": "blog",
       "attrs": {
-        "dir_files": "68",
-        "dir_languages": "markdown,md#a-build-tool-should-not-generate-code,md#a-little-slop-is-fine,md#a-thing-i-am-still-working-out,md#accountability-is-the-whole-rule,md#an-invitation,md#could-and-should,md#dagger,md#enough-is-enough,md#everything-and-nothing,md#everything-goes"
+        "dir_files": "60",
+        "dir_languages": "markdown,md#a-build-tool-should-not-generate-code,md#a-little-slop-is-fine,md#a-thing-i-am-still-working-out,md#accountability-is-the-whole-rule,md#an-invitation,md#dagger,md#enough-is-enough,md#everything-and-nothing,md#everything-goes-in-the-box,md#expli"
       }
     },
     {
@@ -2960,17 +2960,6 @@
         "role": "doc",
         "tags": "opinion",
         "title": "The console was an experiment"
-      }
-    },
-    {
-      "id": "doc:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md",
-      "kind": "doc",
-      "label": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md",
-      "attrs": {
-        "role": "doc",
-        "tags": "opinion",
-        "title": "The skill I am trying not to lose"
       }
     },
     {
@@ -9221,76 +9210,6 @@
       "attrs": {
         "anchor": "the-console-was-an-experiment",
         "level": "1"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#could-and-should",
-      "kind": "docsection",
-      "label": "Could and should",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#could-and-should",
-      "attrs": {
-        "anchor": "could-and-should",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-claim-i-will-make",
-      "kind": "docsection",
-      "label": "The claim I will make",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-claim-i-will-make",
-      "attrs": {
-        "anchor": "the-claim-i-will-make",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "kind": "docsection",
-      "label": "The skill I am trying not to lose",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "attrs": {
-        "anchor": "the-skill-i-am-trying-not-to-lose",
-        "level": "1"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-i-have-to-concede-first",
-      "kind": "docsection",
-      "label": "What I have to concede first",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-i-have-to-concede-first",
-      "attrs": {
-        "anchor": "what-i-have-to-concede-first",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-cannot-tell-you",
-      "kind": "docsection",
-      "label": "What magus cannot tell you",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-cannot-tell-you",
-      "attrs": {
-        "anchor": "what-magus-cannot-tell-you",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-does-about-it",
-      "kind": "docsection",
-      "label": "What magus does about it",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-does-about-it",
-      "attrs": {
-        "anchor": "what-magus-does-about-it",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-the-research-actually-supports",
-      "kind": "docsection",
-      "label": "What the research actually supports",
-      "source": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-the-research-actually-supports",
-      "attrs": {
-        "anchor": "what-the-research-actually-supports",
-        "level": "2"
       }
     },
     {
@@ -53264,14 +53183,6 @@
       "provenance": "blog/2026-09-08-the-console-was-an-experiment.md"
     },
     {
-      "source": "dir:blog",
-      "target": "doc:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
       "source": "dir:cmd",
       "target": "dir:cmd/buzz-playground",
       "relation": "contains",
@@ -59566,14 +59477,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "blog/2026-09-08-the-console-was-an-experiment.md"
-    },
-    {
-      "source": "doc:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
     },
     {
       "source": "doc:console/README.md",
@@ -84454,54 +84357,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "blog/2026-09-01-the-best-code-is-still-no-code.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#could-and-should",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-claim-i-will-make",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-i-have-to-concede-first",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-cannot-tell-you",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-magus-does-about-it",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
-    },
-    {
-      "source": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#the-skill-i-am-trying-not-to-lose",
-      "target": "docsection:blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md#what-the-research-actually-supports",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-09-09-the-skill-i-am-trying-not-to-lose.md"
     },
     {
       "source": "docsection:console/README.md#naming-methodology-strict---the-formula-for-every-class-we-author",
