@@ -30,7 +30,7 @@ import {
   tsMillis,
   type PayloadRef,
 } from "./adapter";
-import { sessionLabel, sessionLineage, type SessionNode } from "./lineage";
+import { sessionKey, sessionLabel, sessionLineage, type SessionNode } from "./lineage";
 import { notify } from "../../lib/notifications";
 import { buildSection, renderLine } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
@@ -175,14 +175,24 @@ function leafLabel(ev: ActivityEvent, now: number): string {
 // the agent session that produced it.
 type IndexMode = "kind" | "session";
 
+// IndexState is what survives a repaint of the index: the branches the reader opened or closed,
+// keyed by mode and branch id so each grouping holds its own, and the leaf they selected, by the
+// event's position in the page. A branch with no entry takes the grouping's default.
+interface IndexState {
+  open: Map<string, boolean>;
+  current: number | null;
+}
+
 // indexBranch builds one collapsible tree branch: a labelled node with a count badge over the list
 // its children go in, wired to its own expand toggle. sub takes the second row of PF's node content
-// slot; "" leaves the branch a single line.
+// slot; "" leaves the branch a single line. onToggle reports each open or close so the caller can
+// remember it past the next repaint.
 function indexBranch(
   label: string,
   sub: string,
   count: number,
   expanded: boolean,
+  onToggle: (open: boolean) => void,
 ): { branch: HTMLElement; kids: HTMLElement } {
   const branch = h("li", "pf-v6-c-tree-view__list-item");
   branch.setAttribute("role", "treeitem");
@@ -190,8 +200,9 @@ function indexBranch(
   if (expanded) branch.classList.add("pf-m-expanded");
 
   const bContent = h("div", "pf-v6-c-tree-view__content");
-  const bNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
+  const bNode = h("button", "pf-v6-c-tree-view__node");
   bNode.type = "button";
+  bNode.title = sub ? label + "  " + sub : label;
   const toggle = h("span", "pf-v6-c-tree-view__node-toggle");
   const ticon = h("span", "pf-v6-c-tree-view__node-toggle-icon");
   ticon.append(chevron());
@@ -215,23 +226,26 @@ function indexBranch(
   bNode.addEventListener("click", () => {
     const open = branch.classList.toggle("pf-m-expanded");
     branch.setAttribute("aria-expanded", String(open));
+    onToggle(open);
   });
   return { branch, kids };
 }
 
-// indexLeaf builds one event row. Selecting it marks the row current across the whole tree and
-// calls onSelect with the event's position in the page.
+// indexLeaf builds one event row. Selecting it marks the row current across the whole tree,
+// records it in state, and calls onSelect with the event's position in the page.
 function indexLeaf(
   event: ActivityEvent,
   index: number,
   now: number,
+  state: IndexState,
   onSelect: (index: number) => void,
 ): HTMLElement {
   const leaf = h("li", "pf-v6-c-tree-view__list-item");
   leaf.setAttribute("role", "treeitem");
   const lContent = h("div", "pf-v6-c-tree-view__content");
-  const lNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
+  const lNode = h("button", "pf-v6-c-tree-view__node");
   lNode.type = "button";
+  if (state.current === index) lNode.classList.add("pf-m-current");
   const err = event.outcome === Outcome.ERROR;
   lNode.title = (err ? "error" : "ok") + " - " + leafLabel(event, now);
   const lContainer = h("span", "pf-v6-c-tree-view__node-container");
@@ -267,6 +281,7 @@ function indexLeaf(
       ?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
       .forEach((n) => n.classList.remove("pf-m-current"));
     lNode.classList.add("pf-m-current");
+    state.current = index;
     onSelect(index);
   });
   return leaf;
@@ -277,12 +292,20 @@ function indexLeaf(
 function kindBranches(
   events: ActivityEvent[],
   now: number,
+  state: IndexState,
   onSelect: (index: number) => void,
 ): HTMLElement[] {
   return groupEventsByKind(events).map((group, gi) => {
-    const { branch, kids } = indexBranch(group.label, "", group.events.length, gi === 0);
+    const key = "kind:" + group.label;
+    const { branch, kids } = indexBranch(
+      group.label,
+      "",
+      group.events.length,
+      state.open.get(key) ?? gi === 0,
+      (open) => state.open.set(key, open),
+    );
     for (const { event, index } of group.events)
-      kids.append(indexLeaf(event, index, now, onSelect));
+      kids.append(indexLeaf(event, index, now, state, onSelect));
     return branch;
   });
 }
@@ -293,18 +316,22 @@ function kindBranches(
 function sessionBranch(
   node: SessionNode,
   now: number,
+  state: IndexState,
   expanded: boolean,
   onSelect: (index: number) => void,
 ): HTMLElement {
+  const key = "session:" + sessionKey(node.host, node.session);
   const { branch, kids } = indexBranch(
     sessionLabel(node),
     node.session,
     node.events.length,
-    expanded,
+    state.open.get(key) ?? expanded,
+    (open) => state.open.set(key, open),
   );
   branch.dataset.session = node.session;
-  for (const { event, index } of node.events) kids.append(indexLeaf(event, index, now, onSelect));
-  for (const child of node.children) kids.append(sessionBranch(child, now, true, onSelect));
+  for (const { event, index } of node.events)
+    kids.append(indexLeaf(event, index, now, state, onSelect));
+  for (const child of node.children) kids.append(sessionBranch(child, now, state, true, onSelect));
   return branch;
 }
 
@@ -314,9 +341,12 @@ function sessionBranch(
 function sessionBranches(
   events: ActivityEvent[],
   now: number,
+  state: IndexState,
   onSelect: (index: number) => void,
 ): HTMLElement[] {
-  return sessionLineage(events).map((node, i) => sessionBranch(node, now, i === 0, onSelect));
+  return sessionLineage(events).map((node, i) =>
+    sessionBranch(node, now, state, i === 0, onSelect),
+  );
 }
 
 // renderIndexTree (re)builds the event index into container as a PF TreeView grouped the given way:
@@ -327,14 +357,28 @@ function renderIndexTree(
   events: ActivityEvent[],
   now: number,
   mode: IndexMode,
+  state: IndexState,
   onSelect: (index: number) => void,
 ): void {
   container.replaceChildren();
   const branches =
     mode === "session"
-      ? sessionBranches(events, now, onSelect)
-      : kindBranches(events, now, onSelect);
-  if (branches.length === 0) return; // the panel is hidden when empty; no note needed
+      ? sessionBranches(events, now, state, onSelect)
+      : kindBranches(events, now, state, onSelect);
+  if (branches.length === 0) {
+    // By kind, an empty tree means an empty page, and the panel hides itself. By session the page
+    // can be full and still group nothing, and a blank panel reads as a broken one.
+    if (mode === "session") {
+      container.append(
+        h(
+          "p",
+          "console-log-runs__empty",
+          "No agent sessions on this page. Only agent commands and spawns carry a session; By kind lists every event.",
+        ),
+      );
+    }
+    return;
+  }
 
   const tree = h("div", "pf-v6-c-tree-view pf-m-guides");
   const list = h("ul", "pf-v6-c-tree-view__list");
@@ -354,35 +398,39 @@ const INDEX_MODES: ReadonlyArray<{ id: IndexMode; label: string; title: string }
   },
 ];
 
-// mountIndexModes docks the grouping toggle between the index header and the tree. It reuses the
-// run browser's control strip and segmented-toggle rules rather than authoring a second pair: this
-// IS that aside, and the strip was written for exactly this slot.
-function mountIndexModes(panel: CollapsiblePanel, onChange: (mode: IndexMode) => void): void {
+// indexModeCell remembers which grouping the reader last chose, so reopening Activity resumes it.
+const indexModeCell = persisted<IndexMode>("activity-index-mode", INDEX_MODES[0].id);
+
+// mountIndexModes docks the grouping toggle between the index header and the tree and returns the
+// current mode's getter. It reuses the run browser's control strip and segmented-toggle rules
+// rather than authoring a second pair: this IS that aside, and the strip was written for exactly
+// this slot.
+function mountIndexModes(panel: CollapsiblePanel, onChange: () => void): () => IndexMode {
   const bar = h("div", "console-log-runs__controls");
   bar.dataset.controlSize = "compact";
   const group = h("div", "pf-v6-c-toggle-group console-log-runs__modes");
   group.setAttribute("role", "group");
   group.setAttribute("aria-label", "Group events by");
 
-  let mode: IndexMode = INDEX_MODES[0].id;
   const buttons = new Map<IndexMode, HTMLButtonElement>();
   for (const m of INDEX_MODES) {
     const item = h("div", "pf-v6-c-toggle-group__item");
-    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    const btn = h("button", "pf-v6-c-toggle-group__button");
     btn.type = "button";
     btn.title = m.title;
     btn.dataset.indexMode = m.id;
-    btn.setAttribute("aria-pressed", String(m.id === mode));
-    if (m.id === mode) btn.classList.add("pf-m-selected");
+    const selected = m.id === indexModeCell.get();
+    btn.setAttribute("aria-pressed", String(selected));
+    if (selected) btn.classList.add("pf-m-selected");
     btn.append(h("span", "pf-v6-c-toggle-group__text", m.label));
     btn.addEventListener("click", () => {
-      if (mode === m.id) return;
-      mode = m.id;
+      if (indexModeCell.get() === m.id) return;
+      indexModeCell.set(m.id);
       for (const [id, b] of buttons) {
-        b.classList.toggle("pf-m-selected", id === mode);
-        b.setAttribute("aria-pressed", String(id === mode));
+        b.classList.toggle("pf-m-selected", id === m.id);
+        b.setAttribute("aria-pressed", String(id === m.id));
       }
-      onChange(mode);
+      onChange();
     });
     buttons.set(m.id, btn);
     item.append(btn);
@@ -391,6 +439,7 @@ function mountIndexModes(panel: CollapsiblePanel, onChange: (mode: IndexMode) =>
 
   bar.append(group);
   panel.head.after(bar);
+  return indexModeCell.get;
 }
 
 // PayloadControl is one "show request/response" control: the body line it sits on, its button and
@@ -458,21 +507,21 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // What the index is currently listing, held apart from the trail itself: switching the grouping
   // repaints the tree alone, and re-rendering the whole surface for it would rebuild every section
   // and throw away the reader's scroll position and any payload they had expanded.
-  let indexMode: IndexMode = INDEX_MODES[0].id;
   let indexEvents: ActivityEvent[] = [];
   let indexSelect: (index: number) => void = () => {};
+  const indexState: IndexState = { open: new Map(), current: null };
+  let indexMode: () => IndexMode = () => INDEX_MODES[0].id;
 
   function repaintIndex(): void {
-    if (panel) renderIndexTree(panel.treeBox, indexEvents, Date.now(), indexMode, indexSelect);
+    if (panel) {
+      renderIndexTree(panel.treeBox, indexEvents, Date.now(), indexMode(), indexState, indexSelect);
+    }
   }
 
   if (panel) {
     panel.head.insertBefore(conn, panel.refreshBtn);
     panel.reopen.append(countBadge);
-    mountIndexModes(panel, (mode) => {
-      indexMode = mode;
-      repaintIndex();
-    });
+    indexMode = mountIndexModes(panel, repaintIndex);
   }
 
   // reveal scrolls a section into view and expands it, so clicking an index leaf lands on that event.
@@ -586,7 +635,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     revealDeepLink(events, sectionEls);
     if (nextPageToken && loadMore) {
-      const more = h("button", "pf-v6-c-button pf-m-secondary") as HTMLButtonElement;
+      const more = h("button", "pf-v6-c-button pf-m-secondary");
       more.type = "button";
       more.append(h("span", "pf-v6-c-button__text", "Load older activity"));
       more.addEventListener("click", loadMore);
@@ -623,6 +672,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     conn.textContent = connText;
     indexEvents = [];
     indexSelect = (): void => {};
+    // The selected position named an event in a list that is gone.
+    indexState.current = null;
     if (panel) {
       repaintIndex();
       panel.applyDefault(keepIndex);

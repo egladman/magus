@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { Kind, Outcome, type ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import { sessionLabel, sessionLineage } from "./lineage";
 
@@ -32,8 +33,23 @@ function cmd(session: string, partial: Partial<ActivityEvent> = {}): ActivityEve
   return ev({ kind: Kind.AGENT_COMMAND, session, host: "claude", action: "Bash", ...partial });
 }
 
-function spawn(session: string, unit: string): ActivityEvent {
-  return ev({ kind: Kind.AGENT_SPAWN, session, host: "claude", action: "Task", unit });
+function spawn(session: string, lease: string, partial: Partial<ActivityEvent> = {}): ActivityEvent {
+  return ev({
+    kind: Kind.AGENT_SPAWN,
+    session,
+    host: "claude",
+    action: "Task",
+    unit: lease,
+    ...partial,
+  });
+}
+
+// at builds a Timestamp from epoch ms; the adapter reads only seconds and nanos.
+function at(ms: number): Timestamp {
+  return {
+    seconds: BigInt(Math.floor(ms / 1000)),
+    nanos: (ms % 1000) * 1_000_000,
+  } as unknown as Timestamp;
 }
 
 test("groups agent events by session, keeping page order and original indices", () => {
@@ -85,7 +101,7 @@ test("a spawn's lease adopts the session that ran commands under it", () => {
     ["parent"],
     "the child is nested, not listed beside its parent",
   );
-  assert.deepEqual(roots[0].spawns, [{ action: "Task", unit: "harness/child-work" }]);
+  assert.deepEqual(roots[0].spawns, [{ action: "Task", lease: "harness/child-work" }]);
   assert.deepEqual(
     roots[0].children.map((n) => n.session),
     ["child"],
@@ -102,7 +118,72 @@ test("a spawn whose lease nobody acted under adopts nothing", () => {
     ["parent"],
   );
   assert.deepEqual(roots[0].children, [], "a declared lease is not by itself a child");
-  assert.deepEqual(roots[0].spawns, [{ action: "Task", unit: "harness/never-started" }]);
+  assert.deepEqual(roots[0].spawns, [{ action: "Task", lease: "harness/never-started" }]);
+});
+
+// The trail lists a page newest-first, so the child's commands sit ABOVE the spawn that handed it
+// the lease, and a second session that declared the same lease later sits above them both. The
+// claim goes to the earliest spawn by time, not to whichever session the page mentions first.
+test("the join reads the same on a newest-first page", () => {
+  const events = [
+    spawn("later", "harness/child-work", { time: at(5_000) }),
+    cmd("child", { unit: "harness/child-work", time: at(4_000) }),
+    cmd("parent", { time: at(3_000) }),
+    spawn("parent", "harness/child-work", { time: at(2_000) }),
+  ];
+
+  const roots = sessionLineage(events);
+  assert.deepEqual(
+    roots.map((n) => n.session),
+    ["later", "parent"],
+    "roots keep page order",
+  );
+  assert.deepEqual(roots[0].children, [], "the later spawn did not claim the child");
+  assert.deepEqual(roots[1].children.map((n) => n.session), ["child"]);
+});
+
+// A parent that binds itself to the lease it registered still ACTS under it, so its own commands
+// would otherwise be the lease's actor and the child would attach to nobody.
+test("the spawner's own commands under its lease do not steal the join", () => {
+  const events = [
+    spawn("parent", "harness/child-work"),
+    cmd("parent", { unit: "harness/child-work" }),
+    cmd("child", { unit: "harness/child-work" }),
+  ];
+
+  const roots = sessionLineage(events);
+  assert.deepEqual(
+    roots.map((n) => n.session),
+    ["parent"],
+  );
+  assert.deepEqual(roots[0].children.map((n) => n.session), ["child"]);
+});
+
+// A lease re-bound to a second worker has two actors, and both were spawned by the same parent.
+test("every session that acted under a spawned lease is a child", () => {
+  const events = [
+    spawn("parent", "harness/work"),
+    cmd("w1", { unit: "harness/work" }),
+    cmd("w2", { unit: "harness/work" }),
+  ];
+
+  const [parent] = sessionLineage(events);
+  assert.deepEqual(parent.children.map((n) => n.session), ["w1", "w2"]);
+});
+
+// Session ids are the host tool's, so two hosts can mint the same id for unrelated sessions.
+test("the same session id on two hosts is two sessions", () => {
+  const events = [cmd("s1", { host: "claude" }), cmd("s1", { host: "codex" })];
+
+  const roots = sessionLineage(events);
+  assert.deepEqual(
+    roots.map((n) => n.host + ":" + n.session),
+    ["claude:s1", "codex:s1"],
+  );
+  assert.deepEqual(
+    roots.map((n) => n.commands),
+    [1, 1],
+  );
 });
 
 test("events with no session are skipped, never pooled", () => {

@@ -284,6 +284,68 @@ test("a spawned session renders under the session that spawned it", async () => 
   assert.equal(branchText(child), "claude, 1 command, 1 denied, harness/child-work");
 });
 
+// A page of MCP calls and jobs has no agent behind any event. Grouped by session that is an empty
+// tree in a panel that is still open, which reads as broken rather than as empty.
+test("a page with no agent events says so in session grouping", async () => {
+  serve([mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "session").click();
+
+  assert.deepEqual(roots(host), []);
+  const note = host.querySelector(".console-log-runs__tree .console-log-runs__empty");
+  assert.ok(note, "an inline note stands in for the tree");
+  assert.match(note.textContent ?? "", /No agent sessions on this page/);
+
+  modeButton(host, "kind").click();
+  assert.equal(host.querySelector(".console-log-runs__empty"), null);
+});
+
+// A branch's text truncates like a leaf's, so it carries the full text the same way.
+test("a branch carries its label as a title", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "kind").click();
+
+  const nodes = roots(host).map(
+    (li) => li.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.title,
+  );
+  assert.deepEqual(nodes, ["MCP tool calls", "Agent commands"]);
+
+  modeButton(host, "session").click();
+  const session = roots(host)[0].querySelector<HTMLButtonElement>(
+    ":scope > .pf-v6-c-tree-view__content button",
+  );
+  assert.equal(session?.title, "claude, 1 command  s1");
+});
+
+// The index repaints on every mode switch and every page loaded, and a repaint that forgets what
+// the reader opened and picked sends them back to the top each time.
+test("expansion and selection survive a repaint", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "kind").click();
+
+  const first = roots(host)[0];
+  assert.equal(first.classList.contains("pf-m-expanded"), true, "the first branch opens by default");
+  first.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.click();
+  assert.equal(first.classList.contains("pf-m-expanded"), false);
+  const leaf = roots(host)[1].querySelector<HTMLButtonElement>("ul button");
+  assert.ok(leaf);
+  leaf.click();
+  assert.equal(leaf.classList.contains("pf-m-current"), true);
+
+  modeButton(host, "session").click();
+  modeButton(host, "kind").click();
+
+  const again = roots(host);
+  assert.equal(again[0].classList.contains("pf-m-expanded"), false, "the closed branch stays closed");
+  assert.equal(
+    again[1].querySelector("ul button")?.classList.contains("pf-m-current"),
+    true,
+    "the picked leaf stays current",
+  );
+});
+
 // The demo trail's refs are synthesized: no store holds them, so a control there could only ever
 // fail. The offer is gated on a live client rather than on the ref alone.
 test("the demo trail offers no expansion", async () => {

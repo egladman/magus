@@ -426,7 +426,7 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-activity-index__session {
   font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle);
   font-family: var(--pf-t--global--font--family--mono);
-  overflow: hidden; text-overflow: ellipsis;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* The maintenance-jobs control (activity/jobs.ts): a PF Card above the trail carrying one row per

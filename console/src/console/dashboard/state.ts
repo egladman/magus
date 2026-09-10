@@ -846,7 +846,7 @@ export interface AgentEventWire {
 // trail.AppendAgentCommand writes preview as "guard: deny" / "guard: advise" / "guard: pass", so
 // the decision is already in the listing. Fetching it properly would mean one GetPayload round trip
 // per row, which for a 200-event window is 200 requests to render one tile.
-function guardDecision(preview: string): "deny" | "advise" | "pass" | "" {
+export function guardDecision(preview: string): "deny" | "advise" | "pass" | "" {
   const m = /^guard:\s*(deny|advise|pass)$/.exec(preview.trim());
   return m ? (m[1] as "deny" | "advise" | "pass") : "";
 }
