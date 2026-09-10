@@ -3,6 +3,7 @@ package pycompat
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
@@ -217,7 +218,7 @@ func Unmarshal(data []byte) (any, error) {
 		return nil, err
 	}
 	if dec.More() {
-		return nil, fmt.Errorf("trailing data after JSON value")
+		return nil, errors.New("trailing data after JSON value")
 	}
 	return convert(v)
 }

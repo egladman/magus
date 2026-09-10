@@ -2,15 +2,17 @@ package bench
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
+	"github.com/egladman/magus/internal/json"
 )
 
 // bootstrapIters is the resample count behind every paired CI.
@@ -23,42 +25,55 @@ const z95 = 1.959963984540054
 // difference is not a finding.
 const minRelativeDelta = 0.10
 
+// metric is one per-run value every cell describes and every pairing
+// compares. A headline metric also gets its own delta table in the report,
+// titled label and printed to digits; the rest stay in analysis.json rather
+// than padding the report with fourteen tables nobody reads.
 type metric struct {
-	name string
-	read func(*ScoredRun) *Number
+	name     string
+	label    string
+	digits   int
+	headline bool
+	read     func(*ScoredRun) *pycompat.Number
 }
 
-func intMetric(read func(*ScoredRun) int64) func(*ScoredRun) *Number {
-	return func(r *ScoredRun) *Number {
+func intMetric(read func(*ScoredRun) int64) func(*ScoredRun) *pycompat.Number {
+	return func(r *ScoredRun) *pycompat.Number {
 		n := pycompat.Int(read(r))
 		return &n
 	}
 }
 
-func floatMetric(read func(*ScoredRun) float64) func(*ScoredRun) *Number {
-	return func(r *ScoredRun) *Number {
+func floatMetric(read func(*ScoredRun) float64) func(*ScoredRun) *pycompat.Number {
+	return func(r *ScoredRun) *pycompat.Number {
 		n := pycompat.Float(read(r))
 		return &n
 	}
 }
 
-// metrics are the per-run values every cell describes and every pairing
-// compares.
 var metrics = []metric{
-	{"total_billed_tokens", intMetric(func(r *ScoredRun) int64 { return r.Tokens.TotalBilled })},
-	{"input_tokens", intMetric(func(r *ScoredRun) int64 { return r.Tokens.Input })},
-	{"output_tokens", intMetric(func(r *ScoredRun) int64 { return r.Tokens.Output })},
-	{"cache_read_tokens", intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheRead })},
-	{"cache_write_tokens", intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheWrite })},
-	{"dollars", floatMetric(func(r *ScoredRun) float64 { return r.Dollars })},
-	{"wall_ms", func(r *ScoredRun) *Number { return r.WallMs }},
-	{"time_to_first_edit_ms", func(r *ScoredRun) *Number { return r.TimeToFirstEditMs }},
-	{"time_to_done_ms", func(r *ScoredRun) *Number { return r.TimeToDoneMs }},
-	{"turns", intMetric(func(r *ScoredRun) int64 { return r.Turns })},
-	{"tool_calls", intMetric(func(r *ScoredRun) int64 { return r.ToolCalls })},
-	{"file_reads", intMetric(func(r *ScoredRun) int64 { return r.FileReads })},
-	{"re_read_rate", floatMetric(func(r *ScoredRun) float64 { return r.ReReadRate })},
-	{"tool_result_bytes", intMetric(func(r *ScoredRun) int64 { return r.ToolResultBytes })},
+	{name: "total_billed_tokens", label: "total billed tokens", digits: 1, headline: true,
+		read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.TotalBilled })},
+	{name: "input_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.Input })},
+	{name: "output_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.Output })},
+	{name: "cache_read_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheRead })},
+	{name: "cache_write_tokens", read: intMetric(func(r *ScoredRun) int64 { return r.Tokens.CacheWrite })},
+	{name: "dollars", label: "dollars", digits: 4, headline: true,
+		read: floatMetric(func(r *ScoredRun) float64 { return r.Dollars })},
+	{name: "wall_ms", label: "wall clock (ms)", digits: 1, headline: true,
+		read: func(r *ScoredRun) *pycompat.Number { return r.WallMs }},
+	{name: "time_to_first_edit_ms", read: func(r *ScoredRun) *pycompat.Number { return r.TimeToFirstEditMs }},
+	{name: "time_to_done_ms", read: func(r *ScoredRun) *pycompat.Number { return r.TimeToDoneMs }},
+	{name: "turns", label: "turns", digits: 1, headline: true,
+		read: intMetric(func(r *ScoredRun) int64 { return r.Turns })},
+	{name: "tool_calls", label: "tool calls", digits: 1, headline: true,
+		read: intMetric(func(r *ScoredRun) int64 { return r.ToolCalls })},
+	{name: "file_reads", label: "file reads", digits: 1, headline: true,
+		read: intMetric(func(r *ScoredRun) int64 { return r.FileReads })},
+	{name: "re_read_rate", label: "re-read rate", digits: 4, headline: true,
+		read: floatMetric(func(r *ScoredRun) float64 { return r.ReReadRate })},
+	{name: "tool_result_bytes", label: "tool result bytes", digits: 1, headline: true,
+		read: intMetric(func(r *ScoredRun) int64 { return r.ToolResultBytes })},
 }
 
 // wilsonInterval is the Wilson score interval for a binomial proportion;
@@ -89,19 +104,15 @@ func percentile(sorted []float64, q float64) *float64 {
 	return &v
 }
 
-type bootstrap struct {
-	ciLow, ciHigh, p *float64
-}
-
 // bootstrapPaired bootstraps the mean of paired deltas; it returns the CI and
 // a two-sided p value. The RNG is seeded from the metric and task name so
 // each interval is independent of how many other cells are analyzed
 // alongside it. The resampled mean accumulates left to right, as the Python
 // did; a compensated sum here would move the CI bounds.
-func bootstrapPaired(deltas []Number, seedKey string) bootstrap {
+func bootstrapPaired(deltas []pycompat.Number, seedKey string) (ci [2]*float64, p *float64) {
 	n := len(deltas)
 	if n == 0 {
-		return bootstrap{}
+		return ci, nil
 	}
 	rng := pycompat.NewRandomString(seedKey)
 	means := make([]float64, bootstrapIters)
@@ -122,9 +133,9 @@ func bootstrapPaired(deltas []Number, seedKey string) bootstrap {
 			atOrAbove++
 		}
 	}
-	p := math.Min(1.0, 2.0*float64(min(atOrBelow, atOrAbove))/float64(bootstrapIters))
-	p = math.Max(p, 1.0/float64(bootstrapIters))
-	return bootstrap{ciLow: percentile(means, 0.025), ciHigh: percentile(means, 0.975), p: &p}
+	v := math.Min(1.0, 2.0*float64(min(atOrBelow, atOrAbove))/float64(bootstrapIters))
+	v = math.Max(v, 1.0/float64(bootstrapIters))
+	return [2]*float64{percentile(means, 0.025), percentile(means, 0.975)}, &v
 }
 
 // holm adjusts a {key: p} mapping across the family of tasks
@@ -158,13 +169,13 @@ func holm(pvalues map[string]*float64) map[string]*float64 {
 	return adjusted
 }
 
-func sortNumbers(values []Number) {
+func sortNumbers(values []pycompat.Number) {
 	sort.SliceStable(values, func(i, j int) bool { return values[i].Less(values[j]) })
 }
 
 // median is statistics.median over a sorted list: the middle value as it is,
 // or the true-division mean of the middle two.
-func median(sorted []Number) Number {
+func median(sorted []pycompat.Number) pycompat.Number {
 	n := len(sorted)
 	if n%2 == 1 {
 		return sorted[n/2]
@@ -173,13 +184,14 @@ func median(sorted []Number) Number {
 }
 
 // fmean is statistics.fmean: fsum, then one division.
-func fmean(values []Number) float64 {
+func fmean(values []pycompat.Number) float64 {
 	floats := make([]float64, len(values))
 	for i, v := range values {
 		floats[i] = v.Float64()
 	}
 	total, err := pycompat.FSum(floats)
 	if err != nil {
+		// FSum only fails on inf or nan, which parseNumber never admits.
 		panic(err)
 	}
 	return total / float64(len(values))
@@ -188,9 +200,9 @@ func fmean(values []Number) float64 {
 // quartiles is statistics.quantiles(n=4, method="inclusive") over a sorted
 // list of at least two values: linear interpolation between neighbors,
 // which always yields floats.
-func quartiles(sorted []Number) [2]*Number {
+func quartiles(sorted []pycompat.Number) [2]*pycompat.Number {
 	m := int64(len(sorted) - 1)
-	var out [2]*Number
+	var out [2]*pycompat.Number
 	for k, i := range []int64{1, 3} {
 		j, delta := (i*m)/4, (i*m)%4
 		q := pycompat.Float(sorted[j].MulInt(4 - delta).Add(sorted[j+1].MulInt(delta)).TrueDiv(4))
@@ -199,10 +211,9 @@ func quartiles(sorted []Number) [2]*Number {
 	return out
 }
 
-// describe is median, IQR and mean together; a mean alone hides the spread
-// that matters. Nil values are dropped first.
-func describe(values []*Number) Spread {
-	var clean []Number
+// describe is the Spread of values, nil values dropped first.
+func describe(values []*pycompat.Number) Spread {
+	var clean []pycompat.Number
 	for _, v := range values {
 		if v != nil {
 			clean = append(clean, *v)
@@ -212,10 +223,10 @@ func describe(values []*Number) Spread {
 		return Spread{}
 	}
 	sortNumbers(clean)
-	var iqr [2]*Number
+	var iqr [2]*pycompat.Number
 	if len(clean) == 1 {
 		q := clean[0]
-		iqr = [2]*Number{&q, &q}
+		iqr = [2]*pycompat.Number{&q, &q}
 	} else {
 		iqr = quartiles(clean)
 	}
@@ -228,9 +239,14 @@ func describe(values []*Number) Spread {
 // is set, a scored run otherwise, and each must carry every field the
 // extractor writes for its kind.
 func LoadRecords(file string) ([]RunRecord, error) {
+	fh, err := os.Open(file)
+	if err != nil {
+		return nil, err
+	}
+	defer fh.Close()
 	var records []RunRecord
 	number := 0
-	err := jsonlLines(file, func(line []byte) error {
+	err = jsonlLines(fh, func(line []byte) error {
 		number++
 		if len(bytes.TrimSpace(line)) == 0 {
 			return nil
@@ -293,11 +309,11 @@ func runFromJSON(line []byte) (RunRecord, error) {
 	}
 	required, isControl := scoredFields, false
 	if kind, ok := raw["control"]; ok {
-		control, err := pycompat.Unmarshal(kind)
-		if err != nil {
+		var control *string
+		if err := json.Unmarshal(kind, &control); err != nil {
 			return RunRecord{}, err
 		}
-		if truthy(control) {
+		if control != nil && *control != "" {
 			required, isControl = controlFields, true
 		}
 	}
@@ -311,7 +327,7 @@ func runFromJSON(line []byte) (RunRecord, error) {
 		if err := json.Unmarshal(line, &c); err != nil {
 			return RunRecord{}, err
 		}
-		if c.Control != ControlGolden && c.Control != ControlNull {
+		if c.Control != controlGolden && c.Control != controlNull {
 			return RunRecord{}, fmt.Errorf("control %q is not golden or null", c.Control)
 		}
 		return RunRecord{Control: &c}, nil
@@ -333,24 +349,17 @@ func countPasses(successes []*bool) int64 {
 	return n
 }
 
-func scoredSuccesses(runs []*ScoredRun) []*bool {
-	out := make([]*bool, len(runs))
-	for i, run := range runs {
-		out[i] = run.Success
-	}
-	return out
-}
-
 // cellStats computes pass rates and metric spreads for one (arm, task) cell.
 func cellStats(runs []*ScoredRun) CellStats {
 	n := int64(len(runs))
-	successes := countPasses(scoredSuccesses(runs))
+	var successes, unknown int64
 	var successful []*ScoredRun
-	var unknown int64
 	for _, run := range runs {
-		if run.Success == nil {
+		switch {
+		case run.Success == nil:
 			unknown++
-		} else if *run.Success {
+		case *run.Success:
+			successes++
 			successful = append(successful, run)
 		}
 	}
@@ -376,7 +385,7 @@ func cellStats(runs []*ScoredRun) CellStats {
 func spreads(runs []*ScoredRun) map[string]Spread {
 	out := map[string]Spread{}
 	for _, m := range metrics {
-		values := make([]*Number, len(runs))
+		values := make([]*pycompat.Number, len(runs))
 		for i, run := range runs {
 			values[i] = m.read(run)
 		}
@@ -389,19 +398,19 @@ func spreads(runs []*ScoredRun) map[string]Spread {
 // per correct solution.
 func armSummary(runs []*ScoredRun) ArmSummary {
 	n := int64(len(runs))
-	successes := countPasses(scoredSuccesses(runs))
-	dollars := make([]*Number, len(runs))
+	var successes, graded int64
+	dollars := make([]*pycompat.Number, len(runs))
 	for i, run := range runs {
 		d := pycompat.Float(run.Dollars)
 		dollars[i] = &d
-	}
-	spread := describe(dollars)
-	var graded int64
-	for _, run := range runs {
 		if run.Success != nil {
 			graded++
+			if *run.Success {
+				successes++
+			}
 		}
 	}
+	spread := describe(dollars)
 	passRate := 0.0
 	if graded > 0 {
 		passRate = float64(successes) / float64(graded)
@@ -426,8 +435,8 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 			reps = append(reps, rep)
 		}
 	}
-	sort.Slice(reps, func(i, j int) bool { return reps[i] < reps[j] })
-	var deltas, baseValues []Number
+	slices.Sort(reps)
+	var deltas, baseValues []pycompat.Number
 	for _, rep := range reps {
 		after, before := m.read(treated[rep]), m.read(baseline[rep])
 		if after == nil || before == nil {
@@ -436,15 +445,15 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 		deltas = append(deltas, after.Sub(*before))
 		baseValues = append(baseValues, *before)
 	}
-	boot := bootstrapPaired(deltas, seedKey)
-	out := PairedDelta{NPairs: int64(len(deltas)), CILow: boot.ciLow, CIHigh: boot.ciHigh, P: boot.p, Verdict: VerdictInconclusive}
+	ci, p := bootstrapPaired(deltas, seedKey)
+	out := PairedDelta{NPairs: int64(len(deltas)), CILow: ci[0], CIHigh: ci[1], P: p, Verdict: verdictInconclusive}
 	if len(deltas) == 0 {
 		return out
 	}
 	sortNumbers(baseValues)
 	baseMedian := median(baseValues)
 	deltaMean := fmean(deltas)
-	sortedDeltas := append([]Number(nil), deltas...)
+	sortedDeltas := append([]pycompat.Number(nil), deltas...)
 	sortNumbers(sortedDeltas)
 	deltaMedian := median(sortedDeltas)
 	out.DeltaMean, out.DeltaMedian, out.BaselineMedian = &deltaMean, &deltaMedian, &baseMedian
@@ -452,11 +461,11 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 		rel := deltaMean / baseMedian.Float64()
 		out.Relative = &rel
 	}
-	out.CIExcludesZero = boot.ciLow != nil && boot.ciHigh != nil && (*boot.ciLow > 0 || *boot.ciHigh < 0)
+	out.CIExcludesZero = ci[0] != nil && ci[1] != nil && (*ci[0] > 0 || *ci[1] < 0)
 	if out.CIExcludesZero && out.Relative != nil && math.Abs(*out.Relative) >= minRelativeDelta {
-		out.Verdict = VerdictHigher
+		out.Verdict = verdictHigher
 		if deltaMean < 0 {
-			out.Verdict = VerdictLower
+			out.Verdict = verdictLower
 		}
 	}
 	return out
@@ -464,10 +473,9 @@ func pairedDelta(treated, baseline map[int64]*ScoredRun, m metric, seedKey strin
 
 type cellKey struct{ arm, task string }
 
-type cells map[cellKey][]*ScoredRun
+type cellRuns map[cellKey][]*ScoredRun
 
-// byRep keeps the last run of each rep, as the dict comprehension did.
-func (c cells) byRep(arm, task string) map[int64]*ScoredRun {
+func (c cellRuns) byRep(arm, task string) map[int64]*ScoredRun {
 	out := map[int64]*ScoredRun{}
 	for _, run := range c[cellKey{arm, task}] {
 		out[run.Rep] = run
@@ -477,13 +485,13 @@ func (c cells) byRep(arm, task string) map[int64]*ScoredRun {
 
 // pairedDeltas is, per metric, per task, the full-minus-rampant delta, with
 // p Holm-adjusted across tasks.
-func pairedDeltas(c cells, tasks []string, seed int64) map[string]map[string]PairedDelta {
+func pairedDeltas(c cellRuns, tasks []string, seed int64) map[string]map[string]PairedDelta {
 	out := map[string]map[string]PairedDelta{}
 	for _, m := range metrics {
 		perTask := map[string]PairedDelta{}
 		pvalues := map[string]*float64{}
 		for _, task := range tasks {
-			delta := pairedDelta(c.byRep(ArmFull, task), c.byRep(ArmRampant, task), m, fmt.Sprintf("%d|%s|%s", seed, m.name, task))
+			delta := pairedDelta(c.byRep(armFull, task), c.byRep(armRampant, task), m, fmt.Sprintf("%d|%s|%s", seed, m.name, task))
 			perTask[task] = delta
 			pvalues[task] = delta.P
 		}
@@ -497,8 +505,8 @@ func pairedDeltas(c cells, tasks []string, seed int64) map[string]map[string]Pai
 	return out
 }
 
-func dataQuality(runs []*ScoredRun, c cells, tasks, arms []string) DataQuality {
-	var incomplete []UnpairedRep
+func dataQuality(runs []*ScoredRun, c cellRuns, tasks, arms []string) DataQuality {
+	var unpaired []UnpairedRep
 	for _, task := range tasks {
 		repsByArm := map[string]map[int64]*ScoredRun{}
 		union := map[int64]bool{}
@@ -508,12 +516,7 @@ func dataQuality(runs []*ScoredRun, c cells, tasks, arms []string) DataQuality {
 				union[rep] = true
 			}
 		}
-		reps := make([]int64, 0, len(union))
-		for rep := range union {
-			reps = append(reps, rep)
-		}
-		sort.Slice(reps, func(i, j int) bool { return reps[i] < reps[j] })
-		for _, rep := range reps {
+		for _, rep := range slices.Sorted(maps.Keys(union)) {
 			var missing []string
 			for _, arm := range arms {
 				if _, ok := repsByArm[arm][rep]; !ok {
@@ -521,14 +524,14 @@ func dataQuality(runs []*ScoredRun, c cells, tasks, arms []string) DataQuality {
 				}
 			}
 			if len(missing) > 0 {
-				incomplete = append(incomplete, UnpairedRep{Task: task, Rep: rep, MissingArms: missing})
+				unpaired = append(unpaired, UnpairedRep{Task: task, Rep: rep, MissingArms: missing})
 			}
 		}
 	}
 	// How far the pricing table sits from what the host billed, over the runs
 	// that carry both. A constant ratio far from 1 is a table error; the report
 	// says so rather than letting a floor pass for a bill.
-	var ratios []Number
+	var ratios []pycompat.Number
 	for _, run := range runs {
 		if run.ReportedCostUSD != nil && *run.ReportedCostUSD != 0 {
 			ratios = append(ratios, pycompat.Float(run.TableDollarsUSD / *run.ReportedCostUSD))
@@ -537,6 +540,7 @@ func dataQuality(runs []*ScoredRun, c cells, tasks, arms []string) DataQuality {
 	var ratioMedian *float64
 	if len(ratios) > 0 {
 		sortNumbers(ratios)
+		// Index n//2 is median_high, which the Python took; the byte pin depends on it.
 		v := ratios[len(ratios)/2].Float64()
 		ratioMedian = &v
 	}
@@ -549,7 +553,7 @@ func dataQuality(runs []*ScoredRun, c cells, tasks, arms []string) DataQuality {
 		RunsWithoutCheck:            runIDs(runs, func(r *ScoredRun) bool { return r.Success == nil }),
 		RunsWithAssumedCacheTTL:     runIDs(runs, func(r *ScoredRun) bool { return r.CacheWriteTTLAssumed }),
 		RunsWithInvariantViolations: runIDs(runs, func(r *ScoredRun) bool { return len(r.InvariantViolations.TestsDeleted) > 0 }),
-		IncompletePairs:             incomplete,
+		UnpairedReps:                unpaired,
 	}
 }
 
@@ -560,7 +564,7 @@ func runIDs(runs []*ScoredRun, keep func(*ScoredRun) bool) []string {
 			ids = append(ids, run.RunID)
 		}
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }
 
@@ -572,8 +576,8 @@ func runIDs(runs []*ScoredRun, keep func(*ScoredRun) bool) []string {
 func controlSummary(controls []*ControlRun, tasks []string) map[string]ControlCell {
 	out := map[string]ControlCell{}
 	for _, task := range tasks {
-		golden := controlCount(controls, task, ControlGolden)
-		null := controlCount(controls, task, ControlNull)
+		golden := controlCount(controls, task, controlGolden)
+		null := controlCount(controls, task, controlNull)
 		goldenAllPass := golden.N > 0 && golden.Passes == golden.N
 		nullAllFail := null.N > 0 && null.Passes == 0
 		out[task] = ControlCell{Golden: golden, Null: null, Discriminates: goldenAllPass && nullAllFail}
@@ -590,7 +594,7 @@ func controlCount(controls []*ControlRun, task, kind string) ControlCount {
 			ids = append(ids, run.RunID)
 		}
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ControlCount{N: int64(len(ids)), Passes: countPasses(successes), RunIDs: ids}
 }
 
@@ -625,7 +629,7 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		seen[key][run.Rep] = run.RunID
 	}
 	armSet, taskSet, modelSet := map[string]bool{}, map[string]bool{}, map[string]bool{}
-	c := cells{}
+	c := cellRuns{}
 	for _, run := range runs {
 		armSet[run.Arm] = true
 		taskSet[run.Task] = true
@@ -635,10 +639,10 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		key := cellKey{run.Arm, run.Task}
 		c[key] = append(c[key], run)
 	}
-	arms, tasks := sortedKeys(armSet), sortedKeys(taskSet)
+	arms, tasks := slices.Sorted(maps.Keys(armSet)), slices.Sorted(maps.Keys(taskSet))
 	cells := map[string]CellStats{}
-	for key, cellRuns := range c {
-		cells[key.arm+"/"+key.task] = cellStats(cellRuns)
+	for key, members := range c {
+		cells[key.arm+"/"+key.task] = cellStats(members)
 	}
 	summaries := map[string]ArmSummary{}
 	for _, arm := range arms {
@@ -657,18 +661,18 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 		Runs:             int64(len(runs)),
 		Arms:             arms,
 		Tasks:            tasks,
-		Models:           sortedKeys(modelSet),
+		Models:           slices.Sorted(maps.Keys(modelSet)),
 		Controls:         controlSummary(controls, tasks),
 		Cells:            cells,
-		ArmSummary:       summaries,
+		ArmSummaries:     summaries,
 		Paired:           pairedDeltas(c, tasks, seed),
 		DataQuality:      dataQuality(runs, c, tasks, arms),
 	}, nil
 }
 
-// AnalysisJSON is analysis.json's bytes: sorted keys, two-space indent, and
-// a trailing newline.
-func AnalysisJSON(a *Analysis) ([]byte, error) {
+// JSON is analysis.json's bytes: sorted keys, two-space indent, and a
+// trailing newline.
+func (a *Analysis) JSON() ([]byte, error) {
 	raw, err := pycompat.Marshal(a, 2)
 	if err != nil {
 		return nil, err

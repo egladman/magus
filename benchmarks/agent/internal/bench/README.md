@@ -1,14 +1,15 @@
 # Benchmark analysis
 
-A Go package and one binary, `benchreport`, that turn a results tree into a
-report in three stages: `extract` (runs to metrics), `analyze` (metrics to
-statistics), `report` (statistics to markdown). They only read artifacts, so a
-scored run is analyzed as many times as you like without re-running an agent.
-`records.go` holds the record types the stages hand each other; their json
-tags are the file formats. Standard library only.
+A Go package, `internal/bench`, and one binary, `cmd/benchreport`, that turn a
+results tree into a report in three stages: `extract` (runs to metrics),
+`analyze` (metrics to statistics), `report` (statistics to markdown). They only
+read artifacts, so a scored run is analyzed as many times as you like without
+re-running an agent. `records.go` holds the record types the stages hand each
+other; their json tags are the file formats. No dependency beyond the standard
+library and the workspace's own JSON codec.
 
 The pipeline was ported from Python and its output is pinned byte for byte to
-what the Python wrote: `pycompat/` carries the pieces of CPython the numbers
+what the Python wrote: `internal/pycompat/` carries the pieces of CPython the numbers
 depend on (random.Random's Mersenne Twister and seeding, math.fsum, float
 repr, json.dumps with sort_keys), and `testdata/fixture-*` is the Python's
 output over the synthetic tree, which the tests reproduce exactly.
@@ -27,7 +28,7 @@ magus run go::go-build . -- -o /tmp/benchreport ./benchmarks/agent/cmd/benchrepo
 /tmp/benchreport report benchmarks/agent/analysis.json -o benchmarks/agent/report.md
 ```
 
-`makefixture <dir>` writes a synthetic results tree under `<dir>/results`, two
+`makefixture <dir> -model <alias>` writes a synthetic results tree under `<dir>/results`, two
 arms by two tasks by three reps with fixed constants, which is what the tests
 assert exact totals against.
 

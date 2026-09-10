@@ -1,8 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"testing"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 func wrapped(body string) string {

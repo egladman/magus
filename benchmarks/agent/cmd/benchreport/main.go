@@ -5,17 +5,19 @@
 //	benchreport extract <results> -o metrics.jsonl [-p pricing.json]
 //	benchreport analyze <metrics.jsonl> -o analysis.json [--seed N]
 //	benchreport report <analysis.json> -o report.md
-//	benchreport makefixture <dir>
+//	benchreport makefixture <dir> -model <alias>
 //
 // makefixture writes a synthetic results tree under <dir>/results, the
 // pipeline's own control. A failure in extract exits 2, in the other stages 1.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"strings"
+	"path/filepath"
+	"strconv"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/bench"
 )
@@ -24,7 +26,7 @@ const usage = `usage:
   benchreport extract <results> -o metrics.jsonl [-p pricing.json]
   benchreport analyze <metrics.jsonl> -o analysis.json [--seed N]
   benchreport report <analysis.json> -o report.md
-  benchreport makefixture <dir>
+  benchreport makefixture <dir> -model <alias>
 `
 
 func main() {
@@ -56,29 +58,43 @@ func main() {
 	}
 }
 
-// parse accepts the flags before or after the one positional argument, the
-// way the argparse commands did.
+// parse takes the one positional argument first, then the flags after it.
 func parse(fs *flag.FlagSet, args []string) (string, error) {
-	var positional, flags []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if !strings.HasPrefix(arg, "-") || arg == "-" {
-			positional = append(positional, arg)
-			continue
-		}
-		flags = append(flags, arg)
-		if !strings.Contains(arg, "=") && i+1 < len(args) {
-			i++
-			flags = append(flags, args[i])
-		}
+	if len(args) == 0 {
+		return "", errors.New("want a positional argument first, then the flags")
 	}
-	if err := fs.Parse(flags); err != nil {
+	if err := fs.Parse(args[1:]); err != nil {
 		return "", err
 	}
-	if len(positional) != 1 {
-		return "", fmt.Errorf("want exactly one positional argument, got %d", len(positional))
+	if fs.NArg() != 0 {
+		return "", fmt.Errorf("want exactly one positional argument, got %d", 1+fs.NArg())
 	}
-	return positional[0], nil
+	return args[0], nil
+}
+
+// summaryLine is one line per run, for the operator watching extraction.
+func summaryLine(record bench.RunRecord) string {
+	if c := record.Control; c != nil {
+		check := "n/a"
+		if c.CheckExit != nil {
+			check = strconv.FormatInt(*c.CheckExit, 10)
+		}
+		return fmt.Sprintf("%s: %s control, check=%s", c.RunID, c.Control, check)
+	}
+	r := record.Scored
+	outcome := "NOCHECK"
+	if r.Success != nil {
+		outcome = "FAIL"
+		if *r.Success {
+			outcome = "PASS"
+		}
+	}
+	guard := "guard=none"
+	if g := r.GuardEvents; g != nil {
+		guard = fmt.Sprintf("guard=%d/%d/%d", g.Denials, g.Advisories, g.SkillLoads)
+	}
+	return fmt.Sprintf("%-34s %-8s %-10s %-7s tok=%-9d $%.4f turns=%-3d tools=%-3d %s",
+		r.RunID, r.Arm, r.Task, outcome, r.Tokens.TotalBilled, r.Dollars, r.Turns, r.ToolCalls, guard)
 }
 
 func extract(args []string) error {
@@ -90,13 +106,13 @@ func extract(args []string) error {
 		return err
 	}
 	if *out == "" {
-		return fmt.Errorf("-o is required")
+		return errors.New("-o is required")
 	}
 	pricing, err := bench.LoadPricing(*pricingFile)
 	if err != nil {
 		return err
 	}
-	records, err := bench.ExtractAll(results, pricing)
+	records, err := bench.Extract(results, pricing)
 	if err != nil {
 		return err
 	}
@@ -114,7 +130,7 @@ func extract(args []string) error {
 		return err
 	}
 	for _, record := range records {
-		fmt.Println(bench.SummaryLine(record))
+		fmt.Println(summaryLine(record))
 	}
 	fmt.Printf("wrote %d runs to %s (%d of them controls)\n", len(records), *out, controls)
 	return nil
@@ -129,7 +145,7 @@ func analyze(args []string) error {
 		return err
 	}
 	if *out == "" {
-		return fmt.Errorf("-o is required")
+		return errors.New("-o is required")
 	}
 	records, err := bench.LoadRecords(metrics)
 	if err != nil {
@@ -139,7 +155,7 @@ func analyze(args []string) error {
 	if err != nil {
 		return err
 	}
-	raw, err := bench.AnalysisJSON(a)
+	raw, err := a.JSON()
 	if err != nil {
 		return err
 	}
@@ -158,13 +174,13 @@ func report(args []string) error {
 		return err
 	}
 	if *out == "" {
-		return fmt.Errorf("-o is required")
+		return errors.New("-o is required")
 	}
 	a, err := bench.LoadAnalysis(file)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(*out, []byte(bench.Render(a)), 0o644); err != nil {
+	if err := os.WriteFile(*out, []byte(bench.Report(a)), 0o644); err != nil {
 		return err
 	}
 	fmt.Printf("wrote %s\n", *out)
@@ -173,14 +189,17 @@ func report(args []string) error {
 
 func makefixture(args []string) error {
 	fs := flag.NewFlagSet("makefixture", flag.ContinueOnError)
+	model := fs.String("model", "", "model alias every synthetic run reports; must be in the pricing table")
 	root, err := parse(fs, args)
 	if err != nil {
 		return err
 	}
-	results, err := bench.BuildFixture(root)
-	if err != nil {
+	if *model == "" {
+		return errors.New("-model is required")
+	}
+	if err := bench.WriteFixture(root, *model); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s\n", results)
+	fmt.Printf("wrote %s\n", filepath.Join(root, "results"))
 	return nil
 }

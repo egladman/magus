@@ -15,7 +15,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,6 +22,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 const (
@@ -80,42 +81,46 @@ type verdict struct {
 }
 
 func main() {
+	resolved, err := run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "swegrade: %v\n", err)
+		os.Exit(exitInputBroken)
+	}
+	if !resolved {
+		os.Exit(exitUnresolved)
+	}
+}
+
+// run grades stdin against the --instance row and prints the verdict; an error
+// means the input was unusable and no verdict was printed.
+func run() (resolved bool, err error) {
 	rowPath := flag.String("instance", "", "path to the instance row (one line of verified.jsonl)")
 	flag.Parse()
 	if *rowPath == "" {
-		fmt.Fprintln(os.Stderr, "swegrade: --instance is required")
-		os.Exit(exitInputBroken)
+		return false, errors.New("--instance is required")
 	}
 	rowBytes, err := os.ReadFile(*rowPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "swegrade: %v\n", err)
-		os.Exit(exitInputBroken)
+		return false, err
 	}
 	var row instance
 	if err := json.Unmarshal(rowBytes, &row); err != nil {
-		fmt.Fprintf(os.Stderr, "swegrade: %s: %v\n", *rowPath, err)
-		os.Exit(exitInputBroken)
+		return false, fmt.Errorf("%s: %w", *rowPath, err)
 	}
 	if _, ok := parsers[row.LogParser]; !ok {
-		fmt.Fprintf(os.Stderr, "swegrade: %s names log_parser %q, which is not ported\n", row.InstanceID, row.LogParser)
-		os.Exit(exitInputBroken)
+		return false, fmt.Errorf("%s names log_parser %q, which is not ported", row.InstanceID, row.LogParser)
 	}
 	log, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "swegrade: reading stdin: %v\n", err)
-		os.Exit(exitInputBroken)
+		return false, fmt.Errorf("reading stdin: %w", err)
 	}
-
 	v := grade(row, string(log))
 	out, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "swegrade: %v\n", err)
-		os.Exit(exitInputBroken)
+		return false, err
 	}
 	fmt.Println(string(out))
-	if !v.Resolved {
-		os.Exit(exitUnresolved)
-	}
+	return v.Resolved, nil
 }
 
 // grade applies the resolution rule to one log. The caller has already checked
@@ -173,8 +178,8 @@ func parseLog(parse func(string) statusMap, log string) (statusMap, error) {
 	if !strings.Contains(log, markerStart) || !strings.Contains(log, markerEnd) {
 		return nil, errors.New("log carries no test output markers, so the test patch never ran")
 	}
-	region := strings.SplitN(log, markerStart, 2)[1]
-	region = strings.SplitN(region, markerEnd, 2)[0]
+	_, region, _ := strings.Cut(log, markerStart)
+	region, _, _ = strings.Cut(region, markerEnd)
 	sm := parse(region)
 	if len(sm) == 0 {
 		sm = parse(log)

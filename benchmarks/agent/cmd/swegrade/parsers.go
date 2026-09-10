@@ -265,24 +265,10 @@ func parseSympy(log string) statusMap {
 	return m
 }
 
+var mouseButtons = strings.NewReplacer("MouseButton.LEFT", "1", "MouseButton.RIGHT", "3")
+
 func parseMatplotlib(log string) statusMap {
-	m := statusMap{}
-	for _, line := range strings.Split(log, "\n") {
-		line = strings.ReplaceAll(line, "MouseButton.LEFT", "1")
-		line = strings.ReplaceAll(line, "MouseButton.RIGHT", "3")
-		if !startsWithStatus(line) {
-			continue
-		}
-		if strings.HasPrefix(line, statusFailed) {
-			line = strings.ReplaceAll(line, " - ", " ")
-		}
-		f := strings.Fields(line)
-		if len(f) <= 1 || isSkipSummary(f[0], f[1]) {
-			continue
-		}
-		m[f[1]] = f[0]
-	}
-	return m
+	return parsePytest(mouseButtons.Replace(log))
 }
 
 func parseSeaborn(log string) statusMap {

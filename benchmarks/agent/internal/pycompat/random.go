@@ -24,20 +24,6 @@ type Random struct {
 	index int
 }
 
-// newRandomInt seeds like random.Random(n) for an int n: the magnitude is cut
-// into little-endian 32-bit words and fed to init_by_array.
-func newRandomInt(seed int64) *Random {
-	u := uint64(seed)
-	if seed < 0 {
-		u = uint64(-seed)
-	}
-	key := []uint32{uint32(u)}
-	if hi := uint32(u >> 32); hi != 0 {
-		key = append(key, hi)
-	}
-	return newRandom(key)
-}
-
 // NewRandomString seeds like random.Random(s) for a str s (seed version 2):
 // the UTF-8 bytes followed by their SHA-512 digest, read as one big-endian
 // integer, cut into little-endian 32-bit words with the high zero words dropped.
@@ -124,13 +110,6 @@ func (r *Random) twist() {
 	y := (r.mt[mtN-1] & mtUpperMask) | (r.mt[0] & mtLowerMask)
 	r.mt[mtN-1] = r.mt[mtM-1] ^ (y >> 1) ^ mag(y)
 	r.index = 0
-}
-
-// Float64 is random(): 53 bits from two draws, as CPython's random_random.
-func (r *Random) Float64() float64 {
-	a := float64(r.uint32() >> 5)
-	b := float64(r.uint32() >> 6)
-	return (a*67108864.0 + b) * (1.0 / 9007199254740992.0)
 }
 
 // getRandBits is getrandbits(k) for 0 <= k <= 64: whole 32-bit words are drawn

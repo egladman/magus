@@ -66,22 +66,15 @@ func (n Number) Sub(o Number) Number {
 	return Float(n.Float64() - o.Float64())
 }
 
-// MulInt is n * k for an int k. The product passes through rounded so the
-// compiler cannot fuse it into the add that follows in a caller.
+// MulInt is n * k for an int k. The explicit conversion rounds the product to
+// a double before a caller adds to it; without it Go may fuse the two into one
+// differently rounded operation, which CPython never does.
 func (n Number) MulInt(k int64) Number {
 	if !n.isFloat {
 		return Int(n.i * k)
 	}
-	return Float(rounded(n.f * float64(k)))
+	return Float(float64(n.f * float64(k)))
 }
-
-// rounded returns x stored as a double. A call the compiler cannot inline is
-// the barrier that keeps a product from being fused with the add after it
-// into one differently rounded operation, which CPython never does and the
-// byte-identity bar cannot absorb.
-//
-//go:noinline
-func rounded(x float64) float64 { return x }
 
 // TrueDiv is n / k, Python's true division: always a float.
 func (n Number) TrueDiv(k int64) float64 {

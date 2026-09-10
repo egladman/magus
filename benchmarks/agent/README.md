@@ -249,9 +249,9 @@ How a container trial works, per rep:
    `swebench/grade.sh` applies `final.diff` with the reference harness's apply
    ladder, then runs the row's `eval_script`, which resets the test files,
    applies `test_patch` and runs the named tests. The log lands in `eval.log`
-   and is piped to `swegrade` (built as the `magus-bench/swegrade` image from
-   `swebench/grader.Dockerfile`, so the host needs no Go toolchain), which
-   writes the JSON verdict to `check.txt` and its exit status to `check.exit`.
+   and is piped to `swegrade` on the host (built by `magus run swegrade-build .`
+   into `bin/`, which `agent-bench-run` does first), which writes the JSON
+   verdict to `check.txt` and its exit status to `check.exit`.
 
 The golden control applies the row's gold `patch` in the trial container in
 place of an agent; the null control applies nothing. `meta.json` carries
@@ -296,8 +296,8 @@ architecture it needs. Then, from `benchmarks/agent`:
 
 ## Analysis
 
-The analysis is a Go package under `analysis/`, standard library only, with
-one binary, `benchreport`; `internal/bench/README.md` has the invocations, and
+The analysis is a Go package under `internal/bench/` with one binary,
+`cmd/benchreport`; `internal/bench/README.md` has the invocations, and
 `magus run agent-bench-report .` builds it and runs the whole pipeline over
 `results/`.
 

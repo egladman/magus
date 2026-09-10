@@ -2,16 +2,14 @@ package bench
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
-
-// fixtureModel is the model every synthetic run reports.
-const fixtureModel = "claude-opus-5"
 
 type armSpec struct {
 	turns, input, output, cacheRead, cacheWrite, resultBytes, distinctReads, wallMs int64
@@ -29,17 +27,25 @@ var fixtureTasks = []string{"task-a", "task-b"}
 
 var fixtureReps = []int64{1, 2, 3}
 
-type fixtureRun struct {
+// fixtureKey names one synthetic run; the shapes below are matched on it.
+type fixtureKey struct {
 	arm, task string
 	rep       int64
 }
 
+type fixtureRun struct {
+	fixtureKey
+	// model is the alias every synthetic run reports, given by the caller: a
+	// model name is host-specific, and none is written into this package.
+	model string
+}
+
 // The shapes the extractor has to survive, one run each.
 var (
-	splitTTLRun     = fixtureRun{"full", "task-b", 1}
-	noTrailRun      = fixtureRun{"full", "task-a", 3}
-	failingRun      = fixtureRun{"rampant", "task-b", 2}
-	testDeletingRun = fixtureRun{"rampant", "task-a", 1}
+	splitTTLRun     = fixtureKey{"full", "task-b", 1}
+	noTrailRun      = fixtureKey{"full", "task-a", 3}
+	failingRun      = fixtureKey{"rampant", "task-b", 2}
+	testDeletingRun = fixtureKey{"rampant", "task-a", 1}
 )
 
 const fixtureDiff = `diff --git a/src/app.ts b/src/app.ts
@@ -75,7 +81,7 @@ func fixtureUsage(spec armSpec, run fixtureRun, perInput int64) map[string]any {
 		"cache_read_input_tokens":     spec.cacheRead,
 		"cache_creation_input_tokens": spec.cacheWrite,
 	}
-	if run == splitTTLRun {
+	if run.fixtureKey == splitTTLRun {
 		usage["cache_creation"] = map[string]any{
 			"ephemeral_5m_input_tokens": spec.cacheWrite * 2 / 3,
 			"ephemeral_1h_input_tokens": spec.cacheWrite / 3,
@@ -90,7 +96,7 @@ func assistantTurn(spec armSpec, run fixtureRun, turn, perInput int64) map[strin
 		"message": map[string]any{
 			"id":    fmt.Sprintf("msg_%s_%d", fixtureRunID(run.arm, run.task, run.rep), turn),
 			"role":  "assistant",
-			"model": fixtureModel,
+			"model": run.model,
 			"usage": fixtureUsage(spec, run, perInput),
 			"content": []any{
 				map[string]any{"type": "text", "text": fmt.Sprintf("turn %d", turn)},
@@ -132,7 +138,7 @@ func transcriptLines(run fixtureRun) []any {
 	spec := fixtureArms[run.arm]
 	perInput := spec.input + 100*(run.rep-1)
 	lines := []any{
-		map[string]any{"type": "system", "subtype": "init", "session_id": fixtureRunID(run.arm, run.task, run.rep), "model": fixtureModel},
+		map[string]any{"type": "system", "subtype": "init", "session_id": fixtureRunID(run.arm, run.task, run.rep), "model": run.model},
 	}
 	for turn := int64(1); turn <= spec.turns; turn++ {
 		lines = append(lines, assistantTurn(spec, run, turn, perInput), toolResults(spec, turn))
@@ -165,7 +171,7 @@ func trailLines(arm string) []any {
 			map[string]any{"kind": "agent_command", "action": "shell.command", "preview": "guard: deny go test ./..."},
 			map[string]any{"kind": "agent_command", "action": "shell.command", "preview": "guard: deny go build ./cmd/magus"},
 			map[string]any{"kind": "agent_command", "action": "shell.command", "preview": "guard: advisory prefer magus query over grep"},
-			map[string]any{"kind": "agent_command", "action": "file.read", "path": ".claude/skills/magus-run/SKILL.md", "preview": "read"},
+			map[string]any{"kind": "agent_command", "action": "file.read", "path": ".agents/skills/magus-run/SKILL.md", "preview": "read"},
 			map[string]any{"kind": "agent_command", "action": "skill.load", "preview": "magus-query"},
 		)
 	}
@@ -204,7 +210,7 @@ func writeRun(resultsDir string, run fixtureRun) error {
 		"arm":           run.arm,
 		"task":          run.task,
 		"rep":           run.rep,
-		"model":         fixtureModel,
+		"model":         run.model,
 		"effort":        "high",
 		"max_turns":     60,
 		"budget_usd":    5.0,
@@ -221,10 +227,10 @@ func writeRun(resultsDir string, run fixtureRun) error {
 		return err
 	}
 	diff := fixtureDiff
-	if run == testDeletingRun {
+	if run.fixtureKey == testDeletingRun {
 		diff += deletedTestDiff
 	}
-	failed := run == failingRun
+	failed := run.fixtureKey == failingRun
 	checkExit, checkText := "0\n", "OK 3 of 3 assertions\n"
 	if failed {
 		checkExit, checkText = "1\n", "FAIL 1 of 3 assertions\n"
@@ -248,7 +254,7 @@ func writeRun(resultsDir string, run fixtureRun) error {
 	}); err != nil {
 		return err
 	}
-	if run != noTrailRun {
+	if run.fixtureKey != noTrailRun {
 		activity := filepath.Join(runDir, "activity")
 		if err := os.MkdirAll(activity, 0o755); err != nil {
 			return err
@@ -260,29 +266,23 @@ func writeRun(resultsDir string, run fixtureRun) error {
 	return nil
 }
 
-// BuildFixture writes a synthetic results tree under <root>/results and
-// returns that directory: two arms, two tasks, three reps, carrying the
-// shapes the extractor has to survive (a failing run, a run with no activity
-// trail, a run whose cache writes report a 5m/1h split, and a diff that
-// deletes a test file).
-func BuildFixture(root string) (string, error) {
+// WriteFixture writes a synthetic results tree under <root>/results: two
+// arms, two tasks, three reps, carrying the shapes the extractor has to
+// survive (a failing run, a run with no activity trail, a run whose cache
+// writes report a 5m/1h split, and a diff that deletes a test file).
+func WriteFixture(root, model string) error {
 	resultsDir := filepath.Join(root, "results")
 	if err := os.MkdirAll(resultsDir, 0o755); err != nil {
-		return "", err
+		return err
 	}
-	arms := make([]string, 0, len(fixtureArms))
-	for arm := range fixtureArms {
-		arms = append(arms, arm)
-	}
-	sort.Strings(arms)
-	for _, arm := range arms {
+	for _, arm := range slices.Sorted(maps.Keys(fixtureArms)) {
 		for _, task := range fixtureTasks {
 			for _, rep := range fixtureReps {
-				if err := writeRun(resultsDir, fixtureRun{arm, task, rep}); err != nil {
-					return "", err
+				if err := writeRun(resultsDir, fixtureRun{fixtureKey{arm, task, rep}, model}); err != nil {
+					return err
 				}
 			}
 		}
 	}
-	return resultsDir, nil
+	return nil
 }

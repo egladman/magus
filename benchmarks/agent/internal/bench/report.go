@@ -2,44 +2,20 @@ package bench
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
-
-type headline struct {
-	name, label string
-	digits      int
-}
-
-// Metrics given their own delta table. The rest stay in analysis.json rather
-// than padding the report with fourteen tables nobody reads.
-var headlineMetrics = []headline{
-	{"total_billed_tokens", "total billed tokens", 1},
-	{"dollars", "dollars", 4},
-	{"wall_ms", "wall clock (ms)", 1},
-	{"turns", "turns", 1},
-	{"tool_calls", "tool calls", 1},
-	{"file_reads", "file reads", 1},
-	{"re_read_rate", "re-read rate", 4},
-	{"tool_result_bytes", "tool result bytes", 1},
-}
 
 // Below this the paired deltas are directional at best; Terminal-Bench runs 5.
 const minReps = 5
 
-var deltaHeader = []string{"task", "pairs", "median delta", "mean delta", "95% CI", "relative", "p (Holm)", "verdict"}
-
-func numFloat(value *float64, digits int) string {
-	if value == nil {
-		return "n/a"
-	}
-	return strconv.FormatFloat(*value, 'f', digits, 64)
-}
-
 // num prints a float to the given digits and an int as it is, which is how
 // the Python's f-string told the two apart.
-func num(value *Number, digits int) string {
+func num(value *pycompat.Number, digits int) string {
 	if value == nil {
 		return "n/a"
 	}
@@ -50,7 +26,16 @@ func num(value *Number, digits int) string {
 	return numFloat(&f, digits)
 }
 
-func usd(value *float64) string { return "$" + numFloat(value, 4) }
+func numFloat(value *float64, digits int) string {
+	if value == nil {
+		return "n/a"
+	}
+	return strconv.FormatFloat(*value, 'f', digits, 64)
+}
+
+func usd(value *pycompat.Number) string { return "$" + num(value, 4) }
+
+func usdFloat(value *float64) string { return "$" + numFloat(value, 4) }
 
 func pct(value *float64) string {
 	if value == nil {
@@ -66,15 +51,17 @@ func interval(bounds [2]*float64, digits int) string {
 	return "[" + numFloat(bounds[0], digits) + ", " + numFloat(bounds[1], digits) + "]"
 }
 
-func table(header []string, rows [][]string) []string {
+type row []string
+
+func table(header row, rows []row) []string {
 	dashes := make([]string, len(header))
 	for i := range dashes {
 		dashes[i] = "---"
 	}
 	lines := make([]string, 0, 2+len(rows))
 	lines = append(lines, "| "+strings.Join(header, " | ")+" |", "| "+strings.Join(dashes, " | ")+" |")
-	for _, row := range rows {
-		lines = append(lines, "| "+strings.Join(row, " | ")+" |")
+	for _, r := range rows {
+		lines = append(lines, "| "+strings.Join(r, " | ")+" |")
 	}
 	return lines
 }
@@ -86,7 +73,7 @@ func section(title, blurb string, body []string) []string {
 }
 
 func controlsSection(a *Analysis) []string {
-	rows := make([][]string, 0, len(a.Tasks))
+	rows := make([]row, 0, len(a.Tasks))
 	for _, task := range a.Tasks {
 		cell := a.Controls[task]
 		verdict := "NO"
@@ -95,7 +82,7 @@ func controlsSection(a *Analysis) []string {
 		} else if cell.Golden.N == 0 || cell.Null.N == 0 {
 			verdict = "UNVERIFIED (control missing)"
 		}
-		rows = append(rows, []string{
+		rows = append(rows, row{
 			task,
 			fmt.Sprintf("%d/%d", cell.Golden.Passes, cell.Golden.N),
 			fmt.Sprintf("%d/%d", cell.Null.Passes, cell.Null.N),
@@ -107,57 +94,55 @@ func controlsSection(a *Analysis) []string {
 		"Whether each task's check can tell a solution from its absence: the golden "+
 			"control applies the known solution and must pass, the null control touches "+
 			"nothing and must fail. A pass rate below is only worth reading where both hold.",
-		table([]string{"task", "golden (pass/n)", "null (pass/n)", "checks discriminate"}, rows),
+		table(row{"task", "golden (pass/n)", "null (pass/n)", "checks discriminate"}, rows),
 	)
 }
 
 func headlineSection(a *Analysis) []string {
-	rows := make([][]string, 0, len(a.Arms))
+	rows := make([]row, 0, len(a.Arms))
 	for _, arm := range a.Arms {
-		summary := a.ArmSummary[arm]
+		summary := a.ArmSummaries[arm]
 		cost := "infinite (no passes)"
 		if !summary.CostOfPassUSD.Infinite {
-			cost = usd(summary.CostOfPassUSD.Value)
+			cost = usdFloat(summary.CostOfPassUSD.Value)
 		}
-		rows = append(rows, []string{
+		rows = append(rows, row{
 			arm,
 			strconv.FormatInt(summary.N, 10),
 			strconv.FormatInt(summary.Successes, 10),
 			pct(&summary.PassRate),
 			interval(summary.PassRateCI, 3),
-			usd(summary.Dollars.Mean),
-			usdNumber(summary.Dollars.Median),
+			usdFloat(summary.Dollars.Mean),
+			usd(summary.Dollars.Median),
 			cost,
 		})
 	}
 	return section(
 		"Headline: cost-of-pass",
 		"Expected dollars per correct solution (mean dollars / pass rate).",
-		table([]string{"arm", "n", "passes", "pass rate", "Wilson 95%", "mean $", "median $", "cost-of-pass"}, rows),
+		table(row{"arm", "n", "passes", "pass rate", "Wilson 95%", "mean $", "median $", "cost-of-pass"}, rows),
 	)
 }
 
-func usdNumber(value *Number) string { return "$" + num(value, 4) }
-
 func paretoSection(a *Analysis) []string {
-	rows := make([][]string, 0, len(a.Cells))
-	for _, key := range sortedKeys(a.Cells) {
+	rows := make([]row, 0, len(a.Cells))
+	for _, key := range slices.Sorted(maps.Keys(a.Cells)) {
 		arm, task, _ := strings.Cut(key, "/")
 		cell := a.Cells[key]
-		rows = append(rows, []string{
+		rows = append(rows, row{
 			arm,
 			task,
 			strconv.FormatInt(cell.N, 10),
 			pct(cell.PassAt1),
 			num(cell.Metrics["total_billed_tokens"].Median, 0),
 			num(cell.MetricsSuccessOnly["total_billed_tokens"].Median, 0),
-			usdNumber(cell.Metrics["dollars"].Median),
+			usd(cell.Metrics["dollars"].Median),
 		})
 	}
 	return section(
 		"Correctness against median tokens",
 		"The cost-accuracy frontier in text: pass rate beside the token spend it cost.",
-		table([]string{"arm", "task", "n", "pass@1", "median tokens", "median tokens (passes only)", "median $"}, rows),
+		table(row{"arm", "task", "n", "pass@1", "median tokens", "median tokens (passes only)", "median $"}, rows),
 	)
 }
 
@@ -172,19 +157,19 @@ func deltasSection(a *Analysis) []string {
 			a.BootstrapIters, strconv.FormatFloat(100.0*a.MinRelativeDelta, 'f', 0, 64)),
 		"",
 	}
-	for _, m := range headlineMetrics {
+	for _, m := range metrics {
 		perTask := a.Paired[m.name]
-		if len(perTask) == 0 {
+		if !m.headline || len(perTask) == 0 {
 			continue
 		}
 		lines = append(lines, "### "+m.label, "")
-		rows := make([][]string, 0, len(a.Tasks))
+		rows := make([]row, 0, len(a.Tasks))
 		for _, task := range a.Tasks {
 			delta, ok := perTask[task]
 			if !ok {
 				continue
 			}
-			rows = append(rows, []string{
+			rows = append(rows, row{
 				task,
 				strconv.FormatInt(delta.NPairs, 10),
 				num(delta.DeltaMedian, m.digits),
@@ -195,18 +180,18 @@ func deltasSection(a *Analysis) []string {
 				delta.Verdict,
 			})
 		}
-		lines = append(lines, table(deltaHeader, rows)...)
+		lines = append(lines, table(row{"task", "pairs", "median delta", "mean delta", "95% CI", "relative", "p (Holm)", "verdict"}, rows)...)
 		lines = append(lines, "")
 	}
 	return lines
 }
 
 func passRatesSection(a *Analysis) []string {
-	rows := make([][]string, 0, len(a.Cells))
-	for _, key := range sortedKeys(a.Cells) {
+	rows := make([]row, 0, len(a.Cells))
+	for _, key := range slices.Sorted(maps.Keys(a.Cells)) {
 		arm, task, _ := strings.Cut(key, "/")
 		cell := a.Cells[key]
-		rows = append(rows, []string{
+		rows = append(rows, row{
 			arm,
 			task,
 			strconv.FormatInt(cell.K, 10),
@@ -218,7 +203,7 @@ func passRatesSection(a *Analysis) []string {
 	return section(
 		"pass@1 and pass^k",
 		"pass@1 is capability; pass^k (all k reps succeed) is reliability.",
-		table([]string{"arm", "task", "k", "pass@1", "Wilson 95%", "pass^k"}, rows),
+		table(row{"arm", "task", "k", "pass@1", "Wilson 95%", "pass^k"}, rows),
 	)
 }
 
@@ -234,7 +219,7 @@ func caveatsSection(a *Analysis) []string {
 // above can claim.
 func caveatLines(a *Analysis) []string {
 	quality := a.DataQuality
-	keys := sortedKeys(a.Cells)
+	keys := slices.Sorted(maps.Keys(a.Cells))
 	var lines []string
 	reps := make([]string, 0, len(keys))
 	var small []string
@@ -248,7 +233,7 @@ func caveatLines(a *Analysis) []string {
 	if len(small) > 0 {
 		lines = append(lines, fmt.Sprintf("Under the %d-rep protocol: %s. Treat those deltas as directional.", minReps, strings.Join(small, ", ")))
 	}
-	for _, gap := range quality.IncompletePairs {
+	for _, gap := range quality.UnpairedReps {
 		lines = append(lines, fmt.Sprintf("Unpaired: %s rep %d is missing arm(s) %s, so it contributes to no delta.",
 			gap.Task, gap.Rep, strings.Join(gap.MissingArms, ", ")))
 	}
@@ -289,9 +274,9 @@ func caveatLines(a *Analysis) []string {
 	return lines
 }
 
-// Render is the whole of report.md: every table and every caveat is generated
+// Report is the whole of report.md: every table and every caveat is generated
 // from the analysis, so a report can never claim more than the data behind it.
-func Render(a *Analysis) string {
+func Report(a *Analysis) string {
 	models := strings.Join(a.Models, " and ")
 	if models == "" {
 		models = "unrecorded"
