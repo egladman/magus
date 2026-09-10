@@ -1038,7 +1038,6 @@
             "test"
           ],
           "charms": [
-            "gha",
             "rw"
           ],
           "cross_dependencies": [
@@ -1048,6 +1047,14 @@
             },
             {
               "project": "libs/diagnostics",
+              "target": "test"
+            },
+            {
+              "project": "libs/commentdash",
+              "target": "test"
+            },
+            {
+              "project": "libs/testlayout",
               "target": "test"
             }
           ],
@@ -1062,20 +1069,28 @@
             {
               "project": "libs/diagnostics",
               "target": "test"
+            },
+            {
+              "project": "libs/commentdash",
+              "target": "test"
+            },
+            {
+              "project": "libs/testlayout",
+              "target": "test"
             }
           ],
           "reads_files": [
             {
               "project": ".",
-              "glob": "coverage.hand.out"
+              "glob": "**/*.go"
             },
             {
               "project": ".",
-              "glob": "libs/gopherbuzz/coverage.out"
+              "glob": "**/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/diagnostics/coverage.out"
+              "glob": "coverage/*.json"
             },
             {
               "project": ".",
@@ -1096,7 +1111,7 @@
               "glob": "assets/coverage.svg"
             },
             {
-              "glob": "coverage.merged.out"
+              "glob": "coverage/*.json"
             }
           ]
         },
@@ -1587,8 +1602,10 @@
         }
       ],
       "depends_on": [
+        "libs/commentdash",
         "libs/diagnostics",
-        "libs/gopherbuzz"
+        "libs/gopherbuzz",
+        "libs/testlayout"
       ]
     },
     {
@@ -2626,6 +2643,7 @@
         },
         {
           "name": "test",
+          "doc": "The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured.",
           "dependencies": [
             "format"
           ],
@@ -2642,7 +2660,12 @@
               "target": "format"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "coverage.out"
+            }
+          ]
         },
         {
           "name": "ci",
@@ -3169,6 +3192,7 @@
         },
         {
           "name": "test",
+          "doc": "The profile is a declared output: the root's coverage badge is one figure over every Go module, recorded from each module's own run rather than re-measured.",
           "dependencies": [
             "format"
           ],
@@ -3185,7 +3209,12 @@
               "target": "format"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "coverage.out"
+            }
+          ]
         },
         {
           "name": "ci",

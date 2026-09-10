@@ -206,6 +206,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   requires a string. The gating reply and the advisory reply are graded against the event that
   reads each, so a renamed field costs a test rather than a silently dropped verdict. The
   OpenCode plugin type-check moves to the current `@opencode-ai/plugin` release.
+- **The Go coverage badge now spans every platform, and is refreshed locally rather than by
+  CI.** The figure used to be whatever the CI runner compiled, which made it a property of
+  that machine: 119 non-test files sit behind build constraints, and macOS and Linux read
+  67.6% and 66.9% for one commit. It is now split. The denominator is enumerated from
+  source, by instrumenting each Go file in each module on its own with `go tool cover`,
+  which parses without a build context and so reports a Windows-only file's blocks on a
+  Mac; those blocks stay in the denominator at zero until something runs them. The
+  numerator is the union of committed per-platform records under `coverage/`, one small
+  JSON per GOOS/GOARCH carrying a digest and a bitset per file, the commit measured and
+  when. `magus run coverage-badge:rw .` refreshes the record for the platform it runs on,
+  from the suites that just ran; a platform's record is raised by running the refresh
+  there, never by a CI matrix or a container. CI no longer measures anything to judge the
+  badge; it re-derives it from the tree and the records, which is a pure function, so the
+  `gha`-only arm is gone. A record measured against source that has since changed is
+  reported and credited nothing, so an unrefreshed platform can only pull the figure down.
+  The 70% floor in `test` is unchanged and stays per-platform on purpose.
 - **One coverage badge per language.** The README carries a Go badge and a TypeScript badge,
   and the TypeScript figure spans every TypeScript project with a suite (the console and
   libs/textsearch), merged line by line from their lcov reports by the console's test target

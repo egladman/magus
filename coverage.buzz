@@ -21,6 +21,10 @@
 // exceptions.
 
 import "fs";
+import "proc";
+import "crypto";
+import "sort";
+import "encoding/json";
 import "std";
 import "assert";
 
@@ -114,6 +118,394 @@ export fun stripGenerated(profile: str, prefix: str) > str !> any {
     return kept.join("\n") + "\n";
 }
 
+// ---------------------------------------------------------------------------
+// The static denominator: every statement block in the tree, on every platform.
+// ---------------------------------------------------------------------------
+//
+// A profile names only the files the run COMPILED, so a single machine's total is a
+// fact about that machine. This repo carries 119 non-test files behind //go:build
+// constraints, and macOS and Linux measured 67.6% and 66.9% for one commit. Which
+// statements EXIST does not depend on where you stand, so the denominator is
+// enumerated from source instead of from a run, and a platform's measurement only ever
+// supplies the numerator.
+//
+// `go tool cover -mode=set -var=X -o <out> <one file.go>` is the enumerator. It
+// instruments a SINGLE file syntactically: it parses, resolves no import and consults
+// no build context, so a windows-only or wasm-only file yields its table on a Mac. The
+// table it writes (X.Pos, X.NumStmt) holds the positions the runtime would report,
+// which is what makes the two halves mergeable. Measured against this repo's own
+// profile on 2026-09-10: over the 418 files both a real
+// `go test -covermode=atomic -coverprofile` run and this pass covered, the block sets
+// were identical, position for position and statement count for statement count.
+//
+// The alternatives lost on cost. `GOOS=x go test -cover -c` compiles per platform and
+// still cannot emit a profile; `GOOS=x go build -cover` needs the binary to RUN; a
+// go/ast reimplementation would have to re-derive cmd/cover's block rules and drift
+// from them silently.
+
+// PRUNE_DIRS are the directory names the source walk skips. Dot- and underscore-
+// prefixed directories are skipped separately (the go tool ignores them, as does
+// project.IgnoreDirs), and so is testdata.
+//
+// `gen` is deliberately absent even though project.IgnoreDirs carries it: this repo
+// compiles hand-maintained files inside gen/ directories, a real profile reports them,
+// and a denominator that skipped them would leave covered blocks with no statement to
+// spend themselves on. Generated files are dropped by their marker instead, exactly as
+// stripGenerated does.
+final PRUNE_DIRS = ["node_modules", "vendor", "target", "testdata"];
+
+final HEX_DIGITS = "0123456789abcdef";
+
+// isSourceDir reports whether the walk descends into a directory of this name.
+export fun isSourceDir(name: str) > bool {
+    if (name.startsWith(".") or name.startsWith("_")) { return false; }
+    foreach (d in PRUNE_DIRS) {
+        if (name == d) { return false; }
+    }
+    return true;
+}
+
+// isBuildIgnored reports whether a Go source is constrained to the `ignore` tag.
+//
+// Nothing compiles such a file on any platform, so counting its statements would put a
+// denominator entry no run can ever reach.
+export fun isBuildIgnored(body: str) > bool {
+    foreach (line in body.split("\n")) {
+        final t = line.trim();
+        if (t.startsWith("//go:build ")) {
+            return t.sub("//go:build ".len()).trim() == "ignore";
+        }
+        if (t.startsWith("package ")) { return false; }
+    }
+    return false;
+}
+
+// goSourceFiles lists the non-test Go files under dir, depth first, paths relative to
+// the workspace root.
+//
+// Recursion over fs\listDir rather than a `**/*.go` glob because a glob cannot PRUNE:
+// it would descend console/node_modules on every run to discard what it found there.
+export fun goSourceFiles(dir: str) > [str] !> any {
+    var files = mut [<str>];
+    foreach (name in sort\strings(fs\listDir(dir))) {
+        final path = if (dir == ".") name else dir + "/" + name;
+        if (fs\isDir(path)) {
+            if (isSourceDir(name)) {
+                foreach (f in goSourceFiles(path)) { files.append(f); }
+            }
+            continue;
+        }
+        if (name.endsWith(".go") and !name.endsWith("_test.go")) { files.append(path); }
+    }
+    return files;
+}
+
+// goModules maps each directory holding a go.mod to its module path, keyed relative to
+// dir with "." for the root. Every module in the tree is included, not just the two the
+// root go.mod replaces: the figure is a statement about the whole codebase.
+export fun goModules(dir: str) > {str: str} !> any {
+    final found = mut {<str: str>};
+    foreach (name in sort\strings(fs\listDir(dir))) {
+        final path = if (dir == ".") name else dir + "/" + name;
+        if (fs\isDir(path)) {
+            if (isSourceDir(name)) {
+                foreach (d, m in goModules(path)) { found[d] = m; }
+            }
+            continue;
+        }
+        if (name == "go.mod") { found[dir] = modulePath(fs\readFile(path)); }
+    }
+    return found;
+}
+
+// importPathFor names a file the way a coverage profile does: the import path of the
+// innermost module containing it, then the path within that module.
+export fun importPathFor(rel: str, modules: {str: str}) > str !> str {
+    var dir = fs\dirname(rel);
+    while (true) {
+        final mod = modules[dir];
+        if (mod != null) {
+            return mod! + "/" + (if (dir == ".") rel else rel.sub(dir.len() + 1));
+        }
+        if (dir == ".") { throw "coverage: no go.mod covers " + rel; }
+        dir = fs\dirname(dir);
+    }
+}
+
+// parseHex reads cmd/cover's packed column word ("0x2002f"). std\parseInt is base 10
+// only, and cover packs both columns into one word.
+export fun parseHex(token: str) > int !> str {
+    var body = token;
+    if (body.startsWith("0x")) { body = body.sub(2); }
+    if (body.len() == 0) { throw "coverage: \"" + token + "\" is not a hex word"; }
+    var n = 0;
+    var i = 0;
+    while (i < body.len()) {
+        final d = HEX_DIGITS.indexOf(body.sub(i, len: 1));
+        if (d == null) { throw "coverage: \"" + token + "\" is not a hex word"; }
+        n = n * 16 + d!;
+        i = i + 1;
+    }
+    return n;
+}
+
+// parseBlockTable reads the block table out of a file instrumented by
+// `go tool cover -mode=set`, returning one "<start>,<end> <numstmt>" row per block in
+// cover's own order. A row is a profile line with the file prefix and the count
+// stripped, so a profile line is `file + ":" + row + " " + count`.
+//
+// cmd/cover writes the triple as (start line, end line, packed columns) with the END
+// column in the high 16 bits (cover.go: `(end.Column&0xFFFF)<<16|(start.Column&0xFFFF)`),
+// which is the one place the encoding is easy to get backwards.
+export fun parseBlockTable(instrumented: str) > [str] !> any {
+    var positions = mut [<str>];
+    var counts = mut [<str>];
+    var section = "";
+    foreach (line in instrumented.split("\n")) {
+        final t = line.trim();
+        // "Pos: [" and "NumStmt: [" open the literals; the bare "Pos" and "NumStmt"
+        // lines of the struct TYPE above them carry no colon and must not match.
+        if (t.startsWith("Pos: [")) { section = "pos"; continue; }
+        if (t.startsWith("NumStmt: [")) { section = "stmt"; continue; }
+        if (section == "") { continue; }
+        if (t.startsWith("}")) { section = ""; continue; }
+        final row = t.split("//")[0].trim();
+        final fields = row.split(",");
+        if (section == "stmt") {
+            counts.append(fields[0].trim());
+            continue;
+        }
+        if (fields.len() < 3) { throw "coverage: malformed cover position row \"" + t + "\""; }
+        final packed = parseHex(fields[2].trim());
+        final startLine = fields[0].trim();
+        final endLine = fields[1].trim();
+        final startCol = packed % 65536;
+        final endCol = packed / 65536;
+        positions.append("{startLine}.{startCol},{endLine}.{endCol}");
+    }
+    if (positions.len() != counts.len()) {
+        throw "coverage: cover emitted {positions.len()} positions for {counts.len()} statement counts";
+    }
+    var rows = mut [<str>];
+    var i = 0;
+    while (i < positions.len()) {
+        rows.append(positions[i] + " " + counts[i]);
+        i = i + 1;
+    }
+    return rows;
+}
+
+// blockTableForFile instruments one Go source into scratch and returns its blocks.
+// scratch is reused across files; cover truncates it.
+export fun blockTableForFile(path: str, scratch: str) > [str] !> any {
+    // quiet because this runs once per file in the tree and cover says nothing useful
+    // on success.
+    proc\exec("go", args: ["tool", "cover", "-mode=set", "-var=CoverBlocks", "-o", scratch, path],
+        opts: {"quiet": true});
+    return parseBlockTable(fs\readFile(scratch));
+}
+
+// staticBlockTables enumerates every measurable statement block in the workspace,
+// keyed by the name a profile would give the file. Generated and build-ignored files
+// are excluded, matching what stripGenerated removes from the numerator.
+//
+// Roughly 1,000 `go tool cover` invocations, about 18s on an M-series laptop.
+export fun staticBlockTables() > {str: [str]} !> any {
+    final modules = goModules(".");
+    final scratch = fs\tempFile("magus-cover-");
+    final tables = mut {<str: [str]>};
+    foreach (rel in goSourceFiles(".")) {
+        final body = fs\readFile(rel);
+        if (isGeneratedSource(body) or isBuildIgnored(body)) { continue; }
+        tables[importPathFor(rel, modules: modules)] = blockTableForFile(rel, scratch: scratch);
+    }
+    fs\remove(scratch);
+    return tables;
+}
+
+// ---------------------------------------------------------------------------
+// The numerator: what a platform's run actually executed.
+// ---------------------------------------------------------------------------
+
+// coveredBlocks maps every block a profile NAMES to whether it ran, keyed by the
+// profile's own "importpath/file.go:1.2,3.4" spelling. Absent from the map means the
+// platform never compiled the file; present and false means it compiled and never
+// entered the block, which is the distinction the per-platform figure rests on.
+//
+// A profile can name one block several times, once per test binary that linked it; any
+// non-zero count means it ran, so the value is the OR.
+//
+// Generated files are NOT filtered here. staticBlockTables never enumerates them, and
+// the merge only ever credits a block the denominator lists, so they fall out of both
+// halves without a second pass over the tree.
+export fun coveredBlocks(profile: str) > {str: bool} !> any {
+    final blocks = mut {<str: bool>};
+    foreach (line in profile.split("\n")) {
+        if (line == "" or line.startsWith("mode:")) { continue; }
+        final fields = line.split(" ");
+        if (fields.len() < 3) { throw "coverage: malformed profile line \"" + line + "\""; }
+        if (fields[2] != "0") {
+            blocks[fields[0]] = true;
+        } else if (blocks[fields[0]] == null) {
+            blocks[fields[0]] = false;
+        }
+    }
+    return blocks;
+}
+
+// platformTotals is one platform's own figure: the statements its run compiled, and how
+// many it entered. This is what a reader of a committed record wants when the merged
+// badge disagrees with what their laptop measured.
+export fun platformTotals(tables: {str: [str]}, blocks: {str: bool}) > any !> any {
+    var statements = 0;
+    var covered = 0;
+    foreach (file, rows in tables) {
+        foreach (row in rows) {
+            final fields = row.split(" ");
+            final ran = blocks[file + ":" + fields[0]];
+            if (ran == null) { continue; }
+            final n = std\parseInt(fields[1]);
+            if (n == null) { throw "coverage: block row \"" + row + "\" has no statement count"; }
+            statements = statements + n!;
+            if (ran! == true) { covered = covered + n!; }
+        }
+    }
+    return {"covered": covered, "statements": statements};
+}
+
+// blockDigest fingerprints a file's block table. A summary carries it per file so a
+// record measured against different source is DETECTED rather than misread: a bitset
+// only means anything against the block list it was written for.
+export fun blockDigest(rows: [str]) > str !> any {
+    return crypto\sha256Hex(rows.join("\n")).sub(0, len: 12);
+}
+
+// summaryFiles renders one platform's per-file coverage: "<digest> <bits>", one bit per
+// block in cover's order, "1" where the run executed it.
+//
+// A file with nothing covered is OMITTED rather than written as a run of zeros. It is
+// the same input to the merge and it halves the committed record; the file the platform
+// never compiled and the file it compiled but never entered are not distinguishable
+// here, and the badge does not distinguish them either.
+export fun summaryFiles(tables: {str: [str]}, covered: {str: bool}) > {str: str} !> any {
+    final files = mut {<str: str>};
+    foreach (file, rows in tables) {
+        var bits = mut [<str>];
+        var entered = false;
+        foreach (row in rows) {
+            final hit = covered[file + ":" + row.split(" ")[0]] == true;
+            if (hit) { entered = true; }
+            bits.append(if (hit) "1" else "0");
+        }
+        if (entered) { files[file] = blockDigest(rows) + " " + bits.join(""); }
+    }
+    return files;
+}
+
+// mergeSummaries unions every platform's run over the static denominator, returning
+// {covered, statements, stale}. A block counts once however many platforms ran it, and
+// a block no platform compiled counts in the denominator alone.
+//
+// A file whose digest no longer matches the tree is reported in `stale` and contributes
+// NOTHING, so an unrefreshed record can only lower the figure. That is what makes a
+// platform nobody has refreshed lately a smaller number rather than a wrong one.
+export fun mergeSummaries(tables: {str: [str]}, summaries: [any]) > any !> any {
+    var total = 0;
+    var covered = 0;
+    final stale = mut [<str>];
+    foreach (file in sort\strings(tables.keys())) {
+        final rows = tables[file]!;
+        final digest = blockDigest(rows);
+        final marks = mut {<int: bool>};
+        foreach (s in summaries) {
+            final rec = s["files"][file];
+            if (rec == null) { continue; }
+            final parts = "{rec}".split(" ");
+            if (parts[0] != digest) {
+                stale.append("{s["goos"]}/{s["goarch"]} " + file);
+                continue;
+            }
+            final bits = parts[1];
+            if (bits.len() != rows.len()) {
+                throw "coverage: {s["goos"]}/{s["goarch"]} records {bits.len()} blocks for "
+                    + file + ", which has {rows.len()}";
+            }
+            var b = 0;
+            while (b < rows.len()) {
+                if (bits.sub(b, len: 1) == "1") { marks[b] = true; }
+                b = b + 1;
+            }
+        }
+        var i = 0;
+        while (i < rows.len()) {
+            final n = std\parseInt(rows[i].split(" ")[1]);
+            if (n == null) { throw "coverage: block row \"" + rows[i] + "\" has no statement count"; }
+            total = total + n!;
+            if (marks[i] == true) { covered = covered + n!; }
+            i = i + 1;
+        }
+    }
+    return {"covered": covered, "statements": total, "stale": stale};
+}
+
+// percentOf renders the badge figure, truncated to a whole percent so it matches what
+// `go tool cover -func` plus split(".")[0] produced before.
+export fun percentOf(covered: int, statements: int) > str !> str {
+    if (statements <= 0) { throw "coverage: nothing to measure; the denominator is empty"; }
+    return "{covered * 100 / statements}";
+}
+
+// ---------------------------------------------------------------------------
+// The committed record.
+// ---------------------------------------------------------------------------
+
+// jsonString quotes a value that must not need escaping. Summaries carry import paths,
+// hex and bits, so a character needing an escape means something upstream is wrong.
+fun jsonString(s: str) > str !> str {
+    if (s.indexOf(`"`) != null or s.indexOf(`\`) != null) {
+        throw "coverage: \"" + s + "\" needs JSON escaping; a summary carries only ASCII paths, hex and bits";
+    }
+    return `"` + s + `"`;
+}
+
+// encodeSummary renders a platform's record: keys in a fixed order, files sorted, one
+// file per line.
+//
+// Hand-rendered rather than json\stringify because the record is COMMITTED. Go's map
+// marshalling is not a guaranteed order across encoder versions, and a byte that moves
+// on its own turns every refresh into a diff.
+export fun encodeSummary(rec: any) > str !> any {
+    var lines = mut [<str>];
+    lines.append("\{");
+    foreach (field in ["goos", "goarch", "mode", "commit", "measured_at"]) {
+        lines.append("  " + jsonString(field) + ": " + jsonString("{rec[field]}") + ",");
+    }
+    lines.append("  " + jsonString("statements") + ": {rec["statements"]},");
+    lines.append("  " + jsonString("covered") + ": {rec["covered"]},");
+    lines.append("  " + jsonString("files") + ": \{");
+    final names = sort\strings(rec["files"].keys());
+    var i = 0;
+    while (i < names.len()) {
+        final comma = if (i == names.len() - 1) "" else ",";
+        lines.append("    " + jsonString(names[i]) + ": " + jsonString("{rec["files"][names[i]]}") + comma);
+        i = i + 1;
+    }
+    lines.append("  }");
+    lines.append("}");
+    return lines.join("\n") + "\n";
+}
+
+// decodeSummary parses a committed record and rejects one missing a field the merge
+// reads, so a hand-edited file fails where it is read rather than silently measuring
+// less.
+export fun decodeSummary(path: str, text: str) > any !> any {
+    final rec = json\parse(text);
+    foreach (field in ["goos", "goarch", "mode", "commit", "measured_at", "files"]) {
+        if (rec[field] == null) { throw "coverage: " + path + " has no \"" + field + "\" field"; }
+    }
+    return rec;
+}
+
 test "modulePath reads the module line" {
     assert\equal(modulePath("module github.com/egladman/magus\n\ngo 1.25\n"), want: "github.com/egladman/magus", message: "module path");
     // go.mod permits any run of whitespace after the keyword. split(" ")[1] took the
@@ -159,4 +551,158 @@ test "stripGenerated removes a real generated file and keeps a real hand-written
     assert\equal(got.indexOf("buzzobject_gen.go") == null, want: true, message: "generated block dropped");
     assert\equal(got.indexOf("magus.go") != null, want: true, message: "hand-written block kept");
     assert\equal(got.startsWith("mode: atomic\n"), want: true, message: "mode header preserved");
+}
+
+// The instrumented tail `go tool cover -mode=set` wrote for
+// cmd/magus/daemon_detach_windows.go, verbatim. A macOS run compiles nothing in that
+// file, and its one block still comes out here.
+final WINDOWS_INSTRUMENTED = "func daemonSysProcAttr() *syscall.SysProcAttr \{CoverBlocks.Count[0] = 1;\n"
+    + "    return &syscall.SysProcAttr\{CreationFlags: 0x00000200\}\n"
+    + "}\n"
+    + "\n"
+    + "var CoverBlocks = struct \{\n"
+    + "    Count     [1]uint32\n"
+    + "    Pos       [3 * 1]uint32\n"
+    + "    NumStmt   [1]uint16\n"
+    + "} \{\n"
+    + "    Pos: [3 * 1]uint32\{\n"
+    + "        10, 12, 0x2002f, // [0]\n"
+    + "    },\n"
+    + "    NumStmt: [1]uint16\{\n"
+    + "        1, // 0\n"
+    + "    },\n"
+    + "}\n";
+
+test "parseBlockTable reads a platform-gated file's blocks" {
+    final rows = parseBlockTable(WINDOWS_INSTRUMENTED);
+    assert\equal(rows.len(), want: 1, message: "one block");
+    // The line is 47 characters, so the body opens at column 47 and closes at 12.2.
+    // A real profile from a Windows run spells this block identically.
+    assert\equal(rows[0], want: "10.47,12.2 1", message: "start col from the low half of the packed word");
+}
+
+test "parseBlockTable accepts a file with no functions" {
+    final empty = "package magus\n\nvar C = struct \{\n    Count     [0]uint32\n"
+        + "    Pos       [3 * 0]uint32\n    NumStmt   [0]uint16\n} \{\n"
+        + "    Pos: [3 * 0]uint32\{\n    },\n    NumStmt: [0]uint16\{\n    },\n}\n";
+    assert\equal(parseBlockTable(empty).len(), want: 0, message: "no blocks");
+}
+
+test "parseHex decodes cover's packed column word" {
+    assert\equal(parseHex("0x2002f"), want: 131119, message: "prefixed");
+    assert\equal(parseHex("2f"), want: 47, message: "bare");
+    assert\equal(parseHex("0x2002f") % 65536, want: 47, message: "start column is the low half");
+    assert\equal(parseHex("0x2002f") / 65536, want: 2, message: "end column is the high half");
+    assert\throws(fun () > void !> str { final _ = parseHex("0xzz"); }, message: "non-hex errors");
+}
+
+test "importPathFor picks the innermost module" {
+    final modules = {"." : "github.com/egladman/magus", "libs/gopherbuzz": "github.com/egladman/magus/libs/gopherbuzz"};
+    assert\equal(importPathFor("magus.go", modules: modules),
+        want: "github.com/egladman/magus/magus.go", message: "root file");
+    assert\equal(importPathFor("internal/cache/hash.go", modules: modules),
+        want: "github.com/egladman/magus/internal/cache/hash.go", message: "root package");
+    assert\equal(importPathFor("libs/gopherbuzz/vm/value.go", modules: modules),
+        want: "github.com/egladman/magus/libs/gopherbuzz/vm/value.go", message: "nested module wins over the root");
+}
+
+test "isBuildIgnored only catches the ignore tag" {
+    assert\equal(isBuildIgnored("//go:build ignore\n\npackage main\n"), want: true, message: "ignore");
+    assert\equal(isBuildIgnored("//go:build windows\n\npackage main\n"), want: false, message: "a platform tag is measurable");
+    assert\equal(isBuildIgnored("package main\n"), want: false, message: "unconstrained");
+}
+
+test "isSourceDir prunes dependency trees but keeps gen" {
+    assert\equal(isSourceDir("node_modules"), want: false, message: "dependency tree");
+    assert\equal(isSourceDir("testdata"), want: false, message: "never compiled");
+    assert\equal(isSourceDir(".git"), want: false, message: "dot dir");
+    assert\equal(isSourceDir("_scratch"), want: false, message: "underscore dir");
+    // A profile reports this repo's hand-maintained gen/ files, so the denominator must
+    // enumerate them or their covered blocks have nothing to spend themselves on.
+    assert\equal(isSourceDir("gen"), want: true, message: "gen is measured, not pruned");
+}
+
+test "coveredBlocks ORs a block reported by several test binaries" {
+    final profile = "mode: atomic\n"
+        + "m/a.go:1.1,2.2 3 0\n"
+        + "m/a.go:1.1,2.2 3 7\n"
+        + "m/a.go:3.3,4.4 2 0\n";
+    final covered = coveredBlocks(profile);
+    assert\equal(covered["m/a.go:1.1,2.2"], want: true, message: "run by one binary counts");
+    assert\equal(covered["m/a.go:3.3,4.4"], want: false, message: "compiled, never entered");
+    assert\equal(covered["m/win.go:1.1,2.2"] == null, want: true, message: "never compiled here");
+}
+
+test "platformTotals separates what this platform compiled from what the tree holds" {
+    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/win.go": ["5.5,6.6 4"]};
+    final totals = platformTotals(tables, blocks: {"m/a.go:1.1,2.2": true, "m/a.go:3.3,4.4": false});
+    assert\equal(totals["statements"], want: 5, message: "win.go is not this platform's denominator");
+    assert\equal(totals["covered"], want: 3, message: "one block entered");
+}
+
+// summaryText renders the committed JSON a platform would write for one file's bits, so
+// the merge tests below read exactly what encodeSummary produces.
+fun summaryText(goos: str, goarch: str, files: {str: str}) > str !> any {
+    return encodeSummary({"goos": goos, "goarch": goarch, "mode": "atomic",
+        "commit": "587c27db1", "measured_at": "2026-09-10T00:00:00Z",
+        "statements": 0, "covered": 0, "files": files});
+}
+
+test "mergeSummaries unions two platforms and keeps an uncompiled file in the denominator" {
+    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/win.go": ["5.5,6.6 4"]};
+    final digest = blockDigest(tables["m/a.go"]!);
+    final darwin = decodeSummary("darwin", text: summaryText("darwin", goarch: "arm64",
+        files: {"m/a.go": digest + " 10"}));
+    // win.go is absent from both records: nothing local compiles it, and its statements
+    // still have to be counted against.
+    final linux = decodeSummary("linux", text: summaryText("linux", goarch: "amd64",
+        files: {"m/a.go": digest + " 01"}));
+
+    final merged = mergeSummaries(tables, summaries: [darwin, linux]);
+
+    assert\equal(merged["statements"], want: 9, message: "every block, compiled here or not");
+    assert\equal(merged["covered"], want: 5, message: "a block covered on either platform counts once");
+    assert\equal(merged["stale"].len(), want: 0, message: "nothing stale");
+    assert\equal(percentOf(merged["covered"], statements: merged["statements"]), want: "55", message: "truncated");
+}
+
+test "mergeSummaries reports a record measured against different source and credits it nothing" {
+    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"]};
+    final stale = decodeSummary("linux", text: summaryText("linux", goarch: "amd64",
+        files: {"m/a.go": "000000000000 11"}));
+
+    final merged = mergeSummaries(tables, summaries: [stale]);
+
+    assert\equal(merged["covered"], want: 0, message: "a mismatched digest can only lower the figure");
+    assert\equal(merged["statements"], want: 5, message: "denominator unaffected");
+    assert\equal(merged["stale"][0], want: "linux/amd64 m/a.go", message: "named platform and file");
+}
+
+test "summaryFiles omits a file nothing covered and round-trips through the record" {
+    final tables = {"m/a.go": ["1.1,2.2 3", "3.3,4.4 2"], "m/cold.go": ["9.9,10.10 1"]};
+    final files = summaryFiles(tables, covered: {"m/a.go:3.3,4.4": true});
+
+    assert\equal(files["m/cold.go"] == null, want: true, message: "an all-zero file is not written");
+    assert\equal(files["m/a.go"]!.split(" ")[1], want: "01", message: "one bit per block, in cover's order");
+
+    final rec = decodeSummary("darwin", text: summaryText("darwin", goarch: "arm64", files: files));
+    final merged = mergeSummaries(tables, summaries: [rec]);
+    assert\equal(merged["covered"], want: 2, message: "the covered block survives the round trip");
+    assert\equal(merged["statements"], want: 6, message: "the omitted file still counts against");
+}
+
+test "encodeSummary sorts files so a refresh that measures the same thing is a no-op" {
+    final text = summaryText("darwin", goarch: "arm64", files: {"m/z.go": "aa 1", "m/a.go": "bb 0"});
+    assert\equal(text.indexOf("m/a.go") < text.indexOf("m/z.go"), want: true, message: "sorted");
+    assert\equal(text.endsWith("}\n"), want: true, message: "newline terminated");
+}
+
+test "decodeSummary rejects a record missing a field the merge reads" {
+    assert\throws(fun () > void !> any {
+        final _ = decodeSummary("coverage/linux-amd64.json", text: "\{\"goos\": \"linux\"\}");
+    }, message: "hand-edited record fails where it is read");
+}
+
+test "percentOf refuses an empty denominator" {
+    assert\throws(fun () > void !> str { final _ = percentOf(0, statements: 0); }, message: "no statements");
 }

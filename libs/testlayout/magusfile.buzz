@@ -92,7 +92,13 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // that carries it is a bootstrap nobody needs.
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx); }
-export fun test(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-test"](ctx); }
+// The profile is a declared output: the root's coverage badge is one figure over every
+// Go module, recorded from each module's own run rather than re-measured.
+export fun test(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.writesFiles("coverage.out");
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
+}
 
 // The anchor `magus affected ci` keys off; fans out lint/build/test after format.
 export fun ci(ctx: magus\Context, args: [str]) > void {

@@ -7,7 +7,7 @@
   </picture>
 </p>
 
-<!-- Coverage badges are regenerated in CI by `magus run coverage-badge` under the gha charm (Go toolchain only, no third-party service); the target is a no-op locally so a laptop never overwrites CI's number. -->
+<!-- The Go badge is refreshed on a developer machine by `magus run coverage-badge:rw .` and committed with coverage/, the per-platform record it renders from (Go toolchain only, no third-party service). CI only re-derives the badge from that record and fails when the two disagree; it never runs a platform suite to judge it. -->
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="TypeScript coverage" src="./console/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
