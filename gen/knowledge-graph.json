@@ -42873,7 +42873,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:2883",
+      "source": "magusfile.buzz:2888",
       "attrs": {
         "exported": "true"
       }
@@ -42970,7 +42970,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:2931",
+      "source": "magusfile.buzz:2936",
       "attrs": {
         "exported": "true"
       }
@@ -42997,7 +42997,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:2912",
+      "source": "magusfile.buzz:2917",
       "attrs": {
         "exported": "true"
       }
@@ -43040,7 +43040,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3058",
+      "source": "magusfile.buzz:3063",
       "attrs": {
         "exported": "true"
       }
@@ -43274,7 +43274,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3019"
+      "source": "magusfile.buzz:3024"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -43340,7 +43340,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:2981"
+      "source": "magusfile.buzz:2986"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -43414,7 +43414,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:2993"
+      "source": "magusfile.buzz:2998"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -43443,7 +43443,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3116",
+      "source": "magusfile.buzz:3121",
       "attrs": {
         "exported": "true"
       }
@@ -43453,7 +43453,7 @@
       "kind": "function",
       "label": "session_load",
       "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.  The recipe resolves the binary itself by walking up to the magusfile, so no argument names one here; from a worktree with no ./magus it falls through to PATH and announces itself on stderr if that copy cannot load.",
-      "source": "magusfile.buzz:3112",
+      "source": "magusfile.buzz:3117",
       "attrs": {
         "exported": "true"
       }
@@ -43540,7 +43540,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3101",
+      "source": "magusfile.buzz:3106",
       "attrs": {
         "exported": "true"
       }

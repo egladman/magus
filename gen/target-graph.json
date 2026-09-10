@@ -1442,7 +1442,12 @@
               ]
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "benchmarks/agent/report.md"
+            }
+          ]
         },
         {
           "name": "agent-bench-run",
