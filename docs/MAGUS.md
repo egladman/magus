@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v11). Query it instead of grepping:
+This workspace has a knowledge graph (schema v12). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -55,12 +55,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | method     | built in | `magus query kind=method`     | `archive.compress`, `archive.list`, `archive.read_file`                                                                     |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS3010`, `MGS4001`                                                                                             |
 | doc        |     300+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir        |     100+ | `magus query kind=dir`        | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage`                                           |
+| dir        |     200+ | `magus query kind=dir`        | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage`                                           |
 | file       |     200+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
 | function   |     900+ | `magus query kind=function`   | `tail`, `sign`, `renderContentHTML`                                                                                         |
 | import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
 | rationale  |        6 | `magus query kind=rationale`  | `TODO`, `WHY`, `NOTE`                                                                                                       |
 | package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
+| link       |      80+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/console/`, `https://github.com/ebitengine/purego`                   |
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |

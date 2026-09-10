@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A URL in a comment is now a link the graph can follow.** Every http(s) URL in a Go or
+  Buzz comment, every absolute markdown link on a page, and the source a generated page
+  names in its `generated_from` frontmatter becomes an edge from the file or page that
+  wrote it. A URL naming a page this workspace holds resolves to that page or heading; a
+  forge URL naming a path it holds resolves to that file or directory; everything else
+  becomes a `link` node keyed by the normalized URL, so `kind=link` is the set of external
+  documents the tree depends on and `magus explain` on one lists every file citing it. A
+  page that cites a source path now documents it, which `magus graph stats` reads as file
+  doc coverage, and a page code points at ranks above prose nothing cites. Only text a
+  lexer called a comment is read, so a URL in a string literal is out of reach; a citation
+  must clear a closed scheme set, carry no credentials, sit under a length cap and name a
+  plausible public host; and nothing is ever fetched. Knowledge-graph schema v12.
+
 - **A rule set nothing declares reaches the console's notification center.** A run's scope
   event now carries the projects it selected on changed files no project declares
   (MGS1028), split into the ones that read as build inputs and the rest. An undeclared

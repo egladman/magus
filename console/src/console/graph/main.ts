@@ -144,6 +144,7 @@ const KINDS = [
   "docsection",
   "rationale",
   "note",
+  "link",
   "diagnostic",
   "charm",
   "owner",

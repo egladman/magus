@@ -144,11 +144,17 @@ func AssembleShards(in Inputs) []Shard {
 	// committed, drift-gated artifact would vary with whether a developer happened to have
 	// built one. See the split at the @dirs pass below, which is where it used to leak.
 	symbolPaths := map[string]bool{}
+	// The doc shard's nodes double as the citation resolver's index (a URL is one of this
+	// workspace's own pages only when the graph holds that page), so they outlive the
+	// block below.
+	var docNodes []types.KnowledgeNode
+	var docCites docCitations
 	if in.Root != "" {
-		if d := assembleDocs(in.Root, in.Spells, in.Graph.Projects, in.NotesPath); len(d.Nodes) > 0 {
+		if d, cites := assembleDocs(in.Root, in.Spells, in.Graph.Projects, in.NotesPath); len(d.Nodes) > 0 {
 			for _, n := range d.Nodes {
 				pathToNode[n.Source] = n.ID
 			}
+			docNodes, docCites = d.Nodes, cites
 			shards = append(shards, d)
 		}
 		fileNodePaths := map[string]bool{}
@@ -171,6 +177,13 @@ func AssembleShards(in Inputs) []Shard {
 				}
 			}
 			shards = append(shards, b)
+		}
+		// Citations run after both prose and buzz sources are known: the resolver needs the
+		// doc and section nodes to cross-link against, and it mints its own file and dir
+		// nodes for the paths neither shard covers (Go sources have none in the default
+		// graph), so its edges never outlive their endpoints.
+		if l := assembleLinks(in.Root, in.Graph.Projects, newDocIndex(docNodes), docCites); len(l.Edges) > 0 {
+			shards = append(shards, l)
 		}
 		if o := assembleOwners(in.Root, owned); len(o.Edges) > 0 {
 			shards = append(shards, o)

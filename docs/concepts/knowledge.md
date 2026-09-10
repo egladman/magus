@@ -321,7 +321,7 @@ builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
-`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`.
+`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`, `link`.
 
 Nodes also carry static metadata the extractors already parse, surfaced as
 attributes so `magus explain` answers a question without a second describe: a
@@ -550,6 +550,43 @@ to do with a missing symbol index, so nothing about one is reported. The probe
 deliberately does not decode each index to check it parses: that is a full unmarshal per
 lookup to catch a case the graph build already logs, while a never-built index is the case
 that actually occurs.
+
+## Citations (@links)
+
+A URL written in a code comment is almost always a pointer at documentation, and until it
+is indexed it is invisible to every query. The `@links` shard reads them: every http(s)
+URL in a Go or Buzz comment, every absolute markdown link on a page, and the source a
+generated page names in its `generated_from` frontmatter.
+
+Each citation lands in one of three classes:
+
+| class | what it names | what the graph does |
+| --- | --- | --- |
+| `docs` | a page this workspace holds | an edge to that `doc`, or to the `docsection` its anchor names |
+| `source` | a forge URL naming a path this workspace holds | an edge to that `file` or `dir` |
+| `upstream` | anything else | an edge to a `link` node keyed by the normalized URL |
+
+Only `upstream` mints a node, so `kind=link` is exactly the set of external documents this
+workspace depends on, and `magus explain link:buzz-lang.dev/0.5.0/reference/std/fs.html`
+lists every file citing it. The other two cross-link to a node that already exists, so a
+docs reorg moves the edge with the page instead of stranding a URL.
+
+Which relation an edge carries follows the citing kind: a page that names a source path is
+describing it (`documents`), while a comment that names anything is only pointing at it
+(`references`). `magus graph stats` reads the first of those as file doc coverage.
+
+Resolution never asks where the site is deployed, because nothing declares it. It matches
+the URL's trailing path against the page's own path with the `docs/` prefix dropped, and an
+ambiguous match resolves to nothing rather than guessing.
+
+Nothing is fetched, ever. A link node asserts that something here points there, never that
+anything is at the other end. Only text a LEXER classified as a comment is scanned, so a
+URL in a string literal is out of reach by construction, and a citation must clear a closed
+scheme set (http, https), carry no userinfo, sit under a length cap, and name a host that
+is not an IP literal, a single label, or an RFC 2606 reserved name. Those rules exist
+because comments are full of URL-shaped prose written to show a format (`http://<host`,
+`https://endpoint/bucket/key`, `http://127.0.0.1:7391@evil.com`), and a link node minted from one
+is a phantom nothing can retire.
 
 ## Git history (@vcs)
 

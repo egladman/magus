@@ -13,9 +13,12 @@ const (
 	maxOrphans      = 40 // cap the orphan SAMPLE; IsolatedCount reports the true total
 )
 
-// documentableKinds are the kinds whose doc coverage graph stats reports:
-// entities magus generates docs for (diagnostic pages, spell pages, module pages).
-var documentableKinds = []string{types.KindDiagnostic, types.KindSpell, types.KindModule}
+// documentableKinds are the kinds whose doc coverage graph stats reports: entities magus
+// generates docs for (diagnostic pages, spell pages, module pages), plus source files,
+// which became documentable when a page's link to a source path started carrying a
+// `documents` edge. The file percentage is low by construction and that is the reading:
+// it is the share of the tree any page has ever pointed at, not a target to drive up.
+var documentableKinds = []string{types.KindDiagnostic, types.KindSpell, types.KindModule, types.KindFile}
 
 // Stats computes the knowledge-graph analytics behind `magus graph stats`: god
 // nodes (highest degree, where risk concentrates), orphans (isolated docs,

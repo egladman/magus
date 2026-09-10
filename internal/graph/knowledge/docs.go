@@ -39,8 +39,13 @@ var (
 // backtick-wrapped spell names) are INFERRED; markdown links to other scanned docs
 // are references. Extracted edges win over inferred on dedup, so a code page's own
 // path edge is not weakened by the same code appearing in its body.
-func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) Shard {
+//
+// It also returns the citations it does NOT resolve: absolute URLs, and the source a
+// generated page declares in its `generated_from` frontmatter. Both point outside the doc
+// tree, so both are classified in @links, which owns that question for prose and code alike.
+func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) (Shard, docCitations) {
 	s := Shard{Name: docsShardName}
+	var cites docCitations
 	files := findDocFiles(root, notesPath)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
@@ -90,6 +95,11 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			}
 			if len(fm.Tags) > 0 {
 				docAttrs[attrTags] = strings.Join(fm.Tags, ",")
+			}
+			for _, spec := range strings.Split(fm.GeneratedFrom, ",") {
+				if spec = strings.TrimSpace(spec); spec != "" {
+					cites.Sources = append(cites.Sources, docSourceCite{Doc: rel, Spec: spec})
+				}
 			}
 		}
 		node.Attrs = docAttrs
@@ -175,6 +185,17 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 		for _, m := range mdLinkRe.FindAllStringSubmatch(content, -1) {
 			if target, ok := resolveDocLink(rel, m[1], scanned); ok {
 				s.Edges = append(s.Edges, extractedEdge(dID, docID(target), types.RelationReferences, rel))
+				continue
+			}
+			// An absolute URL is the one link resolveDocLink drops that still carries
+			// meaning: it is the page citing something outside itself. A markdown target
+			// may carry a title after the URL, so cut at the first space.
+			link := strings.TrimSpace(m[1])
+			if i := strings.IndexAny(link, " \t"); i >= 0 {
+				link = link[:i]
+			}
+			if strings.Contains(link, "://") {
+				cites.URLs = append(cites.URLs, docURLCite{Doc: rel, URL: link})
 			}
 		}
 
@@ -190,7 +211,7 @@ func assembleDocs(root string, spells []types.Spell, projects []types.TargetGrap
 			}
 		}
 	}
-	return s
+	return s, cites
 }
 
 // headingMD mirrors the site's markdown config (std/markdown.go) for the one thing the graph

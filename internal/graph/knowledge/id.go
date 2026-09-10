@@ -204,6 +204,9 @@ const (
 	// depth (1 for #, 2 for ##, ...), so a reader can reconstruct the outline.
 	attrAnchor = "anchor"
 	attrLevel  = "level"
+	// attrHost is a link node's hostname, so `magus query kind=link buzz-lang.dev` groups
+	// every citation of one upstream site without matching the same string in a path.
+	attrHost = "host"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are

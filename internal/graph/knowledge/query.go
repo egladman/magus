@@ -332,7 +332,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		if _, relOnly := q.fields["relation"]; relOnly && !g.touchesRelation(id, q.fields["relation"]) {
 			return 0, false
 		}
-		return 1 + kindRank(n.Kind), true // field-only match; flat score plus kind bias
+		return 1 + kindRank(n.Kind) + g.citedRank(id, n.Kind), true // field-only match; flat score plus kind bias
 	}
 
 	// Every positive term must match (AND); score is the sum of best per-term
@@ -366,7 +366,7 @@ func (g *Graph) scoreNode(n types.KnowledgeNode, id string, q parsedQuery) (int,
 		}
 		total += best
 	}
-	return total + kindRank(n.Kind), true
+	return total + kindRank(n.Kind) + g.citedRank(id, n.Kind), true
 }
 
 // kindRank biases resolution toward primary domain entities over source-level nodes on
@@ -381,6 +381,30 @@ func kindRank(kind string) int {
 	default:
 		return 0
 	}
+}
+
+// citedDocRank lifts a page or section that code cites above the rest of the prose. Half
+// of kindRank's bonus on purpose: a cited page should come back beside the code hit, and
+// should still lose to the target or spell the reader actually named.
+const citedDocRank = 50
+
+// citedRank is the cited half of kindRank, kept separate because it reads the GRAPH rather
+// than the kind: the boost is earned by a source file pointing at this page in a comment,
+// not by being prose. An uncited page ranks exactly as it did.
+func (g *Graph) citedRank(id, kind string) int {
+	if kind != types.KindDoc && kind != types.KindDocSection {
+		return 0
+	}
+	g.ensureAdj()
+	for _, e := range g.in[id] {
+		if e.Relation != types.RelationReferences {
+			continue
+		}
+		if n, ok := g.node(e.Source); ok && n.Kind == types.KindFile {
+			return citedDocRank
+		}
+	}
+	return 0
 }
 
 // Neighborhood collects the induced subgraph reachable from seeds within a node

@@ -30,6 +30,7 @@ const SHAPE_BY_KIND: Readonly<Record<string, NodeShape>> = {
   docsection: "diamond",
   rationale: "diamond",
   note: "diamond",
+  link: "diamond",
   diagnostic: "hexagon",
   charm: "hexagon",
   owner: "ring",
