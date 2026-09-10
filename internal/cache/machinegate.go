@@ -274,30 +274,15 @@ func machineWaitingMessage(c types.MachineClaim, v types.MachineVerdict) string 
 		displayProject(c.Project), c.Target, ahead, describeMachineHolders(v.Holders))
 }
 
-// machineRefusal is a refusal that states the process status it asks for. The
-// diagnostic alone cannot: a step the daemon runs for an adopted client crosses a
-// socket that erases the Go type, and the daemon reads the code off the error rather
-// than naming a CLI package it must not import (see proc.ExitCode). Without this the
-// same refusal exited 75 locally and 1 under a daemon.
-//
-// It wraps rather than replaces, so errors.Is against the diagnostic code keeps
-// matching everywhere it already did.
-type machineRefusal struct {
-	error
-	// exit is per refusal. EX_TEMPFAIL says "try again"; a declaration that cannot fit and
-	// a nested magus that lost its ancestry both answer the same way forever, so a wrapper
-	// retrying on 75 would loop on them.
-	exit int
-}
-
-func (e machineRefusal) ExitCode() int { return e.exit }
-
-func (e machineRefusal) Unwrap() error { return e.error }
+// The exit status is per refusal (types.ExitError, and see proc.ExitCode for the daemon
+// side). EX_TEMPFAIL says "try again"; a declaration that cannot fit and a nested magus
+// that lost its ancestry both answer the same way forever, so a wrapper retrying on 75
+// would loop on them.
 
 // machineBusyError is the fail-fast answer: the machine is full right now, the same
 // command will succeed later, and the caller asked not to queue.
 func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{exit: ExitCodeMachineBusy, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return types.ExitError{Code: ExitCodeMachineBusy, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this machine's build budget is full and MAGUS_NO_WAIT is set; %s, and %s. %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		describeMachineRemaining(v), describeMachineHolders(v.Holders))}
@@ -318,7 +303,7 @@ func machineBusyError(c types.MachineClaim, v types.MachineVerdict) error {
 // for. So over-admission stays where freeSlot left it: at most one claim per stalled
 // ancestor, and never a claim larger than the whole budget.
 func machineDoesNotFitError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"refusing to start %s %s: %s, which does not fit in this machine's whole build budget of %s across %d slots. Waiting would not help; %s",
 		displayProject(c.Project), c.Target, describeMachineDeclaration(c),
 		FormatMB(v.BudgetMB), v.BudgetSlots, describeMachineOversize(c, v))}
@@ -346,7 +331,7 @@ func describeMachineOversize(c types.MachineClaim, v types.MachineVerdict) strin
 // It says what to fix, because the cause is a magusfile clearing the environment rather
 // than anything about the machine.
 func machineBlindError(c types.MachineClaim, v types.MachineVerdict) error {
-	return machineRefusal{exit: ExitCodeMachineDeclaration, error: types.DiagnosticErrorf(types.MachineBudgetExhausted,
+	return types.ExitError{Code: ExitCodeMachineDeclaration, Err: types.DiagnosticErrorf(types.MachineBudgetExhausted,
 		"not starting %s %s: this magus runs underneath another one but was started without %s, so it cannot tell its own parent's claim from a stranger's and will not queue behind a run that is waiting for it; %s. %s."+
 			" Pass that variable through to nested magus invocations, or let magus set it by not clearing the environment.",
 		displayProject(c.Project), c.Target, runPkg.AncestorsEnvVar,

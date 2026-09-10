@@ -68,30 +68,36 @@ func chainProject(path string, policies map[string]types.Target, chains map[stri
 func TestChainMemoryInheritsFromAComposedTarget(t *testing.T) {
 	p := chainProject(".",
 		map[string]types.Target{"test": {MemoryMB: 10240}},
-		map[string][]types.ChainStep{"ci": {{Target: "lint"}, {Target: "test"}}})
+		map[string][]types.ChainStep{"ci": types.Needs("lint", "test")})
 
 	mb, from := (&Magus{}).chainMemoryMB(p, "ci")
 	assert.Equal(t, 10240, mb)
 	assert.Equal(t, "test", from, "the refusal must name the target that wrote the figure")
 }
 
-// The MAXIMUM, not the sum: a chain runs its steps in invocation order, so the peak
-// is the largest single step. Summing would refuse work that fits.
-func TestChainMemoryTakesTheLargestStepNotTheSum(t *testing.T) {
-	p := chainProject(".",
-		map[string]types.Target{"test": {MemoryMB: 10240}, "build": {MemoryMB: 4096}},
-		map[string][]types.ChainStep{"ci": {{Target: "build"}, {Target: "test"}}})
+// One ctx.needs call runs its members together, so their declarations add; a second
+// call runs after the first, so the peak is the larger call. Summing across calls would
+// refuse work that fits, and taking the maximum within one would admit work that does
+// not.
+func TestChainMemorySumsOneCallAndPeaksAcrossCalls(t *testing.T) {
+	policies := map[string]types.Target{"test": {MemoryMB: 10240}, "build": {MemoryMB: 4096}}
+	together := chainProject(".", policies,
+		map[string][]types.ChainStep{"ci": types.Needs("build", "test")})
+	mb, _ := (&Magus{}).chainMemoryMB(together, "ci")
+	assert.Equal(t, 14336, mb, "ctx.needs(build, test) runs both at once")
 
-	mb, _ := (&Magus{}).chainMemoryMB(p, "ci")
-	assert.Equal(t, 10240, mb)
+	inTurn := chainProject(".", policies,
+		map[string][]types.ChainStep{"ci": types.Needs("build").Needs("test")})
+	mb, _ = (&Magus{}).chainMemoryMB(inTurn, "ci")
+	assert.Equal(t, 10240, mb, "ctx.needs(build); ctx.needs(test) runs them in turn")
 }
 
 func TestChainMemoryFollowsNestedChains(t *testing.T) {
 	p := chainProject(".",
 		map[string]types.Target{"test": {MemoryMB: 8192}},
 		map[string][]types.ChainStep{
-			"ci":     {{Target: "verify"}},
-			"verify": {{Target: "test"}},
+			"ci":     types.Needs("verify"),
+			"verify": types.Needs("test"),
 		})
 
 	mb, from := (&Magus{}).chainMemoryMB(p, "ci")
@@ -104,13 +110,13 @@ func TestChainMemoryFollowsNestedChains(t *testing.T) {
 func TestChainMemoryKeepsTheTargetsOwnFigure(t *testing.T) {
 	p := chainProject(".",
 		map[string]types.Target{"ci": {MemoryMB: 6144}, "test": {MemoryMB: 1024}},
-		map[string][]types.ChainStep{"ci": {{Target: "test"}}})
+		map[string][]types.ChainStep{"ci": types.Needs("test")})
 
 	mb, from := (&Magus{}).chainMemoryMB(p, "ci")
 	assert.Equal(t, 6144, mb)
 	assert.Equal(t, "ci", from)
 
-	bare := chainProject(".", nil, map[string][]types.ChainStep{"ci": {{Target: "lint"}}})
+	bare := chainProject(".", nil, map[string][]types.ChainStep{"ci": types.Needs("lint")})
 	mb, from = (&Magus{}).chainMemoryMB(bare, "ci")
 	assert.Equal(t, 0, mb)
 	assert.Empty(t, from)
@@ -121,7 +127,7 @@ func TestChainMemoryKeepsTheTargetsOwnFigure(t *testing.T) {
 func TestChainMemoryTerminatesOnACycle(t *testing.T) {
 	p := chainProject(".",
 		map[string]types.Target{"a": {MemoryMB: 2048}},
-		map[string][]types.ChainStep{"a": {{Target: "b"}}, "b": {{Target: "a"}}})
+		map[string][]types.ChainStep{"a": types.Needs("b"), "b": types.Needs("a")})
 
 	mb, _ := (&Magus{}).chainMemoryMB(p, "a")
 	assert.Equal(t, 2048, mb)

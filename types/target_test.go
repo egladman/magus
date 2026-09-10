@@ -180,3 +180,37 @@ func TestCeilingExceededErrorOmitsTheSplitForALeaf(t *testing.T) {
 	assert.Contains(t, err.Error(),
 		`target "build" exceeded its declared timeout of 1m0s after 1m30s; its process tree was killed`)
 }
+
+// TestChainMemoryMBPeaksOverOneCall: members of one ctx.needs call run together, so their
+// declarations add; a later call runs after, so it competes with the sum rather than
+// joining it.
+func TestChainMemoryMBPeaksOverOneCall(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path: ".",
+		TargetChains: map[string][]ChainStep{
+			"ci":   Needs("lint", "test").Needs("bench"),
+			"test": Needs("gen"),
+		},
+		TargetPolicies: map[string]Target{
+			"lint":  {MemoryMB: 1000},
+			"test":  {MemoryMB: 2000},
+			"gen":   {MemoryMB: 500},
+			"bench": {MemoryMB: 2500},
+		},
+	}
+	mb, by := ChainMemoryMB(p, "ci", nil)
+	assert.Equal(t, 3000, mb, "lint and test share a call; bench runs after them and alone")
+	assert.Equal(t, "test", by, "the largest contributor to the peak call")
+}
+
+// TestChainBuilderReadsLikeTheBody: Needs(a, b).Needs(c) is `ctx.needs(a, b); ctx.needs(c)`,
+// with a cross-project step spelled the way ChainStep.Ref prints one.
+func TestChainBuilderReadsLikeTheBody(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, Chain{
+		{Target: "generate"}, {Project: "libs/gopherbuzz", Target: "build"},
+		{Target: "test", CallIndex: 1},
+	}, Needs("generate", "libs/gopherbuzz:build").Needs("test"))
+	assert.Equal(t, "libs/gopherbuzz:build", Needs("libs/gopherbuzz:build")[0].Ref(), "and prints back the same way")
+}

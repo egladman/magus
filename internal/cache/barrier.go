@@ -30,18 +30,15 @@ func stepKey(s Step) string { return DepKey(s.ProjectPath, s.Target) }
 func formatCycle(cycle []string) string {
 	hops := make([]string, len(cycle))
 	for i, k := range cycle {
-		hops[i] = displayKey(k)
+		hops[i] = DisplayNodeKey(k)
 	}
 	return strings.Join(hops, " -> ")
 }
 
-// displayKey renders one node key for a human, spelling out the control byte DepKey
-// joins on. Every user-facing message naming a node goes through here.
-func displayKey(key string) string { return strings.Replace(key, nodeKeySep, " ", 1) }
-
-// DisplayNodeKey renders a node key for a caller outside this package. A key is minted by
-// DepKey, which is exported, so the rendering that makes one printable has to be too.
-func DisplayNodeKey(key string) string { return displayKey(key) }
+// DisplayNodeKey renders one node key for a human, spelling out the control byte DepKey
+// joins on. Every user-facing message naming a node goes through here; exported because
+// DepKey is, so a caller holding a key can print it.
+func DisplayNodeKey(key string) string { return strings.Replace(key, nodeKeySep, " ", 1) }
 
 // depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
@@ -119,7 +116,7 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 			}
 		}
 		if e.err != nil {
-			return fmt.Errorf("cache: RunAll: dependency %s failed: %w", displayKey(key), e.err)
+			return fmt.Errorf("cache: RunAll: dependency %s failed: %w", DisplayNodeKey(key), e.err)
 		}
 		return nil
 	}
@@ -153,8 +150,8 @@ func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstrea
 		case <-beat.C:
 			ProgressFromContext(ctx).Beat()
 			slog.InfoContext(ctx, "magus: waiting for an upstream target to finish",
-				slog.String("waiting", displayKey(waiting)),
-				slog.String("upstream", displayKey(upstream)))
+				slog.String("waiting", DisplayNodeKey(waiting)),
+				slog.String("upstream", DisplayNodeKey(upstream)))
 		case <-ctx.Done():
 			return ctx.Err()
 		}

@@ -789,16 +789,13 @@ func TestAcquireNamesTheLockItGaveUpOn(t *testing.T) {
 	}
 }
 
-// captureLockOut redirects the lock's decision lines into a buffer for the duration of a
-// test. These lines are the whole user-visible half of a supersede, so a test that cannot
-// read the exact bytes proves nothing about what a person sees.
-func captureLockOut(t *testing.T) *bytes.Buffer {
-	t.Helper()
+// captureLockOut is the buffer a test's lockers write their decision lines into, and the
+// option that points them at it. These lines are the whole user-visible half of a
+// supersede, so a test that cannot read the exact bytes proves nothing about what a
+// person sees.
+func captureLockOut() (*bytes.Buffer, lockerOption) {
 	var b bytes.Buffer
-	prev := lockOut
-	lockOut = &b
-	t.Cleanup(func() { lockOut = prev })
-	return &b
+	return &b, writingTo(&b)
 }
 
 // quickSupersede shortens the two timings a supersede is paced by, so a test that only
@@ -954,26 +951,28 @@ func TestSupersedeQualifier(t *testing.T) {
 // flock is per open file description, so a second handle contends like any other.
 func TestALaterGateTakesTheLockAndTheEarlierOneReportsMGS3014(t *testing.T) {
 	quickSupersede(t, 5*time.Second)
-	out := captureLockOut(t)
+	out, toOut := captureLockOut()
 	cacheDir := t.TempDir()
 
-	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
 	earlier.started = time.Now().Add(-2 * time.Minute)
 	rel, err := earlier.acquire(t.Context(), "app")
 	if err != nil {
 		t.Fatalf("earlier acquire: %v", err)
 	}
-	// Idempotent for the reason acquireProjectLocks makes it so: the watch is a second
-	// caller, and a double release would delete the successor's owner sidecar.
-	var once sync.Once
-	release := func() { once.Do(rel) }
-	defer release()
+	hold := &projectHold{unlock: rel, locker: earlier, paths: []string{"app"}}
+	defer hold.release()
 
-	hold := &projectHold{release: release, locker: earlier, paths: []string{"app"}}
-	ctx, watch := watchForSupersede(t.Context(), hold, release)
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
 	defer watch.close()
+	// The run's own unwind is what frees the locks, on its deferred release; the watch
+	// only cancels. Stand in for that unwind here.
+	go func() {
+		<-ctx.Done()
+		hold.release()
+	}()
 
-	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
 	start := time.Now()
 	rel2, err := later.acquire(t.Context(), "app")
 	if err != nil {
@@ -1053,11 +1052,11 @@ func TestAnAncestorHolderIsRefusedNotSuperseded(t *testing.T) {
 // a supersede from becoming the hang it exists to remove.
 func TestAnUnansweredSupersedeFallsBackToWaiting(t *testing.T) {
 	quickSupersede(t, 200*time.Millisecond)
-	out := captureLockOut(t)
+	out, toOut := captureLockOut()
 	cacheDir := t.TempDir()
 
 	// No watch is armed over this holder, so nothing ever reads the request.
-	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
 	earlier.started = time.Now().Add(-time.Minute)
 	rel, err := earlier.acquire(t.Context(), "app")
 	if err != nil {
@@ -1068,7 +1067,7 @@ func TestAnUnansweredSupersedeFallsBackToWaiting(t *testing.T) {
 		rel()
 	}()
 
-	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
 	rel2, err := later.acquire(t.Context(), "app")
 	if err != nil {
 		t.Fatalf("later acquire: %v", err)

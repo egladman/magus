@@ -743,11 +743,11 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 	}
 }
 
-// treeRoot is the directory a check walks. r.root is the caller's --root override,
+// workspaceRoot is the directory a check walks. r.root is the caller's --root override,
 // empty on the ordinary CLI path and on the daemon's, so the loaded workspace is the
 // answer whenever there is one. A walk from "" silently finds nothing: the same-step
 // witness ran there and reported every workspace clean.
-func (r *runner) treeRoot() string {
+func (r *runner) workspaceRoot() string {
 	if r.ws != nil {
 		return r.ws.Root()
 	}
@@ -759,7 +759,7 @@ func (r *runner) treeRoot() string {
 // empty root fails, which silently produced details naming no file at all, the one
 // thing a detail line exists to do.
 func (r *runner) displayPath(abs string) string {
-	if root := r.treeRoot(); root != "" {
+	if root := r.workspaceRoot(); root != "" {
 		if rel, err := filepath.Rel(root, abs); err == nil {
 			return filepath.ToSlash(rel)
 		}
@@ -1109,10 +1109,19 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorChec
 		return r.ws.Get(path)
 	}
 	// A pair counts only where a file on disk matches both globs: glob intersection
-	// is conservative for ordering and too coarse to fail a workspace on.
-	witness := cache.WorkspaceOverlapWitness(r.treeRoot())
+	// is conservative for ordering and too coarse to fail a workspace on. With no tree
+	// to look at there is no witness, and a check that cannot see the tree must not
+	// vouch for it.
+	root := r.workspaceRoot()
+	if root == "" {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown,
+			Message: "no workspace root to witness declared overlaps against; skipped",
+		}
+	}
+	witness := cache.WorkspaceOverlapWitness(root)
+	const refusedMark = "refused at run time"
 	var details []string
-	refused := 0
 	for _, p := range projects {
 		composers := make([]string, 0, len(p.TargetChains))
 		for target := range p.TargetChains {
@@ -1122,14 +1131,13 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorChec
 		for _, target := range composers {
 			for _, c := range cache.FindSameStepConflicts(cache.DeclaredNodes(p, target, lookup), witness) {
 				verdict := "advised: the sequencing belongs to another project's chain"
-				if c.SameProject {
-					verdict = "refused at run time"
-					refused++
+				if c.SameProject() {
+					verdict = refusedMark
 				}
 				details = append(details, fmt.Sprintf(
 					"%s: %s runs %s, which reads %q, alongside %s, which writes %q, and needs neither from the other (%s)",
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), target,
-					cache.DisplayNodeKey(c.Reader), c.Read, cache.DisplayNodeKey(c.Writer), c.Write, verdict))
+					cache.DisplayNodeKey(c.Reader), c.ReadGlob, cache.DisplayNodeKey(c.Writer), c.WriteGlob, verdict))
 			}
 		}
 	}
@@ -1141,6 +1149,13 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorChec
 	}
 	slices.Sort(details)
 	details = slices.Compact(details)
+	// Counted after the dedupe, so the message and the list agree.
+	refused := 0
+	for _, d := range details {
+		if strings.HasSuffix(d, "("+refusedMark+")") {
+			refused++
+		}
+	}
 	// FAIL only for the pairs a run refuses; a cross-project pair is real but its
 	// ctx.needs may belong to another project's file, so it advises, the way the
 	// neighbouring declaration checks do.
@@ -1148,12 +1163,15 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorChec
 	if refused > 0 {
 		status = types.DoctorFail
 	}
+	verdict := "none within one project, so a run warns about them and refuses nothing"
+	if refused > 0 {
+		verdict = fmt.Sprintf("%d of them within one project, which magus refuses to run rather than schedule around", refused)
+	}
 	return types.DoctorCheck{
 		Name:   name,
 		Status: status,
-		Message: fmt.Sprintf(
-			"%d unordered reader/writer pair(s) inside one composed target, %d of them within one project, which magus refuses to run rather than schedule around (see %s)",
-			len(details), refused, types.CodeURL(types.UnorderedSameStepWrite)),
+		Message: fmt.Sprintf("%d unordered reader/writer pair(s) inside one composed target, %s (see %s)",
+			len(details), verdict, types.CodeURL(types.UnorderedSameStepWrite)),
 		Details: details,
 	}
 }

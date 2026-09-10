@@ -318,7 +318,7 @@ type ChainStep struct {
 	// returns when all of them have run, so a later call is ordered after every earlier
 	// one by the body itself; that is the only within-step sequencing there is, and the
 	// order derivation reads it from here. Zero for the first call, the common case.
-	CallIndex int `json:"call,omitzero" yaml:"call,omitempty"`
+	CallIndex int `json:"callIndex,omitzero" yaml:"callIndex,omitempty"`
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project
@@ -328,6 +328,32 @@ func (s ChainStep) Ref() string {
 		return s.Target
 	}
 	return s.Project + ":" + s.Target
+}
+
+// Chain is a target's ctx.needs chain built the way its body reads: Needs("generate",
+// "lint") is one call, .Needs("build") the call after it. Each ref is spelled as Ref
+// prints it, "target" or "project:target". A Chain is a []ChainStep, so it goes wherever
+// one does; the extractor builds the real thing from the body and this is for code that
+// states a chain by hand.
+type Chain []ChainStep
+
+// Needs starts a chain with its first ctx.needs call.
+func Needs(refs ...string) Chain { return Chain(nil).Needs(refs...) }
+
+// Needs appends one more ctx.needs call, ordered after every call before it.
+func (c Chain) Needs(refs ...string) Chain {
+	index := 0
+	if len(c) > 0 {
+		index = c[len(c)-1].CallIndex + 1
+	}
+	for _, ref := range refs {
+		step := ChainStep{Target: ref, CallIndex: index}
+		if project, target, ok := strings.Cut(ref, ":"); ok {
+			step.Project, step.Target = project, target
+		}
+		c = append(c, step)
+	}
+	return c
 }
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape

@@ -66,10 +66,10 @@ type slotWaiter struct {
 // It changes no scheduling: nothing here decides who runs, and a step still yields its
 // slots across a fan-out and still waits its turn.
 type slotWatch struct {
-	mu      sync.Mutex
-	cap     int
-	holds   map[*slotHold]struct{}
-	waiters map[*slotWaiter]struct{}
+	mu       sync.Mutex
+	capacity int
+	holds    map[*slotHold]struct{}
+	waiters  map[*slotWaiter]struct{}
 	// wedgedSince is when the pool last entered the wedged shape, zero when it is not in
 	// it. A verdict needs the shape to have HELD for the grace, not merely to have been
 	// seen twice.
@@ -84,9 +84,9 @@ func newSlotWatch(n int) *slotWatch {
 		return nil
 	}
 	return &slotWatch{
-		cap:     n,
-		holds:   map[*slotHold]struct{}{},
-		waiters: map[*slotWaiter]struct{}{},
+		capacity: n,
+		holds:    map[*slotHold]struct{}{},
+		waiters:  map[*slotWaiter]struct{}{},
 	}
 }
 
@@ -115,16 +115,26 @@ func (l *Limiter) acquireWatched(ctx context.Context, n int, label string) (*slo
 		}
 		return nil, err
 	}
-	return w.hold(label, n), nil
+	return w.admit(label, n), nil
 }
 
-func (w *slotWatch) hold(label string, slots int) *slotHold {
+// admit records that the named step now holds slots.
+func (w *slotWatch) admit(label string, slots int) *slotHold {
 	h := &slotHold{w: w, label: label, slots: slots}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.holds[h] = struct{}{}
 	w.evaluateLocked()
 	return h
+}
+
+// name is the step the hold was admitted for, as a wait message names it. label never
+// changes after admission, so no lock is taken.
+func (h *slotHold) name() string {
+	if h == nil {
+		return "an unmarked step"
+	}
+	return h.label
 }
 
 // done retires the hold. Called before the slots are released, so a peer waking on those
@@ -158,15 +168,20 @@ func (h *slotHold) block(what string) func() {
 	}
 }
 
-// setYielded records whether the hold's slots are currently handed back.
-func (h *slotHold) setYielded(y bool) {
+// yield records that the hold's slots are handed back until the returned func runs, the
+// way block hands back its undo.
+func (h *slotHold) yield() func() {
 	if h == nil {
-		return
+		return func() {}
 	}
-	h.w.mu.Lock()
-	defer h.w.mu.Unlock()
-	h.yielded = y
-	h.w.evaluateLocked()
+	set := func(y bool) {
+		h.w.mu.Lock()
+		defer h.w.mu.Unlock()
+		h.yielded = y
+		h.w.evaluateLocked()
+	}
+	set(true)
+	return func() { set(false) }
 }
 
 func (w *slotWatch) beginWait(label string, n int, cancel context.CancelFunc) *slotWaiter {
@@ -204,7 +219,7 @@ func (w *slotWatch) evaluateLocked() {
 		w.wedgedSince = time.Now()
 	}
 	if w.timer == nil {
-		w.timer = time.AfterFunc(slotDeadlockGrace, w.verdict)
+		w.timer = time.AfterFunc(slotDeadlockGrace, w.fireVerdict)
 	}
 }
 
@@ -230,13 +245,14 @@ func (w *slotWatch) wedgedLocked() bool {
 		}
 		held += h.slots
 	}
-	return held >= w.cap
+	return held >= w.capacity
 }
 
-// verdict fires the grace after the pool wedged. It re-reads the state rather than
+// fireVerdict runs the grace after the pool wedged, and cancels every waiter with the
+// refusal when the wedge has held for the whole of it. It re-reads the state rather than
 // trusting the timer: the wedge may have broken and re-formed, in which case the new one
-// has not yet outlived the grace and deserves its own.
-func (w *slotWatch) verdict() {
+// has only the remainder of its own grace to outlive.
+func (w *slotWatch) fireVerdict() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.timer = nil
@@ -244,8 +260,8 @@ func (w *slotWatch) verdict() {
 		w.wedgedSince = time.Time{}
 		return
 	}
-	if since := w.wedgedSince; since.IsZero() || time.Since(since) < slotDeadlockGrace {
-		w.timer = time.AfterFunc(slotDeadlockGrace, w.verdict)
+	if remaining := slotDeadlockGrace - time.Since(w.wedgedSince); remaining > 0 {
+		w.timer = time.AfterFunc(remaining, w.fireVerdict)
 		return
 	}
 	err := w.refusalLocked()
@@ -272,27 +288,18 @@ func (w *slotWatch) refusalLocked() error {
 		queued = append(queued, fmt.Sprintf("%s needs %d", wt.label, wt.n))
 	}
 	slices.Sort(queued)
-	return slotRefusal{exit: ExitCodeSlotDeadlock, error: types.DiagnosticErrorf(types.BuildSlotsDeadlocked,
+	// Carries its exit status the way a machine refusal does and for the same reason: a
+	// step the daemon runs for an adopted client crosses a socket that erases the Go
+	// type, and the daemon reads the code off the error.
+	return types.ExitError{Code: ExitCodeSlotDeadlock, Err: types.DiagnosticErrorf(types.BuildSlotsDeadlocked,
 		"refusing to keep waiting for a build slot: all %d of this run's slots are held by steps that are"+
 			" themselves waiting, so no slot can free and nothing queued can start. Holding: %s. Queued: %s."+
 			" The usual cause is a target reading what a target beside it writes with no ctx.needs between"+
 			" them (see %s); order the reader after the writer. Raising concurrency widens the window rather"+
 			" than closing it.",
-		w.cap, strings.Join(holders, "; "), strings.Join(queued, "; "),
+		w.capacity, strings.Join(holders, "; "), strings.Join(queued, "; "),
 		types.CodeURL(types.UnorderedSameStepWrite))}
 }
-
-// slotRefusal states the process status this refusal asks for, the way machineRefusal
-// does and for the same reason: a step the daemon runs for an adopted client crosses a
-// socket that erases the Go type, and the daemon reads the code off the error.
-type slotRefusal struct {
-	error
-	exit int
-}
-
-func (e slotRefusal) ExitCode() int { return e.exit }
-
-func (e slotRefusal) Unwrap() error { return e.error }
 
 // BlockedOn marks the admitted step in ctx as waiting on what until the returned func
 // runs, so a wait that fills the pool can be told from work that is progressing.

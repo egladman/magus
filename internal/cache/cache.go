@@ -938,10 +938,10 @@ func stepSlots(s Step, lim *Limiter) int {
 // so a second claim queued behind it would wait forever. Measured 2026-09-08: `magus
 // affected ci` sat 27 minutes at 13s of CPU with no child process running.
 //
-// The cover is a floor. Step.MemoryMB folds a chain by MAXIMUM and one ctx.needs(a, b, c)
-// runs its members concurrently, so three 4 GB members are covered by a 4 GB claim; see
-// types.ChainMemoryMB for why the recorded chain cannot yet tell a concurrent needs from
-// a sequential one. Covering rather than yielding, because a machine claim's re-acquire
+// The cover is a floor: Step.MemoryMB folds a chain to the largest sum over one
+// ctx.needs call (types.ChainMemoryMB), and a member's own transitive fan-out inside
+// that call adds under the member's figure rather than beside it. Covering rather than
+// yielding, because a machine claim's re-acquire
 // is FALLIBLE: it re-queues behind strangers and can be refused, so a parent that
 // released and retook could fail after its children had already run. The limiter still
 // bounds how many run at once inside this process; the machine budget does not see them.

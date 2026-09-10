@@ -32,25 +32,23 @@ type abortWatch struct {
 	stop    func()
 	done    chan struct{}
 	tripped atomic.Pointer[types.DiagnosticError]
-	// exit is the process status a tripped verdict carries, 0 for magus's default. A
-	// stall is a failure and exits like one; a supersede is not, and says so with 75.
+	// exit is the process status a tripped verdict carries. A stall is a failure and
+	// exits like one; a supersede is not, and says so with 75.
 	exit int
 }
+
+// stallExit is the process status a stalled run carries: a plain failure.
+const stallExit = 1
 
 // verdict replaces err with the watchdog's diagnostic when it fired. It takes
 // precedence over whatever the cancellation itself surfaced, because that is always
 // context.Canceled or a target reporting its subprocess killed, and neither says what
 // happened.
 func (w *abortWatch) verdict(err error) error {
-	e := w.tripped.Load()
-	switch {
-	case e == nil:
-		return err
-	case w.exit == 0:
-		return e
-	default:
-		return abortExit{error: e, code: w.exit}
+	if e := w.tripped.Load(); e != nil {
+		return types.ExitError{Err: e, Code: w.exit}
 	}
+	return err
 }
 
 // close stops the poller and waits for it to exit.
@@ -58,18 +56,6 @@ func (w *abortWatch) close() {
 	w.stop()
 	<-w.done
 }
-
-// abortExit states a process status for a watchdog verdict, for the seam that asks an
-// error what magus should exit with. It wraps, so errors.Is against the diagnostic code
-// keeps matching.
-type abortExit struct {
-	error
-	code int
-}
-
-func (e abortExit) ExitCode() int { return e.code }
-
-func (e abortExit) Unwrap() error { return e.error }
 
 // watchForStall arms the stall watchdog over ctx and returns the context the run should
 // use: once prog has been quiet for the configured window, the watchdog cancels it with
@@ -98,7 +84,7 @@ func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress, release
 	if release == nil {
 		release = func() {}
 	}
-	w := &abortWatch{done: make(chan struct{})}
+	w := &abortWatch{done: make(chan struct{}), exit: stallExit}
 	if window < 0 {
 		w.stop = func() {}
 		close(w.done)
@@ -173,23 +159,21 @@ const supersedeExit = 75
 // Inert for anything that is not a gate: only a gate supersedes and only a gate is
 // superseded, so a `run build` and a `run test` queue on each other exactly as before.
 //
-// The abort is the stall watchdog's, deliberately. Cancelling only asks the run to
-// unwind, and the locks come back when executeStages returns, so a gate that yields
-// without releasing leaves its successor waiting on the very lock it was promised; the
-// release is already idempotent for exactly this second caller (see acquireProjectLocks).
+// The abort is a cancellation and nothing more: the locks come back when the run has
+// unwound and its deferred release runs, never before, because cancellation is not
+// completion and a successor taking the locks while this run's subprocesses are still
+// being torn down would have two gates mutating one tree. The successor's bounded wait
+// covers the unwind (see takeBySuperseding), and past the bound it queues like any run.
 //
 // It runs for the whole invocation, which is what covers the case a batch-shaped check
 // would miss: a run that has finished its targets and is in the settle tail is running as
 // far as the locks are concerned, and is superseded like any other gate.
-func watchForSupersede(ctx context.Context, hold *projectHold, release func()) (context.Context, *abortWatch) {
+func (m *Magus) watchForSupersede(ctx context.Context, hold *projectHold) (context.Context, *abortWatch) {
 	w := &abortWatch{done: make(chan struct{}), exit: supersedeExit}
 	if hold == nil || hold.locker == nil || !hold.locker.gate || len(hold.paths) == 0 {
 		w.stop = func() {}
 		close(w.done)
 		return ctx, w
-	}
-	if release == nil {
-		release = func() {}
 	}
 	ctx, cancel := context.WithCancelCause(ctx)
 	pollCtx, stopPoll := context.WithCancel(ctx)
@@ -227,10 +211,6 @@ func watchForSupersede(ctx context.Context, hold *projectHold, release func()) (
 				// the run stopped at the moment it stops rather than only at the end.
 				slog.WarnContext(logCtx, err.Error())
 				cancel(err)
-				// After the cancel, so the run is already unwinding when its exclusivity
-				// goes: the successor takes a lock from a run on its way out rather than
-				// from one still working.
-				release()
 				return
 			}
 		}

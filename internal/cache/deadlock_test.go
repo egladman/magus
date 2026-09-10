@@ -102,7 +102,7 @@ func TestSlotWatchIgnoresAYieldedHold(t *testing.T) {
 
 	// A composer that yielded for its ctx.needs fan-out occupies nothing, so the pool it
 	// left has room and its record must not read as a seat that cannot free.
-	composer.setYielded(true)
+	defer composer.yield()()
 	lim.Release()
 
 	held, err := lim.acquireWatched(t.Context(), 1, ". mocks-generate")
@@ -133,4 +133,46 @@ func TestAdmitMarksTheStepBlockedWhileItWaitsForMoreSlots(t *testing.T) {
 	_, err = lim.acquireWatched(ctx, 1, ". ci child")
 	require.ErrorIs(t, err, types.BuildSlotsDeadlocked)
 	assert.Contains(t, err.Error(), ". ci holds 1 and is waiting on 1 build slot(s)")
+}
+
+// TestSlotWatchSeesAYieldReacquire: a step taking back the slots it yielded waits like
+// any other, so a pool wedged with it queued is a wedge the watch has to see, and the
+// refusal a regular waiter receives has to name it. The re-acquire itself is not ended
+// by the refusal (its caller must return holding), which is why the holders are freed
+// by hand at the end.
+func TestSlotWatchSeesAYieldReacquire(t *testing.T) {
+	withShortDeadlockGrace(t, 50*time.Millisecond)
+	lim := NewLimiter(2)
+	build, err := lim.acquireWatched(context.Background(), 1, ". build")
+	require.NoError(t, err)
+	composer, err := lim.acquireWatched(context.Background(), 1, ". ci")
+	require.NoError(t, err)
+	build.block("the cache lock for 4f1ac2be, held by . generate")
+	ctx := admission{hold: composer}.on(context.Background())
+
+	// The composer yields for a fan-out; a peer takes its seat and parks; the composer
+	// then wants its seat back, still occupying nothing until it has it.
+	restore := composer.yield()
+	lim.Release()
+	peer, err := lim.acquireWatched(context.Background(), 1, ". test")
+	require.NoError(t, err)
+	peer.block("1 build slot(s)")
+	back := make(chan struct{})
+	go func() {
+		defer close(back)
+		lim.reacquireYielded(ctx, 1)
+	}()
+
+	_, err = lim.acquireWatched(t.Context(), 1, ". mocks-generate")
+	require.ErrorIs(t, err, types.BuildSlotsDeadlocked)
+	assert.Contains(t, err.Error(), ". ci (taking back yielded slots) needs 1")
+
+	build.done()
+	lim.Release()
+	peer.done()
+	lim.Release()
+	<-back
+	restore()
+	composer.done()
+	lim.Release()
 }

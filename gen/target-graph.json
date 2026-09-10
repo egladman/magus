@@ -34,7 +34,7 @@
             },
             {
               "target": "spells-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false,
@@ -898,7 +898,7 @@
             },
             {
               "target": "spells-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false,
@@ -948,11 +948,11 @@
             },
             {
               "target": "format",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "buzz-test",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_files": [
@@ -1089,27 +1089,27 @@
             },
             {
               "target": "test",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": "libs/gopherbuzz",
               "target": "test",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": "libs/diagnostics",
               "target": "test",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": "libs/commentdash",
               "target": "test",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": "libs/testlayout",
               "target": "test",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_files": [
@@ -1201,11 +1201,11 @@
             },
             {
               "target": "image-build",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "go-build",
-              "call": 2
+              "callIndex": 2
             }
           ],
           "reads_secrets": false
@@ -1739,12 +1739,12 @@
             },
             {
               "target": "diffdemo-generate",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": ".",
               "target": "graph-generate",
-              "call": 2
+              "callIndex": 2
             }
           ],
           "reads_secrets": false
@@ -1768,7 +1768,7 @@
             {
               "project": "libs/textsearch",
               "target": "lint",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -1864,19 +1864,19 @@
             },
             {
               "target": "lint",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "test",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "build",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "security",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -2199,19 +2199,19 @@
             {
               "project": ".",
               "target": "changelog-generate",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "content-generate",
-              "call": 2
+              "callIndex": 2
             },
             {
               "target": "index-generate",
-              "call": 2
+              "callIndex": 2
             },
             {
               "target": "diagrams-generate",
-              "call": 2
+              "callIndex": 2
             }
           ],
           "reads_secrets": false,
@@ -2329,17 +2329,17 @@
             },
             {
               "target": "conventions",
-              "call": 1
+              "callIndex": 1
             },
             {
               "project": "libs/textsearch",
               "target": "lint",
-              "call": 2
+              "callIndex": 2
             },
             {
               "project": "docs/guides/integrations/agents",
               "target": "lint",
-              "call": 3
+              "callIndex": 3
             }
           ],
           "reads_secrets": false
@@ -2357,7 +2357,7 @@
             },
             {
               "target": "site-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -2417,7 +2417,7 @@
             },
             {
               "target": "build",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -2442,7 +2442,7 @@
             {
               "project": "libs/gopherbuzz",
               "target": "build",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false,
@@ -2578,11 +2578,11 @@
             },
             {
               "target": "lint",
-              "call": 1
+              "callIndex": 1
             },
             {
               "target": "test",
-              "call": 2
+              "callIndex": 2
             }
           ],
           "reads_secrets": false
@@ -2624,7 +2624,7 @@
             },
             {
               "target": "index-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -2791,7 +2791,7 @@
             },
             {
               "target": "index-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -2975,7 +2975,7 @@
             },
             {
               "target": "index-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -3176,7 +3176,7 @@
             },
             {
               "target": "index-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false
@@ -3343,7 +3343,7 @@
             },
             {
               "target": "index-generate",
-              "call": 1
+              "callIndex": 1
             }
           ],
           "reads_secrets": false

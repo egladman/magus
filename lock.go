@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/types"
 )
 
@@ -36,19 +37,39 @@ func noWaitLocks() bool {
 	}
 }
 
-// A projectHold is one invocation's grip on its project locks: the release, plus what a
-// supersede watch needs in order to see a later gate asking for them.
+// A projectHold is one invocation's grip on its project locks, plus what a supersede
+// watch needs in order to see a later gate asking for them.
 type projectHold struct {
-	release func()
-	locker  *projectLocker
-	paths   []string
+	locker *projectLocker
+	paths  []string
+	// unlock is the locker's release of every lock taken; stopWatchdog joins the
+	// root-vanished watcher. Both run once, through release.
+	unlock       func()
+	stopWatchdog func()
+	once         sync.Once
 }
+
+// release unlocks every project this hold took and stops watching the root. Idempotent:
+// the stall watchdog is a second caller. Without that, a watchdog release followed by
+// the deferred release runs removeOwner twice, and between them another process can take
+// the lock and write its own sidecar, which the finished run would then delete, making
+// the live holder invisible to `magus status` and to every waiter.
+func (h *projectHold) release() {
+	if h.stopWatchdog != nil {
+		h.stopWatchdog()
+	}
+	h.unlockOnce()
+}
+
+// unlockOnce is release without the join, for the root watcher itself: it runs on the
+// goroutine stopWatchdog would wait for.
+func (h *projectHold) unlockOnce() { h.once.Do(h.unlock) }
 
 // yieldRequested reports the first held project a later gate is asking this run to give
 // up, and the gate asking. See watchForSupersede for what the caller does with it.
 func (h *projectHold) yieldRequested() (string, processRecord, bool) {
 	for _, p := range h.paths {
-		if rec, ok := h.locker.yieldRequest(p); ok {
+		if rec, ok := h.locker.pendingYield(p); ok {
 			return p, rec, true
 		}
 	}
@@ -88,23 +109,13 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 		lopts = append(lopts, asGate())
 	}
 	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks(), lopts...)
-	release, err := l.acquireAll(ctx, paths)
+	unlock, err := l.acquireAll(ctx, paths)
 	if err != nil {
 		return nil, err
 	}
-	// Idempotent: the watchdog below is a SECOND caller of release. Without this, a
-	// watchdog release followed by the caller's deferred release runs removeOwner
-	// twice, and between them another process can take the lock and write its own
-	// sidecar, which the finished run would then delete, making the live holder
-	// invisible to `magus status` and to every waiter.
-	var releaseOnce sync.Once
-	releaseIdempotent := func() { releaseOnce.Do(release) }
-	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, releaseIdempotent)
-	return &projectHold{
-		release: func() { stopWatchdog(); releaseIdempotent() },
-		locker:  l,
-		paths:   paths,
-	}, nil
+	hold := &projectHold{locker: l, paths: paths, unlock: unlock}
+	hold.stopWatchdog = watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, hold.unlockOnce)
+	return hold, nil
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -211,14 +222,13 @@ type projectLocker struct {
 	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
 	// gate is superseded.
 	gate bool
+	// out is where the lock's decision lines go: os.Stderr in every real run, a buffer
+	// under test so it can read the exact bytes a user sees. The lines are written
+	// straight to the stream, never through the console, which is why -s/--silent
+	// cannot suppress any of them: a run that stalls or yields without explanation is
+	// the failure they exist to prevent.
+	out io.Writer
 }
-
-// lockOut is where the lock's decision lines go. A var so a test can read the exact bytes
-// a user sees; os.Stderr in every real run. These lines are written straight to the
-// stream, never through the console, which is why -s/--silent cannot suppress any of
-// them: a run that stalls or yields without explanation is the failure they exist to
-// prevent.
-var lockOut io.Writer = os.Stderr
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
 const lockRetryDelay = 100 * time.Millisecond
@@ -246,6 +256,9 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 // asGate marks this invocation the workspace's gate. See projectLocker.gate.
 func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
 
+// writingTo redirects the lock's decision lines, for a test that reads them.
+func writingTo(w io.Writer) lockerOption { return func(l *projectLocker) { l.out = w } }
+
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
 // true a contended acquire fails fast with a *lockContendedError instead of blocking.
@@ -262,6 +275,7 @@ func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...locke
 		noWait:  noWait,
 		root:    resolvedRoot(workspaceRoot),
 		started: time.Now(),
+		out:     os.Stderr,
 	}
 	for _, o := range opts {
 		o(l)
@@ -488,7 +502,7 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(lockOut, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
+	fmt.Fprintf(l.out, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
 	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
 	// line above announces the event and then scrolls away; a run that is blocked
 	// needs the state to stay on screen, because the alternative a reader sees is
@@ -545,7 +559,7 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 				return
 			case <-t.C:
 				elapsed := time.Since(start)
-				fmt.Fprintf(lockOut,
+				fmt.Fprintf(l.out,
 					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
 					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
 			}
@@ -568,7 +582,7 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(lockOut, "magus: lock on project %s released; starting.\n", p)
+	fmt.Fprintf(l.out, "magus: lock on project %s released; starting.\n", p)
 	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))
 }
 
@@ -666,12 +680,12 @@ func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) proce
 // released the flock otherwise), so this never needs to probe liveness. It only
 // answers which process, started when, from where.
 func (l *projectLocker) describeOwner(projectPath string) string {
-	return describeRecord(l.readOwner(projectPath))
+	return l.readOwner(projectPath).describe()
 }
 
-// describeRecord is describeOwner's rendering, over a record the caller already read. One
+// describe is describeOwner's rendering, over a record the caller already read. One
 // holder reads one way whether the reader is a wait, a fail-fast or a supersede.
-func describeRecord(o processRecord) string {
+func (o processRecord) describe() string {
 	if o.PID == 0 {
 		return ""
 	}
@@ -769,14 +783,17 @@ func (l *projectLocker) supersedes(projectPath string) (processRecord, bool) {
 	return rec, true
 }
 
-// yieldRequest reports a LIVE supersede request against a lock this invocation holds: a
-// later gate on this same tree, waiting on it.
+// pendingYield reports a LIVE supersede request against a lock this invocation holds: a
+// later gate on this same tree, still running, waiting on it.
 //
 // The mirror of supersedes, read from the holder's side, and the same start-time
 // comparison is what makes a marker self-expiring. A request from a gate that began
 // before this holder cannot be for this holder, so a marker left behind by a waiter that
-// died is inert rather than a trap for whoever takes the lock next.
-func (l *projectLocker) yieldRequest(projectPath string) (processRecord, bool) {
+// died is inert rather than a trap for whoever takes the lock next. A marker from a
+// LATER gate that died while parked is the trap that comparison cannot catch, so the
+// requester's pid is probed too: a request nobody is waiting on stops nothing, and is
+// swept here so the next holder does not read it either.
+func (l *projectLocker) pendingYield(projectPath string) (processRecord, bool) {
 	if !l.gate || l.root == "" {
 		return processRecord{}, false
 	}
@@ -787,10 +804,14 @@ func (l *projectLocker) yieldRequest(projectPath string) (processRecord, bool) {
 	if !l.started.Before(rec.Started) {
 		return processRecord{}, false
 	}
+	if !pid.Alive(rec.PID) {
+		_ = record.Remove(l.yieldPath(projectPath))
+		return processRecord{}, false
+	}
 	return rec, true
 }
 
-// requestYield publishes this gate's claim on a held lock and returns the retraction.
+// askHolderToYield publishes this gate's claim on a held lock and returns the retraction.
 //
 // A marker file rather than a signal, and the reason is what the abort has to SAY. A
 // signal carries no identity, so the aborted run could not name who superseded it, and
@@ -799,7 +820,7 @@ func (l *projectLocker) yieldRequest(projectPath string) (processRecord, bool) {
 // daemon the holder and the waiter can be threads of one process, where signalling the
 // pid means signalling yourself. The marker carries the successor's pid, command and
 // start time, which is the whole of MGS3014's message.
-func (l *projectLocker) requestYield(ctx context.Context, projectPath string) func() {
+func (l *projectLocker) askHolderToYield(ctx context.Context, projectPath string) func() {
 	path := l.yieldPath(projectPath)
 	if record.Write(path, l.selfRecord(ctx, l.started)) != nil {
 		return func() {}
@@ -810,7 +831,7 @@ func (l *projectLocker) requestYield(ctx context.Context, projectPath string) fu
 // clearStaleYield drops a supersede request that can no longer be for this holder, so a
 // waiter killed between writing the marker and taking the lock leaves no debris.
 //
-// Deliberately NOT gated on this invocation being a gate, unlike yieldRequest: whoever
+// Deliberately NOT gated on this invocation being a gate, unlike pendingYield: whoever
 // wins the lock does the sweeping, and an ordinary run that took it must not delete a
 // request a gate is still waiting on. The start-time comparison is the whole test, and it
 // is the same one that makes a marker self-expiring.
@@ -827,7 +848,7 @@ func (l *projectLocker) clearStaleYield(projectPath string) {
 // wait, which is exactly today's behavior; the error is non-nil only when the CALLER's
 // context ended, since the bound expiring is a fallback rather than a failure.
 func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath string, fl *flock.Flock, holder processRecord) (bool, error) {
-	retract := l.requestYield(ctx, projectPath)
+	retract := l.askHolderToYield(ctx, projectPath)
 	waitCtx, cancel := context.WithTimeout(ctx, supersedeYieldBound)
 	defer cancel()
 	got, err := fl.TryLockContext(waitCtx, lockRetryDelay)
@@ -840,7 +861,7 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 		if p == "" {
 			p = "."
 		}
-		fmt.Fprintf(lockOut, "magus: the earlier gate on project %s did not stop within %s; waiting for it instead.\n", p, supersedeYieldBound)
+		fmt.Fprintf(l.out, "magus: the earlier gate on project %s did not stop within %s; waiting for it instead.\n", p, supersedeYieldBound)
 		return false, nil
 	}
 	l.emitSuperseded(ctx, projectPath, holder)
@@ -848,15 +869,15 @@ func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath strin
 }
 
 // emitSuperseded states the decision, once, on the run that made it. It is a decision and
-// not progress, so it goes to lockOut like every other lock line and -s cannot suppress
+// not progress, so it goes to l.out like every other lock line and -s cannot suppress
 // it: a gate that silently killed another run is worse than one that never did.
 func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, holder processRecord) {
 	p := projectPath
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(lockOut, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
-		p, heldBy(describeRecord(holder)))
+	fmt.Fprintf(l.out, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
+		p, heldBy(holder.describe()))
 	slog.InfoContext(ctx, "lock.superseded",
 		slog.String("project", p),
 		slog.Int("holder_pid", holder.PID),

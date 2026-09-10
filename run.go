@@ -1287,14 +1287,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = cache.ContextWithProgress(ctx, prog)
 	ctx, stall := m.watchForStall(ctx, prog, hold.release)
 	defer stall.close()
-	defer func() { err = stall.verdict(err) }()
 
 	// Armed alongside it, over the other condition this run cannot diagnose from inside
 	// itself: a later gate on this same tree waiting for the locks held above. Inert
 	// unless this invocation is the gate. See watchForSupersede.
-	ctx, superseded := watchForSupersede(ctx, hold, hold.release)
+	ctx, superseded := m.watchForSupersede(ctx, hold)
 	defer superseded.close()
-	defer func() { err = superseded.verdict(err) }()
+	// The supersede verdict is applied last: a superseded gate that goes quiet during a
+	// slow unwind trips the stall watch too, and the answer that says why it stopped is
+	// the one to keep.
+	defer func() { err = superseded.verdict(stall.verdict(err)) }()
 
 	// The probe pass doubles as the toolchain gate. Enforcement follows the
 	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off

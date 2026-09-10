@@ -39,10 +39,10 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 		return &cache.DerivedOrder{}, nil
 	}
 	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps), cache.WorkspaceOverlapWitness(m.Root()))
-	if err := cache.SameStepConflictError(order.SameStep); err != nil {
+	if err := order.SameStep.Refusal(); err != nil {
 		return nil, err
 	}
-	if advice := cache.SameStepAdvice(order.SameStep); advice != "" {
+	if advice := order.SameStep.Advice(); advice != "" {
 		// Cross-project pairs are reported, not refused: their sequencing may belong
 		// to another project's magusfile, and doctor lists every one.
 		slog.WarnContext(ctx, advice)
@@ -91,42 +91,18 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			// composer. Measured: format's modifiesExistingFiles("**/*.go") reached
 			// test's writes that way and closed a declared-footprint "cycle" between
 			// test and docs content-generate that neither target declares.
-			updates := make([]string, 0, len(p.TargetUpdates[target]))
-			for _, ref := range p.TargetUpdates[target] {
-				updates = append(updates, joinGlob(ref.Project, ref.Glob))
-			}
-			var reads []string
-			declaredReads := len(p.TargetInputs[target]) > 0
-			if declaredReads {
-				for _, ref := range p.TargetInputs[target] {
-					reads = append(reads, joinGlob(ref.Project, ref.Glob))
-				}
-				reads = append(reads, updates...)
-			}
-			var writes []string
-			declaredWrites := len(p.TargetOutputs[target]) > 0 || len(updates) > 0
-			for _, ref := range p.TargetOutputs[target] {
-				writes = append(writes, joinGlob(ref.Project, ref.Glob))
-			}
-			writes = append(writes, updates...)
+			node := cache.DeclaredNode(p, target, stepKey, m.ws.Get)
 			s := m.buildStep(p, target)
-			if !declaredReads {
-				reads = s.Sources
+			if !node.DeclaredReads {
+				node.Reads = s.Sources
 			}
 			if len(p.TargetOutputs[target]) == 0 {
 				// No ctx.writesFiles: the project/spell output baseline (dist/**, ...)
 				// is the only claim there is. Weak, like a fallback read.
-				writes = append(writes, s.Outputs...)
+				node.Writes = append(node.Writes, s.Outputs...)
 			}
-			n = &cache.TargetNode{
-				Project:        p.Path,
-				Target:         target,
-				Reads:          reads,
-				Writes:         writes,
-				DeclaredReads:  declaredReads,
-				DeclaredWrites: declaredWrites,
-				IgnoreDirs:     s.IgnoreDirs,
-			}
+			node.IgnoreDirs = s.IgnoreDirs
+			n = &node
 			byKey[key] = n
 			order = append(order, key)
 		}
@@ -136,45 +112,12 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 		return n
 	}
 
-	var walk func(p *types.Project, target, stepKey string, seen map[string]bool)
-	walk = func(p *types.Project, target, stepKey string, seen map[string]bool) {
-		key := cache.DepKey(p.Path, target)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		add(p, target, stepKey)
-		chain := p.TargetChains[target]
-		ownerOf := func(cs types.ChainStep) *types.Project {
-			if cs.Project == "" || cs.Project == p.Path {
-				return p
-			}
-			return m.ws.Get(cs.Project)
-		}
-		keyOf := func(cs types.ChainStep) (string, bool) {
-			owner := ownerOf(cs)
-			if owner == nil {
-				return "", false
-			}
-			return cache.DepKey(owner.Path, cs.Target), true
-		}
-		// Recorded on the node, not just walked: inside one step ctx.needs is the only
-		// sequencing there is, and it is what decides whether a same-step overlap is
-		// ordered or unschedulable. Set once; a node two steps reach has one chain.
-		if n := byKey[key]; n.Needs == nil {
-			n.Needs = cache.ChainNeeds(chain, keyOf)
-		}
-		for _, cs := range chain {
-			walk(ownerOf(cs), cs.Target, stepKey, seen)
-		}
-	}
-
 	for _, s := range steps {
-		p := m.ws.Get(s.ProjectPath)
-		if p == nil {
-			continue
-		}
-		walk(p, s.Target, cache.DepKey(s.ProjectPath, s.Target), map[string]bool{})
+		stepKey := cache.DepKey(s.ProjectPath, s.Target)
+		_ = types.WalkChain(m.ws.Get(s.ProjectPath), s.Target, m.ws.Get, func(v types.ChainVisit) error {
+			add(v.Project, v.Target, stepKey)
+			return nil
+		})
 	}
 
 	nodes := make([]cache.TargetNode, 0, len(order))
