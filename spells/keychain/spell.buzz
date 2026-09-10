@@ -1,0 +1,79 @@
+// The macOS keychain secret provider: resolves a reference by asking the `security` CLI
+// for the generic password stored under that service name. Selected with
+// magus\secret.provider():
+//
+//   import "spells/keychain" as secrets;
+//   magus\secret.provider(secrets);
+//
+//   final token = magus\secret.read("claude-bench-token");
+//
+// A person stores the value once, at a prompt that never echoes it and never lands in a
+// shell history or a transcript:
+//
+//   security add-generic-password -a "$USER" -s claude-bench-token -w
+//
+// This is what lets a magus run resolve a credential on a laptop with NOTHING exported
+// into the shell, which matters most when the shell is an agent's: the agent runs the
+// target, magus reads the keychain, the child process gets the value, and no transcript
+// ever holds it. The first read prompts the keychain to allow `security`; "Always Allow"
+// is the answer that keeps later runs unattended.
+//
+// Same shape as spells/onepassword, imported by path for the same reason: a spell that
+// imports a host module cannot be compiled into the binary.
+
+import "magus/spell";
+
+import "proc";
+export fun mgs_getName() > str { return "keychain"; }
+
+
+// has reports whether haystack contains needle; see spells/onepassword for why this is
+// a helper rather than an inline indexOf comparison.
+fun has(haystack: str, needle: str) > bool {
+    return haystack.indexOf(needle) != null;
+}
+
+// resolve_secret is the secret-provider contract magus\secret.read() invokes. The
+// reference is the keychain SERVICE name of a generic password; the account is not part
+// of the reference, because `security` finds the item by service alone and an account
+// in the reference would make one machine's entry unreadable on another.
+//
+// `-w` prints the password alone to stdout with a trailing newline; magus trims captured
+// output. quiet is not optional: that stdout IS the secret, and without it the value is
+// echoed to the console and into the run log magus persists.
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
+    final io = {};
+    cb(io);
+    final ref = "{io["ref"]}";
+    if (ref == "") {
+        throw "keychain: no reference given";
+    }
+
+    try {
+        proc\which("security");
+    } catch (e) {
+        throw "keychain: the `security` CLI is not on PATH; this provider is macOS only";
+    }
+
+    final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
+        opts: {"allow_failure": true, "quiet": true});
+    if (res["code"] != 0) {
+        final err = "{res["stderr"]}";
+        if (has(err, "could not be found")) {
+            throw "keychain: no generic password is stored under service " + ref + ". Store one with\n"
+                + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
+                + "which prompts for the value and never echoes it.";
+        }
+        if (has(err, "User interaction is not allowed") or has(err, "denied")) {
+            throw "keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
+                + "Always Allow when the keychain asks about `security`.";
+        }
+        throw "keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
+    }
+
+    final value = "{res["stdout"]}";
+    if (value == "") {
+        throw "keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
+    }
+    return Secret{ value = value };
+}

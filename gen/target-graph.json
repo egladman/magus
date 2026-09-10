@@ -1426,6 +1426,15 @@
           "reads_secrets": false
         },
         {
+          "name": "agent-bench-run",
+          "declared": "agent_bench_run",
+          "doc": "Runs a benchmark manifest with a login the launching shell never held.",
+          "reads_secrets": true,
+          "secret_refs": [
+            "claude-bench-token"
+          ]
+        },
+        {
           "name": "compress-cgo-test",
           "declared": "compress_cgo_test",
           "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.",

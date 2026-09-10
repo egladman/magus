@@ -32,6 +32,7 @@ import (
 // to be declared rather than inferred.
 var workspaceLocalSpells = map[string]bool{
 	"onepassword": true, // reaches the `op` CLI, so it imports os
+	"keychain":    true, // reaches the macOS `security` CLI, so it imports proc
 }
 
 func runSpells(args []string) error {

@@ -74,6 +74,30 @@ magus ships this one at `spells/onepassword/`, imported by path because a spell 
 imports a host module cannot be compiled into the binary. Copy it as the starting point
 for any provider with a CLI that prints a secret to stdout.
 
+### The macOS keychain provider
+
+`spells/keychain/` is the same contract over the `security` CLI: a reference is the
+service name of a generic password in the login keychain, and a person stores the
+value once at a prompt that never echoes it:
+
+```sh
+security add-generic-password -a "$USER" -s claude-bench-token -w
+```
+
+```buzz
+import "./spells/keychain" as keychain;
+magus\secret.provider(keychain);
+
+final token = magus\secret.read("claude-bench-token");
+```
+
+The shape earns its keep when the shell running magus is an agent's. Nothing is
+exported into that shell, so nothing reaches its transcript: the agent runs the
+target, magus reads the keychain, the child process receives the value, and the value
+is redacted from every captured line the way any provider-resolved secret is. The
+first read makes the keychain ask whether `security` may have the item; "Always
+Allow" is what keeps later runs unattended.
+
 ### The GitHub Actions provider
 
 magus also ships `spells/github/actions`, the same spell that carries the Actions cache

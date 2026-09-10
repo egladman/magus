@@ -52,6 +52,24 @@ Same grid from a manifest, one run.sh flag line per run:
 ./run.sh --manifest pilot.manifest
 ```
 
+The agent sessions need a login. Interactive CLIs share the keychain session
+`claude login` refreshes; a headless run wants the long-lived token
+`claude setup-token` mints, and the runner takes it two ways. Exported as
+`CLAUDE_CODE_OAUTH_TOKEN` in the launching shell, it rides the environment
+scrub by name. Or, on macOS, store it once in the keychain and let the workspace's
+secret provider hand it to the runner, so nothing is ever exported into a shell
+and a transcript never sees it:
+
+```sh
+security add-generic-password -a "$USER" -s claude-bench-token -w   # prompts, no echo
+magus run agent-bench-run . -- pilot.manifest
+```
+
+`agent-bench-run` resolves `claude-bench-token` through `magus\secret.read`, hands
+it to `run.sh` as `CLAUDE_CODE_OAUTH_TOKEN` in that one child's environment (never
+argv, which the run log records), and magus redacts the value from everything it
+captures.
+
 Always run the controls for a task before trusting any number from it:
 
 ```sh

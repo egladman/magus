@@ -64,6 +64,17 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus\cache.remote(github);
 }
 
+// The macOS keychain is the secret provider on a Mac outside CI, so a laptop run
+// resolves a credential with nothing exported into its shell and nothing in the
+// transcript of whoever typed the command. CI keeps the built-in environment provider,
+// the only thing that can read a repository secret. The host decides, not a knob: a
+// provider is an environment decision (docs/concepts/secrets/providers.md), and a
+// reference written for one provider is a typo under the other.
+import "spells/keychain" as keychain;
+if (os\platform()[0] == "darwin" and (os\env("CI") ?? "") == "") {
+    magus\secret.provider(keychain);
+}
+
 // Unconditional, unlike the cache above: the spell's enabled() gates every op
 // on GITHUB_ACTIONS, so this costs nothing on a laptop. Under Actions it
 // supplies the job-log structure AND answers last_green_run, which is what
@@ -142,6 +153,7 @@ magus\project({
         // and a replay would report the sessions of whatever ran last.
         "session-load": {"skip_cache": "reads an agent host's session store, which changes independently of this tree"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
+        "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
         // writes into .gitattributes, and /magus is gitignored, so declaring it would name
         // a path that can never conflict. A cacheable target with nothing to restore is the
@@ -2842,6 +2854,23 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
         docker["docker-run"](ctx, {"args": argv});
     }
     magus\log.info("benchmark report written to benchmarks/agent/report.md");
+}
+
+// Runs a benchmark manifest with a login the launching shell never held. The
+// long-lived token `claude setup-token` mints is read through the workspace's secret
+// provider under the reference below, handed to run.sh as the one environment variable
+// the runner's scrub keeps, and redacted from everything magus captures. It never
+// touches argv, which the run log records, and it never has to be exported by the
+// person, or the agent, typing this command: `magus run agent-bench-run . -- <manifest>`,
+// defaulting to pilot.manifest. Every run is paid work that writes results/, so it
+// never replays from cache.
+export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
+    var manifest = "pilot.manifest";
+    if (args.len() > 0) { manifest = args[0]; }
+    final token = magus\secret.read("claude-bench-token");
+    os\withEnv({"CLAUDE_CODE_OAUTH_TOKEN": token}, callback: fun () > void !> any {
+        proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent", opts: {});
+    });
 }
 
 // Runs internal/compress's tests under the CGO tags, which the ordinary test target
