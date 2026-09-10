@@ -199,13 +199,14 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   structural questions from declared sources - `magus refs` for a code symbol,
   `magus query` for a domain entity.
 - A dependency re-resolution (`go get`, `pnpm add`, `cargo update`, `uv lock`,
-  `pip-compile`): the `relock` charm is what grants that write inside magus, and
+  `pip-compile`): the `update` charm is what grants that write inside magus, and
   it is deliberately not part of `rw` - `rw` covers output reproducible from a
-  clean checkout, `relock` covers state that depends on what a registry serves
+  clean checkout, `update` covers state that depends on what a registry or a
+  vulnerability feed serves
   today. Applying a lockfile (`npm ci`, `pnpm install --frozen-lockfile`)
   re-resolves nothing and passes. `go mod tidy` is the one that denies rather
   than advises, because a spell op renders it, and its deny reason carries the
-  same `relock` route - routing into magus without naming the charm would send
+  same `update` route - routing into magus without naming the charm would send
   you to a target that refuses the write.
 - A tree-identity read (`git rev-parse HEAD`, `git describe`, `git stash
   create`): `magus vcs checkpoint` prints the revision plus a digest of the

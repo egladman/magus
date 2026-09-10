@@ -187,7 +187,9 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - **`env:` lines** - each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
-- **`obs:` lines** - each `ctx.observes(key, value)` declaration as `key=value`,
+- **`obs:` lines** - each observation of a fact outside the tree: a
+  `ctx.observes(key, value)` declaration as `key=value`, and the output of any
+  observation probe a spell declares for a tool the target's ops drive,
   sorted. Its own class rather than a fold into `env:` or `exec:`, because an
   observation names a fact outside the tree entirely and changes nothing about how
   the target runs. A target declaring none writes no line, so an ordinary run
@@ -227,7 +229,7 @@ this list, it cannot move the key:
 <tr><td><code>arg:</code> - arguments after <code>--</code>, in the order given</td></tr>
 <tr><td><code>src:</code> - every <code>needs</code> file: path, content hash, exec bit; the magusfiles always included</td></tr>
 <tr><td><code>env:</code> - allow-listed variables, sorted</td></tr>
-<tr><td><code>obs:</code> - <code>ctx.observes</code> facts, sorted</td></tr>
+<tr><td><code>obs:</code> - facts outside the tree, stated and probed, sorted</td></tr>
 <tr><td><code>exec:</code> - <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
 <tr><td><code>dep:</code> - each upstream target's resolved key, this same fold applied one level up</td></tr>
 <tr><td><code>spellDefVersion</code>, <code>tool:</code> - the spell definition and toolchain versions</td></tr>
@@ -242,7 +244,8 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - editing, adding, or removing a file matched by `needs`;
 - toggling the executable bit on a needed file;
 - changing the value of an allow-listed env var (or setting/unsetting it);
-- bumping a declared observation's value (`ctx.observes`);
+- bumping a declared observation's value (`ctx.observes`), or a probed one moving
+  (a scanner database refreshing);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
 - applying or dropping a charm;
@@ -408,20 +411,73 @@ says the magusfile changed, an `obs:` line says which fact changed and to what.
 Declare one for a fact a person deliberately bumps, where writing it down is the
 point.
 
-For a fact that moves on its own - a vulnerability database that refreshes
-nightly, a feed that publishes whenever it likes - a literal is a stamp nobody
+For a fact that moves on its own - a vulnerability database that refreshes every
+few hours, a feed that publishes whenever it likes - a literal is a stamp nobody
 remembers to update, and a hit would then claim an observation that had already
-stopped holding. That is worse than the honest opt-out, so such a target keeps
-`skip_cache` until its value can be probed at key time.
+stopped holding.
 
-Three declarations, three different answers to "the answer depends on something
+### The same input class, probed
+
+An observation has two sources, and they are one input class: both land in the key
+as an `obs:` line, both are opaque values magus compares and never interprets, and
+`describe target --cache` prints them together. What differs is who supplies the
+value.
+
+`ctx.observes` is the STATED form, for a fact a person maintains. The PROBED form is
+for a fact the tool can be asked, and it is declared by the spell rather than by the
+target, beside the version probe:
+
+```buzz
+export fun mgs_getTools() > {str: Tool} {
+    return {
+        "trivy": Tool{
+            probe = Command{bin = "trivy", args = ["version"]},
+            key = VersionKey{upTo = VersionComponent.patch},
+            observe = Command{bin = "trivy", args = ["version", "--format", "json"]},
+        },
+    };
+}
+```
+
+The two probes answer questions on different clocks, which is why there are two.
+`probe` answers "which build of the tool", and trivy ships a release every few weeks.
+`observe` answers "which copy of the world it is reading", and the trivy database is
+built every six hours. Keying only the version is what makes a cached scan report
+yesterday's CVEs against today's image.
+
+A probed observation is scoped to the targets that USE the tool, unlike a version
+probe, which keys every target in every project that binds the spell. It has to be:
+folding a value that moves every six hours into every target's key would cost the
+project's whole cache on a clock. The scoping comes from the same static op list
+`describe target` prints, so a target reaching the op through a helper the walk cannot
+follow gets no observation, and no protection.
+
+The other half of a probed observation is that the tool must be able to run OFFLINE.
+`trivy image` passes `--skip-db-update` by default and answers from the copy on disk,
+and the `update` charm drops the flag so the scan refreshes first. In magus's own
+workspace that is the whole difference between the two spellings:
+
+```sh
+magus run image-scan          # scan against the database on disk; cacheable, keyed on it
+magus run image-scan:update   # refresh the database first, then scan
+```
+
+Without that split there is nothing stable to observe: a scan that silently refreshed
+its own feed would change its verdict under an unchanged tree and an unchanged key.
+
+`magus doctor` checks the pairing. A cacheable target composing an op that declares
+`external` and has neither a probe nor `skip_cache` is
+[MGS1033](../reference/codes/magusfile/MGS1033.md).
+
+Four declarations, four different answers to "the answer depends on something
 that is not a source file":
 
-| The fact                               | Declare                           | Because                                                     |
-| -------------------------------------- | --------------------------------- | ----------------------------------------------------------- |
-| An environment variable's value        | `ctx.envInputs("CI")`             | Only the NAME is knowable statically; magus reads the value |
-| A fact outside the tree entirely       | `ctx.observes("trivy-db", "...")` | Magus cannot reach it, so the magusfile states it           |
-| Nothing - the target must never replay | `skip_cache` policy               | It signs, publishes, mutates, or never returns              |
+| The fact                               | Declare                           | Because                                                        |
+| -------------------------------------- | --------------------------------- | -------------------------------------------------------------- |
+| An environment variable's value        | `ctx.envInputs("CI")`             | Only the NAME is knowable statically; magus reads the value    |
+| A fact a person maintains              | `ctx.observes("schema-rev", "7")` | Magus cannot reach it, so the magusfile states it              |
+| A fact the tool can be asked           | `Tool{observe = Command{...}}`    | The tool knows which copy of the world it holds; magus asks it |
+| Nothing - the target must never replay | `skip_cache` policy               | It signs, publishes, mutates, or never returns                 |
 
 Reach for `skip_cache` only when replaying would be _wrong_, not when it would be
 _stale_. Staleness has a declaration now.

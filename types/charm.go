@@ -40,19 +40,33 @@ const CharmCD = "cd"
 // does not strip it (unlike rw), so the annotations survive into ci.
 const CharmGHA = "gha"
 
-// CharmRelock is a reserved built-in charm: the grant to rewrite dependency state (a
-// lockfile, or go.mod/go.sum) rather than verify it. Deliberately not part of rw: rw
-// regenerates derived output from this tree and so is reproducible, while a dependency
-// refresh reads a registry and yields different bytes on different days. Folded into rw,
-// a workspace with default_charms: [rw] would re-resolve dependencies during an unrelated
-// build. Stripped from ci alongside rw (see RunCI).
-const CharmRelock = "relock"
+// CharmUpdate is a reserved built-in charm: the grant to move a pinned copy of upstream
+// state forward to whatever upstream serves today. Re-resolving a lockfile (go mod tidy)
+// and refreshing a scanner's vulnerability database are the same grant under one name,
+// because they answer the same question: may this run replace what it pinned. Deliberately
+// not part of rw: rw regenerates derived output from this tree and so is reproducible,
+// while an update reads a registry or a feed and yields different bytes on different days.
+// Folded into rw, a workspace with default_charms: [rw] would re-resolve dependencies
+// during an unrelated build. Stripped from ci alongside rw (see RunCI).
+const CharmUpdate = "update"
+
+// CharmUpdateAlias is the spelling CharmUpdate had before a second op claimed the grant.
+//
+// compat(until: no workspace magus supports still spells this charm "relock"): the charm
+// was named relock while go mod tidy was the only op that claimed it. NormalizeCharm
+// resolves it to CharmUpdate, so `target:relock` keeps running for one release and every
+// consumer downstream (spell charm arms, the ci strip, the typo guard) sees only update.
+// Observing that it is safe to drop: a release carrying the deprecation notice
+// hintCanonicalSpelling prints has shipped, and `magus query charm=relock` over the
+// workspaces you support returns nothing. Delete this const and the NormalizeCharm branch
+// together; the spell arms and docs already say update.
+const CharmUpdateAlias = "relock"
 
 // reservedCharms are the built-in charm names magus recognizes without any target
 // declaring them. Listed once here so the typo guard (IsReservedCharm) and the
 // doctor name-collision check (ReservedCharms) cannot drift. The entries are
 // already in canonical (normalized) form.
-var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmRelock}
+var reservedCharms = []string{CharmReadWrite, CharmCD, CharmGHA, CharmUpdate}
 
 // ReservedCharms returns magus's built-in charm names as a fresh slice.
 func ReservedCharms() []string { return slices.Clone(reservedCharms) }
@@ -60,29 +74,40 @@ func ReservedCharms() []string { return slices.Clone(reservedCharms) }
 // IsReservedCharm reports whether name — in any casing or separator form — is one
 // of magus's reserved built-in charms.
 func IsReservedCharm(name string) bool {
-	return slices.Contains(reservedCharms, Normalize(name))
+	return slices.Contains(reservedCharms, NormalizeCharm(name))
+}
+
+// NormalizeCharm canonicalizes a charm name: Normalize's case and separator folding,
+// plus the one compatibility alias magus still answers to. Every path that reads a charm
+// name goes through it, so a run that says relock reaches a spell, a magusfile and the ci
+// strip as update and none of them has to know the alias exists.
+func NormalizeCharm(name string) string {
+	if n := Normalize(name); n != CharmUpdateAlias {
+		return n
+	}
+	return CharmUpdate
 }
 
 // ReservedCharmDoc returns a one-line description of a reserved built-in charm, or
 // "" for a name that is not reserved. It is the single source `magus describe charm`
 // reads, so the built-in summaries cannot drift from the reserved set.
 func ReservedCharmDoc(name string) string {
-	switch Normalize(name) {
+	switch NormalizeCharm(name) {
 	case CharmReadWrite:
 		return "mutate in place: flip check-only targets (format, lint, generate) to write; stripped from ci"
 	case CharmCD:
 		return "continuous-delivery: a target reads it to publish its artifact; survives into ci"
 	case CharmGHA:
 		return "GitHub Actions output: swap a tool's reporter to inline workflow annotations; survives into ci"
-	case CharmRelock:
-		return "rewrite dependency state (lockfile, go.mod/go.sum) instead of verifying it; stripped from ci"
+	case CharmUpdate:
+		return "move pinned upstream state forward (a lockfile, a scanner database) instead of verifying it; stripped from ci"
 	default:
 		return ""
 	}
 }
 
 // WithCharms returns a context carrying the active execution charms, normalized
-// (see NormalizeCharmName) so the stored set is canonical and HasCharm only has
+// (see NormalizeCharm) so the stored set is canonical and HasCharm only has
 // to normalize the query. An empty set leaves the context unchanged, so it never
 // clobbers existing charms. Callers pass the full accumulated set (e.g. the
 // charms in a "name:a,b" suffix).
@@ -92,7 +117,7 @@ func WithCharms(ctx context.Context, charms []string) context.Context {
 	}
 	normalized := make([]string, len(charms))
 	for i, c := range charms {
-		normalized[i] = Normalize(c)
+		normalized[i] = NormalizeCharm(c)
 	}
 	return context.WithValue(ctx, charmsContextKey{}, normalized)
 }
@@ -112,7 +137,7 @@ func CharmsFromContext(ctx context.Context) []string {
 // tests has_charm("noCache") matches a "target:no-cache" suffix regardless of
 // casing or separator.
 func HasCharm(ctx context.Context, charm string) bool {
-	want := Normalize(charm)
+	want := NormalizeCharm(charm)
 	for _, c := range CharmsFromContext(ctx) {
 		if c == want {
 			return true

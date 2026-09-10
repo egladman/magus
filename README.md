@@ -273,7 +273,7 @@ export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](c
 // code. Tidy resolves against the module proxy, so what it writes depends on what
 // upstream serves today; that is a second, deliberate ask:
 //   magus run format:rw          formatting only; go mod tidy still just reports
-//   magus run format:rw,relock   also let go mod tidy amend go.mod and go.sum
+//   magus run format:rw,update   also let go mod tidy amend go.mod and go.sum
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

@@ -39,6 +39,20 @@ export fun mgs_listRequiredGlobs() > [Path] {
 // and throw the database date away, leaving a newly published CVE unable to invalidate
 // a cached pass. Keying on the whole output is correct, and declaring nothing asks for it.
 //
+// It declares the same argv as an OBSERVE probe as well, and the duplication is the
+// point: the database date reaching the key through the version probe is an accident of
+// govulncheck printing four facts under one flag, and an accident is not something the
+// doctor check for external ops (MGS1033) can read. Declared, it is a fact a spell states
+// rather than one a reader has to notice. The cost is one extra fast spawn, and only for
+// a target that actually composes the op, since observation probes are scoped to those
+// unlike version probes, which run for every project.
+//
+// There is no update arm, because there is nothing to refresh: govulncheck fetches from
+// https://vuln.go.dev on every run and caches nothing locally. It CAN be pointed at a
+// local copy (`-db file://...`, https://go.dev/security/vuln/database, read 2026-09-10),
+// but which copy is a workspace's decision, not this spell's, so the offline default that
+// trivy gets is not available here.
+//
 // `supported` on go is a MINIMUM ONLY, and deliberately has no ceiling. It says what
 // these ops need to function - 1.21 is where the toolchain line in go.mod became
 // something the module ops rely on - not which Go a repo has qualified. A ceiling here
@@ -53,7 +67,8 @@ export fun mgs_getTools() > {str: Tool} {
         "go": Tool{probe = Command{bin = "go", args = ["version"]}, key = VersionKey{upTo = VersionComponent.patch},
                    supported = VersionBounds{min = "1.21"}},
         "golangci-lint": Tool{probe = Command{bin = "golangci-lint", args = ["--version"]}, key = VersionKey{upTo = VersionComponent.patch}},
-        "govulncheck": Tool{probe = Command{bin = "govulncheck", args = ["-version"]}},
+        "govulncheck": Tool{probe = Command{bin = "govulncheck", args = ["-version"]},
+                            observe = Command{bin = "govulncheck", args = ["-version"]}},
     };
 }
 
@@ -104,9 +119,9 @@ export fun mgs_listManifests() > [Manifest] {
 // phrasing that moves between toolchain releases does not belong here.
 final GO_MOD_HINTS = [
     Hint{contains = "missing go.sum entry",
-         advise = "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+         advise = "go.sum is out of date with go.mod; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
     Hint{contains = "updates to go.mod needed",
-         advise = "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+         advise = "go.mod does not cover the imports in the tree; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 ];
 
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS}; }
@@ -144,16 +159,16 @@ fun goTest(target: Target) > Command {
 }
 // Tidy resolves against the module proxy, and an import go.mod does not require yet
 // arrives at latest, so its result turns on what upstream serves today rather than on
-// this tree alone. The write charm is therefore relock, not rw.
+// this tree alone. The write charm is therefore update, not rw.
 fun goModTidy(target: Target) > Command {
     final args = ["mod", "tidy", "--diff"];
     return Command{bin = "go", args = args, charms = {
-        "relock": drop(args, "--diff"),
+        "update": drop(args, "--diff"),
     }};
 }
 // Edit is offline: it "reads only go.mod; it does not look up information about the
 // modules involved" (go help mod edit), so the same tree always yields the same bytes.
-// The write charm is therefore rw, not relock.
+// The write charm is therefore rw, not update.
 fun goModEdit(target: Target) > Command {
     final args = ["mod", "edit", "-print"];
     return Command{bin = "go", args = args, capture = true, charms = {
@@ -171,7 +186,7 @@ fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", 
 // `go tool govulncheck` requires the binary in the module's tool block, and a workspace that
 // had not put it there got "no such tool" - so the op could not run at all. On PATH it is
 // pinned by whatever the workspace uses, and mgs_getVersionProbes records which.
-fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."]}; }
+fun goVulncheck(target: Target) > Command { return Command{bin = "govulncheck", args = ["./..."], external = External.reads}; }
 fun scipGo(target: Target) > Command {
     return Command{bin = "scip-go", args = ["--output", "$MAGUS_SYMBOL_INDEX"]};
 }

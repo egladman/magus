@@ -13,10 +13,10 @@ import (
 // read without the raw-tool and output-plumbing rules interleaved through it.
 
 // guardDependencyMutations are the argv prefixes that RE-RESOLVE dependencies and
-// rewrite the lockfile, keyed by program. They are what types.CharmRelock exists
+// rewrite the lockfile, keyed by program. They are what types.CharmUpdate exists
 // for: `rw` grants rewriting DERIVED output, which is reproducible from a clean
 // checkout, while these read a registry and yield different bytes on different
-// days, which is why relock is not folded into rw.
+// days, which is why update is not folded into rw.
 //
 // A hand-kept list rather than a catalog lookup, unlike the raw-tool rule: the
 // spell catalog says which op renders a command, never whether that command's

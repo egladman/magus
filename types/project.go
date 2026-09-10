@@ -297,6 +297,13 @@ type Project struct {
 	// target's answer depends on, as "key=value", folded into the cache key. See
 	// TargetGraphNode.Observations.
 	TargetObservations map[string][]string
+	// TargetSpellOps are the spell ops each target's body invokes, statically extracted;
+	// see TargetGraphNode.Spells. It is what scopes an observation probe to the targets
+	// that actually drive the binary holding the external data: a project-wide
+	// observation would put a vulnerability database's publication time into the key of
+	// every target in the project, so an unrelated build would miss the cache every six
+	// hours.
+	TargetSpellOps map[string][]TargetSpellUse
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly, which is

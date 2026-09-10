@@ -175,13 +175,12 @@ magus\project({
         // would report the charms and credentials of whatever ran last.
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
-        // Keyed on the image and this tree, but the ANSWER also depends on trivy's
-        // vulnerability database, which changes daily and is not an input magus can see.
-        // A hit would report yesterday's CVEs against today's image.
-        // ctx.observes is the successor, and it is not usable here YET: it keys on a value
-        // the magusfile STATES, and nothing states trivy's DB id without probing for it,
-        // which cannot run before the key is minted.
-        "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
+        // NO skip_cache, and the reason it used to carry is now an input instead. The
+        // answer still depends on trivy's vulnerability database rather than on this tree
+        // alone, which is why a hit once reported yesterday's CVEs against today's image;
+        // the docker spell now declares an observe probe on trivy, so the database's own
+        // identity keys the step and a hit can only replay a scan run against the same
+        // database. `magus run image-scan:update` is what moves it forward.
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
@@ -868,18 +867,23 @@ export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
+//
+// Through the spell op rather than a proc\exec of the same binary, because the escape
+// cost the two things the op declares: trivy's database is offline by default and
+// identified in the cache key (see the docker spell's trivy tool), and `image-scan:update`
+// is what refreshes it. A raw exec would key on nothing and refresh on every run.
 export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_build);
     if (ctx.hasCharm("rw")) {
         fs\mkdirAll("dist");
-        proc\exec("trivy", ["image",
+        docker["trivy-image"](ctx, {"args": [
             "--format", "sarif",
             "--output", fs\join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
-            image_tag()]);
+            image_tag()]});
     } else {
-        proc\exec("trivy", ["image", image_tag()]);
+        docker["trivy-image"](ctx, {"args": [image_tag()]});
     }
 }
 

@@ -39,7 +39,7 @@ Multi-platform images without buildx: build per-arch, then assemble and push a m
 
 ## podman-push
 
-podman push is its own verb; docker reaches the same place through `buildx --push`.
+podman push is its own verb; docker reaches the same place through `buildx --push`. mutates-external because the effect lands in a registry: a target that replayed this would report a delivery that never happened. docker-buildx is deliberately NOT marked, because it pushes only when the caller passes --push, and an op that reaches outward half the time cannot answer this question for the target composing it.
 
 **Command:** `podman push`
 

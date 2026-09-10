@@ -843,6 +843,89 @@ func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.Doct
 	}
 }
 
+// checkCacheableExternalOps is MGS1033: a cacheable target composing a spell op that
+// declares a relation to the world outside this tree (spells.External).
+//
+// Two shapes, one check, because the fix differs by shape and a reader meeting either
+// needs to be told which one they have:
+//
+//   - mutates-external (a push, a signature, a deploy): a replay reports a side effect
+//     that never happened. Only skip_cache answers it; an effect cannot be hashed.
+//   - reads-external (a scanner reading a vulnerability feed): a replay reports the
+//     verdict of whenever it last ran. skip_cache answers it, and so does declaring an
+//     observation probe on the tool, which puts the feed's identity in the key and keeps
+//     the target cacheable.
+//
+// The op list is the same static extraction `describe target` prints, so an op reached
+// through a helper the walk cannot follow is invisible here, exactly like MGS1004. It
+// under-reports rather than over-reports, which is the right direction for a check whose
+// remedy is to opt a target out of the cache.
+func (r *runner) checkCacheableExternalOps(projects []*types.Project) types.DoctorCheck {
+	const name = "cacheable-external-ops"
+	var details []string
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			for _, n := range describe.Extract(string(data)) {
+				if pol, ok := p.TargetPolicies[n.Name]; ok && pol.SkipCache {
+					continue // declared uncacheable; the author already answered this
+				}
+				for _, use := range n.Spells {
+					i := slices.IndexFunc(p.ResolvedSpells, func(sp *spells.Spell) bool { return sp.Name() == use.Spell })
+					if i < 0 {
+						continue
+					}
+					sp := p.ResolvedSpells[i]
+					for _, opName := range use.Ops {
+						op, ok := sp.Op(opName)
+						if !ok {
+							continue
+						}
+						if d := externalOpFinding(p, sp, op, use.Spell, opName, n.Name, r.relPath(f)); d != "" {
+							details = append(details, d)
+						}
+					}
+				}
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no cacheable target composes an op that reads or mutates state outside the tree"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d cacheable target(s) compose an op whose inputs or effects the cache key cannot see, so a replay "+
+				"reports a verdict that has expired or a side effect that never happened (see %s)",
+			len(details), types.CodeURL(types.CacheableExternalOp)),
+		Details: details,
+	}
+}
+
+// externalOpFinding renders one MGS1033 finding, or "" when the op is fine. Both fixes
+// are named in every finding: which one applies is the author's call, and a message that
+// offered only skip_cache would push every scanner out of the cache when a probe would
+// have kept it in.
+func externalOpFinding(p *types.Project, sp *spells.Spell, op spells.Op, spellName, opName, target, file string) string {
+	where := fmt.Sprintf("%s: target %q composes %s::%s (%s)", p.Path, target, spellName, opName, file)
+	switch op.External {
+	case spells.ExternalMutates:
+		return where + ": the op has an effect outside this tree, which a replay would report without performing; declare skip_cache with a reason"
+	case spells.ExternalReads:
+		if t, ok := sp.Tool(op.Bin); ok && t.HasObservationProbe() {
+			return ""
+		}
+		return where + ": the op's verdict comes from data outside this tree that no probe identifies; declare skip_cache with a reason, or declare an observe probe on tool " + op.Bin + " in the spell so the data's identity keys the cache"
+	default:
+		return ""
+	}
+}
+
 // checkRedundantFootprintGlobs is MGS1005: a per-target output glob already
 // present project-wide. Explicit inputs intentionally do not participate because
 // they narrow a target's source footprint even when a glob is also project-wide.

@@ -78,6 +78,14 @@ type Command struct {
 	//
 	// Empty (the default) leaves Args exactly as declared.
 	Sources []string `json:"sources,omitempty"`
+	// External declares this op's relation to the world outside the tree; see
+	// [External]. It is the one fact a source glob can never carry, so a caller that
+	// asks "may a replay of this stand in for a run" has to be told rather than
+	// derive it. `magus doctor` reads it (MGS1033) and nothing else branches on it:
+	// magus does not silently make a target uncacheable on an op's say-so, because
+	// the target composing it is what knows whether the external part determines the
+	// result.
+	External External `json:"external,omitempty"`
 	// SourcesEach runs Bin once PER file Sources matches (xargs -n1: one file,
 	// one invocation), each invocation appending that single file to Args. False
 	// (the default) batches every matched file across as few invocations as fit

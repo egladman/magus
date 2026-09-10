@@ -229,8 +229,8 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 // reads that header is checking exactly this, so both sides read it from here.
 func CharmsForCI(charms []string) []string {
 	return slices.DeleteFunc(slices.Clone(charms), func(s string) bool {
-		n := types.Normalize(s)
-		return n == types.CharmReadWrite || n == types.CharmRelock
+		n := types.NormalizeCharm(s)
+		return n == types.CharmReadWrite || n == types.CharmUpdate
 	})
 }
 
@@ -241,8 +241,8 @@ func CharmsForCI(charms []string) []string {
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
-	// and relock so a ci run verifies the committed dependency state rather than
-	// re-resolving it against whatever the registry serves today.
+	// and update so a ci run verifies the pinned upstream state rather than refreshing
+	// it against whatever the registry or the feed serves today.
 	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
@@ -707,8 +707,12 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if toolVersions == nil {
 		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
 	}
+	// Not part of sweepReuse: an observation probe runs only for a project whose
+	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
+	// not arise. Keyed the same as a run so `describe target --cache` mints the same key.
+	observations := m.probeObservations(ctx, []*types.Project{p})
 	step := m.buildStep(p, target)
-	applyRunKeying(&step, toolVersions[p.Path], charms)
+	applyRunKeying(&step, toolVersions[p.Path], observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -717,8 +721,11 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
-func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
+func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
 	step.ToolVersions = toolVersions
+	// Appended, not assigned: buildStep already put the target's ctx.observes lines
+	// here, and a probed observation is the same input class from the other source.
+	step.Observations = append(step.Observations, observations...)
 	ck := slices.Clone(charms)
 	slices.Sort(ck)
 	step.Charms = slices.Compact(ck)
@@ -1012,6 +1019,91 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 	return out
 }
 
+// probeObservations runs each resolved spell's declared observation probes and returns
+// the key lines they yield, keyed by project path and then by "spell:tool". A line is
+// "spell:tool:<raw output>": opaque to magus, which only ever compares it.
+//
+// Unlike probeTools this does NOT run per project unconditionally. A version probe is
+// cheap and its answer moves when someone upgrades a toolchain; an observation moves
+// every few hours by design, so folding one into every target's key would cost the whole
+// project's cache on a clock. observationsForTarget is what scopes it back down to the
+// targets that drive the binary.
+//
+// A probe that fails records UNPROBED, like a version probe: a scanner that cannot say
+// which database it holds is a worse reason to key on nothing than to key on a constant,
+// since the constant at least keeps the miss deterministic.
+func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	memo := map[string]string{}
+	for _, p := range projects {
+		for _, s := range p.ResolvedSpells {
+			if !s.HasObservationProbe() {
+				continue
+			}
+			for _, tool := range s.ToolNames() {
+				t, _ := s.Tool(tool)
+				if !t.HasObservationProbe() {
+					continue
+				}
+				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
+				value, hit := memo[tk]
+				if !hit {
+					probed, err := s.ProbeObservation(ctx, tool, p.Dir)
+					if err != nil {
+						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
+							slog.String("spell", s.Name()), slog.String("tool", tool),
+							slog.String("dir", p.Dir), slog.String("err", err.Error()))
+						probed = "UNPROBED"
+					}
+					value = probed
+					memo[tk] = value
+				}
+				if out[p.Path] == nil {
+					out[p.Path] = map[string]string{}
+				}
+				out[p.Path][s.Name()+":"+tool] = value
+			}
+		}
+	}
+	return out
+}
+
+// observationsForTarget narrows a project's probed observations to the ones target
+// actually depends on: an observation counts only when the target's body invokes an op
+// whose command drives that binary. Statically extracted (TargetSpellOps), so it
+// under-reports the way every other static footprint does, in two ways: an op reached
+// through a helper the walk cannot follow is invisible, and TargetSpellUse.Spell is the
+// IMPORT HANDLE, which equals the spell name only for an unaliased import. Both leave a
+// target keyed as it was before, never keyed on the wrong thing.
+func observationsForTarget(p *types.Project, target string, probed map[string]string) []string {
+	if len(probed) == 0 {
+		return nil
+	}
+	var out []string
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			continue
+		}
+		sp := p.ResolvedSpells[i]
+		for _, opName := range use.Ops {
+			op, ok := sp.Op(opName)
+			if !ok || op.Bin == "" {
+				continue
+			}
+			key := use.Spell + ":" + op.Bin
+			value, ok := probed[key]
+			if !ok {
+				continue
+			}
+			if line := key + ":" + value; !slices.Contains(out, line) {
+				out = append(out, line)
+			}
+		}
+	}
+	return out
+}
+
 // executeOnProjects runs handler for every project for a single target.
 func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler TargetHandler) error {
 	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
@@ -1212,9 +1304,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// The keying every step of this invocation shares. runComposedSkipCacheGates mints
 	// steps outside the stage loop, so the two would otherwise key differently.
+	obs := m.probeObservations(ctx, uniqueProjects)
 	newStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
-		applyRunKeying(&step, toolVer[p.Path], charmKey)
+		applyRunKeying(&step, toolVer[p.Path], observationsForTarget(p, target, obs[p.Path]), charmKey)
 		step.Revision = revision
 		step.Dirty = dirty
 		step.VCSName = vcsName

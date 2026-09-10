@@ -193,7 +193,20 @@ const (
 	// target), while an undeclared ceiling is the documented default and harms only the
 	// runaway case, and a target that never terminates records no duration to argue
 	// from, so the evidence for that finding does not exist.
-	TimeoutDeclarationDrift   DiagnosticCode = "MGS1032"
+	TimeoutDeclarationDrift DiagnosticCode = "MGS1032"
+	// CacheableExternalOp is a cacheable target composing a spell op that declares a
+	// relation to the world outside the tree (spells.External) the cache key cannot
+	// see: a scanner reading a vulnerability feed, or a push, signature or deploy.
+	//
+	// The sibling of MGS1026, and for the same reason: what makes it worth a check is
+	// that the failure is GREEN. A replayed scan reports the CVEs of whenever it last
+	// ran, and a replayed push reports a delivery that never happened. Neither surfaces
+	// where it was caused.
+	//
+	// A reads-external op has two answers, not one: declare skip_cache, or let the
+	// spell probe the external data's identity (Tool.observe) so it keys like any other
+	// input. A mutates-external op has only the first: a side effect cannot be hashed.
+	CacheableExternalOp       DiagnosticCode = "MGS1033"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -350,7 +363,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
-	TimeoutDeclarationDrift,
+	TimeoutDeclarationDrift, CacheableExternalOp,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

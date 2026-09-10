@@ -46,8 +46,12 @@ fun podmanBuild(target: Target) > Command {
     return Command{bin = "podman", args = ["build"], hints = REGISTRY_HINTS};
 }
 // podman push is its own verb; docker reaches the same place through `buildx --push`.
+// mutates-external because the effect lands in a registry: a target that replayed this
+// would report a delivery that never happened. docker-buildx is deliberately NOT marked,
+// because it pushes only when the caller passes --push, and an op that reaches outward
+// half the time cannot answer this question for the target composing it.
 fun podmanPush(target: Target) > Command {
-    return Command{bin = "podman", args = ["push"], hints = REGISTRY_HINTS};
+    return Command{bin = "podman", args = ["push"], external = External.mutates, hints = REGISTRY_HINTS};
 }
 // Multi-platform images without buildx: build per-arch, then assemble and push a manifest
 // list. The caller supplies the list name and members through args.

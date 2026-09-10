@@ -49,7 +49,7 @@ export fun attest(ctx: magus\Context, args: [str]) > void {
 
 ## cosign-sign
 
---yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the target reference and flags.
+--yes skips the interactive transparency-log confirmation so signing/attesting runs unattended; the caller appends the target reference and flags. sign and attest write a signature to a registry and a record to the transparency log, so a replay reports a signature nobody can fetch. verify reads the other way: its verdict comes from the registry and the log rather than from this tree, so a cached pass survives the revocation that should have failed it.
 
 **Command:** `cosign sign --yes`
 

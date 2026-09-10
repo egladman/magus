@@ -16,7 +16,7 @@ tags:
 
 # Recommendations
 
-magus enforces one target name (`ci`) and reserves four charms (`rw`, `cd`, `gha`, `relock`).
+magus enforces one target name (`ci`) and reserves four charms (`rw`, `cd`, `gha`, `update`).
 Everything else about your layout is yours. That leaves real questions unanswered: what to call the charm that publishes, whether two charms
 may be combined, where a workspace's own error codes come from.
 
@@ -206,11 +206,12 @@ today but whether the name would mean the same thing if they did.
 | `fast`, `full`, `proper`       | describe a feeling, not a difference a reader can predict        | name the concrete difference              |
 | `nofrozen`, `skip-verify`      | negations of a default that is already implicit                  | name what is granted, not what is skipped |
 
-### A worked example: how `relock` got its name
+### A worked example: how the `update` charm got its name
 
-The built-in `relock` charm went through this rubric, and the trail is more useful
-than the verdict. The goal: one charm for the case where a run may rewrite dependency
-state, so an ordinary build never re-resolves dependencies as a side effect.
+The built-in `update` charm went through this rubric, lost, was named `relock`, and
+came back three months later and won. The whole trail is more useful than the verdict.
+The goal at the time: one charm for the case where a run may rewrite dependency state,
+so an ordinary build never re-resolves dependencies as a side effect.
 
 The first instinct is that a lockfile refresh is a write, so `rw` already covers it.
 Question 6 catches that: `rw` means "regenerate derived output from sources in this
@@ -220,46 +221,57 @@ result does not let you recover it by re-running. Same verb, different guarantee
 so folding it into `rw` would quietly widen what `rw` promises - and in a workspace
 with `default_charms: [rw]`, it would mean unrelated builds rewrite the lockfile.
 
-That establishes a new charm is warranted. Then the rubric runs:
+That establishes a new charm is warranted. Then the rubric ran:
 
-- `update` dies at question 2: it advances versions in pnpm and cargo, and refreshes
+- `update` died at question 2: it advances versions in pnpm and cargo, and refreshes
   metadata in apt and brew.
-- `upgrade` dies at question 1 as an action, and separately misdescribes the common
+- `upgrade` died at question 1 as an action, and separately misdescribed the common
   case: pinning a transitive package _down_ to dodge an advisory is not an upgrade.
 - `resolve` is technically accurate, since pinning, reconciling and advancing all
   re-run the resolver, but it is still a verb, and `magus vcs resolve` already
   spends the word.
-- `deps` survives 1 through 5 and stumbles on grammar: a bare noun reads as a
+- `deps` survived 1 through 5 and stumbled on grammar: a bare noun reads as a
   selector rather than a manner.
-- `relock` is what magus reserved.
+- `relock` is what magus reserved, on a technicality worth knowing. Bare `lock` is
+  disqualified above, and rightly: `cargo --locked` means do not touch it, `uv lock`
+  means rewrite it. The `re-` prefix collapses that ambiguity, because "lock it again"
+  cannot mean "leave it alone." A prefix that removes a reading is a legitimate way to
+  rescue an otherwise-ambiguous word.
 
-`relock` is worth dwelling on, because it **fails question 1 and was chosen anyway**.
-It is a verb, and a reader could reasonably want to type it as a target. That is a
-real cost, accepted deliberately: it is concrete where every alternative was abstract,
-and the artifact it names is the one piece of vocabulary nearly every ecosystem
-already shares.
+### Then a second op wanted the same grant
 
-It escapes question 2 on a technicality worth knowing. Bare `lock` is disqualified
-above, and rightly: `cargo --locked` means do not touch it, `uv lock` means rewrite
-it. The `re-` prefix collapses that ambiguity, because "lock it again" cannot mean
-"leave it alone." A prefix that removes a reading is a legitimate way to rescue an
-otherwise-ambiguous word.
+A vulnerability scanner refreshing its database asks the same question, may this run
+replace a pinned copy of the outside world, and `relock` could not be stretched over
+it. There is no lock file. The choice was a second charm on the same axis, which
+question 5 rules out, or a name that covers both.
 
-Two costs come with it, and neither is hidden. Go has no lockfile at all, so `relock`
-is a slight metaphor over `go.mod` and `go.sum`. And magus itself ships unrelated
-`.lock` files (`docs/active.urls.lock`), so the word is not unambiguous inside this
-workspace either. Both were judged smaller than the guessability `relock` buys.
+That is when the disqualification of `update` turned out to be the case FOR it.
+`update` was rejected for meaning several different things across ecosystems, all of
+them some version of "go and see what upstream has now." Read as a magus charm rather
+than as a package-manager subcommand, that breadth is the concept: the charm answers
+one question about the RUN, not about any one tool's verb. Question 2 asks whether a
+name means something conflicting elsewhere; it turned out to mean the same thing
+everywhere, at a coarser grain than any single ecosystem states it.
 
-Question 5 settles what the candidates kept reopening. "May dependency state change?"
-is one axis, and it is binary, so it takes one charm and no guard. Splitting it into
-a reconcile charm and an upgrade charm would put two charms on one axis, which needs
-a guard and asks every caller to know which they meant.
+The costs of `relock` were the other half. Go has no lockfile at all, so it was
+already a slight metaphor over `go.mod` and `go.sum`; magus itself ships unrelated
+`.lock` files (`docs/active.urls.lock`); and it fails question 1 outright as a verb a
+reader could reasonably want to type as a target. Those were accepted while the charm
+covered one concrete artifact. They stopped being worth paying once it did not.
+
+`relock` remains accepted as a compatibility alias for one release, resolving to
+`update` wherever a charm name is read.
+
+Question 5 settles what the candidates kept reopening. "May pinned upstream state
+change?" is one axis, and it is binary, so it takes one charm and no guard. Splitting
+it into a reconcile charm and an upgrade charm would put two charms on one axis, which
+needs a guard and asks every caller to know which they meant.
 
 None of this is checked by the tool. It is written down because the reasoning is
 easier to reuse than to rediscover, because two of these names looked obviously
 correct right up until someone checked what they meant elsewhere, and because the
-name that won broke a rule on this page. The rules are for thinking with, not for
-deciding by.
+name that lost on this page is the one that eventually fit. The rules are for
+thinking with, not for deciding by.
 
 ## A charm that makes a claim should check it
 

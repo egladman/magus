@@ -108,6 +108,14 @@
           "charms": [
             "rw"
           ],
+          "spells": [
+            {
+              "spell": "docker",
+              "ops": [
+                "trivy-image"
+              ]
+            }
+          ],
           "chain": [
             {
               "target": "image-build"

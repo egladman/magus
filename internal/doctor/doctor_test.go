@@ -326,6 +326,74 @@ func TestCheckCacheableSecretReads(t *testing.T) {
 	})
 }
 
+// TestCheckCacheableExternalOps is MGS1033. The two shapes get different remedies, and
+// the reads-external case has to be exempted by a PROBE as well as by skip_cache, or the
+// check would push every scanner out of the cache when keying its database would do.
+func TestCheckCacheableExternalOps(t *testing.T) {
+	scanner := func(observe bool) *spells.Spell {
+		tool := spells.Tool{Probe: spells.Command{Bin: "trivy", Args: []string{"version"}}}
+		if observe {
+			tool.Observe = spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}}
+		}
+		return spells.NewSpell("docker",
+			spells.WithTools(map[string]spells.Tool{"trivy": tool}),
+			spells.WithOps(map[string]spells.Op{
+				"trivy-image":  {Command: spells.Command{Bin: "trivy", Args: []string{"image"}, External: spells.ExternalReads}},
+				"docker-push":  {Command: spells.Command{Bin: "docker", Args: []string{"push"}, External: spells.ExternalMutates}},
+				"docker-build": {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+			}))
+	}
+	run := func(magusfile string, sp *spells.Spell, policies map[string]types.Target) types.DoctorCheck {
+		root := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		r := &runner{root: root}
+		return r.checkCacheableExternalOps([]*types.Project{{
+			Path: ".", Dir: root, TargetPolicies: policies, ResolvedSpells: []*spells.Spell{sp},
+		}})
+	}
+	// The import is load-bearing: the extractor only reads a bracket call as a spell op
+	// when the handle came from a spell import, so a body without it produces no ops and
+	// the check would pass for the wrong reason.
+	const imports = "import \"magus/spell/docker\";\n"
+	const scan = imports + "export fun scan(ctx: magus\\Context, _a: [str]) > void { docker[\"trivy-image\"](ctx); }\n"
+	const push = imports + "export fun ship(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-push\"](ctx); }\n"
+
+	t.Run("an op that declares nothing is clean", func(t *testing.T) {
+		got := run(imports+"export fun build(ctx: magus\\Context, _a: [str]) > void { docker[\"docker-build\"](ctx); }\n", scanner(false), nil)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("a cacheable reads-external op with no probe is flagged", func(t *testing.T) {
+		got := run(scan, scanner(false), nil)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Len(t, got.Details, 1)
+		assert.Contains(t, got.Details[0], `target "scan"`)
+		assert.Contains(t, got.Details[0], "docker::trivy-image", "the finding must name the op")
+		assert.Contains(t, got.Details[0], "skip_cache")
+		assert.Contains(t, got.Details[0], "observe probe", "both fixes, or the reader takes the lossy one")
+	})
+	t.Run("an observation probe keeps it cacheable", func(t *testing.T) {
+		got := run(scan, scanner(true), nil)
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("skip_cache exempts it too", func(t *testing.T) {
+		got := run(scan, scanner(false), map[string]types.Target{"scan": {SkipCache: true, SkipCacheReason: "reads a feed"}})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("a mutates-external op is flagged with a probe present", func(t *testing.T) {
+		// A side effect cannot be hashed, so an observation is no answer here: the
+		// finding must survive the fix that clears the reads-external case.
+		got := run(push, scanner(true), nil)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		assert.Contains(t, got.Details[0], "docker::docker-push")
+		assert.Contains(t, got.Details[0], "effect outside this tree")
+		assert.NotContains(t, got.Details[0], "observe probe")
+	})
+	t.Run("skip_cache exempts the mutating op", func(t *testing.T) {
+		got := run(push, scanner(true), map[string]types.Target{"ship": {SkipCache: true, SkipCacheReason: "publishes per invocation"}})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+}
+
 func TestCheckRedundantFootprintGlobs(t *testing.T) {
 	r := &runner{root: t.TempDir()}
 	t.Run("no redundancy is clean", func(t *testing.T) {

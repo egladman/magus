@@ -754,19 +754,19 @@ var (
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
 	// exact magus equivalent to route to, so the third deny trigger does not apply.
-	// It is here because relock is under-discoverable (a reserved charm nothing
+	// It is here because update is under-discoverable (a reserved charm nothing
 	// prompts for), and a lockfile refreshed outside magus is a write the cache and
 	// the affected set never saw.
 	//
-	// The covering TARGET is not named and cannot be: relock is magus vocabulary,
+	// The covering TARGET is not named and cannot be: update is magus vocabulary,
 	// but which target carries the dependency work is the workspace's.
 	//
 	// Shared with the raw-tool deny, which appends it when the denied command is
 	// also a re-resolution (`go mod tidy` is both), so the charm is named whichever
 	// rule answers first.
-	relockAdvice = "Run the covering target with the relock charm (`" + hint.Run.With("<target>:relock", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
-		"relock is the reserved charm for rewriting DEPENDENCY state, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry serves today is relock. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
-	relockGuardContext = "magus workspace: " + relockAdvice
+	updateAdvice = "Run the covering target with the update charm (`" + hint.Run.With("<target>:update", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
+		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
+	updateGuardContext = "magus workspace: " + updateAdvice
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status: it already says the command passed, and a message that prints only on success adds nothing."
@@ -1135,7 +1135,7 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 		// npm update` denies on the first half, and the reader was never told the
 		// second half rewrites a lockfile: the deny is the only text they get.
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
-			reason += "\n" + relockAdvice
+			reason += "\n" + updateAdvice
 		}
 		return bashGuardVerdict{
 			Deny: explainDeny(command, rawToolCmd, reason),
@@ -1148,7 +1148,7 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	case magusRedirected(command):
 		return bashGuardVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
-		return bashGuardVerdict{Context: relockGuardContext}
+		return bashGuardVerdict{Context: updateGuardContext}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case fires(cmds, parsed, command, docSearchFires, guardDocSearchRe):

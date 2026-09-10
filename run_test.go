@@ -1502,3 +1502,47 @@ func TestUndeclaredScopeEvent(t *testing.T) {
 		})
 	}
 }
+
+// TestObservationsForTarget covers the scoping that makes a probed observation
+// affordable. A version probe keys every target in every project binding the spell,
+// which is fine for a value that moves when someone upgrades a toolchain. A
+// vulnerability database moves every few hours, so the same treatment would cost the
+// project's whole cache on a clock: only the targets that actually drive the binary may
+// carry it.
+func TestObservationsForTarget(t *testing.T) {
+	sp := spells.NewSpell("docker", spells.WithOps(map[string]spells.Op{
+		"trivy-image":  {Command: spells.Command{Bin: "trivy", Args: []string{"image", "--skip-db-update"}}},
+		"docker-build": {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+	}))
+	p := &types.Project{
+		Path:           ".",
+		ResolvedSpells: []*spells.Spell{sp},
+		TargetSpellOps: map[string][]types.TargetSpellUse{
+			"image-scan":  {{Spell: "docker", Ops: []string{"trivy-image"}}},
+			"image-build": {{Spell: "docker", Ops: []string{"docker-build"}}},
+		},
+	}
+	probed := map[string]string{"docker:trivy": "db 2026-09-10"}
+
+	assert.Equal(t, []string{"docker:trivy:db 2026-09-10"}, observationsForTarget(p, "image-scan", probed),
+		"the target driving trivy carries the database it read")
+	assert.Empty(t, observationsForTarget(p, "image-build", probed),
+		"a target that drives a different binary must not pay for trivy's database")
+	assert.Empty(t, observationsForTarget(p, "test", probed),
+		"a target that names no spell op carries no observation")
+	assert.Empty(t, observationsForTarget(p, "image-scan", nil),
+		"no probe, no line: the key is unchanged for a spell that declares none")
+}
+
+// TestApplyRunKeyingCarriesObservations pins the two halves of the obs: class landing in
+// one place. buildStep puts the target's ctx.observes lines on the step and the run
+// scheduler adds the probed ones, so an assignment here would silently drop whichever
+// arrived first, and the key would lose an input with nothing to notice.
+func TestApplyRunKeyingCarriesObservations(t *testing.T) {
+	step := cache.Step{Observations: []string{"schema-rev=a1b2c3"}}
+	applyRunKeying(&step, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
+
+	assert.Equal(t, []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"}, step.Observations)
+	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
+	assert.Equal(t, []string{"rw"}, step.Charms)
+}

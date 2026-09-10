@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A spell can now tell magus which copy of the world its tool is reading, and a doctor
+  check asks when it should.** A `Tool` may declare an `observe` command beside its version
+  probe; magus runs it at key time and folds the output into the cache key as an `obs:`
+  line, the same input class `ctx.observes` states by hand. The pair matters because the
+  two answers move on different clocks: trivy ships a release every few weeks and its
+  vulnerability database is built every six hours, so keying only the version replays
+  yesterday's CVEs against today's image. Unlike a version probe it is scoped to the
+  targets whose ops actually drive that binary, so a value that changes every six hours
+  does not cost an unrelated build its cache. Alongside it, an op declares its relation to
+  the world outside the tree: `reads-external` for a verdict that comes from a live feed,
+  `mutates-external` for a push, a signature or a deploy. `magus doctor` fails a
+  cacheable target composing one that has neither an observation probe nor `skip_cache`
+  (MGS1033). Reaching the network is not the test: `go mod tidy` declares nothing, because
+  `go.sum` pins what comes back. The docker spell gains a `trivy-image` op that scans
+  offline by default (`--skip-db-update`) and refreshes under the update charm, and this
+  repository's own `image-scan` drops `skip_cache` on the strength of it.
 - **A URL in a comment is now a link the graph can follow.** Every http(s) URL in a Go or
   Buzz comment, every absolute markdown link on a page, and the source a generated page
   names in its `generated_from` frontmatter becomes an edge from the file or page that
@@ -189,6 +205,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The `relock` charm is now `update`.** One charm, one meaning: move a pinned copy of
+  upstream state forward to what upstream serves today. Re-resolving a lockfile and
+  refreshing a scanner's vulnerability database are the same grant, so they share a name,
+  and `relock` could not be stretched over a database that locks nothing. `ci` strips it
+  exactly as it stripped `relock`, and it is still deliberately not part of `rw`, which
+  covers output reproducible from a clean checkout. `relock` remains accepted everywhere
+  `update` is for one release, resolving to it wherever a charm name is read, and magus
+  prints the new spelling the first time a run uses the old one.
 - **The PR advice comment leads with the files no project claims.** The section is ranked
   first rather than posted in the order its step ran, and it now names what an undeclared
   file costs: the containing project reruns on every touch while the cache key stays put,

@@ -248,7 +248,7 @@ var skillOutputGlob = regexp.MustCompile(`"(\.(?:claude|agents|opencode)/skills/
 // thing in its own words and rewording it should not fail a gate, but dropping
 // the CAPABILITY should.
 var guardAdviceSkillCoverage = map[string]string{
-	"relock":     "relock",
+	"update":     ":update",
 	"checkpoint": "magus vcs checkpoint",
 	"search":     "magus refs",
 	"cwd":        "magus where",
@@ -266,7 +266,7 @@ var guardAdviceSkillCoverage = map[string]string{
 // The installed skills ARE the common channel: plain files every host reads,
 // carrying no host conditionals. So anything the guard would advise has to be in
 // one, or three hosts out of four never learn it. That was not true when this was
-// written: relockGuardContext existed with `relock` appearing in no skill at all,
+// written: the charm advisory existed with the charm appearing in no skill at all,
 // while the OpenCode plugin's own comment claimed "the same guidance ships in the
 // installed skills, which is why the skills and the guard say the same things".
 //

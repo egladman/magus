@@ -20,9 +20,14 @@ export fun mgs_getName() > str { return "cosign"; }
 
 // --yes skips the interactive transparency-log confirmation so signing/attesting
 // runs unattended; the caller appends the target reference and flags.
-fun sign(target: Target) > Command { return Command{bin = "cosign", args = ["sign", "--yes"]}; }
-fun verify(target: Target) > Command { return Command{bin = "cosign", args = ["verify"]}; }
-fun attest(target: Target) > Command { return Command{bin = "cosign", args = ["attest", "--yes"]}; }
+//
+// sign and attest write a signature to a registry and a record to the transparency log,
+// so a replay reports a signature nobody can fetch. verify reads the other way: its
+// verdict comes from the registry and the log rather than from this tree, so a cached
+// pass survives the revocation that should have failed it.
+fun sign(target: Target) > Command { return Command{bin = "cosign", args = ["sign", "--yes"], external = External.mutates}; }
+fun verify(target: Target) > Command { return Command{bin = "cosign", args = ["verify"], external = External.reads}; }
+fun attest(target: Target) > Command { return Command{bin = "cosign", args = ["attest", "--yes"], external = External.mutates}; }
 
 export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {

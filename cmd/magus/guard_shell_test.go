@@ -1081,15 +1081,15 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 	}
 }
 
-// TestGuardAdvisesRelockOnDependencyMutations covers the one rule that routes to a
+// TestGuardAdvisesUpdateOnDependencyMutations covers the one rule that routes to a
 // CHARM rather than a command. Re-resolving dependencies writes state that is not
-// reproducible from a clean checkout, which is the whole line between rw and relock
-// (types.CharmRelock), and relock is under-discoverable: nothing prompts for a
+// reproducible from a clean checkout, which is the whole line between rw and update
+// (types.CharmUpdate), and update is under-discoverable: nothing prompts for a
 // reserved charm nobody declared.
 //
 // ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
 // is none: magus has no verb that re-resolves dependencies on its own.
-func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
+func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
 		"go get github.com/foo/bar@latest",
@@ -1105,7 +1105,7 @@ func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
-		assert.Contains(t, v.Context, ":relock", "%q must name the charm that makes the write legal", cmd)
+		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
@@ -1113,13 +1113,13 @@ func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 	// the reader is sent to a target that would refuse the write.
 	tidy := evaluateBashGuard("go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
-	assert.Contains(t, tidy.Deny, ":relock")
+	assert.Contains(t, tidy.Deny, ":update")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
 	// dependency at all. Firing here would put an advisory on the most routine
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
-		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":relock", "%q does not re-resolve dependencies", cmd)
+		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
 	}
 }
 

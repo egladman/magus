@@ -650,3 +650,75 @@ func TestDecodeCommandSources(t *testing.T) {
 		assert.False(t, cmd.SourcesEach)
 	})
 }
+
+// TestDecode_CommandExternal covers the op's declared relation to the world, both
+// directions. It decodes as a value the doctor check reads (MGS1033), and an unknown
+// value is a LOAD error rather than a lenient zero: an op that meant mutates-external and
+// misspelled it would otherwise decode as "declares nothing" and be silently exempt from
+// the one check it was opting into.
+func TestDecode_CommandExternal(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"scan": map[string]any{
+				"bin":      "trivy",
+				"args":     []string{"image"},
+				"external": "reads-external",
+			},
+			"push": map[string]any{
+				"bin":      "cosign",
+				"args":     []string{"sign"},
+				"external": "mutates-external",
+			},
+			"build": map[string]any{"bin": "go", "args": []string{"build"}},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	assert.Equal(t, spells.ExternalReads, m.Ops["scan"].External)
+	assert.Equal(t, spells.ExternalMutates, m.Ops["push"].External)
+	assert.Equal(t, spells.ExternalNone, m.Ops["build"].External,
+		"declaring nothing is the default and the honest answer for most ops")
+
+	bad := mapObj{
+		"name": "myspell",
+		"ops": map[string]any{
+			"scan": map[string]any{"bin": "trivy", "external": "reads-network"},
+		},
+	}
+	_, err = Decode(bad)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "reads-network")
+	assert.Contains(t, err.Error(), "reads-external", "the message must name what is accepted")
+}
+
+// TestDecode_ToolObserve covers the observation probe decoding beside the version probe,
+// and the emptiness rule they share: a tool entry declaring only an observe command is
+// still a tool magus knows something about, so it must survive the drop that removes
+// entries declaring nothing.
+func TestDecode_ToolObserve(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"tools": map[string]any{
+			"trivy": map[string]any{
+				"probe":   map[string]any{"bin": "trivy", "args": []string{"version"}},
+				"observe": map[string]any{"bin": "trivy", "args": []string{"version", "--format", "json"}},
+			},
+			"feed": map[string]any{
+				"observe": map[string]any{"bin": "feedctl", "args": []string{"revision"}},
+			},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+
+	trivy := m.Tools["trivy"]
+	assert.Equal(t, []string{"version"}, trivy.Probe.Args)
+	assert.Equal(t, []string{"version", "--format", "json"}, trivy.Observe.Args)
+	assert.True(t, trivy.HasObservationProbe())
+
+	feed, ok := m.Tools["feed"]
+	require.True(t, ok, "a tool declaring only an observe probe must not be dropped")
+	assert.True(t, feed.HasObservationProbe())
+	assert.False(t, feed.HasProbe(), "an observation is not a version")
+}

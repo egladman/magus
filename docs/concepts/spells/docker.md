@@ -15,6 +15,8 @@ The `docker` spell forks the `docker` CLI (and `hadolint`) to build images and l
 
 **Version probe (hadolint):** `hadolint --version`
 
+**Version probe (trivy):** `trivy version`
+
 ## Passing arguments to ops
 
 Every op is invoked as `docker["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
@@ -117,4 +119,28 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
     docker["hadolint"](ctx);
 }
 ```
+
+## trivy-image
+
+Scans an image OFFLINE by default: --skip-db-update is documented as "skip updating vulnerability database", so a plain run answers from the copy already on disk and downloads nothing (https://trivy.dev/latest/docs/references/configuration/cli/trivy_image/, read 2026-09-10). The caller appends the image reference and any output flags. The update charm drops the flag, which is the whole refresh: trivy pulls a stale database itself before scanning, so the arm needs no second command the way a separate --download-db-only pass would. Offline is the DEFAULT rather than the option because the charm is what says a run may move pinned upstream state forward, and a scan that silently refreshed its feed would be doing exactly that without being asked, and would change its verdict under an unchanged tree. What keeps that honest is the observe probe in mgs_getTools: the database on disk is in the cache key, so a scan replays only against the copy it was run against, and `image-scan:update` is what mints a new key. --offline-scan is NOT this flag and is deliberately not set: it stops trivy issuing API requests to identify dependencies (a Java-analysis concern), not database downloads.
+
+**Command:** `trivy image --skip-db-update`
+
+### update
+
+Drops `--skip-db-update`.
+
+<details class="charm-patch">
+<summary>JSON Patch</summary>
+
+```json
+[
+  {
+    "op": "remove",
+    "path": "/1"
+  }
+]
+```
+
+</details>
 

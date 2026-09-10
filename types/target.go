@@ -376,10 +376,13 @@ func ParseTarget(s string) (Target, error) {
 			if err := ValidateCharmName(g); err != nil {
 				return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 			}
-			if n := Normalize(g); n != g {
+			// NormalizeCharm, not Normalize: the compat alias is a rewritten spelling
+			// like any casing fold, so it lands in DeclaredCharms and the CLI teaches
+			// the canonical name from the same place it teaches the others.
+			if n := NormalizeCharm(g); n != g {
 				declaredCharms = append(declaredCharms, g)
 			}
-			charms = append(charms, Normalize(g))
+			charms = append(charms, NormalizeCharm(g))
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {

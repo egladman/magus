@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `64` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `3e7b17564a02` |
+| `skill-content` | `230f01f61093` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -102,9 +102,9 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
-   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
-   <target>:relock <project>`. It is reserved and deliberately not part of `rw` -
-   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
+   <target>:update <project>`. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today. Applying a lockfile (`npm ci`,
    `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
@@ -282,10 +282,10 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
-   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
-   <target>:relock <project>`, so the rewrite happens inside magus, cached and
+   update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
+   <target>:update <project>`, so the rewrite happens inside magus, cached and
    visible to affected tracking. It is reserved and deliberately not part of `rw` -
-   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today. `ci` strips both, so a gate verifies
    the committed lockfile rather than refreshing it. Applying a lockfile (`npm ci`,
    `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.

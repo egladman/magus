@@ -344,6 +344,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkCacheableSecretReads,
 	},
 	{
+		Name:           "cacheable-external-ops",
+		Doc:            "a cacheable target composing an op that reads a live feed or has an effect outside the tree",
+		Code:           types.CacheableExternalOp,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkCacheableExternalOps,
+	},
+	{
 		Name:           "redundant-footprint-globs",
 		Doc:            "a per-target output glob already declared project-wide",
 		Code:           types.RedundantFootprintGlob,

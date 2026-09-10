@@ -83,34 +83,46 @@ The project is a **positional** argument, not part of the token. See the full gr
 
 `rw` carries no special flag. Like every other charm, you activate it with a `:rw` suffix (`magus run format:rw`). There is no `-w`/`--write` shortcut and no `--write` flag: the suffix is the one way to ask for it.
 
-**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` and `relock` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
+**CI is always read-only.** `Magus.RunCI` strips the `rw` charm before dispatch, so the composite `ci` pipeline can never mutate the tree even if a caller requests it (e.g. `ci:rw`). `rw` and `update` are the two charms with this strip status; the other built-ins (`cd`, `gha`) and every workspace charm you define are ordinary vocabulary that survive into `ci`.
 
-## The `relock` charm
+## The `update` charm
 
-`relock` is the other built-in write grant, and it is deliberately **not** part of `rw`. Both let a run write, but they differ in what kind of write, and that difference is the whole reason there are two:
+`update` is the other built-in write grant, and it is deliberately **not** part of `rw`. Both let a run write, but they differ in what kind of write, and that difference is the whole reason there are two:
 
-|                     | `rw`                                                                                   | `relock`                                             |
-| ------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| what it writes      | derived output, from sources already in this tree                                      | dependency state: a lockfile, or `go.mod`/`go.sum`   |
-| where the input is  | the tree                                                                               | the tree **and** a remote registry                   |
-| deterministic?      | yes: same sources, same bytes                                                          | no: same sources, different bytes on a different day |
-| discard the result? | re-run reproduces it exactly                                                           | re-running gives you whatever upstream serves now    |
-| typical ops         | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate`, `go-mod-edit` | `go-mod-tidy`                                        |
+|                     | `rw`                                                                                   | `update`                                                        |
+| ------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| what it writes      | derived output, from sources already in this tree                                      | a pinned copy of upstream state: a lockfile, a scanner database |
+| where the input is  | the tree                                                                               | the tree **and** a remote registry or feed                      |
+| deterministic?      | yes: same sources, same bytes                                                          | no: same sources, different bytes on a different day            |
+| discard the result? | re-run reproduces it exactly                                                           | re-running gives you whatever upstream serves now               |
+| typical ops         | `go-fmt`, `prettier`, `biome-format`, `golangci-lint --fix`, `generate`, `go-mod-edit` | `go-mod-tidy`, `trivy-image`                                    |
 
-That last row is the practical test. **If re-running the target from a clean checkout would reproduce the same bytes, it is `rw`. If the answer depends on what a registry serves today, it is `relock`.**
+That last row is the practical test. **If re-running the target from a clean checkout would reproduce the same bytes, it is `rw`. If the answer depends on what a registry serves today, it is `update`.**
 
-The two `go mod` ops are the sharpest illustration, and they land on opposite sides despite the shared prefix. `go mod edit` "reads only go.mod; it does not look up information about the modules involved", so the same tree always yields the same bytes and its write charm is `rw`. `go mod tidy` resolves against the module proxy, and an import `go.mod` does not require yet arrives at whatever upstream serves today, so its write charm is `relock`.
+The two `go mod` ops are the sharpest illustration, and they land on opposite sides despite the shared prefix. `go mod edit` "reads only go.mod; it does not look up information about the modules involved", so the same tree always yields the same bytes and its write charm is `rw`. `go mod tidy` resolves against the module proxy, and an import `go.mod` does not require yet arrives at whatever upstream serves today, so its write charm is `update`.
 
 The split exists because `default_charms` makes the distinction expensive. A workspace with `default_charms: [rw]` has granted every local run permission to write, which is fine for formatters: an unwanted `gofmt` is reproducible and reviewable. Granting the same run permission to re-resolve dependencies is not fine, because an unrelated build then rewrites your lockfile, widening both the review diff and the affected set for work that never asked to touch dependencies.
 
+### One grant, not one file format
+
+A lockfile is the obvious case, not the boundary. A vulnerability scanner's database is
+the same grant under a different name: `trivy image` scans against the copy already on
+disk, and `trivy image:update` refreshes it first. Nothing is locked, and the question is
+identical: may this run replace what it pinned of the outside world?
+
+That is why the charm is `update` rather than the `relock` it was named while `go mod
+tidy` was the only op claiming it. `relock` still works everywhere `update` does and
+resolves to it, for one release; magus prints the new spelling the first time you use the
+old one.
+
 ### They stack
 
-Charms are an unordered, additive set, so `rw` and `relock` compose like any other pair. They answer different questions, so neither overrides the other:
+Charms are an unordered, additive set, so `rw` and `update` compose like any other pair. They answer different questions, so neither overrides the other:
 
 ```sh
 magus run format              # check only: report formatting, report go.mod drift
 magus run format:rw           # rewrite formatting; go mod tidy still only reports
-magus run format:rw,relock    # also let go mod tidy amend go.mod and go.sum
+magus run format:rw,update    # also let go mod tidy amend go.mod and go.sum
 magus run generate:rw         # write derived output; touches no dependency versions
 ```
 
@@ -128,7 +140,7 @@ default_charms: [rw] # `magus run format` now writes; no :rw needed
 Per-run charms stack on top, exactly as if you had typed the whole set. Three things keep it safe:
 
 - **`magus affected` does not apply them**, so CI (which runs `magus affected ci`) stays read-only regardless of the workspace default.
-- **`RunCI` still strips `rw` and `relock`**, so even a local `magus run ci` verifies without writing, and never re-resolves dependencies.
+- **`RunCI` still strips `rw` and `update`**, so even a local `magus run ci` verifies without writing, and never re-resolves dependencies or refreshes a scanner database.
 - **`--no-default-charms`** ignores the defaults for one run (`magus run format --no-default-charms` to check without rewriting).
 
 `MAGUS_DEFAULT_CHARMS` (comma-separated) is the environment equivalent. It only sets the default baseline; it never changes what a charm means, so `has_charm("rw")` in spells and targets is unaffected.
