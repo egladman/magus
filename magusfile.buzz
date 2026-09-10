@@ -2811,7 +2811,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     // as modified rather than written: a declared output lands in .gitattributes, and an
     // ignored path there names a file that can never be tracked.
     ctx.modifiesExistingFiles("benchmarks/agent/report.md");
-    ctx.writesFiles("benchmarks/agent/reports/*.md");
+    ctx.writesFiles("benchmarks/agent/reports/**/*.md");
     var results = "results";
     var publish = "";
     var synthetic = false;
@@ -2827,7 +2827,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
             publish = args[i + 1];
             i = i + 2;
         } else {
-            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --results <dir>, --publish <name>)";
+            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --results <dir>, --publish <provider>)";
         }
     }
     // The binary lands outside the tree: under benchmarks/agent it would be a path
@@ -2860,17 +2860,26 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// publish_report commits a rendered report under benchmarks/agent/reports with the
-// environment stamped after its title, the way BENCHMARKS.md carries its own: a
-// number on the docs site has to trace to a date, a build and a machine. The docs
-// project mirrors every file in that directory into a page.
-fun publish_report(agent: str, results: str, name: str) > void !> any {
+// publish_report commits a rendered report at
+// benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped
+// after its title, the way BENCHMARKS.md carries its own: a number on the docs site
+// has to trace to a date, a build and a machine. The provider is given, because a
+// model id does not carry it; the model is the one the runs used, so a tree that
+// mixes models is refused rather than filed under one of them. The docs project
+// mirrors every file under that directory into a page.
+fun publish_report(agent: str, results: str, provider: str) > void !> any {
     final report = fs\readFile(fs\join(agent, "report.md"));
     final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
     var models = "";
+    var count = 0;
     foreach (model in analysis["models"]) {
         if (models != "") { models = models + ", "; }
         models = models + "{model}";
+        count = count + 1;
+    }
+    if (count != 1) {
+        throw "agent-bench-report: --publish files a report under one model, and `" + results
+            + "` carries " + "{count}" + " (" + models + ")";
     }
     // The magus that ran the trials, from the first run's own record; the version
     // string carries a second line when a daemon of another build was up.
@@ -2883,13 +2892,15 @@ fun publish_report(agent: str, results: str, name: str) > void !> any {
             break;
         }
     }
-    final stamp = "Published " + time\nowIso() + " from `" + results + "`: {analysis["runs"]} scored run(s), "
-        + "model(s) " + models + ", " + version + ", host " + os\platform().join("/") + ".";
+    final now = time\nowIso();
+    final stamp = "Published " + now + " from `" + results + "`: {analysis["runs"]} scored run(s), "
+        + "model " + models + " (" + provider + "), " + version + ", host " + os\platform().join("/") + ".";
     final title = report.split("\n")[0];
-    fs\mkdirAll(fs\join(agent, "reports"));
-    fs\writeFile(fs\join(agent, "reports", name + ".md"),
-        report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
-    magus\log.info("benchmark report published to " + fs\join(agent, "reports", name + ".md"));
+    final dir = fs\join(agent, "reports", now.sub(0, len: 10), provider);
+    final target = fs\join(dir, models + ".md");
+    fs\mkdirAll(dir);
+    fs\writeFile(target, report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
+    magus\log.info("benchmark report published to " + target);
 }
 
 // Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at

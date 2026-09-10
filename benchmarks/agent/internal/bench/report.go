@@ -60,7 +60,7 @@ type row []string
 func table(header row, rows []row) []string {
 	widths := make([]int, len(header))
 	for i, cell := range header {
-		widths[i] = max(3, utf8.RuneCountInString(cell))
+		widths[i] = utf8.RuneCountInString(cell)
 	}
 	for _, r := range rows {
 		for i, cell := range r {
@@ -308,7 +308,9 @@ func Report(a *Analysis) string {
 			a.Runs, len(a.Tasks), strings.Join(a.Arms, " and "), models, a.Seed),
 		"",
 	}
+	// Every section ends with an empty line, so the join already closes the file
+	// with one newline, which is the one dprint keeps.
 	lines := slices.Concat(head, controlsSection(a), headlineSection(a), paretoSection(a),
 		deltasSection(a), passRatesSection(a), caveatsSection(a))
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(lines, "\n")
 }

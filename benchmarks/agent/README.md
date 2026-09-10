@@ -305,13 +305,15 @@ The analysis is a Go package under `internal/bench/` with one binary,
 ## Publishing a run
 
 `results/` is gitignored, so a run that is worth keeping is published as its
-report: `magus run agent-bench-report . -- --publish <date>-<model>` writes the
-rendered report to `reports/<date>-<model>.md` with the run's environment
-stamped after the title (date, scored runs, models, the magus build the trials
-recorded, the host). That directory is committed, and the docs project mirrors
-every file in it onto the site under Benchmarks, so a number a reader meets
-there traces back to a date, a build and a machine. Pass `--results <dir>` for
-a tree other than `results/`, as the Opus pilot did.
+report: `magus run agent-bench-report . -- --publish <provider>` writes the
+rendered report to `reports/<date>/<provider>/<model>.md`, the date being
+today's and the model the one the runs used, with the run's environment stamped
+after the title (publish time, scored runs, model and provider, the magus build
+the trials recorded, the host). That directory is committed, and the docs
+project mirrors every file in it onto the site under Benchmarks at the same
+path, so a number a reader meets there traces back to a date, a build and a
+machine. Pass `--results <dir>` for a tree other than `results/`, as the Opus
+pilot did; a tree that mixes models is refused.
 
 ## Not built yet
 

@@ -1,6 +1,13 @@
+---
+title: "Agent harness benchmark (2026-09-10, anthropic claude-sonnet-5)"
+generated_from: benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md
+description: One published run of the agent harness benchmark, the controls first, then cost-of-pass, paired deltas and pass rates. Generated from the committed report.
+tags: [benchmarks, agents, harness, measurement]
+---
+
 # Harness-effectiveness benchmark
 
-Published 2026-09-10T15:15:26Z from `results`: 6 scored run(s), model(s) claude-sonnet-5, magus v0.4.3-76-g63871b145 (63871b145) built 2026-09-09T22:55:47-04:00, host darwin/arm64/v8.
+Published 2026-09-10T15:28:56Z from `results`: 6 scored run(s), model claude-sonnet-5 (anthropic), magus v0.4.3-76-g63871b145 (63871b145) built 2026-09-09T22:55:47-04:00, host darwin/arm64/v8.
 
 6 runs, 1 task(s), arms full and rampant, model(s) claude-sonnet-5, bootstrap seed 20260902.
 
@@ -16,19 +23,19 @@ Whether each task's check can tell a solution from its absence: the golden contr
 
 Expected dollars per correct solution (mean dollars / pass rate).
 
-| arm     | n   | passes | pass rate | Wilson 95%     | mean $  | median $ | cost-of-pass |
-| ------- | --- | ------ | --------- | -------------- | ------- | -------- | ------------ |
-| full    | 3   | 3      | 100%      | [0.439, 1.000] | $0.4441 | $0.3996  | $0.4441      |
-| rampant | 3   | 3      | 100%      | [0.439, 1.000] | $0.2196 | $0.2120  | $0.2196      |
+| arm     | n | passes | pass rate | Wilson 95%     | mean $  | median $ | cost-of-pass |
+| ------- | - | ------ | --------- | -------------- | ------- | -------- | ------------ |
+| full    | 3 | 3      | 100%      | [0.439, 1.000] | $0.4441 | $0.3996  | $0.4441      |
+| rampant | 3 | 3      | 100%      | [0.439, 1.000] | $0.2196 | $0.2120  | $0.2196      |
 
 ## Correctness against median tokens
 
 The cost-accuracy frontier in text: pass rate beside the token spend it cost.
 
-| arm     | task               | n   | pass@1 | median tokens | median tokens (passes only) | median $ |
-| ------- | ------------------ | --- | ------ | ------------- | --------------------------- | -------- |
-| full    | merge-config-falsy | 3   | 100%   | 701714        | 701714                      | $0.3996  |
-| rampant | merge-config-falsy | 3   | 100%   | 386919        | 386919                      | $0.2120  |
+| arm     | task               | n | pass@1 | median tokens | median tokens (passes only) | median $ |
+| ------- | ------------------ | - | ------ | ------------- | --------------------------- | -------- |
+| full    | merge-config-falsy | 3 | 100%   | 701714        | 701714                      | $0.3996  |
+| rampant | merge-config-falsy | 3 | 100%   | 386919        | 386919                      | $0.2120  |
 
 ## Paired deltas, full minus rampant
 
@@ -86,10 +93,10 @@ Rep i of one arm is paired with rep i of the other. CI is a seeded 10000-sample 
 
 pass@1 is capability; pass^k (all k reps succeed) is reliability.
 
-| arm     | task               | k   | pass@1 | Wilson 95%     | pass^k |
-| ------- | ------------------ | --- | ------ | -------------- | ------ |
-| full    | merge-config-falsy | 3   | 100%   | [0.439, 1.000] | 1      |
-| rampant | merge-config-falsy | 3   | 100%   | [0.439, 1.000] | 1      |
+| arm     | task               | k | pass@1 | Wilson 95%     | pass^k |
+| ------- | ------------------ | - | ------ | -------------- | ------ |
+| full    | merge-config-falsy | 3 | 100%   | [0.439, 1.000] | 1      |
+| rampant | merge-config-falsy | 3 | 100%   | [0.439, 1.000] | 1      |
 
 ## Caveats
 
@@ -97,4 +104,3 @@ pass@1 is capability; pass^k (all k reps succeed) is reliability.
 - Under the 5-rep protocol: full/merge-config-falsy, rampant/merge-config-falsy. Treat those deltas as directional.
 - No activity trail for 3 run(s) (rampant-merge-config-falsy-r1-20260910T121032Z, rampant-merge-config-falsy-r2-20260910T121116Z, rampant-merge-config-falsy-r3-20260910T121152Z); their guard_events are null, not zero.
 - Dollars are the host's billed cost; the pricing table would have said 0.67x that, so the table is wrong for this model and only backs runs with no result record.
-

@@ -36,10 +36,10 @@ reliability, and cost-of-pass, the expected dollars per correct solution.
 
 Published runs:
 
-- [2026-09-10, Sonnet 5](benchmarks/2026-09-10-sonnet-5.md), the pilot: one
-  task, three reps per arm.
-- [2026-09-10, Opus 5](benchmarks/2026-09-10-opus-5.md), the same grid under
-  Opus 5.
+- [2026-09-10, Sonnet 5](benchmarks/2026-09-10/anthropic/claude-sonnet-5.md),
+  the pilot: one task, three reps per arm.
+- [2026-09-10, Opus 5](benchmarks/2026-09-10/anthropic/claude-opus-5.md), the
+  same grid under Opus 5.
 
 Read a pilot for what it is. Three reps on one task cannot separate the arms on
 correctness, and the reports say so in their caveats; what they can show is the

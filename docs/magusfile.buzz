@@ -236,10 +236,10 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // is hashed, not executed, so no buf step enters this project's boundary.
         workspace\file("proto/magus/**/*.proto"),
         workspace\file("proto/gen/descriptor.binpb"), workspace\file("CHANGELOG.md"),
-        workspace\file("benchmarks/agent/reports/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
+        workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/**/*.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -285,16 +285,21 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     // and the build-tool comparison at benchmarks/BENCHMARKS.md become a page under
     // benchmarks/, linked from the hand-written benchmarks.md index.
     fs\mkdirAll("benchmarks");
-    foreach (report in fs\glob("../benchmarks/agent/reports/*.md")) {
-        final file = report.value;
-        final name = fs\basename(file).split(".md").join("");
-        final body = fs\readFile(file);
-        fs\writeFile(fs\join("benchmarks", name + ".md"),
-            "---\ntitle: \"Agent harness benchmark (" + name + ")\"\n"
-            + "generated_from: benchmarks/agent/reports/" + name + ".md\n"
+    // A report sits at reports/<date>/<provider>/<model>.md and keeps that path on
+    // the site, so a URL names the run the way the tree does.
+    foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
+        final rel = report.value.split("../benchmarks/agent/reports/").join("");
+        final segments = rel.split("/");
+        final date = segments[0];
+        final provider = segments[1];
+        final model = segments[2].split(".md").join("");
+        fs\mkdirAll(fs\join("benchmarks", date, provider));
+        fs\writeFile(fs\join("benchmarks", rel),
+            "---\ntitle: \"Agent harness benchmark (" + date + ", " + provider + " " + model + ")\"\n"
+            + "generated_from: benchmarks/agent/reports/" + rel + "\n"
             + "description: One published run of the agent harness benchmark, the controls first, then cost-of-pass, paired deltas and pass rates. Generated from the committed report.\n"
             + "tags: [benchmarks, agents, harness, measurement]\n---\n\n"
-            + body);
+            + fs\readFile(report.value));
     }
     fs\writeFile("benchmarks/build-tools.md",
         "---\ntitle: Build-tool benchmarks\ngenerated_from: benchmarks/BENCHMARKS.md\n"

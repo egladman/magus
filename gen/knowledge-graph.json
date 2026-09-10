@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5531,
-  "edge_count": 9804,
+  "node_count": 5535,
+  "edge_count": 9808,
   "relations": [
     {
       "id": "annotates",
@@ -1147,7 +1147,7 @@
       "label": "benchmarks",
       "source": "benchmarks",
       "attrs": {
-        "dir_files": "161",
+        "dir_files": "163",
         "dir_languages": "buzz,markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catch-me-u"
       }
     },
@@ -1157,7 +1157,7 @@
       "label": "benchmarks/agent",
       "source": "benchmarks/agent",
       "attrs": {
-        "dir_files": "119",
+        "dir_files": "121",
         "dir_languages": "markdown,md#add-a-percentile-helper-to-packagesplatformmetrics,md#agent-benchmark-task-corpus,md#agent-harness-effectiveness-benchmark,md#analysis,md#answer,md#answer-format,md#arms,md#behavior-change,md#benchmark-analysis,md#budget-caps,md#catch-me-up-on-"
       }
     },
@@ -1206,6 +1206,26 @@
       "kind": "dir",
       "label": "benchmarks/agent/reports",
       "source": "benchmarks/agent/reports",
+      "attrs": {
+        "dir_files": "34",
+        "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#file-reads,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#paired-deltas-full-minus-rampant,md#pass1-and-passk,md#re-read-rate,md#tool-calls,md#tool-result-by"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/reports/2026-09-10",
+      "kind": "dir",
+      "label": "benchmarks/agent/reports/2026-09-10",
+      "source": "benchmarks/agent/reports/2026-09-10",
+      "attrs": {
+        "dir_files": "33",
+        "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#file-reads,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#paired-deltas-full-minus-rampant,md#pass1-and-passk,md#re-read-rate,md#tool-calls,md#tool-result-by"
+      }
+    },
+    {
+      "id": "dir:benchmarks/agent/reports/2026-09-10/anthropic",
+      "kind": "dir",
+      "label": "benchmarks/agent/reports/2026-09-10/anthropic",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic",
       "attrs": {
         "dir_files": "32",
         "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#file-reads,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#paired-deltas-full-minus-rampant,md#pass1-and-passk,md#re-read-rate,md#tool-calls,md#tool-result-by"
@@ -1387,8 +1407,28 @@
       "label": "docs/benchmarks",
       "source": "docs/benchmarks",
       "attrs": {
-        "dir_files": "44",
+        "dir_files": "46",
         "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#environment,md#file-reads,md#fixture-go-n50,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#magus-benchmarks,md#paired-deltas-full-minus-rampant,md#pass1-and-"
+      }
+    },
+    {
+      "id": "dir:docs/benchmarks/2026-09-10",
+      "kind": "dir",
+      "label": "docs/benchmarks/2026-09-10",
+      "source": "docs/benchmarks/2026-09-10",
+      "attrs": {
+        "dir_files": "33",
+        "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#file-reads,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#paired-deltas-full-minus-rampant,md#pass1-and-passk,md#re-read-rate,md#tool-calls,md#tool-result-by"
+      }
+    },
+    {
+      "id": "dir:docs/benchmarks/2026-09-10/anthropic",
+      "kind": "dir",
+      "label": "docs/benchmarks/2026-09-10/anthropic",
+      "source": "docs/benchmarks/2026-09-10/anthropic",
+      "attrs": {
+        "dir_files": "32",
+        "dir_languages": "markdown,md#caveats,md#controls,md#correctness-against-median-tokens,md#dollars,md#file-reads,md#harness-effectiveness-benchmark,md#headline-cost-of-pass,md#paired-deltas-full-minus-rampant,md#pass1-and-passk,md#re-read-rate,md#tool-calls,md#tool-result-by"
       }
     },
     {
@@ -2838,19 +2878,19 @@
       }
     },
     {
-      "id": "doc:benchmarks/agent/reports/2026-09-10-opus-5.md",
+      "id": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
       "kind": "doc",
-      "label": "benchmarks/agent/reports/2026-09-10-opus-5.md",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md",
+      "label": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
       "attrs": {
         "role": "doc"
       }
     },
     {
-      "id": "doc:benchmarks/agent/reports/2026-09-10-sonnet-5.md",
+      "id": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
       "kind": "doc",
-      "label": "benchmarks/agent/reports/2026-09-10-sonnet-5.md",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md",
+      "label": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
       "attrs": {
         "role": "doc"
       }
@@ -3050,27 +3090,27 @@
       }
     },
     {
-      "id": "doc:docs/benchmarks/2026-09-10-opus-5.md",
+      "id": "doc:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
       "kind": "doc",
-      "label": "docs/benchmarks/2026-09-10-opus-5.md",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md",
+      "label": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
       "attrs": {
         "role": "doc",
         "section": "benchmarks",
         "tags": "benchmarks,agents,harness,measurement",
-        "title": "Agent harness benchmark (2026-09-10-opus-5)"
+        "title": "Agent harness benchmark (2026-09-10, anthropic claude-opus-5)"
       }
     },
     {
-      "id": "doc:docs/benchmarks/2026-09-10-sonnet-5.md",
+      "id": "doc:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
       "kind": "doc",
-      "label": "docs/benchmarks/2026-09-10-sonnet-5.md",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md",
+      "label": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
       "attrs": {
         "role": "doc",
         "section": "benchmarks",
         "tags": "benchmarks,agents,harness,measurement",
-        "title": "Agent harness benchmark (2026-09-10-sonnet-5)"
+        "title": "Agent harness benchmark (2026-09-10, anthropic claude-sonnet-5)"
       }
     },
     {
@@ -8667,300 +8707,300 @@
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#caveats",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "kind": "docsection",
       "label": "Caveats",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#caveats",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "attrs": {
         "anchor": "caveats",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#controls",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#controls",
       "kind": "docsection",
       "label": "Controls",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#controls",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#controls",
       "attrs": {
         "anchor": "controls",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "kind": "docsection",
       "label": "Correctness against median tokens",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "attrs": {
         "anchor": "correctness-against-median-tokens",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#dollars",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "kind": "docsection",
       "label": "dollars",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#dollars",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "attrs": {
         "anchor": "dollars",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#file-reads",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "kind": "docsection",
       "label": "file reads",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#file-reads",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "attrs": {
         "anchor": "file-reads",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "kind": "docsection",
       "label": "Harness-effectiveness benchmark",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "attrs": {
         "anchor": "harness-effectiveness-benchmark",
         "level": "1"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "kind": "docsection",
       "label": "Headline: cost-of-pass",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "attrs": {
         "anchor": "headline-cost-of-pass",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "kind": "docsection",
       "label": "Paired deltas, full minus rampant",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "attrs": {
         "anchor": "paired-deltas-full-minus-rampant",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#pass1-and-passk",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "kind": "docsection",
       "label": "pass@1 and pass^k",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#pass1-and-passk",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "attrs": {
         "anchor": "pass1-and-passk",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#re-read-rate",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "kind": "docsection",
       "label": "re-read rate",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#re-read-rate",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "attrs": {
         "anchor": "re-read-rate",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#tool-calls",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "kind": "docsection",
       "label": "tool calls",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#tool-calls",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "attrs": {
         "anchor": "tool-calls",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#tool-result-bytes",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "kind": "docsection",
       "label": "tool result bytes",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#tool-result-bytes",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "attrs": {
         "anchor": "tool-result-bytes",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#total-billed-tokens",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "kind": "docsection",
       "label": "total billed tokens",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#total-billed-tokens",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "attrs": {
         "anchor": "total-billed-tokens",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#turns",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#turns",
       "kind": "docsection",
       "label": "turns",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#turns",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#turns",
       "attrs": {
         "anchor": "turns",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#wall-clock-ms",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "kind": "docsection",
       "label": "wall clock (ms)",
-      "source": "benchmarks/agent/reports/2026-09-10-opus-5.md#wall-clock-ms",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "attrs": {
         "anchor": "wall-clock-ms",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#caveats",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "kind": "docsection",
       "label": "Caveats",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#caveats",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "attrs": {
         "anchor": "caveats",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#controls",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "kind": "docsection",
       "label": "Controls",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#controls",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "attrs": {
         "anchor": "controls",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "kind": "docsection",
       "label": "Correctness against median tokens",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "attrs": {
         "anchor": "correctness-against-median-tokens",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#dollars",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "kind": "docsection",
       "label": "dollars",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#dollars",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "attrs": {
         "anchor": "dollars",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#file-reads",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "kind": "docsection",
       "label": "file reads",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#file-reads",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "attrs": {
         "anchor": "file-reads",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "kind": "docsection",
       "label": "Harness-effectiveness benchmark",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "attrs": {
         "anchor": "harness-effectiveness-benchmark",
         "level": "1"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "kind": "docsection",
       "label": "Headline: cost-of-pass",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "attrs": {
         "anchor": "headline-cost-of-pass",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "kind": "docsection",
       "label": "Paired deltas, full minus rampant",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "attrs": {
         "anchor": "paired-deltas-full-minus-rampant",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "kind": "docsection",
       "label": "pass@1 and pass^k",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "attrs": {
         "anchor": "pass1-and-passk",
         "level": "2"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#re-read-rate",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "kind": "docsection",
       "label": "re-read rate",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#re-read-rate",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "attrs": {
         "anchor": "re-read-rate",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-calls",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "kind": "docsection",
       "label": "tool calls",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-calls",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "attrs": {
         "anchor": "tool-calls",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "kind": "docsection",
       "label": "tool result bytes",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "attrs": {
         "anchor": "tool-result-bytes",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "kind": "docsection",
       "label": "total billed tokens",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "attrs": {
         "anchor": "total-billed-tokens",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#turns",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "kind": "docsection",
       "label": "turns",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#turns",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "attrs": {
         "anchor": "turns",
         "level": "3"
       }
     },
     {
-      "id": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "id": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "kind": "docsection",
       "label": "wall clock (ms)",
-      "source": "benchmarks/agent/reports/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "source": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "attrs": {
         "anchor": "wall-clock-ms",
         "level": "3"
@@ -9967,300 +10007,300 @@
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#caveats",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "kind": "docsection",
       "label": "Caveats",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#caveats",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "attrs": {
         "anchor": "caveats",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#controls",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#controls",
       "kind": "docsection",
       "label": "Controls",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#controls",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#controls",
       "attrs": {
         "anchor": "controls",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "kind": "docsection",
       "label": "Correctness against median tokens",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "attrs": {
         "anchor": "correctness-against-median-tokens",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#dollars",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "kind": "docsection",
       "label": "dollars",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#dollars",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "attrs": {
         "anchor": "dollars",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#file-reads",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "kind": "docsection",
       "label": "file reads",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#file-reads",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "attrs": {
         "anchor": "file-reads",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "kind": "docsection",
       "label": "Harness-effectiveness benchmark",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "attrs": {
         "anchor": "harness-effectiveness-benchmark",
         "level": "1"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "kind": "docsection",
       "label": "Headline: cost-of-pass",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "attrs": {
         "anchor": "headline-cost-of-pass",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "kind": "docsection",
       "label": "Paired deltas, full minus rampant",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "attrs": {
         "anchor": "paired-deltas-full-minus-rampant",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#pass1-and-passk",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "kind": "docsection",
       "label": "pass@1 and pass^k",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#pass1-and-passk",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "attrs": {
         "anchor": "pass1-and-passk",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#re-read-rate",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "kind": "docsection",
       "label": "re-read rate",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#re-read-rate",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "attrs": {
         "anchor": "re-read-rate",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#tool-calls",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "kind": "docsection",
       "label": "tool calls",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#tool-calls",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "attrs": {
         "anchor": "tool-calls",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#tool-result-bytes",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "kind": "docsection",
       "label": "tool result bytes",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#tool-result-bytes",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "attrs": {
         "anchor": "tool-result-bytes",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#total-billed-tokens",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "kind": "docsection",
       "label": "total billed tokens",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#total-billed-tokens",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "attrs": {
         "anchor": "total-billed-tokens",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#turns",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#turns",
       "kind": "docsection",
       "label": "turns",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#turns",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#turns",
       "attrs": {
         "anchor": "turns",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-opus-5.md#wall-clock-ms",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "kind": "docsection",
       "label": "wall clock (ms)",
-      "source": "docs/benchmarks/2026-09-10-opus-5.md#wall-clock-ms",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "attrs": {
         "anchor": "wall-clock-ms",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#caveats",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "kind": "docsection",
       "label": "Caveats",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#caveats",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "attrs": {
         "anchor": "caveats",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#controls",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "kind": "docsection",
       "label": "Controls",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#controls",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "attrs": {
         "anchor": "controls",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "kind": "docsection",
       "label": "Correctness against median tokens",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "attrs": {
         "anchor": "correctness-against-median-tokens",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#dollars",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "kind": "docsection",
       "label": "dollars",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#dollars",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "attrs": {
         "anchor": "dollars",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#file-reads",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "kind": "docsection",
       "label": "file reads",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#file-reads",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "attrs": {
         "anchor": "file-reads",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "kind": "docsection",
       "label": "Harness-effectiveness benchmark",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "attrs": {
         "anchor": "harness-effectiveness-benchmark",
         "level": "1"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "kind": "docsection",
       "label": "Headline: cost-of-pass",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "attrs": {
         "anchor": "headline-cost-of-pass",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "kind": "docsection",
       "label": "Paired deltas, full minus rampant",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "attrs": {
         "anchor": "paired-deltas-full-minus-rampant",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "kind": "docsection",
       "label": "pass@1 and pass^k",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "attrs": {
         "anchor": "pass1-and-passk",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#re-read-rate",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "kind": "docsection",
       "label": "re-read rate",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#re-read-rate",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "attrs": {
         "anchor": "re-read-rate",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#tool-calls",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "kind": "docsection",
       "label": "tool calls",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#tool-calls",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "attrs": {
         "anchor": "tool-calls",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "kind": "docsection",
       "label": "tool result bytes",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "attrs": {
         "anchor": "tool-result-bytes",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "kind": "docsection",
       "label": "total billed tokens",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "attrs": {
         "anchor": "total-billed-tokens",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#turns",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "kind": "docsection",
       "label": "turns",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#turns",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "attrs": {
         "anchor": "turns",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "id": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "kind": "docsection",
       "label": "wall clock (ms)",
-      "source": "docs/benchmarks/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "source": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "attrs": {
         "anchor": "wall-clock-ms",
         "level": "3"
@@ -41020,7 +41060,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build renders the site: the tree cd.yaml publishes and deploy-generate assembles. None of it is committed, so unlike generate it is gated by producing without error rather than by a byte comparison - see generate's comment for the split.  generate first, because site-generate reads the Markdown and catalog it derives. The esbuild bundles are NOT listed here: site-generate declares them itself, which is what makes it correct when something other than this target invokes it. Repeating them would state the ord",
-      "source": "docs/magusfile.buzz:478",
+      "source": "docs/magusfile.buzz:483",
       "attrs": {
         "exported": "true"
       }
@@ -41030,7 +41070,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:581",
+      "source": "docs/magusfile.buzz:586",
       "attrs": {
         "exported": "true"
       }
@@ -41040,7 +41080,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:525",
+      "source": "docs/magusfile.buzz:530",
       "attrs": {
         "exported": "true"
       }
@@ -41050,7 +41090,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:594",
+      "source": "docs/magusfile.buzz:599",
       "attrs": {
         "exported": "true"
       }
@@ -41060,7 +41100,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:486",
+      "source": "docs/magusfile.buzz:491",
       "attrs": {
         "exported": "true"
       }
@@ -41069,7 +41109,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:502",
+      "source": "docs/magusfile.buzz:507",
       "attrs": {
         "exported": "true"
       }
@@ -41089,7 +41129,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:442",
+      "source": "docs/magusfile.buzz:447",
       "attrs": {
         "exported": "true"
       }
@@ -41099,7 +41139,7 @@
       "kind": "function",
       "label": "diagrams_generate",
       "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
-      "source": "docs/magusfile.buzz:554",
+      "source": "docs/magusfile.buzz:559",
       "attrs": {
         "exported": "true"
       }
@@ -41109,7 +41149,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. Since the guard-hook templates' project under guides/integrations/agents grew Markdown pages of its own, a bare run here reached them - the parent target writing into a descendant project, which magus rejects as MGS3001. That project formats its own pages.  Keep this list in ste",
-      "source": "docs/magusfile.buzz:421",
+      "source": "docs/magusfile.buzz:426",
       "attrs": {
         "exported": "true"
       }
@@ -41119,7 +41159,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate owns the COMMITTED derived files, and nothing else. That is the line between generate and build here: generate's output is in the repository, so CI can re-run it and fail when the bytes move, and the drift gate below is that check. build's output is not committed, so no comparison can gate it - it is verified by rendering without error.  The site render, the esbuild bundles, and the WebAssembly playground all write the ignored gen/ tree, so they live in build. They used to run here, which cost ever",
-      "source": "docs/magusfile.buzz:338",
+      "source": "docs/magusfile.buzz:343",
       "attrs": {
         "exported": "true"
       }
@@ -41146,7 +41186,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:455",
+      "source": "docs/magusfile.buzz:460",
       "attrs": {
         "exported": "true"
       }
@@ -41165,7 +41205,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:602",
+      "source": "docs/magusfile.buzz:607",
       "attrs": {
         "exported": "true"
       }
@@ -41175,7 +41215,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:497",
+      "source": "docs/magusfile.buzz:502",
       "attrs": {
         "exported": "true"
       }
@@ -41185,7 +41225,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.  The bundles are needed HERE, not merely ordered by whoever calls this. They used to be ordered only in `generate`, which made this target correct as a stage and broken on its own: `magus run site-generate docs` - and `magus vcs resolve`, which invokes the target that owns a conflicted output directly - failed on `playground/index.html references miss",
-      "source": "docs/magusfile.buzz:317",
+      "source": "docs/magusfile.buzz:322",
       "attrs": {
         "exported": "true"
       }
@@ -41194,7 +41234,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:490",
+      "source": "docs/magusfile.buzz:495",
       "attrs": {
         "exported": "true"
       }
@@ -43826,7 +43866,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:2916",
+      "source": "magusfile.buzz:2927",
       "attrs": {
         "exported": "true"
       }
@@ -43913,7 +43953,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:2965",
+      "source": "magusfile.buzz:2976",
       "attrs": {
         "exported": "true"
       }
@@ -43940,7 +43980,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:2946",
+      "source": "magusfile.buzz:2957",
       "attrs": {
         "exported": "true"
       }
@@ -43983,7 +44023,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3092",
+      "source": "magusfile.buzz:3103",
       "attrs": {
         "exported": "true"
       }
@@ -44217,7 +44257,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3053"
+      "source": "magusfile.buzz:3064"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -44268,8 +44308,8 @@
       "id": "function:magusfile.buzz:publish_report",
       "kind": "function",
       "label": "publish_report",
-      "doc": "publish_report commits a rendered report under benchmarks/agent/reports with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The docs project mirrors every file in that directory into a page.",
-      "source": "magusfile.buzz:2867"
+      "doc": "publish_report commits a rendered report at benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The provider is given, because a model id does not carry it; the model is the one the runs used, so a tree that mixes models is refused rather than filed under one of them. The docs project mirrors every file under that directory into a page.",
+      "source": "magusfile.buzz:2870"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -44290,7 +44330,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:3015"
+      "source": "magusfile.buzz:3026"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -44364,7 +44404,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:3027"
+      "source": "magusfile.buzz:3038"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -44393,7 +44433,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3150",
+      "source": "magusfile.buzz:3161",
       "attrs": {
         "exported": "true"
       }
@@ -44403,7 +44443,7 @@
       "kind": "function",
       "label": "session_load",
       "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.  The recipe resolves the binary itself by walking up to the magusfile, so no argument names one here; from a worktree with no ./magus it falls through to PATH and announces itself on stderr if that copy cannot load.",
-      "source": "magusfile.buzz:3146",
+      "source": "magusfile.buzz:3157",
       "attrs": {
         "exported": "true"
       }
@@ -44433,7 +44473,7 @@
       "kind": "function",
       "label": "swegrade_build",
       "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. Built on the host from the root module so it shares the workspace's JSON codec and its tests, rather than as a throwaway module inside a grader image; the binary is gitignored under benchmarks/agent/bin, undeclared like ./magus for the same reason.",
-      "source": "magusfile.buzz:2900",
+      "source": "magusfile.buzz:2911",
       "attrs": {
         "exported": "true"
       }
@@ -44500,7 +44540,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3135",
+      "source": "magusfile.buzz:3146",
       "attrs": {
         "exported": "true"
       }
@@ -54024,19 +54064,35 @@
     },
     {
       "source": "dir:benchmarks/agent/reports",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-opus-5.md",
+      "target": "dir:benchmarks/agent/reports/2026-09-10",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10"
     },
     {
-      "source": "dir:benchmarks/agent/reports",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-sonnet-5.md",
+      "source": "dir:benchmarks/agent/reports/2026-09-10",
+      "target": "dir:benchmarks/agent/reports/2026-09-10/anthropic",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic"
+    },
+    {
+      "source": "dir:benchmarks/agent/reports/2026-09-10/anthropic",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
+    },
+    {
+      "source": "dir:benchmarks/agent/reports/2026-09-10/anthropic",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "dir:benchmarks/agent/tasks",
@@ -54328,19 +54384,11 @@
     },
     {
       "source": "dir:docs/benchmarks",
-      "target": "doc:docs/benchmarks/2026-09-10-opus-5.md",
+      "target": "dir:docs/benchmarks/2026-09-10",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
-    },
-    {
-      "source": "dir:docs/benchmarks",
-      "target": "doc:docs/benchmarks/2026-09-10-sonnet-5.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10"
     },
     {
       "source": "dir:docs/benchmarks",
@@ -54349,6 +54397,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/benchmarks/build-tools.md"
+    },
+    {
+      "source": "dir:docs/benchmarks/2026-09-10",
+      "target": "dir:docs/benchmarks/2026-09-10/anthropic",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/benchmarks/2026-09-10/anthropic"
+    },
+    {
+      "source": "dir:docs/benchmarks/2026-09-10/anthropic",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
+    },
+    {
+      "source": "dir:docs/benchmarks/2026-09-10/anthropic",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "dir:docs/concepts",
@@ -60311,20 +60383,20 @@
       "provenance": "benchmarks/agent/internal/bench/testdata/fixture-report.md"
     },
     {
-      "source": "doc:benchmarks/agent/reports/2026-09-10-opus-5.md",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "source": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "doc:benchmarks/agent/reports/2026-09-10-sonnet-5.md",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "source": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "doc:benchmarks/agent/tasks/README.md",
@@ -60640,7 +60712,7 @@
     },
     {
       "source": "doc:docs/benchmarks.md",
-      "target": "doc:docs/benchmarks/2026-09-10-opus-5.md",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -60648,7 +60720,7 @@
     },
     {
       "source": "doc:docs/benchmarks.md",
-      "target": "doc:docs/benchmarks/2026-09-10-sonnet-5.md",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -60671,20 +60743,20 @@
       "provenance": "docs/benchmarks.md"
     },
     {
-      "source": "doc:docs/benchmarks/2026-09-10-opus-5.md",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
+      "source": "doc:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "doc:docs/benchmarks/2026-09-10-sonnet-5.md",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
+      "source": "doc:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "doc:docs/benchmarks/build-tools.md",
@@ -85191,228 +85263,228 @@
       "provenance": "benchmarks/agent/internal/bench/testdata/fixture-report.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#caveats",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#controls",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#controls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#pass1-and-passk",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#dollars",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#file-reads",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#re-read-rate",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#tool-calls",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#tool-result-bytes",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#total-billed-tokens",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#turns",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#turns",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-opus-5.md#wall-clock-ms",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-opus-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#caveats",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#controls",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#dollars",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#file-reads",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#re-read-rate",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-calls",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#turns",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:benchmarks/agent/reports/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "source": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "benchmarks/agent/reports/2026-09-10-sonnet-5.md"
+      "provenance": "benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "docsection:benchmarks/agent/tasks/README.md#agent-benchmark-task-corpus",
@@ -86055,228 +86127,228 @@
       "provenance": "docs/benchmarks.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#caveats",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#caveats",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#controls",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#controls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#correctness-against-median-tokens",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#correctness-against-median-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#headline-cost-of-pass",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#headline-cost-of-pass",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#pass1-and-passk",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#pass1-and-passk",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#dollars",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#dollars",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#file-reads",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#file-reads",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#re-read-rate",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#re-read-rate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#tool-calls",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-calls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#tool-result-bytes",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#tool-result-bytes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#total-billed-tokens",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#total-billed-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#turns",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#turns",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-opus-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-opus-5.md#wall-clock-ms",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md#wall-clock-ms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-opus-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#caveats",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#caveats",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#controls",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#controls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#correctness-against-median-tokens",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#correctness-against-median-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#headline-cost-of-pass",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#headline-cost-of-pass",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#harness-effectiveness-benchmark",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#pass1-and-passk",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#harness-effectiveness-benchmark",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#pass1-and-passk",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#dollars",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#dollars",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#file-reads",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#file-reads",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#re-read-rate",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#re-read-rate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#tool-calls",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-calls",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#tool-result-bytes",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#tool-result-bytes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#total-billed-tokens",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#total-billed-tokens",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#turns",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#turns",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
-      "source": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#paired-deltas-full-minus-rampant",
-      "target": "docsection:docs/benchmarks/2026-09-10-sonnet-5.md#wall-clock-ms",
+      "source": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#paired-deltas-full-minus-rampant",
+      "target": "docsection:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md#wall-clock-ms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/benchmarks/2026-09-10-sonnet-5.md"
+      "provenance": "docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md"
     },
     {
       "source": "docsection:docs/benchmarks/build-tools.md#environment",
@@ -127396,7 +127468,7 @@
     },
     {
       "source": "target:.:agent-bench-report",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-opus-5.md",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -127404,7 +127476,7 @@
     },
     {
       "source": "target:.:agent-bench-report",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-sonnet-5.md",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -128676,7 +128748,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-opus-5.md",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-opus-5.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -128684,7 +128756,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:benchmarks/agent/reports/2026-09-10-sonnet-5.md",
+      "target": "doc:benchmarks/agent/reports/2026-09-10/anthropic/claude-sonnet-5.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -128692,7 +128764,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/benchmarks/2026-09-10-opus-5.md",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-opus-5.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -128700,7 +128772,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/benchmarks/2026-09-10-sonnet-5.md",
+      "target": "doc:docs/benchmarks/2026-09-10/anthropic/claude-sonnet-5.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

@@ -1425,7 +1425,7 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "benchmarks/agent/reports/*.md"
+              "glob": "benchmarks/agent/reports/**/*.md"
             }
           ],
           "modifies_existing_files": [
@@ -1879,7 +1879,7 @@
             },
             {
               "project": ".",
-              "glob": "benchmarks/agent/reports/*.md"
+              "glob": "benchmarks/agent/reports/**/*.md"
             },
             {
               "project": ".",
@@ -1910,7 +1910,7 @@
               "glob": "changelog.md"
             },
             {
-              "glob": "benchmarks/*.md"
+              "glob": "benchmarks/**/*.md"
             }
           ],
           "modifies_existing_files": [
