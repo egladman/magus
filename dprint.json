@@ -28,7 +28,6 @@
   // file once and nothing puts it back.
   "excludes": [
     "./MAGUS.md",
-    "./CHANGELOG.md",
-    "./benchmarks/agent/internal/bench/testdata/*.md"
+    "./CHANGELOG.md"
   ]
 }

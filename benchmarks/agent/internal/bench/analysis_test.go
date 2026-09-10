@@ -624,12 +624,13 @@ func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
 	return a
 }
 
-// TestBenchPipelineMatchesPythonByteForByte pins every stage's output over
-// the synthetic fixture to what the Python pipeline wrote from the same tree
-// (testdata/fixture-*, seed 20260902). The bootstrap CIs in analysis.json are
-// the strongest check: they only match if the seeding, the draw sequence and
-// the summation order all do.
-func TestBenchPipelineMatchesPythonByteForByte(t *testing.T) {
+// TestBenchPipelineMatchesPinnedOutput pins every stage's output over the
+// synthetic fixture (testdata/fixture-*, seed 20260902). The metrics and the
+// analysis are what the Python pipeline wrote from the same tree, and their
+// bootstrap CIs are the strongest check: they only match if the seeding, the
+// draw sequence and the summation order all do. The report is this binary's
+// own, regenerated whenever its rendering changes on purpose.
+func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 	_, _, records := fixtureRecords(t)
 	metrics, err := RecordsJSONL(records)
 	if err != nil {
@@ -672,8 +673,8 @@ func assertSameBytes(t *testing.T, name string, got []byte) {
 			w = wantLines[i]
 		}
 		if g != w {
-			t.Fatalf("%s differs from the Python's at line %d:\n got %s\nwant %s", name, i+1, g, w)
+			t.Fatalf("%s differs from the pinned output at line %d:\n got %s\nwant %s", name, i+1, g, w)
 		}
 	}
-	t.Fatalf("%s differs from the Python's in length only", name)
+	t.Fatalf("%s differs from the pinned output in length only", name)
 }

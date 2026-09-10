@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/egladman/magus/benchmarks/agent/internal/pycompat"
 )
@@ -53,15 +54,34 @@ func interval(bounds [2]*float64, digits int) string {
 
 type row []string
 
+// table renders a markdown table with every column padded to its widest cell,
+// which is the form dprint writes, so a report that is committed and mirrored
+// into the docs passes the formatter instead of being excluded from it.
 func table(header row, rows []row) []string {
-	dashes := make([]string, len(header))
-	for i := range dashes {
-		dashes[i] = "---"
+	widths := make([]int, len(header))
+	for i, cell := range header {
+		widths[i] = max(3, utf8.RuneCountInString(cell))
+	}
+	for _, r := range rows {
+		for i, cell := range r {
+			widths[i] = max(widths[i], utf8.RuneCountInString(cell))
+		}
+	}
+	line := func(r row) string {
+		cells := make([]string, len(header))
+		for i := range header {
+			cells[i] = r[i] + strings.Repeat(" ", widths[i]-utf8.RuneCountInString(r[i]))
+		}
+		return "| " + strings.Join(cells, " | ") + " |"
+	}
+	dashes := make(row, len(header))
+	for i, w := range widths {
+		dashes[i] = strings.Repeat("-", w)
 	}
 	lines := make([]string, 0, 2+len(rows))
-	lines = append(lines, "| "+strings.Join(header, " | ")+" |", "| "+strings.Join(dashes, " | ")+" |")
+	lines = append(lines, line(header), line(dashes))
 	for _, r := range rows {
-		lines = append(lines, "| "+strings.Join(r, " | ")+" |")
+		lines = append(lines, line(r))
 	}
 	return lines
 }
