@@ -1433,9 +1433,52 @@
           ]
         },
         {
+          "name": "swegrade-build",
+          "declared": "swegrade_build",
+          "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from.",
+          "spells": [
+            {
+              "spell": "go",
+              "ops": [
+                "go-build"
+              ]
+            }
+          ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "benchmarks/agent/cmd/swegrade/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/json/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "go.sum"
+            }
+          ],
+          "reads_secrets": false,
+          "exec_overrides": [
+            "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
           "name": "agent-bench-run",
           "declared": "agent_bench_run",
           "doc": "Runs a benchmark manifest with a login the launching shell never held.",
+          "dependencies": [
+            "swegrade-build"
+          ],
+          "chain": [
+            {
+              "target": "swegrade-build"
+            }
+          ],
           "reads_secrets": true,
           "secret_refs": [
             "CLAUDE_BENCH_TOKEN"

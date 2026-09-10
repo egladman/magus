@@ -80,6 +80,9 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		"internal/json/json_v2.go":                  true,
 		"libs/gopherbuzz/internal/codec/json.go":    true,
 		"libs/gopherbuzz/internal/codec/json_v2.go": true,
+		// A codec too: CPython's json.dumps and a number-preserving loads, which the
+		// benchmark's byte-identical output depends on and no shared codec can be.
+		"benchmarks/agent/internal/pycompat/json.go": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)

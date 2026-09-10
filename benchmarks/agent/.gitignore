@@ -12,3 +12,5 @@ analysis.json
 report.md
 # the full SWE-bench Verified table swebench/fetch.sh downloads; swebench/verified.sha256 pins it
 swebench/verified.jsonl
+# swegrade, built by `magus run swegrade-build .` and read by swebench/lib.sh
+bin/

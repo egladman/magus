@@ -2836,7 +2836,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     // one is trusted to.
     if (synthetic) {
         // makefixture creates results/ under the directory it is given.
-        steps.append(["makefixture", fs\join(agent, "results-synthetic")]);
+        steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
         results = "results-synthetic/results";
     }
     steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl"),
@@ -2850,6 +2850,18 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("benchmark report written to benchmarks/agent/report.md");
 }
 
+// Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at
+// the path swebench/lib.sh reads it from. Built on the host from the root module so
+// it shares the workspace's JSON codec and its tests, rather than as a throwaway
+// module inside a grader image; the binary is gitignored under benchmarks/agent/bin,
+// undeclared like ./magus for the same reason.
+export fun swegrade_build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("benchmarks/agent/cmd/swegrade/*.go", "internal/json/*.go", "go.mod", "go.sum");
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+        "args": ["-o", "benchmarks/agent/bin/swegrade", "./benchmarks/agent/cmd/swegrade"],
+    });
+}
+
 // Runs a benchmark manifest with a login the launching shell never held. The
 // long-lived token `claude setup-token` mints is read through the workspace's secret
 // provider under the reference below, handed to run.sh as the one environment variable
@@ -2860,6 +2872,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
 // to pilot.manifest. Every run is paid work that writes results/, so it never replays
 // from cache.
 export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(swegrade_build);
     var manifest = "pilot.manifest";
     if (args.len() > 0) { manifest = args[0]; }
     final token = magus\secret.read("CLAUDE_BENCH_TOKEN");

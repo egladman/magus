@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 48 | `magus query project=.` | `generate`, `buzz-test`, `release-index` |
+| . | 49 | `magus query project=.` | `generate`, `buzz-test`, `release-index` |
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -127,6 +127,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `buzz-test` | Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through magus's embedded engine. |
 | `lint-build` | Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. |
 | `completion-test` | Exercises the completion scripts magus SHIPS, each inside the official image for its shell. |
+| `swegrade-build` | Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. |
 | `compress-cgo-test` | Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach. |
 
 ## Project: console

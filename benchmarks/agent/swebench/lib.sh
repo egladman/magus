@@ -20,7 +20,9 @@
 
 SWEBENCH_DIR="$HERE/swebench"
 SWEBENCH_ROOT="$(cd "$HERE/../.." && pwd)"
-SWEBENCH_GRADER_IMAGE="magus-bench/swegrade:latest"
+# swegrade runs on the host: it reads a log and a row and touches nothing else, and
+# building it from the root module keeps it under the workspace's own tests.
+SWEBENCH_GRADER="$HERE/bin/swegrade"
 SWEBENCH_REGISTRY="ghcr.io/epoch-research/swe-bench.eval"
 # The reference harness's own per-instance eval timeout.
 SWEBENCH_EVAL_TIMEOUT_S="${BENCH_EVAL_TIMEOUT_S:-1800}"
@@ -144,8 +146,8 @@ swebench_run_one() {
 
     bench_image=$("$SWEBENCH_DIR/images.sh" "$image" "$platform" "$magus_binary") ||
         die "building the trial image for $id failed"
-    docker build -q -t "$SWEBENCH_GRADER_IMAGE" -f "$SWEBENCH_DIR/grader.Dockerfile" \
-        "$HERE/cmd/swegrade" >/dev/null || die "building $SWEBENCH_GRADER_IMAGE failed"
+    [[ -x $SWEBENCH_GRADER ]] || die "swegrade is not built at $SWEBENCH_GRADER; from the workspace root:
+  magus run swegrade-build ."
     magus_version=$(docker run --rm --platform "$platform" "$bench_image" magus --version 2>/dev/null || true)
     magus_version=${magus_version:-unknown}
 
@@ -305,8 +307,7 @@ swebench_grade() {
         printf '\n>>>>> Tests Timed Out\n' >>"$out/eval.log"
     fi
     set +e
-    docker run --rm -i -v "$out/row.json:/row.json:ro" "$SWEBENCH_GRADER_IMAGE" --instance /row.json \
-        <"$out/eval.log" >"$out/check.txt" 2>>"$out/setup.log"
+    "$SWEBENCH_GRADER" --instance "$out/row.json" <"$out/eval.log" >"$out/check.txt" 2>>"$out/setup.log"
     check_exit=$?
     set -e
     printf '%s\n' "$check_exit" >"$out/check.exit"
