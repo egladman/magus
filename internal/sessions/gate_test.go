@@ -22,6 +22,10 @@ func TestGateRoundTrip(t *testing.T) {
 		Fingerprint: "f1",
 		Projects:    []string{".", "docs"},
 		Charms:      []string{"quiet"},
+		// The MGS1028 debt rides the same record: a gate's cost is not readable from
+		// its verdict, and the projects only containment selected are the part of it
+		// that could not have changed the verdict.
+		UndeclaredSeeds: []string{"."},
 	}
 	require.NoError(t, RecordGate(dir, g, start))
 

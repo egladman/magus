@@ -49,6 +49,10 @@ type gateRedundancy struct {
 	fp       string
 	projects []string
 	charms   []string
+	// undeclared is the subset of projects nothing but an undeclared changed file
+	// selected; set by the affected path, empty on the `magus run ci` one, which
+	// names its own selection.
+	undeclared []string
 }
 
 // gateFinding is one redundancy match: the green gate, and either an identical
@@ -100,6 +104,16 @@ func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, t
 		projects: projects,
 		charms:   sorted,
 	}
+}
+
+// noteUndeclaredSeeds records which of this gate's projects were selected only through
+// files no project declares, for the record written after the run. Nil-safe, like every
+// other method here: the gate is inert on a non-ci or dry run.
+func (g *gateRedundancy) noteUndeclaredSeeds(projects []string) {
+	if g == nil {
+		return
+	}
+	g.undeclared = projects
 }
 
 // evaluate applies the redundancy decision before the gate runs. A nil error
@@ -195,6 +209,10 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 	}
 	fmt.Fprintf(&b, "  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
 		inv, f.rec.Ref, shortCommit(f.rec.Commit), f.rec.At.UTC().Format(time.RFC3339), gateAge(f.rec.At), shortFingerprint(f.rec.Fingerprint))
+	if n := len(f.rec.UndeclaredSeeds); n > 0 {
+		fmt.Fprintf(&b, "\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
+			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
+	}
 	if f.identical {
 		b.WriteString("\n  delta since that gate: none; this run's input fingerprint " + shortFingerprint(g.fp) + " matches it exactly")
 		return b.String()
@@ -266,14 +284,15 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error) {
 		outcome = sessions.OutcomeFail
 	}
 	g.append(ctx, sessions.GateResult{
-		Target:      g.target,
-		Ref:         g.ref,
-		Commit:      g.commit,
-		Outcome:     outcome,
-		Fingerprint: g.fp,
-		Projects:    g.projects,
-		Charms:      g.charms,
-		Inv:         journal.InvocationIDFromContext(ctx),
+		Target:          g.target,
+		Ref:             g.ref,
+		Commit:          g.commit,
+		Outcome:         outcome,
+		Fingerprint:     g.fp,
+		Projects:        g.projects,
+		Charms:          g.charms,
+		UndeclaredSeeds: g.undeclared,
+		Inv:             journal.InvocationIDFromContext(ctx),
 	})
 }
 

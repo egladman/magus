@@ -228,7 +228,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	if err != nil {
 		return err
 	}
-	targets, source, _, err := m.ExpandAffected(ctx, target, af.Base)
+	targets, source, _, affectedSet, err := m.ExpandAffectedSet(ctx, target, af.Base)
 	if err != nil {
 		return err
 	}
@@ -271,12 +271,19 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return nil
 	}
 
+	// MGS1028 where it is paid for: --impact and --explain report the same condition
+	// forensically, and this is the invocation that buys the rerun.
+	undeclaredOnly := undeclaredOnlySeeds(affectedSet)
+
 	// Same check as `magus run ci`: a redundant gate refuses under load and
 	// advises when the machine is idle. See prepareGateRedundancy.
 	gate := prepareGateRedundancy(ctx, m, target, targets, charms, false)
+	gate.noteUndeclaredSeeds(slices.Sorted(maps.Keys(undeclaredOnly)))
 	if gateErr := gate.evaluate(ctx, af.NoRedundancyCheck); gateErr != nil {
 		return gateErr
 	}
+	// After the gate agreed to run, because a refused gate pays for nothing.
+	noteUndeclaredSeedCost(os.Stderr, undeclaredOnly)
 
 	opts, optsErr := outputOptionsOrDefault()
 	if optsErr != nil {
@@ -297,6 +304,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		}
 		m.SetGraphObserver(rw.GraphObserver())
 		defer func() { _ = rw.Close() }()
+		reportUndeclaredSeeds(rw, undeclaredOnly)
 	}
 
 	var runOpts []magus.RunOption
@@ -379,7 +387,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target))
+		return emitRunResult(ctx, m, opts, target, charms, targets, readReturns(target),
+			slices.Sorted(maps.Keys(undeclaredOnly)))
 	case outputName:
 		return emitProjectNames(m, targets)
 	}
@@ -810,20 +819,90 @@ func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
-	if len(seeds) > undeclaredSeedHintCap {
-		seeds = append(seeds[:undeclaredSeedHintCap:undeclaredSeedHintCap],
-			fmt.Sprintf("and %d more", len(undeclaredBySeed)-undeclaredSeedHintCap))
+	interactive.Emit(os.Stderr, undeclaredSeedNotice(undeclaredBySeed, false))
+}
+
+// noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
+// <target>` selected these projects through undeclared files alone, and is about to
+// rerun their targets for an answer that was already correct. It names the files
+// because this reader has none on screen: unlike --impact and --explain, the run
+// prints a project list and never the changeset.
+//
+// It rides interactive.Emit for the same reason the unchanged-failure line does: it is
+// the one channel a -s run still bubbles up, and the dedupe there holds it to once per
+// invocation. Nothing is skipped; the run proceeds exactly as it would have.
+//
+// The file list makes the text vary per changeset, so an adopted run in a long-lived
+// daemon dedupes fewer of these than the project-only twin above. That is the trade for
+// naming files the reader cannot see anywhere else, and interactive.maxEmittedDedupe
+// bounds what it can cost.
+func noteUndeclaredSeedCost(w io.Writer, undeclaredOnly map[string][]string) {
+	if len(undeclaredOnly) == 0 {
+		return
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf(
+	interactive.Emit(w, undeclaredSeedNotice(undeclaredOnly, true))
+}
+
+// undeclaredSeedNotice renders MGS1028 for the seed projects in undeclaredBySeed. With
+// withFiles each project carries its undeclared files, for a reader that cannot see
+// them anywhere else; both lists are capped by cappedList.
+func undeclaredSeedNotice(undeclaredBySeed map[string][]string, withFiles bool) string {
+	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
+	named := make([]string, 0, len(seeds))
+	for _, seed := range seeds {
+		if withFiles {
+			seed += " (" + strings.Join(cappedList(undeclaredBySeed[seed]), ", ") + ")"
+		}
+		named = append(named, seed)
+	}
+	return fmt.Sprintf(
 		"[%s] projects seeded by changed files nothing declares: %s. Directory containment "+
 			"selected them, so the targets they rerun were already correct. Declare the files "+
 			"in the owning project's sources, or leave them undeclared deliberately (see %s)",
-		types.UndeclaredSeedingFile, strings.Join(seeds, ", "),
-		types.CodeURL(types.UndeclaredSeedingFile)))
+		types.UndeclaredSeedingFile, strings.Join(cappedList(named), ", "),
+		types.CodeURL(types.UndeclaredSeedingFile))
 }
 
-// undeclaredSeedHintCap bounds how many seed projects MGS1028 names inline.
+// undeclaredOnlySeeds narrows an affected result to the seeds selected ONLY by files no
+// project declares: every changed file under them is undeclared, so nothing that moved a
+// cache key put them in the set. A seed with one declared file among them had a keyed
+// reason to run and is not what this reports.
+func undeclaredOnlySeeds(res *types.AffectedResult) map[string][]string {
+	if res == nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for seed, undeclared := range res.UndeclaredBySeed {
+		if len(undeclared) > 0 && len(undeclared) == len(res.FilesBySeed[seed]) {
+			out[seed] = undeclared
+		}
+	}
+	return out
+}
+
+// reportUndeclaredSeeds carries MGS1028 into the -o jsonl stream as one coded event per
+// project, the shape the engine's own diagnostic sink emits, so a consumer counts the
+// code and the unit instead of matching the hint's wording.
+func reportUndeclaredSeeds(rw *magus.ReportWriter, undeclaredOnly map[string][]string) {
+	for _, seed := range slices.Sorted(maps.Keys(undeclaredOnly)) {
+		_ = rw.RecordDiagnostic(seed, types.UndeclaredSeedingFile,
+			"seeded only by changed files no project declares: "+
+				strings.Join(cappedList(undeclaredOnly[seed]), ", "))
+	}
+}
+
+// cappedList bounds an inline list at undeclaredSeedHintCap, replacing the tail with a
+// count of what it left out.
+func cappedList(items []string) []string {
+	if len(items) <= undeclaredSeedHintCap {
+		return items
+	}
+	return append(items[:undeclaredSeedHintCap:undeclaredSeedHintCap],
+		fmt.Sprintf("and %d more", len(items)-undeclaredSeedHintCap))
+}
+
+// undeclaredSeedHintCap bounds how many seed projects (and how many of one project's
+// files) MGS1028 names inline.
 const undeclaredSeedHintCap = 5
 
 // affectedImpact reports the blast radius of the current changeset (the --impact

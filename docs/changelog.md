@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A rule set nothing declares reaches the console's notification center.** A run's scope
+  event now carries the projects it selected on changed files no project declares
+  (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
+  linter config, lockfile or toolchain pin rings the bell, because it keys no cache and a
+  verdict recorded under the rules it replaced can still replay; anything else records
+  silently in the history tier. Both link to the review surface filtered to unclaimed files.
 - **A target whose inputs have not moved since it failed says so before it runs again.** A
   failure is not a cache entry, but its descriptor is still stored under the step's cache
   key, so a miss can check whether this exact tree has already been seen to fail. When it
@@ -32,6 +38,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   while nothing on the line looked like magus. A range print counts as a filter; reading the
   file whole does not, and backgrounding the run as `-o jsonl --tee <file>` makes the capture
   a contract that `jq` may consume.
+- **The run that pays for an undeclared seeding file says so before it spends.** MGS1028
+  fired only on `magus affected --impact` and `--explain`, the two commands that report on
+  a changeset without running anything; the `magus affected <target>` run that reruns those
+  targets said nothing. It now names each project a changed file no project declares put in
+  the set on its own, with the files and the one-line fix, before the first target starts.
+  Nothing is skipped and nothing is refused: the run proceeds exactly as before, `-s` keeps
+  the line, and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. `-o json`
+  carries the same set as `undeclared_seeds` and `-o jsonl` as one `run.diagnostic` event
+  per project, so a consumer counts the code instead of matching the wording. A `ci` gate
+  records the set on its gate result too, next to the projects it covered, so a branch's
+  accumulated debt is countable rather than only visible in the run that printed it.
 - **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
   live ledger row, the agent guard now denies a write outside every entry in that row's
   `owned_paths`, any write at all by a `read_only` row, and a command running the `ci`

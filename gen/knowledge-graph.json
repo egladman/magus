@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5535,
-  "edge_count": 9808,
+  "node_count": 5537,
+  "edge_count": 9813,
   "relations": [
     {
       "id": "annotates",
@@ -1577,7 +1577,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1545",
+        "dir_files": "1547",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1587,7 +1587,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "265",
+        "dir_files": "266",
         "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#affected,md#affinityoutput,md#anchor,md#anchorkind,md#anchorstatus,md#answer,md#backfill,md#before-you-call-anything,md#buildinfo,md#buzz,md#cache,md#calling-a-method-without-a-generated-clie"
       }
     },
@@ -1817,7 +1817,7 @@
       "label": "docs/reference/api/viewer",
       "source": "docs/reference/api/viewer",
       "attrs": {
-        "dir_files": "35",
+        "dir_files": "36",
         "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#invocation,md#journal,md#kind,md#listevents,md#listeventsrequest,md#lis"
       }
     },
@@ -1827,7 +1827,7 @@
       "label": "docs/reference/api/viewer/v1alpha1",
       "source": "docs/reference/api/viewer/v1alpha1",
       "attrs": {
-        "dir_files": "34",
+        "dir_files": "35",
         "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#invocation,md#journal,md#kind,md#listevents,md#listeventsrequest,md#lis"
       }
     },
@@ -1847,7 +1847,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "488",
+        "dir_files": "489",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -1897,7 +1897,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "193",
+        "dir_files": "194",
         "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-a-workspace,m"
       }
     },
@@ -22927,6 +22927,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
+      "kind": "docsection",
+      "label": "UndeclaredSeed",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
+      "attrs": {
+        "anchor": "undeclaredseed",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#viewerservice",
       "kind": "docsection",
       "label": "ViewerService",
@@ -28154,6 +28164,16 @@
       "attrs": {
         "anchor": "mgs1028-a-changed-file-seeds-a-project-it-does-not-key",
         "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1028.md#reading-it-as-data",
+      "kind": "docsection",
+      "label": "Reading it as data",
+      "source": "docs/reference/codes/magusfile/MGS1028.md#reading-it-as-data",
+      "attrs": {
+        "anchor": "reading-it-as-data",
+        "level": "2"
       }
     },
     {
@@ -68096,6 +68116,14 @@
     },
     {
       "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
@@ -70976,6 +71004,14 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1028.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1028.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
       "confidence": "extracted",
@@ -71009,6 +71045,14 @@
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1028.md",
       "target": "doc:docs/reference/codes/magusfile/MGS1018.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1028.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -95623,6 +95667,14 @@
       "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#methods",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getinvocation",
       "relation": "contains",
@@ -99241,6 +99293,14 @@
     {
       "source": "docsection:docs/reference/codes/magusfile/MGS1028.md#mgs1028-a-changed-file-seeds-a-project-it-does-not-key",
       "target": "docsection:docs/reference/codes/magusfile/MGS1028.md#example",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1028.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1028.md#mgs1028-a-changed-file-seeds-a-project-it-does-not-key",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1028.md#reading-it-as-data",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

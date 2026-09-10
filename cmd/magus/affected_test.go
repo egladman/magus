@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,4 +243,128 @@ func TestPlanSummaryMarkdownPrefersTheInheritanceReport(t *testing.T) {
 	inherited := planSummaryMarkdown(out)
 	assert.Equal(t, "## Verdict inherited from run 42\n", inherited)
 	assert.NotContains(t, inherited, "Affected CI plan")
+}
+
+// TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected: the run-path report is
+// narrower than --impact's. A seed with one declared changed file among the undeclared
+// ones had a keyed reason to run, and naming it at the point of cost would claim the
+// whole rerun was waste.
+func TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		res  *types.AffectedResult
+		want map[string][]string
+	}{
+		{
+			name: "no set was computed",
+			res:  nil,
+			want: nil,
+		},
+		{
+			name: "every changed file under the seed is undeclared",
+			res: &types.AffectedResult{
+				FilesBySeed:      map[string][]string{".": {".golangci.yml"}},
+				UndeclaredBySeed: map[string][]string{".": {".golangci.yml"}},
+			},
+			want: map[string][]string{".": {".golangci.yml"}},
+		},
+		{
+			name: "one declared file is enough to keep the seed out",
+			res: &types.AffectedResult{
+				FilesBySeed:      map[string][]string{".": {".golangci.yml", "main.go"}},
+				UndeclaredBySeed: map[string][]string{".": {".golangci.yml"}},
+			},
+			want: map[string][]string{},
+		},
+		{
+			name: "a seed whose files are all declared",
+			res: &types.AffectedResult{
+				FilesBySeed:      map[string][]string{"docs": {"docs/a.md"}},
+				UndeclaredBySeed: map[string][]string{},
+			},
+			want: map[string][]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, undeclaredOnlySeeds(tt.res))
+		})
+	}
+}
+
+// TestNoteUndeclaredSeedCostReachesASilentRun pins the CHANNEL, not the wording. The run
+// that pays for MGS1028 is usually the gate, and a gate is usually run with -s, so a line
+// routed through slog (level error under -s) would reach nobody who was billed for it.
+// The hint channel is the one thing -s bubbles up, and hints.enabled is the one switch
+// that turns it off.
+func TestNoteUndeclaredSeedCostReachesASilentRun(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global.quiet, global.silent = true, true
+	t.Cleanup(func() { interactive.SetHintsEnabled(true) })
+	interactive.SetHintsEnabled(true)
+
+	var buf bytes.Buffer
+	noteUndeclaredSeedCost(&buf, map[string][]string{"silent-run": {".golangci.yml", "dprint.json"}})
+	got := buf.String()
+	assert.Contains(t, got, "hint: ["+string(types.UndeclaredSeedingFile)+"]")
+	assert.Contains(t, got, "silent-run (.golangci.yml, dprint.json)", "the run prints a project list and never the changeset, so the files come with it")
+	assert.Contains(t, got, "sources", "the one-line fix rides along")
+	assert.Contains(t, got, types.CodeURL(types.UndeclaredSeedingFile))
+
+	buf.Reset()
+	noteUndeclaredSeedCost(&buf, nil)
+	assert.Empty(t, buf.String(), "a run with nothing undeclared-only says nothing")
+
+	buf.Reset()
+	interactive.SetHintsEnabled(false)
+	noteUndeclaredSeedCost(&buf, map[string][]string{"hints-off": {"LICENSE"}})
+	assert.Empty(t, buf.String())
+}
+
+// TestUndeclaredSeedNoticeCapsEveryList: the notice promises to be one line. A changeset
+// that touches a hundred undeclared files under a dozen projects must still fit it, and
+// the tail is a count rather than a truncation, so the reader knows what was left out.
+func TestUndeclaredSeedNoticeCapsEveryList(t *testing.T) {
+	t.Parallel()
+
+	seeds := map[string][]string{}
+	for i := range undeclaredSeedHintCap + 2 {
+		seeds[fmt.Sprintf("p%d", i)] = []string{"a.txt"}
+	}
+	got := undeclaredSeedNotice(seeds, false)
+	assert.Contains(t, got, "p4")
+	assert.NotContains(t, got, "p5", "past the cap the projects are counted, not named")
+	assert.Contains(t, got, "and 2 more")
+
+	files := map[string][]string{".": {}}
+	for i := range undeclaredSeedHintCap + 2 {
+		files["."] = append(files["."], fmt.Sprintf("f%d.txt", i))
+	}
+	got = undeclaredSeedNotice(files, true)
+	assert.Contains(t, got, "f4.txt")
+	assert.NotContains(t, got, "f5.txt", "one project's files are capped by the same rule")
+	assert.Contains(t, got, "and 2 more")
+
+	// The forensic modes keep the shape they had: --impact and --explain mark every
+	// file inline already, so repeating them there would be the same list twice.
+	assert.NotContains(t, undeclaredSeedNotice(map[string][]string{".": {"LICENSE"}}, false), "LICENSE")
+}
+
+// TestRunOutputCarriesUndeclaredSeedsAsAField: a consumer of -o json counts the debt from
+// a field. Absent rather than empty when there is none, so "no undeclared seeds" and "this
+// magus does not report them" stay distinguishable.
+func TestRunOutputCarriesUndeclaredSeedsAsAField(t *testing.T) {
+	t.Parallel()
+
+	b, err := json.Marshal(runOutput{Target: "ci", UndeclaredSeeds: []string{".", "docs"}})
+	require.NoError(t, err)
+	assert.Contains(t, string(b), `"undeclared_seeds":[".","docs"]`)
+
+	b, err = json.Marshal(runOutput{Target: "ci"})
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "undeclared_seeds")
 }

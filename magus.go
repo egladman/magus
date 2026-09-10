@@ -1499,24 +1499,33 @@ func (m *Magus) ExpandCwd(t types.Target) (targets []types.Target, found bool, e
 // callers can act on (e.g. annotate the plan) rather than parsing the free-text
 // source string, which on the fallback path carries the underlying error message.
 func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef string) (targets []types.Target, source string, fellBack bool, err error) {
+	targets, source, fellBack, _, err = m.ExpandAffectedSet(ctx, target, baseRef)
+	return targets, source, fellBack, err
+}
+
+// ExpandAffectedSet is [Magus.ExpandAffected] plus the result the expansion was derived
+// from, for a caller that reports on the derivation as well as running it: MGS1028 rides
+// [types.AffectedResult.UndeclaredBySeed], and recovering it afterwards costs a second
+// VCS diff and dependency build. res is nil on the fallback path, where no set exists.
+func (m *Magus) ExpandAffectedSet(ctx context.Context, target string, baseRef string) (targets []types.Target, source string, fellBack bool, res *types.AffectedResult, err error) {
 	r, err := m.Affected(ctx, baseRef)
 	if errors.Is(err, types.ErrAffectedFallback) {
 		all, allErr := m.ExpandPath(types.Target{Name: target})
 		if allErr != nil {
-			return nil, "", false, allErr
+			return nil, "", false, nil, allErr
 		}
-		return all, err.Error(), true, nil
+		return all, err.Error(), true, nil, nil
 	}
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
 
-	res, err := vcs.Resolve(ctx, m.ws.Root, r.Base, m.ws.VCSOptions)
+	v, err := vcs.Resolve(ctx, m.ws.Root, r.Base, m.ws.VCSOptions)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", false, nil, err
 	}
-	source = res.Name + " diff vs " + r.Base
-	if res.Source == types.VCSSourceDisabled {
+	source = v.Name + " diff vs " + r.Base
+	if v.Source == types.VCSSourceDisabled {
 		source = "vcs disabled vs " + r.Base
 	}
 
@@ -1529,7 +1538,7 @@ func (m *Magus) ExpandAffected(ctx context.Context, target string, baseRef strin
 			Undeclared: r.UndeclaredBySeed[path],
 		}
 	}
-	return out, source, false, nil
+	return out, source, false, r, nil
 }
 
 // TargetLabel returns a one-line summary of a target slice suitable for log headers.

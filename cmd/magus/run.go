@@ -362,7 +362,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	switch opts.Format {
 	case outputJSON, outputYAML, outputTemplate:
-		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName))
+		// No undeclared seeds: `magus run` names its own selection, so no changed file seeded it.
+		return emitRunResult(ctx, m, opts, targetName, charms, targets, readReturns(targetName), nil)
 	case outputName:
 		return emitProjectNames(m, targets)
 	}
@@ -760,6 +761,11 @@ type runOutput struct {
 	DryRun   bool         `json:"dry_run"          yaml:"dry_run"`
 	Count    int          `json:"count"            yaml:"count"`
 	Projects []runProject `json:"projects"         yaml:"projects"`
+	// UndeclaredSeeds names the projects an affected run selected ONLY through changed
+	// files no project declares (MGS1028): targets whose answer could not have moved.
+	// Absent rather than empty when there are none, so a consumer counting the debt can
+	// tell "none" from "not reported".
+	UndeclaredSeeds []string `json:"undeclared_seeds,omitempty" yaml:"undeclared_seeds,omitempty"`
 }
 
 // emitRunResult renders what a run produced. It is deliberately NOT a second
@@ -772,8 +778,8 @@ type runOutput struct {
 // target body under a tracing context: the value is real, and omitting it made
 // `-o json` claim "no return value" for a target that had just produced one, while
 // `--then value` printed it.
-func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns) error {
-	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun}
+func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, target string, charms []string, selection []types.Target, returns types.Returns, undeclaredSeeds []string) error {
+	out := runOutput{Target: target, Charms: charms, DryRun: globalCfg.DryRun, UndeclaredSeeds: undeclaredSeeds}
 	projects := m.ResolveProjects(selection)
 	out.Count = len(projects)
 
