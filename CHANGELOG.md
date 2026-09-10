@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. The result record
   carries `"hint_id": "unchanged-failure"` in `-o jsonl`, a stable id to count instead of
   the wording.
+- **A text filter over a backgrounded run's capture is denied like a pipe over magus
+  itself.** The file a host writes a detached command's console output to, and a persisted
+  `.magus/logs/<hex>.log`, are magus output one step removed, so `grep -n cause: <capture> |
+  head -8` was cutting the `output:` and `inspect:` lines that read the rest of the failure
+  while nothing on the line looked like magus. A range print counts as a filter; reading the
+  file whole does not, and backgrounding the run as `-o jsonl --tee <file>` makes the capture
+  a contract that `jq` may consume.
 - **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
   live ledger row, the agent guard now denies a write outside every entry in that row's
   `owned_paths`, any write at all by a `read_only` row, and a command running the `ci`

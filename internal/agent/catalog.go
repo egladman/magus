@@ -121,7 +121,10 @@ import (
 // 61: magus-run names where a ref comes from when none is in hand: the run that
 // minted it, and `magus session`. Version 59 sent readers to a `magus tail` verb
 // that was removed in v0.4.0.
-const SkillVersion = 61
+// 62: magus-run says a backgrounded run's capture is magus output and meets the
+// same filter rule, with `-o jsonl --tee <file>` as the spelling that makes it a
+// contract.
+const SkillVersion = 62
 
 const skillLicense = "GPL-3.0-or-later"
 

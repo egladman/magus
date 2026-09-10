@@ -1263,6 +1263,66 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 	}
 }
 
+// A backgrounded gate's capture is magus output one step removed, and nothing on the
+// filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
+// one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
+// it, which are the only way to read the rest of the failure.
+func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
+	for _, cmd := range []string{
+		// The measured command.
+		`grep -n "^\[fail\]\|cause:" /Users/x/.claude/tasks/abc123.output | head -8`,
+		`grep -c fail tasks/abc123.output`,
+		`tail -40 /tmp/t.output`,
+		`cat tasks/abc123.output | grep cause:`,
+		`awk '/cause:/ {print}' tasks/abc123.output`,
+		`wc -l tasks/abc123.output`,
+		// A range print cuts by position, which is a filter with extra steps.
+		`sed -n '1,200p' tasks/abc123.output`,
+		// The persisted run log is the same content by another route.
+		`grep -n cause: .magus/logs/9f2c1a.log`,
+		`head -20 /Users/x/repo/.magus/logs/9f2c1a.log`,
+		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
+		// command, not the head of the line.
+		`bash -c 'grep cause: tasks/abc123.output'`,
+		`LC_ALL=C grep cause: tasks/abc123.output`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
+	}
+}
+
+// The deny has to name what the filter was about to cut, or the reader corrects the
+// spelling instead of the mistake, and it has to route somewhere that works.
+func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
+	v := evaluateBashGuard(`grep -n "cause:" tasks/abc123.output | head -8`)
+	require.NotEmpty(t, v.Deny)
+	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
+		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
+	}
+	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
+	assert.Contains(t, v.Deny, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+}
+
+// The rule is about the CAPTURE, not about text filters. Reading the file whole, and
+// filtering anything else, both stay allowed.
+func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
+	for _, cmd := range []string{
+		// No filter at all: the whole file is the sanctioned read.
+		`cat tasks/abc123.output`,
+		`cat /Users/x/.claude/tasks/abc123.output`,
+		// An unrelated file is an ordinary search.
+		`grep -n cause: internal/run/run.go`,
+		`head -20 CHANGELOG.md`,
+		// A --tee'd file has a contract, so consuming it is composition.
+		`jq -r 'select(.level=="error")' gate.jsonl`,
+		`cat gate.jsonl | jq -r .target`,
+	} {
+		assert.NotEqual(t, denyRuleCaptureFilter, evaluateBashGuard(cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
 // TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
 // one session, every one green, each following a local gate that had already run the
 // identical command on the identical tree.

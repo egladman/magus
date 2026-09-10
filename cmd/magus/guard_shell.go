@@ -51,6 +51,7 @@ const (
 	denyRuleReadAck           denyRuleName = "read-ack"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
+	denyRuleCaptureFilter     denyRuleName = "capture-filter"
 	denyRuleCIWatch           denyRuleName = "ci-watch"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
@@ -182,6 +183,55 @@ func magusRedirected(command string) bool {
 		return true
 	})
 	return found
+}
+
+// guardCapturePathRe matches the files that hold magus console output verbatim:
+// the host's task capture for a backgrounded command (`<id>.output`, whatever
+// directory the host keeps it in) and a persisted run log.
+//
+// It is the same shape the busy-wait rule is pinned against, which polls a
+// capture by grepping it.
+var guardCapturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
+
+// captureFilterFires reports a text filter aimed at one of those files.
+//
+// The capture is magus output one step removed, so the pipe rule's reasoning
+// reaches it: the filter drops the output ref and the inspect line that sit two
+// lines under the `cause:` an agent greps for. Measured twice in one session,
+// with nothing on the line the pipe rule could recognize as magus.
+//
+// `cat <capture>` alone is not a filter and stays allowed, which is why the
+// pipeline arm asks what the SOURCE of the pipe named rather than only what each
+// command was pointed at.
+func captureFilterFires(cmds []guardCommand, command string) bool {
+	if slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		return guardTextFilters[c.Name] && namesCapture(c)
+	}) {
+		return true
+	}
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		pipe, ok := n.(*syntax.BinaryCmd)
+		if !ok || pipe.Op != syntax.Pipe {
+			return true
+		}
+		if slices.ContainsFunc(lastOfPipeline(pipe.X), namesCapture) && isTextFilter(firstOfPipeline(pipe.Y)) {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+// namesCapture reports whether a command was pointed at a capture. Every
+// argument is checked rather than the operands alone, because each filter spells
+// its value-taking flags differently and no flag value looks like this path.
+func namesCapture(c guardCommand) bool {
+	return slices.ContainsFunc(c.Args, guardCapturePathRe.MatchString)
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -633,6 +683,20 @@ var (
 		"This loop has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive - a run that failed early never prints the line being grepped for. Several have had to be killed by hand.\n" +
 		"Waiting on something OUTSIDE this machine (a remote queue, a deploy nobody here started) is what your host's monitor surface is for."
 
+	// LEADS with the replacement, like the pipe and redirect messages it extends,
+	// and spells out the block because the reader cannot lose what they can see.
+	denyCaptureFilter = "Read that file whole, or give the run an output contract to begin with:\n" +
+		"  -o jsonl --tee <file>        background the run this way and the capture IS a contract; `jq` over that file is fine\n" +
+		"  cat <file>, or your editor tool   the capture as written; under -s a failure is a bounded tail\n" +
+		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log, once the ref is in hand\n" +
+		"That file is the host's task capture, or a run log: magus console output one step removed, so filtering it loses exactly what the pipe rule exists to protect. A failure prints five lines together, and a filter keeps the one you matched:\n" +
+		"  [fail] <target>\n" +
+		"  cause: <what went wrong>\n" +
+		"  output: out<hex>\n" +
+		"  inspect: magus query output out<hex>\n" +
+		"  reproduce: <the command to run it again>\n" +
+		"`grep 'cause:'` keeps the symptom and drops the ref that reads the whole log, two lines below it. A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it.\n" +
+		"Reading the whole file is not a filter, and stays allowed."
 	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
 		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
 		"One call answers every open pull request, mergeability included, and costs one turn.\n" +
@@ -988,6 +1052,13 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	// unparseable line naming `watch` is far more likely to be something else entirely.
 	if parsed && ciWatchFires(cmds) {
 		return bashGuardVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
+	}
+	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
+	// a task capture, this one refuses trimming it once it arrives. It has to sit above
+	// the search advisories, which would otherwise answer for the grep and say nothing
+	// about what it was cutting away.
+	if parsed && captureFilterFires(cmds, command) {
+		return bashGuardVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
 	}
 	if scriptedRewriteFires(command) {
 		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}

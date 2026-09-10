@@ -124,6 +124,18 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   with the last stage's, so `magus affected ci | tail` reports tail's success
   and a failing gate reads as exit 0. `magus query output <ref>` is the one
   exemption: a raw captured tool log has no schema to project.
+
+  A text filter aimed at the file a BACKGROUNDED run was captured to denies on the
+  same ground, and it is the shape that gets past the rule above: nothing on
+  `grep -n cause: <capture> | head -8` is a magus invocation. The files are the
+  host's task capture (`<id>.output`) and a persisted run log
+  (`.magus/logs/<hex>.log`). A failure prints `[fail]`, `cause:`, `output:`,
+  `inspect:` and `reproduce:` together, so a grep for the cause drops the ref that
+  reads the rest, two lines below it. A range print (`sed -n '1,200p'`) counts: it
+  cuts by position and the block is wherever the run left it. Reading the file
+  whole does not: `cat <capture>` and an editor tool's read are both fine.
+  Backgrounding the run as `-o jsonl --tee <file>` makes the capture a contract,
+  after which `jq` over it is composition.
 - **Writing into the declared notes store** (`knowledge.notes.shared`), however
   the write is spelled. A file write into the store is caught on the path
   surface; `magus notes edit` reading piped prose is a command, so it is caught

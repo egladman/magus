@@ -157,6 +157,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
 {{if .Full}}
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).

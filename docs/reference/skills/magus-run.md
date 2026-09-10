@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 11403
-skill_short_bytes: 7473
+skill_full_bytes: 11738
+skill_short_bytes: 7808
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `61` |
+| `agent-skill-version` | `62` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `f2f450006c4a` |
+| `skill-content` | `3e7b17564a02` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -156,6 +156,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
 ## When you need finer granularity
 
 Every top-level target composes spell ops (tool-native operations). address one directly
@@ -367,6 +373,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
 WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
