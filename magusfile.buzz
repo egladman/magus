@@ -2571,6 +2571,14 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
     // coverage/, which is a pure function, so CI stays cheap and never runs a platform
     // suite to judge a badge. The gha-only early return that used to sit here is gone
     // with it: the figure is no longer a property of whichever machine ran.
+    // Ordered after generate in BOTH arms. The denominator reads every Go file,
+    // generated ones included (it reads them to skip them), and the generate
+    // sub-targets write Go files in this same step. Left unordered, the verify arm
+    // waited for those writers to settle while holding its slot, and with every
+    // composer above them also holding one, the writers never got a slot: a gate
+    // stalled for fifteen minutes with nothing running (2026-09-10). A declared edge
+    // is what make's jobserver rule needs here; a settle wait is not one.
+    ctx.needs(generate);
     if (ctx.hasCharm("rw")) {
         ctx.needs(test, gopherbuzz\test, diagnostics\test, commentdash\test, testlayout\test);
     }

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5814,
-  "edge_count": 10319,
+  "edge_count": 10320,
   "relations": [
     {
       "id": "annotates",
@@ -45374,7 +45374,7 @@
       "kind": "function",
       "label": "agent_bench_report",
       "doc": "Turns a results tree into the benchmark report: build benchreport, then extract one metrics record per run, analyze the paired deltas, render report.md. `-- --results <dir>` names a tree under benchmarks/agent other than results/; `-- --synthetic` generates the pipeline's own control, a synthetic tree, and reports on that instead. Reads run artifacts that change under it, so it never replays from cache. The analysis tests are ordinary Go tests in the root module, so `test` covers them and there is no separa",
-      "source": "magusfile.buzz:2932",
+      "source": "magusfile.buzz:2940",
       "attrs": {
         "exported": "true"
       }
@@ -45384,7 +45384,7 @@
       "kind": "function",
       "label": "agent_bench_run",
       "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run .",
-      "source": "magusfile.buzz:3051",
+      "source": "magusfile.buzz:3059",
       "attrs": {
         "exported": "true"
       }
@@ -45404,7 +45404,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:2735",
+      "source": "magusfile.buzz:2743",
       "attrs": {
         "exported": "true"
       }
@@ -45434,7 +45434,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:2648",
+      "source": "magusfile.buzz:2656",
       "attrs": {
         "exported": "true"
       }
@@ -45461,7 +45461,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:2881",
+      "source": "magusfile.buzz:2889",
       "attrs": {
         "exported": "true"
       }
@@ -45471,7 +45471,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed.  Transport only: the plan names its own outputs and renders its own summary, so porting this to another provider is a rewrite of the two file formats and nothing else.",
-      "source": "magusfile.buzz:3100",
+      "source": "magusfile.buzz:3108",
       "attrs": {
         "exported": "true"
       }
@@ -45488,7 +45488,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:2902",
+      "source": "magusfile.buzz:2910",
       "attrs": {
         "exported": "true"
       }
@@ -45498,7 +45498,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:3081",
+      "source": "magusfile.buzz:3089",
       "attrs": {
         "exported": "true"
       }
@@ -45583,7 +45583,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:3227",
+      "source": "magusfile.buzz:3235",
       "attrs": {
         "exported": "true"
       }
@@ -45620,7 +45620,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:2857",
+      "source": "magusfile.buzz:2865",
       "attrs": {
         "exported": "true"
       }
@@ -45746,7 +45746,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict.",
-      "source": "magusfile.buzz:2786",
+      "source": "magusfile.buzz:2794",
       "attrs": {
         "exported": "true"
       }
@@ -45756,7 +45756,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:2756",
+      "source": "magusfile.buzz:2764",
       "attrs": {
         "exported": "true"
       }
@@ -45817,7 +45817,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:3188"
+      "source": "magusfile.buzz:3196"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -45869,7 +45869,7 @@
       "kind": "function",
       "label": "publish_report",
       "doc": "publish_report commits a rendered report at benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped after its title, the way BENCHMARKS.md carries its own: a number on the docs site has to trace to a date, a build and a machine. The provider is given, because a model id does not carry it; the model is the one the runs used, so a tree that mixes models is refused rather than filed under one of them. The docs project mirrors every file under that directory into a page.",
-      "source": "magusfile.buzz:2994"
+      "source": "magusfile.buzz:3002"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
@@ -45890,7 +45890,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:3150"
+      "source": "magusfile.buzz:3158"
     },
     {
       "id": "function:magusfile.buzz:refuse_overwrite",
@@ -45964,7 +45964,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:3162"
+      "source": "magusfile.buzz:3170"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -45993,7 +45993,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:3285",
+      "source": "magusfile.buzz:3293",
       "attrs": {
         "exported": "true"
       }
@@ -46003,7 +46003,7 @@
       "kind": "function",
       "label": "session_load",
       "doc": "Loads this checkout's own Claude Code sessions, so the repository dogfoods the recipe it ships the same way it invokes the guard template it ships rather than keeping a private copy.  The recipe resolves the binary itself by walking up to the magusfile, so no argument names one here; from a worktree with no ./magus it falls through to PATH and announces itself on stderr if that copy cannot load.",
-      "source": "magusfile.buzz:3281",
+      "source": "magusfile.buzz:3289",
       "attrs": {
         "exported": "true"
       }
@@ -46033,7 +46033,7 @@
       "kind": "function",
       "label": "swegrade_build",
       "doc": "Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at the path swebench/lib.sh reads it from. Built on the host from the root module so it shares the workspace's JSON codec and its tests, rather than as a throwaway module inside a grader image; the binary is gitignored under benchmarks/agent/bin, undeclared like ./magus for the same reason.",
-      "source": "magusfile.buzz:3035",
+      "source": "magusfile.buzz:3043",
       "attrs": {
         "exported": "true"
       }
@@ -46100,7 +46100,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:3270",
+      "source": "magusfile.buzz:3278",
       "attrs": {
         "exported": "true"
       }
@@ -54402,11 +54402,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:2902:TODO",
+      "id": "rationale:magusfile.buzz:2910:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:2902"
+      "source": "magusfile.buzz:2910"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -133212,12 +133212,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:2902:TODO",
+      "source": "rationale:magusfile.buzz:2910:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:2902"
+      "provenance": "magusfile.buzz:2910"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -134201,6 +134201,14 @@
       "source": "target:.:coverage-badge",
       "target": "file:coverage.buzz",
       "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:coverage-badge",
+      "target": "target:.:generate",
+      "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
       "provenance": "."

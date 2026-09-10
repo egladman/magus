@@ -1035,6 +1035,7 @@
           "declared": "coverage_badge",
           "doc": "Writes assets/coverage.svg, and is the only target that may.",
           "dependencies": [
+            "generate",
             "test"
           ],
           "charms": [
@@ -1059,6 +1060,9 @@
             }
           ],
           "chain": [
+            {
+              "target": "generate"
+            },
             {
               "target": "test"
             },
