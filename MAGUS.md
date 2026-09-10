@@ -47,7 +47,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 10+ | `magus query kind=project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind=target` | `content-generate`, `site-generate`, `format` |
-| spell | built in | `magus query kind=spell` | `go`, `markdown`, `docker` |
+| spell | built in | `magus query kind=spell` | `go`, `markdown`, `typescript` |
 | op | built in | `magus query kind=op` | `go-build`, `go-test`, `dprint` |
 | tool | built in | `magus query kind=tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind=charm` | `rw`, `cd`, `stable` |
@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 49 | `magus query project=.` | `generate`, `buzz-test`, `release-index` |
+| . | 48 | `magus query project=.` | `generate`, `buzz-test`, `release-index` |
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -106,8 +106,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, shellcheck, and actionlint. |
 | `format` | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. |
 | `ci` | Runs the CI gates through their declared dependencies. |
-| `agent-bench-test` | Runs the agent benchmark's analysis tests in a container, because Python never runs on the host (benchmarks/agent/README.md): the extractor and the statistics are stdlib-only and the image pins the interpreter. |
-| `agent-bench-report` | Turns a results tree into the benchmark report: extract one metrics record per run, analyze the paired deltas, render report.md, all in the container the analysis is written for. |
+| `agent-bench-report` | Turns a results tree into the benchmark report: build benchreport, then extract one metrics record per run, analyze the paired deltas, render report.md. |
 | `agent-bench-run` | Runs a benchmark manifest with a login the launching shell never held. |
 | `ci-shard` | Writes a `magus affected --plan` (read on stdin) to GitHub Actions as job outputs and a step summary; the gha charm writes $GITHUB_OUTPUT, otherwise the block is previewed. |
 | `deploy-generate` | deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/. |

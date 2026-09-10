@@ -1,52 +1,45 @@
 # Benchmark analysis
 
-Three stdlib-only Python scripts that turn a results tree into a report:
-`extract.py` (runs to metrics), `analyze.py` (metrics to statistics),
-`report.py` (statistics to markdown). They only read artifacts, so a scored run
-is analyzed as many times as you like without re-running an agent. `records.py`
-holds the frozen dataclasses the three hand each other; its fields are the file
-formats, and `to_json` / `from_json` are the only places a dict appears.
+A Go package and one binary, `benchreport`, that turn a results tree into a
+report in three stages: `extract` (runs to metrics), `analyze` (metrics to
+statistics), `report` (statistics to markdown). They only read artifacts, so a
+scored run is analyzed as many times as you like without re-running an agent.
+`records.go` holds the record types the stages hand each other; their json
+tags are the file formats. Standard library only.
 
-Python runs in Docker only. Nothing here imports anything outside the standard
-library, so `python:3.12-slim` runs it as-is with no build:
-
-```sh
-docker pull python:3.12-slim
-```
+The pipeline was ported from Python and its output is pinned byte for byte to
+what the Python wrote: `pycompat/` carries the pieces of CPython the numbers
+depend on (random.Random's Mersenne Twister and seeding, math.fsum, float
+repr, json.dumps with sort_keys), and `testdata/fixture-*` is the Python's
+output over the synthetic tree, which the tests reproduce exactly.
 
 ## Invocations
 
-Every command bind-mounts `benchmarks/agent` at `/w`.
+Every command takes one positional argument and `-o` for the file it writes.
+`extract` reads `pricing.json` from `benchmarks/agent/analysis/` relative to
+the working directory unless `-p` names another table.
 
 ```sh
-docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
-  python /w/analysis/extract.py /w/results -o /w/metrics.jsonl
+magus run go::go-build . -- -o /tmp/benchreport ./benchmarks/agent/analysis/cmd/benchreport
 
-docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
-  python /w/analysis/analyze.py /w/metrics.jsonl -o /w/analysis.json --seed 20260902
-
-docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
-  python /w/analysis/report.py /w/analysis.json -o /w/report.md
+/tmp/benchreport extract benchmarks/agent/results -o benchmarks/agent/metrics.jsonl
+/tmp/benchreport analyze benchmarks/agent/metrics.jsonl -o benchmarks/agent/analysis.json --seed 20260902
+/tmp/benchreport report benchmarks/agent/analysis.json -o benchmarks/agent/report.md
 ```
 
-Tests, and a synthetic results tree to run the three scripts against:
+`makefixture <dir>` writes a synthetic results tree under `<dir>/results`, two
+arms by two tasks by three reps with fixed constants, which is what the tests
+assert exact totals against.
 
-```sh
-docker run --rm -v "$PWD/benchmarks/agent:/w" -w /w/analysis python:3.12-slim \
-  python -m unittest discover -v
+Inside this repo the whole pipeline is one target: `magus run
+agent-bench-report .` builds the binary and runs extract, analyze and report
+over `results/` (`-- --results <dir>` for another tree, `-- --synthetic` to
+generate the fixture and report on that instead). The tests are ordinary Go
+tests in the root module, so `magus run test .` covers them; to run only these,
+`magus run go::go-test . -- -run TestBench`. Both need a magus binary that
+loads this workspace.
 
-docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
-  python /w/analysis/makefixture.py /tmp/fx
-```
-
-The magus agent guard denies a raw `docker run` that does work, so inside this
-repo the same steps are targets: `magus run agent-bench-test .` runs the unit
-tests, and `magus run agent-bench-report .` runs extract, analyze and report
-over `results/` (`-- --results <dir>` for another tree, `-- --image <img>` for
-another image). Both need a magus binary that loads this workspace.
-
-`extract.py` takes `--pricing` if you need a table other than the one beside it.
-`analyze.py` takes `--seed`; the bootstrap is seeded per metric and task, so the
+`analyze` takes `--seed`; the bootstrap is seeded per metric and task, so the
 same metrics.jsonl and seed produce byte-identical analysis.json.
 
 ## Inputs

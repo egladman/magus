@@ -29,8 +29,7 @@ rather than switched.
 - `bash`, `git`, and `node` (every task check is stdlib node)
 - `jq`, which the arm probes use to read `settings.json` and doctor's output
 - the `claude` CLI, logged in (see below)
-- `docker`, for the analysis side (`analysis/README.md`) and for every
-  SWE-bench trial (below)
+- `docker`, for every SWE-bench trial (below)
 
 `_selftest` is not an arm. It provisions nothing and exists so the runner can be
 exercised without the real recipes; `tasks/_placeholder` is its counterpart.
@@ -71,11 +70,11 @@ secret provider hand it to the runner, so nothing is ever exported into a shell
 and a transcript never sees it:
 
 ```sh
-security add-generic-password -a "$USER" -s claude-bench-token -w   # prompts, no echo
-magus run agent-bench-run . -- pilot.manifest
+security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w   # prompts, no echo
+MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run . -- pilot.manifest
 ```
 
-`agent-bench-run` resolves `claude-bench-token` through `magus\secret.read`, hands
+`agent-bench-run` resolves `CLAUDE_BENCH_TOKEN` through `magus\secret.read`, hands
 it to `run.sh` as `CLAUDE_CODE_OAUTH_TOKEN` in that one child's environment (never
 argv, which the run log records), and magus redacts the value from everything it
 captures.
@@ -297,9 +296,9 @@ architecture it needs. Then, from `benchmarks/agent`:
 
 ## Analysis
 
-Python runs only in Docker, on the upstream `python:3.12-slim` image with
-nothing installed; the analysis stays stdlib-only. `analysis/README.md` has the
-invocations, and `magus run agent-bench-report .` runs the whole pipeline over
+The analysis is a Go package under `analysis/`, standard library only, with
+one binary, `benchreport`; `analysis/README.md` has the invocations, and
+`magus run agent-bench-report .` builds it and runs the whole pipeline over
 `results/`.
 
 ## Not built yet
