@@ -30,6 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   waiting on another. Behind the incident: a gate held every project lock for fifteen
   minutes with nothing running, because a badge target read every Go file its siblings were
   still writing.
+- **A newer gate no longer queues behind an older one on the same tree.** When
+  `magus affected ci` or `magus run ci` contends for a project lock held by an earlier gate
+  on the same workspace root, the earlier run stops with MGS3014 and the later one takes
+  the lock, usually within a second. The earlier verdict would have described a tree that
+  has since changed, so waiting for it bought a stale answer at the price of the machine.
+  The ordering is decided by the tree and never by the caller: one resolved root, both
+  invocations the whole `ci` target, later start wins, and there is no priority to set. A
+  sibling worktree is a different tree and still waits; a `run build` behind a `run test`
+  still waits; a lock held by one of the run's own ancestors is still MGS3007. The earlier
+  run cancels through the same path the stall watchdog uses, so its targets stop and its
+  locks and budget come back rather than timing out, and it exits 75 (`EX_TEMPFAIL`) so a
+  caller can tell a yielded gate from a failed one. The later run prints one line naming
+  what it superseded, on the stream `-s` does not bound. A holder that does not answer
+  inside thirty seconds is waited on exactly as before.
 - **A spell can now tell magus which copy of the world its tool is reading, and a doctor
   check asks when it should.** A `Tool` may declare an `observe` command beside its version
   probe; magus runs it at key time and folds the output into the cache key as an `obs:`

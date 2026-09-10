@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5830,
-  "edge_count": 10370,
+  "node_count": 5840,
+  "edge_count": 10395,
   "relations": [
     {
       "id": "annotates",
@@ -970,6 +970,14 @@
       }
     },
     {
+      "id": "diagnostic:MGS3014",
+      "kind": "diagnostic",
+      "label": "MGS3014",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3014/"
+      }
+    },
+    {
       "id": "diagnostic:MGS4001",
       "kind": "diagnostic",
       "label": "MGS4001",
@@ -1517,7 +1525,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "596",
+        "dir_files": "597",
         "dir_languages": "markdown,md#1-built-in-command-spells-import-maguscharm,md#2-workspace-spells--magusfiles-import-charm,md#3-raw-rfc-6902-data-the-lowest-level,md#4-function-targets--ops-branch-in-code,md#a-bypass-fails-closed,md#a-gap-worth-knowing,md#a-known-leak-a-multi"
       }
     },
@@ -1657,7 +1665,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1569",
+        "dir_files": "1577",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1927,7 +1935,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "511",
+        "dir_files": "519",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2007,8 +2015,8 @@
       "label": "docs/reference/codes/sandbox",
       "source": "docs/reference/codes/sandbox",
       "attrs": {
-        "dir_files": "129",
-        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#configuring-the-window,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#extending-the-allowlist,md#fix,md#mgs2001-path-read-denied-by-s"
+        "dir_files": "137",
+        "dir_languages": "markdown,md#at-a-terminal-magus-waits-first,md#catching-it-by-code,md#codes,md#configuring-the-prose-class,md#configuring-the-window,md#declaring-one,md#enabling-it,md#enforcement-mechanism,md#exit-status,md#extending-the-allowlist,md#fix,md#how-the-handov"
       }
     },
     {
@@ -6097,6 +6105,18 @@
         "section": "reference",
         "tags": "MGS3013,deadlock,concurrency,slots,limiter,jobserver,hang,stall,ctx.needs",
         "title": "MGS3013: build slots deadlocked"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/sandbox/MGS3014.md",
+      "source": "docs/reference/codes/sandbox/MGS3014.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS3014,ci,gate,supersede,locks,workspace-lock,worktrees,exit 75,concurrency",
+        "title": "MGS3014: gate superseded"
       }
     },
     {
@@ -12558,6 +12578,16 @@
       "source": "docs/concepts/concurrency.md#when-a-run-is-waiting",
       "attrs": {
         "anchor": "when-a-run-is-waiting",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/concepts/concurrency.md#when-the-waiter-is-a-newer-gate",
+      "kind": "docsection",
+      "label": "When the waiter is a newer gate",
+      "source": "docs/concepts/concurrency.md#when-the-waiter-is-a-newer-gate",
+      "attrs": {
+        "anchor": "when-the-waiter-is-a-newer-gate",
         "level": "3"
       }
     },
@@ -30778,6 +30808,76 @@
       "source": "docs/reference/codes/sandbox/MGS3013.md#what-it-usually-means",
       "attrs": {
         "anchor": "what-it-usually-means",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#exit-status",
+      "kind": "docsection",
+      "label": "Exit status",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#exit-status",
+      "attrs": {
+        "anchor": "exit-status",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#how-the-handover-works",
+      "kind": "docsection",
+      "label": "How the handover works",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#how-the-handover-works",
+      "attrs": {
+        "anchor": "how-the-handover-works",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "kind": "docsection",
+      "label": "MGS3014: gate superseded",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "attrs": {
+        "anchor": "mgs3014-gate-superseded",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#resolution",
+      "kind": "docsection",
+      "label": "Resolution",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#resolution",
+      "attrs": {
+        "anchor": "resolution",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#what-qualifies",
+      "kind": "docsection",
+      "label": "What qualifies",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#what-qualifies",
+      "attrs": {
+        "anchor": "what-qualifies",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/sandbox/MGS3014.md#why-the-later-run-wins",
+      "kind": "docsection",
+      "label": "Why the later run wins",
+      "source": "docs/reference/codes/sandbox/MGS3014.md#why-the-later-run-wins",
+      "attrs": {
+        "anchor": "why-the-later-run-wins",
         "level": "2"
       }
     },
@@ -59150,6 +59250,14 @@
     },
     {
       "source": "dir:docs/reference/codes/sandbox",
+      "target": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/sandbox",
       "target": "doc:docs/reference/codes/sandbox/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -63078,6 +63186,14 @@
     },
     {
       "source": "doc:CHANGELOG.md",
+      "target": "diagnostic:MGS3014",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
+      "source": "doc:CHANGELOG.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -64854,6 +64970,14 @@
     },
     {
       "source": "doc:docs/changelog.md",
+      "target": "diagnostic:MGS3014",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
       "target": "diagnostic:MGS4003",
       "relation": "documents",
       "confidence": "inferred",
@@ -65910,7 +66034,23 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "diagnostic:MGS3009",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
+      "target": "diagnostic:MGS3014",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
@@ -65958,7 +66098,23 @@
     },
     {
       "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3009.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
+      "source": "doc:docs/concepts/concurrency.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3014.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -77717,6 +77873,78 @@
       "provenance": "docs/reference/codes/sandbox/MGS3013.md"
     },
     {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "diagnostic:MGS3007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "diagnostic:MGS3010",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "diagnostic:MGS3012",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "diagnostic:MGS3014",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "doc:docs/concepts/concurrency.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3007.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3010.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3012.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3014.md",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -77830,6 +78058,14 @@
     },
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "diagnostic:MGS3014",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS2001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -77935,6 +78171,14 @@
     {
       "source": "doc:docs/reference/codes/sandbox/README.md",
       "target": "doc:docs/reference/codes/sandbox/MGS3013.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/README.md",
+      "target": "doc:docs/reference/codes/sandbox/MGS3014.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -93429,6 +93673,14 @@
       "provenance": "docs/concepts/concurrency.md"
     },
     {
+      "source": "docsection:docs/concepts/concurrency.md#across-separate-runs-the-workspace-lock",
+      "target": "docsection:docs/concepts/concurrency.md#when-the-waiter-is-a-newer-gate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/concurrency.md"
+    },
+    {
       "source": "docsection:docs/concepts/concurrency.md#concurrency",
       "target": "docsection:docs/concepts/concurrency.md#across-separate-runs-the-workspace-lock",
       "relation": "contains",
@@ -106395,6 +106647,54 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3013.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#exit-status",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#how-the-handover-works",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#resolution",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#what-qualifies",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/sandbox/MGS3014.md#mgs3014-gate-superseded",
+      "target": "docsection:docs/reference/codes/sandbox/MGS3014.md#why-the-later-run-wins",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/sandbox/MGS3014.md"
     },
     {
       "source": "docsection:docs/reference/codes/sandbox/README.md#the-sandbox",

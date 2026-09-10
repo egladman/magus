@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,4 +151,84 @@ func TestStallWatchdogDoesNotReleaseAfterClose(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 
 	assert.Zero(t, releases.Load(), "a stopped watchdog must never release")
+}
+
+// gateHold builds a hold over one locked project, the shape watchForSupersede polls.
+func gateHold(t *testing.T, project string, opts ...lockerOption) *projectHold {
+	t.Helper()
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false, opts...)
+	l.started = time.Now().Add(-time.Minute)
+	release, err := l.acquire(t.Context(), project)
+	require.NoError(t, err)
+	var once sync.Once
+	return &projectHold{release: func() { once.Do(release) }, locker: l, paths: []string{project}}
+}
+
+// requestYieldFrom writes the request a later gate on the same tree would leave.
+func requestYieldFrom(t *testing.T, hold *projectHold, project string) {
+	t.Helper()
+	later := newProjectLocker("", testWorkspaceRoot, false, asGate())
+	require.NoError(t, record.Write(hold.locker.yieldPath(project), later.selfRecord(t.Context(), time.Now())))
+}
+
+// TestSupersedeWatchAbortsAndReleases pins what the watch does when the request arrives:
+// it cancels with MGS3014 as the cause and frees the locks. Cancelling alone would leave
+// the successor waiting on the lock it was just promised, because the locks only come
+// back when executeStages returns.
+func TestSupersedeWatchAbortsAndReleases(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	released := make(chan struct{})
+	var once sync.Once
+	hold := gateHold(t, "app", asGate())
+	defer hold.release()
+
+	ctx, watch := watchForSupersede(t.Context(), hold, func() {
+		hold.release()
+		once.Do(func() { close(released) })
+	})
+	defer watch.close()
+	requestYieldFrom(t, hold, "app")
+
+	select {
+	case <-released:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch aborted without releasing the locks the successor is waiting on")
+	}
+	require.Error(t, ctx.Err())
+	assert.ErrorIs(t, context.Cause(ctx), types.GateSuperseded, "the cause is what tells the run apart from a Ctrl-C")
+	assert.ErrorIs(t, watch.verdict(nil), types.GateSuperseded)
+}
+
+// TestSupersedeWatchIgnoresANonGate is the containment: only a gate is superseded, so an
+// ordinary run holding the same lock must never be aborted by a marker beside it.
+func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	var releases atomic.Int32
+	hold := gateHold(t, "app")
+	defer hold.release()
+
+	ctx, watch := watchForSupersede(t.Context(), hold, func() { releases.Add(1) })
+	defer watch.close()
+	requestYieldFrom(t, hold, "app")
+	time.Sleep(100 * time.Millisecond)
+
+	assert.NoError(t, ctx.Err(), "a non-gate holder keeps waiting behind it, exactly as before")
+	assert.Zero(t, releases.Load())
+	assert.NoError(t, watch.verdict(nil))
+}
+
+// A run that finished on its own must not have its successor's locks freed by a tick that
+// raced its own stop. Same hazard as the stall watchdog's, same guard.
+func TestSupersedeWatchDoesNotReleaseAfterClose(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	var releases atomic.Int32
+	hold := gateHold(t, "app", asGate())
+	defer hold.release()
+
+	_, watch := watchForSupersede(t.Context(), hold, func() { releases.Add(1) })
+	watch.close()
+	requestYieldFrom(t, hold, "app")
+	time.Sleep(80 * time.Millisecond)
+
+	assert.Zero(t, releases.Load(), "a stopped watch must never release")
 }

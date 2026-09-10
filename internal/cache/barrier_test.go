@@ -772,3 +772,32 @@ func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 
 	assert.Empty(t, violations)
 }
+
+func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
+	withShortHeartbeat(t, 20*time.Millisecond)
+	logs := captureLogs(t)
+
+	prog := NewProgress()
+	prog.at.Store(time.Now().Add(-time.Hour).UnixNano())
+	ctx := ContextWithProgress(context.Background(), prog)
+
+	upstream := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- waitForUpstream(ctx, upstream, DepKey(".", "coverage-badge"), DepKey(".", "generate"))
+	}()
+	time.Sleep(80 * time.Millisecond)
+	assert.Less(t, prog.Idle(), time.Minute)
+	close(upstream)
+	require.NoError(t, <-done)
+
+	assert.Contains(t, logs.lines(),
+		"magus: waiting for an upstream target to finish waiting=. coverage-badge upstream=. generate")
+}
+
+func TestWaitForUpstreamEndsOnCancel(t *testing.T) {
+	withShortHeartbeat(t, time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.ErrorIs(t, waitForUpstream(ctx, make(chan struct{}), "a", "b"), context.Canceled)
+}

@@ -63,13 +63,23 @@ type gateFinding struct {
 	delta     internalci.GateDelta
 }
 
+// isGateInvocation reports whether this invocation is THE gate: the ci target, run whole
+// rather than as a shard, and actually executing.
+//
+// The redundancy check and lock supersession (MGS3014) both key on it, and they have to
+// agree on what a gate is. One would otherwise defer a run the other would abort, on two
+// definitions that drifted.
+func isGateInvocation(target string, partial bool) bool {
+	return target == types.TargetCI && !partial && !globalCfg.DryRun
+}
+
 // prepareGateRedundancy computes the gate identity for a ci invocation, or
 // nil when the invocation is not one the check can vouch for: not the ci
 // target, a dry run, a shard or otherwise partial run, no VCS branch to key
 // on, or a selection whose cache keys cannot be computed. nil means the run
 // proceeds exactly as before this feature existed, with no output at all.
 func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, targets []types.Target, charms []string, partial bool) *gateRedundancy {
-	if target != types.TargetCI || partial || globalCfg.DryRun {
+	if !isGateInvocation(target, partial) {
 		return nil
 	}
 	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())

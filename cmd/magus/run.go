@@ -255,7 +255,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// The redundancy check: a ci gate this branch already passed with equivalent
 	// inputs refuses under load (MGS3010, exit 75) and advises when the machine
 	// is idle. Inert off the ci target and when nothing is on record.
-	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, rf.Shard != "" || rf.NShards > 0)
+	partial := rf.Shard != "" || rf.NShards > 0
+	gate := prepareGateRedundancy(ctx, m, targetName, targets, charms, partial)
 	if gateErr := gate.evaluate(ctx, rf.NoRedundancyCheck); gateErr != nil {
 		return gateErr
 	}
@@ -284,6 +285,9 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	var runOpts []magus.RunOption
 	if globalCfg.DryRun {
 		runOpts = append(runOpts, magus.WithDryRun())
+	}
+	if isGateInvocation(targetName, partial) {
+		runOpts = append(runOpts, magus.WithGate())
 	}
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))

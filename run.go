@@ -59,6 +59,7 @@ type run struct {
 	Step              bool     // forces Concurrency=1; StepGate comes from ctx
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
+	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -102,6 +103,15 @@ func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
 // still refreshes the cache entry on success, so a subsequent ordinary run
 // replays the rebuilt result instead of the stale one.
 func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
+
+// WithGate marks this invocation as the workspace's gate: the whole ci target, run to
+// judge the tree as it stands rather than to build one part of it.
+//
+// It is what admits the run to lock supersession in both directions. A gate takes a
+// project lock from an EARLIER gate on the same workspace root instead of queueing behind
+// it, and yields its own locks to a LATER one, which stops with MGS3014. Nothing else
+// about the run changes, and every non-gate invocation queues as before.
+func WithGate() RunOption { return func(o *run) { o.Gate = true } }
 
 func applyRunOpts(opts []RunOption) run {
 	var o run
@@ -1262,11 +1272,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
 	// out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	releaseLocks, err := m.acquireProjectLocks(ctx, uniqueProjects)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate)
 	if err != nil {
 		return err
 	}
-	defer releaseLocks()
+	defer hold.release()
 
 	// Armed once the locks are held, which is the condition that makes a stall costly:
 	// from here a wedged invocation blocks every other magus on these projects. Every
@@ -1275,9 +1285,16 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// it is not a target ceiling.
 	prog := cache.NewProgress()
 	ctx = cache.ContextWithProgress(ctx, prog)
-	ctx, stall := m.watchForStall(ctx, prog, releaseLocks)
+	ctx, stall := m.watchForStall(ctx, prog, hold.release)
 	defer stall.close()
 	defer func() { err = stall.verdict(err) }()
+
+	// Armed alongside it, over the other condition this run cannot diagnose from inside
+	// itself: a later gate on this same tree waiting for the locks held above. Inert
+	// unless this invocation is the gate. See watchForSupersede.
+	ctx, superseded := watchForSupersede(ctx, hold, hold.release)
+	defer superseded.close()
+	defer func() { err = superseded.verdict(err) }()
 
 	// The probe pass doubles as the toolchain gate. Enforcement follows the
 	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off

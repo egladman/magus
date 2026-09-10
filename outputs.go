@@ -88,11 +88,11 @@ func (m *Magus) CleanOutputs(ctx context.Context, projects []*types.Project, dry
 	// cannot be regenerating the same outputs mid-delete. A dry run removes nothing
 	// and takes no lock.
 	if !dryRun {
-		release, err := m.acquireProjectLocks(ctx, projects)
+		hold, err := m.acquireProjectLocks(ctx, projects, false)
 		if err != nil {
 			return nil, err
 		}
-		defer release()
+		defer hold.release()
 	}
 
 	var removed []string

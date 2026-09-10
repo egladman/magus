@@ -300,7 +300,20 @@ const (
 	// says a run stopped moving, after the window it takes to be sure; this says why
 	// within seconds, and names every holder and what each is blocked on, because the
 	// admission path knows both.
-	BuildSlotsDeadlocked      DiagnosticCode = "MGS3013"
+	BuildSlotsDeadlocked DiagnosticCode = "MGS3013"
+	// GateSuperseded is an earlier gate magus stopped because a LATER gate started on the
+	// same tree and asked for the project locks it holds. It joins MGS3007/MGS3010/MGS3012
+	// in the environment family: nothing in the workspace is wrong and nothing failed, the
+	// tree the verdict was about moved on.
+	//
+	// The ordering is decided by the tree and never by the caller: one workspace root, both
+	// invocations the whole ci target, later start wins. There is no priority to set,
+	// because a verdict about a tree that has since changed is worthless whoever asked for
+	// it, and the compute spent producing it is waste either way.
+	//
+	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
+	// command is valid again the moment the later gate finishes.
+	GateSuperseded            DiagnosticCode = "MGS3014"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -394,7 +407,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
-	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked,
+	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
 	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,

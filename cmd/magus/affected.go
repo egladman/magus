@@ -308,6 +308,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 
 	var runOpts []magus.RunOption
+	if isGateInvocation(target, false) {
+		runOpts = append(runOpts, magus.WithGate())
+	}
 	race, err := resolveRace(af.Race)
 	if err != nil {
 		return err

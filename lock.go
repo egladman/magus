@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -35,9 +36,28 @@ func noWaitLocks() bool {
 	}
 }
 
+// A projectHold is one invocation's grip on its project locks: the release, plus what a
+// supersede watch needs in order to see a later gate asking for them.
+type projectHold struct {
+	release func()
+	locker  *projectLocker
+	paths   []string
+}
+
+// yieldRequested reports the first held project a later gate is asking this run to give
+// up, and the gate asking. See watchForSupersede for what the caller does with it.
+func (h *projectHold) yieldRequested() (string, processRecord, bool) {
+	for _, p := range h.paths {
+		if rec, ok := h.locker.yieldRequest(p); ok {
+			return p, rec, true
+		}
+	}
+	return "", processRecord{}, false
+}
+
 // acquireProjectLocks takes the per-project EXCLUSIVE workspace lock for every
 // project this invocation will mutate, in canonical sorted order (deadlock-safe),
-// and returns a single release func.
+// and returns the hold, whose release func unlocks all of them.
 //
 // The lock is held ONCE for the whole invocation, at the boundary where the
 // invocation begins mutating the project set, NOT around each target. The
@@ -46,7 +66,11 @@ func noWaitLocks() bool {
 // keep a SEPARATE magus process from mutating the same project concurrently. This
 // is the complement of the per-target `exclusive` scheduling policy, which is a
 // different, intra-process concern and is left untouched.
-func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project) (func(), error) {
+//
+// gate marks this invocation the workspace's gate, which is what admits it to
+// supersession in both directions: it may take a lock from an earlier gate on this same
+// tree, and a later one may take its locks (MGS3014). Everything else queues as before.
+func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Project, gate bool) (*projectHold, error) {
 	paths := make([]string, 0, len(projects))
 	for _, p := range projects {
 		paths = append(paths, p.Path)
@@ -59,7 +83,11 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())
 	}
-	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks())
+	var lopts []lockerOption
+	if gate {
+		lopts = append(lopts, asGate())
+	}
+	l := newProjectLocker(resolveCacheDir(m.ws.Root, m.cfg), m.ws.Root, noWaitLocks(), lopts...)
 	release, err := l.acquireAll(ctx, paths)
 	if err != nil {
 		return nil, err
@@ -72,7 +100,11 @@ func (m *Magus) acquireProjectLocks(ctx context.Context, projects []*types.Proje
 	var releaseOnce sync.Once
 	releaseIdempotent := func() { releaseOnce.Do(release) }
 	stopWatchdog := watchWorkspaceRoot(ctx, m.ws.Root, rootWatchdogInterval, releaseIdempotent)
-	return func() { stopWatchdog(); releaseIdempotent() }, nil
+	return &projectHold{
+		release: func() { stopWatchdog(); releaseIdempotent() },
+		locker:  l,
+		paths:   paths,
+	}, nil
 }
 
 // rootWatchdogInterval is how often a lock-holding run re-checks that its workspace
@@ -169,10 +201,38 @@ type projectLocker struct {
 	dir    string
 	noWait bool
 	notify func(projectPath string) // waiting-message hook; nil prints to stderr
+	// root is the resolved workspace root, recorded in every sidecar. It is what makes
+	// "the same tree" a comparison of paths rather than of project names: a sibling
+	// worktree serves a project called "." too, and its gate judges different files.
+	root string
+	// started is when this invocation began taking its locks. Both sides of a supersede
+	// read it off the same clock, so "later" is a comparison and never a guess.
+	started time.Time
+	// gate marks this invocation the whole ci target. Only a gate supersedes, and only a
+	// gate is superseded.
+	gate bool
 }
+
+// lockOut is where the lock's decision lines go. A var so a test can read the exact bytes
+// a user sees; os.Stderr in every real run. These lines are written straight to the
+// stream, never through the console, which is why -s/--silent cannot suppress any of
+// them: a run that stalls or yields without explanation is the failure they exist to
+// prevent.
+var lockOut io.Writer = os.Stderr
 
 // lockRetryDelay is how often a blocked acquire re-polls the OS lock while waiting.
 const lockRetryDelay = 100 * time.Millisecond
+
+// supersedeYieldBound is how long a later gate asks an earlier one to stop before giving
+// up and queueing behind it like any other run.
+//
+// A bound rather than a wait, because a holder that cannot answer (wedged in a syscall,
+// stopped, or too old a magus to know what a yield request is) would otherwise turn a
+// supersede into the hang the whole path exists to remove. Generous against what the
+// abort actually costs: cancelling a run unwinds through killing its subprocesses.
+//
+// A var, not a const, so a test can shorten it: this path only exists to be observed.
+var supersedeYieldBound = 30 * time.Second
 
 // lockerOption configures a projectLocker.
 type lockerOption func(*projectLocker)
@@ -182,6 +242,9 @@ type lockerOption func(*projectLocker)
 func withLockNotify(fn func(projectPath string)) lockerOption {
 	return func(l *projectLocker) { l.notify = fn }
 }
+
+// asGate marks this invocation the workspace's gate. See projectLocker.gate.
+func asGate() lockerOption { return func(l *projectLocker) { l.gate = true } }
 
 // newProjectLocker returns a projectLocker whose lock files live under
 // <cacheDir>/locks/<workspace>, mirroring the workspace project tree. When noWait is
@@ -194,7 +257,12 @@ func withLockNotify(fn func(projectPath string)) lockerOption {
 // project "." blocked on this one's. That is a false conflict between projects that
 // share nothing, and it presents as a hang rather than an error.
 func newProjectLocker(cacheDir, workspaceRoot string, noWait bool, opts ...lockerOption) *projectLocker {
-	l := &projectLocker{dir: filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)), noWait: noWait}
+	l := &projectLocker{
+		dir:     filepath.Join(cacheDir, locksDirName, workspaceLockKey(workspaceRoot)),
+		noWait:  noWait,
+		root:    resolvedRoot(workspaceRoot),
+		started: time.Now(),
+	}
 	for _, o := range opts {
 		o(l)
 	}
@@ -278,6 +346,10 @@ func heldBy(owner string) string {
 // call blocks. With noWait the call returns a *lockContendedError immediately.
 // The returned release func unlocks; call it (defer) once the invocation's
 // mutating work on the project is done.
+//
+// One contention does not wait: a gate holding the lock for an EARLIER gate on this same
+// tree is asked to stop instead (MGS3014), and this call takes the lock when it does. See
+// supersedes for the qualifier and takeBySuperseding for the bound.
 func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func(), error) {
 	path := l.lockPath(projectPath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -300,6 +372,18 @@ func (l *projectLocker) acquire(ctx context.Context, projectPath string) (func()
 		if l.noWait {
 			return nil, &lockContendedError{Project: projectPath, Owner: l.describeOwner(projectPath)}
 		}
+		// A later gate does not queue behind an earlier one on the same tree: the earlier
+		// verdict is about a tree that has since changed, so ask it to stop and take the
+		// lock when it does. After the noWait branch, because MAGUS_NO_WAIT asked not to
+		// wait at all and superseding still waits, briefly, for the holder to unwind.
+		if holder, ok := l.supersedes(projectPath); ok {
+			got, err = l.takeBySuperseding(ctx, projectPath, fl, holder)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	if !got {
 		l.emitWaiting(ctx, projectPath)
 		stopWaiter := l.recordWaiter(ctx, projectPath)
 		stopHeartbeat := l.startWaitHeartbeat(ctx, projectPath)
@@ -364,12 +448,20 @@ func (l *projectLocker) acquireAll(ctx context.Context, projectPaths []string) (
 // root is hashed rather than embedded: it is the identity that matters, a path is not a
 // legal single directory name, and a digest keeps the lock tree shallow.
 func workspaceLockKey(root string) string {
+	sum := sha256.Sum256([]byte(resolvedRoot(root)))
+	return hex.EncodeToString(sum[:8])
+}
+
+// resolvedRoot is a workspace root reduced to the one spelling every comparison uses.
+// Two runs are on the same tree when this agrees, which is a stricter question than
+// whether they name the same project: a sibling worktree of the same repository has the
+// same project paths and different files.
+func resolvedRoot(root string) string {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		abs = root
 	}
-	sum := sha256.Sum256([]byte(filepath.Clean(abs)))
-	return hex.EncodeToString(sum[:8])
+	return filepath.Clean(abs)
 }
 
 // lockPath maps a workspace-relative project path to its lock file, mirroring the
@@ -396,7 +488,7 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(os.Stderr, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
+	fmt.Fprintf(lockOut, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
 	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
 	// line above announces the event and then scrolls away; a run that is blocked
 	// needs the state to stay on screen, because the alternative a reader sees is
@@ -453,7 +545,7 @@ func (l *projectLocker) startWaitHeartbeat(ctx context.Context, projectPath stri
 				return
 			case <-t.C:
 				elapsed := time.Since(start)
-				fmt.Fprintf(os.Stderr,
+				fmt.Fprintf(lockOut,
 					"magus: still waiting for the lock on project %s (%s elapsed); this run is NOT hung. Set MAGUS_NO_WAIT=1 to fail fast instead.%s\n",
 					p, elapsed.Round(time.Second), orphanHint(elapsed, l.describeOwner(projectPath)))
 			}
@@ -476,7 +568,7 @@ func (l *projectLocker) emitResumed(ctx context.Context, projectPath string) {
 	if p == "" {
 		p = "."
 	}
-	fmt.Fprintf(os.Stderr, "magus: lock on project %s released; starting.\n", p)
+	fmt.Fprintf(lockOut, "magus: lock on project %s released; starting.\n", p)
 	slog.InfoContext(ctx, "lock.acquired", slog.String("project", p))
 }
 
@@ -500,6 +592,17 @@ type processRecord struct {
 	// share one. Empty for a subcommand with no invocation record (clean), and for a
 	// sidecar written by an older magus; a waiter then has nothing to match and waits.
 	Inv string `record:"invocation,omitempty"`
+	// Root is the resolved workspace root, and Gate says the invocation is the whole ci
+	// target. Together they are the supersede qualifier: same tree, both gates.
+	//
+	// omitempty is what makes two magus versions safe to run against one lock directory,
+	// which two checkouts sharing a cache dir already do. A sidecar written by a magus
+	// that predates supersession lacks both lines and decodes to the zero value, which
+	// disqualifies its holder and leaves it waited on exactly as today; a sidecar carrying
+	// them decodes in the older magus too, because a record reader looks up the field
+	// names it knows and ignores every other line.
+	Root string `record:"root,omitempty"`
+	Gate bool   `record:"gate,omitempty"`
 }
 
 // The sidecar layout, in ONE place. HeldLocks previously re-derived these by hand
@@ -509,6 +612,7 @@ const (
 	lockFileName = "lock"
 	ownerSuffix  = ".owner"
 	waiterInfix  = ".waiter."
+	yieldSuffix  = ".yield"
 	locksDirName = "locks"
 )
 
@@ -522,16 +626,22 @@ func (l *projectLocker) ownerPath(projectPath string) string {
 // swallowed: not being able to say who holds a lock must never fail a run that
 // already holds it.
 func (l *projectLocker) recordOwner(ctx context.Context, projectPath string) {
-	_ = record.Write(l.ownerPath(projectPath), selfRecord(ctx))
+	// The owner's Started is when this invocation began LOCKING, not when the sidecar was
+	// written, so a supersede compares two runs against one clock. A waiter keeps the
+	// write time, which is when its own wait actually began.
+	_ = record.Write(l.ownerPath(projectPath), l.selfRecord(ctx, l.started))
+	l.clearStaleYield(projectPath)
 }
 
 // selfRecord builds this invocation's identity, the payload both the owner and
-// waiter sidecars carry. Stored one file per field, so a stuck run is diagnosable
+// waiter sidecars carry. Stored as one cattable file, so a stuck run is diagnosable
 // with cat alone:
 //
 //	$ cat .magus/locks/*/lock.owner
-//	magus run ci .
-func selfRecord(ctx context.Context) processRecord {
+//	command	magus run ci .
+//	gate	true
+//	pid	41221
+func (l *projectLocker) selfRecord(ctx context.Context, started time.Time) processRecord {
 	dir, _ := os.Getwd()
 	// This invocation's OWN id, never the ancestry's last element. Those look the same for
 	// a run (BeginInvocation appends its id there), and differ for every lock-taker that
@@ -542,8 +652,10 @@ func selfRecord(ctx context.Context) processRecord {
 		PID:     os.Getpid(),
 		Command: strings.Join(os.Args, " "),
 		Dir:     dir,
-		Started: time.Now(),
+		Started: started,
 		Inv:     journal.InvocationIDFromContext(ctx),
+		Root:    l.root,
+		Gate:    l.gate,
 	}
 }
 
@@ -554,7 +666,12 @@ func selfRecord(ctx context.Context) processRecord {
 // released the flock otherwise), so this never needs to probe liveness. It only
 // answers which process, started when, from where.
 func (l *projectLocker) describeOwner(projectPath string) string {
-	o := l.readOwner(projectPath)
+	return describeRecord(l.readOwner(projectPath))
+}
+
+// describeRecord is describeOwner's rendering, over a record the caller already read. One
+// holder reads one way whether the reader is a wait, a fail-fast or a supersede.
+func describeRecord(o processRecord) string {
 	if o.PID == 0 {
 		return ""
 	}
@@ -614,10 +731,136 @@ func (l *projectLocker) waiterPath(projectPath string) string {
 // owner record, and never load-bearing.
 func (l *projectLocker) recordWaiter(ctx context.Context, projectPath string) func() {
 	path := l.waiterPath(projectPath)
-	if record.Write(path, selfRecord(ctx)) != nil {
+	if record.Write(path, l.selfRecord(ctx, time.Now())) != nil {
 		return func() {}
 	}
 	return func() { _ = record.Remove(path) }
+}
+
+// yieldPath is the supersede request beside the lock file: one marker per project, naming
+// the later gate that wants it.
+func (l *projectLocker) yieldPath(projectPath string) string {
+	return l.lockPath(projectPath) + yieldSuffix
+}
+
+// supersedes reports the holder of projectPath when this invocation should TAKE the lock
+// from it rather than queue behind it, and the holder to name when it does.
+//
+// The qualifier is narrow on purpose, because the cost of a false positive is a killed
+// run that was doing real work. All four must hold: this invocation is a gate, the holder
+// is a gate, both resolve to the same workspace root, and the holder began first. A
+// sibling worktree is a different tree and keeps waiting; a `run build` behind a `run
+// test` keeps waiting; a holder with no start time on record keeps waiting, because a
+// supersede that cannot prove it is the later run is a coin toss.
+//
+// An ancestor holding the lock never reaches here: reentrantErr answers that one first,
+// and MGS3007 stays the more specific diagnosis.
+func (l *projectLocker) supersedes(projectPath string) (processRecord, bool) {
+	if !l.gate || l.root == "" {
+		return processRecord{}, false
+	}
+	rec := l.readOwner(projectPath)
+	if rec.PID == 0 || !rec.Gate || rec.Root != l.root {
+		return processRecord{}, false
+	}
+	if rec.Started.IsZero() || !rec.Started.Before(l.started) {
+		return processRecord{}, false
+	}
+	return rec, true
+}
+
+// yieldRequest reports a LIVE supersede request against a lock this invocation holds: a
+// later gate on this same tree, waiting on it.
+//
+// The mirror of supersedes, read from the holder's side, and the same start-time
+// comparison is what makes a marker self-expiring. A request from a gate that began
+// before this holder cannot be for this holder, so a marker left behind by a waiter that
+// died is inert rather than a trap for whoever takes the lock next.
+func (l *projectLocker) yieldRequest(projectPath string) (processRecord, bool) {
+	if !l.gate || l.root == "" {
+		return processRecord{}, false
+	}
+	rec := readRecord(l.yieldPath(projectPath))
+	if rec.PID == 0 || !rec.Gate || rec.Root != l.root {
+		return processRecord{}, false
+	}
+	if !l.started.Before(rec.Started) {
+		return processRecord{}, false
+	}
+	return rec, true
+}
+
+// requestYield publishes this gate's claim on a held lock and returns the retraction.
+//
+// A marker file rather than a signal, and the reason is what the abort has to SAY. A
+// signal carries no identity, so the aborted run could not name who superseded it, and
+// nothing could tell this from the Ctrl-C or the supervisor SIGTERM the CLI already
+// handles as an interrupt; SIGTERM is not deliverable on Windows at all; and under the
+// daemon the holder and the waiter can be threads of one process, where signalling the
+// pid means signalling yourself. The marker carries the successor's pid, command and
+// start time, which is the whole of MGS3014's message.
+func (l *projectLocker) requestYield(ctx context.Context, projectPath string) func() {
+	path := l.yieldPath(projectPath)
+	if record.Write(path, l.selfRecord(ctx, l.started)) != nil {
+		return func() {}
+	}
+	return func() { _ = record.Remove(path) }
+}
+
+// clearStaleYield drops a supersede request that can no longer be for this holder, so a
+// waiter killed between writing the marker and taking the lock leaves no debris.
+//
+// Deliberately NOT gated on this invocation being a gate, unlike yieldRequest: whoever
+// wins the lock does the sweeping, and an ordinary run that took it must not delete a
+// request a gate is still waiting on. The start-time comparison is the whole test, and it
+// is the same one that makes a marker self-expiring.
+func (l *projectLocker) clearStaleYield(projectPath string) {
+	rec := readRecord(l.yieldPath(projectPath))
+	if rec.PID != 0 && l.started.Before(rec.Started) {
+		return
+	}
+	_ = record.Remove(l.yieldPath(projectPath))
+}
+
+// takeBySuperseding asks the holder to stop, waits a bounded time for the lock, and
+// reports whether it got it. A false return means the caller falls back to the ordinary
+// wait, which is exactly today's behavior; the error is non-nil only when the CALLER's
+// context ended, since the bound expiring is a fallback rather than a failure.
+func (l *projectLocker) takeBySuperseding(ctx context.Context, projectPath string, fl *flock.Flock, holder processRecord) (bool, error) {
+	retract := l.requestYield(ctx, projectPath)
+	waitCtx, cancel := context.WithTimeout(ctx, supersedeYieldBound)
+	defer cancel()
+	got, err := fl.TryLockContext(waitCtx, lockRetryDelay)
+	retract()
+	if err != nil || !got {
+		if ctx.Err() != nil {
+			return false, fmt.Errorf("workspace lock: gave up waiting for %s: %w", projectPath, ctx.Err())
+		}
+		p := projectPath
+		if p == "" {
+			p = "."
+		}
+		fmt.Fprintf(lockOut, "magus: the earlier gate on project %s did not stop within %s; waiting for it instead.\n", p, supersedeYieldBound)
+		return false, nil
+	}
+	l.emitSuperseded(ctx, projectPath, holder)
+	return true, nil
+}
+
+// emitSuperseded states the decision, once, on the run that made it. It is a decision and
+// not progress, so it goes to lockOut like every other lock line and -s cannot suppress
+// it: a gate that silently killed another run is worse than one that never did.
+func (l *projectLocker) emitSuperseded(ctx context.Context, projectPath string, holder processRecord) {
+	p := projectPath
+	if p == "" {
+		p = "."
+	}
+	fmt.Fprintf(lockOut, "magus: superseded the earlier gate on project %s%s; its verdict would have described a tree that has since changed.\n",
+		p, heldBy(describeRecord(holder)))
+	slog.InfoContext(ctx, "lock.superseded",
+		slog.String("project", p),
+		slog.Int("holder_pid", holder.PID),
+		slog.String("holder_command", holder.Command))
 }
 
 // removeOwner clears the sidecar on release so a later reader never attributes a
