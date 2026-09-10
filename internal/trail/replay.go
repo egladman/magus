@@ -128,7 +128,7 @@ func replayTrail(root, base string, paths []string, limit int) map[string][]type
 		// else reads the touch, and every consumer then has to remember to redact.
 		obs = append(obs, observation{
 			Host: req.Host, Session: req.Session, Transcript: req.Transcript,
-			Tool: req.Tool, Path: relativize(root, req.Path), Program: commandProgram(req.Command),
+			Tool: req.Tool, Path: relativize(root, req.Path), Program: CommandProgram(req.Command),
 			At: time.UnixMilli(e.Ts),
 		})
 	}
@@ -335,7 +335,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 	return reads, writes, shell
 }
 
-// commandProgram reduces a recorded command line to the program it invoked, dropping every
+// CommandProgram reduces a recorded command line to the program it invoked, dropping every
 // argument. See Touch.Ran for why the arguments cannot be kept.
 //
 // Leading VAR=value assignments are skipped rather than reported, because they are the single
@@ -347,7 +347,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 // best-guess program for an unparsable line would put an invented fact in a provenance
 // record, and an admitted gap beats a low-confidence match here for the same reason it does
 // in the notes store.
-func commandProgram(cmd string) string {
+func CommandProgram(cmd string) string {
 	for _, tok := range strings.Fields(cmd) {
 		if isEnvAssignment(tok) {
 			continue

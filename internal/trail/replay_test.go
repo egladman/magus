@@ -73,7 +73,7 @@ func TestCommandProgramReducesToTheProgram(t *testing.T) {
 		{"", ""},
 		{"ONLY=assignments HERE=too", ""},
 	} {
-		assert.Equal(t, tc.want, commandProgram(tc.in), "input %q", tc.in)
+		assert.Equal(t, tc.want, CommandProgram(tc.in), "input %q", tc.in)
 	}
 }
 

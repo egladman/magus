@@ -417,11 +417,28 @@ func TestSessionShowNamesTheLoadWhenNothingIsThere(t *testing.T) {
 	assert.Contains(t, err.Error(), "magus session load")
 }
 
+// TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory is the bound: a line longer than
+// any event is rejected by number and skipped, and the lines after it still load.
+func TestReadLoadStreamSkipsAnOverlongLineInBoundedMemory(t *testing.T) {
+	long := `{"event":"command","host":"claude-code","session":"s1","cwd":"/nowhere","command":"` +
+		strings.Repeat("x", loadMaxLineBytes+1) + `"}`
+
+	summary, err := readLoadStream(strings.NewReader(long+"\n\n"+long+"\n"), t.TempDir())
+
+	require.NoError(t, err)
+	require.Len(t, summary.Rejects, 2)
+	assert.Contains(t, summary.Rejects[0], "line 1: longer than any event")
+	assert.Contains(t, summary.Rejects[1], "line 3: longer than any event")
+}
+
 func TestCommandProgramReadsThroughAWrapper(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "go", commandProgram("env GOFLAGS=-mod=mod go build ./..."))
 	assert.Equal(t, "ls", commandProgram("ls -la"))
 	assert.Empty(t, commandProgram(""))
+	// The unparsable fallback must not store a leading assignment as the program: that
+	// token is where a pasted credential sits.
+	assert.Equal(t, "curl", commandProgram(`TOKEN=hunter2 curl -H "Authorization: Bearer $TOKEN`))
 }
 
 // TestSessionShowJoinsThisCheckoutsTrail is the lineage join: a loaded transcript and the

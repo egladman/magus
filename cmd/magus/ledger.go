@@ -27,6 +27,7 @@ import (
 // exists because the person orchestrating that agent is the one who has to see it, and
 // until now had to read a JSON file or open the console to do so.
 func ledgerCmd(ctx context.Context, root string, args []string) error {
+	root = resolveRootOrEmpty(root)
 	if len(args) > 0 {
 		switch args[0] {
 		case "-h", "--help", "help":

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -563,19 +562,26 @@ func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 	}
 
 	sameRepo := repoScope(dir)
-	r := bufio.NewReaderSize(in, 64*1024)
+	// ReadSlice over a buffer one byte wider than the cap is what bounds memory: ReadString
+	// would grow without limit on a line that never ends, and the overlong case has to be
+	// reported and skipped, not read to completion.
+	r := bufio.NewReaderSize(in, loadMaxLineBytes+1)
 	for line := 1; ; line++ {
-		raw, err := r.ReadString('\n')
+		raw, err := r.ReadSlice('\n')
+		overlong := errors.Is(err, bufio.ErrBufferFull)
+		for errors.Is(err, bufio.ErrBufferFull) {
+			_, err = r.ReadSlice('\n')
+		}
 		if err != nil && !errors.Is(err, io.EOF) {
 			return summary, fmt.Errorf("magus session load: read stream: %w", err)
 		}
 		last := errors.Is(err, io.EOF)
-		switch raw = strings.TrimSpace(raw); {
-		case raw == "":
-		case len(raw) > loadMaxLineBytes:
-			reject(line, "%d bytes, longer than any event (%d)", len(raw), loadMaxLineBytes)
+		switch text := strings.TrimSpace(string(raw)); {
+		case overlong:
+			reject(line, "longer than any event (%d bytes)", loadMaxLineBytes)
+		case text == "":
 		default:
-			if ev, reason := decodeLoadEvent(raw, sameRepo); reason != "" {
+			if ev, reason := decodeLoadEvent(text, sameRepo); reason != "" {
 				reject(line, "%s", reason)
 			} else if ev != nil {
 				summary.Events = append(summary.Events, *ev)
@@ -683,16 +689,14 @@ func rejudgeCommand(text string) (program, verdict, rule string) {
 	return program, sessions.VerdictPass, ""
 }
 
-// commandProgram names the program a line runs, wrappers already peeled. A line
-// the shell parser cannot read still has a first word worth grouping by.
+// commandProgram names the program a line runs, wrappers already peeled. A line the
+// shell parser cannot read falls back to the trail's reducer, which skips the VAR=value
+// prefix a credential is likeliest to sit in rather than storing it as the program.
 func commandProgram(text string) string {
 	if cmds, parsed := parseGuardCommands(text); parsed && len(cmds) > 0 {
 		return cmds[0].Name
 	}
-	if fields := strings.Fields(text); len(fields) > 0 {
-		return path.Base(fields[0])
-	}
-	return ""
+	return trail.CommandProgram(text)
 }
 
 // repoScope reports whether a cwd belongs to the repository whose store is dir,
