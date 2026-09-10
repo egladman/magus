@@ -198,6 +198,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The Cursor hook schemas come from Cursor's own validator.** Cursor publishes no schema for
+  `.cursor/hooks.json`, but its shipped hooks bundle validates the file and every event's stdout
+  before a hook fires, so the vendored Cursor schemas are now transcribed from that code (read
+  out of the cursor-agent CLI package and the desktop app, digests in the provenance table)
+  rather than from the docs page, which types `matcher` as an object where the validator
+  requires a string. The gating reply and the advisory reply are graded against the event that
+  reads each, so a renamed field costs a test rather than a silently dropped verdict. The
+  OpenCode plugin type-check moves to the current `@opencode-ai/plugin` release.
 - **One coverage badge per language.** The README carries a Go badge and a TypeScript badge,
   and the TypeScript figure spans every TypeScript project with a suite (the console and
   libs/textsearch), merged line by line from their lcov reports by the console's test target

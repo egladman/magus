@@ -59,6 +59,19 @@ var hostOutputSchema = map[string]string{
 	"cursor":      "cursor/hook-output.schema.json",
 }
 
+// cursorReplySchema maps a shell template variable in cursor-guard.sh to the schema for
+// the event that reads what it renders.
+//
+// One entry per host is enough everywhere else. Cursor validates each event's stdout
+// with a different function, and its gating events carry no advisory channel, so the
+// guard answers two events with two shapes; a single schema for the host would have to
+// be the union of both, which validates each reply against fields the event reading it
+// ignores.
+var cursorReplySchema = map[string]string{
+	"gate":   "cursor/hook-output.schema.json",
+	"advise": "cursor/post-tool-use.output.schema.json",
+}
+
 // hostConfigFile names the config files magus SHIPS for a host, as opposed to the
 // blocks its pages embed. Cursor has none: its page tells a reader to write the file.
 var hostConfigFile = map[string][]string{
@@ -95,6 +108,7 @@ var (
 	hostResponseAssign = regexp.MustCompile(`(?m)^\[ -n "\$HOST_RESPONSE" \] \|\| HOST_RESPONSE='(.*)'"\$HOST_ADVISE_BRANCH"'(.*)'$`)
 	inlineTemplateArg  = regexp.MustCompile(`-o 'template=(.*)'`)
 	literalJSONObject  = regexp.MustCompile(`'(\{"[^'\n]*\})'`)
+	shellTemplateVar   = regexp.MustCompile(`(?m)^(\w+)_template='(.*)'$`)
 )
 
 // guardVerdicts are the three decisions `magus session hook` renders. The values are
@@ -353,12 +367,85 @@ func TestHookOutputSchemasRejectAWrongEventName(t *testing.T) {
 		schema := loadHostSchema(t, hostOutputSchema["cursor"])
 		assert.Error(t, schema.Validate(decodeJSON(t, "cursor", `{"permission":"denied"}`)),
 			"cursor's output schema accepted a permission value Cursor does not define")
+
+		advise := loadHostSchema(t, cursorReplySchema["advise"])
+		assert.Error(t, advise.Validate(decodeJSON(t, "cursor", `{"additional_context":{"text":"nope"}}`)),
+			"cursor's postToolUse schema accepted an advisory that is not a string, which Cursor drops")
 	})
+}
+
+// schemaPropertyNames reads the field names a vendored schema declares.
+//
+// Read out of the raw JSON rather than off the resolved schema because the question is
+// what the host NAMES, and jsonschema-go is built to validate rather than to introspect.
+func schemaPropertyNames(t *testing.T, rel string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(hostSchemaDir, rel))
+	require.NoError(t, err, "read the vendored schema %s", rel)
+	var schema struct {
+		Properties map[string]any `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &schema))
+	require.NotEmpty(t, schema.Properties, "%s must name the fields it grades", rel)
+	return schema.Properties
+}
+
+// TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem grades what cursor-guard.sh
+// answers, per event.
+//
+// The generic extraction above cannot reach these. The guard holds its two replies in
+// shell variables and splices them in as `template=$gate_template`, so the only Cursor
+// bytes that gate ever saw were the two literal allow replies, leaving the deny path
+// ungraded, which is the one path a guard exists for.
+//
+// Both halves of the check matter and only one of them is a schema. Validating catches a
+// field whose TYPE moved. The subset assertion catches a field Cursor RENAMED, which
+// validating cannot: Cursor's stdout validators read the fields they know and ignore the
+// rest, so a reply naming additional_context_v2 is accepted, ignored, and carries no
+// advisory at all.
+func TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
+	path := filepath.Join(hookTemplateDir, "cursor-guard.sh")
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+
+	templates := shellTemplateVar.FindAllStringSubmatch(string(raw), -1)
+	require.Len(t, templates, len(cursorReplySchema),
+		"%s must render one reply template per mapped Cursor event; a template that stopped\n"+
+			"being assigned on its own line reads here as one that stopped existing", path)
+
+	funcs := sprig.HermeticTxtFuncMap()
+	for _, match := range templates {
+		name := match[1]
+		t.Run(name, func(t *testing.T) {
+			schemaFile, ok := cursorReplySchema[name]
+			require.True(t, ok,
+				"%s renders %s_template and nothing says which Cursor event reads it", path, name)
+			schema := loadHostSchema(t, schemaFile)
+			named := schemaPropertyNames(t, schemaFile)
+
+			tmpl, err := template.New(name).Funcs(funcs).Parse(match[2])
+			require.NoError(t, err, "%s_template carries the reply, so it must parse", name)
+			for _, verdict := range guardVerdicts {
+				var out strings.Builder
+				require.NoError(t, tmpl.Execute(&out, verdict), "%s_template on a %s", name, verdict["decision"])
+				reply, isObject := decodeJSON(t, path, out.String()).(map[string]any)
+				require.True(t, isObject, "%s_template must render a JSON object", name)
+				assert.NoError(t, schema.Validate(reply),
+					"%s_template renders %s, which Cursor would not accept, per %s", name, out.String(), schemaFile)
+				for field := range reply {
+					assert.Contains(t, named, field,
+						"%s_template names %q, which %s does not. Cursor ignores a field it has never\n"+
+							"heard of rather than rejecting it, so a rename costs the verdict in silence.",
+						name, field, schemaFile)
+				}
+			}
+		})
+	}
 }
 
 // sourcesRow matches one row of the provenance table, which is the only place a
 // vendored schema's origin and digest are written down.
-var sourcesRow = regexp.MustCompile("(?m)^\\| `([^`]+)` \\| (published|derived) \\|.*\\| `([0-9a-f]{64})` \\|")
+var sourcesRow = regexp.MustCompile("(?m)^\\| `([^`]+)` \\| (published|derived-from-binary|derived) \\|.*\\| `([0-9a-f]{64})` \\|")
 
 // TestVendoredHostSchemasMatchTheirRecordedDigest keeps the provenance honest.
 //

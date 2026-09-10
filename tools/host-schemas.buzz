@@ -15,10 +15,10 @@
 //
 // verify is the default, so a mistyped mode reports rather than overwrites.
 //
-// Only the rows the provenance table marks `published` can be refreshed. A `derived`
-// row is ours, transcribed by hand from a host that publishes no schema for that
-// surface, and there is nothing at its URL to diff against, so this names it and moves
-// on rather than pretending to have checked it.
+// Only the rows the provenance table marks `published` can be refreshed. A `derived` or
+// `derived-from-binary` row is ours, transcribed by hand from a host that publishes no
+// schema for that surface, and its URL serves prose or a shipped artifact rather than
+// bytes to diff, so this names it and moves on rather than pretending to have checked it.
 //
 // Run from the workspace root: every path here is relative to it, the way `magus buzz`
 // resolves them.
@@ -63,7 +63,7 @@ export fun main() > void !> any {
         final file = code(cells, 1);
         final origin = plain(cells, 2);
         if (origin != "published") {
-            std\print("skip {file}: ours, not theirs; re-read " + code(cells, 3) + " by hand");
+            std\print("skip {file}: {origin}, so " + code(cells, 3) + " has no bytes to diff; re-read it by hand");
             continue;
         }
 
