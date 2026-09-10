@@ -318,7 +318,7 @@ type ChainStep struct {
 	// returns when all of them have run, so a later stage is ordered after every earlier
 	// one by the body itself; that is the only within-step sequencing there is, and the
 	// order derivation reads it from here. Zero for the first call, the common case.
-	Stage int `json:"stage,omitempty" yaml:"stage,omitempty"`
+	Stage int `json:"stage,omitzero" yaml:"stage,omitempty"`
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project

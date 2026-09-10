@@ -8,6 +8,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
 
@@ -43,6 +44,13 @@ type TargetNode struct {
 	// the only sequencing that exists INSIDE a step, so they are what decides whether a
 	// same-step overlap is ordered or unschedulable; see FindSameStepConflicts.
 	Needs []string
+	// After are the node keys that complete before this target STARTS: the members of
+	// the earlier ctx.needs calls in the body that composes it (StageAfter). Kept apart
+	// from Needs because the two order different things. A need completes before this
+	// target's own work and says nothing about its sibling members; an After edge holds
+	// for everything this target composes as well, since none of it can start before
+	// the target does.
+	After []string
 }
 
 // Key returns the node's scheduling identity, shared with the step barrier.
@@ -483,7 +491,12 @@ type SameStepConflict struct {
 // over-ordering is cheap, but a refusal has to stand on a file: "reads **/MAGUS.md
 // alongside a writer of cmd/magus/completions/*" intersects as globs and never as paths.
 // nil means no witness is required, which keeps fixtures with invented globs testable.
-type OverlapWitness func(write, read string) bool
+//
+// ignore is the reader's pruned directory names. A pattern read never reaches a file
+// under one of them when the key is hashed (expandSources prunes the walk by name), so
+// a file there witnesses nothing for a pattern; an exact read names its file
+// deliberately and is hashed by stat, so it does. What orders and what hashes agree.
+type OverlapWitness func(write, read string, ignore []string) bool
 
 // WorkspaceOverlapWitness answers from the workspace tree: the write glob is expanded
 // once and each hit is matched against the read glob. Expansion is memoized per write
@@ -491,7 +504,7 @@ type OverlapWitness func(write, read string) bool
 func WorkspaceOverlapWitness(root string) OverlapWitness {
 	tree := os.DirFS(root)
 	hits := map[string][]string{}
-	return func(write, read string) bool {
+	return func(write, read string, ignore []string) bool {
 		paths, seen := hits[write]
 		if !seen {
 			// An unreadable or absent path reads as no witness: a refusal over a glob
@@ -499,7 +512,11 @@ func WorkspaceOverlapWitness(root string) OverlapWitness {
 			paths, _ = doublestar.Glob(tree, write, doublestar.WithFilesOnly(), doublestar.WithNoFollow())
 			hits[write] = paths
 		}
+		pattern := strings.ContainsAny(read, "*?[{")
 		for _, p := range paths {
+			if pattern && underIgnoredDir(p, ignore) {
+				continue
+			}
 			if ok, err := doublestar.Match(read, p); ok && err == nil {
 				return true
 			}
@@ -527,6 +544,7 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) []SameSte
 	for _, n := range nodes {
 		byKey[n.Key()] = n
 	}
+	composers := composersOf(nodes)
 	var out []SameStepConflict
 	for w := range nodes {
 		for r := range nodes {
@@ -544,10 +562,10 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) []SameSte
 			if !ok {
 				continue
 			}
-			if witness != nil && !witness(write, read) {
+			if witness != nil && !witness(write, read, nodes[r].IgnoreDirs) {
 				continue
 			}
-			if needsPath(byKey, nodes[r].Key(), nodes[w].Key()) || needsPath(byKey, nodes[w].Key(), nodes[r].Key()) {
+			if orderedAfter(byKey, composers, nodes[r].Key(), nodes[w].Key()) || orderedAfter(byKey, composers, nodes[w].Key(), nodes[r].Key()) {
 				continue
 			}
 			out = append(out, SameStepConflict{
@@ -573,24 +591,77 @@ func sharedStep(a, b TargetNode) (string, bool) {
 	return "", false
 }
 
-// needsPath reports whether from reaches to by following ctx.needs edges, so the schedule
-// already puts to first. Bounded by the node count, which is what keeps a chain the loader
+// composersOf inverts the Needs edges: for each node key, the composers whose chains
+// dispatch it. An After edge on a composer holds for everything under it, and this is
+// how the walk up to those composers is made.
+func composersOf(nodes []TargetNode) map[string][]string {
+	out := map[string][]string{}
+	for _, n := range nodes {
+		for _, member := range n.Needs {
+			out[member] = append(out[member], n.Key())
+		}
+	}
+	return out
+}
+
+// orderedAfter reports whether later's own work runs after earlier has completed, so
+// the body's sequencing already puts earlier first.
+//
+// Two ways that holds. later's own edges reach earlier: a need completes before later's
+// work, an After edge before later starts, and from there every edge of every node
+// reached completes before that node does, so the closure over both kinds is sound.
+// Or a composer above later carries an After edge that reaches earlier: nothing under
+// that composer starts before it does. A composer's NEEDS do not count from up there,
+// because those are later's own siblings, fanned out unordered beside it.
+//
+// Every walk is bounded by the node count, which is what keeps a chain the loader
 // somehow admitted with a cycle in it from spinning here.
-func needsPath(byKey map[string]TargetNode, from, to string) bool {
-	seen := map[string]bool{from: true}
-	queue := []string{from}
+func orderedAfter(byKey map[string]TargetNode, composers map[string][]string, later, earlier string) bool {
+	if completesBefore(byKey, later, earlier, true) {
+		return true
+	}
+	seen := map[string]bool{later: true}
+	queue := []string{later}
 	for len(queue) > 0 {
 		k := queue[0]
 		queue = queue[1:]
-		for _, next := range byKey[k].Needs {
-			if next == to {
+		for _, c := range composers[k] {
+			if seen[c] {
+				continue
+			}
+			seen[c] = true
+			if completesBefore(byKey, c, earlier, false) {
 				return true
 			}
-			if !seen[next] {
-				seen[next] = true
-				queue = append(queue, next)
-			}
+			queue = append(queue, c)
 		}
+	}
+	return false
+}
+
+// completesBefore reports whether target completes before from's own work, walking
+// from's After edges, its Needs too when ownNeeds is set, and both kinds of edge on
+// every node reached past the first hop.
+func completesBefore(byKey map[string]TargetNode, from, target string, ownNeeds bool) bool {
+	first := byKey[from].After
+	if ownNeeds {
+		first = append(slices.Clone(first), byKey[from].Needs...)
+	}
+	seen := map[string]bool{from: true}
+	queue := first
+	for len(queue) > 0 {
+		k := queue[0]
+		queue = queue[1:]
+		if k == target {
+			return true
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		n := byKey[k]
+		queue = append(queue, n.Needs...)
+		queue = append(queue, n.After...)
 	}
 	return false
 }
@@ -717,6 +788,7 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 			Reads: reads, Writes: writes,
 			DeclaredReads:  declaredReads,
 			DeclaredWrites: len(proj.TargetOutputs[target]) > 0 || len(updates) > 0,
+			IgnoreDirs:     prunedDirs(proj),
 		}
 		byKey[key] = node
 		order = append(order, key)
@@ -736,12 +808,12 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 			node.Needs = append(node.Needs, memberKey)
 			walk(lookupOwner(proj, cs, lookup), cs.Target)
 		}
-		for memberKey, earlier := range StageNeeds(chain, keyOf) {
+		for memberKey, earlier := range StageAfter(chain, keyOf) {
 			// Every member walked above exists; a step keyOf rejected has no entry.
 			member := byKey[memberKey]
 			for _, e := range earlier {
-				if !slices.Contains(member.Needs, e) {
-					member.Needs = append(member.Needs, e)
+				if !slices.Contains(member.After, e) {
+					member.After = append(member.After, e)
 				}
 			}
 		}
@@ -753,6 +825,22 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 		nodes = append(nodes, *byKey[k])
 	}
 	return nodes
+}
+
+// prunedDirs is the directory-name set the project's source walk prunes: the core
+// names every walk skips plus what each resolved spell declares, the same union
+// buildStep hands the hasher. A project loaded without resolved spells (a doctor
+// fixture) prunes the core set alone.
+func prunedDirs(proj *types.Project) []string {
+	out := slices.Clone(project.IgnoreDirs)
+	for _, sp := range proj.ResolvedSpells {
+		for _, d := range sp.IgnoreDirs() {
+			if !slices.Contains(out, d) {
+				out = append(out, d)
+			}
+		}
+	}
+	return out
 }
 
 // lookupOwner resolves the project a chain step runs in: the composer's own for a local
@@ -767,18 +855,18 @@ func lookupOwner(proj *types.Project, cs types.ChainStep, lookup func(path strin
 	return lookup(cs.Project)
 }
 
-// StageNeeds lists, per chain member, the members of the earlier ctx.needs calls in the
+// StageAfter lists, per chain member, the members of the earlier ctx.needs calls in the
 // same body. One call fans its arguments out unordered and returns when all of them have
-// run, so a later stage is ordered after every earlier one by the composer itself; a
-// collector records that as needs edges on the member, which is the form needsPath
-// already reads every other ordering in. keyOf names a step's node and says no for a
-// step that resolves to nothing, which then neither orders nor is ordered.
+// run, so a later stage starts after every earlier one has completed, by the composer's
+// own sequencing; a collector records that as the member's After edges. keyOf names a
+// step's node and says no for a step that resolves to nothing, which then neither
+// orders nor is ordered.
 //
 // The edges land on the member's node, shared with every composer that reaches it. A
 // target one composer runs in a later stage so carries that ordering into another
 // composer that fans it out with the same writer in one call, and that pair goes
 // unreported; both composers have to be scheduled in one invocation for it to matter.
-func StageNeeds(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) map[string][]string {
+func StageAfter(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) map[string][]string {
 	out := map[string][]string{}
 	var earlier, current []string
 	stage := 0

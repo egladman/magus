@@ -158,11 +158,6 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			}
 			return cache.DepKey(owner.Path, cs.Target), true
 		}
-		need := func(from, to string) {
-			if n := byKey[from]; !slices.Contains(n.Needs, to) {
-				n.Needs = append(n.Needs, to)
-			}
-		}
 		for _, cs := range chain {
 			needs, ok := keyOf(cs)
 			if !ok {
@@ -171,12 +166,17 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			// Recorded on the node, not just walked: inside one step ctx.needs is the
 			// only sequencing there is, and it is what decides whether a same-step
 			// overlap is ordered or unschedulable.
-			need(key, needs)
+			if n := byKey[key]; !slices.Contains(n.Needs, needs) {
+				n.Needs = append(n.Needs, needs)
+			}
 			walk(ownerOf(cs), cs.Target, stepKey, seen)
 		}
-		for member, earlier := range cache.StageNeeds(chain, keyOf) {
+		for member, earlier := range cache.StageAfter(chain, keyOf) {
+			n := byKey[member]
 			for _, e := range earlier {
-				need(member, e)
+				if !slices.Contains(n.After, e) {
+					n.After = append(n.After, e)
+				}
 			}
 		}
 	}

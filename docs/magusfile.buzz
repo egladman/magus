@@ -509,7 +509,11 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, build, test);
+    // build renders every page format rewrites in place, so the render waits for lint's
+    // format stage rather than racing it (MGS4008). Two calls, not an edge on build:
+    // a site built alone from unformatted markdown is a fine site.
+    ctx.needs(generate, lint, test);
+    ctx.needs(build);
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: the

@@ -324,17 +324,22 @@ func TestWorkspaceOverlapWitnessNeedsAFileMatchingBothGlobs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "MAGUS.md"), []byte("# index\n"), 0o644))
 
 	witness := WorkspaceOverlapWitness(root)
-	assert.True(t, witness("**/gen/mocks/*.go", "**/*.go"), "a file on disk matches both")
-	assert.False(t, witness("cmd/magus/completions/*", "**/MAGUS.md"), "the globs intersect, no path does")
-	assert.False(t, witness("**/gen/mocks/*.go", "cmd/magus-termcast/*.go"), "the writer's files sit elsewhere")
+	assert.True(t, witness("**/gen/mocks/*.go", "**/*.go", nil), "a file on disk matches both")
+	assert.False(t, witness("cmd/magus/completions/*", "**/MAGUS.md", nil), "the globs intersect, no path does")
+	assert.False(t, witness("**/gen/mocks/*.go", "cmd/magus-termcast/*.go", nil), "the writer's files sit elsewhere")
+
+	// The key never hashes a pattern's hits under a pruned dir, so they witness nothing
+	// for a pattern; an exact path is hashed by stat and still counts.
+	assert.False(t, witness("**/gen/mocks/*.go", "**/*.go", []string{"gen"}), "pruned for a pattern read")
+	assert.True(t, witness("**/gen/mocks/*.go", "gen/mocks/store.go", []string{"gen"}), "an exact read reaches in")
 }
 
 // With a witness the same fixture is refused only when its overlap is real on disk.
 func TestFindSameStepConflictsHonorsTheWitness(t *testing.T) {
 	t.Parallel()
-	never := OverlapWitness(func(write, read string) bool { return false })
+	never := OverlapWitness(func(write, read string, ignore []string) bool { return false })
 	assert.Empty(t, FindSameStepConflicts(badgeFixture(false), never), "no witness, no refusal")
-	always := OverlapWitness(func(write, read string) bool { return true })
+	always := OverlapWitness(func(write, read string, ignore []string) bool { return true })
 	assert.NotEmpty(t, FindSameStepConflicts(badgeFixture(false), always))
 }
 
@@ -359,11 +364,11 @@ func TestCrossProjectConflictAdvisesInsteadOfRefusing(t *testing.T) {
 		"a same-project pair is refused, not advised")
 }
 
-// TestStageNeedsOrdersLaterCallsAfterEarlierOnes: the docs lint shape, `ctx.needs(format);
+// TestStageAfterOrdersLaterCallsAfterEarlierOnes: the docs lint shape, `ctx.needs(format);
 // ctx.needs(conventions);`, where format reaches the generators conventions reads. The
 // second call is ordered after the first by the body, and that has to reach the
 // predicate as edges or every staged composer reads as unordered.
-func TestStageNeedsOrdersLaterCallsAfterEarlierOnes(t *testing.T) {
+func TestStageAfterOrdersLaterCallsAfterEarlierOnes(t *testing.T) {
 	t.Parallel()
 	chain := []types.ChainStep{
 		{Target: "format"}, {Project: "gone", Target: "lint"},
@@ -380,8 +385,8 @@ func TestStageNeedsOrdersLaterCallsAfterEarlierOnes(t *testing.T) {
 		DepKey("docs", "conventions"): {DepKey("docs", "format")},
 		DepKey("docs", "spelling"):    {DepKey("docs", "format")},
 		DepKey("docs", "links"):       {DepKey("docs", "format"), DepKey("docs", "conventions"), DepKey("docs", "spelling")},
-	}, StageNeeds(chain, keyOf), "a step that resolves to nothing neither orders nor is ordered")
-	assert.Empty(t, StageNeeds([]types.ChainStep{{Target: "a"}, {Target: "b"}}, keyOf), "one call, no stages")
+	}, StageAfter(chain, keyOf), "a step that resolves to nothing neither orders nor is ordered")
+	assert.Empty(t, StageAfter([]types.ChainStep{{Target: "a"}, {Target: "b"}}, keyOf), "one call, no stages")
 }
 
 func TestDeclaredNodesHonorsStages(t *testing.T) {
@@ -391,6 +396,50 @@ func TestDeclaredNodesHonorsStages(t *testing.T) {
 	p.TargetChains["ci"] = []types.ChainStep{{Target: "generate"}, {Target: "coverage-badge", Stage: 1}}
 	assert.Empty(t, FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil),
 		"a later ctx.needs call is ordered after the earlier one")
+}
+
+// TestStageOrderReachesUnderTheLaterComposer is the docs ci shape: `ctx.needs(generate,
+// lint, test); ctx.needs(build);` with the render under build reading pages that format,
+// under lint, rewrites. The render never names format; build's stage does, and nothing
+// under build starts before build does.
+func TestStageOrderReachesUnderTheLaterComposer(t *testing.T) {
+	t.Parallel()
+	p := &types.Project{
+		Path: "docs", Name: "docs",
+		TargetChains: map[string][]types.ChainStep{
+			"ci":    {{Target: "generate"}, {Target: "lint"}, {Target: "build", Stage: 1}},
+			"lint":  {{Target: "format"}},
+			"build": {{Target: "generate"}, {Target: "site-generate", Stage: 1}},
+		},
+		TargetInputs:  map[string][]types.InputRef{"site-generate": {{Glob: "**/*.md"}}},
+		TargetUpdates: map[string][]types.UpdateRef{"format": {{Glob: "*.md"}}},
+		TargetOutputs: map[string][]types.OutputRef{"site-generate": {{Glob: "gen/**"}}},
+	}
+	assert.Empty(t, FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil))
+
+	// One call instead: build fans out beside lint, and the render races the rewrite.
+	p.TargetChains["ci"] = []types.ChainStep{{Target: "generate"}, {Target: "lint"}, {Target: "build"}}
+	got := FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil)
+	require.Len(t, got, 1)
+	assert.Equal(t, DepKey("docs", "site-generate"), got[0].Reader)
+	assert.Equal(t, DepKey("docs", "format"), got[0].Writer)
+}
+
+// TestAComposersOwnNeedsDoNotOrderItsMembers pins the hop the upward walk must not
+// take: ci needs both the writer and the reader's composer in ONE call, so reaching the
+// writer through ci's needs would read two unordered siblings as sequenced.
+func TestAComposersOwnNeedsDoNotOrderItsMembers(t *testing.T) {
+	t.Parallel()
+	p := &types.Project{
+		Path: ".", Name: "root",
+		TargetChains: map[string][]types.ChainStep{
+			"ci":    {{Target: "mocks-generate"}, {Target: "check"}},
+			"check": {{Target: "coverage-badge"}},
+		},
+		TargetInputs:  map[string][]types.InputRef{"coverage-badge": {{Glob: "**/*.go"}}},
+		TargetOutputs: map[string][]types.OutputRef{"mocks-generate": {{Glob: "**/mocks/*.go"}}},
+	}
+	require.Len(t, FindSameStepConflicts(DeclaredNodes(p, "ci", nil), nil), 1)
 }
 
 func TestSameStepConflictErrorNamesBothFixes(t *testing.T) {

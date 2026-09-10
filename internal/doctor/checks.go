@@ -743,17 +743,23 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 	}
 }
 
-// displayPath renders an absolute path for a check detail, workspace-relative
-// where that is possible and absolute where it is not. r.root is empty on some
-// call paths (the daemon passes the workspace through r.ws instead), and
-// filepath.Rel against an empty root fails, which silently produced details
-// naming no file at all, the one thing a detail line exists to do.
-func (r *runner) displayPath(abs string) string {
-	root := r.root
-	if root == "" && r.ws != nil {
-		root = r.ws.Root()
+// treeRoot is the directory a check walks. r.root is the caller's --root override,
+// empty on the ordinary CLI path and on the daemon's, so the loaded workspace is the
+// answer whenever there is one. A walk from "" silently finds nothing: the same-step
+// witness ran there and reported every workspace clean.
+func (r *runner) treeRoot() string {
+	if r.ws != nil {
+		return r.ws.Root()
 	}
-	if root != "" {
+	return r.root
+}
+
+// displayPath renders an absolute path for a check detail, workspace-relative
+// where that is possible and absolute where it is not; filepath.Rel against an
+// empty root fails, which silently produced details naming no file at all, the one
+// thing a detail line exists to do.
+func (r *runner) displayPath(abs string) string {
+	if root := r.treeRoot(); root != "" {
 		if rel, err := filepath.Rel(root, abs); err == nil {
 			return filepath.ToSlash(rel)
 		}
@@ -1104,7 +1110,7 @@ func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorChec
 	}
 	// A pair counts only where a file on disk matches both globs: glob intersection
 	// is conservative for ordering and too coarse to fail a workspace on.
-	witness := cache.WorkspaceOverlapWitness(r.root)
+	witness := cache.WorkspaceOverlapWitness(r.treeRoot())
 	var details []string
 	refused := 0
 	for _, p := range projects {

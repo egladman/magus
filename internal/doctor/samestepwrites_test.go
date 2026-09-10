@@ -29,7 +29,9 @@ func sameStepFixture(ordered bool) *types.Project {
 			"coverage-badge": {{Glob: "**/*.go"}},
 		},
 		TargetOutputs: map[string][]types.OutputRef{
-			"mocks-generate": {{Glob: "**/gen/mocks/*.go"}},
+			// Not under gen/: a pattern read never hashes a pruned dir, so a file there
+			// would witness nothing and the fixture would read as ordered.
+			"mocks-generate": {{Glob: "**/mocks/*.go"}},
 			"coverage-badge": {{Glob: "assets/coverage.svg"}},
 		},
 	}
@@ -44,8 +46,8 @@ func TestSameStepWritesCheck(t *testing.T) {
 	// It does have a root, holding one file both globs match: the check refuses only an
 	// overlap a file on disk witnesses, so a fixture with no tree would read as clean.
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen", "mocks"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "mocks", "store.go"), []byte("package mocks\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "mocks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "mocks", "store.go"), []byte("package mocks\n"), 0o644))
 	r := &runner{root: root}
 
 	t.Run("an unordered reader fails", func(t *testing.T) {
@@ -53,7 +55,7 @@ func TestSameStepWritesCheck(t *testing.T) {
 		assert.Equal(t, types.DoctorFail, got.Status)
 		require.Len(t, got.Details, 1)
 		assert.Equal(t,
-			`root: ci runs . coverage-badge, which reads "**/*.go", alongside . mocks-generate, which writes "**/gen/mocks/*.go", and needs neither from the other (refused at run time)`,
+			`root: ci runs . coverage-badge, which reads "**/*.go", alongside . mocks-generate, which writes "**/mocks/*.go", and needs neither from the other (refused at run time)`,
 			got.Details[0])
 		assert.Contains(t, got.Message, "MGS4008", "the reader gets somewhere to look it up")
 	})

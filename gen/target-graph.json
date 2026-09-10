@@ -30,8 +30,7 @@
           "chain": [
             {
               "project": "libs/gopherbuzz",
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
               "target": "spells-generate",
@@ -120,8 +119,7 @@
           ],
           "chain": [
             {
-              "target": "image-build",
-              "stage": 0
+              "target": "image-build"
             }
           ],
           "reads_secrets": false
@@ -142,8 +140,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_secrets": false,
@@ -179,28 +176,22 @@
           ],
           "chain": [
             {
-              "target": "spells-generate",
-              "stage": 0
+              "target": "spells-generate"
             },
             {
-              "target": "bindings-generate",
-              "stage": 0
+              "target": "bindings-generate"
             },
             {
-              "target": "langservice-generate",
-              "stage": 0
+              "target": "langservice-generate"
             },
             {
-              "target": "mcp-tools-generate",
-              "stage": 0
+              "target": "mcp-tools-generate"
             },
             {
-              "target": "config-generate",
-              "stage": 0
+              "target": "config-generate"
             },
             {
-              "target": "mocks-generate",
-              "stage": 0
+              "target": "mocks-generate"
             }
           ],
           "reads_files": [
@@ -266,8 +257,7 @@
           ],
           "chain": [
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false,
@@ -294,8 +284,7 @@
           ],
           "chain": [
             {
-              "target": "bindings-generate",
-              "stage": 0
+              "target": "bindings-generate"
             }
           ],
           "reads_secrets": false,
@@ -340,8 +329,7 @@
           ],
           "chain": [
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false,
@@ -366,8 +354,7 @@
           ],
           "chain": [
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false,
@@ -529,8 +516,7 @@
           ],
           "chain": [
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false,
@@ -609,64 +595,49 @@
           ],
           "chain": [
             {
-              "target": "bindings-generate",
-              "stage": 0
+              "target": "bindings-generate"
             },
             {
-              "target": "changelog-generate",
-              "stage": 0
+              "target": "changelog-generate"
             },
             {
-              "target": "config-generate",
-              "stage": 0
+              "target": "config-generate"
             },
             {
-              "target": "graph-generate",
-              "stage": 0
+              "target": "graph-generate"
             },
             {
-              "target": "index-generate",
-              "stage": 0
+              "target": "index-generate"
             },
             {
-              "target": "langservice-generate",
-              "stage": 0
+              "target": "langservice-generate"
             },
             {
-              "target": "magusfile-api-generate",
-              "stage": 0
+              "target": "magusfile-api-generate"
             },
             {
-              "target": "man-generate",
-              "stage": 0
+              "target": "man-generate"
             },
             {
-              "target": "mcp-tools-generate",
-              "stage": 0
+              "target": "mcp-tools-generate"
             },
             {
-              "target": "mocks-generate",
-              "stage": 0
+              "target": "mocks-generate"
             },
             {
-              "target": "skills-generate",
-              "stage": 0
+              "target": "skills-generate"
             },
             {
-              "target": "spells-generate",
-              "stage": 0
+              "target": "spells-generate"
             },
             {
-              "target": "termcast-generate",
-              "stage": 0
+              "target": "termcast-generate"
             },
             {
-              "target": "termshots-generate",
-              "stage": 0
+              "target": "termshots-generate"
             },
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false
@@ -833,64 +804,49 @@
           ],
           "chain": [
             {
-              "target": "bindings-generate",
-              "stage": 0
+              "target": "bindings-generate"
             },
             {
-              "target": "changelog-generate",
-              "stage": 0
+              "target": "changelog-generate"
             },
             {
-              "target": "config-generate",
-              "stage": 0
+              "target": "config-generate"
             },
             {
-              "target": "graph-generate",
-              "stage": 0
+              "target": "graph-generate"
             },
             {
-              "target": "index-generate",
-              "stage": 0
+              "target": "index-generate"
             },
             {
-              "target": "langservice-generate",
-              "stage": 0
+              "target": "langservice-generate"
             },
             {
-              "target": "magusfile-api-generate",
-              "stage": 0
+              "target": "magusfile-api-generate"
             },
             {
-              "target": "man-generate",
-              "stage": 0
+              "target": "man-generate"
             },
             {
-              "target": "mcp-tools-generate",
-              "stage": 0
+              "target": "mcp-tools-generate"
             },
             {
-              "target": "mocks-generate",
-              "stage": 0
+              "target": "mocks-generate"
             },
             {
-              "target": "skills-generate",
-              "stage": 0
+              "target": "skills-generate"
             },
             {
-              "target": "spells-generate",
-              "stage": 0
+              "target": "spells-generate"
             },
             {
-              "target": "termcast-generate",
-              "stage": 0
+              "target": "termcast-generate"
             },
             {
-              "target": "termshots-generate",
-              "stage": 0
+              "target": "termshots-generate"
             },
             {
-              "target": "types-generate",
-              "stage": 0
+              "target": "types-generate"
             }
           ],
           "reads_secrets": false
@@ -938,8 +894,7 @@
           "chain": [
             {
               "project": "libs/gopherbuzz",
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
               "target": "spells-generate",
@@ -989,8 +944,7 @@
           ],
           "chain": [
             {
-              "target": "advice-test",
-              "stage": 0
+              "target": "advice-test"
             },
             {
               "target": "format",
@@ -1131,8 +1085,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             },
             {
               "target": "test",
@@ -1244,8 +1197,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             },
             {
               "target": "image-build",
@@ -1267,8 +1219,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_files": [
@@ -1332,12 +1283,10 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             },
             {
-              "target": "lint-build",
-              "stage": 0
+              "target": "lint-build"
             }
           ],
           "reads_files": [
@@ -1471,8 +1420,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_secrets": false,
@@ -1514,32 +1462,25 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             },
             {
-              "target": "coverage-badge",
-              "stage": 0
+              "target": "coverage-badge"
             },
             {
-              "target": "compress-cgo-test",
-              "stage": 0
+              "target": "compress-cgo-test"
             },
             {
-              "target": "completion-test",
-              "stage": 0
+              "target": "completion-test"
             },
             {
-              "target": "security",
-              "stage": 0
+              "target": "security"
             }
           ],
           "reads_secrets": false
@@ -1561,8 +1502,7 @@
           ],
           "chain": [
             {
-              "target": "config-generate",
-              "stage": 0
+              "target": "config-generate"
             }
           ],
           "reads_files": [
@@ -1648,8 +1588,7 @@
           ],
           "chain": [
             {
-              "target": "swegrade-build",
-              "stage": 0
+              "target": "swegrade-build"
             }
           ],
           "reads_secrets": true,
@@ -1674,8 +1613,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_files": [
@@ -1755,13 +1693,11 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "project": "libs/textsearch",
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false,
@@ -1799,8 +1735,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "diffdemo-generate",
@@ -1828,8 +1763,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "project": "libs/textsearch",
@@ -1855,8 +1789,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false,
@@ -1910,8 +1843,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -1928,8 +1860,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "lint",
@@ -2142,16 +2073,13 @@
           ],
           "chain": [
             {
-              "target": "build-hljs",
-              "stage": 0
+              "target": "build-hljs"
             },
             {
-              "target": "build-playground-editor",
-              "stage": 0
+              "target": "build-playground-editor"
             },
             {
-              "target": "build-playground",
-              "stage": 0
+              "target": "build-playground"
             }
           ],
           "reads_files": [
@@ -2266,8 +2194,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "project": ".",
@@ -2316,8 +2243,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_secrets": false,
@@ -2399,8 +2325,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             },
             {
               "target": "conventions",
@@ -2428,8 +2353,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             },
             {
               "target": "site-generate",
@@ -2452,12 +2376,10 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             },
             {
-              "target": "buzz-test",
-              "stage": 0
+              "target": "buzz-test"
             }
           ],
           "reads_secrets": false
@@ -2470,8 +2392,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -2481,25 +2402,22 @@
           "dependencies": [
             "generate",
             "lint",
-            "build",
-            "test"
+            "test",
+            "build"
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             },
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
+            },
+            {
+              "target": "test"
             },
             {
               "target": "build",
-              "stage": 0
-            },
-            {
-              "target": "test",
-              "stage": 0
+              "stage": 1
             }
           ],
           "reads_secrets": false
@@ -2519,8 +2437,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "project": "libs/gopherbuzz",
@@ -2568,8 +2485,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false,
@@ -2588,8 +2504,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false,
@@ -2631,8 +2546,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -2645,8 +2559,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -2661,8 +2574,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             },
             {
               "target": "lint",
@@ -2708,8 +2620,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "index-generate",
@@ -2757,8 +2668,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_files": [
@@ -2785,8 +2695,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -2806,8 +2715,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -2828,8 +2736,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false,
@@ -2849,16 +2756,13 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -2883,8 +2787,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "index-generate",
@@ -2926,8 +2829,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_secrets": false
@@ -2947,8 +2849,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -2968,8 +2869,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -2990,8 +2890,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false,
@@ -3011,16 +2910,13 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -3050,8 +2946,7 @@
           ],
           "chain": [
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -3076,8 +2971,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "index-generate",
@@ -3125,8 +3019,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_files": [
@@ -3152,8 +3045,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -3173,8 +3065,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -3195,8 +3086,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false,
@@ -3223,8 +3113,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -3239,16 +3128,13 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -3261,8 +3147,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -3287,8 +3172,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "index-generate",
@@ -3336,8 +3220,7 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             }
           ],
           "reads_files": [
@@ -3364,8 +3247,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -3385,8 +3267,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -3407,8 +3288,7 @@
           ],
           "chain": [
             {
-              "target": "format",
-              "stage": 0
+              "target": "format"
             }
           ],
           "reads_secrets": false,
@@ -3428,16 +3308,13 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "build",
-              "stage": 0
+              "target": "build"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -3462,8 +3339,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             },
             {
               "target": "index-generate",
@@ -3497,8 +3373,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false
@@ -3511,8 +3386,7 @@
           ],
           "chain": [
             {
-              "target": "preflight",
-              "stage": 0
+              "target": "preflight"
             }
           ],
           "reads_secrets": false,
@@ -3531,12 +3405,10 @@
           ],
           "chain": [
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             },
             {
-              "target": "test",
-              "stage": 0
+              "target": "test"
             }
           ],
           "reads_secrets": false
@@ -3598,12 +3470,10 @@
           ],
           "chain": [
             {
-              "target": "generate",
-              "stage": 0
+              "target": "generate"
             },
             {
-              "target": "lint",
-              "stage": 0
+              "target": "lint"
             }
           ],
           "reads_secrets": false
