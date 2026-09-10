@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/project"
@@ -107,7 +108,11 @@ func gradeFocusRead(ctx context.Context, actingLease, command string) focusGrade
 	if location.workspace == "" {
 		return focusGrade{}
 	}
-	ws, err := inspectWorkspace(ctx, location.workspace)
+	// Not the memoized inspectWorkspace: the hook process is one command long, so
+	// nothing is saved, and the memo pins one root per process while the trail names
+	// whichever checkout the command ran in.
+	ws, err := magus.Inspect(ctx, location.workspace,
+		magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 	if err != nil || ws == nil {
 		return focusGrade{}
 	}
