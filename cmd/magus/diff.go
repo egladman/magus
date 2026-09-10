@@ -561,7 +561,7 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 	// The agent record: which sessions wrote each file and what they had read first, from the
 	// guard hook's trail and from loaded transcripts. Empty when neither has anything, which
 	// is the common case rather than a fault.
-	rev.AttachReplay(trail.ReviewTouches(m.Root(), m.CacheDir(), paths))
+	trail.AttachTouches(&rev, m.Root(), m.CacheDir())
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.
@@ -1571,8 +1571,8 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// exactly as diffCmd's own load did.
 	p.Anchors = impactAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	p.Rationale = collectRationale(m.Root(), rev)
-	// The trail and window AttachReplay walks for the per-file story, read here for the questions
-	// the authors asked rather than the files they opened.
+	// The trail and window trail.AttachTouches walks for the per-file story, read here for the
+	// questions the authors asked rather than the files they opened.
 	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), trail.DefaultReplayEvents)
 	var requiredIn func(string) bool
 	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {

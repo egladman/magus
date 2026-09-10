@@ -10,44 +10,13 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Touch is one agent session's contact with one file: that it wrote the file, what it had
+// A touch is one agent session's contact with one file: that it wrote the file, what it had
 // READ beforehand in the same session, and where the host's own transcript of that session
-// lives.
-//
-// The read list is the part no other review tool has. A guard hook sees every path an agent
-// reaches, so magus can say what an agent was LOOKING AT immediately before it wrote
-// something, which is the closest thing to "why is this change shaped like this" that any
-// tool can produce without asking the author. "It changed this because it had just read that"
-// is a sentence a forge cannot say.
-type Touch struct {
-	// Host is the agent host's own label for itself, empty when its wrapper passed none.
-	Host string `json:"host,omitempty" yaml:"host,omitempty"`
-	// Session is the host's own session id, the thing that groups these events.
-	Session string `json:"session,omitempty" yaml:"session,omitempty"`
-	// Transcript points at the host's record of the session. A POINTER, never content: magus
-	// never opens it, so the trail stays a record of paths and timings while the expensive and
-	// sensitive detail stays where the host already put it.
-	Transcript string `json:"transcript,omitempty" yaml:"transcript,omitempty"`
-	// At is when the session last wrote this file.
-	At time.Time `json:"at" yaml:"at"`
-	// Read are the paths the session reached BEFORE that write, most recent first. Capped: the
-	// last handful is the context that explains the edit, and the whole session's reach is a
-	// different question with a different surface.
-	Read []string `json:"read,omitempty" yaml:"read,omitempty"`
-	// Ran are the PROGRAMS the session ran before the write, most recent first and capped:
-	// "go", "grep", "perl", not their arguments.
-	//
-	// Arguments are dropped, and that is the whole point of this field's shape. Carrying the
-	// raw command line makes the trail a verbatim record of everything an agent typed: an
-	// `op=state` response was observed carrying a live daemon bearer token in a
-	// `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
-	// commit messages. Transcript one field up states the rule that breaks ("A POINTER, never
-	// content ... the expensive and sensitive detail stays where the host already put it"),
-	// and a review payload is read by every MCP client, so an agent asked to summarize it
-	// reproduces whatever is in there. The program name is the part that explains the edit;
-	// anyone who needs the argument list opens the host's own transcript.
-	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
-}
+// lives. It is the review's own types.DiffTouch, produced here rather than through a
+// trail-side twin, because the read list is the part no other review tool has: a guard hook
+// sees every path an agent reaches, so magus can say what an agent was LOOKING AT
+// immediately before it wrote something, which is the closest thing to "why is this change
+// shaped like this" that any tool can produce without asking the author.
 
 // The tool labels magus itself writes; see cmd/magus/agent.go. Matched rather than a host's
 // own tool names, which magus deliberately never learns.
@@ -82,21 +51,46 @@ type observation struct {
 	At                        time.Time
 }
 
-// Touches are the contacts a replay found, keyed by the workspace-relative path that was
-// written; each path lists one Touch per session, the session's most recent write. A path
-// nobody wrote has no key.
-type Touches map[string][]Touch
-
-// Replay reconstructs, for each of paths, which agent sessions wrote it and what they had read
-// first. It reads at most limit recent events.
+// AttachTouches folds the agent record onto the review in place: for every changed file,
+// which sessions wrote it and what they had read first, from the guard hook's trail at base
+// and from the transcripts loaded for root's repository. The trail wins for a session both
+// stores hold, since it saw the write happen; a loaded transcript adds the sessions no hook
+// was wired for.
 //
-// Best-effort throughout: an unreadable blob, a missing trail, or a host that supplied no
-// session id all just contribute less. A review must still open when nothing was recorded,
-// which is the normal case for a workspace whose agents have no guard hook wired.
-func Replay(root, base string, paths []string, limit int) Touches {
+// Best-effort throughout: an unreadable blob, a missing trail, an absent session store, or
+// a host that supplied no session id all just contribute less. A review must still open when
+// nothing was recorded, which is the normal case for a workspace whose agents have no guard
+// hook wired, and a file nobody touched keeps a nil Touches.
+func AttachTouches(rev *types.Diff, root, base string) {
+	paths := make([]string, len(rev.Files))
+	for i, f := range rev.Files {
+		paths[i] = f.Path
+	}
+	byPath := replayTrail(root, base, paths, DefaultReplayEvents)
+	if dir, err := sessions.Dir(root); err == nil {
+		if fold, err := sessions.ReadAll(dir); err == nil {
+			for path, touches := range replayLoaded(fold, paths) {
+				for _, t := range touches {
+					if !slices.ContainsFunc(byPath[path], func(h types.DiffTouch) bool { return h.Host == t.Host && h.Session == t.Session }) {
+						byPath[path] = append(byPath[path], t)
+					}
+				}
+			}
+		}
+	}
+	for i := range rev.Files {
+		if touches := byPath[rev.Files[i].Path]; len(touches) > 0 {
+			rev.Files[i].Touches = touches
+		}
+	}
+}
+
+// replayTrail reconstructs, for each of paths, which agent sessions the trail at base saw
+// write it and what they had read first, reading at most limit recent events.
+func replayTrail(root, base string, paths []string, limit int) map[string][]types.DiffTouch {
 	events, err := ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
-		return nil
+		return map[string][]types.DiffTouch{}
 	}
 
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
@@ -141,11 +135,11 @@ func Replay(root, base string, paths []string, limit int) Touches {
 	return touchesFrom(obs, paths)
 }
 
-// ReplaySessions answers Replay's question from the loaded transcripts in fold instead of the
-// hook trail: which sessions wrote each of paths and what they had read first. Loads store
-// the checkout-relative path and the reduced program, so nothing is relativized here; the
-// events are ordered by the host's own clock within each session.
-func ReplaySessions(fold sessions.Fold, paths []string) Touches {
+// replayLoaded answers replayTrail's question from the loaded transcripts in fold: which
+// sessions wrote each of paths and what they had read first. Loads store the
+// checkout-relative path and the reduced program, so nothing is relativized here; the events
+// are ordered by the host's own clock within each session.
+func replayLoaded(fold sessions.Fold, paths []string) map[string][]types.DiffTouch {
 	var obs []observation
 	for session, ev := range sessions.EachAgentEvent(fold) {
 		var tool string
@@ -174,55 +168,12 @@ func ReplaySessions(fold sessions.Fold, paths []string) Touches {
 	return touchesFrom(obs, paths)
 }
 
-// ReviewTouches is what a review attaches: both stores, merged and adapted to the review's
-// own type. The hook trail is read first and wins for a session both stores hold, since it
-// saw the write happen; a loaded transcript adds the sessions no hook was wired for. root is
-// the workspace, base its cache dir; the loaded store is found from root and is skipped when
-// it cannot be, the way an absent trail is.
-func ReviewTouches(root, base string, paths []string) types.DiffTouches {
-	found := Replay(root, base, paths, DefaultReplayEvents)
-	if dir, err := sessions.Dir(root); err == nil {
-		if fold, err := sessions.ReadAll(dir); err == nil {
-			found = found.merge(ReplaySessions(fold, paths))
-		}
-	}
-	if len(found) == 0 {
-		return nil
-	}
-	out := make(types.DiffTouches, len(found))
-	for path, touches := range found {
-		for _, t := range touches {
-			out[path] = append(out[path], types.DiffTouch{
-				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
-			})
-		}
-	}
-	return out
-}
-
-// merge adds other's touches to ts, keeping ts's own entry for a session both hold, and
-// returns the result so a nil receiver reads naturally.
-func (ts Touches) merge(other Touches) Touches {
-	if ts == nil {
-		ts = Touches{}
-	}
-	for path, touches := range other {
-		for _, t := range touches {
-			held := slices.ContainsFunc(ts[path], func(h Touch) bool { return h.Host == t.Host && h.Session == t.Session })
-			if !held {
-				ts[path] = append(ts[path], t)
-			}
-		}
-	}
-	return ts
-}
-
 // touchesFrom is the one reading of "what had it read before it wrote this": one pass over
 // obs in session order, accumulating each session's reads and programs so that a write can
 // take a snapshot of what came before it. Walking newest-first would mean knowing the writes
 // before the reads that explain them, which is the wrong direction for the only question
-// being asked.
-func touchesFrom(obs []observation, paths []string) Touches {
+// being asked. The result is keyed by written path, one entry per session.
+func touchesFrom(obs []observation, paths []string) map[string][]types.DiffTouch {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		want[p] = true
@@ -232,7 +183,7 @@ func touchesFrom(obs []observation, paths []string) Touches {
 		ran  []string
 	}
 	states := map[string]*sessionState{}
-	out := Touches{}
+	out := map[string][]types.DiffTouch{}
 
 	for _, o := range obs {
 		// Session is the grouping key. A host that supplies none still produces attributable
@@ -261,11 +212,10 @@ func touchesFrom(obs []observation, paths []string) Touches {
 			}
 			// The read list is snapshotted at the moment of the write, so a path the session
 			// reached AFTER this edit does not retroactively become its explanation.
-			t := Touch{
+			t := types.DiffTouch{
 				Host:       o.Host,
 				Session:    o.Session,
 				Transcript: o.Transcript,
-				At:         o.At,
 				Read:       withoutSelf(st.read, o.Path),
 				Ran:        append([]string(nil), st.ran...),
 			}
@@ -473,7 +423,7 @@ func withoutSelf(xs []string, self string) []string {
 // upsertLatest keeps ONE entry per session, the most recent write. A session that edits a file
 // eleven times is one story, not eleven, and listing each pass would bury the sessions that
 // touched it once.
-func upsertLatest(xs []Touch, t Touch) []Touch {
+func upsertLatest(xs []types.DiffTouch, t types.DiffTouch) []types.DiffTouch {
 	for i := range xs {
 		if xs[i].Session == t.Session {
 			xs[i] = t

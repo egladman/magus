@@ -172,12 +172,21 @@ func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= NotableRa
 // which is what lets a whole session's reach be carried cheaply while the expensive and
 // sensitive detail stays where the host already put it.
 type DiffTouch struct {
-	Host       string   `json:"host,omitempty"       yaml:"host,omitempty"`
-	Session    string   `json:"session,omitempty"    yaml:"session,omitempty"`
-	Transcript string   `json:"transcript,omitempty" yaml:"transcript,omitempty"`
-	Read       []string `json:"read,omitempty"       yaml:"read,omitempty"`
-	// Ran are the PROGRAMS the session ran, never their arguments; see trail.Touch.Ran for
-	// the leak that shape exists to prevent. This payload is served to every MCP client.
+	// Host is the agent host's own label for itself, empty when its wrapper passed none.
+	Host string `json:"host,omitempty" yaml:"host,omitempty"`
+	// Session is the host's own session id, the thing that groups these events.
+	Session    string `json:"session,omitempty"    yaml:"session,omitempty"`
+	Transcript string `json:"transcript,omitempty" yaml:"transcript,omitempty"`
+	// Read are the paths the session reached BEFORE the write, most recent first. Capped:
+	// the last handful is the context that explains the edit, and the whole session's
+	// reach is a different question with a different surface.
+	Read []string `json:"read,omitempty" yaml:"read,omitempty"`
+	// Ran are the PROGRAMS the session ran before the write, most recent first and capped:
+	// "go", "grep", "perl", never their arguments. Carrying the raw command line makes
+	// the record a verbatim copy of everything an agent typed, and one was observed
+	// holding a live daemon bearer token; this payload is served to every MCP client, so
+	// an agent asked to summarize it reproduces whatever is in there. Anyone who needs the
+	// argument list opens the host's own transcript.
 	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
 }
 
@@ -799,7 +808,7 @@ func (r *Diff) AttachReviewed(at VCSCheckpoint, files int) {
 
 // AttachReadState folds recorded read receipts onto the review, in place.
 //
-// Supplied by the caller for the same reason AttachReplay's data is: the receipts live beside
+// Supplied by the caller for the same reason AttachChurn's data is: the receipts live beside
 // the cache dir, and fingerprinting each file to check one is a cost the caller decides to
 // pay while the fold stays defined once. A file the map does not name keeps DiffReadUnknown,
 // which is why an empty map returns early rather than marking everything unread.
@@ -816,26 +825,6 @@ func (r Diff) AttachReadState(byPath map[string]string) {
 	// the review was ordered before any receipt was read. Leaving the old order would keep a
 	// ranking key magus now has out of the order it drives.
 	r.SortForReading()
-}
-
-// DiffTouches are the agent contacts a review attaches, keyed by the changed file's
-// workspace-relative path: one DiffTouch per session that wrote it.
-type DiffTouches map[string][]DiffTouch
-
-// AttachReplay folds the agent record onto the review, in place.
-//
-// Supplied by the caller for the same reason AttachChurn's data is: the trail lives beside the
-// daemon's cache dir and reading it is a different cost from computing annotations, so who
-// pays and how much they read is the caller's decision while the fold stays defined once.
-func (r Diff) AttachReplay(byPath DiffTouches) {
-	if len(byPath) == 0 {
-		return
-	}
-	for i := range r.Files {
-		if t, ok := byPath[r.Files[i].Path]; ok {
-			r.Files[i].Touches = t
-		}
-	}
 }
 
 // SortForReading orders Files into the sequence magus recommends reading them in. It sorts in

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolShell, Command: "go test ./internal/cache/"})
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Transcript: "/tmp/s1.jsonl", Tool: toolWrite, Path: "magus.go"})
 
-	got := Replay("", base, []string{"magus.go"}, 100)
+	got := replayTrail("", base, []string{"magus.go"}, 100)
 	touches := got["magus.go"]
 	require.Len(t, touches, 1)
 
@@ -30,7 +31,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
 	// Most recent read first: this is the "what was it looking at" ordering.
 	assert.Equal(t, []string{"types/impact.go", "internal/cache/output.go"}, touches[0].Read)
-	// The PROGRAM, not the command line; see Touch.Ran. The argument list is dropped at
+	// The PROGRAM, not the command line; see types.DiffTouch.Ran. The argument list is dropped at
 	// ingest, so this asserts the reduction rather than the recorded text.
 	assert.Equal(t, []string{"go"}, touches[0].Ran)
 }
@@ -46,7 +47,7 @@ func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "/usr/local/bin/psql --password=hunter2"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "magus.go"})
 
-	touches := Replay("", base, []string{"magus.go"}, 100)["magus.go"]
+	touches := replayTrail("", base, []string{"magus.go"}, 100)["magus.go"]
 	require.Len(t, touches, 1)
 
 	// Most recent first, and each reduced to its program: the leading VAR=value assignment is
@@ -84,7 +85,7 @@ func TestReplayIgnoresReadsThatCameAfterTheWrite(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "after.go"})
 
-	touches := Replay("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"before.go"}, touches[0].Read)
 	assert.NotContains(t, touches[0].Read, "after.go")
@@ -98,7 +99,7 @@ func TestReplayDropsTheWrittenFileFromItsOwnReadList(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "context.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := Replay("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"context.go"}, touches[0].Read)
 }
@@ -111,7 +112,7 @@ func TestReplayKeepsOneTouchPerSession(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "second.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := Replay("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1, "one session is one story")
 	// The LAST write wins, so its read list is the one current at that moment.
 	assert.Contains(t, touches[0].Read, "second.go")
@@ -124,7 +125,7 @@ func TestReplaySeparatesSessions(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolRead, Path: "b.go"})
 	record(t, base, AgentCommand{Session: "s2", Host: "codex", Tool: toolWrite, Path: "target.go"})
 
-	touches := Replay("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 2)
 	hosts := []string{touches[0].Host, touches[1].Host}
 	assert.ElementsMatch(t, []string{"claude-code", "codex"}, hosts)
@@ -144,7 +145,7 @@ func TestReplaySkipsEventsWithNoSession(t *testing.T) {
 	base := t.TempDir()
 	record(t, base, AgentCommand{Tool: toolRead, Path: "a.go"})
 	record(t, base, AgentCommand{Tool: toolWrite, Path: "target.go"})
-	assert.Empty(t, Replay("", base, []string{"target.go"}, 100))
+	assert.Empty(t, replayTrail("", base, []string{"target.go"}, 100))
 }
 
 func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
@@ -152,7 +153,7 @@ func TestReplayOnlyReportsRequestedPaths(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "wanted.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "unwanted.go"})
 
-	got := Replay("", base, []string{"wanted.go"}, 100)
+	got := replayTrail("", base, []string{"wanted.go"}, 100)
 	assert.Len(t, got, 1)
 	assert.Contains(t, got, "wanted.go")
 }
@@ -166,7 +167,7 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 	record(t, base, AgentCommand{Session: "s1", Tool: toolRead, Path: "other.go"})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolWrite, Path: "target.go"})
 
-	touches := Replay("", base, []string{"target.go"}, 100)["target.go"]
+	touches := replayTrail("", base, []string{"target.go"}, 100)["target.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, []string{"other.go", "same.go"}, touches[0].Read)
 }
@@ -174,12 +175,12 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 // A workspace whose agents have no guard hook wired is the normal case, and a review has to
 // open anyway.
 func TestReplayOnAnEmptyTrailIsEmptyNotAnError(t *testing.T) {
-	assert.Empty(t, Replay("", t.TempDir(), []string{"anything.go"}, 100))
+	assert.Empty(t, replayTrail("", t.TempDir(), []string{"anything.go"}, 100))
 }
 
-// ReplaySessions answers the same question from a loaded transcript: the reads and programs
+// replayLoaded answers the same question from a loaded transcript: the reads and programs
 // that preceded a write, ordered by the host's clock rather than by arrival.
-func TestReplaySessionsThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
+func TestReplayLoadedThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	dir := t.TempDir()
 	_, err := sessions.LoadEvents(dir, []sessions.LoadEvent{
 		// Handed out of order: the host clock is what sequences them.
@@ -192,7 +193,7 @@ func TestReplaySessionsThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	touches := ReplaySessions(fold, []string{"magus.go"})["magus.go"]
+	touches := replayLoaded(fold, []string{"magus.go"})["magus.go"]
 	require.Len(t, touches, 1)
 	assert.Equal(t, "claude-code", touches[0].Host)
 	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
@@ -200,9 +201,9 @@ func TestReplaySessionsThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 	assert.Equal(t, []string{"go"}, touches[0].Ran)
 }
 
-// ReviewTouches merges both stores: the trail wins for a session both hold, and the loaded
-// transcripts add the sessions no hook observed.
-func TestReviewTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
+// AttachTouches merges both stores onto the review: the trail wins for a session both hold,
+// and the loaded transcripts add the sessions no hook observed.
+func TestAttachTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root, base := t.TempDir(), t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "from-trail.go"})
@@ -217,17 +218,23 @@ func TestReviewTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
 	}, sessions.SessionStart{})
 	require.NoError(t, err)
 
-	got := ReviewTouches(root, base, []string{"magus.go"})["magus.go"]
+	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}, {Path: "untouched.go"}}}
+	AttachTouches(&rev, root, base)
+
+	got := rev.Files[0].Touches
 	require.Len(t, got, 2, "one entry per session, whichever store saw it")
 	assert.Equal(t, "s1", got[0].Session)
 	assert.Equal(t, []string{"from-trail.go"}, got[0].Read, "the trail's account wins for a session both stores hold")
 	assert.Equal(t, "s2", got[1].Session)
 	assert.Equal(t, "codex", got[1].Host)
+	assert.Nil(t, rev.Files[1].Touches, "a file nobody wrote keeps no touches")
 }
 
-func TestReviewTouchesIsEmptyWithNeitherStore(t *testing.T) {
+func TestAttachTouchesLeavesTheReviewAloneWithNeitherStore(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	assert.Nil(t, ReviewTouches(t.TempDir(), t.TempDir(), []string{"magus.go"}))
+	rev := types.Diff{Files: []types.DiffFile{{Path: "magus.go"}}}
+	AttachTouches(&rev, t.TempDir(), t.TempDir())
+	assert.Nil(t, rev.Files[0].Touches)
 }
 
 // ForSession is the join a transcript reader needs: what the guard saw this host session do
