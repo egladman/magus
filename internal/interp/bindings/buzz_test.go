@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interp/engine"
 	_ "github.com/egladman/magus/internal/interp/engine/buzz"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -318,6 +319,39 @@ func TestMagusSurfaceLocked(t *testing.T) {
 		assert.Truef(t, wantSet[n],
 			"magus.%s was ADDED to the magusfile surface; regenerate the lock with "+
 				"UPDATE_MAGUS_API_LOCK=1 go test ./internal/interp/bindings/", n)
+	}
+}
+
+// TestMagusSurfaceIsDeclared closes the drift class that let magus\review exist for
+// months with no declaration, no doc page and no MCP link back to it.
+//
+// The surface lock above pins WHAT is bound, so a removal is loud. It says nothing
+// about whether the descriptor knows: a member MapSet here and absent from std.Magus
+// still binds, still runs, and is simply invisible to the checker, to
+// docs/reference/buzz/magus.md, and to everything generated from the descriptor.
+// This asserts the two agree, so a member bound outside the descriptor cannot ship.
+//
+// The comparison is on the BUZZ name, which is what a caller types: the descriptor
+// declares snake_case and the surface exposes camelCase.
+func TestMagusSurfaceIsDeclared(t *testing.T) {
+	declared := map[string]bool{}
+	for _, m := range std.Magus.Methods {
+		declared[std.BuzzMethodName(m)] = true
+	}
+	for _, ns := range std.Magus.Namespaces {
+		declared[ns.Name] = true
+	}
+	// The magus.Context builder and the target registry are not members of this
+	// namespace; log is assembled here from the descriptor's log namespace.
+	for _, name := range magusSurfaceNames(t) {
+		if strings.Contains(name, ".") {
+			continue
+		}
+		assert.Truef(t, declared[name],
+			"magus\\%s is bound at run time but absent from the std.Magus descriptor, "+
+				"so it has no checker declaration, no reference doc page, and nothing "+
+				"generated from the descriptor can name it. Declare it in std/magus.go "+
+				"(Extern: true when the runtime binds it, as the namespaces do).", name)
 	}
 }
 

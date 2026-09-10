@@ -93,7 +93,6 @@ var serverInstructions = strings.Join([]string{
 	"Inspect:",
 	toolLine(hint.ToolDoctor, "validate the workspace health"),
 	toolLine(hint.ToolStatus, "inspect the live concurrency pool"),
-	toolLine(hint.ToolTailLog, "retrieve the captured build log for a project"),
 	toolLine(hint.ToolOutput, "fetch a target-output blob by its reference id"),
 	toolLine(hint.ToolInsight, "VCS history lenses (hotspots, ownership, trend)"),
 	"",
@@ -109,8 +108,7 @@ var serverInstructions = strings.Join([]string{
 		hint.ToolWhere.String() + " (resolve a fuzzy project name to a path).",
 	"  Then act: " + hint.ToolRunTarget.String() + " / " + hint.ToolRunAffected.String() + "; " +
 		hint.ToolAffectedPlan.String() + " (CI shard plan), " + hint.ToolAffectedExplain.String() + " (why a project is affected).",
-	"  After a run: " + hint.ToolOutput.String() + " (fetch a target's captured output by its ref), " +
-		hint.ToolTailLog.String() + " (latest cache log for a project).",
+	"  After a run: " + hint.ToolOutput.String() + " (fetch a target's captured output by its ref).",
 	"  Understand the graph: " + hint.ToolQuery.String() + " (search) -> " + hint.ToolExplain.String() +
 		" (a node's edges and provenance) -> " + hint.ToolPath.String() + " (shortest path); " +
 		hint.ToolRefs.String() + " (symbol defs and refs); " + hint.ToolStats.String() + " (graph shape).",

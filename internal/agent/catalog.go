@@ -113,7 +113,10 @@ import (
 // 58: magus-query says every result names its own next step, and that following it is
 // optional. The breadcrumb is a field on the result now, so a reader that never meets
 // the text still meets the suggestion.
-const SkillVersion = 58
+// 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
+// onto the bytes magus_output already returns, keyed by project instead of by ref;
+// the CLI keeps that route as `magus tail`.
+const SkillVersion = 59
 
 const skillLicense = "GPL-3.0-or-later"
 

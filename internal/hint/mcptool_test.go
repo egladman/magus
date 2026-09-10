@@ -38,7 +38,7 @@ func TestFollowUpError(t *testing.T) {
 		{
 			name: "output error explains where refs come from",
 			tool: ToolOutput,
-			want: "next: output refs come from magus_run_target or magus_tail_log",
+			want: "next: output refs come from magus_run_target or magus_run_affected",
 		},
 		{
 			name: "explain error recovers via query",

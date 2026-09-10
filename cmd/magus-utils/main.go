@@ -28,6 +28,7 @@ var scribes = map[string]func(args []string) error{
 	"boundarylist":       runBoundaryList,
 	"mockassert":         runMockAssert,
 	"buzzobjects":        runBuzzObjects,
+	"mcptools":           runMCPTools,
 	"moduledecls":        runModuleDecls,
 	"moduleset":          runModuleSet,
 	"bindings":           runBindings,

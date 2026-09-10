@@ -534,6 +534,11 @@ export object secret {
     static extern fun read(ref: str) > str !> any;
 }
 
+// Where this workspace's changes are discussed. One member: a magusfile says WHERE reviews live and does not conduct one, so opening a review, reading its threads and publishing drafts are reserved names on the provider spell instead (see spells/review.go). Wiring no provider is the ordinary state and never an error: the workspace reviews locally.
+export object review {
+    static extern fun provider(spell: {str: any}) > void;
+}
+
 // Workspace-level declarations made from the root magusfile.
 export object workspace {
     static extern fun provider(spell: {str: any}) > void;

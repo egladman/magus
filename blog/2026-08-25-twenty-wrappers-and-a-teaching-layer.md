@@ -57,6 +57,10 @@ Two of them duplicate each other inside the MCP surface. `magus_output` and
 `magus_tail_log` both fetch a captured run log, and both correspond to
 `magus query output`. I did not notice until I put them in a table.
 
+Since writing this: `magus_tail_log` is gone, and the catalog above is generated from
+the `std.Magus` descriptor rather than hand-written, which is what would have caught
+the duplicate without a table.
+
 ## The two that are not wrappers
 
 I expected the leftovers to be the interesting part, the places where a protocol

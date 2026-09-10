@@ -1030,6 +1030,17 @@ export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/langservice"]);
 }
 
+// Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the
+// same std descriptors bindings_generate reads.
+//
+// The catalog was hand-written, and it was the one agent-facing surface with no
+// generator and no drift gate behind it: a tool could duplicate another, or keep
+// wrapping a member that had been renamed, and nothing said so.
+export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("internal/handler/mcp/gen/registry.go");
+    proc\exec("go", ["generate", "./internal/handler/mcp"]);
+}
+
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
 // the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module
 // host declarations (internal/spellruntime/gen/decls), all driven by the

@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 11169
-skill_short_bytes: 7401
+skill_full_bytes: 11286
+skill_short_bytes: 7392
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `58` |
+| `agent-skill-version` | `59` |
 | `knowledge-schema-version` | `11` |
-| `skill-content` | `b94fce866f3d` |
+| `skill-content` | `c99306049b67` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -175,8 +175,8 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI. Never re-run just to see the error again.
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, `magus tail <project>` prints the project's most recent
+   captured log.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles).
 
@@ -397,8 +397,9 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI. Do this instead of re-running the
    target to see the error again.
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, `magus tail <project>` prints the project's most recent
+   captured log; there is no MCP tool for it, because a second door onto
+   the same bytes only makes an agent holding a ref pick between two.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles) when failures look environmental rather than caused by
    your change.

@@ -281,6 +281,17 @@
           ]
         },
         {
+          "name": "mcp-tools-generate",
+          "declared": "mcp_tools_generate",
+          "doc": "Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors bindings_generate reads.",
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "internal/handler/mcp/gen/registry.go"
+            }
+          ]
+        },
+        {
           "name": "spells-generate",
           "declared": "spells_generate",
           "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
@@ -534,6 +545,7 @@
             "langservice-generate",
             "magusfile-api-generate",
             "man-generate",
+            "mcp-tools-generate",
             "mocks-generate",
             "skills-generate",
             "spells-generate",
@@ -576,6 +588,9 @@
             },
             {
               "target": "man-generate"
+            },
+            {
+              "target": "mcp-tools-generate"
             },
             {
               "target": "mocks-generate"
@@ -746,6 +761,7 @@
             "langservice-generate",
             "magusfile-api-generate",
             "man-generate",
+            "mcp-tools-generate",
             "mocks-generate",
             "skills-generate",
             "spells-generate",
@@ -781,6 +797,9 @@
             },
             {
               "target": "man-generate"
+            },
+            {
+              "target": "mcp-tools-generate"
             },
             {
               "target": "mocks-generate"

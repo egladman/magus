@@ -189,8 +189,9 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, `magus tail <project>` prints the project's most recent
+   captured log{{if .Full}}; there is no MCP tool for it, because a second door onto
+   the same bytes only makes an agent holding a ref pick between two{{end}}.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles){{if .Full}} when failures look environmental rather than caused by
    your change{{end}}.

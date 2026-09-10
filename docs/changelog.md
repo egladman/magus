@@ -80,6 +80,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The MCP tool catalog is generated from the `std.Magus` descriptor.** It was the one
+  agent-facing surface with no generator behind it: 22 hand-written descriptors and ~22 KB
+  of prose beside a descriptor that already generates the Buzz bindings, the checker
+  declarations and the reference docs. Declaring an `MCPTool` on the module is now what
+  adds a tool, the existing drift gate covers the output, and a tool naming a member the
+  descriptor does not declare fails at init. `magus_tail_log` is gone with it: it was a
+  second door onto the bytes `magus_output` already returns, keyed by project rather than
+  by ref, and the duplication was on record since the 2026-08-25 post that found it. The
+  CLI keeps the project-scoped route as `magus tail`. `magus\review.provider` gains a
+  declaration too, so it has a checker signature and a doc page like every other member;
+  a new test fails on any magus member bound at run time that the descriptor does not
+  declare, which is how that one went missing.
+
 - **A redundant ci gate is refused whether or not the machine is busy.** MGS3010 used to
   require a saturated admission pool as well, which made it unreachable in the case it was
   written for: the load reading comes from the daemon, ordinary commands run without a

@@ -40,7 +40,6 @@ const (
 	ToolStatus          ToolName = "magus_status"
 	ToolAffectedPlan    ToolName = "magus_affected_plan"
 	ToolConfigGet       ToolName = "magus_config_get"
-	ToolTailLog         ToolName = "magus_tail_log"
 	ToolMemory          ToolName = "magus_memory"
 	ToolQuery           ToolName = "magus_query"
 	ToolOutput          ToolName = "magus_output"
@@ -60,7 +59,7 @@ const (
 var AllToolNames = []ToolName{
 	ToolDescribe, ToolDescribeFile, ToolWhere, ToolAffectedExplain, ToolInsight,
 	ToolRunTarget, ToolRunAffected, ToolDoctor, ToolStatus,
-	ToolAffectedPlan, ToolConfigGet, ToolTailLog, ToolMemory,
+	ToolAffectedPlan, ToolConfigGet, ToolMemory,
 	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
 	ToolDiff,
 	ToolVCSCheckpoint, ToolLedger,
@@ -76,7 +75,7 @@ var errorHints = map[ToolName]string{
 	ToolRunTarget:   "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
 	ToolRunAffected: "next: list valid targets with " + ToolDescribe.String() + " (kind=targets)",
 	ToolWhere:       "next: list projects with " + ToolDescribe.String() + " (kind=projects)",
-	ToolOutput:      "next: output refs come from " + ToolRunTarget.String() + " or " + ToolTailLog.String(),
+	ToolOutput:      "next: output refs come from " + ToolRunTarget.String() + " or " + ToolRunAffected.String(),
 	ToolExplain:     "next: locate a node with " + ToolQuery.String() + ", then explain it",
 	ToolPath:        "next: locate the endpoints with " + ToolQuery.String(),
 	ToolRefs:        "next: locate a symbol with " + ToolQuery.String(),

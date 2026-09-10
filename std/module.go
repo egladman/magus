@@ -273,6 +273,55 @@ type Module struct {
 	// getRandomValues. The test is whether the BROWSER can provide it, not whether
 	// the operation sounds pure.
 	WASM bool
+	// MCPTools is the module's AGENT surface: the tools an MCP client sees. The
+	// generated registry (internal/handler/mcp/gen) is emitted from this, so the
+	// tool catalog derives from the same descriptor as the bindings, the checker
+	// declarations and the reference docs.
+	MCPTools []MCPTool
+}
+
+// MCPTool is one tool on a module's MCP surface.
+//
+// It hangs off the MODULE and names its member, rather than being a flag on
+// Method, because the two surfaces are not in bijection. An MCP tool can need
+// state a Buzz member never sees (magus_diff wants the daemon's live review
+// session, magus_run_target the run engine's Options), and a member can mean
+// something a tool of the same name does not (`magus\where(dir)` answers which
+// project contains a directory; magus_where filters project names). A flag on
+// Method could express neither without either lying about a member or declaring
+// one nothing binds.
+//
+// Member is the link back, and it is the drift check: when set, it must name a
+// Method or Namespace on the module, so a rename that misses the tool fails
+// codegen instead of shipping a tool that wraps nothing. Empty means the verb
+// has no typed member YET, which is the remaining gap rather than a decision.
+type MCPTool struct {
+	// Name is the tool name an MCP client calls, e.g. "magus_query". Bound to a
+	// hint.ToolName constant on the handler side, which is what keeps the two
+	// spellings from drifting.
+	Name string
+	// Member is the Method or Namespace this tool wraps, by its descriptor Name
+	// ("insight", "ledger"). Empty when no typed member covers the verb.
+	Member string
+	// Doc is the tool description sent to the client. Agent-facing prose, so it is
+	// authored here rather than inherited from the member: a member's Doc teaches a
+	// Buzz caller about return-type annotations and raising, which is noise in a
+	// tool manifest an agent pays context for.
+	Doc string
+	// Params are the tool's named parameters. Authored rather than derived from the
+	// member's Args because a Buzz member takes positional args plus one opts map,
+	// and an opts map carries no names for the schema to read.
+	Params []MCPParam
+}
+
+// MCPParam is one named parameter of an MCPTool. Type is restricted to the
+// scalars JSON schema and the MCP tool builder both have: TypeString, TypeInt,
+// TypeFloat, TypeBool.
+type MCPParam struct {
+	Name     string
+	Type     TypeTag
+	Required bool
+	Doc      string
 }
 
 // ImportPath returns the path a magusfile imports this module by: Path when it
