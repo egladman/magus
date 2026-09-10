@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -111,7 +112,7 @@ func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress, release
 				if idle < window {
 					continue
 				}
-				err := stallDiagnostic(prog.Last(), idle, window)
+				err := stallDiagnostic(prog.Last(), idle, window, m.cache.RunningTargets())
 				w.tripped.Store(err)
 				// Logged as well as returned: the abort unwinds through cancellation, and
 				// a reader watching the terminal should see WHY the run stopped at the
@@ -142,16 +143,27 @@ func stallPollInterval(window time.Duration) time.Duration {
 	return d
 }
 
-// stallDiagnostic renders MGS3012: what ran last, how long ago, and where its output
-// went, so a reader has somewhere to look without reproducing the stall.
-func stallDiagnostic(last cache.Mark, idle, window time.Duration) *types.DiagnosticError {
+// stallDiagnostic renders MGS3012: what ran last, how long ago, what else was still
+// admitted alongside it, and where its output went, so a reader has somewhere to look
+// without reproducing the stall.
+//
+// running is the whole answer to "waiting on what?" that this process can give. A step
+// blocked on a dependency is blocked on something that is either still in flight (named
+// here) or already finished (absent here, which says the wait itself is the bug). The
+// 2026-09-10 stall reported only "generate (executing)", and the list would have said
+// whether the codegen chain beneath it was moving.
+func stallDiagnostic(last cache.Mark, idle, window time.Duration, running []string) *types.DiagnosticError {
 	what := "none; no target had started"
 	if last.Target != "" {
 		what = fmt.Sprintf("%s:%s (%s)", last.Project, last.Target, last.What)
 	}
+	inFlight := "nothing; every admitted step had already handed its seat back"
+	if len(running) > 0 {
+		inFlight = strings.Join(running, ", ")
+	}
 	msg := fmt.Sprintf("aborting a stalled run: nothing has started, finished or printed a line for %s, "+
-		"and every selected project's lock is still held.\n  last step: %s\n  stall window: %s",
-		idle.Round(time.Second), what, window)
+		"and every selected project's lock is still held.\n  last step: %s\n  still admitted: %s\n  stall window: %s",
+		idle.Round(time.Second), what, inFlight, window)
 	if last.Log != "" {
 		msg += "\n  captured log: " + last.Log
 	}

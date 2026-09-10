@@ -385,6 +385,26 @@ func (c *Cache) Remote() RemoteBackend { return c.remote }
 // it, so those artifacts stay out of the working tree.
 func (c *Cache) Dir() string { return c.dir }
 
+// RunningTargets names what this process has in flight right now, as "project:target".
+//
+// The stall report is the caller that needs it: a wedged invocation's last transition
+// says which step was executing, and this says what else was still admitted alongside it,
+// which is the difference between "one target is slow" and "everything is parked".
+//
+// A nil receiver reports nothing, so the watchdog on an Inspect workspace needs no guard
+// of its own.
+func (c *Cache) RunningTargets() []string {
+	if c == nil {
+		return nil
+	}
+	running := c.inflight.Running()
+	out := make([]string, 0, len(running))
+	for _, t := range running {
+		out = append(out, t.Project+":"+t.Target)
+	}
+	return out
+}
+
 // IsCached reports whether step s would replay from cache rather than run: its inputs hash
 // to a manifest already present locally. It is Run's hash-and-lookup without the
 // execution or the remote fetch: a read-only "is this up to date?" probe (e.g. status
@@ -997,6 +1017,51 @@ func WithRunScope(ctx context.Context) context.Context {
 	}
 	return context.WithValue(ctx, runIsolationKey{}, &runIsolation{})
 }
+
+type sharedStepBaseKey struct{}
+
+// WithSharedStepBase marks ctx as the cancellation that work COMPOSED beneath this
+// scheduled target should run under. Set once per scheduled target, after its own ceiling
+// has been applied and before its body can narrow it further.
+func WithSharedStepBase(ctx context.Context) context.Context {
+	return context.WithValue(ctx, sharedStepBaseKey{}, ctx)
+}
+
+// SharedStepContext returns ctx's values under the scheduled target's cancellation
+// instead of the caller's: the context a step that several parents reach has to run on.
+//
+// A composed target is dispatched once and awaited by everyone who needs it (the Buzz
+// pool's TargetMemo), so whichever parent asks first supplies the context the work runs
+// under. When that parent declares a timeout, its ceiling silently becomes the ceiling of
+// a step its siblings also depend on: on 2026-09-10 `security` (15m) reached `generate`
+// first, and when it expired the whole codegen chain died with "context deadline exceeded"
+// under it, taking lint, build and test with it. A ceiling is a claim about the target
+// that declared it, never about a sibling that happens to share a dependency.
+//
+// What still rides is everything above the base: Ctrl-C, the stall watchdog, a failing
+// batch, and the ceiling of the unit the user actually scheduled (this repository's `ci`
+// declares 45m for exactly that reason). Outside a scheduled target this is a
+// pass-through, so a bare Cache.Run stays governed by its caller.
+func SharedStepContext(ctx context.Context) context.Context {
+	base, _ := ctx.Value(sharedStepBaseKey{}).(context.Context)
+	if base == nil {
+		return ctx
+	}
+	return sharedStepContext{values: ctx, cancel: base}
+}
+
+// sharedStepContext splices one context's values onto another's cancellation. No
+// goroutine and nothing to close: both halves outlive the step, so the merge is a pair of
+// pointers rather than a forwarded channel.
+type sharedStepContext struct {
+	values context.Context
+	cancel context.Context
+}
+
+func (c sharedStepContext) Deadline() (time.Time, bool) { return c.cancel.Deadline() }
+func (c sharedStepContext) Done() <-chan struct{}       { return c.cancel.Done() }
+func (c sharedStepContext) Err() error                  { return c.cancel.Err() }
+func (c sharedStepContext) Value(key any) any           { return c.values.Value(key) }
 
 func isolationFrom(ctx context.Context) *runIsolation {
 	isolation, _ := ctx.Value(runIsolationKey{}).(*runIsolation)

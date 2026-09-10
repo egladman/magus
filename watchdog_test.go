@@ -49,6 +49,7 @@ func TestStallWatchdogAbortsAQuietInvocation(t *testing.T) {
 	assert.Contains(t, err.Error(), "docs:graph-generate (executing)", "it names the last step that ran")
 	assert.Contains(t, err.Error(), "/tmp/.magus/logs/docs/abc123.log", "it names the captured log")
 	assert.Contains(t, err.Error(), "stall window: 60ms", "it names the window it measured against")
+	assert.Contains(t, err.Error(), "still admitted:", "it says what else was in flight, or that nothing was")
 	assert.Same(t, err, context.Cause(ctx), "the same diagnostic is the context's cause")
 }
 

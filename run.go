@@ -1555,6 +1555,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// branch and glob first, claims its TargetMemo, then delegates the
 			// already-memoed execution here.
 			spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
+				// The member is dispatched once and awaited by every parent that needs
+				// it, so it runs under the scheduled unit rather than under whichever
+				// parent asked first; see cache.SharedStepContext for the ceiling this
+				// stops from leaking sideways.
+				memberCtx = cache.SharedStepContext(memberCtx)
 				member := newStep(p, name)
 				member.SkipReplay = opts.NoCache
 				if raceForcesNoCache(opts) {
@@ -2193,6 +2198,10 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 		pol := p.TargetPolicies[name]
 		ctx, cancel := m.withTargetDeadline(ctx, pol)
 		defer cancel()
+		// The cancellation every target composed beneath this one inherits, fixed here so
+		// it carries THIS unit's ceiling and nothing a composed member declares later; see
+		// cache.SharedStepContext.
+		ctx = cache.WithSharedStepBase(ctx)
 		started := time.Now()
 		// The ceiling is annotated here as well as one layer down, because the layer
 		// down only sees a MAGUSFILE body: a spell-backed target reaches neither that

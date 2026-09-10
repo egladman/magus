@@ -175,6 +175,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **One target's declared timeout no longer becomes the timeout of the work its siblings
+  share.** A target reached through `ctx.needs` runs once and is awaited by every target
+  that needs it, so whichever caller arrived first supplied the context the work ran under.
+  When that caller declared a timeout, its ceiling silently governed a step other callers
+  also depended on: in this repository `security` declares fifteen minutes and reaches
+  `generate`, so an expiry there killed the whole codegen chain and took `lint`, `build`
+  and `test` down with it under a deadline none of them had asked for. A shared step now
+  runs under the invocation's own cancellation, which Ctrl-C, a failing batch and the stall
+  watchdog all still reach; a declared timeout continues to bound the target that declared
+  it. The stall abort (MGS3012) also lists what was still admitted when it fired, so the
+  next report says whether the work beneath the last step was moving instead of only naming
+  the step.
 - **A release whose publish step fails can be finished without rewriting the tag.** Cutting
   the manifest is idempotent: a second cut of a version whose manifest already names exactly
   the artifacts on disk reports what is there and leaves it untouched, instead of refusing
