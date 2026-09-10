@@ -334,13 +334,15 @@ turn the act that needs confirming into a series of small ones nobody confirms.
 The skill this page protects is narrow: your ability to fix the thing yourself
 when the agent is wrong, or gone. Not speed, and not thinking in general.
 
-Two studies set the target. Bastani et al. (PNAS 122(26), 2025) measured a tutor
-that handed over answers at 48% better while it was available and 17% worse once
-it was taken away, against 127% better with no residual harm for a version that
-gave hints instead. Sankaranarayanan (arXiv 2602.20206, a preprint) found 77% of
-developers could not finish a 30-minute task once their assistant was withdrawn,
-against 39% of a group whose tool required a stated reason before it accepted
-output, at no cost to how fast either group shipped.
+Two studies set the target. Bastani et al. measured nearly a thousand high school
+students with a tutor that handed over answers: 48% better on practice while it was
+available and 17% worse on the exam once it was taken away, against 127% better and
+no measurable residual harm for a version prompted to give hints instead.[^bastani-2025]
+Sankaranarayanan found that 77% of novice programmers given unrestricted AI failed a
+30-minute maintenance task once the assistant was withdrawn, against 39% of a group
+whose tool made them explain generated code's causal logic before it would integrate
+it. The two groups produced equally functional work; the explaining group took about
+a third longer to do it.[^sankaranarayanan-2026]
 
 The mechanisms are already on this page. Notes are human-authored by
 construction. `--ack` refuses without a terminal, agent hosts are denied it
@@ -351,7 +353,7 @@ model, which is what makes the Friday above an option rather than a slogan.
 This repository is built with agents at scale: 113,430 agent-run shell commands
 in twenty-one days. Our own oversight lapsed too. In 22 of 203 recent sessions
 the guard was not running, and those sessions carried 17% of all commands. The
-only reason that number exists is that we went looking for it.
+only reason that number exists is that we went looking for it.[^agent-commands-2026-09]
 
 ## Where this is strained
 
@@ -428,3 +430,25 @@ removed, with what decided each and where to check it.
 Two of those rows record a measurement that killed an idea somebody wanted,
 which is the only reason the rest of the list is worth anything. A ledger of
 things nobody was going to build proves nothing.
+
+[^bastani-2025]: Hamsa Bastani, Osbert Bastani, Alp Sungu, Haosen Ge, Ozge Kabakci, Rei Mariman,
+    "Generative AI without guardrails can harm learning: Evidence from high school
+    mathematics", PNAS 122(26), e2422633122, 2025, <https://doi.org/10.1073/pnas.2422633122>.
+    Figures are from the abstract: GPT Base and GPT Tutor practice gains of 48% and 127%
+    over control, a 17% exam reduction for GPT Base, and an effect the authors describe
+    as essentially eradicated for GPT Tutor. Checked 2026-09-10.
+
+[^sankaranarayanan-2026]: Sreecharan Sankaranarayanan, "Mitigating Epistemic Debt in
+    Generative AI-Scaffolded Novice Programming using Metacognitive Scripts", arXiv
+    2602.20206 (preprint, v2 2026-03-31), <https://arxiv.org/abs/2602.20206>. N=78
+    novices (CS undergraduates and recent bootcamp graduates), Cursor with Claude 3.5
+    Sonnet. Failure rates on the AI-blackout maintenance task were 77% unrestricted and
+    39% with the Explanation Gate; functional utility did not differ (p=.64); the gated
+    group was slower (about 64.6 versus 48.2 minutes, d=1.52). Checked 2026-09-10.
+
+[^agent-commands-2026-09]: Measured in this repository on 2026-09-09 over the Claude Code,
+    Codex and OpenCode transcripts on one machine, using the session-load recipes in
+    [the agents guide](guides/integrations/agents/session-load.md): 113,430 Bash tool
+    calls in the 21 days to that date; 22 of 203 sessions carried the guard-not-running
+    notice and accounted for 17% of those calls. Reproducible with `magus session load`
+    over the same transcripts.
