@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -514,6 +515,36 @@ func TestDeriveTargetOrderPartlySharedStepsStillDerive(t *testing.T) {
 
 	nodes[1].Steps = []string{s1, s2}
 	assert.Empty(t, DeriveTargetOrder(steps, nodes, nil).Edges, "identical step sets are the body's own sequencing")
+}
+
+// TestOrderingDoesNotDependOnWhichPairAsksFirst is the docs workspace's shape: preflight
+// is reached under generate's first call and again under the site render, which build
+// runs after generate. Answering "is the render after content-generate" walks through
+// preflight's composers back to the render, and a memoized recursion answered that with
+// whichever partial set it was building at the time, so the doctor and the run disagreed
+// on the same tree. Every node order must give the same answer.
+func TestOrderingDoesNotDependOnWhichPairAsksFirst(t *testing.T) {
+	t.Parallel()
+	p := &types.Project{
+		Path: "docs", Name: "docs",
+		TargetChains: map[string][]types.ChainStep{
+			"ci":            types.Needs("generate").Needs("build"),
+			"generate":      types.Needs("preflight").Needs("content-generate"),
+			"build":         types.Needs("generate").Needs("site-generate"),
+			"site-generate": types.Needs("build-hljs"),
+			"build-hljs":    types.Needs("preflight"),
+		},
+		TargetInputs:  map[string][]types.InputRef{"site-generate": {{Project: "docs", Glob: "**/*.md"}}},
+		TargetOutputs: map[string][]types.OutputRef{"content-generate": {{Project: "docs", Glob: "reference/*.md"}}},
+	}
+	nodes := DeclaredNodes(p, "ci", nil)
+	for shift := range nodes {
+		rotated := append(slices.Clone(nodes[shift:]), nodes[:shift]...)
+		assert.Empty(t, FindSameStepConflicts(rotated, nil), "rotation %d", shift)
+		o := newNodeOrder(rotated)
+		assert.True(t, o.runsAfter(DepKey("docs", "site-generate"), DepKey("docs", "content-generate")), "rotation %d", shift)
+		assert.Empty(t, o.preceded[DepKey("docs", "preflight")], "nothing precedes preflight, whichever composer reaches it first")
+	}
 }
 
 func TestGlobsOverlapTreatsAnExhaustedLiteralAsADirectory(t *testing.T) {

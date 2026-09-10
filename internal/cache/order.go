@@ -683,30 +683,80 @@ func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) SameStepC
 }
 
 // nodeOrder answers, over one collection of nodes, whether one node's own work runs
-// after another has completed. Every answer is a lookup in two sets computed once per
-// node and memoized, so a plan's N^2 pairs cost N set constructions rather than a walk
+// after another has completed. Every answer is a lookup in two sets per node, settled
+// once for the collection, so a plan's N^2 pairs cost one settlement rather than a walk
 // each.
+//
+// The two sets define each other (what is done once a target completes includes what
+// preceded it; what precedes a target is what its composers completed first, which is
+// what THEY had done), and a target reached under two composers closes that definition
+// into a loop. A recursion with memoization answered such a loop with whichever partial
+// set it was building when it came back around, so the verdict depended on which pair
+// asked first. The sets are instead grown to a fixpoint: every rule only ever adds, so
+// the iteration climbs to the least sets consistent with all of them and stops, and the
+// least sets are the ones that order nothing a rule cannot prove.
 type nodeOrder struct {
-	byKey     map[string]TargetNode
-	composers map[string][]string
+	byKey map[string]TargetNode
 	// done holds, per key, everything complete once the key has completed: the key, its
 	// members transitively, and whatever preceded each of them.
 	done map[string]map[string]bool
-	// preceded holds, per key, everything complete before the key STARTS.
+	// preceded holds, per key, everything complete before the key STARTS. A node is
+	// dispatched by whichever composer reaches it first and runs once, so only what
+	// EVERY composer puts before it is certain: the intersection, over its composers,
+	// of what that composer's earlier calls completed plus what preceded the composer
+	// itself. A composer's other members never count; those are the key's siblings,
+	// fanned out unordered beside it.
 	preceded map[string]map[string]bool
 }
 
 func newNodeOrder(nodes []TargetNode) *nodeOrder {
 	o := &nodeOrder{
-		byKey:     make(map[string]TargetNode, len(nodes)),
-		composers: map[string][]string{},
-		done:      map[string]map[string]bool{},
-		preceded:  map[string]map[string]bool{},
+		byKey:    make(map[string]TargetNode, len(nodes)),
+		done:     make(map[string]map[string]bool, len(nodes)),
+		preceded: make(map[string]map[string]bool, len(nodes)),
 	}
+	composers := map[string][]string{}
 	for _, n := range nodes {
 		o.byKey[n.Key()] = n
+		o.done[n.Key()] = map[string]bool{n.Key(): true}
+		o.preceded[n.Key()] = map[string]bool{}
 		for _, member := range n.Needs.members() {
-			o.composers[member] = append(o.composers[member], n.Key())
+			composers[member] = append(composers[member], n.Key())
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, n := range nodes {
+			key := n.Key()
+			done := o.done[key]
+			before := len(done)
+			for _, m := range n.Needs.members() {
+				maps.Copy(done, o.done[m])
+			}
+			maps.Copy(done, o.preceded[key])
+			changed = changed || len(done) > before
+
+			var preceded map[string]bool
+			for _, c := range composers[key] {
+				via := map[string]bool{}
+				for _, m := range o.byKey[c].Needs.before(key) {
+					maps.Copy(via, o.done[m])
+				}
+				maps.Copy(via, o.preceded[c])
+				if preceded == nil {
+					preceded = via
+					continue
+				}
+				for k := range preceded {
+					if !via[k] {
+						delete(preceded, k)
+					}
+				}
+			}
+			if len(preceded) > len(o.preceded[key]) {
+				o.preceded[key] = preceded
+				changed = true
+			}
 		}
 	}
 	return o
@@ -716,65 +766,15 @@ func newNodeOrder(nodes []TargetNode) *nodeOrder {
 // body's sequencing already puts earlier first: earlier precedes later, or completes
 // with one of later's own members.
 func (o *nodeOrder) runsAfter(later, earlier string) bool {
-	if o.precededBy(later)[earlier] {
+	if o.preceded[later][earlier] {
 		return true
 	}
 	for _, m := range o.byKey[later].Needs.members() {
-		if o.doneBy(m)[earlier] {
+		if o.done[m][earlier] {
 			return true
 		}
 	}
 	return false
-}
-
-// doneBy is everything complete once key has completed. A key under construction (a
-// chain the loader somehow admitted with a cycle in it) reads as its partial set, which
-// orders less rather than more.
-func (o *nodeOrder) doneBy(key string) map[string]bool {
-	if s, ok := o.done[key]; ok {
-		return s
-	}
-	s := map[string]bool{key: true}
-	o.done[key] = s
-	for _, m := range o.byKey[key].Needs.members() {
-		maps.Copy(s, o.doneBy(m))
-	}
-	maps.Copy(s, o.precededBy(key))
-	return s
-}
-
-// precededBy is everything complete before key starts. A node is dispatched by
-// whichever composer reaches it first and runs once, so only what EVERY composer puts
-// before it is certain: the intersection, over its composers, of what that composer's
-// earlier calls completed plus what preceded the composer itself. A composer's other
-// members never count; those are key's siblings, fanned out unordered beside it.
-func (o *nodeOrder) precededBy(key string) map[string]bool {
-	if s, ok := o.preceded[key]; ok {
-		return s
-	}
-	o.preceded[key] = map[string]bool{}
-	var s map[string]bool
-	for _, c := range o.composers[key] {
-		via := map[string]bool{}
-		for _, m := range o.byKey[c].Needs.before(key) {
-			maps.Copy(via, o.doneBy(m))
-		}
-		maps.Copy(via, o.precededBy(c))
-		if s == nil {
-			s = via
-			continue
-		}
-		for k := range s {
-			if !via[k] {
-				delete(s, k)
-			}
-		}
-	}
-	if s == nil {
-		s = map[string]bool{}
-	}
-	o.preceded[key] = s
-	return s
 }
 
 // Refusal is the MGS4008 refusal for the SAME-project conflicts, or nil for none. It
