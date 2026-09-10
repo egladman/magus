@@ -74,25 +74,32 @@ magus ships this one at `spells/onepassword/`, imported by path because a spell 
 imports a host module cannot be compiled into the binary. Copy it as the starting point
 for any provider with a CLI that prints a secret to stdout.
 
-### The macOS keychain provider
+### The system keychain provider
 
-`spells/macos-keychain/` is the same contract over the `security` CLI, and the name
-carries the platform because the spell is nothing without it: a reference is the
-service name of a generic password in the login keychain, and a person stores the
-value once at a prompt that never echoes it:
+`spells/system-keychain/` is the same contract over whatever keychain the
+platform ships, chosen at run time: the macOS keychain through `security`, and on
+Linux the freedesktop Secret Service (GNOME Keyring, KDE Wallet) through
+`secret-tool` from libsecret. A reference is the item's service name, and a
+person stores the value once at a prompt that never echoes it:
 
 ```sh
-security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w
+security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w     # macOS
+secret-tool store --label=CLAUDE_BENCH_TOKEN service CLAUDE_BENCH_TOKEN  # Linux
 ```
 
 ```buzz
-import "./spells/macos-keychain" as macos_keychain;
-if (os\env("MAGUS_SECRET_PROVIDER") == "macos-keychain") {
-    magus\secret.provider(macos_keychain);
+import "./spells/system-keychain" as system_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
+    magus\secret.provider(system_keychain);
 }
 
 final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
 ```
+
+Windows is not implemented yet: the provider says so, and names the environment
+provider as the way through, rather than pretending Credential Manager is wired.
+The Linux path follows the `secret-tool` manual and has not been run in this
+repository's own checks, which run on macOS.
 
 Spell the reference like a shell variable and select the provider from the
 environment rather than from the platform: the same line then reads a repository

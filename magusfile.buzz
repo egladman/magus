@@ -64,17 +64,18 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
     magus\cache.remote(github);
 }
 
-// The macOS keychain is the secret provider when the person launching the run asks
+// The system keychain is the secret provider when the person launching the run asks
 // for it, so a laptop run resolves a credential with nothing exported into its shell
 // and nothing in the transcript of whoever typed the command. Opt-in rather than
-// every Mac outside CI: the environment provider is what image-login and the release
-// targets read on a laptop too, and a keychain that answers for every reference would
-// break each of them until its item was stored. A reference is written to be legal
-// under both (a shell name, which the keychain takes as a service name), so the same
-// magusfile line reads a repository secret in CI and a keychain item here.
-import "spells/macos-keychain" as macos_keychain;
-if (os\env("MAGUS_SECRET_PROVIDER") == "macos-keychain") {
-    magus\secret.provider(macos_keychain);
+// every laptop outside CI: the environment provider is what image-login and the
+// release targets read on a laptop too, and a keychain that answers for every
+// reference would break each of them until its item was stored. A reference is
+// written to be legal under both (a shell name, which the keychain takes as a service
+// name), so the same magusfile line reads a repository secret in CI and a keychain
+// item here.
+import "spells/system-keychain" as system_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
+    magus\secret.provider(system_keychain);
 }
 
 // Unconditional, unlike the cache above: the spell's enabled() gates every op
@@ -2855,7 +2856,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
 // the runner's scrub keeps, and redacted from everything magus captures. It never
 // touches argv, which the run log records, and it never has to be exported by the
 // person, or the agent, typing this command:
-// `MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run . -- <manifest>`, defaulting
+// `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run . -- <manifest>`, defaulting
 // to pilot.manifest. Every run is paid work that writes results/, so it never replays
 // from cache.
 export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {

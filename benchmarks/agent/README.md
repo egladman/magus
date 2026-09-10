@@ -71,7 +71,7 @@ and a transcript never sees it:
 
 ```sh
 security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w   # prompts, no echo
-MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run . -- pilot.manifest
+MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run . -- pilot.manifest
 ```
 
 `agent-bench-run` resolves `CLAUDE_BENCH_TOKEN` through `magus\secret.read`, hands
