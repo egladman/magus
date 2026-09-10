@@ -122,6 +122,10 @@ magus\project({
         "magus.yaml",           // charms, cache and sandbox policy every run resolves
         "Dockerfile",           // image-build's amd64 variant
         "Dockerfile.static",    // image-build's static multi-arch variant
+        // The vendored agent-host schemas hostschema_test.go grades the hook configs
+        // against. No spell claims them (the go spell takes *.go and *.txtar), so a
+        // refresh would otherwise not invalidate the tests that read them.
+        "testdata/hostschemas/**/*.json",
     ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},

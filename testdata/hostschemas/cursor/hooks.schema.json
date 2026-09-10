@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/hostschemas/cursor/hooks.schema.json",
+  "$comment": "OURS, not Cursor's. Cursor publishes a JSON Schema for .cursor/environment.json (cursor.com/schemas/environment.schema.json, draft 2019-09) and NONE for .cursor/hooks.json: cursor.com/schemas/hooks.schema.json serves the docs SPA, not a schema. Transcribed by hand from the configuration tables on https://cursor.com/docs/agent/hooks, read 2026-09-10. The event list is that page's, so a Cursor rename lands here as a false failure rather than as silence; see testdata/hostschemas/SOURCES.md.",
+  "title": "Cursor hooks.json",
+  "type": "object",
+  "required": ["hooks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"type": "number"},
+    "hooks": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "sessionStart": {"$ref": "#/definitions/handlers"},
+        "sessionEnd": {"$ref": "#/definitions/handlers"},
+        "preToolUse": {"$ref": "#/definitions/handlers"},
+        "postToolUse": {"$ref": "#/definitions/handlers"},
+        "postToolUseFailure": {"$ref": "#/definitions/handlers"},
+        "subagentStart": {"$ref": "#/definitions/handlers"},
+        "subagentStop": {"$ref": "#/definitions/handlers"},
+        "beforeShellExecution": {"$ref": "#/definitions/handlers"},
+        "afterShellExecution": {"$ref": "#/definitions/handlers"},
+        "beforeMCPExecution": {"$ref": "#/definitions/handlers"},
+        "afterMCPExecution": {"$ref": "#/definitions/handlers"},
+        "beforeReadFile": {"$ref": "#/definitions/handlers"},
+        "afterFileEdit": {"$ref": "#/definitions/handlers"},
+        "beforeSubmitPrompt": {"$ref": "#/definitions/handlers"},
+        "preCompact": {"$ref": "#/definitions/handlers"},
+        "stop": {"$ref": "#/definitions/handlers"},
+        "afterAgentResponse": {"$ref": "#/definitions/handlers"},
+        "afterAgentThought": {"$ref": "#/definitions/handlers"},
+        "beforeTabFileRead": {"$ref": "#/definitions/handlers"},
+        "afterTabFileEdit": {"$ref": "#/definitions/handlers"},
+        "workspaceOpen": {"$ref": "#/definitions/handlers"}
+      }
+    }
+  },
+  "definitions": {
+    "handlers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/definitions/handler"}
+    },
+    "handler": {
+      "type": "object",
+      "required": ["command"],
+      "additionalProperties": false,
+      "properties": {
+        "command": {"type": "string", "minLength": 1},
+        "type": {"enum": ["command", "prompt"]},
+        "timeout": {"type": "number"},
+        "loop_limit": {"type": ["number", "null"]},
+        "failClosed": {"type": "boolean"},
+        "matcher": {
+          "type": ["string", "object"],
+          "$comment": "The field table on cursor.com/docs/agent/hooks (read 2026-09-10) types matcher as object, while every example on the same page writes a string such as \"Shell\" or \"curl|wget\", and the string form is what the shipped config uses. Both are accepted until Cursor publishes a schema of its own."
+        }
+      }
+    }
+  }
+}

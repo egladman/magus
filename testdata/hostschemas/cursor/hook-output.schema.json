@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/hostschemas/cursor/hook-output.schema.json",
+  "$comment": "OURS, not Cursor's. Transcribed by hand from the beforeShellExecution output block on https://cursor.com/docs/agent/hooks, read 2026-09-10. Only that surface is modelled: Cursor's afterFileEdit fires after the write, so magus reports there as prose on stderr and prints no JSON at all.",
+  "title": "Cursor beforeShellExecution hook stdout",
+  "type": "object",
+  "required": ["permission"],
+  "additionalProperties": false,
+  "properties": {
+    "permission": {"enum": ["allow", "deny", "ask"]},
+    "user_message": {"type": "string"},
+    "agent_message": {"type": "string"}
+  }
+}

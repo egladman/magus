@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/hostschemas/claude-code/hook-output.schema.json",
+  "$comment": "OURS, not Anthropic's. Anthropic publishes no JSON Schema for hook stdout; it publishes TypeScript. Transcribed by hand from SyncHookJSONOutput and PreToolUseHookSpecificOutput in @anthropic-ai/claude-agent-sdk 0.3.267 (sdk.d.ts), read 2026-09-10. Only the PreToolUse arm of hookSpecificOutput is modelled, because PreToolUse is the only surface whose verdict magus renders as JSON; the other templates write prose. See testdata/hostschemas/SOURCES.md for how to refresh it against the type rather than against memory.",
+  "title": "Claude Code hook stdout (PreToolUse arm)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "continue": {"type": "boolean"},
+    "suppressOutput": {"type": "boolean"},
+    "stopReason": {"type": "string"},
+    "decision": {"enum": ["approve", "block"]},
+    "systemMessage": {"type": "string"},
+    "terminalSequence": {"type": "string"},
+    "reason": {"type": "string"},
+    "hookSpecificOutput": {"$ref": "#/definitions/preToolUseHookSpecificOutput"}
+  },
+  "definitions": {
+    "preToolUseHookSpecificOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hookEventName"],
+      "properties": {
+        "hookEventName": {"const": "PreToolUse"},
+        "permissionDecision": {"enum": ["allow", "deny", "ask", "defer"]},
+        "permissionDecisionReason": {"type": "string"},
+        "updatedInput": {"type": "object"},
+        "additionalContext": {"type": "string"}
+      }
+    }
+  }
+}
