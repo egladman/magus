@@ -14,10 +14,10 @@ in the memory store.
 
 ## Arms
 
-| Arm       | What the worktree gets                                                                                        |
-| --------- | ------------------------------------------------------------------------------------------------------------- |
-| `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md         |
-| `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                           |
+| Arm       | What the worktree gets                                                                                |
+| --------- | ----------------------------------------------------------------------------------------------------- |
+| `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md |
+| `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                   |
 
 The arms differ only in provisioning. Model, effort, prompt, permission mode,
 budget caps, worktree layout and fixture SHA are identical. Neither arm
