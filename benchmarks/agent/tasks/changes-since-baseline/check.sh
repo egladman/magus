@@ -20,9 +20,10 @@ node -e '
     console.error("check: no \"## Behavior change\" section");
     process.exit(1);
   }
-  const body = lines.slice(start + 1).join(" ");
-  const cut = body.indexOf("\n#") >= 0 ? body.slice(0, body.indexOf("\n#")) : body;
-  const missing = ["timeoutMs", "2500"].filter((token) => !cut.includes(token));
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => l.startsWith("#"));
+  const body = (end < 0 ? rest : rest.slice(0, end)).join(" ");
+  const missing = ["timeoutMs", "2500"].filter((token) => !body.includes(token));
   if (missing.length) {
     console.error(`check: behavior change does not name ${missing.join(" and ")}`);
     process.exit(1);

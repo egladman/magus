@@ -39,7 +39,7 @@ arm_templates() {
 # same state as provisioning once.
 arm_reset() {
     rm -rf "$1/.benchmark" "$1/.claude" "$1/MAGUS.md" "$1/CLAUDE.md" "$1/.mcp.json"
-    mkdir -p "$1/.benchmark/claude-config" "$1/.benchmark/home" "$1/.claude"
+    mkdir -p "$1/.benchmark/home" "$1/.claude"
 }
 
 # arm_write_env writes the file the runner sources after scrubbing the
@@ -74,11 +74,11 @@ arm_load_env() {
     [ -f "$1/.benchmark/env.sh" ] || arm_die "no .benchmark/env.sh, so the runner has no environment to source"
     # shellcheck disable=SC1091  # generated at provision time
     . "$1/.benchmark/env.sh"
-    [ -n "$BENCH_MAGUS_BIN" ] || arm_die "env.sh exports no BENCH_MAGUS_BIN"
+    [ -n "${BENCH_MAGUS_BIN:-}" ] || arm_die "env.sh exports no BENCH_MAGUS_BIN"
     [ -x "$BENCH_MAGUS_BIN" ] || arm_die "BENCH_MAGUS_BIN=$BENCH_MAGUS_BIN is not executable"
     resolved=$(command -v magus 2>/dev/null)
     [ "$resolved" = "$BENCH_MAGUS_BIN" ] || arm_die "PATH resolves magus to ${resolved:-nothing}, not $BENCH_MAGUS_BIN"
-    [ "$MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES" = "0" ] || arm_die "activity-trail rotation is not pinned off (MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES=${MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES:-unset})"
+    [ "${MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES:-}" = "0" ] || arm_die "activity-trail rotation is not pinned off (MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES=${MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES:-unset})"
 }
 
 # arm_check_no_mcp proves no MCP server reaches the session: the config the run
@@ -88,7 +88,7 @@ arm_load_env() {
 # operator's servers would be reporting a config the session never sees.
 arm_check_no_mcp() {
     [ ! -e "$1/.mcp.json" ] || arm_die ".mcp.json exists, so the tree registers project-scoped MCP servers"
-    [ -n "$RUNNER_MCP_CONFIG" ] || arm_die "env.sh exports no RUNNER_MCP_CONFIG, so the session would inherit the operator's MCP servers"
+    [ -n "${RUNNER_MCP_CONFIG:-}" ] || arm_die "env.sh exports no RUNNER_MCP_CONFIG, so the session would inherit the operator's MCP servers"
     [ -f "$RUNNER_MCP_CONFIG" ] || arm_die "RUNNER_MCP_CONFIG=$RUNNER_MCP_CONFIG is not a file"
     case $(tr -d ' \n' < "$RUNNER_MCP_CONFIG") in
     '{"mcpServers":{}}') ;;

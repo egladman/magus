@@ -16,18 +16,17 @@ max_turns=$4
 model=$5
 effort=$6
 
-# The session inherits nothing it was not given. Arms that need a lever pass its
-# name through RUNNER_ENV_EXTRA, which run.sh fills from arms/<arm>/env, or
-# export it from the worktree's .benchmark/env.sh, which provision.sh writes per
-# run (the pinned binary on PATH, the isolated CLAUDE_CONFIG_DIR, rotation off).
-# Every name that file exports rides through the scrub.
+# The environment is scrubbed to this whitelist plus every name the worktree's
+# .benchmark/env.sh exports, which is how an arm sets its levers (provision.sh
+# writes it per run: the pinned binary on PATH, the empty MCP config, rotation
+# off). Settings are limited to --setting-sources project, but HOME is kept, so
+# whatever the host reads from ~/.claude (memory, user-scoped skills) reaches
+# both arms equally; the arms differ only in what the worktree carries.
 #
 # Credentials pass through by NAME only: an API key, or the long-lived token `claude
 # setup-token` mints for headless use. The operator exports one of them before launching
 # the runner; nothing here reads, stores or prints a value.
 env_keep=(HOME PATH USER LOGNAME SHELL TERM TMPDIR LANG LC_ALL ANTHROPIC_API_KEY ANTHROPIC_BASE_URL CLAUDE_CODE_OAUTH_TOKEN)
-# shellcheck disable=SC2206 # RUNNER_ENV_EXTRA is a space-separated name list
-env_keep+=(${RUNNER_ENV_EXTRA:-})
 if [[ -f $wt/.benchmark/env.sh ]]; then
     # shellcheck disable=SC1091 # written per run by the arm's provision.sh
     . "$wt/.benchmark/env.sh"

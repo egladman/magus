@@ -2,7 +2,7 @@
   "_source": "https://platform.claude.com/docs/en/about-claude/pricing",
   "_read_on": "2026-09-09",
   "_units": "USD per million tokens, first-party Claude API list prices",
-  "_note": "cache_write_5m is the 1.25x multiplier, cache_write_1h the 2x multiplier, cache_read the 0.1x multiplier (0.025x on the Fable models). A model absent from this table is an extraction error, never a guess.",
+  "_note": "cache_write_5m is the 1.25x multiplier, cache_write_1h the 2x multiplier, cache_read the 0.1x multiplier (0.025x on the Fable models). A dated model id (claude-opus-5-20260301) is priced as its alias (claude-opus-5); a model absent from this table under either name is an extraction error, never a guess.",
   "models": {
     "claude-opus-5": {
       "input": 5.0,

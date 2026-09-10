@@ -11,9 +11,14 @@ import argparse
 import json
 import os
 import posixpath
+import re
 import sys
 
 USD_PER_TOKEN = 1_000_000.0
+
+# A transcript records the dated model id the API served (claude-opus-5-20260301);
+# the pricing table is keyed by alias, so the date is stripped before lookup.
+DATED_MODEL_SUFFIX = re.compile(r"-\d{8}$")
 
 # Tool names whose call counts feed file_reads / re_read_rate.
 READ_TOOLS = ("Read", "NotebookRead")
@@ -62,6 +67,8 @@ def price_usage(by_model, pricing, run_id):
     total = 0.0
     for model in sorted(by_model):
         rates = pricing.get(model)
+        if rates is None:
+            rates = pricing.get(DATED_MODEL_SUFFIX.sub("", model))
         if rates is None:
             raise ExtractError(
                 "%s: model %r is absent from the pricing table; add its published prices"
@@ -320,13 +327,19 @@ META_FIELDS = (
     "started",
     "ended",
     "exit_reason",
+    "control",
 )
 
 REQUIRED_META = ("run_id", "arm", "task", "rep", "model")
 
 
 def extract_run(run_dir, pricing):
-    """Build one metrics record for a single run directory."""
+    """Build one metrics record for a single run directory.
+
+    Returns None for a control run (golden or null): no agent ran, so there is
+    no transcript to measure, and its verdict is already in meta.json's
+    exit_reason. A scored run without a transcript is still an error.
+    """
     meta_path = os.path.join(run_dir, "meta.json")
     if not os.path.exists(meta_path):
         raise ExtractError("%s: meta.json is missing" % run_dir)
@@ -336,6 +349,8 @@ def extract_run(run_dir, pricing):
         if meta.get(field) in (None, ""):
             raise ExtractError("%s: meta.json has no %s" % (run_dir, field))
     run_id = meta["run_id"]
+    if meta.get("control"):
+        return None
 
     transcript = read_transcript(os.path.join(run_dir, "transcript.jsonl"), run_id, meta.get("model"))
     check_exit, success = read_check(run_dir)
@@ -412,13 +427,23 @@ def main(argv=None):
     if not run_dirs:
         raise ExtractError("no run directories under %s" % args.results)
 
-    records = [extract_run(run_dir, pricing) for run_dir in run_dirs]
+    records = []
+    controls = 0
+    for run_dir in run_dirs:
+        record = extract_run(run_dir, pricing)
+        if record is None:
+            controls += 1
+            print("skipped %s: control run, nothing to measure" % os.path.basename(run_dir))
+        else:
+            records.append(record)
+    if not records:
+        raise ExtractError("no scored runs under %s (%d control runs)" % (args.results, controls))
     records.sort(key=lambda r: r["run_id"])
     with open(args.out, "w", encoding="utf-8") as fh:
         for record in records:
             fh.write(json.dumps(record, sort_keys=True) + "\n")
             print(summary_line(record))
-    print("wrote %d runs to %s" % (len(records), args.out))
+    print("wrote %d runs to %s (%d control runs skipped)" % (len(records), args.out, controls))
     return 0
 
 

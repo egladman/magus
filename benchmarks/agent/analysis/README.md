@@ -12,14 +12,9 @@ library, so `python:3.12-slim` runs it as-is with no build:
 docker pull python:3.12-slim
 ```
 
-`benchmarks/agent/Dockerfile` pins that image with a `python3` entrypoint for
-anyone who wants a named one; the commands below use the upstream image
-directly, so they spell `python` themselves.
-
 ## Invocations
 
-Every command bind-mounts `benchmarks/agent` at `/w`. Substitute
-`magus-bench-analysis` for `python:3.12-slim` if you built the image.
+Every command bind-mounts `benchmarks/agent` at `/w`.
 
 ```sh
 docker run --rm -v "$PWD/benchmarks/agent:/w" python:3.12-slim \
@@ -56,15 +51,15 @@ same metrics.jsonl and seed produce byte-identical analysis.json.
 
 One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
 
-| File                     | Read for                                                                                                                            |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `meta.json`              | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
-| `transcript.jsonl`       | tokens, dollars, turns, tool calls, file reads, tool-result bytes                                                                   |
-| `final.diff`             | invariant violations                                                                                                                |
-| `check.exit`             | success                                                                                                                             |
-| `timing.json`            | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                     |
-| `activity/events.jsonl`  | guard events (optional)                                                                                                             |
-| `check.txt`, `probe.txt` | kept for the human, not parsed                                                                                                      |
+| File                     | Read for                                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta.json`              | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason, control |
+| `transcript.jsonl`       | tokens, dollars, turns, tool calls, file reads, tool-result bytes                                                                            |
+| `final.diff`             | invariant violations                                                                                                                         |
+| `check.exit`             | success                                                                                                                                      |
+| `timing.json`            | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                              |
+| `activity/events.jsonl`  | guard events (optional)                                                                                                                      |
+| `check.txt`, `probe.txt` | kept for the human, not parsed                                                                                                               |
 
 ## Metric definitions
 
@@ -93,7 +88,12 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   skill load. **Null when no trail was captured, never zero** - zero means the
   guard was present and silent.
 - **success** - `check.exit == 0`. A run with no `check.exit` is null (unknown),
-  not a failure, and the report names it as a control failure.
+  not a failure; the report lists it under its caveats as an unknown outcome,
+  excluded from every pass rate.
+- **control runs** - a run whose `meta.json` carries `control` (`golden` or
+  `null`) never launched an agent and has no transcript. The extractor skips it
+  with a note and it contributes no row; its verdict is the `exit_reason` the
+  runner recorded. A scored run without a transcript is still an error.
 - **invariant_violations** - `tests_deleted` lists paths the diff deletes whose
   basename contains `_test.` or `.test.`. Deletion is the only violation read
   from a diff deterministically; everything else belongs in an acceptance check.

@@ -6,7 +6,7 @@ WT="$(cd "${1:?usage: check.sh <worktree>}" && pwd)"
 
 if grep -rq --exclude-dir=node_modules --exclude-dir=.git 'createLogger' "$WT"; then
     echo "check: createLogger still appears in the tree" >&2
-    grep -rn --exclude-dir=node_modules --exclude-dir=.git -l 'createLogger' "$WT" >&2
+    grep -rl --exclude-dir=node_modules --exclude-dir=.git 'createLogger' "$WT" >&2
     exit 1
 fi
 

@@ -207,6 +207,56 @@ class TranscriptDefectCase(unittest.TestCase):
             extract.extract_run(self.run, PRICING)
         self.assertIn("pricing table", str(ctx.exception))
 
+    def test_dated_model_id_is_priced_as_its_alias(self):
+        self.write_transcript(
+            [
+                {
+                    "type": "assistant",
+                    "message": {
+                        "id": "m1",
+                        "model": "claude-opus-5-20260301",
+                        "usage": {"input_tokens": 1_000_000, "output_tokens": 0},
+                        "content": [],
+                    },
+                }
+            ]
+        )
+        record = extract.extract_run(self.run, PRICING)
+        self.assertAlmostEqual(record["dollars"], PRICING["claude-opus-5"]["input"])
+
+    def test_dated_id_with_no_alias_still_raises(self):
+        self.write_transcript(
+            [
+                {
+                    "type": "assistant",
+                    "message": {
+                        "id": "m1",
+                        "model": "some-unlisted-model-20260301",
+                        "usage": {"input_tokens": 10, "output_tokens": 2},
+                        "content": [],
+                    },
+                }
+            ]
+        )
+        with self.assertRaises(extract.ExtractError):
+            extract.extract_run(self.run, PRICING)
+
+    def test_scored_run_without_a_transcript_raises(self):
+        with self.assertRaises(extract.ExtractError) as ctx:
+            extract.extract_run(self.run, PRICING)
+        self.assertIn("transcript.jsonl is missing", str(ctx.exception))
+
+    def test_control_run_is_skipped_not_measured(self):
+        # Neither control writes a transcript, so the run must be recognized
+        # from meta.json alone rather than from what is missing beside it.
+        with open(os.path.join(self.run, "meta.json"), "r+", encoding="utf-8") as fh:
+            meta = json.load(fh)
+            meta.update({"control": "golden", "exit_reason": "control_golden_ok"})
+            fh.seek(0)
+            fh.truncate()
+            json.dump(meta, fh)
+        self.assertIsNone(extract.extract_run(self.run, PRICING))
+
 
 def synthetic_record(arm, task, rep, dollars, tokens, success=True):
     return {

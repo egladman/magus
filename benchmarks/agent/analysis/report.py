@@ -183,8 +183,8 @@ def caveats(analysis, out):
             )
     if quality["runs_without_check"]:
         lines.append(
-            "Control failure: %d run(s) carry no acceptance check and are excluded from "
-            "pass rates as unknown (%s)."
+            "Unknown outcome: %d run(s) carry no acceptance check and are excluded from "
+            "pass rates (%s)."
             % (len(quality["runs_without_check"]), ", ".join(quality["runs_without_check"]))
         )
     if quality["runs_without_guard_events"]:

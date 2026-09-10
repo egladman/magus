@@ -20,7 +20,9 @@ usage:
   run.sh --manifest <file>
 
 A manifest is a text file of run.sh flag lines; blank lines and lines starting
-with # are skipped. Each line is executed as its own run.sh invocation.
+with # are skipped. Each line is executed as its own run.sh invocation. A line
+that fails does not stop the ones after it; the failures are listed at the end
+and the exit status is 1 if there were any.
 
 env:
   BENCH_FIXTURE_REPO    git repo each run worktree is cut from
@@ -133,7 +135,7 @@ run_one() {
                 bash "$task_dir/solution.sh" "$wt" >>"$out/setup.log" 2>&1 || exit_reason=control_error
                 ;;
             null) ;;
-            *) run_agent "$wt" "$out" "$task_dir" "$arm_dir" "$max_turns" "$model" "$effort" "$budget" ;;
+            *) run_agent "$wt" "$out" "$task_dir" "$max_turns" "$model" "$effort" "$budget" ;;
         esac
         t_done=$(now_ms)
 
@@ -178,7 +180,7 @@ run_one() {
     ended=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     write_meta "$out" "$run_id" "$arm" "$task" "$rep" "$model" "$effort" \
         "$max_turns" "$budget" "$magus_binary" "$magus_version" "$fixture_sha" \
-        "$started" "$ended" "$exit_reason"
+        "$started" "$ended" "$exit_reason" "$control"
     write_timing "$out" "$t_start" "$t_first_edit" "$t_done"
 
     if [[ ${BENCH_KEEP_WORKTREE:-} == 1 ]]; then
@@ -195,28 +197,15 @@ run_one() {
 # EXIT_REASON are set through the caller's locals, which is why this is not a
 # subshell.
 run_agent() {
-    local wt=$1 out=$2 task_dir=$3 arm_dir=$4 max_turns=$5 model=$6 effort=$7 budget=$8
+    local wt=$1 out=$2 task_dir=$3 max_turns=$4 model=$5 effort=$6 budget=$7
     local agent="${RUNNER_AGENT:-$HERE/runner/agent.sh}"
-    local extra_names=""
-
-    if [[ -f $arm_dir/env ]]; then
-        while IFS='=' read -r k v; do
-            if [[ -n $k && $k != \#* ]]; then
-                export "$k=$v"
-                extra_names="$extra_names $k"
-            fi
-        done <"$arm_dir/env"
-    fi
-    if [[ -f $arm_dir/mcp.json ]]; then
-        export RUNNER_MCP_CONFIG="$arm_dir/mcp.json"
-    fi
 
     # A task may seed a dirty worktree, so "dirty" is not the edit signal;
     # "different from how seeding and provisioning left it" is.
     local baseline
     baseline=$(worktree_digest "$wt")
 
-    RUNNER_TASK_DIR="$task_dir" RUNNER_BUDGET_USD="$budget" RUNNER_ENV_EXTRA="$extra_names" \
+    RUNNER_TASK_DIR="$task_dir" RUNNER_BUDGET_USD="$budget" \
         "$agent" "$wt" "$out/prompt.md" "$out/transcript.jsonl" "$max_turns" "$model" "$effort" \
         >"$out/agent.log" 2>&1 &
     local apid=$! deadline agent_exit=0
@@ -259,7 +248,8 @@ write_meta() {
   "fixture_sha": "$(json_escape "${12}")",
   "started": "${13}",
   "ended": "${14}",
-  "exit_reason": "${15}"
+  "exit_reason": "${15}",
+  "control": "$(json_escape "${16}")"
 }
 EOF
 }
@@ -278,16 +268,26 @@ write_timing() {
 EOF
 }
 
+# run_manifest keeps going after a failed line: the controls lead a manifest,
+# and a failing control must be reported, not abort the grid behind it.
 run_manifest() {
-    local file=$1 line
+    local file=$1 line lineno=0 failed=()
     [[ -f $file ]] || die "no such manifest: $file"
     while IFS= read -r line || [[ -n $line ]]; do
+        lineno=$((lineno + 1))
         if [[ -n ${line// /} && $line != \#* ]]; then
             local parts
             read -r -a parts <<<"$line"
-            "$0" "${parts[@]}"
+            if ! "$0" "${parts[@]}"; then
+                note "manifest line $lineno failed: $line"
+                failed+=("$lineno")
+            fi
         fi
     done <"$file"
+    if ((${#failed[@]} > 0)); then
+        note "${#failed[@]} manifest line(s) failed: ${failed[*]}"
+        exit 1
+    fi
 }
 
 main() {

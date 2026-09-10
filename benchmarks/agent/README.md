@@ -16,11 +16,20 @@ in the memory store.
 
 | Arm       | What the worktree gets                                                                                        |
 | --------- | ------------------------------------------------------------------------------------------------------------- |
-| `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MCP, no MAGUS.md, a minimal CLAUDE.md |
-| `full`    | everything `magus agent install` ships, plus hook wiring, MCP and the real routing index                      |
+| `rampant` | magus binary and a magusfile, no agent surface: no skills, no hooks, no MAGUS.md, a minimal CLAUDE.md         |
+| `full`    | everything `magus agent install` ships, plus hook wiring and the real routing index                           |
 
 The arms differ only in provisioning. Model, effort, prompt, permission mode,
-budget caps, worktree layout and fixture SHA are identical.
+budget caps, worktree layout and fixture SHA are identical. Neither arm
+registers an MCP server; `arms/README.md` says why it is held at zero in both
+rather than switched.
+
+## Prerequisites
+
+- `bash`, `git`, and `node` (every task check is stdlib node)
+- `jq`, which the arm probes use to read `settings.json` and doctor's output
+- the `claude` CLI, logged in (see below)
+- `docker`, for the analysis side only (`analysis/README.md`)
 
 `_selftest` is not an arm. It provisions nothing and exists so the runner can be
 exercised without the real recipes; `tasks/_placeholder` is its counterpart.
@@ -96,21 +105,22 @@ itself. Override with `BENCH_FIXTURE_REPO` only for runner self-tests.
 
 `results/<run-id>/`, where run-id is `<arm>-<task>-r<rep>-<utc-stamp>`:
 
-| File                                  | Contents                                                                                                                            |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `meta.json`                           | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason |
-| `transcript.jsonl`                    | the raw stream-json, unmodified                                                                                                     |
-| `final.diff`                          | `git diff` of the worktree after the run, untracked files included                                                                  |
-| `check.txt`, `check.exit`             | acceptance-check output and exit code (0 = pass)                                                                                    |
-| `timing.json`                         | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                     |
-| `activity/`                           | copy of the worktree's `.magus/activity/`, when the arm produced one                                                                |
-| `probe.txt`                           | arm-verification output, pass or fail                                                                                               |
-| `prompt.md`, `agent.log`, `setup.log` | the prompt as given, agent stderr, seed/provision output                                                                            |
+| File                                  | Contents                                                                                                                                     |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `meta.json`                           | run_id, arm, task, rep, model, effort, max_turns, budget_usd, magus_binary, magus_version, fixture_sha, started, ended, exit_reason, control |
+| `transcript.jsonl`                    | the raw stream-json, unmodified; absent for a control run, which launches no agent                                                           |
+| `final.diff`                          | `git diff` of the worktree after the run, untracked files included                                                                           |
+| `check.txt`, `check.exit`             | acceptance-check output and exit code (0 = pass)                                                                                             |
+| `timing.json`                         | wall_ms, time_to_first_edit_ms, time_to_done_ms                                                                                              |
+| `activity/`                           | copy of the worktree's `.magus/activity/`, when the arm produced one                                                                         |
+| `probe.txt`                           | arm-verification output, pass or fail                                                                                                        |
+| `prompt.md`, `agent.log`, `setup.log` | the prompt as given, agent stderr, seed/provision output                                                                                     |
 
 `exit_reason` is one of `ok`, `timeout`, `agent_error`, `seed_failed`,
 `provision_failed`, `probe_failed`, `control_error`, or a control verdict
 (`control_golden_ok`, `control_golden_failed`, `control_null_ok`,
-`control_null_failed`).
+`control_null_failed`). `control` is `golden`, `null`, or empty for a scored
+run; the extractor skips the first two.
 
 Timings are runner-side and tool-agnostic: `time_to_first_edit_ms` is the first
 poll at which the worktree differs from how seeding and provisioning left it,
@@ -136,7 +146,9 @@ nothing can pass and a checker that everything passes.
   vacuously and half failed vacuously, and nobody noticed because no control ran.
 
 A control that behaves unexpectedly is recorded as a `control_*_failed` run,
-announced on stderr, and makes `run.sh` exit non-zero.
+announced on stderr, and makes `run.sh` exit non-zero. In a manifest that
+failure does not stop the lines after it: every line runs, the failed line
+numbers are listed at the end, and the manifest exits 1.
 
 ## Budget caps
 
@@ -160,38 +172,37 @@ stand-in used to test the runner: it writes a schema-valid transcript with all
 four token counters, and with `FAKE_AGENT_SOLVE=1` applies the task's oracle
 solution.
 
-The session is launched with `env -i` and a small whitelist, cwd set to the
-worktree, `--setting-sources project` so only the worktree's own settings load,
-and `--strict-mcp-config` with an empty config unless the arm supplies
-`arms/<arm>/mcp.json`. MCP registration is user-scoped, so without that flag the
-operator's own servers would leak their tool schemas into both arms' context
-windows. An arm needing environment levers (`MAGUS_HINTS_ENABLED=false`, say)
-drops a `KEY=VALUE` file at `arms/<arm>/env`.
+The session is launched with `env -i` and a whitelist: `HOME`, `PATH`, the
+locale, the credential names, plus every name the worktree's
+`.benchmark/env.sh` exports. That file is how an arm sets its levers
+(`MAGUS_HINTS_ENABLED=false`, `GUARD_MAGUS_BIN`): `provision.sh` writes it per
+run through `arm_write_env` in `arms/lib.sh`, and `agent.sh` sources it before
+the scrub. cwd is the worktree and `--setting-sources project` limits settings
+to the worktree's own `.claude/settings.json`; `HOME` is kept, so whatever the
+host reads from `~/.claude` (memory, user-scoped skills) reaches both arms
+equally. `env.sh` also exports `RUNNER_MCP_CONFIG`, the empty server set the
+session gets under `--strict-mcp-config`. MCP registration is user-scoped, so
+without that flag the operator's own servers would leak their tool schemas
+into both arms' context windows.
 
-## Analysis image
+## Analysis
 
-Python runs only in Docker. The image pins the interpreter and installs nothing;
-analysis code and results are bind-mounted, and the analysis stays stdlib-only.
-
-```sh
-docker build -t magus-bench-analysis benchmarks/agent
-docker run --rm \
-    -v "$PWD/benchmarks/agent/analysis:/opt/analysis:ro" \
-    -v "$PWD/benchmarks/agent/results:/results:ro" \
-    magus-bench-analysis /opt/analysis/<script>.py /results
-```
+Python runs only in Docker, on the upstream `python:3.12-slim` image with
+nothing installed; the analysis stays stdlib-only. `analysis/README.md` has the
+invocations, and `magus run agent-bench-report .` runs the whole pipeline over
+`results/`.
 
 ## Not built yet
 
-- The metrics extractor and the statistics under `analysis/` (paired bootstrap
-  deltas, Holm correction, Wilson intervals, pass@1 and pass^k).
-- The judge harness for interrogation and catch-up tasks, including the blinding
-  pass that strips magus command names, skill mentions and guard text before
-  grading.
 - Containerized agent sessions. Runs execute on the host today, so host state is
   a shared confound rather than an isolated one.
-- The task corpus and the fixture enrichment (generated outputs with a real
-  drift gate, cross-project dependencies, a `ci` composition).
-- The arm recipes themselves.
+- MCP as a switch. Both arms hold it at zero (`arms/README.md`); measuring it
+  needs an estimate of the tool-schema floor in the system prompt, which
+  transcripts never show and the extractor does not model.
+- An enforced turn cap: `claude` exposes no `--max-turns`, so `max_turns` is
+  recorded and not enforced (see Budget caps).
+- An LLM judge and its blinding pass. Nothing in the corpus needs one today:
+  every task grades deterministically, against an `ANSWER.md` set or a held-out
+  test. A task that cannot be graded that way has no home yet.
 - Warm-versus-cold start is still undecided; whichever is chosen has to be held
   identical across arms, and the runner does nothing to warm or cool anything.

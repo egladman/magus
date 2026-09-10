@@ -21,7 +21,7 @@ Z_95 = 1.959963984540054
 MIN_RELATIVE_DELTA = 0.10
 
 TREATMENT_ARM = "full"
-CONTROL_ARM = "rampant"
+BASELINE_ARM = "rampant"
 
 METRICS = (
     ("total_billed_tokens", ("tokens", "total_billed")),
@@ -200,15 +200,15 @@ def paired_deltas(by_arm_task_rep, tasks, seed):
             baseline = []
             reps = sorted(
                 set(by_arm_task_rep.get((TREATMENT_ARM, task), {}))
-                & set(by_arm_task_rep.get((CONTROL_ARM, task), {}))
+                & set(by_arm_task_rep.get((BASELINE_ARM, task), {}))
             )
             for rep in reps:
                 treated = metric_value(by_arm_task_rep[(TREATMENT_ARM, task)][rep], path)
-                control = metric_value(by_arm_task_rep[(CONTROL_ARM, task)][rep], path)
-                if treated is None or control is None:
+                base = metric_value(by_arm_task_rep[(BASELINE_ARM, task)][rep], path)
+                if treated is None or base is None:
                     continue
-                deltas.append(treated - control)
-                baseline.append(control)
+                deltas.append(treated - base)
+                baseline.append(base)
             boot = bootstrap_paired(deltas, "%d|%s|%s" % (seed, name, task))
             base_median = statistics.median(baseline) if baseline else None
             delta_mean = statistics.fmean(deltas) if deltas else None
