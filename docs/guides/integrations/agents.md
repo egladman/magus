@@ -76,12 +76,35 @@ what it costs you.
 
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
-[Guard hook templates](agents/guard-templates.md) for the two files Claude Code
+[Guard hook templates](agents/guard-templates.md) for the files Claude Code
 and Codex run, [Session load recipes](agents/session-load.md) for reading a
 host's own session log back into magus,
 [Attention hooks](agents/notifications.md) for `magus session notify`,
 and [Leases](agents/leases.md) for the surface an agent uses when it
 fans work out across several.
+
+## When a session loses its history
+
+A host that compacts a long session replaces what happened with a summary of it,
+and the model works from that summary. The branch it is on, what it has already
+changed, which rules it agreed to, and the failure it was in the middle of all
+survive only as a retelling, and nothing in the transcript says how much each
+retelling lost.
+
+`magus session --brief` answers that with state instead of prose: branch and
+revision, commits not yet on the base ref, the dirty tree split by the same
+classifier `magus describe file` uses, the live leases with the command that
+binds each one, the last recorded run's failures with the ref that holds their
+output, whether any hook config here invokes magus, and where this workspace's
+rules live. Every line is read off the disk on the call, so none of it can
+degrade; it restates no rule, because a rule copied into a context block is a
+second copy to go stale.
+
+magus prints it and your host places it. Wire
+[`magus-rehydrate.sh`](agents/guard-templates.md#magus-rehydratesh) to whatever
+event your host fires after compaction (`SessionStart` with matcher `compact` on
+[Claude Code](agents/claude-code.md)), or run the command yourself and read the
+same thing.
 
 ## Parity across hosts
 

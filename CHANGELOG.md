@@ -14,6 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   linter config, lockfile or toolchain pin rings the bell, because it keys no cache and a
   verdict recorded under the rules it replaced can still replay; anything else records
   silently in the history tier. Both link to the review surface filtered to unclaimed files.
+- **A session that lost its history can be handed this checkout back.** `magus session
+  --brief` prints where the work stands, read off the disk on the call: branch and
+  revision, commits not yet on the base ref, the dirty tree split into sources,
+  generated outputs and unclaimed paths by the classifier `magus describe file` uses,
+  the live leases with the command that binds each one, the last recorded run's failing
+  targets with the ref that holds their output, whether any host hook config in this
+  checkout invokes magus, and which instruction files and skill directories the rules
+  live in. It restates no rule and remembers nothing. `-o json` carries the same record.
+  A host that replaces a long session's history with a summary can wire the new
+  `magus-rehydrate.sh` template to its session-start event and give the model state
+  instead of a retelling.
 - **A target whose inputs have not moved since it failed says so before it runs again.** A
   failure is not a cache entry, but its descriptor is still stored under the step's cache
   key, so a miss can check whether this exact tree has already been seen to fail. When it

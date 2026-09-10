@@ -2010,6 +2010,30 @@ func checkCheckpointWiring(root, home string) types.DoctorCheck {
 // config that runs it. A path, which is the one host-specific shape magus owns.
 const checkpointTemplate = "magus-checkpoint.sh"
 
+// HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
+// hook, which is what a caller outside doctor needs to say whether a checkout's
+// rules are enforced by anything. It reads the same two markers the guard-wiring
+// check reads, so the two cannot disagree about what counts as wired.
+//
+// Scoped to the checkout on purpose, unlike that check: a home-relative config
+// governs the machine, and a report about this tree that named one would tell a
+// reader their tree is wired when the next clone of it is not. It grades nothing
+// either: staleness is the check's job, and it costs a canary subprocess this
+// caller must not pay.
+func HookConfigs(root string) []string {
+	var out []string
+	for _, candidate := range guardWiringCandidates(root, "") {
+		for _, path := range hookConfigFiles(candidate) {
+			body, err := os.ReadFile(path)
+			if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
+				continue
+			}
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
 // hookConfigFiles expands one wiring candidate into the files worth reading: a plugin
 // DIRECTORY contributes its TypeScript, a config file contributes itself.
 func hookConfigFiles(candidate string) []string {

@@ -1327,9 +1327,20 @@ rather than failing the read.
 The listing takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each session's last fact, not its first, so a long session that is
-still working stays listed however long ago it began.`,
+still working stays listed however long ago it began.
+
+--brief answers the listing's own question, where does the work stand, for a
+model instead of a person. It prints this checkout read off disk: branch and
+revision, commits not yet on the base ref, the dirty tree split by the
+classifier ` + "`magus describe file`" + ` uses, the live leases with the command that
+binds each one, the last recorded run's failures with the ref that holds their
+output, whether any host hook config here invokes magus, and where this
+workspace's rules live. Nothing in it is remembered: an agent host that
+replaces a session's history with a summary can wire this to its
+session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
+		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
 		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
 		{Name: "since", Kind: FlagString, Doc: "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
@@ -1561,6 +1572,7 @@ none. This is the only command that opens one.`,
 	Examples: []Example{
 		{"Show recent sessions", "magus session"},
 		{"Show today's work", "magus session --since 24h"},
+		{"Hand a compacted session this checkout's state", "magus session --brief"},
 		{"Full session records as JSON", "magus session -o json"},
 		{"Load a host transcript a recipe normalized", "magus session load --file events.ndjson"},
 		{"Read one loaded session back", "magus session show 8f1c2d4e"},

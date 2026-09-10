@@ -44,7 +44,20 @@ duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each session's last fact, not its first, so a long session that is
 still working stays listed however long ago it began.
 
+--brief answers the listing's own question, where does the work stand, for a
+model instead of a person. It prints this checkout read off disk: branch and
+revision, commits not yet on the base ref, the dirty tree split by the
+classifier \`magus describe file\` uses, the live leases with the command that
+binds each one, the last recorded run's failures with the ref that holds their
+output, whether any host hook config here invokes magus, and where this
+workspace's rules live. Nothing in it is remembered: an agent host that
+replaces a session's history with a summary can wire this to its
+session-start event and hand the model state instead of prose.
+
 ## Options
+
+**--brief**
+: Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)
 
 **--limit** *int*
 : Show at most this many sessions (0 for all)
@@ -159,6 +172,12 @@ magus session
 
 ```sh
 magus session --since 24h
+```
+
+*Hand a compacted session this checkout's state*
+
+```sh
+magus session --brief
 ```
 
 *Full session records as JSON*

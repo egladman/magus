@@ -77,6 +77,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 
 func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
+	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
 	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
 	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
 	fmt.Fprintln(os.Stderr, "       magus session lease [<lease-id>]  # bind a lease to this checkout for the guard")
@@ -95,6 +96,10 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "and `session notify`, and `session load` takes a normalized event stream")
 	fmt.Fprintln(os.Stderr, "extracted from a host's own transcript.")
 	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "`session --brief` answers the same question the listing opens with, for a")
+	fmt.Fprintln(os.Stderr, "session rather than a person: where this checkout stands, read off disk, for")
+	fmt.Fprintln(os.Stderr, "a model whose history a host replaced with a summary.")
+	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
 
@@ -103,15 +108,20 @@ func sessionUsage() {
 func sessionList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
+	var brief bool
 	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many sessions (0 for all)")
 		fs.StringVar(&since, "since", "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+		fs.BoolVar(&brief, "brief", false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
 	})
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
 		return usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
+	}
+	if brief {
+		return sessionBriefCmd(ctx, root)
 	}
 	if limit < 0 {
 		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every session", limit)

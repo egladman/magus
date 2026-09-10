@@ -389,6 +389,8 @@ const (
 	FlagSessionNotifyDesktop = "desktop"
 	// session notify: --outcome
 	FlagSessionNotifyOutcome = "outcome"
+	// session: --brief
+	FlagSessionBrief = "brief"
 	// session: --limit
 	FlagSessionLimit = "limit"
 	// session: --since
@@ -1095,6 +1097,7 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 
 // SessionFlags are the flags declared for `magus session`.
 type SessionFlags struct {
+	Brief bool   // --brief
 	Limit int    // --limit
 	Since string // --since
 }
@@ -1102,6 +1105,7 @@ type SessionFlags struct {
 // BindSession registers `magus session`'s flags on fs and returns the destination.
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
+	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
 	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
 	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f

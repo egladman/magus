@@ -359,6 +359,7 @@ var templatePage = map[string]string{
 	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
 	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":     "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
@@ -384,6 +385,9 @@ var hookTemplates = []string{
 	// at the top of each for why that absence is deliberate rather than a hole.
 	"magus-guard-observe.sh",
 	"magus-checkpoint.sh",
+	// The third of them: it reports where a checkout stands to a session that lost
+	// its history, and judges nothing either.
+	"magus-rehydrate.sh",
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",
@@ -1270,6 +1274,37 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 			"%s embeds %s incompletely: the lines below are in the template but not on that page.\n"+
 				"Re-copy the template into its code block - a reader exploring the docs site must see\n"+
 				"what they would download.", page, name)
+	}
+}
+
+// TestRehydrateTemplateIsWiredAfterCompaction gives the rehydration hook the one
+// property its siblings get from the guard parity table: an event it is wired to.
+//
+// A template is only worth shipping if a reader can tell WHEN it runs, and this one
+// runs at a moment no other hook covers: after a host replaces a session's history
+// with a summary. A page that embedded the file and never named that event would
+// leave every reader wiring it to session start alone, which fires when there is
+// nothing to rehydrate and never fires when there is.
+//
+// It asserts the wiring is documented, not that this repository has applied it:
+// what a checkout wires is the reader's, and .claude/settings.json is checked by
+// TestDogfoodedHookInvokesTheTemplate for the hooks it does carry.
+func TestRehydrateTemplateIsWiredAfterCompaction(t *testing.T) {
+	const template = "magus-rehydrate.sh"
+
+	body, err := os.ReadFile(filepath.Join(hookTemplateDir, template))
+	require.NoError(t, err, "read %s", template)
+	assert.Contains(t, string(body), "session --brief",
+		"%s must invoke the brief; it has no other reason to exist", template)
+
+	page, err := os.ReadFile("docs/guides/integrations/agents/claude-code.md")
+	require.NoError(t, err, "read the host page")
+	doc := string(page)
+	for _, want := range []string{template, "SessionStart", "compact"} {
+		assert.Contains(t, doc, want,
+			"the host page must wire %s to the post-compaction event by name; a reader who\n"+
+				"cannot see WHEN it runs wires it to session start, which is the one moment it\n"+
+				"has nothing to say.", template)
 	}
 }
 

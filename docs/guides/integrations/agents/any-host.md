@@ -26,6 +26,7 @@ Any host that can run a command and read its output fits.
 | skills          | whichever directory your host discovers `SKILL.md` in |
 | always-on rules | `AGENTS.md`, if your host reads one                   |
 | guard wiring    | whatever pre-tool hook or plugin your host offers     |
+| rehydration     | whatever session-start or post-compaction event fires |
 | MCP             | [MCP](../mcp.md)                                      |
 
 ## Skills
@@ -186,6 +187,21 @@ records and never opens.
 
 magus needs no release to learn about your host. `--agent-name` is an opaque
 label you choose, exactly as on the guard hook.
+
+## Handing a session its state back
+
+If your host has an event for "a session started" or "the history was
+compacted", wire it to
+[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and whatever it
+prints reaches the model as context. It runs `magus session --brief`, which
+reads this checkout off the disk: branch and revision, commits not yet on the
+base ref, the dirty tree classified, the live leases, the last recorded run's
+failures, the guard wiring, and where the rules live. Set `REHYDRATE_RULES` to
+your host's own instruction file.
+
+Nothing about it is host-shaped except which event you hang it on. If your host
+has no such event, run `magus session --brief` by hand and paste it, or read it
+yourself: it is the same answer either way.
 
 ## Coverage and limits
 

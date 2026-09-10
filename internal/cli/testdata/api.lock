@@ -164,6 +164,7 @@ flag run/step
 flag run/timeout
 flag run/upstream
 flag run/wait
+flag session/brief
 flag session/limit
 flag session/since
 flag status/W

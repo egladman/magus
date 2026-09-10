@@ -21,6 +21,7 @@ event.
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
 | checkpoint       | `Stop`                                 |
+| rehydration      | `SessionStart` (`compact`, `resume`)   |
 | lease            | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
@@ -192,6 +193,48 @@ This is the wiring this repository dogfoods, in `.claude/settings.json` beside
 the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
 exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
+
+## Handing a compacted session its state back
+
+Claude Code fires `SessionStart` when a session begins, when one is resumed, and
+after it compacts a long conversation into a summary; whatever a `SessionStart`
+hook prints is added to the model's context. Wire it to
+[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and a session that
+just lost its history is handed this checkout instead: branch and revision,
+commits not yet on the base ref, the dirty tree split into sources, generated
+outputs and unclaimed paths, the live leases with the command that binds each
+one, the last recorded run's failures with the ref that holds their output, the
+guard wiring, and where the rules live.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`compact` is the case that needs it; `resume` gets it for free and answers the
+same question, since a resumed session did not watch the tree move while it was
+away. Add `startup` if you want it at the top of every session, at the cost of
+the block on sessions that would have been fine without it.
+
+Every line is read off the disk when the hook runs, so nothing in it can be a
+retelling of a retelling. It restates no rule: the last line names the files your
+rules live in, `CLAUDE.md` by default and `REHYDRATE_RULES` when yours is
+somewhere else. Run `magus session --brief` yourself to see what a session will
+be handed.
 
 ## Coverage and limits
 

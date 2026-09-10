@@ -813,3 +813,21 @@ func TestCheckSessionLoadStates(t *testing.T) {
 		assert.Equal(t, types.DoctorOK, got.Status)
 	})
 }
+
+// HookConfigs answers for a CHECKOUT, which is the difference that matters to a
+// caller reporting on a tree: a machine-wide config in the reader's home says
+// nothing about whether the next clone of this repository is wired.
+func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
+	wired := filepath.Join(root, ".claude", "settings.json")
+	require.NoError(t, os.WriteFile(wired, []byte(`{"command":"magus session hook"}`), 0o644))
+
+	assert.Equal(t, []string{wired}, HookConfigs(root))
+
+	// A config that names magus without running a hook of its own is not wiring: the
+	// same two markers the guard-wiring check reads, so neither can count a file the
+	// other would not.
+	require.NoError(t, os.WriteFile(wired, []byte(`{"note":"magus lives here"}`), 0o644))
+	assert.Empty(t, HookConfigs(root))
+}

@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5537,
-  "edge_count": 9813,
+  "node_count": 5541,
+  "edge_count": 9817,
   "relations": [
     {
       "id": "annotates",
@@ -1527,7 +1527,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "235",
+        "dir_files": "236",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -1537,7 +1537,7 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "140",
+        "dir_files": "141",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
@@ -17677,6 +17677,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents.md#when-a-session-loses-its-history",
+      "kind": "docsection",
+      "label": "When a session loses its history",
+      "source": "docs/guides/integrations/agents.md#when-a-session-loses-its-history",
+      "attrs": {
+        "anchor": "when-a-session-loses-its-history",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents.md#why-a-daemon-not-a-wrapper",
       "kind": "docsection",
       "label": "Why a daemon, not a wrapper",
@@ -17723,6 +17733,16 @@
       "source": "docs/guides/integrations/agents/any-host.md#guard-hook",
       "attrs": {
         "anchor": "guard-hook",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/any-host.md#handing-a-session-its-state-back",
+      "kind": "docsection",
+      "label": "Handing a session its state back",
+      "source": "docs/guides/integrations/agents/any-host.md#handing-a-session-its-state-back",
+      "attrs": {
+        "anchor": "handing-a-session-its-state-back",
         "level": "2"
       }
     },
@@ -17823,6 +17843,16 @@
       "source": "docs/guides/integrations/agents/claude-code.md#guard-hook",
       "attrs": {
         "anchor": "guard-hook",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/claude-code.md#handing-a-compacted-session-its-state-back",
+      "kind": "docsection",
+      "label": "Handing a compacted session its state back",
+      "source": "docs/guides/integrations/agents/claude-code.md#handing-a-compacted-session-its-state-back",
+      "attrs": {
+        "anchor": "handing-a-compacted-session-its-state-back",
         "level": "2"
       }
     },
@@ -18103,6 +18133,16 @@
       "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
       "attrs": {
         "anchor": "magus-guard-pathsh",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-rehydratesh",
+      "kind": "docsection",
+      "label": "magus-rehydrate.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-rehydratesh",
+      "attrs": {
+        "anchor": "magus-rehydratesh",
         "level": "2"
       }
     },
@@ -91875,6 +91915,14 @@
       "provenance": "docs/guides/integrations/agents.md"
     },
     {
+      "source": "docsection:docs/guides/integrations/agents.md#agents",
+      "target": "docsection:docs/guides/integrations/agents.md#when-a-session-loses-its-history",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
       "source": "docsection:docs/guides/integrations/agents.md#mcp",
       "target": "docsection:docs/guides/integrations/agents.md#the-cli-works-without-it",
       "relation": "contains",
@@ -91901,6 +91949,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
       "target": "docsection:docs/guides/integrations/agents/any-host.md#guard-hook",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
+      "target": "docsection:docs/guides/integrations/agents/any-host.md#handing-a-session-its-state-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -91981,6 +92037,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
       "target": "docsection:docs/guides/integrations/agents/claude-code.md#guard-hook",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
+      "target": "docsection:docs/guides/integrations/agents/claude-code.md#handing-a-compacted-session-its-state-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -92181,6 +92245,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
       "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-rehydratesh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
