@@ -37,7 +37,7 @@ Return paths matching pattern (doublestar-style).
 import "std";
 import "fs";
 
-foreach (path in fs\glob("cmd/**/*.go")) { std\print(path.value); }
+foreach (path in fs\glob("cmd/**/*.go") catch []) { std\print(path.value); }
 ```
 
 ### dirname
@@ -102,7 +102,9 @@ True iff path exists.
 import "std";
 import "fs";
 
-if (fs\exists("go.mod")) { std\print("Go module"); }
+// exists raises when the path cannot be examined at all (an unreadable parent),
+// which is not the same answer as "no", so the fallback says no separately.
+if (fs\exists("go.mod") catch false) { std\print("Go module"); }
 ```
 
 ### readFile
@@ -123,7 +125,7 @@ Return the contents of path as a string.
 import "std";
 import "fs";
 
-final version = fs\readFile("VERSION");
+final version = fs\readFile("VERSION") catch "unknown";
 std\print(version);
 ```
 
@@ -141,9 +143,14 @@ Write content to path (mode 0644).
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\writeFile("dist/manifest.txt", "artifact list here\n");
+try {
+    fs\writeFile("dist/manifest.txt", "artifact list here\n");
+} catch (e) {
+    std\print("could not write dist/manifest.txt");
+}
 ```
 
 ### mkdirAll
@@ -192,9 +199,14 @@ Recursively remove path (no error if missing).
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\removeAll("dist/");
+try {
+    fs\removeAll("dist/");
+} catch (e) {
+    std\print("could not remove dist/");
+}
 ```
 
 ### remove
@@ -271,7 +283,7 @@ Return directory entries; empty if path does not exist.
 import "std";
 import "fs";
 
-foreach (name in fs\listDir("cmd")) { std\print(name); }
+foreach (name in fs\listDir("cmd") catch []) { std\print(name); }
 ```
 
 ### ext
@@ -314,7 +326,7 @@ True iff path exists and is a directory. A sandbox-denied path raises rather tha
 import "std";
 import "fs";
 
-if (fs\isDir("internal")) { std\print("internal is a directory"); }
+if (fs\isDir("internal") catch false) { std\print("internal is a directory"); }
 ```
 
 ### isFile
@@ -335,7 +347,7 @@ True iff path exists and is a regular file. A sandbox-denied path raises rather 
 import "std";
 import "fs";
 
-if (fs\isFile("go.mod")) { std\print("go.mod is a file"); }
+if (fs\isFile("go.mod") catch false) { std\print("go.mod is a file"); }
 ```
 
 ### stat
@@ -360,9 +372,13 @@ import "fs";
 // the method rather than the stat field. The time key is `mtime` (Unix millis), not
 // `modTime` - dot access on a missing key is silent, which is how this example went
 // unnoticed while printing nothing useful.
-final info = fs\stat("go.mod");
-std\print(info["size"]);
-std\print(info["mtime"]);
+try {
+    final info = fs\stat("go.mod");
+    std\print(info["size"]);
+    std\print(info["mtime"]);
+} catch (e) {
+    std\print("go.mod is not there to stat");
+}
 ```
 
 ### copyFile
@@ -379,9 +395,14 @@ Copy the file at src to dst (overwriting), preserving its permission bits.
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\copyFile("dist/magus", "/usr/local/bin/magus");
+try {
+    fs\copyFile("dist/magus", "/usr/local/bin/magus");
+} catch (e) {
+    std\print("could not install dist/magus");
+}
 ```
 
 ### copyDir
@@ -398,10 +419,15 @@ Recursively copy the directory tree at src to dst, preserving permission bits.
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
 // Recursive copy; preserves file mode and dir structure.
-fs\copyDir("assets/", "dist/assets/");
+try {
+    fs\copyDir("assets/", "dist/assets/");
+} catch (e) {
+    std\print("could not copy assets/ into dist/assets/");
+}
 ```
 
 ### watch
@@ -422,10 +448,14 @@ import "std";
 import "fs";
 
 // Blocks; the callback fires per change batch. Return true to keep watching.
-fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
-    foreach (p in paths) { std\print("changed: " + p); }
-    return true;
-});
+try {
+    fs\watch(["cmd/**/*.go", "internal/**/*.go"], fun (paths: [str]) > bool {
+        foreach (p in paths) { std\print("changed: " + p); }
+        return true;
+    });
+} catch (e) {
+    std\print("watch stopped");
+}
 ```
 
 ### walk
@@ -445,13 +475,17 @@ Recursively walk the directory tree rooted at root, calling callback(path, is_di
 import "std";
 import "fs";
 
-fs\walk(".", fun (path: str, isDir: bool) > bool {
-    if (isDir and fs\basename(path) == "node_modules") {
-        return false;   // skip descent
-    }
-    if (fs\ext(path) == ".go") { std\print(path); }
-    return true;
-});
+try {
+    fs\walk(".", fun (path: str, isDir: bool) > bool {
+        if (isDir and fs\basename(path) == "node_modules") {
+            return false;   // skip descent
+        }
+        if (fs\ext(path) == ".go") { std\print(path); }
+        return true;
+    });
+} catch (e) {
+    std\print("walk stopped early");
+}
 ```
 
 ### appendFile
@@ -468,9 +502,14 @@ Append content to path (creating if absent, mode 0644).
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\appendFile("dist/build.log", "compile done\n");
+try {
+    fs\appendFile("dist/build.log", "compile done\n");
+} catch (e) {
+    std\print("could not append to dist/build.log");
+}
 ```
 
 ### chmod
@@ -487,11 +526,16 @@ Change the permission bits of path to mode (octal integer, e.g. 0755).
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
 // Mark the release binary executable. Buzz has no octal literal
 // (matches upstream); Unix mode 0755 = 493 decimal.
-fs\chmod("dist/magus", 493);
+try {
+    fs\chmod("dist/magus", 493);
+} catch (e) {
+    std\print("could not chmod dist/magus");
+}
 ```
 
 ### symlink
@@ -508,9 +552,14 @@ Create a symbolic link at link pointing to target.
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\symlink("dist/magus", "/usr/local/bin/magus");
+try {
+    fs\symlink("dist/magus", "/usr/local/bin/magus");
+} catch (e) {
+    std\print("could not link /usr/local/bin/magus");
+}
 ```
 
 ### readlink
@@ -531,7 +580,8 @@ Return the target of the symbolic link at path.
 import "std";
 import "fs";
 
-std\print(fs\readlink("/usr/local/bin/magus"));
+// readlink raises when the path is not a symlink, so "" reads as "nothing to follow".
+std\print(fs\readlink("/usr/local/bin/magus") catch "");
 ```
 
 ### tempDir
@@ -552,9 +602,14 @@ Create a new temporary directory (in os.TempDir()) with an optional name prefix 
 import "std";
 import "fs";
 
-final tmp = fs\tempDir("magus-build-");
-std\print(tmp);
-// -> "/tmp/magus-build-abc123"
+// No sensible fallback path exists, so an unwritable temp dir is reported rather
+// than substituted.
+try {
+    std\print(fs\tempDir("magus-build-"));
+    // -> "/tmp/magus-build-abc123"
+} catch (e) {
+    std\print("no writable temp dir");
+}
 ```
 
 ### readLines
@@ -575,7 +630,7 @@ Read path and return its lines as a list, with the line terminators stripped. A 
 import "std";
 import "fs";
 
-foreach (line in fs\readLines("targets.txt")) { std\print(line); }
+foreach (line in fs\readLines("targets.txt") catch []) { std\print(line); }
 ```
 
 ### writeLines
@@ -592,9 +647,14 @@ Write lines to path (mode 0644), each followed by a newline. The companion to re
 **Example:**
 
 ```buzz
+import "std";
 import "fs";
 
-fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
+try {
+    fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
+} catch (e) {
+    std\print("could not write dist/targets.txt");
+}
 ```
 
 [^buzz-stdlib-fs-exists]: `fs\exists` is also in Buzz's standard library (`fs.exists`); the magus form is sandbox-aware.

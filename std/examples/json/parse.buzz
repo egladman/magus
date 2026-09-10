@@ -1,8 +1,14 @@
 import "std";
 import "encoding/json";
 
-final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
-std\print(v["name"]);
-std\print(v["port"]);
-// -> api
-// -> 8080
+// parse RAISES on malformed input rather than returning a null document, so
+// invalid JSON cannot be mistaken for an empty one.
+try {
+    final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
+    std\print(v["name"]);
+    std\print(v["port"]);
+    // -> api
+    // -> 8080
+} catch (e) {
+    std\print("not JSON");
+}

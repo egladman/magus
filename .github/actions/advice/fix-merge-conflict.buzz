@@ -7,6 +7,7 @@
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_REF, PR_HEAD_REPO, FIX_CONFLICTS, FIX_LABEL.
 import "proc";
 import "advice";
+import "magus";
 import "std";
 
 final section = "merge-conflict-fix";

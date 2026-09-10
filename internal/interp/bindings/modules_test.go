@@ -188,8 +188,8 @@ main();
 // only in what a member does when called, which is what MGS1022 reports.
 func TestMagusSurfacesExposeSameMembers(t *testing.T) {
 	sess := scriptSession(t)
-	script := sess.GetGlobal("magus")
-	require.True(t, script.IsMap(), "magus namespace is not installed for a script")
+	script, ok := sess.NativeModule("magus")
+	require.True(t, ok && script.IsMap(), "magus namespace is not installed for a script")
 
 	assert.ElementsMatch(t, MagusModuleKeys(), script.MapKeys())
 }

@@ -116,7 +116,10 @@ import (
 // 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
 // onto the bytes magus_output already returns, keyed by project instead of by ref;
 // the CLI keeps that route as `magus tail`.
-const SkillVersion = 59
+// 60: magus-buzz-write says `magus` is a host module and the import is what makes the
+// namespace exist. It used to read as "also available in a script", from when the
+// namespace was a session global an import never had to name.
+const SkillVersion = 60
 
 const skillLicense = "GPL-3.0-or-later"
 

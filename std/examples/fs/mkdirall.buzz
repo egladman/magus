@@ -1,4 +1,9 @@
+import "std";
 import "fs";
 
 // Buzz has no octal literal (matches upstream); Unix mode 0755 = 493 decimal.
-fs\mkdirAll("dist/reports", 493);
+try {
+    fs\mkdirAll("dist/reports", 493);
+} catch (e) {
+    std\print("could not create dist/reports");
+}

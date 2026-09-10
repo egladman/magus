@@ -1,3 +1,8 @@
+import "std";
 import "fs";
 
-fs\appendFile("dist/build.log", "compile done\n");
+try {
+    fs\appendFile("dist/build.log", "compile done\n");
+} catch (e) {
+    std\print("could not append to dist/build.log");
+}

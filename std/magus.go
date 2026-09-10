@@ -49,7 +49,10 @@ var Magus = Module{
 		"`read` is the ordinary choice. See " +
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
 		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
-		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile, and a " +
+		"`import \"magus\"` is how you reach any of this. The namespace is an ordinary host " +
+		"module, like `fs` or `vcs`: without the import line `magus` is undefined, and the " +
+		"import is what attaches these signatures to your call sites. It resolves in a " +
+		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
 		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +

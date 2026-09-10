@@ -37,11 +37,17 @@ Decode a JSON string into a value (map, list, string, number, or boolean).
 import "std";
 import "encoding/json";
 
-final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
-std\print(v["name"]);
-std\print(v["port"]);
-// -> api
-// -> 8080
+// parse RAISES on malformed input rather than returning a null document, so
+// invalid JSON cannot be mistaken for an empty one.
+try {
+    final v = json\parse("\{\"name\": \"api\", \"port\": 8080\}");
+    std\print(v["name"]);
+    std\print(v["port"]);
+    // -> api
+    // -> 8080
+} catch (e) {
+    std\print("not JSON");
+}
 ```
 
 ### stringify
@@ -64,11 +70,11 @@ import "std";
 import "encoding/json";
 
 final config = { "target": "build", "parallel": true };
-std\print(json\stringify(config));
+std\print(json\stringify(config) catch "");
 // -> {"parallel":true,"target":"build"}
 
 // Pretty-printed with two-space indent:
-std\print(json\stringify(config, "  "));
+std\print(json\stringify(config, "  ") catch "");
 ```
 
 [^buzz-stdlib-json-parse]: `json\parse` is also in Buzz's standard library (`serialize.jsonDecode`); the magus form is sandbox-aware.

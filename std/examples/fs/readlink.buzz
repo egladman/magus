@@ -1,4 +1,5 @@
 import "std";
 import "fs";
 
-std\print(fs\readlink("/usr/local/bin/magus"));
+// readlink raises when the path is not a symlink, so "" reads as "nothing to follow".
+std\print(fs\readlink("/usr/local/bin/magus") catch "");

@@ -1,3 +1,8 @@
+import "std";
 import "fs";
 
-fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
+try {
+    fs\writeLines("dist/targets.txt", ["build", "test", "lint"]);
+} catch (e) {
+    std\print("could not write dist/targets.txt");
+}

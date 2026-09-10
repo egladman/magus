@@ -1,3 +1,8 @@
+import "std";
 import "fs";
 
-fs\writeFile("dist/manifest.txt", "artifact list here\n");
+try {
+    fs\writeFile("dist/manifest.txt", "artifact list here\n");
+} catch (e) {
+    std\print("could not write dist/manifest.txt");
+}

@@ -40,9 +40,15 @@ Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fa
 import "std";
 import "http";
 
-final r = http\get("https://api.github.com/repos/egladman/magus");
-std\print(r.status);
-std\print(r.body.sub(0, 80) + "...");
+// A transport failure (DNS, TLS, timeout) RAISES; a 4xx/5xx does not, it arrives
+// as a status. The two are different answers and are handled separately.
+try {
+    final r = http\get("https://api.github.com/repos/egladman/magus");
+    std\print(r.status);
+    std\print(r.body.sub(0, 80) + "...");
+} catch (e) {
+    std\print("request never reached the server");
+}
 ```
 
 ### download
@@ -80,18 +86,24 @@ Send a POST request with body; returns {status, body, headers}. opts (curl-style
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // Post JSON. opts carries the curl-style settings; retrying is a separate,
 // typed HttpRetry argument, and without one the request runs exactly once.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
-final r = http\post(
-    "https://httpbin.org/post",
-    "\{\"target\":\"build\"\}",
-    {"Content-Type": "application/json"},
-    {"timeout": 10},
-    http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
-);
+try {
+    final r = http\post(
+        "https://httpbin.org/post",
+        "\{\"target\":\"build\"\}",
+        {"Content-Type": "application/json"},
+        {"timeout": 10},
+        http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
+    );
+    std\print(r.status);
+} catch (e) {
+    std\print("post never reached the server");
+}
 ```
 
 ### request
@@ -114,16 +126,22 @@ Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, 
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http\request(
-    "PUT",
-    "https://httpbin.org/put",
-    "hello",
-    { "Content-Type": "text/plain" },
-    { "timeout": 10 },
-);
+try {
+    final r = http\request(
+        "PUT",
+        "https://httpbin.org/put",
+        "hello",
+        { "Content-Type": "text/plain" },
+        { "timeout": 10 },
+    );
+    std\print(r.status);
+} catch (e) {
+    std\print("request never reached the server");
+}
 ```
 
 ### server
@@ -141,11 +159,16 @@ Start a static file server in the background from an options map and return the 
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // Serve the current build output over http on port 8080 for quick sharing.
-// Blocks until the process exits.
-http\server({"dir": "dist/", "port": 8080});
+// Blocks until the process exits; raises when the port is already taken.
+try {
+    http\server({"dir": "dist/", "port": 8080});
+} catch (e) {
+    std\print("port 8080 is not available");
+}
 ```
 
 ### byteSize

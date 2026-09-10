@@ -1,5 +1,5 @@
 import "std";
 import "fs";
 
-final version = fs\readFile("VERSION");
+final version = fs\readFile("VERSION") catch "unknown";
 std\print(version);
