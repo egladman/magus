@@ -242,6 +242,18 @@ def caveats(analysis, out):
             "More than one model appears across runs (%s); the arm is no longer the only "
             "variable." % ", ".join(analysis["models"])
         )
+    ratio = quality.get("table_to_billed_ratio_median")
+    if ratio is not None and not 0.9 <= ratio <= 1.1:
+        lines.append(
+            "Dollars are the host's billed cost; the pricing table would have said %.2fx "
+            "that, so the table is wrong for this model and only backs runs with no "
+            "result record." % ratio
+        )
+    if quality.get("runs_without_billed_cost"):
+        lines.append(
+            "No billed cost for %d run(s); their dollars come from the pricing table."
+            % len(quality["runs_without_billed_cost"])
+        )
     unverified = [t for t in analysis["tasks"] if not analysis["controls"].get(t, {}).get("discriminates")]
     if unverified:
         lines.append(

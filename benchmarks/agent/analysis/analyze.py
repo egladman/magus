@@ -254,7 +254,19 @@ def data_quality(records, by_arm_task_rep, tasks, arms):
             missing = [arm for arm in arms if rep not in by_arm_task_rep.get((arm, task), {})]
             if missing:
                 incomplete.append({"task": task, "rep": rep, "missing_arms": missing})
+    # How far the pricing table sits from what the host billed, over the runs that
+    # carry both. A constant ratio far from 1 is a table error; the report says so
+    # rather than letting a floor pass for a bill.
+    ratios = sorted(
+        r["table_dollars_usd"] / r["reported_cost_usd"]
+        for r in records
+        if r.get("reported_cost_usd") and r.get("table_dollars_usd") is not None
+    )
     return {
+        "table_to_billed_ratio_median": ratios[len(ratios) // 2] if ratios else None,
+        "runs_without_billed_cost": sorted(
+            r["run_id"] for r in records if not r.get("reported_cost_usd")
+        ),
         "runs_without_guard_events": sorted(
             r["run_id"] for r in records if r.get("guard_events") is None
         ),

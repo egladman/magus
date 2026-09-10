@@ -384,10 +384,16 @@ def extract_run(run_dir, pricing):
     check_exit, success = read_check(run_dir)
 
     record = {field: meta.get(field) for field in META_FIELDS}
+    table_dollars = price_usage(transcript["by_model"], pricing, run_id)
     record.update(
         {
             "tokens": transcript["tokens"],
-            "dollars": price_usage(transcript["by_model"], pricing, run_id),
+            # The host's own bill wins when it recorded one: the table is a floor kept
+            # for transcripts that end without a result record, and it disagreed with
+            # the host by a constant 0.665x on Sonnet 5 and 1.663x on Opus 5 in the
+            # 2026-09-10 pilot, which is a table error rather than noise.
+            "dollars": transcript["reported_cost_usd"] or table_dollars,
+            "table_dollars_usd": table_dollars,
             "reported_cost_usd": transcript["reported_cost_usd"],
             "cache_write_ttl_assumed": transcript["cache_write_ttl_assumed"],
             "turns": transcript["turns"],

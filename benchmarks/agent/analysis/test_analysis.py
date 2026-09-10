@@ -201,6 +201,21 @@ class TranscriptDefectCase(unittest.TestCase):
         self.assertEqual(record["tokens"]["input"], 20, "input still comes from the turns")
         self.assertEqual(record["tokens"]["cache_read"], 200)
 
+    def test_billed_cost_beats_the_table_when_the_host_recorded_one(self):
+        usage = {"input_tokens": 1000, "output_tokens": 100}
+        self.write_transcript(
+            [
+                {"type": "system", "subtype": "init", "model": "claude-opus-5"},
+                {"type": "assistant", "message": {"id": "m1", "usage": usage, "content": []}},
+                {"type": "result", "subtype": "success", "total_cost_usd": 0.05,
+                 "usage": dict(usage)},
+            ]
+        )
+        record = extract.extract_run(self.run, PRICING)
+        self.assertEqual(record["dollars"], 0.05)
+        self.assertGreater(record["table_dollars_usd"], 0)
+        self.assertNotEqual(record["table_dollars_usd"], 0.05)
+
     def test_transcript_with_no_assistant_records_raises(self):
         self.write_transcript([{"type": "system", "subtype": "init", "model": "claude-opus-5"}])
         with self.assertRaises(extract.ExtractError):

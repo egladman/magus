@@ -68,14 +68,17 @@ One directory per run under `results/`, named `<arm>-<task>-r<rep>-<stamp>`:
   `cache_write` (`cache_creation_input_tokens`, or the 5m/1h breakdown under
   `cache_creation` when the transcript reports one). `total_billed` is the sum
   of all four; it is a token count, not a price.
-- **dollars** - per-model token totals priced from `pricing.json` (USD per
-  million tokens, read from the published pricing page on the date recorded in
-  that file). A model missing from the table stops extraction rather than being
-  guessed at. When a transcript reports only the flat cache-write counter, those
-  tokens are priced at the 5-minute rate and the record carries
+- **dollars** - the host's own bill, `total_cost_usd` from the transcript's
+  `result` record (kept as `reported_cost_usd`), when it recorded a positive one.
+  `table_dollars_usd` is the per-model token totals priced from `pricing.json`
+  (USD per million tokens, read from the published pricing page on the date
+  recorded in that file); it is the fallback for a transcript that ends without
+  a result record, and the report says how far it sits from the bill. A model
+  missing from the table still stops extraction rather than being guessed at.
+  When a transcript reports only the flat cache-write counter, those tokens are
+  priced at the 5-minute rate and the record carries
   `cache_write_ttl_assumed: true`, which the report surfaces as a caveat: the
-  dollars are a floor. `reported_cost_usd` is whatever the transcript's own
-  `result` record claimed, kept only as a cross-check.
+  table dollars are a floor.
 - **turns** - assistant records, deduplicated by message id.
 - **tool_calls** - `tool_use` blocks, total and by tool name.
 - **file_reads / re_read_rate** - Read and NotebookRead calls;
