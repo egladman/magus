@@ -33,7 +33,11 @@ function cmd(session: string, partial: Partial<ActivityEvent> = {}): ActivityEve
   return ev({ kind: Kind.AGENT_COMMAND, session, host: "claude", action: "Bash", ...partial });
 }
 
-function spawn(session: string, lease: string, partial: Partial<ActivityEvent> = {}): ActivityEvent {
+function spawn(
+  session: string,
+  lease: string,
+  partial: Partial<ActivityEvent> = {},
+): ActivityEvent {
   return ev({
     kind: Kind.AGENT_SPAWN,
     session,
@@ -139,7 +143,10 @@ test("the join reads the same on a newest-first page", () => {
     "roots keep page order",
   );
   assert.deepEqual(roots[0].children, [], "the later spawn did not claim the child");
-  assert.deepEqual(roots[1].children.map((n) => n.session), ["child"]);
+  assert.deepEqual(
+    roots[1].children.map((n) => n.session),
+    ["child"],
+  );
 });
 
 // A parent that binds itself to the lease it registered still ACTS under it, so its own commands
@@ -156,7 +163,10 @@ test("the spawner's own commands under its lease do not steal the join", () => {
     roots.map((n) => n.session),
     ["parent"],
   );
-  assert.deepEqual(roots[0].children.map((n) => n.session), ["child"]);
+  assert.deepEqual(
+    roots[0].children.map((n) => n.session),
+    ["child"],
+  );
 });
 
 // A lease re-bound to a second worker has two actors, and both were spawned by the same parent.
@@ -168,7 +178,10 @@ test("every session that acted under a spawned lease is a child", () => {
   ];
 
   const [parent] = sessionLineage(events);
-  assert.deepEqual(parent.children.map((n) => n.session), ["w1", "w2"]);
+  assert.deepEqual(
+    parent.children.map((n) => n.session),
+    ["w1", "w2"],
+  );
 });
 
 // Session ids are the host tool's, so two hosts can mint the same id for unrelated sessions.

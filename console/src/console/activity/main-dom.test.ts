@@ -307,7 +307,8 @@ test("a branch carries its label as a title", async () => {
   modeButton(host, "kind").click();
 
   const nodes = roots(host).map(
-    (li) => li.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.title,
+    (li) =>
+      li.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.title,
   );
   assert.deepEqual(nodes, ["MCP tool calls", "Agent commands"]);
 
@@ -326,7 +327,11 @@ test("expansion and selection survive a repaint", async () => {
   modeButton(host, "kind").click();
 
   const first = roots(host)[0];
-  assert.equal(first.classList.contains("pf-m-expanded"), true, "the first branch opens by default");
+  assert.equal(
+    first.classList.contains("pf-m-expanded"),
+    true,
+    "the first branch opens by default",
+  );
   first.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.click();
   assert.equal(first.classList.contains("pf-m-expanded"), false);
   const leaf = roots(host)[1].querySelector<HTMLButtonElement>("ul button");
@@ -338,7 +343,11 @@ test("expansion and selection survive a repaint", async () => {
   modeButton(host, "kind").click();
 
   const again = roots(host);
-  assert.equal(again[0].classList.contains("pf-m-expanded"), false, "the closed branch stays closed");
+  assert.equal(
+    again[0].classList.contains("pf-m-expanded"),
+    false,
+    "the closed branch stays closed",
+  );
   assert.equal(
     again[1].querySelector("ul button")?.classList.contains("pf-m-current"),
     true,
