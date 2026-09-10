@@ -2492,10 +2492,10 @@
       }
     },
     {
-      "id": "dir:spells/keychain",
+      "id": "dir:spells/macos-keychain",
       "kind": "dir",
-      "label": "spells/keychain",
-      "source": "spells/keychain",
+      "label": "spells/macos-keychain",
+      "source": "spells/macos-keychain",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "buzz"
@@ -37425,10 +37425,10 @@
       }
     },
     {
-      "id": "file:spells/keychain/spell.buzz",
+      "id": "file:spells/macos-keychain/spell.buzz",
       "kind": "file",
-      "label": "spells/keychain/spell.buzz",
-      "source": "spells/keychain/spell.buzz",
+      "label": "spells/macos-keychain/spell.buzz",
+      "source": "spells/macos-keychain/spell.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -42872,7 +42872,7 @@
       "id": "function:magusfile.buzz:agent_bench_run",
       "kind": "function",
       "label": "agent_bench_run",
-      "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=keychain magus run agent-bench-run . -- <ma",
+      "doc": "Runs a benchmark manifest with a login the launching shell never held. The long-lived token `claude setup-token` mints is read through the workspace's secret provider under the reference below, handed to run.sh as the one environment variable the runner's scrub keeps, and redacted from everything magus captures. It never touches argv, which the run log records, and it never has to be exported by the person, or the agent, typing this command: `MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run .",
       "source": "magusfile.buzz:2883",
       "attrs": {
         "exported": "true"
@@ -45411,36 +45411,36 @@
       "source": "spells/golang/spell.buzz:175"
     },
     {
-      "id": "function:spells/keychain/spell.buzz:has",
+      "id": "function:spells/macos-keychain/spell.buzz:has",
       "kind": "function",
       "label": "has",
       "doc": "has reports whether haystack contains needle; see spells/onepassword for why this is a helper rather than an inline indexOf comparison.",
-      "source": "spells/keychain/spell.buzz:39"
+      "source": "spells/macos-keychain/spell.buzz:39"
     },
     {
-      "id": "function:spells/keychain/spell.buzz:mgs_getName",
+      "id": "function:spells/macos-keychain/spell.buzz:mgs_getName",
       "kind": "function",
       "label": "mgs_getName",
-      "source": "spells/keychain/spell.buzz:30",
+      "source": "spells/macos-keychain/spell.buzz:30",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/keychain/spell.buzz:mgs_getTools",
+      "id": "function:spells/macos-keychain/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
-      "source": "spells/keychain/spell.buzz:32",
+      "source": "spells/macos-keychain/spell.buzz:32",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:spells/keychain/spell.buzz:resolve_secret",
+      "id": "function:spells/macos-keychain/spell.buzz:resolve_secret",
       "kind": "function",
       "label": "resolve_secret",
       "doc": "resolve_secret is the secret-provider contract magus\\secret.read() invokes. The reference is the keychain SERVICE name of a generic password; the account is not part of the reference, because `security` finds the item by service alone and an account in the reference would make one machine's entry unreadable on another.  `-w` prints the password alone to stdout with a trailing newline; magus trims captured output. quiet is not optional: that stdout IS the secret, and without it the value is echoed to the con",
-      "source": "spells/keychain/spell.buzz:51",
+      "source": "spells/macos-keychain/spell.buzz:51",
       "attrs": {
         "exported": "true"
       }
@@ -51113,9 +51113,9 @@
       "label": "gomod"
     },
     {
-      "id": "spell:keychain",
+      "id": "spell:macos-keychain",
       "kind": "spell",
-      "label": "keychain"
+      "label": "macos-keychain"
     },
     {
       "id": "spell:markdown",
@@ -57081,11 +57081,11 @@
     },
     {
       "source": "dir:spells",
-      "target": "dir:spells/keychain",
+      "target": "dir:spells/macos-keychain",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain"
+      "provenance": "spells/macos-keychain"
     },
     {
       "source": "dir:spells",
@@ -57744,12 +57744,12 @@
       "provenance": "spells/golang/spell.buzz"
     },
     {
-      "source": "dir:spells/keychain",
-      "target": "file:spells/keychain/spell.buzz",
+      "source": "dir:spells/macos-keychain",
+      "target": "file:spells/macos-keychain/spell.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
       "source": "dir:spells/markdown",
@@ -111009,7 +111009,7 @@
     },
     {
       "source": "file:magusfile.buzz",
-      "target": "file:spells/keychain/spell.buzz",
+      "target": "file:spells/macos-keychain/spell.buzz",
       "relation": "imports",
       "confidence": "extracted",
       "score": 1,
@@ -114800,52 +114800,52 @@
       "provenance": "spells/golang/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
-      "target": "function:spells/keychain/spell.buzz:has",
+      "source": "file:spells/macos-keychain/spell.buzz",
+      "target": "function:spells/macos-keychain/spell.buzz:has",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
-      "target": "function:spells/keychain/spell.buzz:mgs_getName",
+      "source": "file:spells/macos-keychain/spell.buzz",
+      "target": "function:spells/macos-keychain/spell.buzz:mgs_getName",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
-      "target": "function:spells/keychain/spell.buzz:mgs_getTools",
+      "source": "file:spells/macos-keychain/spell.buzz",
+      "target": "function:spells/macos-keychain/spell.buzz:mgs_getTools",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
-      "target": "function:spells/keychain/spell.buzz:resolve_secret",
+      "source": "file:spells/macos-keychain/spell.buzz",
+      "target": "function:spells/macos-keychain/spell.buzz:resolve_secret",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
+      "source": "file:spells/macos-keychain/spell.buzz",
       "target": "import:magus/spell",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
-      "source": "file:spells/keychain/spell.buzz",
+      "source": "file:spells/macos-keychain/spell.buzz",
       "target": "import:proc",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
       "source": "file:spells/markdown/spell.buzz",
@@ -120040,12 +120040,12 @@
       "provenance": "spells/golang/gomod.buzz"
     },
     {
-      "source": "function:spells/keychain/spell.buzz:resolve_secret",
-      "target": "function:spells/keychain/spell.buzz:has",
+      "source": "function:spells/macos-keychain/spell.buzz:resolve_secret",
+      "target": "function:spells/macos-keychain/spell.buzz:has",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "spells/keychain/spell.buzz"
+      "provenance": "spells/macos-keychain/spell.buzz"
     },
     {
       "source": "function:spells/onepassword/spell.buzz:resolve_secret",

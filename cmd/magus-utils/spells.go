@@ -31,8 +31,8 @@ import (
 // spells/ is expected to compile; see the check in runSpells for why the distinction has
 // to be declared rather than inferred.
 var workspaceLocalSpells = map[string]bool{
-	"onepassword": true, // reaches the `op` CLI, so it imports os
-	"keychain":    true, // reaches the macOS `security` CLI, so it imports proc
+	"onepassword":    true, // reaches the `op` CLI, so it imports os
+	"macos-keychain": true, // reaches the macOS `security` CLI, so it imports proc
 }
 
 func runSpells(args []string) error {

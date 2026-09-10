@@ -72,9 +72,9 @@ if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" 
 // break each of them until its item was stored. A reference is written to be legal
 // under both (a shell name, which the keychain takes as a service name), so the same
 // magusfile line reads a repository secret in CI and a keychain item here.
-import "spells/keychain" as keychain;
-if (os\env("MAGUS_SECRET_PROVIDER") == "keychain") {
-    magus\secret.provider(keychain);
+import "spells/macos-keychain" as macos_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "macos-keychain") {
+    magus\secret.provider(macos_keychain);
 }
 
 // Unconditional, unlike the cache above: the spell's enabled() gates every op
@@ -2877,7 +2877,7 @@ export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
 // the runner's scrub keeps, and redacted from everything magus captures. It never
 // touches argv, which the run log records, and it never has to be exported by the
 // person, or the agent, typing this command:
-// `MAGUS_SECRET_PROVIDER=keychain magus run agent-bench-run . -- <manifest>`, defaulting
+// `MAGUS_SECRET_PROVIDER=macos-keychain magus run agent-bench-run . -- <manifest>`, defaulting
 // to pilot.manifest. Every run is paid work that writes results/, so it never replays
 // from cache.
 export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {

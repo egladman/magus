@@ -76,7 +76,8 @@ for any provider with a CLI that prints a secret to stdout.
 
 ### The macOS keychain provider
 
-`spells/keychain/` is the same contract over the `security` CLI: a reference is the
+`spells/macos-keychain/` is the same contract over the `security` CLI, and the name
+carries the platform because the spell is nothing without it: a reference is the
 service name of a generic password in the login keychain, and a person stores the
 value once at a prompt that never echoes it:
 
@@ -85,9 +86,9 @@ security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w
 ```
 
 ```buzz
-import "./spells/keychain" as keychain;
-if (os\env("MAGUS_SECRET_PROVIDER") == "keychain") {
-    magus\secret.provider(keychain);
+import "./spells/macos-keychain" as macos_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "macos-keychain") {
+    magus\secret.provider(macos_keychain);
 }
 
 final token = magus\secret.read("CLAUDE_BENCH_TOKEN");

@@ -2,7 +2,7 @@
 // for the generic password stored under that service name. Selected with
 // magus\secret.provider():
 //
-//   import "spells/keychain" as secrets;
+//   import "spells/macos-keychain" as secrets;
 //   magus\secret.provider(secrets);
 //
 //   final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
@@ -27,7 +27,7 @@
 import "magus/spell";
 
 import "proc";
-export fun mgs_getName() > str { return "keychain"; }
+export fun mgs_getName() > str { return "macos-keychain"; }
 
 export fun mgs_getTools() > {str: Tool} {
     return {"security": Tool{probe = Command{bin = "security", args = ["help"]}}};
@@ -53,13 +53,13 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     cb(io);
     final ref = "{io["ref"]}";
     if (ref == "") {
-        throw "keychain: no reference given";
+        throw "macos-keychain: no reference given";
     }
 
     try {
         proc\which("security");
     } catch (e) {
-        throw "keychain: the `security` CLI is not on PATH; this provider is macOS only";
+        throw "macos-keychain: the `security` CLI is not on PATH; this provider is macOS only";
     }
 
     final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
@@ -67,22 +67,22 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
     if (res["code"] != 0) {
         final err = "{res["stderr"]}";
         if (has(err, "could not be found")) {
-            throw "keychain: no generic password is stored under service " + ref + ". Store one with\n"
+            throw "macos-keychain: no generic password is stored under service " + ref + ". Store one with\n"
                 + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
                 + "which prompts for the value and never echoes it.";
         }
         // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
         // are the three refusals `security` words differently; the remedy is the same.
         if (has(err, "User interaction is not allowed") or has(err, "User canceled") or has(err, "keychain is locked")) {
-            throw "keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
+            throw "macos-keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
                 + "Always Allow when the keychain asks about `security`.";
         }
-        throw "keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
+        throw "macos-keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
     }
 
     final value = "{res["stdout"]}";
     if (value == "") {
-        throw "keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
+        throw "macos-keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
     }
     return Secret{ value = value };
 }
