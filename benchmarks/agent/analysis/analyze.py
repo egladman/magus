@@ -6,12 +6,39 @@ never as independent means. Every interval is a seeded 10k bootstrap or a Wilson
 score interval, so the same input and seed give byte-identical output.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import math
 import random
 import statistics
 import sys
+from collections import defaultdict
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import NamedTuple
+
+from records import (
+    Analysis,
+    Arm,
+    ArmSummary,
+    CellStats,
+    ControlCell,
+    ControlCount,
+    ControlKind,
+    ControlRun,
+    CostOfPass,
+    DataQuality,
+    PairedDelta,
+    RunRecord,
+    ScoredRun,
+    Spread,
+    UnpairedRep,
+    Verdict,
+    run_from_json,
+)
 
 BOOTSTRAP_ITERS = 10000
 Z_95 = 1.959963984540054
@@ -20,57 +47,70 @@ Z_95 = 1.959963984540054
 # the CI excluding zero. A significant 2 percent difference is not a finding.
 MIN_RELATIVE_DELTA = 0.10
 
-TREATMENT_ARM = "full"
-BASELINE_ARM = "rampant"
+TREATMENT_ARM = Arm.FULL
+BASELINE_ARM = Arm.RAMPANT
+
+
+class AnalyzeError(Exception):
+    """The metrics file cannot be analyzed; say which file and why."""
+
+
+@dataclass(frozen=True)
+class Metric:
+    name: str
+    read: Callable[[ScoredRun], float | None]
+
 
 METRICS = (
-    ("total_billed_tokens", ("tokens", "total_billed")),
-    ("input_tokens", ("tokens", "input")),
-    ("output_tokens", ("tokens", "output")),
-    ("cache_read_tokens", ("tokens", "cache_read")),
-    ("cache_write_tokens", ("tokens", "cache_write")),
-    ("dollars", ("dollars",)),
-    ("wall_ms", ("wall_ms",)),
-    ("time_to_first_edit_ms", ("time_to_first_edit_ms",)),
-    ("time_to_done_ms", ("time_to_done_ms",)),
-    ("turns", ("turns",)),
-    ("tool_calls", ("tool_calls",)),
-    ("file_reads", ("file_reads",)),
-    ("re_read_rate", ("re_read_rate",)),
-    ("tool_result_bytes", ("tool_result_bytes",)),
+    Metric("total_billed_tokens", lambda r: r.tokens.total_billed),
+    Metric("input_tokens", lambda r: r.tokens.input),
+    Metric("output_tokens", lambda r: r.tokens.output),
+    Metric("cache_read_tokens", lambda r: r.tokens.cache_read),
+    Metric("cache_write_tokens", lambda r: r.tokens.cache_write),
+    Metric("dollars", lambda r: r.dollars),
+    Metric("wall_ms", lambda r: r.wall_ms),
+    Metric("time_to_first_edit_ms", lambda r: r.time_to_first_edit_ms),
+    Metric("time_to_done_ms", lambda r: r.time_to_done_ms),
+    Metric("turns", lambda r: r.turns),
+    Metric("tool_calls", lambda r: r.tool_calls),
+    Metric("file_reads", lambda r: r.file_reads),
+    Metric("re_read_rate", lambda r: r.re_read_rate),
+    Metric("tool_result_bytes", lambda r: r.tool_result_bytes),
 )
 
 
-def metric_value(record, path):
-    """Read a metric out of a record by its key path; missing reads as None."""
-    value = record
-    for key in path:
-        if not isinstance(value, dict) or key not in value:
-            return None
-        value = value[key]
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+class Interval(NamedTuple):
+    low: float | None
+    high: float | None
 
 
-def wilson_interval(successes, total, z=Z_95):
+def wilson_interval(successes: int, total: int, z: float = Z_95) -> Interval:
     """Wilson score interval for a binomial proportion. (None, None) when total is 0."""
     if total <= 0:
-        return (None, None)
+        return Interval(None, None)
     p = successes / total
     denom = 1.0 + z * z / total
     center = (p + z * z / (2.0 * total)) / denom
     half = z * math.sqrt(p * (1.0 - p) / total + z * z / (4.0 * total * total)) / denom
-    return (max(0.0, center - half), min(1.0, center + half))
+    return Interval(max(0.0, center - half), min(1.0, center + half))
 
 
-def percentile(sorted_values, q):
+def percentile(sorted_values: Sequence[float], q: float) -> float | None:
     """Nearest-rank percentile over an already sorted list."""
     if not sorted_values:
         return None
-    index = int(math.floor(q * (len(sorted_values) - 1)))
-    return sorted_values[index]
+    return sorted_values[math.floor(q * (len(sorted_values) - 1))]
 
 
-def bootstrap_paired(deltas, seed_key, iters=BOOTSTRAP_ITERS):
+class Bootstrap(NamedTuple):
+    ci_low: float | None
+    ci_high: float | None
+    p: float | None
+
+
+def bootstrap_paired(
+    deltas: Sequence[float], seed_key: str, iters: int = BOOTSTRAP_ITERS
+) -> Bootstrap:
     """Bootstrap the mean of paired deltas; returns the CI and a two-sided p value.
 
     The RNG is seeded from the metric and task name so each interval is
@@ -78,294 +118,288 @@ def bootstrap_paired(deltas, seed_key, iters=BOOTSTRAP_ITERS):
     """
     n = len(deltas)
     if n == 0:
-        return {"ci_low": None, "ci_high": None, "p": None}
+        return Bootstrap(None, None, None)
     rng = random.Random(seed_key)
-    means = []
-    for _ in range(iters):
-        total = 0.0
-        for _ in range(n):
-            total += deltas[rng.randrange(n)]
-        means.append(total / n)
-    means.sort()
+    means = sorted(_resampled_mean(deltas, rng) for _ in range(iters))
     at_or_below = sum(1 for m in means if m <= 0.0)
     at_or_above = sum(1 for m in means if m >= 0.0)
     p = min(1.0, 2.0 * min(at_or_below, at_or_above) / iters)
-    return {
-        "ci_low": percentile(means, 0.025),
-        "ci_high": percentile(means, 0.975),
-        "p": max(p, 1.0 / iters),
-    }
+    return Bootstrap(percentile(means, 0.025), percentile(means, 0.975), max(p, 1.0 / iters))
 
 
-def holm(pvalues):
+def _resampled_mean(deltas: Sequence[float], rng: random.Random) -> float:
+    n = len(deltas)
+    total = 0.0
+    for _ in range(n):
+        total += deltas[rng.randrange(n)]
+    return total / n
+
+
+def holm(pvalues: Mapping[str, float | None]) -> dict[str, float | None]:
     """Holm-Bonferroni adjust a {key: p} mapping across the family of tasks."""
-    items = sorted((p, key) for key, p in pvalues.items() if p is not None)
-    m = len(items)
-    adjusted = {}
+    ranked = sorted((p, key) for key, p in pvalues.items() if p is not None)
+    m = len(ranked)
+    adjusted: dict[str, float | None] = {key: None for key in pvalues}
     running = 0.0
-    for i, (p, key) in enumerate(items):
-        value = min(1.0, (m - i) * p)
-        running = max(running, value)
+    for i, (p, key) in enumerate(ranked):
+        running = max(running, min(1.0, (m - i) * p))
         adjusted[key] = running
-    for key, p in pvalues.items():
-        if p is None:
-            adjusted[key] = None
     return adjusted
 
 
-def describe(values):
+def describe(values: Iterable[float | None]) -> Spread:
     """Median, IQR and mean together; a mean alone hides the spread that matters."""
     clean = sorted(v for v in values if v is not None)
     if not clean:
-        return {"n": 0, "median": None, "iqr": [None, None], "mean": None}
+        return Spread(n=0, median=None, iqr=(None, None), mean=None)
     if len(clean) == 1:
         q1 = q3 = clean[0]
     else:
         q1, _, q3 = statistics.quantiles(clean, n=4, method="inclusive")
-    return {
-        "n": len(clean),
-        "median": statistics.median(clean),
-        "iqr": [q1, q3],
-        "mean": statistics.fmean(clean),
-    }
+    return Spread(
+        n=len(clean), median=statistics.median(clean), iqr=(q1, q3), mean=statistics.fmean(clean)
+    )
 
 
-def load_records(path):
-    records = []
-    with open(path, encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                records.append(json.loads(line))
+def load_records(path: Path) -> list[RunRecord]:
+    records: list[RunRecord] = []
+    with path.open(encoding="utf-8") as fh:
+        for number, line in enumerate(fh, start=1):
+            if not line.strip():
+                continue
+            try:
+                records.append(run_from_json(json.loads(line)))
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+                raise AnalyzeError(f"{path} line {number}: not a metrics record: {exc}") from exc
     if not records:
-        raise SystemExit("analyze: %s is empty" % path)
+        raise AnalyzeError(f"{path} is empty")
     return records
 
 
-def cell_stats(records):
+def _passes(runs: Iterable[ScoredRun | ControlRun]) -> int:
+    return sum(1 for run in runs if run.success is True)
+
+
+def cell_stats(runs: Sequence[ScoredRun]) -> CellStats:
     """Pass rates and metric spreads for one (arm, task) cell."""
-    n = len(records)
-    successes = sum(1 for r in records if r.get("success") is True)
-    unknown = sum(1 for r in records if r.get("success") is None)
-    pass_at_1 = successes / n if n else None
-    low, high = wilson_interval(successes, n)
-    successful = [r for r in records if r.get("success") is True]
-    return {
-        "n": n,
-        "successes": successes,
-        "unknown_outcomes": unknown,
-        "pass_at_1": pass_at_1,
-        "pass_at_1_ci": [low, high],
-        "k": n,
-        "pass_pow_k": 1.0 if n and successes == n else 0.0,
-        "metrics": {
-            name: describe([metric_value(r, path) for r in records]) for name, path in METRICS
-        },
-        "metrics_success_only": {
-            name: describe([metric_value(r, path) for r in successful]) for name, path in METRICS
-        },
-    }
+    n = len(runs)
+    successes = _passes(runs)
+    successful = [run for run in runs if run.success is True]
+    return CellStats(
+        n=n,
+        successes=successes,
+        unknown_outcomes=sum(1 for run in runs if run.success is None),
+        pass_at_1=successes / n if n else None,
+        pass_at_1_ci=wilson_interval(successes, n),
+        k=n,
+        pass_pow_k=1.0 if n and successes == n else 0.0,
+        metrics=_spreads(runs),
+        metrics_success_only=_spreads(successful),
+    )
 
 
-def arm_summary(records):
+def _spreads(runs: Sequence[ScoredRun]) -> dict[str, Spread]:
+    return {metric.name: describe(map(metric.read, runs)) for metric in METRICS}
+
+
+def arm_summary(runs: Sequence[ScoredRun]) -> ArmSummary:
     """Arm-level pass rate and cost-of-pass: expected dollars per correct solution."""
-    n = len(records)
-    successes = sum(1 for r in records if r.get("success") is True)
-    dollars = [metric_value(r, ("dollars",)) for r in records]
-    spread = describe(dollars)
+    n = len(runs)
+    successes = _passes(runs)
+    spread = describe(run.dollars for run in runs)
     pass_rate = successes / n if n else 0.0
-    low, high = wilson_interval(successes, n)
-    if pass_rate > 0 and spread["mean"] is not None:
-        cost_of_pass = {"value": spread["mean"] / pass_rate, "infinite": False}
+    if pass_rate > 0 and spread.mean is not None:
+        cost_of_pass = CostOfPass(value=spread.mean / pass_rate, infinite=False)
     else:
-        cost_of_pass = {"value": None, "infinite": True}
-    return {
-        "n": n,
-        "successes": successes,
-        "pass_rate": pass_rate,
-        "pass_rate_ci": [low, high],
-        "dollars": spread,
-        "cost_of_pass_usd": cost_of_pass,
-    }
+        cost_of_pass = CostOfPass(value=None, infinite=True)
+    return ArmSummary(
+        n=n,
+        successes=successes,
+        pass_rate=pass_rate,
+        pass_rate_ci=wilson_interval(successes, n),
+        dollars=spread,
+        cost_of_pass_usd=cost_of_pass,
+    )
 
 
-def paired_deltas(by_arm_task_rep, tasks, seed):
-    """Per metric, per task: bootstrap the full-minus-rampant delta over matched reps."""
-    out = {}
-    for name, path in METRICS:
-        per_task = {}
-        pvalues = {}
-        for task in tasks:
-            deltas = []
-            baseline = []
-            reps = sorted(
-                set(by_arm_task_rep.get((TREATMENT_ARM, task), {}))
-                & set(by_arm_task_rep.get((BASELINE_ARM, task), {}))
+def paired_delta(
+    treated: Mapping[int, ScoredRun],
+    baseline: Mapping[int, ScoredRun],
+    metric: Metric,
+    seed_key: str,
+) -> PairedDelta:
+    """Bootstrap treated-minus-baseline over the reps both arms ran, for one metric."""
+    deltas: list[float] = []
+    base_values: list[float] = []
+    for rep in sorted(treated.keys() & baseline.keys()):
+        after, before = metric.read(treated[rep]), metric.read(baseline[rep])
+        if after is None or before is None:
+            continue
+        deltas.append(after - before)
+        base_values.append(before)
+    boot = bootstrap_paired(deltas, seed_key)
+    base_median = statistics.median(base_values) if base_values else None
+    delta_mean = statistics.fmean(deltas) if deltas else None
+    relative = delta_mean / base_median if delta_mean is not None and base_median else None
+    excludes_zero = (
+        boot.ci_low is not None
+        and boot.ci_high is not None
+        and (boot.ci_low > 0 or boot.ci_high < 0)
+    )
+    if excludes_zero and relative is not None and abs(relative) >= MIN_RELATIVE_DELTA:
+        verdict = Verdict.LOWER if delta_mean < 0 else Verdict.HIGHER
+    else:
+        verdict = Verdict.INCONCLUSIVE
+    return PairedDelta(
+        n_pairs=len(deltas),
+        delta_mean=delta_mean,
+        delta_median=statistics.median(deltas) if deltas else None,
+        ci_low=boot.ci_low,
+        ci_high=boot.ci_high,
+        p=boot.p,
+        baseline_median=base_median,
+        relative=relative,
+        ci_excludes_zero=excludes_zero,
+        verdict=verdict,
+    )
+
+
+Cells = Mapping[tuple[str, str], Sequence[ScoredRun]]
+
+
+def _by_rep(cells: Cells, arm: str, task: str) -> dict[int, ScoredRun]:
+    return {run.rep: run for run in cells.get((arm, task), ())}
+
+
+def paired_deltas(
+    cells: Cells, tasks: Sequence[str], seed: int
+) -> dict[str, dict[str, PairedDelta]]:
+    """Per metric, per task: the full-minus-rampant delta, with p Holm-adjusted across tasks."""
+    out: dict[str, dict[str, PairedDelta]] = {}
+    for metric in METRICS:
+        per_task = {
+            task: paired_delta(
+                _by_rep(cells, TREATMENT_ARM, task),
+                _by_rep(cells, BASELINE_ARM, task),
+                metric,
+                f"{seed}|{metric.name}|{task}",
             )
-            for rep in reps:
-                treated = metric_value(by_arm_task_rep[(TREATMENT_ARM, task)][rep], path)
-                base = metric_value(by_arm_task_rep[(BASELINE_ARM, task)][rep], path)
-                if treated is None or base is None:
-                    continue
-                deltas.append(treated - base)
-                baseline.append(base)
-            boot = bootstrap_paired(deltas, "%d|%s|%s" % (seed, name, task))
-            base_median = statistics.median(baseline) if baseline else None
-            delta_mean = statistics.fmean(deltas) if deltas else None
-            relative = None
-            if delta_mean is not None and base_median:
-                relative = delta_mean / base_median
-            excludes_zero = (
-                boot["ci_low"] is not None
-                and boot["ci_high"] is not None
-                and (boot["ci_low"] > 0 or boot["ci_high"] < 0)
-            )
-            if excludes_zero and relative is not None and abs(relative) >= MIN_RELATIVE_DELTA:
-                verdict = "lower under full" if delta_mean < 0 else "higher under full"
-            else:
-                verdict = "inconclusive"
-            per_task[task] = {
-                "n_pairs": len(deltas),
-                "delta_mean": delta_mean,
-                "delta_median": statistics.median(deltas) if deltas else None,
-                "ci_low": boot["ci_low"],
-                "ci_high": boot["ci_high"],
-                "p": boot["p"],
-                "baseline_median": base_median,
-                "relative": relative,
-                "ci_excludes_zero": excludes_zero,
-                "verdict": verdict,
-            }
-            pvalues[task] = boot["p"]
-        for task, adjusted in holm(pvalues).items():
-            per_task[task]["p_holm"] = adjusted
-        out[name] = per_task
+            for task in tasks
+        }
+        adjusted = holm({task: delta.p for task, delta in per_task.items()})
+        out[metric.name] = {
+            task: replace(delta, p_holm=adjusted[task]) for task, delta in per_task.items()
+        }
     return out
 
 
-def data_quality(records, by_arm_task_rep, tasks, arms):
+def data_quality(
+    runs: Sequence[ScoredRun], cells: Cells, tasks: Sequence[str], arms: Sequence[str]
+) -> DataQuality:
     """Facts the report's caveats are generated from, not prose about them."""
-    incomplete = []
+    incomplete: list[UnpairedRep] = []
     for task in tasks:
-        reps = set()
-        for arm in arms:
-            reps |= set(by_arm_task_rep.get((arm, task), {}))
-        for rep in sorted(reps):
-            missing = [arm for arm in arms if rep not in by_arm_task_rep.get((arm, task), {})]
+        reps_by_arm = {arm: set(_by_rep(cells, arm, task)) for arm in arms}
+        for rep in sorted(set().union(*reps_by_arm.values())):
+            missing = tuple(arm for arm in arms if rep not in reps_by_arm[arm])
             if missing:
-                incomplete.append({"task": task, "rep": rep, "missing_arms": missing})
+                incomplete.append(UnpairedRep(task=task, rep=rep, missing_arms=missing))
     # How far the pricing table sits from what the host billed, over the runs that
     # carry both. A constant ratio far from 1 is a table error; the report says so
     # rather than letting a floor pass for a bill.
-    ratios = sorted(
-        r["table_dollars_usd"] / r["reported_cost_usd"]
-        for r in records
-        if r.get("reported_cost_usd") and r.get("table_dollars_usd") is not None
+    ratios = [
+        run.table_dollars_usd / run.reported_cost_usd
+        for run in runs
+        if run.reported_cost_usd and run.table_dollars_usd is not None
+    ]
+    return DataQuality(
+        table_to_billed_ratio_median=statistics.median_high(ratios) if ratios else None,
+        runs_without_billed_cost=_run_ids(run for run in runs if not run.reported_cost_usd),
+        runs_without_guard_events=_run_ids(run for run in runs if run.guard_events is None),
+        runs_without_check=_run_ids(run for run in runs if run.success is None),
+        runs_with_assumed_cache_ttl=_run_ids(run for run in runs if run.cache_write_ttl_assumed),
+        runs_with_invariant_violations=_run_ids(
+            run for run in runs if run.invariant_violations.tests_deleted
+        ),
+        incomplete_pairs=tuple(incomplete),
     )
-    return {
-        "table_to_billed_ratio_median": ratios[len(ratios) // 2] if ratios else None,
-        "runs_without_billed_cost": sorted(
-            r["run_id"] for r in records if not r.get("reported_cost_usd")
-        ),
-        "runs_without_guard_events": sorted(
-            r["run_id"] for r in records if r.get("guard_events") is None
-        ),
-        "runs_without_check": sorted(
-            r["run_id"] for r in records if r.get("success") is None
-        ),
-        "runs_with_assumed_cache_ttl": sorted(
-            r["run_id"] for r in records if r.get("cache_write_ttl_assumed")
-        ),
-        "runs_with_invariant_violations": sorted(
-            r["run_id"]
-            for r in records
-            if (r.get("invariant_violations") or {}).get("tests_deleted")
-        ),
-        "incomplete_pairs": incomplete,
-    }
 
 
-def control_summary(controls, tasks):
+def _run_ids(runs: Iterable[ScoredRun | ControlRun]) -> tuple[str, ...]:
+    return tuple(sorted(run.run_id for run in runs))
+
+
+def control_summary(controls: Sequence[ControlRun], tasks: Sequence[str]) -> dict[str, ControlCell]:
     """Per task, whether the checks discriminate: golden must pass, null must fail.
 
     A pass rate means nothing until this holds, because a check that accepts an
     untouched tree would grade every arm at 100%. A task with no control of one
     kind is reported as unverified rather than assumed.
     """
-    out = {}
+    out: dict[str, ControlCell] = {}
     for task in tasks:
-        cell = {}
-        for kind in ("golden", "null"):
-            runs = [r for r in controls if r["task"] == task and r.get("control") == kind]
-            cell[kind] = {
-                "n": len(runs),
-                "passes": sum(1 for r in runs if r.get("success") is True),
-                "run_ids": sorted(r["run_id"] for r in runs),
-            }
-        golden, null = cell["golden"], cell["null"]
-        cell["discriminates"] = (
-            golden["n"] > 0
-            and golden["passes"] == golden["n"]
-            and null["n"] > 0
-            and null["passes"] == 0
+        golden = _control_count(controls, task, ControlKind.GOLDEN)
+        null = _control_count(controls, task, ControlKind.NULL)
+        golden_all_pass = golden.n > 0 and golden.passes == golden.n
+        null_all_fail = null.n > 0 and null.passes == 0
+        out[task] = ControlCell(
+            golden=golden, null=null, discriminates=golden_all_pass and null_all_fail
         )
-        out[task] = cell
     return out
 
 
-def analyze(all_records, seed):
-    controls = [r for r in all_records if r.get("control")]
-    records = [r for r in all_records if not r.get("control")]
-    if not records:
-        raise SystemExit("analyze: no scored runs, only %d control(s)" % len(controls))
-    arms = sorted({r["arm"] for r in records})
-    tasks = sorted({r["task"] for r in records})
-    by_arm_task = {}
-    by_arm_task_rep = {}
-    for record in records:
-        key = (record["arm"], record["task"])
-        by_arm_task.setdefault(key, []).append(record)
-        by_arm_task_rep.setdefault(key, {})[record["rep"]] = record
-
-    models = sorted({r.get("model") for r in records if r.get("model")})
-    return {
-        "seed": seed,
-        "bootstrap_iters": BOOTSTRAP_ITERS,
-        "min_relative_delta": MIN_RELATIVE_DELTA,
-        "runs": len(records),
-        "arms": arms,
-        "tasks": tasks,
-        "models": models,
-        "controls": control_summary(controls, tasks),
-        "cells": {
-            "%s/%s" % (arm, task): cell_stats(by_arm_task[(arm, task)])
-            for (arm, task) in sorted(by_arm_task)
-        },
-        "arm_summary": {
-            arm: arm_summary([r for r in records if r["arm"] == arm]) for arm in arms
-        },
-        "paired": paired_deltas(by_arm_task_rep, tasks, seed),
-        "data_quality": data_quality(records, by_arm_task_rep, tasks, arms),
-    }
+def _control_count(controls: Sequence[ControlRun], task: str, kind: ControlKind) -> ControlCount:
+    runs = [run for run in controls if run.task == task and run.control == kind]
+    return ControlCount(n=len(runs), passes=_passes(runs), run_ids=_run_ids(runs))
 
 
-def main(argv=None):
+def analyze(all_records: Sequence[RunRecord], seed: int) -> Analysis:
+    controls = [record for record in all_records if isinstance(record, ControlRun)]
+    runs = [record for record in all_records if isinstance(record, ScoredRun)]
+    if not runs:
+        raise AnalyzeError(f"no scored runs, only {len(controls)} control(s)")
+    arms = tuple(sorted({run.arm for run in runs}))
+    tasks = tuple(sorted({run.task for run in runs}))
+    cells: defaultdict[tuple[str, str], list[ScoredRun]] = defaultdict(list)
+    for run in runs:
+        cells[(run.arm, run.task)].append(run)
+    return Analysis(
+        seed=seed,
+        bootstrap_iters=BOOTSTRAP_ITERS,
+        min_relative_delta=MIN_RELATIVE_DELTA,
+        runs=len(runs),
+        arms=arms,
+        tasks=tasks,
+        models=tuple(sorted({run.model for run in runs if run.model})),
+        controls=control_summary(controls, tasks),
+        cells={f"{arm}/{task}": cell_stats(cells[(arm, task)]) for arm, task in sorted(cells)},
+        arm_summary={arm: arm_summary([run for run in runs if run.arm == arm]) for arm in arms},
+        paired=paired_deltas(cells, tasks, seed),
+        data_quality=data_quality(runs, cells, tasks, arms),
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("metrics", help="metrics.jsonl from extract.py")
-    parser.add_argument("-o", "--out", required=True, help="analysis.json to write")
+    parser.add_argument("metrics", type=Path, help="metrics.jsonl from extract.py")
+    parser.add_argument("-o", "--out", type=Path, required=True, help="analysis.json to write")
     parser.add_argument("--seed", type=int, default=20260902, help="bootstrap seed")
     args = parser.parse_args(argv)
 
     analysis = analyze(load_records(args.metrics), args.seed)
-    with open(args.out, "w", encoding="utf-8") as fh:
-        json.dump(analysis, fh, sort_keys=True, indent=2)
+    with args.out.open("w", encoding="utf-8") as fh:
+        json.dump(analysis.to_json(), fh, sort_keys=True, indent=2)
         fh.write("\n")
     print(
-        "analyzed %d runs, %d tasks, %d arms -> %s"
-        % (analysis["runs"], len(analysis["tasks"]), len(analysis["arms"]), args.out)
+        f"analyzed {analysis.runs} runs, {len(analysis.tasks)} tasks, "
+        f"{len(analysis.arms)} arms -> {args.out}"
     )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except AnalyzeError as err:
+        print(f"analyze: {err}", file=sys.stderr)
+        sys.exit(1)

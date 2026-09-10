@@ -3,7 +3,9 @@
 Three stdlib-only Python scripts that turn a results tree into a report:
 `extract.py` (runs to metrics), `analyze.py` (metrics to statistics),
 `report.py` (statistics to markdown). They only read artifacts, so a scored run
-is analyzed as many times as you like without re-running an agent.
+is analyzed as many times as you like without re-running an agent. `records.py`
+holds the frozen dataclasses the three hand each other; its fields are the file
+formats, and `to_json` / `from_json` are the only places a dict appears.
 
 Python runs in Docker only. Nothing here imports anything outside the standard
 library, so `python:3.12-slim` runs it as-is with no build:
