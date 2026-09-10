@@ -162,7 +162,7 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 		// sequencing there is, and it is what decides whether a same-step overlap is
 		// ordered or unschedulable. Set once; a node two steps reach has one chain.
 		if n := byKey[key]; n.Needs == nil {
-			n.Needs = cache.ChainCalls(chain, keyOf)
+			n.Needs = cache.ChainNeeds(chain, keyOf)
 		}
 		for _, cs := range chain {
 			walk(ownerOf(cs), cs.Target, stepKey, seen)

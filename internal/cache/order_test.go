@@ -230,13 +230,13 @@ func badgeFixture(ordered bool) []TargetNode {
 		Writes: []string{"assets/coverage.svg"}, DeclaredWrites: true,
 	}
 	if ordered {
-		badge.Needs = [][]string{{DepKey(".", "generate")}}
+		badge.Needs = []Need{{Key: DepKey(".", "generate")}}
 	}
 	return []TargetNode{
 		{Project: ".", Target: "ci", Steps: []string{step},
-			Needs: [][]string{{DepKey(".", "generate"), DepKey(".", "coverage-badge")}}},
+			Needs: []Need{{Key: DepKey(".", "generate")}, {Key: DepKey(".", "coverage-badge")}}},
 		{Project: ".", Target: "generate", Steps: []string{step},
-			Needs: [][]string{{DepKey(".", "mocks-generate")}}},
+			Needs: []Need{{Key: DepKey(".", "mocks-generate")}}},
 		{Project: ".", Target: "mocks-generate", Steps: []string{step},
 			Writes: []string{"**/gen/mocks/*.go"}, DeclaredWrites: true},
 		badge,
@@ -306,7 +306,7 @@ func TestFindSameStepConflictsIgnoresCrossStepAndWriterFirst(t *testing.T) {
 	writerFirst := []TargetNode{
 		{Project: ".", Target: "gen", Steps: []string{ci},
 			Writes: []string{"gen/**/*.go"}, DeclaredWrites: true,
-			Needs: [][]string{{DepKey(".", "read")}}},
+			Needs: []Need{{Key: DepKey(".", "read")}}},
 		{Project: ".", Target: "read", Steps: []string{ci},
 			Reads: []string{"**/*.go"}, DeclaredReads: true},
 	}
@@ -364,11 +364,11 @@ func TestCrossProjectConflictAdvisesInsteadOfRefusing(t *testing.T) {
 		"a same-project pair is refused, not advised")
 }
 
-// TestChainCallsGroupsByCall: the docs lint shape, `ctx.needs(format);
+// TestChainNeedsKeepTheCallIndex: the docs lint shape, `ctx.needs(format);
 // ctx.needs(conventions);`, where format reaches the generators conventions reads. The
 // second call is ordered after the first by the body, and that has to survive on the
 // node or every composer with two calls reads as unordered.
-func TestChainCallsGroupsByCall(t *testing.T) {
+func TestChainNeedsKeepTheCallIndex(t *testing.T) {
 	t.Parallel()
 	chain := []types.ChainStep{
 		{Target: "format"}, {Project: "gone", Target: "lint"},
@@ -381,21 +381,22 @@ func TestChainCallsGroupsByCall(t *testing.T) {
 		}
 		return DepKey("docs", cs.Target), true
 	}
-	calls := ChainCalls(chain, keyOf)
-	assert.Equal(t, [][]string{
-		{DepKey("docs", "format")},
-		{DepKey("docs", "conventions"), DepKey("docs", "spelling")},
-		{DepKey("docs", "links")},
-	}, calls, "a step that resolves to nothing neither orders nor is ordered")
+	needs := ChainNeeds(chain, keyOf)
+	assert.Equal(t, []Need{
+		{Key: DepKey("docs", "format")},
+		{Key: DepKey("docs", "conventions"), CallIndex: 1},
+		{Key: DepKey("docs", "spelling"), CallIndex: 1},
+		{Key: DepKey("docs", "links"), CallIndex: 2},
+	}, needs, "a step that resolves to nothing neither orders nor is ordered")
 
-	n := TargetNode{Needs: calls}
+	n := TargetNode{Needs: needs}
 	assert.Equal(t, []string{DepKey("docs", "format"), DepKey("docs", "conventions"), DepKey("docs", "spelling")},
 		n.MembersBefore(DepKey("docs", "links")))
+	assert.Equal(t, []string{DepKey("docs", "format")}, n.MembersBefore(DepKey("docs", "spelling")),
+		"a sibling in the same call is not before")
 	assert.Nil(t, n.MembersBefore(DepKey("docs", "format")), "nothing precedes the first call")
 	assert.Nil(t, n.MembersBefore(DepKey("docs", "nobody")), "not a member")
-	assert.Equal(t, [][]string{{DepKey("docs", "a"), DepKey("docs", "b")}},
-		ChainCalls([]types.ChainStep{{Target: "a"}, {Target: "b"}}, keyOf), "one call")
-	assert.Empty(t, ChainCalls([]types.ChainStep{{Project: "gone", Target: "a"}}, keyOf), "no empty call is kept")
+	assert.Empty(t, ChainNeeds([]types.ChainStep{{Project: "gone", Target: "a"}}, keyOf))
 }
 
 func TestDeclaredNodesHonorsTheCallOrder(t *testing.T) {

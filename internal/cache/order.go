@@ -41,19 +41,27 @@ type TargetNode struct {
 	// wholly inside one derive no edge.
 	IgnoreDirs []string
 	// Needs are the node keys this target dispatches with ctx.needs, one slice per call
-	// in body order. They are the only sequencing that exists INSIDE a step: a call fans
-	// its members out unordered and returns when all of them have run, so the members of
-	// one call are siblings, every call completes before this target's own work, and a
-	// later call starts after the earlier ones have completed. That is what decides
-	// whether a same-step overlap is ordered or unschedulable; see FindSameStepConflicts.
-	Needs [][]string
+	// in body order, each carrying the index of the call that named it. They are the
+	// only sequencing that exists INSIDE a step: a call fans its members out unordered
+	// and returns when all of them have run, so the members of one call are siblings,
+	// every call completes before this target's own work, and a later call starts after
+	// the earlier ones have completed. That is what decides whether a same-step overlap
+	// is ordered or unschedulable; see FindSameStepConflicts.
+	Needs []Need
+}
+
+// Need is one target a node dispatches with ctx.needs: its node key and the index of
+// the call that named it, the same count ChainStep.CallIndex carries.
+type Need struct {
+	Key       string
+	CallIndex int
 }
 
 // Members is every node key this target dispatches, in body order.
 func (n TargetNode) Members() []string {
-	var out []string
-	for _, call := range n.Needs {
-		out = append(out, call...)
+	out := make([]string, 0, len(n.Needs))
+	for _, need := range n.Needs {
+		out = append(out, need.Key)
 	}
 	return out
 }
@@ -63,14 +71,17 @@ func (n TargetNode) Members() []string {
 // sequencing. Nil when member is in the first call or is not one of this target's
 // members.
 func (n TargetNode) MembersBefore(member string) []string {
-	var out []string
-	for _, call := range n.Needs {
-		if slices.Contains(call, member) {
-			return out
-		}
-		out = append(out, call...)
+	i := slices.IndexFunc(n.Needs, func(need Need) bool { return need.Key == member })
+	if i < 0 {
+		return nil
 	}
-	return nil
+	var out []string
+	for _, need := range n.Needs {
+		if need.CallIndex < n.Needs[i].CallIndex {
+			out = append(out, need.Key)
+		}
+	}
+	return out
 }
 
 // Key returns the node's scheduling identity, shared with the step barrier.
@@ -822,7 +833,7 @@ func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *
 			}
 			return DepKey(owner.Path, cs.Target), true
 		}
-		node.Needs = ChainCalls(chain, keyOf)
+		node.Needs = ChainNeeds(chain, keyOf)
 		for _, cs := range chain {
 			walk(lookupOwner(proj, cs, lookup), cs.Target)
 		}
@@ -864,32 +875,16 @@ func lookupOwner(proj *types.Project, cs types.ChainStep, lookup func(path strin
 	return lookup(cs.Project)
 }
 
-// ChainCalls groups a chain's steps by the ctx.needs call that named them, in body
-// order, as TargetNode.Needs wants them. keyOf names a step's node and says no for a
-// step that resolves to nothing, which then neither orders nor is ordered; a call left
-// with no member is dropped rather than kept empty.
-func ChainCalls(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) [][]string {
-	var out [][]string
-	var call []string
-	index := 0
-	flush := func() {
-		if len(call) > 0 {
-			out = append(out, call)
-		}
-		call = nil
-	}
+// ChainNeeds resolves a chain's steps to the needs a node records, in body order. keyOf
+// names a step's node and says no for a step that resolves to nothing, which then
+// neither orders nor is ordered.
+func ChainNeeds(chain []types.ChainStep, keyOf func(types.ChainStep) (string, bool)) []Need {
+	var out []Need
 	for _, cs := range chain {
-		key, ok := keyOf(cs)
-		if !ok {
-			continue
+		if key, ok := keyOf(cs); ok {
+			out = append(out, Need{Key: key, CallIndex: cs.CallIndex})
 		}
-		if cs.CallIndex != index {
-			flush()
-			index = cs.CallIndex
-		}
-		call = append(call, key)
 	}
-	flush()
 	return out
 }
 
