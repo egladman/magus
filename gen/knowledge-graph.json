@@ -3,8 +3,8 @@
   "schema_version": 11,
   "directed": true,
   "multigraph": false,
-  "node_count": 5541,
-  "edge_count": 9817,
+  "node_count": 5542,
+  "edge_count": 9818,
   "relations": [
     {
       "id": "annotates",
@@ -2007,7 +2007,7 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "165",
+        "dir_files": "166",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md"
       }
     },
@@ -2017,7 +2017,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "155",
+        "dir_files": "156",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -2027,7 +2027,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "152",
+        "dir_files": "153",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -2097,8 +2097,8 @@
       "label": "internal/agent/skills/magus-docs-lookup",
       "source": "internal/agent/skills/magus-docs-lookup",
       "attrs": {
-        "dir_files": "7",
-        "dir_languages": "markdown,md#fast-path-start-from-the-index-do-not-guess-urls,md#in-the-magus-repo,md#navigating-the-magus-docs,md#traversing-within-the-docs,md#url-scheme,md#where-things-live-stable-ids-route-straight-to-a-page"
+        "dir_files": "8",
+        "dir_languages": "markdown,md#fast-path-start-from-the-index-do-not-guess-urls,md#in-a-magus-workspace-ask-the-graph-for-the-passage,md#in-the-magus-repo,md#navigating-the-magus-docs,md#traversing-within-the-docs,md#url-scheme,md#where-things-live-stable-ids-route-straight-"
       }
     },
     {
@@ -35013,6 +35013,16 @@
       "source": "internal/agent/skills/magus-docs-lookup/SKILL.md#fast-path-start-from-the-index-do-not-guess-urls",
       "attrs": {
         "anchor": "fast-path-start-from-the-index-do-not-guess-urls",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:internal/agent/skills/magus-docs-lookup/SKILL.md#in-a-magus-workspace-ask-the-graph-for-the-passage",
+      "kind": "docsection",
+      "label": "In a magus workspace, ask the graph for the passage",
+      "source": "internal/agent/skills/magus-docs-lookup/SKILL.md#in-a-magus-workspace-ask-the-graph-for-the-passage",
+      "attrs": {
+        "anchor": "in-a-magus-workspace-ask-the-graph-for-the-passage",
         "level": "2"
       }
     },
@@ -103861,6 +103871,14 @@
     {
       "source": "docsection:internal/agent/skills/magus-docs-lookup/SKILL.md#navigating-the-magus-docs",
       "target": "docsection:internal/agent/skills/magus-docs-lookup/SKILL.md#fast-path-start-from-the-index-do-not-guess-urls",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-docs-lookup/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-docs-lookup/SKILL.md#navigating-the-magus-docs",
+      "target": "docsection:internal/agent/skills/magus-docs-lookup/SKILL.md#in-a-magus-workspace-ask-the-graph-for-the-passage",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

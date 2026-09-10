@@ -44,6 +44,32 @@ func TestNextForQueryWithoutASharedKind(t *testing.T) {
 	assert.Equal(t, [][2]string{{"query-explain", "magus explain spell:go"}}, runs(next))
 }
 
+// A page-level answer leaves a whole file to scan, so the sections it holds are the
+// breadcrumb, ranked above the pair and symbol entries.
+func TestNextForQueryOpensAMatchedDocPagesSections(t *testing.T) {
+	next := NextForQuery(types.KnowledgeQueryOutput{Matches: []types.KnowledgeMatch{
+		{ID: "doc:docs/concepts/cache.md", Kind: types.KindDoc, Label: "docs/concepts/cache.md"},
+		{ID: "doc:docs/concepts/sandbox.md", Kind: types.KindDoc, Label: "docs/concepts/sandbox.md"},
+	}})
+
+	assert.Equal(t, [][2]string{
+		{"query-explain", "magus explain doc:docs/concepts/cache.md"},
+		{"query-doc-sections", "magus query kind=docsection id=docs/concepts/cache.md"},
+		{"query-path", "magus path doc:docs/concepts/cache.md doc:docs/concepts/sandbox.md"},
+	}, runs(next))
+}
+
+// A result that already carries sections has led the reader to the passage; pointing
+// at what is on the screen is the kind of breadcrumb nobody takes.
+func TestNextForQuerySkipsDocSectionsWhenOneAlreadyMatched(t *testing.T) {
+	next := NextForQuery(types.KnowledgeQueryOutput{Matches: []types.KnowledgeMatch{
+		{ID: "doc:docs/concepts/cache.md", Kind: types.KindDoc, Label: "docs/concepts/cache.md"},
+		{ID: "docsection:docs/concepts/cache.md#key-inputs", Kind: types.KindDocSection, Label: "Key inputs"},
+	}})
+
+	assert.Equal(t, [][2]string{{"query-explain", "magus explain doc:docs/concepts/cache.md"}}, runs(next))
+}
+
 // Absence has to be measurable: nothing matched means no field at all, never an empty
 // list a consumer would count as a suggestion nobody took.
 func TestNextIsNilWhenThereIsNothingToSuggest(t *testing.T) {

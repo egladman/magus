@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   A host that replaces a long session's history with a summary can wire the new
   `magus-rehydrate.sh` template to its session-start event and give the model state
   instead of a retelling.
+- **The doc-section route arrives with the reader's own terms in it.** The advisory on a
+  markdown search now leads with the query hint composes for that exact search, and repeats
+  it in the same concrete form, instead of a command still carrying a `<terms>` placeholder;
+  a plain read, which has no pattern to query with, keeps the placeholder wording. A graph
+  search that matched a doc page but no section carries a `query-doc-sections` breadcrumb to
+  the page's headings, and the docs-lookup skill names the section query as the in-workspace
+  route ahead of the published-site index. Measured over 1,907 session transcripts: the
+  advisory fired 1,420 times and `magus query kind=docsection` ran 11 times ever, against
+  9,237 prose greps and 964 reads of a markdown file under `docs/`.
 - **A target whose inputs have not moved since it failed says so before it runs again.** A
   failure is not a cache entry, but its descriptor is still stored under the step's cache
   key, so a miss can check whether this exact tree has already been seen to fail. When it

@@ -522,6 +522,39 @@ func TestRenderAdvisoryLead(t *testing.T) {
 	}
 }
 
+// TestDocSearchAdviceCarriesTheReadersOwnTerms: the doc rule is matched before the one
+// that renders a suggestion, so nothing asserted the notice was runnable as printed and
+// a `<terms>` placeholder passed the whole suite. The repeat arm is pinned too: it is
+// the text a session meets on every firing after the first.
+func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
+	v := evaluateBashGuard(`grep -rn "cache key" docs/concepts/cache.md`)
+	assert.Empty(t, v.Deny)
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Contains(t, v.Context, `magus query kind=docsection "cache key"`, "the lead is runnable as printed")
+	assert.Contains(t, v.Brief, `magus query kind=docsection "cache key"`, "so is the repeat")
+	assert.Contains(t, v.Context, "Load the magus-query skill", "the standing advice still ships under the lead")
+}
+
+// A read carries no pattern to query with, so hint abstains and the placeholder
+// wording is what is left to say. Naming a concrete query there would be inventing
+// terms the reader never typed.
+func TestDocReadKeepsThePlaceholderAdvice(t *testing.T) {
+	v := evaluateBashGuard("cat docs/doctrine.md")
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Equal(t, docSearchBrief, v.Brief)
+	assert.Equal(t, docSearchAdvice, v.Context)
+}
+
+// A prose notice must never lead with a code lookup: the markdown read is what fired
+// it, and the grep beside it asks a different question.
+func TestProseSuggestionIgnoresACodeSearchOnTheSameLine(t *testing.T) {
+	cmds := []guardCommand{
+		{Name: "cat", Args: []string{"docs/doctrine.md"}},
+		{Name: "rg", Args: []string{"HandleFoo", "internal/"}},
+	}
+	require.Nil(t, proseSuggestion(cmds, searchHints))
+}
+
 // TestSearchAdvisoryLeadAbstains: with nothing hint recognizes on the line there is
 // no lead, and the generic reason ships alone rather than with an empty paragraph.
 func TestSearchAdvisoryLeadAbstains(t *testing.T) {

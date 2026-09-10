@@ -37,8 +37,9 @@ type Next struct {
 // time trains ignoring, and context is the budget it spends.
 const NextCap = 3
 
-// NextForQuery breadcrumbs a graph search: explain the top match, connect two
-// matches that share a kind, and list a matched symbol's references.
+// NextForQuery breadcrumbs a graph search: explain the top match, open a matched
+// doc page's sections, connect two matches that share a kind, and list a matched
+// symbol's references.
 //
 // Nil when nothing matched. An absent verdict has its own text and no node to
 // point at.
@@ -51,6 +52,15 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 		Run: Explain.With(out.Matches[0].ID),
 		Why: "explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
 	}}
+	// Ranked above path and refs: a reader holding a page wants the passage, and
+	// nothing else in the result says the page is retrievable a heading at a time.
+	if page, ok := unsectionedDocPage(out.Matches); ok {
+		next = append(next, Next{
+			ID:  "query-doc-sections",
+			Run: Query.With(matcherArg("kind="+types.KindDocSection), matcherArg("id="+page)),
+			Why: "every heading in that page is its own node, so the answer is one section to read instead of the whole file.",
+		})
+	}
 	if a, b, ok := firstSharedKind(out.Matches); ok {
 		next = append(next, Next{
 			ID:  "query-path",
@@ -215,6 +225,27 @@ func firstSharedKind(matches []types.KnowledgeMatch) (a, b string, ok bool) {
 		seen[m.Kind] = m.ID
 	}
 	return "", "", false
+}
+
+// unsectionedDocPage returns the highest-ranked doc page's repo-relative path, which
+// is the id fragment its headings share, and false when a section already matched.
+//
+// A result that already carries sections has led the reader to the passage, so the
+// breadcrumb would point at what is on the screen. It fires only for the page-level
+// answer, which is the one that leaves a whole file to scan.
+func unsectionedDocPage(matches []types.KnowledgeMatch) (string, bool) {
+	page := ""
+	for _, m := range matches {
+		switch m.Kind {
+		case types.KindDocSection:
+			return "", false
+		case types.KindDoc:
+			if page == "" {
+				page = strings.TrimPrefix(m.ID, types.KindDoc+":")
+			}
+		}
+	}
+	return page, page != ""
 }
 
 // firstSymbol returns the highest-ranked symbol match's NAME, which is what refs

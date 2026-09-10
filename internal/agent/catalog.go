@@ -124,7 +124,11 @@ import (
 // 62: magus-run says a backgrounded run's capture is magus output and meets the
 // same filter rule, with `-o jsonl --tee <file>` as the spelling that makes it a
 // contract.
-const SkillVersion = 62
+// 63: magus-docs-lookup names the doc-section query as the in-workspace route,
+// ahead of the published-site index it used to open with. Measured over 1,907
+// session transcripts: the section query ran 11 times ever while agents read a
+// markdown file under docs/ 964 times, and this skill is what routed them there.
+const SkillVersion = 63
 
 const skillLicense = "GPL-3.0-or-later"
 

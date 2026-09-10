@@ -652,6 +652,10 @@ var (
 	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
 		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
 
+	// The placeholder repeat, kept for the read with no pattern to query with. A search
+	// gets its own terms spliced in instead: see proseSuggestion.
+	docSearchBrief = "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`"
+
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
 	// workspace vocabulary and routes through discovery.
@@ -962,6 +966,30 @@ func searchAdvisoryLead(cmds []guardCommand, hints *hint.Translator) string {
 	return renderAdvisoryLead(fallback)
 }
 
+// proseSuggestion is the doc-section query hint composes for the prose search on the
+// line, with the reader's own terms already in it, or nil when there is none.
+//
+// The doc rule is matched before the code-search rule, so this is the only path by
+// which a prose search meets a runnable command. searchAdvisoryLead records the
+// reasoning for the code case, and it holds harder here: a `<terms>` placeholder is a
+// command the reader still has to finish writing.
+//
+// It abstains for a plain read (`cat docs/x.md` carries no pattern) and for a line whose
+// only searchable command asks a code question, so a prose notice never leads with a
+// symbol lookup. The placeholder wording stands in both cases.
+func proseSuggestion(cmds []guardCommand, hints *hint.Translator) []hint.Suggestion {
+	for _, c := range cmds {
+		inv := hint.Invocation{Name: c.Name, Args: c.Args}
+		if hint.Classify(inv) != hint.ClassSearchProse {
+			continue
+		}
+		if s := hints.Suggest(inv); len(s) > 0 {
+			return s
+		}
+	}
+	return nil
+}
+
 func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 	var b strings.Builder
 	switch suggestions[0].Confidence {
@@ -1124,11 +1152,12 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case fires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
-		return bashGuardVerdict{
-			Context: docSearchAdvice,
-			Kind:    advisoryDocSearch,
-			Brief:   "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`",
+		v := bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
+		if s := proseSuggestion(cmds, hints); s != nil {
+			v.Context = renderAdvisoryLead(s) + docSearchAdvice
+			v.Brief = "magus workspace: prose is queryable. `" + s[0].Run + "`"
 		}
+		return v
 	case precedentIdent(cmds) != "":
 		ident := precedentIdent(cmds)
 		return bashGuardVerdict{
