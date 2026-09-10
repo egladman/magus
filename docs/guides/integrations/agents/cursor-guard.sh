@@ -141,7 +141,7 @@ guard() {
 }
 
 # guard_failure_notice states WHICH binary went silent, what version it is, and what it
-# actually said - the three facts a reader otherwise spends a session collecting. It takes
+# actually said, the three facts a reader otherwise spends a session collecting. It takes
 # the same arguments the failed call did, and re-runs it to capture the stderr the verdict
 # path discards: one extra process, only on the path that is already broken. WARN lines are
 # dropped because a config the binary is too old to parse warns BEFORE it fails, and that
@@ -178,14 +178,14 @@ fi
 
 # Every verdict below is captured and printed rather than piped straight through,
 # because `magus session hook` exits non-zero on a deny and Cursor reads a non-zero
-# hook as a CRASH - which it fails open on, unless failClosed is set. Letting that
+# hook as a CRASH, which it fails open on unless failClosed is set. Letting that
 # status escape would turn every block into an allow, silently, which is the one
 # outcome worse than not installing the guard. Cursor's channel is the JSON on
 # stdout, and this exits 0 so that JSON is what it acts on.
 #
 # An empty verdict is a BROKEN guard, never a pass: the templates above render a
 # reply for every decision, so nothing but a magus that could not run leaves one
-# empty - too old for `session hook`, unable to load the workspace, half-written by
+# empty: too old for `session hook`, unable to load the workspace, half-written by
 # a concurrent build. Allowing is still right; announcing it is what was missing.
 case $event_name in
 sessionEnd)

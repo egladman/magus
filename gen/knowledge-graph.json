@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5749,
-  "edge_count": 10202,
+  "node_count": 5754,
+  "edge_count": 10208,
   "relations": [
     {
       "id": "annotates",
@@ -1583,7 +1583,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "236",
+        "dir_files": "237",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -1593,7 +1593,7 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "141",
+        "dir_files": "142",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
@@ -18043,6 +18043,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents.md#what-each-host-carries",
+      "kind": "docsection",
+      "label": "What each host carries",
+      "source": "docs/guides/integrations/agents.md#what-each-host-carries",
+      "attrs": {
+        "anchor": "what-each-host-carries",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents.md#when-a-session-loses-its-history",
       "kind": "docsection",
       "label": "When a session loses its history",
@@ -18253,6 +18263,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/claude-code.md#recording-what-was-read",
+      "kind": "docsection",
+      "label": "Recording what was read",
+      "source": "docs/guides/integrations/agents/claude-code.md#recording-what-was-read",
+      "attrs": {
+        "anchor": "recording-what-was-read",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/claude-code.md#recording-where-the-work-stands",
       "kind": "docsection",
       "label": "Recording where the work stands",
@@ -18309,6 +18329,16 @@
       "source": "docs/guides/integrations/agents/codex.md#guard-hook",
       "attrs": {
         "anchor": "guard-hook",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/codex.md#handing-a-compacted-session-its-state-back",
+      "kind": "docsection",
+      "label": "Handing a compacted session its state back",
+      "source": "docs/guides/integrations/agents/codex.md#handing-a-compacted-session-its-state-back",
+      "attrs": {
+        "anchor": "handing-a-compacted-session-its-state-back",
         "level": "2"
       }
     },
@@ -18379,6 +18409,16 @@
       "source": "docs/guides/integrations/agents/cursor.md#guard-hook",
       "attrs": {
         "anchor": "guard-hook",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/cursor.md#lease-capture",
+      "kind": "docsection",
+      "label": "Lease capture",
+      "source": "docs/guides/integrations/agents/cursor.md#lease-capture",
+      "attrs": {
+        "anchor": "lease-capture",
         "level": "2"
       }
     },
@@ -18839,6 +18879,16 @@
       "source": "docs/guides/integrations/agents/opencode.md#guard-hook",
       "attrs": {
         "anchor": "guard-hook",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/opencode.md#handing-a-compacted-session-its-state-back",
+      "kind": "docsection",
+      "label": "Handing a compacted session its state back",
+      "source": "docs/guides/integrations/agents/opencode.md#handing-a-compacted-session-its-state-back",
+      "attrs": {
+        "anchor": "handing-a-compacted-session-its-state-back",
         "level": "2"
       }
     },
@@ -49133,21 +49183,21 @@
       }
     },
     {
+      "id": "link:https://cursor.com/docs/agent/hooks",
+      "kind": "link",
+      "label": "https://cursor.com/docs/agent/hooks",
+      "source": "https://cursor.com/docs/agent/hooks",
+      "attrs": {
+        "host": "cursor.com"
+      }
+    },
+    {
       "id": "link:https://dagger.io/",
       "kind": "link",
       "label": "https://dagger.io/",
       "source": "https://dagger.io/",
       "attrs": {
         "host": "dagger.io"
-      }
-    },
-    {
-      "id": "link:https://docs.cursor.com/agent/hooks",
-      "kind": "link",
-      "label": "https://docs.cursor.com/agent/hooks",
-      "source": "https://docs.cursor.com/agent/hooks",
-      "attrs": {
-        "host": "docs.cursor.com"
       }
     },
     {
@@ -69255,6 +69305,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/cursor.md",
+      "target": "doc:docs/guides/integrations/agents/any-host.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/cursor.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/cursor.md",
       "target": "doc:docs/guides/integrations/agents/guard-templates.md",
       "relation": "references",
       "confidence": "extracted",
@@ -69311,7 +69369,7 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/cursor.md",
-      "target": "link:https://docs.cursor.com/agent/hooks",
+      "target": "link:https://cursor.com/docs/agent/hooks",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -96462,6 +96520,14 @@
       "provenance": "docs/guides/integrations/agents.md"
     },
     {
+      "source": "docsection:docs/guides/integrations/agents.md#parity-across-hosts",
+      "target": "docsection:docs/guides/integrations/agents.md#what-each-host-carries",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
       "source": "docsection:docs/guides/integrations/agents/any-host.md#any-other-host",
       "target": "docsection:docs/guides/integrations/agents/any-host.md#coverage-and-limits",
       "relation": "contains",
@@ -96599,6 +96665,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
+      "target": "docsection:docs/guides/integrations/agents/claude-code.md#recording-what-was-read",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
       "target": "docsection:docs/guides/integrations/agents/claude-code.md#recording-where-the-work-stands",
       "relation": "contains",
       "confidence": "extracted",
@@ -96632,6 +96706,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/codex.md#codex",
       "target": "docsection:docs/guides/integrations/agents/codex.md#guard-hook",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/codex.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/codex.md#codex",
+      "target": "docsection:docs/guides/integrations/agents/codex.md#handing-a-compacted-session-its-state-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -96680,6 +96762,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/cursor.md#cursor",
       "target": "docsection:docs/guides/integrations/agents/cursor.md#guard-hook",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/cursor.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/cursor.md#cursor",
+      "target": "docsection:docs/guides/integrations/agents/cursor.md#lease-capture",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -97016,6 +97106,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/opencode.md#opencode",
       "target": "docsection:docs/guides/integrations/agents/opencode.md#guard-hook",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/opencode.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/opencode.md#opencode",
+      "target": "docsection:docs/guides/integrations/agents/opencode.md#handing-a-compacted-session-its-state-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

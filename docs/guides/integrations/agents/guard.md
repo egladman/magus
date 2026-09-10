@@ -271,7 +271,7 @@ it carries a sibling's practices and code quality into work that never chose
 them. Nothing downstream can tell that happened.
 
 The rule reads the operands of the commands that read a file or search a tree
-(`cat`, `head`, `tail`, `sed`, `wc`, `grep`, `rg`, `find`, and their neighbours),
+(`cat`, `head`, `tail`, `sed`, `wc`, `grep`, `rg`, `find`, and their neighbors),
 and says nothing about anything else: a rule that fired on an interpreter or a
 build tool would be guessing at what the program does with its arguments. A
 pattern is not a path, so `grep`'s first operand is skipped; an operand that

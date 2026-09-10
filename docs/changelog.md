@@ -42,6 +42,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   against. Measured over 204 session transcripts in this repository: reads landed outside
   the units a session actually wrote to about a fifth of the time, and 17,353 reads left
   the workspace root altogether.
+- **Every documented host now delivers an `advise` verdict to the model, and three of the
+  four hand a compacted session its checkout back.** The guard rules were always identical
+  across hosts; what differed was how much of a verdict survived the trip, and two hosts
+  were dropping the explaining half entirely. Codex was sent no advisory at all, on a
+  reading of its hook contract that OpenAI's current reference contradicts: the response
+  keys it rejects are `continue`, `stopReason` and `suppressOutput`, and `additionalContext`
+  is supported, so the shipped `codex-hooks.json` no longer sets `GUARD_NO_ADVISE=1` and
+  also wires `SessionStart` with matcher `compact` for the post-compaction brief. Cursor's
+  write guard moved from `afterFileEdit`, which fires once the file has changed, to
+  `preToolUse`, which blocks it, and its advisories now ride
+  `postToolUse.additional_context` instead of stderr prose; its script also records a
+  checkpoint on `sessionEnd` and captures a lease on `subagentStart`, which its payload
+  carries as `task`. The OpenCode plugin appends an advisory to the tool result that
+  produced it, joined by `callID`, pushes the brief into `experimental.session.compacting`,
+  and records a checkpoint on the `session.idle` bus event. `magus-rehydrate.sh` gained
+  `REHYDRATE_FORMAT=json`, which wraps its text in the `hookSpecificOutput` envelope a host
+  that parses a session-start hook's stdout as a reply needs, escaped in the template so
+  the file still needs no `jq`. Guard template version 12: re-copy your installed copies.
+  Cursor's post-compaction gap is named rather than approximated, because its `preCompact`
+  returns a message for the person only, and the guide now carries a table of every job magus
+  does through a host event, with the event that carries it or the reason nothing does.
 - **A rule set nothing declares reaches the console's notification center.** A run's scope
   event now carries the projects it selected on changed files no project declares
   (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
