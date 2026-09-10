@@ -30,7 +30,13 @@ A loaded session answers questions the trail alone cannot:
 - which commands ran with no guard record at all, found by joining the host's log
   against magus's own trail for the same session id.
 
-That last one is the join. Neither store answers it alone.
+That last one is the join. Neither store answers it alone. `magus session show
+<id>` makes it: below the loaded transcript it reports what the guard trail in
+the current checkout observed for that host session id, how many of those calls
+it denied, the lease they ran under, and the sub-agents the session spawned.
+The same join reaches review: `magus diff --impact` names the sessions that
+wrote each changed file from both stores, so a session no hook was wired for
+still appears once its transcript is loaded.
 
 ## The contract
 

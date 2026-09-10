@@ -818,12 +818,16 @@ func (r Diff) AttachReadState(byPath map[string]string) {
 	r.SortForReading()
 }
 
-// AttachReplay folds the agent trail onto the review, in place.
+// DiffTouches are the agent contacts a review attaches, keyed by the changed file's
+// workspace-relative path: one DiffTouch per session that wrote it.
+type DiffTouches map[string][]DiffTouch
+
+// AttachReplay folds the agent record onto the review, in place.
 //
 // Supplied by the caller for the same reason AttachChurn's data is: the trail lives beside the
 // daemon's cache dir and reading it is a different cost from computing annotations, so who
 // pays and how much they read is the caller's decision while the fold stays defined once.
-func (r Diff) AttachReplay(byPath map[string][]DiffTouch) {
+func (r Diff) AttachReplay(byPath DiffTouches) {
 	if len(byPath) == 0 {
 		return
 	}

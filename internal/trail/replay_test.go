@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -174,4 +175,78 @@ func TestReplayDeduplicatesRepeatedReads(t *testing.T) {
 // open anyway.
 func TestReplayOnAnEmptyTrailIsEmptyNotAnError(t *testing.T) {
 	assert.Empty(t, Replay("", t.TempDir(), []string{"anything.go"}, 100))
+}
+
+// ReplaySessions answers the same question from a loaded transcript: the reads and programs
+// that preceded a write, ordered by the host's clock rather than by arrival.
+func TestReplaySessionsThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
+	dir := t.TempDir()
+	_, err := sessions.LoadEvents(dir, []sessions.LoadEvent{
+		// Handed out of order: the host clock is what sequences them.
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go", Transcript: "/tmp/s1.jsonl"}},
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "types/impact.go"}},
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventShellCommand, Ref: "r2", AtMs: 200, Program: "go"}},
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r4", AtMs: 400, Text: "late.go"}},
+	}, sessions.SessionStart{})
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+
+	touches := ReplaySessions(fold, []string{"magus.go"})["magus.go"]
+	require.Len(t, touches, 1)
+	assert.Equal(t, "claude-code", touches[0].Host)
+	assert.Equal(t, "/tmp/s1.jsonl", touches[0].Transcript)
+	assert.Equal(t, []string{"types/impact.go"}, touches[0].Read, "a read after the write does not explain it")
+	assert.Equal(t, []string{"go"}, touches[0].Ran)
+}
+
+// ReviewTouches merges both stores: the trail wins for a session both hold, and the loaded
+// transcripts add the sessions no hook observed.
+func TestReviewTouchesMergesTheTrailAndTheLoadedStore(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root, base := t.TempDir(), t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolRead, Path: "from-trail.go"})
+	record(t, base, AgentCommand{Session: "s1", Host: "claude-code", Tool: toolWrite, Path: "magus.go"})
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	_, err = sessions.LoadEvents(dir, []sessions.LoadEvent{
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileRead, Ref: "r1", AtMs: 100, Text: "from-load.go"}},
+		{Session: "s1", Event: sessions.AgentEvent{Host: "claude-code", Kind: sessions.EventFileWrite, Ref: "r2", AtMs: 200, Text: "magus.go"}},
+		{Session: "s2", Event: sessions.AgentEvent{Host: "codex", Kind: sessions.EventFileWrite, Ref: "r3", AtMs: 300, Text: "magus.go"}},
+	}, sessions.SessionStart{})
+	require.NoError(t, err)
+
+	got := ReviewTouches(root, base, []string{"magus.go"})["magus.go"]
+	require.Len(t, got, 2, "one entry per session, whichever store saw it")
+	assert.Equal(t, "s1", got[0].Session)
+	assert.Equal(t, []string{"from-trail.go"}, got[0].Read, "the trail's account wins for a session both stores hold")
+	assert.Equal(t, "s2", got[1].Session)
+	assert.Equal(t, "codex", got[1].Host)
+}
+
+func TestReviewTouchesIsEmptyWithNeitherStore(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	assert.Nil(t, ReviewTouches(t.TempDir(), t.TempDir(), []string{"magus.go"}))
+}
+
+// ForSession is the join a transcript reader needs: what the guard saw this host session do
+// in this checkout, under which lease, and whom it handed work to.
+func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "ls", Decision: "pass", Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "git commit -m x", Decision: "deny", Lease: "fleet/w1"})
+	record(t, base, AgentCommand{Session: "other", Tool: toolShell, Command: "rm -rf", Decision: "deny"})
+	AppendAgentSpawn(context.Background(), base, AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook around\n"})
+
+	got := ForSession(base, "s1", 100)
+	assert.Equal(t, 2, got.Commands)
+	assert.Equal(t, 1, got.Denied)
+	assert.Equal(t, []string{"fleet/w1", "fleet/w1-child"}, got.Leases)
+	require.Len(t, got.Spawns, 1)
+	assert.Equal(t, "Explore", got.Spawns[0].Child)
+	assert.Equal(t, "fleet/w1-child", got.Spawns[0].Lease)
+
+	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
+	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
 }

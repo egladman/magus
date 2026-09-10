@@ -649,7 +649,7 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 // loadedKeys is the dedup set: the eventKey of every event the store already holds.
 func loadedKeys(fold Fold) map[string]bool {
 	seen := make(map[string]bool)
-	for session, ev := range agentEvents(fold) {
+	for session, ev := range EachAgentEvent(fold) {
 		seen[eventKey(session, ev)] = true
 	}
 	return seen
@@ -660,10 +660,10 @@ func eventKey(session string, ev AgentEvent) string {
 	return session + "\x00" + ev.Host + "\x00" + ev.Kind + "\x00" + ev.Ref
 }
 
-// agentEvents yields every loaded event in the fold with its session, in fold order.
+// EachAgentEvent yields every loaded event in the fold with its session, in fold order.
 // A payload this build cannot decode is skipped, the tolerance every reader of the
 // store applies to a record it does not understand.
-func agentEvents(fold Fold) iter.Seq2[string, AgentEvent] {
+func EachAgentEvent(fold Fold) iter.Seq2[string, AgentEvent] {
 	return func(yield func(string, AgentEvent) bool) {
 		for _, rec := range fold.Records {
 			if rec.Kind != KindAgentEvent {
@@ -686,7 +686,7 @@ func agentEvents(fold Fold) iter.Seq2[string, AgentEvent] {
 // every other reader of this store.
 func AgentEvents(fold Fold, session string) []AgentEvent {
 	var out []AgentEvent
-	for s, ev := range agentEvents(fold) {
+	for s, ev := range EachAgentEvent(fold) {
 		if s == session {
 			out = append(out, ev)
 		}
@@ -700,7 +700,7 @@ func AgentEvents(fold Fold, session string) []AgentEvent {
 // event, which is the age a staleness check is asking about.
 func NewestEventMs(fold Fold) int64 {
 	var newest int64
-	for _, ev := range agentEvents(fold) {
+	for _, ev := range EachAgentEvent(fold) {
 		newest = max(newest, ev.AtMs)
 	}
 	return newest

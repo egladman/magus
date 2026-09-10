@@ -1,10 +1,13 @@
 package trail
 
 import (
+	"slices"
 	"strings"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/types"
 )
 
 // Touch is one agent session's contact with one file: that it wrote the file, what it had
@@ -64,27 +67,38 @@ const (
 	replayRanCap  = 3
 )
 
+// DefaultReplayEvents bounds a trail walk behind a review. Each event costs a small blob
+// read, and a reader asking "what was this agent looking at" is asking about recent work by
+// construction.
+const DefaultReplayEvents = 2000
+
+// observation is one agent event in session order, whichever store it came from: the hook
+// trail records it live, a loaded transcript records it after the fact. Program is already
+// reduced to the program name; Path is workspace-relative.
+type observation struct {
+	Host, Session, Transcript string
+	Tool                      string
+	Path, Program             string
+	At                        time.Time
+}
+
+// Touches are the contacts a replay found, keyed by the workspace-relative path that was
+// written; each path lists one Touch per session, the session's most recent write. A path
+// nobody wrote has no key.
+type Touches map[string][]Touch
+
 // Replay reconstructs, for each of paths, which agent sessions wrote it and what they had read
 // first. It reads at most limit recent events.
 //
 // Best-effort throughout: an unreadable blob, a missing trail, or a host that supplied no
 // session id all just contribute less. A review must still open when nothing was recorded,
 // which is the normal case for a workspace whose agents have no guard hook wired.
-func Replay(root, base string, paths []string, limit int) map[string][]Touch {
-	want := make(map[string]bool, len(paths))
-	for _, p := range paths {
-		want[p] = true
-	}
+func Replay(root, base string, paths []string, limit int) Touches {
 	events, err := ReadRecent(base, limit)
 	if err != nil || len(events) == 0 {
 		return nil
 	}
 
-	// One pass, OLDEST first, accumulating each session's reads and commands as they happen so
-	// that a write can take a snapshot of what came before it. Walking newest-first would mean
-	// knowing the writes before the reads that explain them, which is the wrong direction for
-	// the only question being asked.
-	//
 	// REVERSED rather than sorted by Ts. The events file is append-only, so its order IS the
 	// chronology; Ts is a lossy shadow of it, stamped in whole milliseconds. A burst of hook
 	// observations (which is the normal shape, since an agent reads several files and then
@@ -96,13 +110,7 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 		events[i], events[j] = events[j], events[i]
 	}
 
-	type sessionState struct {
-		read []string
-		ran  []string
-	}
-	sessions := map[string]*sessionState{}
-	out := map[string][]Touch{}
-
+	obs := make([]observation, 0, len(events))
 	for _, e := range events {
 		if e.Kind != KindAgentCommand || e.RequestRef == "" {
 			continue
@@ -115,53 +123,212 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 		if json.Unmarshal(raw, &req) != nil {
 			continue
 		}
-		// Session is the grouping key. A host that supplies none still produces attributable
-		// events, but they cannot be threaded into a story, so they are skipped rather than
-		// all collapsed into one fictional session.
-		key := req.Session
-		if key == "" {
-			continue
-		}
-		st := sessions[key]
-		if st == nil {
-			st = &sessionState{}
-			sessions[key] = st
-		}
-
 		// A hook records the path exactly as its host supplied it, which is an ABSOLUTE path
 		// for every host observed so far, while a review speaks workspace-relative. Without
 		// this the two vocabularies never meet and every file reports no history at all,
 		// which looks identical to "no hook is wired" and is why it was worth a helper rather
 		// than a comparison at each site.
-		reqPath := relativize(root, req.Path)
+		//
+		// The command is reduced to its program at the point of INGEST, not at render: a
+		// redaction that happens on the way out leaves the raw text in memory for whatever
+		// else reads the touch, and every consumer then has to remember to redact.
+		obs = append(obs, observation{
+			Host: req.Host, Session: req.Session, Transcript: req.Transcript,
+			Tool: req.Tool, Path: relativize(root, req.Path), Program: commandProgram(req.Command),
+			At: time.UnixMilli(e.Ts),
+		})
+	}
+	return touchesFrom(obs, paths)
+}
 
-		switch req.Tool {
+// ReplaySessions answers Replay's question from the loaded transcripts in fold instead of the
+// hook trail: which sessions wrote each of paths and what they had read first. Loads store
+// the checkout-relative path and the reduced program, so nothing is relativized here; the
+// events are ordered by the host's own clock within each session.
+func ReplaySessions(fold sessions.Fold, paths []string) Touches {
+	var obs []observation
+	for session, ev := range sessions.EachAgentEvent(fold) {
+		var tool string
+		switch ev.Kind {
+		case sessions.EventFileRead:
+			tool = toolRead
+		case sessions.EventFileWrite:
+			tool = toolWrite
+		case sessions.EventShellCommand:
+			tool = toolShell
+		default:
+			continue
+		}
+		obs = append(obs, observation{
+			Host: ev.Host, Session: session, Transcript: ev.Transcript,
+			Tool: tool, Path: ev.Text, Program: ev.Program,
+			At: time.UnixMilli(ev.AtMs),
+		})
+	}
+	slices.SortStableFunc(obs, func(a, b observation) int {
+		if c := strings.Compare(a.Session, b.Session); c != 0 {
+			return c
+		}
+		return a.At.Compare(b.At)
+	})
+	return touchesFrom(obs, paths)
+}
+
+// ReviewTouches is what a review attaches: both stores, merged and adapted to the review's
+// own type. The hook trail is read first and wins for a session both stores hold, since it
+// saw the write happen; a loaded transcript adds the sessions no hook was wired for. root is
+// the workspace, base its cache dir; the loaded store is found from root and is skipped when
+// it cannot be, the way an absent trail is.
+func ReviewTouches(root, base string, paths []string) types.DiffTouches {
+	found := Replay(root, base, paths, DefaultReplayEvents)
+	if dir, err := sessions.Dir(root); err == nil {
+		if fold, err := sessions.ReadAll(dir); err == nil {
+			found = found.merge(ReplaySessions(fold, paths))
+		}
+	}
+	if len(found) == 0 {
+		return nil
+	}
+	out := make(types.DiffTouches, len(found))
+	for path, touches := range found {
+		for _, t := range touches {
+			out[path] = append(out[path], types.DiffTouch{
+				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
+			})
+		}
+	}
+	return out
+}
+
+// merge adds other's touches to ts, keeping ts's own entry for a session both hold, and
+// returns the result so a nil receiver reads naturally.
+func (ts Touches) merge(other Touches) Touches {
+	if ts == nil {
+		ts = Touches{}
+	}
+	for path, touches := range other {
+		for _, t := range touches {
+			held := slices.ContainsFunc(ts[path], func(h Touch) bool { return h.Host == t.Host && h.Session == t.Session })
+			if !held {
+				ts[path] = append(ts[path], t)
+			}
+		}
+	}
+	return ts
+}
+
+// touchesFrom is the one reading of "what had it read before it wrote this": one pass over
+// obs in session order, accumulating each session's reads and programs so that a write can
+// take a snapshot of what came before it. Walking newest-first would mean knowing the writes
+// before the reads that explain them, which is the wrong direction for the only question
+// being asked.
+func touchesFrom(obs []observation, paths []string) Touches {
+	want := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		want[p] = true
+	}
+	type sessionState struct {
+		read []string
+		ran  []string
+	}
+	states := map[string]*sessionState{}
+	out := Touches{}
+
+	for _, o := range obs {
+		// Session is the grouping key. A host that supplies none still produces attributable
+		// events, but they cannot be threaded into a story, so they are skipped rather than
+		// all collapsed into one fictional session.
+		if o.Session == "" {
+			continue
+		}
+		st := states[o.Session]
+		if st == nil {
+			st = &sessionState{}
+			states[o.Session] = st
+		}
+		switch o.Tool {
 		case toolRead:
-			if reqPath != "" {
-				st.read = prependCapped(st.read, reqPath, replayReadCap)
+			if o.Path != "" {
+				st.read = prependCapped(st.read, o.Path, replayReadCap)
 			}
 		case toolShell:
-			// Reduced to the program at the point of INGEST, not at render: a redaction that
-			// happens on the way out leaves the raw text in memory for whatever else reads the
-			// touch, and every consumer then has to remember to redact.
-			if prog := commandProgram(req.Command); prog != "" {
-				st.ran = prependCapped(st.ran, prog, replayRanCap)
+			if o.Program != "" {
+				st.ran = prependCapped(st.ran, o.Program, replayRanCap)
 			}
 		case toolWrite:
-			if reqPath == "" || !want[reqPath] {
+			if o.Path == "" || !want[o.Path] {
 				continue
 			}
 			// The read list is snapshotted at the moment of the write, so a path the session
 			// reached AFTER this edit does not retroactively become its explanation.
 			t := Touch{
-				Host:       req.Host,
-				Session:    req.Session,
-				Transcript: req.Transcript,
-				At:         time.UnixMilli(e.Ts),
-				Read:       withoutSelf(st.read, reqPath),
+				Host:       o.Host,
+				Session:    o.Session,
+				Transcript: o.Transcript,
+				At:         o.At,
+				Read:       withoutSelf(st.read, o.Path),
 				Ran:        append([]string(nil), st.ran...),
 			}
-			out[reqPath] = upsertLatest(out[reqPath], t)
+			out[o.Path] = upsertLatest(out[o.Path], t)
+		}
+	}
+	return out
+}
+
+// SessionTrail is what one checkout's trail holds for a host session: the join between a
+// transcript a host wrote and the observations the guard made while that session ran. It is
+// scoped to the checkout whose cache dir was read, because that is where the hook wrote.
+type SessionTrail struct {
+	// Commands is how many tool calls the guard observed; Denied how many it refused.
+	Commands int `json:"commands"`
+	Denied   int `json:"denied"`
+	// Leases are the ledger leases the observations were made under, first seen first.
+	Leases []string `json:"leases,omitempty"`
+	// Spawns are the handoffs this session made to sub-agents, oldest first.
+	Spawns []SessionSpawn `json:"spawns,omitempty"`
+}
+
+// SessionSpawn is one recorded handoff: the label the host gave the callee, the lease the
+// handed context named, and when.
+type SessionSpawn struct {
+	Child string    `json:"child"`
+	Lease string    `json:"lease,omitempty"`
+	At    time.Time `json:"at"`
+}
+
+// ForSession folds the trail at base for one host session, reading at most limit recent
+// events. A trail that cannot be read is an empty result, never an error: the join is context
+// for a transcript that stands on its own.
+func ForSession(base, session string, limit int) SessionTrail {
+	var out SessionTrail
+	if session == "" {
+		return out
+	}
+	events, err := ReadRecent(base, limit)
+	if err != nil {
+		return out
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
+		if e.Session != session {
+			continue
+		}
+		switch e.Kind {
+		case KindAgentCommand:
+			out.Commands++
+			if raw, err := ReadBlob(base, e.ResponseRef); err == nil {
+				var resp agentCommandResponse
+				if json.Unmarshal(raw, &resp) == nil && resp.Decision == "deny" {
+					out.Denied++
+				}
+			}
+		case KindAgentSpawn:
+			out.Spawns = append(out.Spawns, SessionSpawn{Child: e.Action, Lease: e.Lease, At: time.UnixMilli(e.Ts)})
+		default:
+			continue
+		}
+		if e.Lease != "" && !slices.Contains(out.Leases, e.Lease) {
+			out.Leases = append(out.Leases, e.Lease)
 		}
 	}
 	return out

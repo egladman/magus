@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -421,4 +422,28 @@ func TestCommandProgramReadsThroughAWrapper(t *testing.T) {
 	assert.Equal(t, "go", commandProgram("env GOFLAGS=-mod=mod go build ./..."))
 	assert.Equal(t, "ls", commandProgram("ls -la"))
 	assert.Empty(t, commandProgram(""))
+}
+
+// TestSessionShowJoinsThisCheckoutsTrail is the lineage join: a loaded transcript and the
+// guard's live observations share the host session id, so `show` reports what the trail in
+// this checkout saw the session do, under which lease, and whom it spawned.
+func TestSessionShowJoinsThisCheckoutsTrail(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+
+	_, err = loadStream(t, root,
+		`{"host":"h1","session":"s1","ts":1,"kind":"shell.command","ref":"r1","text":"ls"}`)
+	require.NoError(t, err)
+	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "ls", Decision: "pass", Lease: "fleet/w1"})
+	trail.AppendAgentCommand(t.Context(), cacheDir, trail.AgentCommand{Session: "s1", Tool: "shell.command", Command: "git push", Decision: "deny", Lease: "fleet/w1"})
+	trail.AppendAgentSpawn(t.Context(), cacheDir, trail.AgentSpawn{Session: "s1", Child: "Explore", Context: "lease: fleet/w1-child\nlook\n"})
+
+	out := captureStdout(t, func() { require.NoError(t, sessionShow(root, []string{"s1"})) })
+
+	assert.Contains(t, out, "Guard trail in this checkout: 2 command(s) observed, 1 denied, under lease fleet/w1, fleet/w1-child")
+	assert.Contains(t, out, "spawned Explore (lease fleet/w1-child)")
 }

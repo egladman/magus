@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -814,7 +815,16 @@ type sessionShowOutput struct {
 	FilesWritten []countedName  `json:"files_written,omitempty"`
 	HookOutputs  int            `json:"hook_outputs"`
 	Transcript   string         `json:"transcript,omitempty"`
+	// Trail is what THIS checkout's guard trail recorded for the session: the join
+	// between the host's transcript and the observations magus made while it ran. Absent
+	// when the trail here holds nothing for it, which is the case for a session that ran
+	// in another worktree.
+	Trail *trail.SessionTrail `json:"trail,omitempty"`
 }
+
+// sessionTrailEvents bounds the trail walk behind the join: recent work is what a reader
+// asking about a session is asking about.
+const sessionTrailEvents = 5000
 
 // sessionShow implements `magus session show <id>`.
 func sessionShow(root string, args []string) error {
@@ -858,6 +868,7 @@ func sessionShow(root string, args []string) error {
 	}
 
 	out := summarizeSession(rest[0], events)
+	out.Trail = sessionTrailHere(root, rest[0])
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -867,6 +878,20 @@ func sessionShow(root string, args []string) error {
 	}
 	renderSessionShow(os.Stdout, out)
 	return nil
+}
+
+// sessionTrailHere folds this checkout's trail for the session, or nil when it holds
+// nothing: no cache dir, no trail, or a session that ran elsewhere all read the same.
+func sessionTrailHere(root, session string) *trail.SessionTrail {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil
+	}
+	tr := trail.ForSession(cacheDir, session, sessionTrailEvents)
+	if tr.Commands == 0 && len(tr.Spawns) == 0 {
+		return nil
+	}
+	return &tr
 }
 
 func summarizeSession(session string, events []sessions.AgentEvent) sessionShowOutput {
@@ -988,6 +1013,20 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 	renderCounted(w, "Files read", s.FilesRead)
 	renderCounted(w, "Files written", s.FilesWritten)
 	fmt.Fprintf(w, "\nhook outputs: %d\n", s.HookOutputs)
+	if s.Trail != nil {
+		fmt.Fprintf(w, "\nGuard trail in this checkout: %d command(s) observed, %d denied", s.Trail.Commands, s.Trail.Denied)
+		if len(s.Trail.Leases) > 0 {
+			fmt.Fprintf(w, ", under lease %s", strings.Join(s.Trail.Leases, ", "))
+		}
+		fmt.Fprintln(w)
+		for _, sp := range s.Trail.Spawns {
+			fmt.Fprintf(w, "  spawned %s", sp.Child)
+			if sp.Lease != "" {
+				fmt.Fprintf(w, " (lease %s)", sp.Lease)
+			}
+			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
+		}
+	}
 }
 
 func renderCounted(w io.Writer, title string, items []countedName) {

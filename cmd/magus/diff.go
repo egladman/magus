@@ -558,9 +558,10 @@ func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, 
 		}
 		rev.AttachChurn(hot.Files, projects)
 	}
-	// The agent trail: which sessions wrote each file and what they had read first. Empty when
-	// no guard hook is wired, which is the common case rather than a fault.
-	rev.AttachReplay(diffTouches(m.Root(), m.CacheDir(), paths))
+	// The agent record: which sessions wrote each file and what they had read first, from the
+	// guard hook's trail and from loaded transcripts. Empty when neither has anything, which
+	// is the common case rather than a fault.
+	rev.AttachReplay(trail.ReviewTouches(m.Root(), m.CacheDir(), paths))
 	// Which of these files somebody has recorded reading. Best-effort like every other
 	// overlay: an unreadable store leaves every file DiffReadUnknown, which renders as
 	// unmeasured rather than as unread.
@@ -1188,30 +1189,6 @@ func diffUsage(w io.Writer) {
 // two different windows would report two different "hottest file" answers for one tree.
 const diffHistoryCommits = 500
 
-// diffReplayEvents bounds the trail walk. Each event costs a small blob read, and a reader
-// asking "what was this agent looking at" is asking about recent work by construction.
-const diffReplayEvents = 2000
-
-// diffTouches adapts the trail's Touch to the diff's, a rename across a boundary types
-// must not cross, since types imports nothing internal and the trail is internal.
-func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
-	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string][]types.DiffTouch, len(raw))
-	for path, touches := range raw {
-		conv := make([]types.DiffTouch, 0, len(touches))
-		for _, t := range touches {
-			conv = append(conv, types.DiffTouch{
-				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
-			})
-		}
-		out[path] = conv
-	}
-	return out
-}
-
 // diffCountsLine is the headline every rendering of a changeset opens with: how much there
 // is to read before any of it is shown.
 //
@@ -1596,7 +1573,7 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	p.Rationale = collectRationale(m.Root(), rev)
 	// The trail and window AttachReplay walks for the per-file story, read here for the questions
 	// the authors asked rather than the files they opened.
-	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), diffReplayEvents)
+	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), trail.DefaultReplayEvents)
 	var requiredIn func(string) bool
 	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
 		requiredIn = reviewRequiredMatcher(ws)
