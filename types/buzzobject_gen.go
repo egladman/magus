@@ -304,6 +304,7 @@ func (v ChainStep) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"project": v.Project,
 		"target":  v.Target,
+		"stage":   v.Stage,
 	}
 }
 

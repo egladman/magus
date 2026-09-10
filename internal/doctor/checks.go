@@ -1077,6 +1077,81 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 	}
 }
 
+// checkSameStepWrites is MGS4008 standing still: a composed target whose chain runs a
+// reader and a writer of the same files with no ctx.needs between them.
+//
+// The engine refuses this at plan time, so the check exists to be met FIRST: a
+// magusfile edit is cheap the moment it is made and expensive when a gate refuses to
+// start twenty minutes later. It asks the same question of the same declarations, so a
+// workspace this reports is a workspace whose gate will refuse, and one it passes cannot
+// be refused for this.
+//
+// Every composer in every project, rather than the targets one run happens to select:
+// which target a reader runs is a scheduling accident, and the conflict belongs to the
+// chain either way.
+//
+// FAIL, where the neighbouring declaration checks advise. There is no reading of this
+// where the author meant it: two targets in one chain, both naming these files
+// explicitly, produce a result that depends on which goroutine won, and half the time
+// they produce no result at all.
+func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorCheck {
+	const name = "same-step-writes"
+	lookup := func(path string) *types.Project {
+		if r.ws == nil {
+			return nil
+		}
+		return r.ws.Get(path)
+	}
+	// A pair counts only where a file on disk matches both globs: glob intersection
+	// is conservative for ordering and too coarse to fail a workspace on.
+	witness := cache.WorkspaceOverlapWitness(r.root)
+	var details []string
+	refused := 0
+	for _, p := range projects {
+		composers := make([]string, 0, len(p.TargetChains))
+		for target := range p.TargetChains {
+			composers = append(composers, target)
+		}
+		slices.Sort(composers)
+		for _, target := range composers {
+			for _, c := range cache.FindSameStepConflicts(cache.DeclaredNodes(p, target, lookup), witness) {
+				verdict := "advised: the sequencing belongs to another project's chain"
+				if c.SameProject {
+					verdict = "refused at run time"
+					refused++
+				}
+				details = append(details, fmt.Sprintf(
+					"%s: %s runs %s, which reads %q, alongside %s, which writes %q, and needs neither from the other (%s)",
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), target,
+					cache.DisplayNodeKey(c.Reader), c.Read, cache.DisplayNodeKey(c.Writer), c.Write, verdict))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: "no composed target runs a reader and a writer of the same files unordered",
+		}
+	}
+	slices.Sort(details)
+	details = slices.Compact(details)
+	// FAIL only for the pairs a run refuses; a cross-project pair is real but its
+	// ctx.needs may belong to another project's file, so it advises, the way the
+	// neighbouring declaration checks do.
+	status := types.DoctorAdvice
+	if refused > 0 {
+		status = types.DoctorFail
+	}
+	return types.DoctorCheck{
+		Name:   name,
+		Status: status,
+		Message: fmt.Sprintf(
+			"%d unordered reader/writer pair(s) inside one composed target, %d of them within one project, which magus refuses to run rather than schedule around (see %s)",
+			len(details), refused, types.CodeURL(types.UnorderedSameStepWrite)),
+		Details: details,
+	}
+}
+
 // checkUndeclaredSeedingFiles is MGS1028 standing still: committed files that no
 // project declares, yet that pull a project into the affected set the moment they are
 // touched, because directory containment seeds and the root project catches

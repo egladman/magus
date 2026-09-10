@@ -25,6 +25,10 @@ type admission struct {
 	machineClaim bool
 	// isolation is the run-isolation lease, nil outside an admitted step.
 	isolation *runIsolationLease
+	// hold is this step's record in the limiter's slot watch, nil outside an admitted
+	// step. It is what a blocking wait marks itself on, so a slot held by a step that
+	// cannot proceed is distinguishable from one doing work.
+	hold *slotHold
 }
 
 type admissionKey struct{}
@@ -64,4 +68,11 @@ func SlotsHeld(ctx context.Context) int {
 // SlotHeld reports whether ctx is marked as holding at least one limiter slot.
 func SlotHeld(ctx context.Context) bool {
 	return SlotsHeld(ctx) > 0
+}
+
+// withSlotHold returns ctx carrying the step's slot-watch record.
+func withSlotHold(ctx context.Context, h *slotHold) context.Context {
+	held := admissionFrom(ctx)
+	held.hold = h
+	return held.on(ctx)
 }

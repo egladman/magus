@@ -400,6 +400,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkOutputOwnedByTwoTargets,
 	},
 	{
+		Name:           "same-step-writes",
+		Doc:            "a composed target running a reader and a writer of the same files with no ctx.needs between them",
+		Code:           types.UnorderedSameStepWrite,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkSameStepWrites,
+	},
+	{
 		Name:           "self-staling-outputs",
 		Doc:            "a committed generated file containing this repository's own HEAD commit",
 		Code:           types.SelfStalingOutput,

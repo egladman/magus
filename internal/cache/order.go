@@ -35,6 +35,10 @@ type TargetNode struct {
 	// A fallback reader provably never sees files under them, so writes landing
 	// wholly inside one derive no edge.
 	IgnoreDirs []string
+	// Needs are the node keys this target dispatches with ctx.needs, directly. They are
+	// the only sequencing that exists INSIDE a step, so they are what decides whether a
+	// same-step overlap is ordered or unschedulable; see FindSameStepConflicts.
+	Needs []string
 }
 
 // Key returns the node's scheduling identity, shared with the step barrier.
@@ -76,6 +80,10 @@ type DerivedOrder struct {
 	// RunAfter maps a step's node key to the step node keys it must wait for,
 	// beyond its coarse DependsOn. RunAll's barrier waits these exactly.
 	RunAfter map[string][]string
+	// SameStep holds the overlaps inside one step that nothing sequences. They are not
+	// edges: no schedule can express them, and settling cannot repair them either, since
+	// both targets run in one window. The caller refuses the run over them.
+	SameStep []SameStepConflict
 }
 
 // DeriveTargetOrder derives cross-step, target-granular ordering from declared
@@ -95,20 +103,19 @@ type DerivedOrder struct {
 // entries; the rest are marked unordered for the caller to settle. Coarse
 // DependsOn edges always win over derived ones: project-level ordering (and the
 // affected set) is never widened or narrowed here.
-func DeriveTargetOrder(steps []Step, nodes []TargetNode) *DerivedOrder {
-	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}}
+func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
+	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}, SameStep: FindSameStepConflicts(nodes, witness)}
 
-	sharesStep := func(a, b TargetNode) bool {
-		return slices.ContainsFunc(a.Steps, func(s string) bool { return slices.Contains(b.Steps, s) })
-	}
 	for w := range nodes {
 		for r := range nodes {
 			if w == r || nodes[w].Key() == nodes[r].Key() {
 				continue
 			}
 			// Same-step pairs are the body's own ctx.needs sequencing, which stays
-			// untouched; only cross-step order is magus's to derive.
-			if sharesStep(nodes[w], nodes[r]) {
+			// untouched; only cross-step order is magus's to derive. A same-step pair
+			// the body does NOT sequence is already in SameStep above, for the caller
+			// to refuse over.
+			if _, shared := sharedStep(nodes[w], nodes[r]); shared {
 				continue
 			}
 			if !footprintsIntersect(nodes[w], nodes[r]) {
@@ -160,17 +167,25 @@ func (d *DerivedOrder) TopoNodes() []int {
 // match. For a fallback reader, writes confined to the reader's pruned dirs are
 // invisible to it and derive nothing.
 func footprintsIntersect(w, r TargetNode) bool {
+	_, _, ok := overlappingGlobs(w, r)
+	return ok
+}
+
+// overlappingGlobs is footprintsIntersect with the witness kept: the first write glob and
+// read glob that can meet. A refusal has to name them, and recomputing the pair in the
+// message would be a second answer to the same question.
+func overlappingGlobs(w, r TargetNode) (write, read string, ok bool) {
 	for _, wg := range w.Writes {
 		if !r.DeclaredReads && underIgnoredDir(wg, r.IgnoreDirs) {
 			continue
 		}
 		for _, rg := range r.Reads {
 			if globsOverlap(wg, rg) {
-				return true
+				return wg, rg, true
 			}
 		}
 	}
-	return false
+	return "", "", false
 }
 
 // underIgnoredDir reports whether every path glob can match lies inside one of

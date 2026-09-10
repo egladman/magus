@@ -313,6 +313,12 @@ func (r CrossTargetRef) Ref() string {
 type ChainStep struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target  string `json:"target"            yaml:"target"`
+	// Stage counts the ctx.needs calls before the one that named this step, so the
+	// members of one call share a stage. One call fans its arguments out unordered and
+	// returns when all of them have run, so a later stage is ordered after every earlier
+	// one by the body itself; that is the only within-step sequencing there is, and the
+	// order derivation reads it from here. Zero for the first call, the common case.
+	Stage int `json:"stage,omitempty" yaml:"stage,omitempty"`
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project

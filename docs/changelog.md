@@ -15,6 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A run that cannot be scheduled is refused before it starts, and a pool that cannot free
+  a slot is refused within seconds.** Two targets inside one composed step, one declaring it
+  writes files the other declares it reads, with no `ctx.needs` path between them, is a plan
+  no order can express: the reader either reads bytes the writer had not produced yet or
+  waits for the writer while holding the seat the writer needs. magus now refuses that plan
+  at derivation time, naming the reader, the writer, the globs that overlap, and both fixes
+  (MGS4008), and `magus doctor` asks the same question of every composed target in every
+  project, so the answer arrives when the magusfile is being edited rather than twenty
+  minutes into a gate. Only explicit declarations count on either side: a project baseline
+  is an over-approximation, and a refusal may not rest on a guess. Nor on a pattern: the
+  refusal stands on a file in the tree both globs match, and on one project, since a pair
+  split across two is advice rather than a refusal. A later `ctx.needs` call in the
+  composer's body counts as ordering everything an earlier call ran, which each chain step
+  now records as its stage. Where the wedge is
+  reached anyway, the concurrency pool now knows who holds its slots and what each holder is
+  waiting on, and refuses the wait once every slot is held by a step that is itself waiting,
+  naming every holder (MGS3013). Waiting for the per-key cache lock and waiting for an
+  upstream target both report themselves and beat the invocation heartbeat, so a legitimate
+  long wait is no longer a stall to the watchdog and an aborted run reads as one target
+  waiting on another. Behind the incident: a gate held every project lock for fifteen
+  minutes with nothing running, because a badge target read every Go file its siblings were
+  still writing.
 - **A spell can now tell magus which copy of the world its tool is reading, and a doctor
   check asks when it should.** A `Tool` may declare an `observe` command beside its version
   probe; magus runs it at key time and folds the output into the cache key as an `obs:`

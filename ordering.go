@@ -22,12 +22,31 @@ import (
 // own target plus its static chain closure) and derives writer-before-reader
 // ordering from them. The DerivedOrder's RunAfter entries are applied onto the
 // steps in place; unordered edges are left for settleDerivedOrder after the
-// batch. A single-step batch derives an empty order: nothing to cross-order.
-func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) *cache.DerivedOrder {
-	if len(steps) < 2 {
-		return &cache.DerivedOrder{}
+// batch.
+//
+// It returns an error for the overlaps inside one step that nothing sequences
+// (MGS4008). Those are not a schedule to improve: no step order can put one
+// chain member ahead of another in the same chain, and the run is refused here,
+// before any goroutine launches, rather than after the reader has either read
+// stale bytes or wedged the pool waiting for the writer.
+//
+// A one-step batch is derived too, where it used to return early. Cross-step
+// order is indeed vacuous there, but the same-step question is not: the shape
+// this refuses fits entirely inside one `ci` step's chain, which is the batch a
+// single-project gate runs.
+func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cache.DerivedOrder, error) {
+	if len(steps) == 0 {
+		return &cache.DerivedOrder{}, nil
 	}
-	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps))
+	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps), cache.WorkspaceOverlapWitness(m.Root()))
+	if err := cache.SameStepConflictError(order.SameStep); err != nil {
+		return nil, err
+	}
+	if advice := cache.SameStepAdvice(order.SameStep); advice != "" {
+		// Cross-project pairs are reported, not refused: their sequencing may belong
+		// to another project's magusfile, and doctor lists every one.
+		slog.WarnContext(ctx, advice)
+	}
 	for i := range steps {
 		key := cache.DepKey(steps[i].ProjectPath, steps[i].Target)
 		for _, up := range order.RunAfter[key] {
@@ -50,7 +69,7 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) *cache
 	for _, e := range order.Dropped {
 		trace(e.DerivedEdge, e.Reason)
 	}
-	return order
+	return order, nil
 }
 
 // collectOrderNodes builds one TargetNode per distinct (project, target) the
@@ -125,14 +144,40 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 		}
 		seen[key] = true
 		add(p, target, stepKey)
-		for _, cs := range p.TargetChains[target] {
-			owner := p
-			if cs.Project != "" && cs.Project != p.Path {
-				if owner = m.ws.Get(cs.Project); owner == nil {
-					continue
-				}
+		chain := p.TargetChains[target]
+		ownerOf := func(cs types.ChainStep) *types.Project {
+			if cs.Project == "" || cs.Project == p.Path {
+				return p
 			}
-			walk(owner, cs.Target, stepKey, seen)
+			return m.ws.Get(cs.Project)
+		}
+		keyOf := func(cs types.ChainStep) (string, bool) {
+			owner := ownerOf(cs)
+			if owner == nil {
+				return "", false
+			}
+			return cache.DepKey(owner.Path, cs.Target), true
+		}
+		need := func(from, to string) {
+			if n := byKey[from]; !slices.Contains(n.Needs, to) {
+				n.Needs = append(n.Needs, to)
+			}
+		}
+		for _, cs := range chain {
+			needs, ok := keyOf(cs)
+			if !ok {
+				continue
+			}
+			// Recorded on the node, not just walked: inside one step ctx.needs is the
+			// only sequencing there is, and it is what decides whether a same-step
+			// overlap is ordered or unschedulable.
+			need(key, needs)
+			walk(ownerOf(cs), cs.Target, stepKey, seen)
+		}
+		for member, earlier := range cache.StageNeeds(chain, keyOf) {
+			for _, e := range earlier {
+				need(member, e)
+			}
 		}
 	}
 

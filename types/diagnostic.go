@@ -289,7 +289,18 @@ const (
 	// making no progress AT ALL, in any of its work. The shape it exists for is a
 	// post-batch pass wedged on a network read while every observer reported an idle
 	// machine, which no target's ceiling covers because no target was running.
-	InvocationStalled         DiagnosticCode = "MGS3012"
+	InvocationStalled DiagnosticCode = "MGS3012"
+	// BuildSlotsDeadlocked is a run magus refused because every one of its concurrency
+	// slots is held by a step that is itself waiting, so no slot can free and the steps
+	// queued for one would wait forever. It joins MGS3007/MGS3009/MGS3010 in the
+	// environment family: nothing about the workspace is wrong, the process has arranged
+	// itself into a wait nothing in it can end.
+	//
+	// The half of MGS3012 that can be answered rather than merely reported. The watchdog
+	// says a run stopped moving, after the window it takes to be sure; this says why
+	// within seconds, and names every holder and what each is blocked on, because the
+	// admission path knows both.
+	BuildSlotsDeadlocked      DiagnosticCode = "MGS3013"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -307,6 +318,20 @@ const (
 	// someone spelled it out. ctx.modifiesExistingFiles is the declaration that answers
 	// this, which is why a formatter names its edits rather than earning an exemption.
 	UndeclaredSourceModified DiagnosticCode = "MGS4007"
+	// UnorderedSameStepWrite is one target reading, inside a single step, what another
+	// target of that same step writes, with no ctx.needs path between them. Both sides
+	// are explicit declarations, so the overlap is the magusfile's own claim rather than
+	// an over-approximated baseline.
+	//
+	// Refused at PLAN time, before any goroutine launches, because both failures it
+	// produces are worse than a refusal: the reader may run first and read stale bytes,
+	// or it may wait for the writer while holding the seat the writer needs, wedging the
+	// run until the stall watchdog (MGS3012) kills it.
+	//
+	// The same-step case is the one magus must not schedule around. Across steps the
+	// engine derives writer-before-reader ordering itself; within one step the sequencing
+	// is the composing body's own, and only ctx.needs can express it.
+	UnorderedSameStepWrite   DiagnosticCode = "MGS4008"
 	NearDuplicateServices    DiagnosticCode = "MGS5001"
 	ServiceOpDetached        DiagnosticCode = "MGS5002"
 	CommandOpNeverExits      DiagnosticCode = "MGS5003"
@@ -369,9 +394,9 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
-	TargetCeilingExceeded, InvocationStalled,
+	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
-	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
+	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

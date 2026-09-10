@@ -488,7 +488,12 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		ctx = withExportReadLockCache(ctx, c)
 	}
 
-	unlock, err := hashLocks.acquire(ctx, hash)
+	// Named, so a wait here says which step holds the key and so the slot watch can see
+	// that this step's seat is parked rather than working: this lock is one of the two
+	// ways a step blocks while holding its slots.
+	unlock, err := hashLocks.acquireNamed(ctx, hash, stepLabel(s), func(holder string) func() {
+		return BlockedOn(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
+	})
 	if err != nil {
 		return result, err
 	}
@@ -962,16 +967,23 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 // record every observer reads: the local limiter slots, the inflight set a killed run is
 // reported from, and the invocation heartbeat the stall watchdog compares against. A step
 // reaches here already holding its machine claim; claimMachine says why that one cannot
-// be taken under the isolation lease. It returns the clamped slot count and one release
-// that gives the seats back.
+// be taken under the isolation lease. It returns a context carrying the hold, the clamped
+// slot count, and one release that gives the seats back.
+//
+// The returned context is what a blocking wait inside the step marks itself on
+// ([BlockedOn]), so the slot watch can tell a seat doing work from one that cannot
+// proceed. A caller that ran the step under the context it passed IN would take every
+// wait as progress.
 //
 // Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
-func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
+func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
 	slots := stepSlots(s, lim)
-	if err := lim.AcquireN(ctx, slots); err != nil {
-		return 0, nil, err
+	hold, err := lim.acquireWatched(ctx, slots, stepLabel(s))
+	if err != nil {
+		return ctx, 0, nil, err
 	}
+	ctx = withSlotHold(ctx, hold)
 	// Report occupancy on both edges of the slot's life, so an interactive run can show a
 	// live pool counter. Handlers that render no status line ignore the event, so piped
 	// and CI output are unchanged.
@@ -983,13 +995,20 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 	doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 	prog := ProgressFromContext(ctx)
 	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
-	return slots, func() {
+	return ctx, slots, func() {
 		doneInflight()
+		// Retire the hold before the slots go back, so a peer waking on them never reads
+		// a record that occupies nothing.
+		hold.done()
 		lim.ReleaseN(slots)
 		c.logPool(ctx, lim)
 		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
 	}, nil
 }
+
+// stepLabel names a step for a human reading a wait: the project as `magus status` spells
+// it, then the target.
+func stepLabel(s Step) string { return displayProject(s.ProjectPath) + " " + s.Target }
 
 // runIsolation serializes Step.Exclusive steps against the rest of one invocation: an
 // exclusive step takes the write lock, every other step takes the read lock.
@@ -1159,7 +1178,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	defer releaseMachine()
 	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
 	defer releaseIsolation()
-	slots, release, err := c.admit(ctx, s, lim)
+	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1315,10 +1334,13 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			// A slot-acquire failure is only ever this batch's own cancellation, which
-			// fail swallows regardless.
-			slots, release, admitErr := c.admit(stepCtx, s, lim)
+			// A slot-acquire failure is usually this batch's own cancellation, which fail
+			// swallows regardless. A deadlocked pool is the exception: nothing upstream
+			// failed and the batch was not cancelled, so it is an independent finding and
+			// has to count as one, or a run that did nothing reports success.
+			stepCtx, slots, release, admitErr := c.admit(stepCtx, s, lim)
 			if admitErr != nil {
+				ran = errors.Is(admitErr, types.BuildSlotsDeadlocked) && gctx.Err() == nil
 				return fail(admitErr)
 			}
 			defer release()

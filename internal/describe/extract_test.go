@@ -487,8 +487,23 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 	ci, ok := nodeByName(g, "ci")
 	require.True(t, ok, "missing ci; got %v", g)
 	assert.Equal(t, []types.ChainStep{
-		{Target: "generate"}, {Target: "lint"}, {Target: "build"}, {Target: "test"},
-	}, ci.Chain)
+		{Target: "generate"}, {Target: "lint"}, {Target: "build", Stage: 1}, {Target: "test", Stage: 1},
+	}, ci.Chain, "the second call is the second stage")
+}
+
+// TestChainStageKeepsTheFirstMention: a target named twice runs once, when the earlier
+// call reaches it, so the later mention neither duplicates the step nor moves it.
+func TestChainStageKeepsTheFirstMention(t *testing.T) {
+	g := Extract(`export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.needs(conventions, format);
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	assert.Equal(t, []types.ChainStep{{Target: "format"}, {Target: "conventions", Stage: 1}}, l.Chain)
 }
 
 // TestChainInterleavesCrossSteps: a chain that mixes local and cross-project steps keeps
@@ -509,8 +524,8 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 	require.True(t, ok, "missing lint; got %v", g)
 	assert.Equal(t, []types.ChainStep{
 		{Target: "format"},
-		{Project: "../lib", Target: "lint"}, // raw import path; the caller resolves it
-		{Target: "conventions"},
+		{Project: "../lib", Target: "lint", Stage: 1}, // raw import path; the caller resolves it
+		{Target: "conventions", Stage: 2},
 	}, l.Chain)
 }
 

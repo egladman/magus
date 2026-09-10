@@ -980,7 +980,12 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
     //
     // It was latent for as long as machine-budget contention happened to serialize the two.
     // Nothing declared that ordering, so nothing kept it.
-    ctx.needs(spells_generate);
+    //
+    // The same race exists against every sibling that writes Go under internal/ or
+    // types/gen while this compile reads it, and MGS4008 now refuses the run rather than
+    // letting the fan-out race, so each one is declared: the compile runs after all of them.
+    ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
+              config_generate, mocks_generate);
     ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.modifiesExistingFiles("CHANGELOG.md");
@@ -2762,6 +2767,10 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
+    // Declared here, not only sequenced by lint's two ctx.needs stages: the chain a
+    // composer records is a flat list, so the ordering MGS4008 can see is the edge
+    // the reader itself declares. This compiles libs/testlayout, which gofmt rewrites.
+    ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/commentdash/go.mod", "libs/commentdash/go.sum",
@@ -2908,6 +2917,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
 export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
+    // The completions it checks are config-generate's output, written in this same
+    // ci fan-out; without the edge the check could read a half-written file (MGS4008).
+    ctx.needs(config_generate);
     // Declared so `magus affected` knows when this matters. Without it CI had to
     // re-derive the same answer with a git-diff grep in the workflow.
     ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
@@ -3087,6 +3099,9 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
 // A charm variant (`test:cgo`) cannot express it either - charms patch argv, and the
 // distinguishing input here is CGO_ENABLED in the environment.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
+    // After format, like every other compile in this fan-out: gofmt rewrites the files
+    // this reads, in place, and one ctx.needs on ci puts the two side by side (MGS4008).
+    ctx.needs(format);
     // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {

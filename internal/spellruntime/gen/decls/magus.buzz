@@ -392,6 +392,7 @@ export object CrossTargetRef {
 export object ChainStep {
     project: str = "",
     target: str = "",
+    stage: int = 0,
 }
 
 export object InputRef {

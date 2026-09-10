@@ -3,8 +3,10 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
+	"time"
 )
 
 // nodeKeySep is a control byte that cannot appear in a filesystem path, making DepKey unambiguous.
@@ -36,6 +38,10 @@ func formatCycle(cycle []string) string {
 // displayKey renders one node key for a human, spelling out the control byte DepKey
 // joins on. Every user-facing message naming a node goes through here.
 func displayKey(key string) string { return strings.Replace(key, nodeKeySep, " ", 1) }
+
+// DisplayNodeKey renders a node key for a caller outside this package. A key is minted by
+// DepKey, which is exported, so the rendering that makes one printable has to be too.
+func DisplayNodeKey(key string) string { return displayKey(key) }
 
 // depBarrier gates RunAll goroutines on inter-step completion. One entry per node
 // key; dependents block in waitForDeps until markDone closes its channel.
@@ -108,10 +114,8 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 		select {
 		case <-e.ch:
 		default:
-			select {
-			case <-e.ch:
-			case <-ctx.Done():
-				return ctx.Err()
+			if err := waitForUpstream(ctx, e.ch, stepKey(s), key); err != nil {
+				return err
 			}
 		}
 		if e.err != nil {
@@ -131,6 +135,36 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	}
 	return nil
 }
+
+// waitForUpstream blocks on done, beating the invocation heartbeat and naming the upstream
+// on the way.
+//
+// This is where a reader waits for the writer the derived order put ahead of it, and that
+// wait can legitimately be as long as the writer's whole run. Silent, it was a stall to
+// the watchdog and unattributable to a reader; named, an aborted run reads as one target
+// waiting on another.
+func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstream string) error {
+	beat := time.NewTicker(upstreamWaitHeartbeat)
+	defer beat.Stop()
+	for {
+		select {
+		case <-done:
+			return nil
+		case <-beat.C:
+			ProgressFromContext(ctx).Beat()
+			slog.InfoContext(ctx, "magus: waiting for an upstream target to finish",
+				slog.String("waiting", displayKey(waiting)),
+				slog.String("upstream", displayKey(upstream)))
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+// upstreamWaitHeartbeat is how often a step waiting on its upstream says so. It matches
+// the keyed lock's cadence: both are waits a step spends holding nothing, and a reader
+// meeting one in a log should not have to learn two rhythms.
+var upstreamWaitHeartbeat = lockWaitHeartbeat
 
 // checkAcyclic reports an error if in-scope DependsOn or RunAfter edges form a cycle, using
 // three-color DFS. A batch that passes this check cannot deadlock the barrier.

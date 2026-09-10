@@ -32,7 +32,7 @@ func TestDeriveTargetOrderWriterBeforeReader(t *testing.T) {
 		{Project: "b", Target: "check", Steps: []string{stepKey(steps[1])},
 			Reads: []string{"a/out/*.md"}, DeclaredReads: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
 	assert.Equal(t, map[string][]string{stepKey(steps[1]): {stepKey(steps[0])}}, d.RunAfter)
 }
@@ -54,7 +54,7 @@ func TestDeriveTargetOrderNoSelfEdge(t *testing.T) {
 		{Project: "docs", Target: "reader", Steps: []string{docs},
 			Reads: []string{"MAGUS.md"}, DeclaredReads: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 2, Ordered: true}}, d.Edges)
 }
 
@@ -74,7 +74,7 @@ func TestDeriveTargetOrderMutualDeclarationsSettle(t *testing.T) {
 			Reads: []string{"CHANGELOG.md"}, DeclaredReads: true,
 			Writes: []string{"docs/changelog.md"}, DeclaredWrites: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	// "docs content" sorts after ". changelog", so the docs-writes-root-reads
 	// direction is the one that yields.
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges)
@@ -101,7 +101,7 @@ func TestDeriveTargetOrderMutualTrioTieBreak(t *testing.T) {
 	perms := [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
 	for _, perm := range perms {
 		nodes := []TargetNode{node(perm[0]), node(perm[1]), node(perm[2])}
-		d := DeriveTargetOrder(steps, nodes)
+		d := DeriveTargetOrder(steps, nodes, nil)
 		var kept, dropped [][2]string
 		for _, e := range d.Edges {
 			kept = append(kept, [2]string{d.Nodes[e.Writer].Project, d.Nodes[e.Reader].Project})
@@ -130,7 +130,7 @@ func TestDeriveTargetOrderWeakCycleDropped(t *testing.T) {
 			Reads: []string{"**/MAGUS.md"}, DeclaredReads: true,
 			Writes: []string{"docs/MAGUS.md"}, DeclaredWrites: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Equal(t, []DerivedEdge{{Writer: 0, Reader: 1, Ordered: true}}, d.Edges,
 		"the strong (declared) direction survives; the weak fallback direction is dropped")
 }
@@ -154,7 +154,7 @@ func TestDeriveTargetOrderEntangledUnordered(t *testing.T) {
 			Reads:  []string{"**/*.md"},
 			Writes: []string{"gen/*.json"}, DeclaredWrites: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Equal(t, []DerivedEdge{
 		// Writer's step already precedes the reader's via the coarse edge.
 		{Writer: 0, Reader: 1, Ordered: true},
@@ -175,7 +175,7 @@ func TestDeriveTargetOrderIgnoredDirInvisibleToFallbackReader(t *testing.T) {
 			Reads:      []string{"**/*.md"},
 			IgnoreDirs: []string{"gen"}},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	assert.Empty(t, d.Edges, "a fallback reader never walks its ignored dirs, so writes confined there derive nothing")
 }
 
@@ -210,7 +210,7 @@ func TestTopoNodesWritersFirst(t *testing.T) {
 			Reads: []string{"src/*.txt"}, DeclaredReads: true,
 			Writes: []string{"docs/changelog.md"}, DeclaredWrites: true},
 	}
-	d := DeriveTargetOrder(steps, nodes)
+	d := DeriveTargetOrder(steps, nodes, nil)
 	require.Len(t, d.Edges, 1)
 	assert.Equal(t, []int{1, 0}, d.TopoNodes())
 }

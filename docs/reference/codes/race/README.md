@@ -53,3 +53,7 @@ or a manual audit rather than every push.
 - [MGS4007](MGS4007.md): undeclared source modified. Always on, like `MGS4002`,
   and needs no `--race`: the comparison is between two hashes of the declared
   source set, which every run computes anyway.
+- [MGS4008](MGS4008.md): a target reading what a target beside it writes, inside
+  one step, with nothing ordering them. Always on and needs no `--race` either,
+  and unlike every other code here it is decided before the run starts: it reads
+  declarations, so it refuses the plan rather than reporting the damage.

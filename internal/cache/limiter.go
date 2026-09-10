@@ -17,6 +17,10 @@ type Limiter struct {
 	cap     int
 	running atomic.Int64
 	queued  atomic.Int64
+	// watch records who holds the slots and what each holder is waiting on, so a wait
+	// nothing in this process can end is refused rather than hung. Nil on an unlimited
+	// limiter, where no caller ever queues. See deadlock.go.
+	watch *slotWatch
 
 	onAcquire atomic.Pointer[func(waitNs int64, n int)]
 	onRelease atomic.Pointer[func(n int)]
@@ -39,7 +43,7 @@ func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n
 // NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
 // (Acquire and AcquireN always succeed immediately).
 func NewLimiter(n int) *Limiter {
-	l := &Limiter{cap: n}
+	l := &Limiter{cap: n, watch: newSlotWatch(n)}
 	if n > 0 {
 		l.sem = semaphore.NewWeighted(int64(n))
 	}
@@ -127,6 +131,11 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 	if n < 1 {
 		n = 1
 	}
+	// The hold record has to say so too: a step whose slots are back in the pool occupies
+	// nothing, and a watch that still counted them would read a pool with room as full.
+	hold := admissionFrom(ctx).hold
+	hold.setYielded(true)
+	defer hold.setYielded(false)
 	l.ReleaseN(n)
 	defer func() { _ = l.AcquireN(context.WithoutCancel(ctx), n) }()
 	return fn()
