@@ -340,13 +340,15 @@ func TestMagusSurfaceIsDeclared(t *testing.T) {
 	}
 	for _, ns := range std.Magus.Namespaces {
 		declared[ns.Name] = true
+		// A nested member is declared under its namespace: magus\review.provider is
+		// the shape that went missing when only the namespace names were compared.
+		for _, m := range ns.Methods {
+			declared[ns.Name+"."+std.BuzzMethodName(m)] = true
+		}
 	}
 	// The magus.Context builder and the target registry are not members of this
 	// namespace; log is assembled here from the descriptor's log namespace.
 	for _, name := range magusSurfaceNames(t) {
-		if strings.Contains(name, ".") {
-			continue
-		}
 		assert.Truef(t, declared[name],
 			"magus\\%s is bound at run time but absent from the std.Magus descriptor, "+
 				"so it has no checker declaration, no reference doc page, and nothing "+

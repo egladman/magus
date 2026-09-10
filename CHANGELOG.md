@@ -81,7 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   descriptor does not declare fails at init. `magus_tail_log` is gone with it: it was a
   second door onto the bytes `magus_output` already returns, keyed by project rather than
   by ref, and the duplication was on record since the 2026-08-25 post that found it. The
-  CLI keeps the project-scoped route as `magus tail`. `magus\review.provider` gains a
+  SDK keeps the project-scoped route as `Magus.TailLog`; on the CLI the ref every run
+  prints is the route, as it always was. `magus\review.provider` gains a
   declaration too, so it has a checker signature and a doc page like every other member;
   a new test fails on any magus member bound at run time that the descriptor does not
   declare, which is how that one went missing.

@@ -331,6 +331,48 @@ final c = Color.Green;
 `)
 }
 
+// A backed enum names the common values without closing the parameter: a plain value
+// of the backing type passes where the enum is declared, and only a value of another
+// type is refused. This is what lets a host declare `enum<str> TimeLayout` on a layout
+// parameter that has no finite set of values.
+func TestCheck_BackedEnumAcceptsItsBackingType(t *testing.T) {
+	checkOK(t, `
+enum<str> Layout { rfc3339 = "2006-01-02T15:04:05Z07:00" }
+fun stamp(layout: Layout) > str { return layout.value; }
+final _a = stamp(Layout.rfc3339);
+final _b = stamp("02 Jan 06");
+`)
+	checkErr(t, `
+enum<str> Layout { rfc3339 = "2006-01-02T15:04:05Z07:00" }
+fun stamp(layout: Layout) > str { return layout.value; }
+final _c = stamp(42);
+`, `cannot pass int as argument "layout" of type Layout`)
+}
+
+// A fiber wraps an ordinary call, so its arguments are checked against the callee's
+// parameters the way a direct call's are.
+func TestCheck_FiberArgumentsAreTyped(t *testing.T) {
+	checkErr(t, `
+fun greet(name: str) > str { return name; }
+final _f = &greet(1);
+`, `cannot pass int as argument "name" of type str`)
+}
+
+// A call whose labels could not be resolved reports that one problem. Checking the
+// arguments afterwards, against slots they were never matched to, would stack a
+// spurious type error on top of the real one.
+func TestCheck_UnresolvedArgumentsReportOnce(t *testing.T) {
+	errs := checkSrc(`
+fun f(a: str, b: int) > void {}
+f(b: 2);
+`)
+	require.NotEmpty(t, errs)
+	for _, e := range errs {
+		assert.NotContains(t, e.Msg, "cannot pass",
+			"the argument type check must not run over slots the labels never matched:\n%s", fmtErrors(errs))
+	}
+}
+
 func TestCheck_EnumUnknownCase(t *testing.T) {
 	checkErr(t, `
 enum Color { Red, Green, Blue }
@@ -1274,10 +1316,10 @@ func TestCheck_ExternArgumentType(t *testing.T) {
 }
 
 // TestCheck_DeclaredGlobalNamespace covers a namespace a host binds as a GLOBAL rather
-// than behind an import, declaring it through DeclareModuleTypes: magus's own `magus\`
-// surface. Its declarations were collected but never built into a namespace object, so
-// the global fell back to Unknown and every call through it went unchecked - an unknown
-// member reached the VM as "null is not callable".
+// than behind an import, declaring it through DeclareModuleTypes. Its declarations were
+// collected but never built into a namespace object, so the global fell back to Unknown
+// and every call through it went unchecked - an unknown member reached the VM as "null
+// is not callable".
 func TestCheck_DeclaredGlobalNamespace(t *testing.T) {
 	newSess := func(t *testing.T) *Session {
 		t.Helper()

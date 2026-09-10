@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5431,
-  "edge_count": 9687,
+  "edge_count": 9689,
   "relations": [
     {
       "id": "annotates",
@@ -81374,6 +81374,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-run.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-run.md",
       "target": "docsection:docs/reference/skills/magus-run.md#magus-run",
       "relation": "contains",
       "confidence": "extracted",
@@ -82311,6 +82319,14 @@
     {
       "source": "doc:internal/agent/skills/magus-run/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-run/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-run/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

@@ -194,10 +194,6 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 //   - TargetRun / Run: annotate-only shapes. No host method returns them; they exist so a
 //     caller can type a run payload it decoded itself. TargetRun precedes Run because
 //     Run.targets is a list of it.
-//   - review: the one namespace buildMagusNS assembles that std.Magus does not declare, so
-//     the generator never sees it. A namespace's members are checked in full, and an
-//     undeclared one reads as "module magus has no member", so this is what keeps
-//     magus\review.provider compiling.
 //
 // Everything else that used to live here is now generated, leaf-first, from the
 // returns themselves: a mirror can no longer go missing when a return is added.
@@ -207,19 +203,7 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 	spellruntime.ModuleSource,
 	spellruntime.TargetRunSource,
 	spellruntime.RunSource,
-	reviewNamespaceSource,
 }, "\n")
-
-// reviewNamespaceSource declares magus\review, whose only member selects the spell a
-// workspace's changes are discussed on (buildReviewNS in target.go).
-//
-// compat(until: std.Magus declares the review namespace and the generator emits it, the
-// way it emits cache/ci/secret/workspace/ledger): drop this string and the entry above.
-// Observe it is safe when internal/spellruntime/gen/decls/magus.buzz carries an
-// `export object review`.
-const reviewNamespaceSource = `export object review {
-    static extern fun provider(spell: {str: any}) > void !> any;
-}`
 
 // RegisterSpellSourceModules installs every source-only Buzz module a spell (or
 // magusfile) imports for its value types:
@@ -275,8 +259,18 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	mod, _ := sess.NativeModule("magus")
-	return mod.MapKeys()
+	return magusNativeModule(sess).MapKeys()
+}
+
+// magusNativeModule is the registered magus module value, and a missing one is a
+// panic rather than a zero value: both readers below exist to catch drift, and a zero
+// map would report an empty surface as agreement.
+func magusNativeModule(sess *buzz.Session) vm.Value {
+	mod, ok := sess.NativeModule("magus")
+	if !ok {
+		panic("bindings: the magus module is not registered; registerAllBuzz must run first")
+	}
+	return mod
 }
 
 // MagusNamespaceKeys returns the member names bound inside one of magus's nested
@@ -289,8 +283,7 @@ func MagusModuleKeys() []string {
 func MagusNamespaceKeys(name string) []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	mod, _ := sess.NativeModule("magus")
-	ns, ok := mod.MapGet(name)
+	ns, ok := magusNativeModule(sess).MapGet(name)
 	if !ok || !ns.IsMap() {
 		return nil
 	}

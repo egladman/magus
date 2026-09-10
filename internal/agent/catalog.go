@@ -114,12 +114,14 @@ import (
 // optional. The breadcrumb is a field on the result now, so a reader that never meets
 // the text still meets the suggestion.
 // 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
-// onto the bytes magus_output already returns, keyed by project instead of by ref;
-// the CLI keeps that route as `magus tail`.
+// onto the bytes magus_output already returns, keyed by project instead of by ref.
 // 60: magus-buzz-write says `magus` is a host module and the import is what makes the
 // namespace exist. It used to read as "also available in a script", from when the
 // namespace was a session global an import never had to name.
-const SkillVersion = 60
+// 61: magus-run names where a ref comes from when none is in hand: the run that
+// minted it, and `magus session`. Version 59 sent readers to a `magus tail` verb
+// that was removed in v0.4.0.
+const SkillVersion = 61
 
 const skillLicense = "GPL-3.0-or-later"
 

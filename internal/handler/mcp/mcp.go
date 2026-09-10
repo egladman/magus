@@ -138,7 +138,7 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 
 // allMCPTools constructs every MCP tool the daemon exposes. Each tool is a
 // SpellDriver; the MCP server dispatches by Name and invokes it.
-func allMCPTools(opts Options) []spells.Driver {
+func allToolDrivers(opts Options) []spells.Driver {
 	wsCfg := types.WorkspaceConfig{
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
@@ -190,7 +190,7 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	if opts.Magus != nil {
 		tel = opts.Magus.Telemetry()
 	}
-	tools := allMCPTools(opts)
+	tools := allToolDrivers(opts)
 	// A function rather than the workspace itself: wrap needs one capability (put this
 	// workspace's secret resolver on a context so the trail writes are redacted) and
 	// taking *magus.Magus for it would hand the handler a whole workspace to reach into.

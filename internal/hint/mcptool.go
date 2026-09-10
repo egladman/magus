@@ -26,8 +26,9 @@ type ToolName string
 // to concatenate a tool name into hint prose so the reference tracks a rename.
 func (t ToolName) String() string { return string(t) }
 
-// The full MCP tool surface. Every Registry[].Name is bound to one of these, so
-// this block is the one place a tool name is spelled out.
+// The full MCP tool surface. std/magus.go names every tool through one of these, and
+// the generated catalog (internal/handler/mcp/gen) carries the rendered string, so
+// this block is the one place a tool name is spelled by hand.
 const (
 	ToolDescribe        ToolName = "magus_describe"
 	ToolDescribeFile    ToolName = "magus_describe_file"

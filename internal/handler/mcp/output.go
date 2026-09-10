@@ -20,8 +20,9 @@ import (
 //
 // It had a sibling, magus_tail_log, which returned the LATEST log for a project instead.
 // That was a second door onto the same bytes reached by a different key, and an agent
-// with a ref in hand had two tools to choose between. The CLI keeps the project-scoped
-// route (`magus tail`, Magus.TailLog); the agent surface does not.
+// with a ref in hand had two tools to choose between. The SDK keeps the project-scoped
+// route (Magus.TailLog); the agent surface does not, and the CLI never had one: every
+// run prints the ref its log is reached by.
 
 // outputReader is the slice of the workspace magus_output needs: resolve a
 // target-output ref to its stored bytes and descriptor, invert the ref back to

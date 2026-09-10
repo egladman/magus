@@ -58,13 +58,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | dir | 100+ | `magus query kind=dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
 | file | 200+ | `magus query kind=file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
 | function | 900+ | `magus query kind=function` | `tail`, `sign`, `renderContentHTML` |
-| import | 100+ | `magus query kind=import` | `magus`, `fs`, `std` |
+| import | 100+ | `magus query kind=import` | `magus`, `std`, `fs` |
 | rationale | 6 | `magus query kind=rationale` | `TODO`, `WHY`, `NOTE` |
 | package | 100+ | `magus query kind=package` | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 48 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
+| . | 49 | `magus query project=.` | `generate`, `buzz-test`, `release-index` |
 | console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
 | docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -118,6 +118,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |
 | `langservice-generate` | Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads. |
+| `mcp-tools-generate` | Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors bindings_generate reads. |
 | `skills-generate` | Reinstalls the agent skills from their embedded sources in internal/agent/skills. |
 | `index-generate` | Renders MAGUS.md via `magus describe graph`. |
 | `graph-generate` | Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. |

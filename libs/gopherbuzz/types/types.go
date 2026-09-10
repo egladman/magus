@@ -146,6 +146,19 @@ type EnumType struct {
 	Backing string
 }
 
+// backingType is the primitive a case's value has, and the one a plain value must
+// have to be passed where the enum is expected.
+func (e *EnumType) backingType() Type {
+	switch e.Backing {
+	case "str":
+		return Str
+	case "double":
+		return Double
+	default:
+		return Int
+	}
+}
+
 func (e *EnumType) TypeName() string { return e.Name }
 
 // NamedType is an unresolved reference to a user-defined type.
@@ -237,6 +250,13 @@ func Compat(got, want Type) bool {
 	}
 	if got.TypeName() == want.TypeName() {
 		return true
+	}
+	// A backed enum accepts a plain value of its backing type where it is declared:
+	// `enum<str> Layout` names the common layouts and takes any str, which is what keeps
+	// a host enum from closing a parameter that has no finite set of values (a timestamp
+	// layout, say). An unbacked enum numbers its cases from zero, so it reads as int.
+	if we, ok := want.(*EnumType); ok {
+		return got.TypeName() == we.backingType().TypeName()
 	}
 	// An object is assignable to a protocol it declared conformance to. The check is
 	// on the DECLARATION, not the method set: upstream rejects an object that happens

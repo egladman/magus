@@ -125,8 +125,9 @@ type checker struct {
 	private map[string]bool
 }
 
-// Check type-checks prog after pre-registering extraGlobals as types.Any.
-// This allows callers to inject dynamically-defined names (e.g. from SetVal) so the
+// checkWithGlobals type-checks prog after pre-registering extraGlobals: as the typed
+// namespace a host declared for the name when there is one, else as Unknown. This
+// allows callers to inject dynamically-defined names (e.g. from SetVal) so the
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
@@ -149,11 +150,11 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 		if _, ok := c.scopes[len(c.scopes)-1][name]; ok {
 			continue
 		}
-		// A host may bind a namespace as a GLOBAL rather than behind an import, and
-		// declare it through DeclareModuleTypes (magus's own `magus\` namespace is the
-		// case). Its declarations are collected under the same bound name an import
-		// would use, so the namespace object is built the same way; without this the
-		// global falls back to Unknown and every `magus\...` call goes unchecked.
+		// A host may bind a namespace as a GLOBAL rather than behind an import and
+		// declare it through DeclareModuleTypes. Its declarations are collected under
+		// the same bound name an import would use, so the namespace object is built the
+		// same way; without this the global falls back to Unknown and every call
+		// through it goes unchecked.
 		if nt := c.namespaceType(name); nt != nil {
 			c.define(name, nt, false)
 			continue
@@ -1230,7 +1231,8 @@ func (c *checker) infer(n ast.Node) types.Type {
 		// whose methods did not exist.
 		for i, a := range v.Call.Args {
 			if ft, ok := calleeTyp.(*types.FuncType); ok && i < len(ft.Params) {
-				c.inferExpected(a, c.resolveType(ft.Params[i]))
+				want := c.resolveType(ft.Params[i])
+				c.checkArgType(ft, i, a, c.inferExpected(a, want), want)
 				continue
 			}
 			c.infer(a)
@@ -1409,6 +1411,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	calleeTyp := c.infer(v.Callee)
 	ft, ok := calleeTyp.(*types.FuncType)
+	argsResolved := true
 	if ok {
 		// Propagate-or-catch: a call to a function that declared !> (or, for a
 		// host extern, is authored as raising in std.Method) is only legal when
@@ -1437,7 +1440,12 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 				c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: callee yields %s, enclosing function declares %s", ft.Yield.TypeName(), c.yieldTyp.TypeName())
 			}
 		}
+		// A call whose labels could not be matched to slots has already reported why;
+		// typing its arguments against slots they never landed in would stack a second
+		// error on the first, so the per-argument check below runs only on a resolved call.
+		before := len(c.errors)
 		c.resolveNamedArgs(v, ft)
+		argsResolved = len(c.errors) == before
 	} else {
 		// Dynamic callee (any-typed value, host function): labels cannot be
 		// resolved, so arguments pass in written order. Upstream-style call
@@ -1473,7 +1481,10 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			// argument looks for an OBJECT in its expected type and would find none, and
 			// so stay a plain map whose methods then do not exist.
 			want := c.resolveType(ft.Params[i])
-			c.checkArgType(ft, i, a, c.inferExpected(a, want), want)
+			got := c.inferExpected(a, want)
+			if argsResolved {
+				c.checkArgType(ft, i, a, got, want)
+			}
 			continue
 		}
 		c.infer(a)
@@ -1532,7 +1543,7 @@ func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, wan
 	if i < len(ft.ParamDefaults) && ft.ParamDefaults[i] != nil && ft.ParamDefaults[i] == arg {
 		return
 	}
-	if erasedType(want) || erasedType(got) {
+	if hasErasedType(want) || hasErasedType(got) {
 		return
 	}
 	if types.Compat(got, want) {
@@ -1545,24 +1556,24 @@ func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, wan
 	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as %s of type %s", got.TypeName(), slot, want.TypeName())
 }
 
-// erasedType reports whether t still carries a NamedType resolveType could not
+// hasErasedType reports whether t still carries a NamedType resolveType could not
 // resolve, at any depth. `list: [T]` inside a generic function is the shape that
 // matters: the element is erased even though the list itself is concrete.
-func erasedType(t types.Type) bool {
+func hasErasedType(t types.Type) bool {
 	switch v := t.(type) {
 	case *types.NamedType:
 		return true
 	case *types.ListType:
-		return erasedType(v.Elem)
+		return hasErasedType(v.Elem)
 	case *types.MapType:
-		return erasedType(v.Key) || erasedType(v.Val)
+		return hasErasedType(v.Key) || hasErasedType(v.Val)
 	case *types.FuncType:
 		for _, p := range v.Params {
-			if erasedType(p) {
+			if hasErasedType(p) {
 				return true
 			}
 		}
-		return erasedType(v.Ret)
+		return hasErasedType(v.Ret)
 	}
 	return false
 }

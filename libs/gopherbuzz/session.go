@@ -208,6 +208,13 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 // SetModuleDecls instead would collect it at the import point, which for an import
 // partway down a chain outranks types the chain already declared.
 func (s *Session) DeclareModuleTypes(boundName, src string) {
+	// A host's declaration source is static text a person wrote, so a parse error is a
+	// bug in the host and must not read as an empty declaration: collectImportedModule
+	// ignores parse errors because a real import is re-parsed by the Exec that follows,
+	// and nothing re-parses this.
+	if _, err := parseModed(src, !s.embedded); err != nil {
+		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
+	}
 	s.collectImportedModule(boundName, src)
 }
 
