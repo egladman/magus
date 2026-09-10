@@ -155,6 +155,18 @@ type Lease struct {
 	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required.
 	OwnedPaths     []string `json:"owned_paths,omitempty" yaml:"owned_paths,omitempty"`
 	ForbiddenPaths []string `json:"forbidden_paths,omitempty" yaml:"forbidden_paths,omitempty"`
+	// Focus is the declared READ lane: the paths whose projects this lease may read,
+	// widened to those projects' own dependencies when the guard resolves it. Empty
+	// means OwnedPaths stands in, because a worker leased to edit a project is a
+	// worker that was pointed at that project.
+	//
+	// A separate field rather than a wider OwnedPaths, and the separation is the
+	// point: a worker that has to READ a shared library must not be handed the right
+	// to WRITE it, and one list cannot say both. It is also the only way to widen the
+	// boundary, which is deliberate. An environment variable that switched the rule
+	// off would be set once, in a wrapper, by the first worker it inconvenienced, and
+	// nothing afterwards would say the lane had stopped being checked.
+	Focus []string `json:"focus,omitempty" yaml:"focus,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
@@ -377,7 +389,7 @@ func pathsIntersect(a, b string) bool {
 	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
 		return false
 	}
-	a, b = literalPrefix(a), literalPrefix(b)
+	a, b = LiteralPrefix(a), LiteralPrefix(b)
 	if a == "" || b == "" {
 		// A pattern with no literal prefix ("**/*.go") claims the whole tree.
 		return true
@@ -385,10 +397,15 @@ func pathsIntersect(a, b string) bool {
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
-// literalPrefix is the part of a declared path that names actual directories: the
+// LiteralPrefix is the part of a declared path that names actual directories: the
 // cleaned path itself when it holds no glob metacharacter, and everything above the
 // first segment that does when it holds one.
-func literalPrefix(p string) string {
+//
+// Exported because the focus rule asks the same question of the same declarations:
+// which project a lease's owned_paths land in cannot be answered by a wildcard, and
+// two packages deriving that prefix by their own rules would disagree about a
+// declaration on the day the rules drifted.
+func LiteralPrefix(p string) string {
 	p = path.Clean(strings.TrimSpace(p))
 	if p == "." || p == "/" {
 		return ""
@@ -409,6 +426,7 @@ func (u Lease) Clone() Lease {
 	c := u
 	c.OwnedPaths = slices.Clone(u.OwnedPaths)
 	c.ForbiddenPaths = slices.Clone(u.ForbiddenPaths)
+	c.Focus = slices.Clone(u.Focus)
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)

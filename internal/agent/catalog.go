@@ -128,7 +128,12 @@ import (
 // ahead of the published-site index it used to open with. Measured over 1,907
 // session transcripts: the section query ran 11 times ever while agents read a
 // markdown file under docs/ 964 times, and this skill is what routed them there.
-const SkillVersion = 63
+// 64: magus-multi-agent says owned_paths is read as a READ lane too, and that a
+// worker needing to read what it must not write gets a `focus` on its row rather
+// than a wider owned_paths. Measured over 204 session transcripts: reads left the
+// units the session actually wrote to about a fifth of the time, and widening the
+// write lane to open a read is the move that puts two workers on one file.
+const SkillVersion = 64
 
 const skillLicense = "GPL-3.0-or-later"
 

@@ -743,6 +743,21 @@ type FileEntry struct {
 	// both "who owns this path" and "what does that owner run behind". It is not
 	// the transitive closure; `magus graph deps` computes that.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Focus is "in" or "out": whether the path is inside the focus of the project
+	// the command ran from, which is that project, what it declares depends_on, and
+	// the workspace-root files every project resolves through (project.Focus). It is
+	// "" when no focus could be computed, which is a workspace with no project
+	// holding the working directory, not a judgment.
+	//
+	// It rides here rather than on a verb of its own because the question a caller
+	// asks is always about a path they already wanted classified: the agent guard
+	// answers it from this same computation, and a second command would be a second
+	// place for the two answers to disagree.
+	//
+	// A FACT about where the reader stands, so it is not part of Role and never
+	// changes it: the same path is in focus from one directory and out of it from
+	// another, while its role is the same everywhere.
+	Focus string `json:"focus,omitempty" yaml:"focus,omitempty"`
 	// Hint is the one-line handling rule for the role, ready to surface to a
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
@@ -757,6 +772,14 @@ type FileEntry struct {
 	// is the interesting value is the one shape this cannot take.
 	Exists bool `json:"exists" yaml:"exists"`
 }
+
+// The two readings of FileEntry.Focus. Absent is the third and is not a member:
+// "no focus could be computed" is not a judgment, and giving it a spelling would
+// invite a caller to treat it as one.
+const (
+	FocusIn  = "in"
+	FocusOut = "out"
+)
 
 // FileClaim is one declaration that names a path: the project whose magusfile
 // declared it, the target that did, and the workspace-rooted glob that matched.

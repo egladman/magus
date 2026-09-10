@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5748,
-  "edge_count": 10200,
+  "node_count": 5749,
+  "edge_count": 10202,
   "relations": [
     {
       "id": "annotates",
@@ -18549,6 +18549,16 @@
       "source": "docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
       "attrs": {
         "anchor": "deny-only-what-cannot-be-undone",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-lane",
+      "kind": "docsection",
+      "label": "Focus: the read lane",
+      "source": "docs/guides/integrations/agents/guard.md#focus-the-read-lane",
+      "attrs": {
+        "anchor": "focus-the-read-lane",
         "level": "2"
       }
     },
@@ -69445,6 +69455,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/guard.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
@@ -96790,6 +96808,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
       "target": "docsection:docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
+      "target": "docsection:docs/guides/integrations/agents/guard.md#focus-the-read-lane",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

@@ -27,7 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   lexer called a comment is read, so a URL in a string literal is out of reach; a citation
   must clear a closed scheme set, carry no credentials, sit under a length cap and name a
   plausible public host; and nothing is ever fetched. Knowledge-graph schema v12.
-
+- **A read that leaves the project you are working in now says so.** The agent guard
+  computes a session's focus from the project graph: the project holding the working
+  directory, everything it declares `depends_on` transitively, the projects nested inside
+  it, and the files at the workspace root plus `.claude/skills` that every project resolves
+  through. A `cat`, `sed`, `grep`, `rg` or `find` pointed outside that set draws one
+  advisory naming what owns the path, held to one firing per path and one full explanation
+  per session. It denies instead when a lease is bound to the checkout with `magus session
+  lease`, where the boundary is one an orchestrator declared: a new `focus` field on the
+  lease row names the paths a worker may READ, falling back to `owned_paths`, so a worker
+  that needs to read a shared library no longer has to be handed the right to write it.
+  There is no environment variable that switches the rule off. `magus describe file`
+  carries the same answer as a `focus` field per path, and names the focus it judged
+  against. Measured over 204 session transcripts in this repository: reads landed outside
+  the units a session actually wrote to about a fifth of the time, and 17,353 reads left
+  the workspace root altogether.
 - **A rule set nothing declares reaches the console's notification center.** A run's scope
   event now carries the projects it selected on changed files no project declares
   (MGS1028), split into the ones that read as build inputs and the rest. An undeclared

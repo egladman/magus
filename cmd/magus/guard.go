@@ -302,6 +302,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 			}
 		}
+		// The focus rule. Its DENY outranks any advisory above it, because that one is
+		// about a boundary an orchestrator declared; its advisory only fills a silence.
+		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
+		// project, and the rule that caught it is also the cheaper one to have run.
+		if verdict.Decision != "deny" {
+			focus := gradeFocusRead(ctx, actingLease, input.Value)
+			switch {
+			case focus.Decision == "deny":
+				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
+			case verdict.Decision == "pass" && focus.Decision == "advise" && !gate.fireOnce(advisoryFocusPath(focus.Rel)):
+				if held := gate.onceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
+					verdict.Decision, verdict.Context = "advise", held
+				}
+			}
+		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's own answer is to run a narrower target, and firing on that
 		// narrower target argues with the caller for doing what it asked. The narrow
@@ -582,6 +597,10 @@ type hookAttribution struct {
 type hookActivityLocation struct {
 	base      string
 	workspace string
+	// dir is where the tool call runs, which the focus rule needs and the trail does
+	// not: a session opened in a subdirectory stands in a different project than the
+	// workspace root does, and that difference is the whole of what focus judges.
+	dir string
 }
 
 type hookActivityLocationKey struct{}
@@ -686,7 +705,15 @@ func hookActivityLocationAt(dir string) hookActivityLocation {
 	if err != nil {
 		return hookActivityLocation{}
 	}
-	return hookActivityLocation{base: cacheDir, workspace: root}
+	if dir == "" {
+		// The process cwd, which for "" is what root was found from. Read rather than
+		// assumed to be the root: a session opened in a subdirectory is exactly the
+		// case focus exists for, and collapsing it to the root would hide it.
+		if wd, wderr := os.Getwd(); wderr == nil {
+			dir = wd
+		}
+	}
+	return hookActivityLocation{base: cacheDir, workspace: root, dir: dir}
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host

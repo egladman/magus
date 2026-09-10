@@ -814,6 +814,7 @@ func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
 	}
 	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
+	out.MapSet("focus", vm.StrValue(v.Focus))
 	out.MapSet("hint", vm.StrValue(v.Hint))
 	out.MapSet("exists", vm.BoolValue(v.Exists))
 	return out

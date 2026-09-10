@@ -474,7 +474,7 @@ var Magus = Module{
 				{
 					Name: "put",
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
-						"goal, checkpoint, owned_paths, forbidden_paths, depends_on, tier, " +
+						"goal, checkpoint, owned_paths, forbidden_paths, focus, depends_on, tier, " +
 						"validation, state (declared, running, pass, fail, no_return), read_only. A " +
 						"key opts omits is left untouched, so a later put in a lease's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
@@ -743,6 +743,7 @@ var magusMCPTools = []MCPTool{
 			{Name: "checkpoint", Type: TypeString, Doc: "put only: the working state this lease was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
 			{Name: "owned_paths", Type: TypeString, Doc: "put only: space-separated paths the lease may edit. Empty on a read-only lease by design. Shrinking this set IS how a lease announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed - which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits - a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
 			{Name: "forbidden_paths", Type: TypeString, Doc: "put only: space-separated paths the lease must not touch. Empty on a read-only lease by design."},
+			{Name: "focus", Type: TypeString, Doc: "put only: space-separated paths whose projects the lease may READ, widened to those projects' own depends_on. Omit and owned_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen the read lane: the guard advises on an out-of-focus read and denies one under a bound lease, and there is no environment variable that turns it off."},
 			{Name: "depends_on", Type: TypeString, Doc: "put only: space-separated ids of leases that must land before this one."},
 			{Name: "tier", Type: TypeString, Doc: "put only: the effort tier the work was matched to, e.g. principal, standard, economy."},
 			{Name: "validation", Type: TypeString, Doc: "put only: the magus target or named check this lease was assigned."},

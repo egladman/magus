@@ -400,6 +400,7 @@ func (v FileEntry) BuzzObject() BuzzObject {
 		"sourceOf":  v.SourceOf,
 		"claims":    itemsClaims,
 		"dependsOn": v.DependsOn,
+		"focus":     v.Focus,
 		"hint":      v.Hint,
 		"exists":    v.Exists,
 	}
@@ -919,6 +920,7 @@ func (v Lease) BuzzObject() BuzzObject {
 		"checkpoint":     v.Checkpoint,
 		"ownedPaths":     v.OwnedPaths,
 		"forbiddenPaths": v.ForbiddenPaths,
+		"focus":          v.Focus,
 		"dependsOn":      v.DependsOn,
 		"tier":           v.Tier,
 		"validation":     v.Validation,

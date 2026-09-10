@@ -106,7 +106,7 @@ person can see it. One row per lease, in the skill's vocabulary.
 A row carries `id` and optionally `parent` (the lease that handed out this one),
 `goal` with its observable acceptance criteria, `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `owned_paths` and `forbidden_paths`,
-`depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
+`focus`, `depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
 `created`, `updated`, `releases`, and `unattributed` (paths this lease owns that
 somebody outside it wrote, noticed by the guard), all output-only: a timestamp a
 client sent would be a fact about that client's clock. `register` adds three more
@@ -232,9 +232,19 @@ file write and every command. It denies:
 | a write covered by another live lease's owned list             | `owned_paths` (that lease's)  |
 | a write outside every entry in this lease's own owned list     | `owned_paths`                 |
 | a command running the `ci` gate                                | `validation`                  |
+| a READ of a path outside the projects this lease may read      | `focus`, else `owned_paths`   |
 
 It advises on one more: your own path, written from a base that `base_verdict`
 says is not the checkpoint you were handed.
+
+The read row is the write lane read the other way. `owned_paths` stands in when
+`focus` is empty, because a worker leased to edit a project was pointed at that
+project, and the lane it opens is those projects plus what they declare
+`depends_on` (see [the guard's focus rule](guard.md#focus-the-read-lane)). Set
+`focus` when a worker must READ something it must not WRITE: widening
+`owned_paths` to open a read is how two workers end up owning one file. Without a
+lease bound to the checkout the same rule only advises, which is the opt-in: a
+hard read boundary needs somebody to have declared one.
 
 The last row is the one that surprises people. The gate runs ONCE per branch, in
 the orchestrator's tree, after every unit lands; a worker's `validation` is the

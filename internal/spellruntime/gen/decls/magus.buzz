@@ -78,6 +78,7 @@ export object FileEntry {
     sourceOf: [str] = [],
     claims: [FileClaim] = [],
     dependsOn: [str] = [],
+    focus: str = "",
     hint: str = "",
     exists: bool = false,
 }
@@ -459,6 +460,7 @@ export object Lease {
     checkpoint: str = "",
     ownedPaths: [str] = [],
     forbiddenPaths: [str] = [],
+    focus: [str] = [],
     dependsOn: [str] = [],
     tier: str = "",
     validation: str = "",

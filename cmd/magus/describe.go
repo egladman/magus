@@ -1529,6 +1529,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	focus, inFocus := markFileFocus(ws, files)
 	report := types.NewFileReport(files)
 	next := hint.NextForFiles(files)
 
@@ -1547,7 +1548,14 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 
 	// text / wide
-	fmt.Printf("definition: %s\n\n", types.FileDefinition)
+	fmt.Printf("definition: %s\n", types.FileDefinition)
+	// Printed once rather than per entry: it is a fact about where the caller stands,
+	// so it is the same for every path in the request, and it is what makes a
+	// `focus: out` line below actionable instead of an accusation.
+	if inFocus {
+		fmt.Printf("focus of %s: %s\n", strings.Join(focus.Seeds, ", "), strings.Join(focus.Projects, ", "))
+	}
+	fmt.Println()
 	for _, f := range files {
 		fmt.Printf("%s\n", f.Path)
 		if f.Project != "" {
@@ -1568,6 +1576,12 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		if len(f.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", f.DependsOn)
 		}
+		// Only when OUT, for the reason `exists: false` prints only when false: in
+		// focus is the overwhelmingly common case, and a line on every entry buries
+		// the one reading that changes what to do next. `-o json` carries both.
+		if f.Focus == types.FocusOut {
+			fmt.Printf("  focus: out\n")
+		}
 		for _, c := range f.Claims {
 			fmt.Printf("  declared: %-6s %s  %s\n", c.Role, claimLabel(c), c.Glob)
 		}
@@ -1584,6 +1598,36 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	printNext(os.Stdout, nextGate(root), next)
 	return nil
+}
+
+// markFileFocus stamps each entry with whether it is inside the focus of the
+// project holding the working directory, and reports the focus it used.
+//
+// Computed at the render edge rather than inside ClassifyFiles, because focus is a
+// fact about WHERE THE CALLER STANDS and classification is a fact about the file.
+// Folding it in would give the same path two different classifications from two
+// directories, and every other caller of ClassifyFiles (staging, the gate, the
+// write guard) asks about the file.
+//
+// Silent on every uncertainty: an unresolvable cwd, or a workspace with no project
+// holding it, leaves Focus empty rather than claiming everything is out.
+func markFileFocus(ws types.WorkspaceReader, files []types.FileEntry) (project.Focus, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return project.Focus{}, false
+	}
+	focus, ok := project.FocusAt(ws, cwd)
+	if !ok {
+		return project.Focus{}, false
+	}
+	for i, f := range files {
+		if focus.Contains(f.Path) {
+			files[i].Focus = types.FocusIn
+		} else {
+			files[i].Focus = types.FocusOut
+		}
+	}
+	return focus, true
 }
 
 // claimLabel spells a claim's declarer as the path:target ref the rest of the CLI

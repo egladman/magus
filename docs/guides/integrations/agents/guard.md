@@ -248,13 +248,56 @@ outside the command line, and speak only into the silence the rules above leave:
   thing under the answer, which is the half that works on every host with
   nothing wired; this one arrives a call earlier.
 
+## Focus: the read lane
+
+A command that READS a path outside the project a session is working in draws a
+focus advisory. The focus of a session is the project holding its working
+directory, everything that project declares `depends_on` transitively, any
+project nested inside it, and the files directly at the workspace root plus
+`.claude/skills`: the declaration, the config, and the instructions every
+project resolves through, whatever the cwd. Not the siblings, and not the
+projects that depend on it: `magus affected` runs that direction, from a change
+outward to what it could break, and focus runs the other one, from where you
+stand back to what you legitimately need.
+
+It is the read half of a boundary whose write half is a lease's `owned_paths`,
+and the two catch different failures. A write outside your lane collides with
+another agent, and the diff eventually shows it. A read outside it collides with
+nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
+it carries a sibling's practices and code quality into work that never chose
+them. Nothing downstream can tell that happened.
+
+The rule reads the operands of the commands that read a file or search a tree
+(`cat`, `head`, `tail`, `sed`, `wc`, `grep`, `rg`, `find`, and their neighbours),
+and says nothing about anything else: a rule that fired on an interpreter or a
+build tool would be guessing at what the program does with its arguments. A
+pattern is not a path, so `grep`'s first operand is skipped; an operand that
+resolves outside the workspace is a different rule's business; a path no project
+owns has no lane it could be outside of.
+
+It ADVISES by default and DENIES only under a bound lease
+(`magus session lease <id>`), because a hard read boundary needs somebody to have
+declared one. The lease's `focus` names the paths whose projects it may read; it
+falls back to `owned_paths`, since a worker leased to edit a project was pointed
+at that project. Widening is that field and nothing else. There is no
+environment variable that turns the rule off, because a variable would be set
+once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
+would say the lane had stopped being checked.
+
+`magus describe file <path>` answers the same question before a read rather than
+after one: each entry carries `focus: out` when it falls outside, and the report
+names the focus it judged against.
+
 ## Advisories are said once
 
 The advisories that carry a standing fact rather than a correction to the
 command in front of you are held to one firing per session: the stale-binary
 notice, the graph-beats-grep hint, the classify-before-staging reminder, the
 index-staleness advisory, the enroll-a-lease notice an unleased write draws, and
-the repository-scoped path rules above. The second
+the repository-scoped path rules above. The focus advisory is held twice over:
+once per PATH, because a second out-of-focus file is a second fact, and once per
+session for the full explanation, so every firing after the first is one line.
+The second
 identical paragraph teaches nothing, and this page's standard says why that
 matters - a check that is red by default is a check people learn to ignore,
 taking the real failures with it.

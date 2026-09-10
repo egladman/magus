@@ -266,6 +266,16 @@ generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct{{end}}.
 
+Owned paths are the WRITE lane. The guard reads them as a READ lane too, so a
+worker leased to `apps/web` is advised off `apps/admin` and denied it outright
+once `magus session lease <its id>` binds the row to its checkout.{{if .Full}} The
+focus set is its projects plus what they declare `depends_on`, so a shared library
+it legitimately builds on stays open.{{end}} When a worker must READ something it
+must not WRITE, put that path in the row's `focus` instead of widening
+`owned_paths`: one list cannot say both, and widening the write lane to open a
+read is how two workers end up owning one file. `focus` is the only widening
+there is; nothing in the environment turns the rule off.
+
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
 lease's `owned_paths` with another `magus_ledger` put, or message the orchestrator
