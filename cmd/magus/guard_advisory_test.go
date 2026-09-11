@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,6 +92,7 @@ func TestAdvisoryGateLeavesUnenrolledKindsAlone(t *testing.T) {
 // runs. The graph-beats-grep hint is the measured case: it fired dozens of times in one
 // session with byte-identical text.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
 	ctx := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{base: base, workspace: root})
 	run := func(session string) string {
@@ -156,6 +158,7 @@ func TestPrecedentIdentClassifier(t *testing.T) {
 // project=-scoped query suggestion, and a workspace with no manifest gets the
 // unscoped advice it always got.
 func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	run := func(t *testing.T, base, command string) string {
 		t.Helper()
 		ctx := context.WithValue(t.Context(), hookActivityLocationKey{},
@@ -194,6 +197,7 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 // refusal explains itself every time it refuses: it is the one verdict the caller cannot
 // see past, and a second identical `git stash` blocked with no reason is a dead end.
 func TestHookCmdRepeatsEveryDenial(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
 	ctx := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{base: base, workspace: root})
 	run := func() string {
@@ -213,6 +217,7 @@ func TestHookCmdRepeatsEveryDenial(t *testing.T) {
 // pins the dedupe on the path surface, where a suppressed advisory must leave silence
 // rather than let the next rung speak into it.
 func TestHookCmdRoutesAnAgentSurfaceWrite(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 	t.Chdir(root)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))

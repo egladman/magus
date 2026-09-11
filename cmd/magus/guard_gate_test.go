@@ -361,6 +361,7 @@ func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 // checkout, and the lease bound there scopes the verdict, whatever the hook process's own
 // directory is.
 func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	global = globalFlags{}
 	root := t.TempDir()

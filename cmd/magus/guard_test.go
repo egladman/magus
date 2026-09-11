@@ -85,6 +85,7 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 // and the fail-open contract for empty input. Host-specific event extraction
 // happens before the command is piped to magus.
 func TestHookCmd(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
@@ -136,6 +137,7 @@ func TestHookCmd(t *testing.T) {
 // guard never saw as cleared. The manpage's exit table promises the same: deny and
 // unreadable input share code 2 so a host that blocks on 2 fails closed in both.
 func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -167,6 +169,7 @@ func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer
@@ -199,6 +202,7 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 }
 
 func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -276,6 +280,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
 // metadata, so a wrapper that supplies none still gets a verdict and still records an event.
 func TestHookCmd_AttributionIsOptional(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -302,6 +307,7 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 // failing to fire. Without it, a hook wired to a host's read tool would advise "you are
 // editing a declared output" at a file the agent only opened.
 func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -332,6 +338,7 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 // read event carries a file_path will send --observe alongside the envelope that sets --path,
 // and the observation must win. The reverse would silently restore the false advisory.
 func TestHookCmd_ObserveOutranksPath(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -349,6 +356,7 @@ func TestHookCmd_ObserveOutranksPath(t *testing.T) {
 // session's events; the path is what a reader follows to see the rest. magus records the
 // POINTER and never opens the file, which is what keeps the trail paths-and-timings.
 func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -374,6 +382,7 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 // without the flag the transcript link exists only for hosts that pipe raw JSON, which is
 // none of the ones magus ships a template for.
 func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -398,6 +407,7 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 // has nothing to report, and an observation with no subject is dropped like any other empty
 // one rather than being invented as ".", which would claim a reach the host never described.
 func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -418,6 +428,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
 // spawn is recorded rather than blocked for describing a denied command.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -459,6 +470,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 // orchestrator that writes no marker still gets an audited handoff, just an uncorrelated one,
 // and a host whose payload names no callee still records a spawn.
 func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
@@ -498,6 +510,7 @@ func TestDecodeHookEnvelope_CommandStillWinsOverPrompt(t *testing.T) {
 // is exercised end to end elsewhere; what matters here is that the mode parses,
 // shares the standard output arm, and FAILS OPEN on anything it cannot classify.
 func TestHookPathMode(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	for _, tt := range []struct {
 		name string
 		args []string
@@ -557,6 +570,7 @@ func TestDecodeHookEnvelope(t *testing.T) {
 // The shell rules then read a denied command QUOTED inside the payload as the command
 // about to run, so writing a todo that says not to run `sed -i` was itself blocked.
 func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	const payload = `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"TodoWrite",` +
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
 

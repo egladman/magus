@@ -172,6 +172,9 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.OwnedPaths = []string{"**"}
+	// Unregistered, so the lane rule has a denial of its own to be outranked BY. A lane
+	// that covers the path and says nothing leaves the rank unobserved.
+	lease.Registered = 0
 	ctx, _ := fleetFixture(t, lease)
 
 	var out bytes.Buffer
@@ -180,7 +183,8 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, out.String(), "magus cache dir")
 	assert.Contains(t, out.String(), "magus is the only writer of it")
-	assert.NotContains(t, out.String(), lease.ID+"\\n", "the lane rules must not answer for this path")
+	assert.NotContains(t, out.String(), "registered the base it landed on",
+		"the lane rules must not answer for this path")
 }
 
 // TestCacheDirDenyNamesTheVerbs pins the half of the text that does the work. A refusal

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -164,6 +165,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 // test picked would pass or fail on test ORDER, since the rule is silent whenever the
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
 
