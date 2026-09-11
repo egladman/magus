@@ -110,6 +110,10 @@ var guardChainedRunRe = regexp.MustCompile(
 type guardToolMatch struct {
 	spell     string
 	operation string
+	// rewrites reports that the rendering matched was the rw one, so the verdict can
+	// name the charm that makes the write legal instead of routing to a target that
+	// would refuse to do it.
+	rewrites bool
 }
 
 // guardTextFilters are the shell commands whose purpose is to trim, slice, or
@@ -394,11 +398,20 @@ func rawToolDenied(c guardCommand) bool {
 	return ok
 }
 
-// rawToolMatch finds the operation whose rendered base command and semantic
-// subcommand match c. Both the ordinary and rw renderings participate: a spell
-// can expose a read-only check (`gofmt -l`) and a rewriting form (`gofmt -w`)
-// without the guard confusing the two. The catalog is read for every process,
-// so a newly registered spell operation requires no guard edit.
+// rawToolMatch finds the operation whose rendered base command matches c. Both the
+// ordinary and rw renderings participate, so the verdict can name the charm the caller
+// needs. The catalog is read for every process, so a newly registered spell operation
+// requires no guard edit.
+//
+// A rendering that carries a SUBCOMMAND is matched on it, which is what keeps `go env`
+// available in a workspace whose spells render `go test`. A rendering that carries none is
+// a single-purpose program, and then every spelling of it is the covered one: a read-only
+// form (`gofmt -l`, `govulncheck ./...`, `shellcheck`) bypasses the cache, the sandbox and
+// the affected set exactly as the rewriting form does, and the exemption those used to
+// have is what let a whole tool family run raw.
+//
+// `--version` still passes. It asks the binary what it is rather than running it over the
+// tree, and a guard funnels a capability rather than removing one.
 func rawToolMatch(c guardCommand) (guardToolMatch, bool) {
 	for _, a := range c.Args {
 		if a == "--version" || a == "-version" || a == "-V" {
@@ -407,51 +420,45 @@ func rawToolMatch(c guardCommand) (guardToolMatch, bool) {
 	}
 	for _, spell := range project.DefaultSpellRegistry().All() {
 		for _, operation := range spell.Targets() {
-			for _, charms := range [][]string{nil, []string{"rw"}} {
+			for _, charms := range [][]string{nil, {"rw"}} {
 				program, args, ok, err := spell.RenderCommand(operation, charms)
 				if err != nil || !ok || program == "" || filepath.Base(program) != c.Name {
 					continue
 				}
 				prefix := guardCommandPrefix(args)
-				if len(prefix) == 0 || len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix) {
+				if len(prefix) > 0 && (len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix)) {
 					continue
 				}
-				return guardToolMatch{spell: spell.Name(), operation: operation}, true
+				return guardToolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
 			}
 		}
 	}
 	return guardToolMatch{}, false
 }
 
-// guardCommandPrefix extracts the semantic command portion from an operation's
-// rendered argv. It preserves compound verbs (`go mod tidy`, `go tool
-// govulncheck`) and uses write-mode flags as a verb when an operation has no
-// subcommand (`gofmt -w`). Other leading flags describe a read-only rendering
-// and therefore do not create a raw-tool deny.
+// guardCommandPrefix extracts the semantic subcommand from an operation's rendered argv,
+// preserving compound verbs (`go mod tidy`, `go tool govulncheck`). It is empty when the
+// rendering names no subcommand, which rawToolMatch reads as a single-purpose program.
 func guardCommandPrefix(args []string) []string {
-	if len(args) == 0 {
-		return nil
-	}
-	for _, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
-			break
-		}
-		if arg == "-w" || arg == "--write" || arg == "--fix" {
-			return []string{arg}
-		}
-	}
 	first := 0
 	for first < len(args) && strings.HasPrefix(args[first], "-") {
 		first++
 	}
-	if first == len(args) || args[first] == "." || strings.HasPrefix(args[first], "./") {
+	if first == len(args) || !guardSubcommandWord(args[first]) {
 		return nil
 	}
 	prefix := []string{args[first]}
-	if (args[first] == "mod" || args[first] == "tool") && first+1 < len(args) && !strings.HasPrefix(args[first+1], "-") {
+	if (args[first] == "mod" || args[first] == "tool") && first+1 < len(args) && guardSubcommandWord(args[first+1]) {
 		prefix = append(prefix, args[first+1])
 	}
 	return prefix
+}
+
+// guardSubcommandWord reports an argv word that names a subcommand rather than a path or a
+// pattern: a bare word with no separator, glob or extension. `./...`, `.` and
+// `scripts/x.sh` are operands a rendering points the tool AT, not verbs it selects.
+func guardSubcommandWord(arg string) bool {
+	return arg != "" && !strings.HasPrefix(arg, "-") && !strings.ContainsAny(arg, "/*?.")
 }
 
 // The guard patterns. [^&|;]* keeps a flag search inside one segment of a
@@ -1195,5 +1202,17 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 // named, since it resolved from the spell catalog rather than from a convention.
 func runGuardContextFor(match guardToolMatch) string {
 	return fmt.Sprintf("Run it through magus instead: `"+hint.Run.With("<target>", "<project>")+"`. `"+hint.DescribeTargets.String()+"` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
+		guardCharmClause(match)+
 		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n\n%s", match.spell, match.operation, runGuardContext)
+}
+
+// guardCharmClause names the charm the caller's form needs, because the same target
+// answers both and routing to the wrong one sends a rewrite at a target that would refuse
+// to do it. The charm is named rather than the target: a workspace calls its targets
+// whatever it likes, and `rw` is magus's own vocabulary.
+func guardCharmClause(match guardToolMatch) string {
+	if match.rewrites {
+		return "That form REWRITES, so the target has to run with the `rw` charm; a workspace that sets default_charms already has it, and `--no-default-charms` is what takes it away.\n"
+	}
+	return "That form only CHECKS, so run the target without the `rw` charm; where this workspace sets default_charms, `--no-default-charms` is what keeps it a check.\n"
 }

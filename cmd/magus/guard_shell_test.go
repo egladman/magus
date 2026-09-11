@@ -198,9 +198,24 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
-		// Exempt: these bypass nothing, so advising on them is pure noise.
-		{command: "gofmt -l ./libs"},
-		{command: "gofmt -d x.go"},
+		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
+		// a check bypasses nothing, and what it bypasses is the cache, the sandbox and
+		// the affected set, exactly as the rewriting form does. The deny names the charm,
+		// so the reader is not sent at a target that would rewrite the tree.
+		{command: "gofmt -l ./libs", rule: rawTool(`gofmt -l ./libs`)},
+		{command: "gofmt -d x.go", rule: rawTool(`gofmt -d x.go`)},
+		// One per tool family a spell renders without a subcommand. Each passed before,
+		// because the rendering names no verb and the prefix match had nothing to compare.
+		{command: "golangci-lint run ./...", rule: rawTool(`golangci-lint run ./...`)},
+		{command: "govulncheck ./...", rule: rawTool(`govulncheck ./...`)},
+		{command: "shellcheck scripts/release.sh", rule: rawTool(`shellcheck scripts/release.sh`)},
+		// `typos` is the other half of the rule: no built-in spell renders it, so it
+		// still passes. A guard funnels a capability magus has, never one it does not.
+		{command: "typos"},
+		// Asking the binary what it is runs nothing over the tree, and a guard funnels a
+		// capability rather than removing one.
+		{command: "gofmt --version"},
+		{command: "govulncheck -V"},
 		// `go build` denies at EVERY output path. Producing a binary is a write,
 		// and the write rule has no destination-shaped exceptions.
 		{command: "go build -o /tmp/magus ./cmd/magus", rule: rawTool(`go build -o /tmp/magus ./cmd/magus`)},
@@ -261,11 +276,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// absolute -o (the documented `/tmp/magus` dev loop) is exempt.
 		{command: "go build -o ./bin/magus ./cmd/magus", rule: rawTool(`go build -o ./bin/magus ./cmd/magus`)},
 		{command: "go mod tidy", rule: rawTool(`go mod tidy`)},
-		// A raw tool is guarded only when a spell renders that exact base command
-		// and verb. These programs have no direct rendered equivalent, so they
-		// remain available instead of being denied by a stale generic list.
+		// A raw tool is guarded only when a spell renders that program. These have no
+		// rendered equivalent, so they remain available instead of being denied by a
+		// stale generic list.
 		{command: "go mod vendor"},
-		{command: "govulncheck ./..."},
 		{command: "ruff check ."},
 		{command: "mypy ."},
 		{command: "rustfmt src/main.rs"},
@@ -845,9 +859,8 @@ func TestGuardAdversarial(t *testing.T) {
 		{"mise install", "mise install"},
 		{"bash -c innocuous", "bash -c 'ls -la'"},
 
-		// Documented exemptions.
-		{"gofmt list", "gofmt -l ./libs"},
-		{"gofmt diff", "gofmt -d x.go"},
+		// Documented exemptions. A read-only rendering is NOT one of them any more: see
+		// the two gofmt rows in TestEvaluateBashGuard.
 		{"version probe", "golangci-lint --version"},
 		{"go version", "go version"},
 		{"go help", "go help test"},
