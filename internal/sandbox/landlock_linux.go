@@ -52,8 +52,8 @@ const fsAccessReadOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_FILE |
 // are masked against the probed ABI before use.
 // fsAccessDirOnly are the rights only a directory can carry. Requesting any of them on
 // a regular file makes landlock_add_rule fail with EINVAL, which is how a rule for
-// /run/systemd/resolve/stub-resolv.conf - a FILE in an allowlist that assumed a
-// directory - took down every sandboxed run on a systemd host.
+// /run/systemd/resolve/stub-resolv.conf (a FILE in an allowlist that assumed a
+// directory) took down every sandboxed run on a systemd host.
 const fsAccessDirOnly uint64 = unix.LANDLOCK_ACCESS_FS_READ_DIR |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_DIR |
 	unix.LANDLOCK_ACCESS_FS_REMOVE_FILE |
@@ -131,7 +131,7 @@ func Apply(p *Policy) error {
 
 	// Supported() promises that a false return means Apply reports ErrUnsupported, and
 	// until now Apply never asked. On a host where the landlock syscalls work but
-	// securityfs is not mounted - a GitHub Actions runner, for one - Supported() said no
+	// securityfs is not mounted (a GitHub Actions runner, for one), Supported() said no
 	// while Apply went ahead, built a ruleset, and failed with whatever the kernel
 	// objected to. Callers treat ErrUnsupported as a soft fallback and anything else as a
 	// hard failure, so that gap turned an unmountable securityfs into a broken run.
