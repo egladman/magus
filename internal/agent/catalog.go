@@ -137,8 +137,8 @@ import (
 // the report with `magus ledger accept` instead of demanding four facts in prose, and
 // carries a coalescing rule: partition by write set, then merge what the write sets
 // allow, because a worker's fixed context load is paid whatever the diff's size.
-// 66: magus-multi-agent drops the word "handoff" and says delegate; the word is the
-// agent-industry idiom and this tool is written for a person first.
+// 66: magus-multi-agent says delegate. The agent-industry word it replaces is gone;
+// this tool is written for a person first.
 // 67: magus-multi-agent follows the ledger's grading contract onto its new shape.
 // `magus ledger accept` now reads the report from --stdin only and exits 1 for a
 // rejection or 2 for one that will not decode; it derives pass or fail from the
