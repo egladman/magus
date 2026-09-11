@@ -500,18 +500,18 @@ func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
 	id := narrowLease().ID
 
 	for _, command := range []string{
-		"./magus session lease " + id,
-		"./magus ledger accept --schema",
-		"./magus ledger accept --help",
-		"./magus ledger register --schema",
+		"./magus job exec " + id,
+		"./magus job wait --schema",
+		"./magus job wait --help",
+		"./magus job fork --schema",
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, id, command),
 			"%q asserts a binding the holder already has, or prints a contract; neither writes a row", command)
 	}
 
 	for _, command := range []string{
-		"./magus session lease harness/other",
-		"./magus ledger accept --state pass",
+		"./magus job exec harness/other",
+		"./magus job wait --state pass",
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, id, command)
 		require.NotEmpty(t, reason, "%q still moves a row", command)
@@ -521,8 +521,8 @@ func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
 
 // laneFleet is the plan the lane rule is graded against: the acting worker, and a sibling
 // whose tree every write below aims at.
-func laneFleet() []types.Lease {
-	return []types.Lease{
+func laneFleet() []types.Job {
+	return []types.Job{
 		{
 			ID:         "lease-a",
 			Goal:       "own the ledger store",
