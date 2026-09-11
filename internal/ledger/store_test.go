@@ -366,6 +366,26 @@ func hashOf(t *testing.T, path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// A ledger a newer magus wrote is refused rather than read lossily. read drops what this
+// binary does not know and mutate rewrites EVERY row, so one unrelated put would destroy
+// the rest of the plan.
+func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"leases":[{"id":"adj/store","schema_version":2}]}`+"\n"), 0o644))
+
+	_, err = s.List()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "schema_version 2 and this magus accepts version 1 only")
+
+	_, err = s.Put(t.Context(), lease("adj/other"))
+	assert.Error(t, err, "no write goes near a ledger this binary cannot read whole")
+}
+
 func TestStoreClear(t *testing.T) {
 	t.Parallel()
 

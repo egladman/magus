@@ -565,6 +565,15 @@ func (s *Store) read() (ledgerFile, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return ledgerFile{}, err
 	}
+	// A row this binary cannot read whole stops every operation, not just the read of that
+	// row: mutate rewrites EVERY row in the file, so one unrelated put would silently drop
+	// whatever a newer magus recorded across the whole plan.
+	for _, row := range f.Leases {
+		if row.SchemaVersion > types.LeaseSchemaVersion {
+			return ledgerFile{}, fmt.Errorf("ledger: row %s in %s is schema_version %d and this magus accepts version %d only."+
+				" A newer ledger is not readable by an older magus; update magus", row.ID, s.path, row.SchemaVersion, types.LeaseSchemaVersion)
+		}
+	}
 	return f, nil
 }
 
