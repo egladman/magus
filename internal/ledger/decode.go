@@ -37,14 +37,14 @@ type Row struct {
 	// the version.
 	ID string `json:"id"`
 	// The rest mirror types.Lease one for one; that type documents what each one means.
-	Parent         string           `json:"parent,omitempty"`
-	Goal           string           `json:"goal,omitempty"`
-	Checkpoint     string           `json:"checkpoint,omitempty"`
-	OwnedPaths     []string         `json:"owned_paths,omitempty"`
-	ForbiddenPaths []string         `json:"forbidden_paths,omitempty"`
-	Focus          []string         `json:"focus,omitempty"`
-	DependsOn      []string         `json:"depends_on,omitempty"`
-	Tier           string           `json:"tier,omitempty"`
+	Parent         string            `json:"parent,omitempty"`
+	Goal           string            `json:"goal,omitempty"`
+	Checkpoint     string            `json:"checkpoint,omitempty"`
+	OwnedPaths     []string          `json:"owned_paths,omitempty"`
+	ForbiddenPaths []string          `json:"forbidden_paths,omitempty"`
+	Focus          []string          `json:"focus,omitempty"`
+	DependsOn      []string          `json:"depends_on,omitempty"`
+	Tier           string            `json:"tier,omitempty"`
 	Check          *types.LeaseCheck `json:"check,omitempty"`
 	State          types.LeaseState  `json:"state,omitempty"`
 	ReadOnly       bool              `json:"read_only,omitempty"`
@@ -65,33 +65,33 @@ func (r Row) Validate() error {
 	if r.State != "" && !types.ValidLeaseState(r.State) {
 		return fmt.Errorf("ledger: state must be one of %s", stateVocabulary())
 	}
-	_, err := r.check()
+	_, _, err := r.check()
 	return err
 }
 
-// check is the row's declared check, from either spelling. A line that does not parse is
-// refused HERE, at the door, rather than at grading time, where the row is already stored
-// and the worker has already run something.
-func (r Row) check() (*types.LeaseCheck, error) {
+// check is the row's declared check, from either spelling, and whether it declares one at
+// all. A line that does not parse is refused HERE, at the door, rather than at grading
+// time, where the row is already stored and the worker has already run something.
+func (r Row) check() (types.LeaseCheck, bool, error) {
 	line := strings.TrimSpace(r.Validation)
 	switch {
 	case r.Check != nil && line != "":
-		return nil, errors.New("ledger: a row carries `check` or a rendered `validation` line, not both")
+		return types.LeaseCheck{}, false, errors.New("ledger: a row carries `check` or a rendered `validation` line, not both")
 	case r.Check != nil:
 		parsed, err := types.ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
-			return nil, fmt.Errorf("ledger: %w", err)
+			return types.LeaseCheck{}, false, fmt.Errorf("ledger: %w", err)
 		}
 		parsed.Args = r.Check.Args
-		return &parsed, nil
+		return parsed, true, nil
 	case line != "":
 		parsed, err := types.ParseLeaseRunLine(line)
 		if err != nil {
-			return nil, fmt.Errorf("ledger: %w", err)
+			return types.LeaseCheck{}, false, fmt.Errorf("ledger: %w", err)
 		}
-		return &parsed, nil
+		return parsed, true, nil
 	}
-	return nil, nil
+	return types.LeaseCheck{}, false, nil
 }
 
 // stateVocabulary is the closed set as an error quotes it.
@@ -117,11 +117,10 @@ func (r Row) Apply(u *types.Lease) {
 	u.Tier = strings.TrimSpace(r.Tier)
 	// Validate refused an unparsable check before the row reached a store, so the error
 	// here cannot fire; the rendered line is written from the record so the two agree.
-	check, _ := r.check()
-	u.Check = check
-	u.Validation = ""
-	if check != nil {
-		u.Validation = check.String()
+	check, declared, _ := r.check()
+	u.Check, u.Validation = nil, ""
+	if declared {
+		u.Check, u.Validation = &check, check.String()
 	}
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly

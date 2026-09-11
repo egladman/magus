@@ -7,7 +7,7 @@ tags: [cli, magus ledger, ledger, leases, agents, delegation]
 
 # magus-ledger
 
-Read the lease ledger a fan-out declared, declare a row, and grade what comes back
+Read the lease ledger, declare a row, and grade a worker's report
 
 ## Synopsis
 
@@ -34,9 +34,9 @@ criteria, its owned and forbidden paths, the knowledge graph's blast radius for
 each owned path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the bootstrap commands the worker starts
 with, each with the reason it is there. It carries no rules: the guard states
-those at the moment a command meets one. It
-also carries what the WORKSPACE knows and the row's author may not have written
-down: the projects the owned paths reach, the declared output globs that land
+those at the moment a command meets one. It also carries what the WORKSPACE knows
+and the row's author may not have written down: the projects the owned paths
+reach, the declared output globs that land
 inside them, the paths a sibling lease is holding, the build inputs and workspace
 config that have one owner, and the projects that change alongside the leased
 ones without declaring a dependency. It is context and never a verdict, the same
@@ -47,29 +47,39 @@ in the orchestrator's tree, after every unit lands.
 register declares one row, from flags for the one-row case or from a JSON record
 on --stdin. It replaces the row it names rather than merging into it, which is
 the difference between a person declaring what a lease IS and an agent advancing
-one field of a live row.
+one field of a live row. Every path flag is repeatable or comma-separated, and an
+empty segment is refused rather than dropped. There is no --state: this declares a
+new row, and a row nobody has picked up is declared.
 
-accept closes the loop. It reads a worker's report as JSON on stdin and grades
-EVIDENCE, not claims: every changed path inside the declared owned paths, a change
-set that is not empty on a row that writes, and an output ref that resolves to a
-passing run of that row's own validation. There is no field for whether the worker
-thinks it passed. A row that passes is recorded pass; a rejection names every rule
-that failed and exits 1, and a report that could not be decoded exits 2. Whether
-the work is GOOD stays the orchestrator's reading.
+accept grades what comes back. It reads a worker's report as JSON on stdin and
+grades EVIDENCE, not claims: every changed path inside the declared owned paths
+and outside the forbidden ones, a change set that is not empty on a row that
+writes, descendants the plan carries, and an output ref that resolves to a passing
+run of that row's own validation. There is no field for whether the worker thinks
+it passed. A row that passes is recorded pass. Exit 1 is a verdict, naming every
+rule that failed; exit 2 is magus unable to answer, which is a report that would
+not decode, an output store that would not open, or a row that would not write.
+Whether the work is GOOD stays the orchestrator's reading.
 
 ### ledger register options
 
-**--focus** *string*
-: A path whose projects this lease may read; repeat for more (additive: owned paths are readable already)
+**--check** *\<target\> \<project\> [-- args]*
+: The one check this lease runs, as \`\<target\> \<project\> [-- args]\` (the \`magus run\` is implied)
 
-**--forbidden** *string*
-: A path inside the lane this lease may not write; repeat for more
+**--checkpoint** *magus vcs checkpoint -o name*
+: The working state this lease is handed, as \`magus vcs checkpoint -o name\` prints it
+
+**--deny-paths** *string*
+: A path inside the lane this lease may not write; repeatable or comma-separated
+
+**--depends-on** *string*
+: A lease this one waits on; repeatable or comma-separated
 
 **--goal** *string*
 : The goal and its observable acceptance criteria
 
-**--owned** *string*
-: A path this lease may write; repeat for more
+**--model** *string*
+: The model the work was matched to
 
 **--parent** *string*
 : The lease this one is handed out under
@@ -77,17 +87,17 @@ the work is GOOD stays the orchestrator's reading.
 **--read-only**
 : A lease that gathers evidence and writes nothing
 
+**--read-paths** *string*
+: A path whose projects this lease may read; repeatable or comma-separated (additive: the written paths are readable already)
+
 **--schema**
 : Print the JSON schema a row must satisfy, and exit
 
 **--stdin**
 : Read one row as JSON on stdin instead of taking it from flags
 
-**--tier** *string*
-: The effort tier the work was matched to
-
-**--validation** *magus run \<target\> \<project\>*
-: The one check this lease runs, as a \`magus run \<target\> \<project\>\` line
+**--write-paths** *string*
+: A path this lease may write; repeatable or comma-separated
 
 ### ledger accept options
 
@@ -134,7 +144,7 @@ magus ledger brief session-load/core
 *Declare a lease*
 
 ```sh
-magus ledger register session-load/core --owned internal/sessions --validation 'magus run test internal/sessions'
+magus ledger register session-load/core --write-paths internal/sessions --check 'test internal/sessions'
 ```
 
 *Declare it from a record*
