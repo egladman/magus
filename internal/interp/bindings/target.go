@@ -561,26 +561,11 @@ func buzzDispatchViaPool(ctx context.Context, p *buzz.Pool, names []string) erro
 	lim := cache.LimiterFromContext(ctx)
 	ancestors := buzz.AncestorsFromContext(ctx)
 	return proc.RunChildSync(ctx, lim, func() error {
-		childCtx := cache.WithoutSlotHeld(ctx)
-		if !buzz.HasTargetInterceptor(ctx) {
-			return p.Dispatch(childCtx, names, ancestors)
-		}
-		// Pool.Dispatch may fan names out concurrently. Yield once around that whole
-		// fan-out rather than once per intercepted target: the caller owns one
-		// isolation lease, and only its dispatcher may release it.
-		//
-		// INSIDE the slot yield, not around it. Two locks are released here (the
-		// limiter slot and the isolation lease), and releasing them in one order
-		// while re-acquiring them in the other is a lock-order inversion. Held the
-		// other way round it deadlocks at saturated concurrency: an exclusive step
-		// holding the isolation write lock waits for a slot, while this dispatcher
-		// holds a slot and waits to re-read the isolation lock behind it. Neither
-		// re-acquisition is cancellable (Limiter.Yield restores under
-		// context.WithoutCancel and sync.RWMutex takes no context), so Ctrl-C cannot
-		// break the cycle. Nested this way the two are strictly LIFO.
-		return cache.YieldRunIsolation(childCtx, func(c context.Context) error {
-			return p.Dispatch(c, names, ancestors)
-		})
+		// The slot is handed back here and the isolation lease deliberately is not: the
+		// children run inside the caller's region and take no lease of their own, so
+		// there is nothing for the dispatcher to release and nothing to re-acquire
+		// behind a queued peer (see cache.runIsolation).
+		return p.Dispatch(cache.WithoutSlotHeld(ctx), names, ancestors)
 	})
 }
 

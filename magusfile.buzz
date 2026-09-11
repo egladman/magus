@@ -143,7 +143,7 @@ magus\project({
         // NOT exclusive, and it never actually was. The engine released an exclusive
         // step's lease for the whole of its ctx.needs fan-out, and this target's body IS
         // that fan-out, so the flag bought nothing for as long as it has been here. Once
-        // the engine started honouring it (see YieldRunIsolation), the cost arrived
+        // the engine started honouring it (see cache.runIsolation), the cost arrived
         // without the benefit: every other ci member reaches generate, so all of them
         // serialized behind its entire codegen chain with nothing of their own to report,
         // the built-in 15m stall window ran out, and the watchdog took the invocation.

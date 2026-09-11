@@ -9,7 +9,7 @@ import "context"
 // Three independent markers produced two bugs on 2026-09-08, each a child context
 // carrying the wrong SUBSET of the parent's hold. A needs child took a second machine
 // claim the parent's figure already covered, then queued forever behind the parent
-// blocked waiting for it. An exclusive step's fan-out dropped its write lock and
+// blocked waiting for it. An exclusive step's fan-out gave its isolation lease back and
 // excluded nothing.
 //
 // The zero value holds nothing, which is the right reading for work dispatched outside

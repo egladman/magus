@@ -149,6 +149,35 @@ func (h *slotHold) done() {
 	h.w.evaluateLocked()
 }
 
+// stalled reports a hold that cannot finish on its own: it is blocked on something else,
+// or its slots are handed back for a fan-out it is waiting on. A nil hold is read as
+// working, which is the conservative answer for a step that has not been admitted yet and
+// for a run whose limiter keeps no records.
+func (h *slotHold) stalled() bool {
+	if h == nil {
+		return false
+	}
+	h.w.mu.Lock()
+	defer h.w.mu.Unlock()
+	return h.blocked != "" || h.yielded
+}
+
+// waitingOn names what the hold is parked on, as a refusal spells it.
+func (h *slotHold) waitingOn() string {
+	if h == nil {
+		return "something unrecorded"
+	}
+	h.w.mu.Lock()
+	defer h.w.mu.Unlock()
+	if h.blocked != "" {
+		return h.blocked
+	}
+	if h.yielded {
+		return "the targets it composes"
+	}
+	return "nothing"
+}
+
 // block marks the hold as waiting on what until the returned func runs. Nested waits
 // restore the outer one, so a mark is never lost by a deeper wait finishing first.
 func (h *slotHold) block(what string) func() {

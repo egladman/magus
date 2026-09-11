@@ -924,14 +924,13 @@ func stepSlots(s Step, lim *Limiter) int {
 // marked as holding the claim, plus the release that hands it back.
 //
 // It is the FIRST seat a step takes, ahead of the run-isolation lease and the local
-// limiter slot, because it is the only one whose wait is other processes' to end. Queued
-// under the isolation lock that wait is uninterruptible: it is ctx-aware but sync.RWMutex
-// is not, so a shared peer that yielded its read lock to fan out parks re-taking it
-// behind the queued step's pending write lock while holding the claim that step waits
-// for, and Ctrl-C reaches neither goroutine. Taking it first instead means a step holds
-// machine-wide memory while it waits for a local lock or slot, a wait that ends on its
-// own: the isolation-lock holder took its claim first and can run to completion. The
-// claim goes back LAST, after the slot and the lease.
+// limiter slot, because it is the only one whose wait is other processes' to end. Held
+// the other way round, a step queued for the machine occupies the gate while it waits,
+// so an exclusive peer waiting for that gate waits on strangers this process cannot
+// hurry. Taking it first instead means a step holds machine-wide memory while it waits
+// for a local lock or slot, a wait that ends on its own: the gate's holders took their
+// claims first and can run to completion. The claim goes back LAST, after the slot and
+// the lease.
 //
 // A step admitted BENEATH one that already holds a claim takes none, because the ancestor
 // is the one thing that cannot release: it is blocked in dispatch waiting for this step,
@@ -984,6 +983,9 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 		return ctx, 0, nil, err
 	}
 	ctx = withSlotHold(ctx, hold)
+	// The isolation lease keeps the same record, so the gate's wedge verdict can tell a
+	// holder that is working from one that is parked (see runIsolation).
+	admissionFrom(ctx).isolation.attach(hold)
 	// Report occupancy on both edges of the slot's life, so an interactive run can show a
 	// live pool counter. Handlers that render no status line ignore the event, so piped
 	// and CI output are unchanged.
@@ -1009,33 +1011,6 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Contex
 // stepLabel names a step for a human reading a wait: the project as `magus status` spells
 // it, then the target.
 func stepLabel(s Step) string { return displayProject(s.ProjectPath) + " " + s.Target }
-
-// runIsolation serializes Step.Exclusive steps against the rest of one invocation: an
-// exclusive step takes the write lock, every other step takes the read lock.
-type runIsolation struct {
-	mu sync.RWMutex
-}
-
-type runIsolationKey struct{}
-
-type runIsolationLease struct {
-	isolation *runIsolation
-	exclusive bool
-	// inherited marks a lease a step is running UNDER rather than holding: an exclusive
-	// ancestor kept its write lock across a dispatch, so this step is already inside the
-	// region and has nothing to acquire or release.
-	inherited bool
-}
-
-// WithRunScope attaches the isolation gate shared by a top-level invocation and
-// its off-batch cache work. Reusing an existing scope makes nested entry points
-// join the same gate instead of serializing against an unrelated one.
-func WithRunScope(ctx context.Context) context.Context {
-	if isolationFrom(ctx) != nil {
-		return ctx
-	}
-	return context.WithValue(ctx, runIsolationKey{}, &runIsolation{})
-}
 
 type sharedStepBaseKey struct{}
 
@@ -1082,73 +1057,6 @@ func (c sharedStepContext) Done() <-chan struct{}       { return c.cancel.Done()
 func (c sharedStepContext) Err() error                  { return c.cancel.Err() }
 func (c sharedStepContext) Value(key any) any           { return c.values.Value(key) }
 
-func isolationFrom(ctx context.Context) *runIsolation {
-	isolation, _ := ctx.Value(runIsolationKey{}).(*runIsolation)
-	return isolation
-}
-
-func acquireRunIsolation(ctx context.Context, exclusive bool) (context.Context, func()) {
-	ctx = WithRunScope(ctx)
-	// Inside an exclusive ancestor's region there is nothing to take: a shared lease is
-	// redundant and an exclusive one is already satisfied, and either would block forever
-	// behind the ancestor's write lock.
-	//
-	// An exclusive step admitted here therefore does not exclude its siblings, which is
-	// Step's stated contract rather than a shortcut: Exclusive is "RunAll only ... no
-	// other BATCH step runs concurrently", and a dynamically dispatched needs child
-	// arrives through RunAside, outside any batch. The ancestor's write lock already
-	// excludes it from every batch peer, which is the whole of what the policy promises.
-	if lease := admissionFrom(ctx).isolation; lease != nil && lease.inherited {
-		return ctx, func() {}
-	}
-	isolation := isolationFrom(ctx)
-	if exclusive {
-		isolation.mu.Lock()
-	} else {
-		isolation.mu.RLock()
-	}
-	held := admissionFrom(ctx)
-	held.isolation = &runIsolationLease{isolation: isolation, exclusive: exclusive}
-	ctx = held.on(ctx)
-	return ctx, func() {
-		if exclusive {
-			isolation.mu.Unlock()
-			return
-		}
-		isolation.mu.RUnlock()
-	}
-}
-
-// YieldRunIsolation lets fn admit dynamically dispatched children under the caller's
-// RunAll or RunAside isolation lease. A shared holder releases its read lock for the
-// duration and retakes it before returning; an exclusive holder keeps its write lock and
-// the children run inside its region, taking no lease of their own. It is deliberately a
-// no-op outside an admitted cache step.
-func YieldRunIsolation(ctx context.Context, fn func(context.Context) error) error {
-	held := admissionFrom(ctx)
-	lease := held.isolation
-	if lease == nil || lease.inherited {
-		return fn(ctx)
-	}
-	if lease.exclusive {
-		// Keep the write lock. Releasing it would make an exclusive step shareable for
-		// exactly the part of its life where it fans out, which for a body that is only
-		// ctx.needs is nearly all of it. Children cannot take leases behind this write lock,
-		// so they are marked as inside the region and acquireRunIsolation hands them none.
-		inherited := *lease
-		inherited.inherited = true
-		held.isolation = &inherited
-		return fn(held.on(ctx))
-	}
-	// A shared holder releases: a child may need an exclusive lease, which the read lock
-	// would block, and RWMutex parks a new reader behind any waiting writer, so a parent
-	// that held would deadlock on its own child.
-	lease.isolation.mu.RUnlock()
-	defer lease.isolation.mu.RLock()
-	held.isolation = nil
-	return fn(held.on(ctx))
-}
-
 // RunAside runs one step OUTSIDE a batch under the same accounting a batch step gets:
 // [Cache.admit]'s limiter slots, machine claim, inflight record and heartbeat, wrapped
 // around [Cache.Run]'s captured log, output ref and journal result event.
@@ -1176,7 +1084,10 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
-	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
+	ctx, releaseIsolation, err := acquireRunIsolation(ctx, s.Exclusive, stepLabel(s))
+	if err != nil {
+		return Result{ProjectPath: s.ProjectPath}, err
+	}
 	defer releaseIsolation()
 	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
@@ -1325,12 +1236,20 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 				return fail(machineErr)
 			}
 			defer releaseMachine()
-			stepCtx, releaseIsolation := acquireRunIsolation(machineCtx, s.Exclusive)
+			stepCtx, releaseIsolation, isoErr := acquireRunIsolation(machineCtx, s.Exclusive, stepLabel(s))
+			if isoErr != nil {
+				// A refused gate is an independent finding for the same reason a
+				// deadlocked pool is: nothing upstream failed and the batch was not
+				// cancelled, this run's own waits arranged themselves into a cycle. A
+				// cancelled wait is the batch unwinding and stays a consequence.
+				ran = errors.Is(isoErr, types.RunIsolationWedged) && gctx.Err() == nil
+				return fail(isoErr)
+			}
 			defer releaseIsolation()
-			// acquireRunIsolation's Lock/RLock is not ctx-aware, so a goroutine can park
-			// there uninterruptibly while a sibling fails. Re-check after it returns and
-			// bail before running fn. lim.Acquire below would catch a cancelled gctx too,
-			// except on an unlimited limiter, where it returns nil without consulting ctx.
+			// A gate that was free hands the seat over without consulting the context, so
+			// a sibling that failed while this step queued for the machine budget is only
+			// observed here. lim.Acquire below would catch it too, except on an unlimited
+			// limiter, where it returns nil without consulting ctx.
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}

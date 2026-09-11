@@ -296,6 +296,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A target dispatched through `ctx.needs` no longer waits for the run-isolation gate its
+  own ancestor holds.** One invocation shares that gate: an `exclusive` step takes all of
+  it, every other step takes a seat. Work admitted beneath a step now inherits whatever
+  lease that step holds instead of asking for one of its own, in both directions: an
+  exclusive request under a shared ancestor included, which is the case that wedged. A
+  composed target's skip-cache gate reached it first: dispatched from inside a step holding
+  the shared side, it asked for the exclusive side, waited for a release that could only
+  come once it returned, and parked every later shared request behind it. The run then held
+  every project lock with no step executing, no child process alive and `magus status`
+  reporting nothing running, twice on the same tree for nineteen and twenty-one minutes.
+  What inheriting gives up is nothing the policy promised: `exclusive` excludes BATCH peers,
+  and the ancestor's admission already excludes every one of them. Where a wedge is reached
+  anyway the gate is now refused rather than waited out, naming every holder, what each was
+  parked on, and everything queued behind them (MGS3015); the wait is cancellable, so
+  Ctrl-C, a failing sibling and the stall watchdog all reach a parked step. Waiting for an
+  upstream target in the same run no longer beats the invocation heartbeat, because a step
+  that is moving beats for itself and a batch where every goroutine is parked in that wait
+  was telling the watchdog it was fine.
 - **A committed coverage record is no longer refused because the commit it names is not an
   ancestor of the checkout.** Every record is measured on a branch, and a squash merge
   rewrites that branch's commits, so the rule turned the badge red on every checkout of

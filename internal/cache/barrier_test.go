@@ -712,15 +712,15 @@ func TestRunAllDependentFailureDoesNotSpendTheBudget(t *testing.T) {
 	assert.True(t, ran["C"], "C is independent and B's cascade must not have spent the budget")
 }
 
-// The half TestRunAllExclusiveRunsAlone cannot see: that test's exclusive step only sleeps,
-// so it never reaches the yield, and the yield is where exclusivity is given away.
+// The half TestRunAllExclusiveRunsAlone cannot see: that test's exclusive step only
+// sleeps, so it never fans out, and a fan-out is where exclusivity used to be given away.
 //
-// A step that dispatches ctx.needs goes through YieldRunIsolation so its children can be
-// admitted. For a SHARED holder that release is necessary and harmless; for an EXCLUSIVE
-// one it drops the write lock for the whole fan-out, which is most of such a step's life.
-// This repo's own `generate` is skip_cache + exclusive and its entire body is ctx.needs
-// over every *-generate sibling, so the one step declared to run alone would run alongside
-// everything, including the drift gate it exists to isolate.
+// A step that dispatches ctx.needs hands its children a context and waits. They run inside
+// its region and take no lease of their own; a dispatcher that released instead would drop
+// exclusivity for most of such a step's life. This repo's own `generate` is skip_cache +
+// exclusive and its entire body is ctx.needs over every *-generate sibling, so the one
+// step declared to run alone would run alongside everything, including the drift gate it
+// exists to isolate.
 func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 	root, c := openCache(t)
 
@@ -755,11 +755,14 @@ func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 			mu.Unlock()
 		}
 		if s.Exclusive {
-			// What a ctx.needs dispatch does: hand the children a context and wait.
-			require.NoError(t, YieldRunIsolation(ctx, func(context.Context) error {
-				body()
-				return nil
-			}))
+			// What a ctx.needs dispatch does: hand a child the step's context and wait.
+			// The child asks for a lease of its own and must be handed the ancestor's.
+			child, release, err := acquireRunIsolation(WithoutSlotHeld(ctx), false, "child")
+			require.NoError(t, err)
+			require.Same(t, admissionFrom(ctx).isolation, admissionFrom(child).isolation,
+				"the child took a lease of its own instead of running inside the region")
+			body()
+			release()
 		} else {
 			body()
 		}
@@ -774,7 +777,11 @@ func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 	assert.Empty(t, violations)
 }
 
-func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
+// The wait names the writer and, deliberately, does not vouch for it. A batch where every
+// live goroutine is parked in this wait is wedged, and a beat here is that batch telling
+// the stall watchdog it is fine; the 2026-09-11 gate held every project lock for 19
+// minutes on exactly that reading.
+func TestWaitForUpstreamNamesTheWriterWithoutVouchingForIt(t *testing.T) {
 	withShortHeartbeat(t, 20*time.Millisecond)
 	logs := captureLogs(t)
 
@@ -788,7 +795,7 @@ func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
 		done <- waitForUpstream(ctx, upstream, DepKey(".", "coverage-badge"), DepKey(".", "generate"))
 	}()
 	time.Sleep(200 * time.Millisecond)
-	assert.Less(t, prog.Idle(), time.Minute)
+	assert.Greater(t, prog.Idle(), time.Hour, "waiting on this run's own step counted as the run making progress")
 	close(upstream)
 	require.NoError(t, <-done)
 
@@ -803,7 +810,7 @@ func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
 		}
 	}
 	assert.GreaterOrEqual(t, said, 2, "the wait must keep saying so as it doubles")
-	assert.LessOrEqual(t, said, 6, "the log must back off while the beat keeps its cadence")
+	assert.LessOrEqual(t, said, 6, "the log must back off while the wait keeps its cadence")
 }
 
 func TestWaitForUpstreamEndsOnCancel(t *testing.T) {

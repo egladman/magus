@@ -117,3 +117,5 @@ Two layers run together:
 - [MGS3012](MGS3012.md): invocation stalled with its project locks held.
 - [MGS3013](MGS3013.md): every build slot held by a step that is itself waiting.
 - [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.
+- [MGS3015](MGS3015.md): every holder of the run's isolation gate is itself
+  waiting.
