@@ -539,9 +539,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	configgen.ApplyEnv(&cfg, os.Getenv)
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
 	// Without a second pass the whole MAGUS_* surface goes unchecked while the
-	// equivalent yaml is rejected. Exit 1 to match the load failure above.
+	// equivalent yaml is rejected. Printed and exiting 1 like the load failure
+	// above, for the same reason: it is the same multi-line validator text.
 	if err := config.Validate(cfg); err != nil {
-		slog.Error("invalid configuration from the environment", slog.String("error", err.Error()))
+		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// Pass config to the workspace singletons via package-level state.
