@@ -207,6 +207,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   time, the same rate as no hint at all, while re-running the same failing target won 84%.
   Each id exists so a suggestion nobody takes is deleted from the data rather than
   reworded.
+- **A write that opens a second unit of work now draws an advisory.** When an agent's write
+  lands in a project that neither depends on, nor is depended on by, any project the session
+  has already written to, the guard names both sides and suggests handing the new project to
+  its own subagent or session, pointing at the magus-multi-agent skill, which partitions work
+  by write set, and at the `magus path` that says whether the two connect at all. The fact it
+  reports is a graph fact read in both directions, so a project the session's work already
+  reaches stays quiet, and it advises rather than denies because nobody declared this
+  boundary: a write inside the paths a lease owns is in scope by declaration and is skipped
+  outright. A project joins the session's set the first time it is written whatever the
+  verdict, so the advisory speaks once per unrelated project rather than once per write.
+- **`magus session ls` and `magus session --brief` clock the published prompt-cache windows.**
+  Both now print how long it has been since a tool call last ran past the guard in this
+  checkout, and when each provider's published window closes for it: Anthropic's 5 minute
+  default and 1 hour opt-in, OpenAI's in-memory retention of 5 minutes to 1 hour and extended
+  retention of 30 minutes to 24 hours, each refreshed whenever the cache is hit, and Google
+  Gemini, which publishes a caller-set TTL for explicit caches and no window at all for
+  implicit ones, so the row says so instead of showing a clock. Every provider is listed
+  because which one a host called, and which window it bought, are invisible from this side,
+  and a range is shown as a range because that is what the provider claims. Nothing is ever
+  reported as expired: magus sees hook timestamps, never the provider's cache, so the brief
+  says only that a resume past a closed window re-pays the prompt. `-o json` carries the same
+  answer as a `prompt_cache` field.
+- **`magus ledger brief` derives the boundary from the workspace, and `magus ledger accept`
+  grades what a worker returns.** A brief used to carry only what the row's author
+  remembered to write down. It now adds the projects the owned paths reach, the declared
+  output globs that land inside them, the paths a sibling lease is holding, the build inputs
+  and workspace configuration that have a single owner, and the projects that change
+  alongside the leased ones without declaring a dependency, which is a warning about hidden
+  coupling rather than a path the worker is refused. It also refuses to brief a row whose
+  validation is the `ci` gate, or a target that chains to one, because the gate runs once in
+  the orchestrator's tree after every unit lands. `magus ledger accept <lease-id>` reads the
+  worker's report as JSON on stdin and checks what is mechanical: every changed path inside
+  the declared owned paths, no changed paths at all for a read-only lease, a validation the
+  report claims passed, and an output ref that still resolves in this workspace's store. A
+  row that passes is recorded `pass`; a rejection names every rule that failed and exits
+  non-zero, so a shell step in an integration sequence can branch on it. `magus ledger accept
+  --schema` prints the JSON schema a report must satisfy, which a host can hand a worker as
+  its response format. Whether the work is good stays the orchestrator's reading.
+- **The magus-multi-agent skill carries a coalescing rule and the typed brief and report.**
+  Disjoint write sets license parallelism without requiring it, and every worker pays a fixed
+  context load before it reads a line of the diff, so the skill now says to partition by
+  write set and then merge what the write sets allow: a depends-on chain is one worker in
+  sequence, small disjoint units inside one project merge, a spawn is warranted only when
+  more than one independent unit survives that merge, and idle root time is filled from the
+  merged pool rather than by cutting a unit finer. It renders a worker prompt with `magus
+  ledger brief` instead of typing one, so two renders of a row are byte-identical, and grades
+  the answer with `magus ledger accept` before reading it, replacing the four facts it used
+  to demand in prose. Skill version 65 grades every installed tree stale, so a reinstall
+  restamps it.
 
 ### Fixed
 
@@ -396,6 +445,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   every open pull request at once. Watching costs a wake-up per completion and buys
   nothing: green changes nothing, because the human merges. Reading a result that already
   exists is untouched.
+- **An unknown key in `magus.yaml` fails the load and names the file it is in.** It used to
+  be a warning that left the command at exit 0, and `-q`/`--quiet` and `-s`/`--silent`
+  dropped it entirely, so a setting magus would never honor looked exactly like one it had
+  applied. Every tier decodes the same way now, user-global, workspace and cwd alike, which
+  means a user-global config carrying a stale key stops every magus command on that machine
+  until the key is moved or removed. That is the point: the alternative is a machine running
+  under settings its owner believes are in force. A second YAML document in one file is
+  rejected for the same reason, since the decoder reads the first and would drop the rest
+  without a word, while an empty or comment-only file still declares nothing and loads. The
+  old warning referred readers to `magus config validate`, which does not exist; `magus
+  doctor` is the check that grades the config files a workspace resolves.
+- **A wait for an upstream target names both parties in a sentence and repeats less often the
+  longer it runs.** The line was structured fields printed every fifteen seconds, so several
+  readers waiting out one long writer each repeated it at every beat. It now reads as one
+  sentence naming the waiting target and the target it waits for, spelled the way the lines
+  around it spell a step, and it prints at 15s, 30s, 1m, 2m, 4m and so on with the elapsed
+  time; a wait for the per-key cache lock reads the same way. The stall watchdog still hears
+  every beat, so a legitimate long wait is still not a stall and an aborted run still reads
+  as one target waiting on another.
 
 ## [v0.4.3] - 2026-09-06
 
