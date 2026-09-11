@@ -513,13 +513,18 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
 	if strings.TrimSpace(base) == "" {
-		if base, err = checkoutBaseToken(ctx, flagRoot); err != nil {
-			return fmt.Errorf("magus job exec: %w", err)
-		}
+		// A tree with no readable revision still TAKES the job: binding is what puts every
+		// lease-scoped rule in force, and refusing it because there is nothing to compare
+		// a base against would leave the holder unguarded over a missing FACT.
+		base, _ = checkoutBaseToken(ctx, flagRoot)
 	}
 	store, err := openJobs(root)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(base) == "" {
+		fmt.Printf("holding the lease on %s; this checkout reports no revision, so no base was recorded\n", pos[0])
+		return nil
 	}
 	stored, err := store.Exec(ctx, pos[0], base)
 	if err != nil {

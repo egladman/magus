@@ -480,7 +480,7 @@ func TestClearArchivesWhatItDropped(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, dropped)
 
-	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "leases-*.json"))
+	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "jobs-*.json"))
 	require.NoError(t, err)
 	require.Len(t, archives, 1)
 	raw, err := os.ReadFile(archives[0])
@@ -675,16 +675,17 @@ func TestStoreListReturnsCopies(t *testing.T) {
 	assert.Equal(t, "goal for a", again[0].Goal)
 }
 
-func TestStoreReportsUnreadableLedger(t *testing.T) {
+func TestStoreReportsAnUnreadableFile(t *testing.T) {
 	t.Parallel()
 
-	loc := tmpLoc(t, t.TempDir())
-	require.NoError(t, os.MkdirAll(filepath.Join(loc.CacheDir, "ledger"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(loc.CacheDir, "ledger", "leases.json"), []byte("{not json"), 0o644))
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	s := NewStore(loc)
-	_, err := s.List()
-	assert.Error(t, err, "a corrupt ledger is reported, never silently read as empty")
+	_, err = s.List()
+	assert.Error(t, err, "a corrupt job store is reported, never silently read as empty")
 }
 
 func TestRecordUnattributedWrite(t *testing.T) {

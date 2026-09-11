@@ -50,7 +50,7 @@ var ErrNoID = errors.New("job: a lease needs an id")
 //
 //   - The mutex serializes writers within one process while they share a Store, which is
 //     why the daemon builds exactly one and hands it to both of its doors (the
-//     magus_ledger MCP tool and the console's read route).
+//     magus_job MCP tool and the console's read route).
 //   - An OS file lock beside jobs.json serializes writers across PROCESSES. The CLI, the
 //     daemon, and an MCP client each hold their own Store on the same file, from any
 //     worktree or clone of the repository, and workers now register and heartbeat against
@@ -62,7 +62,7 @@ var ErrNoID = errors.New("job: a lease needs an id")
 // List and writing back the whole row takes them twice, and two such merges on one id
 // then lose whichever field the second one read before the first wrote. [Store.Update] is
 // that merge done under a single acquisition, and it is what a field-at-a-time writer (the
-// magus_ledger MCP tool) has to use.
+// magus_job MCP tool) has to use.
 //
 // READS take neither. write replaces the file by rename, so a reader either sees the
 // whole previous ledger or the whole next one; blocking List behind a writer in another
@@ -78,7 +78,7 @@ type Store struct {
 	root string
 	// actor pins who this Store writes as; nil resolves the acting party at every write
 	// from cacheDir and the environment. The daemon builds ONE Store at startup and serves
-	// every magus_ledger caller from it, so an actor frozen at construction grades all of
+	// every magus_job caller from it, so an actor frozen at construction grades all of
 	// them as whoever started the process.
 	actor    *Actor
 	cacheDir string

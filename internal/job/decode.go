@@ -24,7 +24,7 @@ var DeclarationSchema string
 // for the store to strip them afterwards.
 //
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted
-// one is cleared rather than kept. The magus_ledger tool's put deliberately does the
+// one is cleared rather than kept. The magus_job tool's fork deliberately does the
 // opposite, since an agent advancing one field of a live row must not erase the rest (see
 // [ParseMerge]).
 //

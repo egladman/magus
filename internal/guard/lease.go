@@ -459,7 +459,7 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 			continue
 		}
 		return fmt.Sprintf(
-			"magus workspace: leave your own row alone. "+leaseActorClause("change a lease row")+"\n"+
+			"magus workspace: leave your own job alone. "+leaseActorClause("change a job")+"\n"+
 				"`%s` would %s, and this checkout is bound to lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
 			command, what, actingLease)
 	}

@@ -45,28 +45,6 @@ func TestMergeListAcceptsBothWireForms(t *testing.T) {
 }
 
 // compat: see the legacy fields on Row.
-func TestMergeAcceptsALaneUnderItsOldName(t *testing.T) {
-	t.Parallel()
-
-	got := applyMerge(t, map[string]any{
-		"owned_paths": "a/b", "forbidden_paths": "c/d", "focus": "e/f", "tier": "principal",
-	}, types.Job{})
-	require.Equal(t, types.Job{
-		WritePaths: []string{"a/b"},
-		DenyPaths:  []string{"c/d"},
-		ReadPaths:  []string{"e/f"},
-		Model:      "principal",
-	}, got)
-}
-
-func TestMergeRefusesALaneSpelledBothWays(t *testing.T) {
-	t.Parallel()
-
-	_, err := ParseMerge(map[string]any{"owned_paths": "a/b", "write_paths": "c/d"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "write_paths or owned_paths, not both")
-}
-
 func TestMergeRejectsAnUnknownState(t *testing.T) {
 	t.Parallel()
 

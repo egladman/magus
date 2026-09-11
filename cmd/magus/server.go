@@ -131,11 +131,14 @@ func serverStatus(ctx context.Context, args []string) error {
 	}
 
 	if report.Pool == nil {
-		fmt.Println("no daemon is running")
+		// To stderr, like every other thing `magus server` says when it cannot do what it
+		// was asked: stdout carries the report, and a caller redirecting it wants an empty
+		// file rather than a sentence about why there is nothing in it.
+		fmt.Fprintln(os.Stderr, "no daemon is running")
 		if report.PoolError != "" {
-			fmt.Println(report.PoolError)
+			fmt.Fprintln(os.Stderr, report.PoolError)
 		}
-		fmt.Printf("start one with `%s`. `%s` still reports this workspace and this machine without a daemon.\n",
+		fmt.Fprintf(os.Stderr, "start one with `%s`. `%s` still reports this workspace and this machine without a daemon.\n",
 			hint.ServerStart, hint.Status)
 		return errSilent{exitCode: 1}
 	}
