@@ -17,7 +17,7 @@ import (
 // service: assemble the current domain status report. It is satisfied by
 // *console.Service; the handler package never imports the service concretely.
 type statusSource interface {
-	StatusReport(context.Context) types.StatusSnapshot
+	StatusSnapshot(context.Context) types.StatusSnapshot
 }
 
 // EventsHandler serves GET /api/v1/events as a Server-Sent Events stream.
@@ -96,7 +96,7 @@ func (h *EventsHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// a version to stamp; metrics on the snapshot fn. A bare handler stays heartbeat/graph-only.
 	var lastStatus string
 	pushStatus := func() {
-		enc, err := EncodeStatusEvent(h.src.StatusReport(r.Context()), h.build)
+		enc, err := EncodeStatusEvent(h.src.StatusSnapshot(r.Context()), h.build)
 		if err != nil || enc == lastStatus {
 			return
 		}

@@ -562,7 +562,7 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 // live status synthesis carries the sum of the currently-warm workspaces' cache
 // counters. `cacheSrc` records which one so the cache-rate chart can refuse to diff
 // across the crossover (a mismatched-baseline diff shows a spurious gap or spike);
-// occupancy (running/capacity/queued) comes from the same StatusReport in both, so
+// occupancy (running/capacity/queued) comes from the same StatusSnapshot in both, so
 // it needs no such tag.
 
 export type CacheSrc = "metrics" | "status";

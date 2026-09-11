@@ -43,7 +43,7 @@ var _ statusv1alpha1connect.StatusServiceHandler = (*ConnectService)(nil)
 // per-session fields (observing_since, config) on the response envelope, the typed replacement for the
 // removed JSON /api/v1/status route, which carried the live status AND those static fields in one body.
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
-	report := s.src.StatusReport(ctx)
+	report := s.src.StatusSnapshot(ctx)
 	resp := &statusv1.GetStatusResponse{
 		Status: statusSnapshotToProto(report, s.build),
 		Config: &statusv1.Config{
@@ -65,7 +65,7 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 // so Connect tears the RPC down.
 func (s *ConnectService) StreamStatus(ctx context.Context, _ *connect.Request[statusv1.StreamStatusRequest], stream *connect.ServerStream[statusv1.StreamStatusResponse]) error {
 	// Push the initial snapshot immediately so a subscriber renders without waiting a full tick.
-	last := statusSnapshotToProto(s.src.StatusReport(ctx), s.build)
+	last := statusSnapshotToProto(s.src.StatusSnapshot(ctx), s.build)
 	if err := stream.Send(&statusv1.StreamStatusResponse{Status: last}); err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (s *ConnectService) StreamStatus(ctx context.Context, _ *connect.Request[st
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			next := statusSnapshotToProto(s.src.StatusReport(ctx), s.build)
+			next := statusSnapshotToProto(s.src.StatusSnapshot(ctx), s.build)
 			// Skip unchanged snapshots so a quiescent pool does not spam the stream; proto
 			// identity here is structural, so an equal message means nothing a client cares
 			// about moved.

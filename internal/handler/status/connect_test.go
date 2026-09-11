@@ -69,7 +69,7 @@ type mutableSource struct {
 	report types.StatusSnapshot
 }
 
-func (m *mutableSource) StatusReport(context.Context) types.StatusSnapshot {
+func (m *mutableSource) StatusSnapshot(context.Context) types.StatusSnapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.report
