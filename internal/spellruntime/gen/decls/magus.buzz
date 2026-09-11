@@ -454,7 +454,13 @@ export object LeaseUnattributedWrite {
     at: int = 0,
 }
 
+export object LeaseActor {
+    session: str = "",
+    host: str = "",
+}
+
 export object Lease {
+    schemaVersion: int = 0,
     id: str = "",
     parent: str = "",
     goal: str = "",
@@ -471,6 +477,7 @@ export object Lease {
     unattributed: [LeaseUnattributedWrite] = [],
     reportedBase: str = "",
     baseVerdict: str = "",
+    registeredBy: LeaseActor = LeaseActor{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,

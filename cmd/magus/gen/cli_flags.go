@@ -243,6 +243,28 @@ const (
 	FlagInitVCS = "vcs"
 	// ledger accept: --schema
 	FlagLedgerAcceptSchema = "schema"
+	// ledger accept: --stdin
+	FlagLedgerAcceptStdin = "stdin"
+	// ledger register: --focus
+	FlagLedgerRegisterFocus = "focus"
+	// ledger register: --forbidden
+	FlagLedgerRegisterForbidden = "forbidden"
+	// ledger register: --goal
+	FlagLedgerRegisterGoal = "goal"
+	// ledger register: --owned
+	FlagLedgerRegisterOwned = "owned"
+	// ledger register: --parent
+	FlagLedgerRegisterParent = "parent"
+	// ledger register: --read-only
+	FlagLedgerRegisterReadOnly = "read-only"
+	// ledger register: --schema
+	FlagLedgerRegisterSchema = "schema"
+	// ledger register: --stdin
+	FlagLedgerRegisterStdin = "stdin"
+	// ledger register: --tier
+	FlagLedgerRegisterTier = "tier"
+	// ledger register: --validation
+	FlagLedgerRegisterValidation = "validation"
 	// man install: --dir
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
@@ -1213,15 +1235,41 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
+// LedgerRegisterFlags are the flags declared for `magus ledger register`.
+type LedgerRegisterFlags struct {
+	Schema     bool   // --schema
+	Stdin      bool   // --stdin
+	Goal       string // --goal
+	Parent     string // --parent
+	Validation string // --validation
+	Tier       string // --tier
+	ReadOnly   bool   // --read-only
+}
+
+// BindLedgerRegister registers `magus ledger register`'s flags on fs and returns the destination.
+func BindLedgerRegister(fs *flag.FlagSet) *LedgerRegisterFlags {
+	var f LedgerRegisterFlags
+	fs.BoolVar(&f.Schema, FlagLedgerRegisterSchema, false, "Print the JSON schema a row must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagLedgerRegisterStdin, false, "Read one row as JSON on stdin instead of taking it from flags")
+	fs.StringVar(&f.Goal, FlagLedgerRegisterGoal, "", "The goal and its observable acceptance criteria")
+	fs.StringVar(&f.Parent, FlagLedgerRegisterParent, "", "The lease this one is handed out under")
+	fs.StringVar(&f.Validation, FlagLedgerRegisterValidation, "", "The one check this lease runs, as a `magus run <target> <project>` line")
+	fs.StringVar(&f.Tier, FlagLedgerRegisterTier, "", "The effort tier the work was matched to")
+	fs.BoolVar(&f.ReadOnly, FlagLedgerRegisterReadOnly, false, "A lease that gathers evidence and writes nothing")
+	return &f
+}
+
 // LedgerAcceptFlags are the flags declared for `magus ledger accept`.
 type LedgerAcceptFlags struct {
 	Schema bool // --schema
+	Stdin  bool // --stdin
 }
 
 // BindLedgerAccept registers `magus ledger accept`'s flags on fs and returns the destination.
 func BindLedgerAccept(fs *flag.FlagSet) *LedgerAcceptFlags {
 	var f LedgerAcceptFlags
 	fs.BoolVar(&f.Schema, FlagLedgerAcceptSchema, false, "Print the JSON schema a report must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagLedgerAcceptStdin, false, "Read the worker's report from stdin (required: nothing is read without it)")
 	return &f
 }
 

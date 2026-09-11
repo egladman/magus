@@ -905,6 +905,13 @@ func (v LeaseUnattributedWrite) BuzzObject() BuzzObject {
 	}
 }
 
+func (v LeaseActor) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"session": v.Session,
+		"host":    v.Host,
+	}
+}
+
 func (v Lease) BuzzObject() BuzzObject {
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
@@ -915,6 +922,7 @@ func (v Lease) BuzzObject() BuzzObject {
 		itemsUnattributed[indexUnattributed] = v.Unattributed[indexUnattributed].BuzzObject()
 	}
 	return BuzzObject{
+		"schemaVersion":  v.SchemaVersion,
 		"id":             v.ID,
 		"parent":         v.Parent,
 		"goal":           v.Goal,
@@ -931,6 +939,7 @@ func (v Lease) BuzzObject() BuzzObject {
 		"unattributed":   itemsUnattributed,
 		"reportedBase":   v.ReportedBase,
 		"baseVerdict":    string(v.BaseVerdict),
+		"registeredBy":   v.RegisteredBy.BuzzObject(),
 		"registered":     v.Registered,
 		"created":        v.Created,
 		"updated":        v.Updated,

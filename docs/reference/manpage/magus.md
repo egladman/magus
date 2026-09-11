@@ -107,7 +107,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Durable cross-session project memory. See [**magus-memory**(1)](magus-memory.md).
 
 **ledger**
-: Read the lease ledger a fan-out declared, and grade what comes back. See [**magus-ledger**(1)](magus-ledger.md).
+: Read the lease ledger a fan-out declared, declare a row, and grade what comes back. See [**magus-ledger**(1)](magus-ledger.md).
 
 **notes**
 : Human-authored notes committed to the repository. See [**magus-notes**(1)](magus-notes.md).

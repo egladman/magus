@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5842,
-  "edge_count": 10396,
+  "node_count": 5847,
+  "edge_count": 10404,
   "relations": [
     {
       "id": "annotates",
@@ -1665,7 +1665,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1578",
+        "dir_files": "1579",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2035,7 +2035,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "275",
+        "dir_files": "276",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -18422,6 +18422,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/claude-code.md#mcp-tool-calls",
+      "kind": "docsection",
+      "label": "MCP tool calls",
+      "source": "docs/guides/integrations/agents/claude-code.md#mcp-tool-calls",
+      "attrs": {
+        "anchor": "mcp-tool-calls",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/claude-code.md#notifications",
       "kind": "docsection",
       "label": "Notifications",
@@ -18752,6 +18762,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/guard.md#commands-magus-suggested",
+      "kind": "docsection",
+      "label": "Commands magus suggested",
+      "source": "docs/guides/integrations/agents/guard.md#commands-magus-suggested",
+      "attrs": {
+        "anchor": "commands-magus-suggested",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
       "kind": "docsection",
       "label": "Deny only what cannot be undone",
@@ -18878,6 +18898,16 @@
       "source": "docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
       "attrs": {
         "anchor": "declare-the-plan-in-the-ledger",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#grading-what-comes-back",
+      "kind": "docsection",
+      "label": "Grading what comes back",
+      "source": "docs/guides/integrations/agents/leases.md#grading-what-comes-back",
+      "attrs": {
+        "anchor": "grading-what-comes-back",
         "level": "2"
       }
     },
@@ -19148,6 +19178,16 @@
       "source": "docs/guides/integrations/agents/session-load.md#codex",
       "attrs": {
         "anchor": "codex",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/session-load.md#hint-uptake",
+      "kind": "docsection",
+      "label": "Hint uptake",
+      "source": "docs/guides/integrations/agents/session-load.md#hint-uptake",
+      "attrs": {
+        "anchor": "hint-uptake",
         "level": "2"
       }
     },
@@ -32868,6 +32908,16 @@
       "source": "docs/reference/manpage/magus-ledger.md#ledger-accept-options",
       "attrs": {
         "anchor": "ledger-accept-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-ledger.md#ledger-register-options",
+      "kind": "docsection",
+      "label": "ledger register options",
+      "source": "docs/reference/manpage/magus-ledger.md#ledger-register-options",
+      "attrs": {
+        "anchor": "ledger-register-options",
         "level": "3"
       }
     },
@@ -70641,6 +70691,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/reference/manpage/magus-ledger.md",
       "relation": "references",
       "confidence": "inferred",
@@ -70813,6 +70871,22 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/session-load.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/session-load.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/session-load.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/session-load.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/guides/integrations/agents/session-load.md"
     },
     {
@@ -98065,6 +98139,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
+      "target": "docsection:docs/guides/integrations/agents/claude-code.md#mcp-tool-calls",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/claude-code.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/claude-code.md#claude-code",
       "target": "docsection:docs/guides/integrations/agents/claude-code.md#notifications",
       "relation": "contains",
       "confidence": "extracted",
@@ -98305,6 +98387,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
+      "target": "docsection:docs/guides/integrations/agents/guard.md#commands-magus-suggested",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/guard.md#the-guard",
       "target": "docsection:docs/guides/integrations/agents/guard.md#deny-only-what-cannot-be-undone",
       "relation": "contains",
       "confidence": "extracted",
@@ -98402,6 +98492,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#grading-what-comes-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -98586,6 +98684,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents/session-load.md#session-load-recipes",
       "target": "docsection:docs/guides/integrations/agents/session-load.md#codex",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/session-load.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/session-load.md#session-load-recipes",
+      "target": "docsection:docs/guides/integrations/agents/session-load.md#hint-uptake",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -108090,6 +108196,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-ledger.md#description",
       "target": "docsection:docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ledger.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-ledger.md#description",
+      "target": "docsection:docs/reference/manpage/magus-ledger.md#ledger-register-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
