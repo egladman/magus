@@ -753,7 +753,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	switch {
 	case sub == "server" && len(subArgs) > 0 && subArgs[0] == "start":
 		// A help request must print usage and build no daemon, so it skips both the
-		// background handoff and the in-process daemon and falls through to normal dispatch
+		// detach to the background and the in-process daemon and falls through to normal dispatch
 		// (serverStart's flag parse prints the usage). Without this guard `server start -h`
 		// would hit the idempotency check and report "already running" instead of help.
 		if !isServerStartHelp(subArgs) {

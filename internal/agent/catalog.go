@@ -74,16 +74,17 @@ import (
 // (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
 // compat alias. `=` reads as a match over a structured graph, and `!=` removes
 // the flag collision the dash negation carried.
-// 50: magus-handoff-journal gains the `elimination` record: a hypothesis an
+// 50: the memory journal skill, then still named for the agent-industry idiom,
+// gains the `elimination` record: a hypothesis an
 // investigation killed, carrying the why plus an `excerpt` of the evidence that
 // killed it. The excerpt is required because an output ref resolves only from the
 // checkout that minted it, which leaves the ref beside it a best-effort handle.
-// 51: magus-handoff-journal teaches what `put` writes: the fields the caller
+// 51: that same skill teaches what `put` writes: the fields the caller
 // sends, keeping the rest, so refreshing a status does not drop the body. Clearing
 // a field or changing a type is a delete and a create, and `allow_missing: false`
 // (CLI `--amend`) says the entry is meant to exist.
-// 52: magus-handoff-journal is magus-memory again, and "handoff journal" is gone
-// from every surface a reader meets. The word is agent-industry jargon and this
+// 52: that skill is magus-memory again, and the agent-industry name it carried is
+// gone from every surface a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
 // always been called. Pre-1.0, so the old directory is not carried: `--prune`
 // removes it, which is what the stale report already names it for.
