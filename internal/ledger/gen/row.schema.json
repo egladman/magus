@@ -68,25 +68,25 @@
       "items": {
         "type": "string"
       },
-      "description": "LegacyWritePaths is write_paths under the name it carried before the rename."
+      "description": "LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and never emitted."
     },
     "forbidden_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "LegacyDenyPaths is deny_paths under its pre-rename name. compat: see LegacyWritePaths."
+      "description": "LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths."
     },
     "focus": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "LegacyReadPaths is read_paths under its pre-rename name. compat: see LegacyWritePaths."
+      "description": "LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths."
     },
     "tier": {
       "type": "string",
-      "description": "LegacyModel is model under its pre-rename name. compat: see LegacyWritePaths."
+      "description": "LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths."
     },
     "check": {
       "type": "object",

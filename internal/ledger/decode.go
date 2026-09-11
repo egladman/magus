@@ -55,7 +55,8 @@ type Row struct {
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
 	Model string `json:"model,omitempty"`
-	// LegacyWritePaths is write_paths under the name it carried before the rename.
+	// LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and
+	// never emitted.
 	//
 	// compat(until: no client or stored ledger still sends owned_paths/focus/
 	// forbidden_paths/tier; observe: grep the leases-*.json archives and the trail for the
@@ -63,11 +64,11 @@ type Row struct {
 	// unknown member rather than understood. A row naming both spellings of one lane is
 	// refused, since nothing here can say which one its author meant.
 	LegacyWritePaths []string `json:"owned_paths,omitempty"`
-	// LegacyDenyPaths is deny_paths under its pre-rename name. compat: see LegacyWritePaths.
+	// LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths.
 	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
-	// LegacyReadPaths is read_paths under its pre-rename name. compat: see LegacyWritePaths.
+	// LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths.
 	LegacyReadPaths []string `json:"focus,omitempty"`
-	// LegacyModel is model under its pre-rename name. compat: see LegacyWritePaths.
+	// LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths.
 	LegacyModel string `json:"tier,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
