@@ -1,17 +1,18 @@
 .TH MAGUS-LEDGER 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-ledger \- Read the lease ledger a fan\-out declared
+magus\-ledger \- Read the lease ledger a fan\-out declared, and grade what comes back
 .SH SYNOPSIS
 .B magus
-.RI "ledger [ls|brief <lease\-id>] [flags]"
+.RI "ledger [ls|brief <lease\-id>|accept <lease\-id>] [flags]"
 .SH DESCRIPTION
 Read the lease ledger: one row per lease an orchestrating agent declared,
 rendered as a tree of parents and the leases they handed out.
 .PP
-The ledger is written by AGENTS, through the magus_ledger MCP tool, and read by
+The plan is written by AGENTS, through the magus_ledger MCP tool, and read by
 PEOPLE here. put, register and clear are deliberately not on this verb: the plan
 has one author by definition of what it records, and a second write door invites
-two.
+two. accept is the exception, and it is not a declaration: it is the verdict on a
+finished worker, and it needs an exit status a tool call cannot hand a shell.
 .PP
 The rows are kept per repository rather than per checkout, so an orchestrator
 declaring a plan in one worktree and a worker reading it in another see the same
@@ -22,8 +23,26 @@ criteria, its owned and forbidden paths, the knowledge graph's blast radius for
 each owned path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the fixed bootstrap, rules and skills
 blocks this workspace's docs/guides/integrations/agents/brief.md.tmpl carries. It
-is context and never a verdict, the same shape magus diff \-\-prompt has: magus
-assembles what it holds, and you hand it to the worker.
+also carries what the WORKSPACE knows and the row's author may not have written
+down: the projects the owned paths reach, the declared output globs that land
+inside them, the paths a sibling lease is holding, the build inputs and workspace
+config that have one owner, and the projects that change alongside the leased
+ones without declaring a dependency. It is context and never a verdict, the same
+shape magus diff \-\-prompt has, with one refusal: a row whose validation is the ci
+gate, or a target that chains to it, is not briefed at all. The gate runs once,
+in the orchestrator's tree, after every unit lands.
+.PP
+accept closes the loop. It reads a worker's report as JSON on stdin and checks
+what is mechanical: every changed path inside the declared owned paths, the
+validation passed, and its output ref still resolving in this workspace's store.
+A row that passes is recorded pass; a rejection names every rule that failed and
+exits non\-zero. Whether the work is GOOD stays the orchestrator's reading.
+.SS ledger accept options
+.RS
+.TP
+\fB\-\-schema\fR
+Print the JSON schema a report must satisfy, and exit
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP
@@ -32,6 +51,9 @@ Print the declared leases as a tree, with the overlapping pairs
 .TP
 \fBbrief\fR
 Print one lease's worker brief
+.TP
+\fBaccept\fR
+Grade a worker's report, read as JSON on stdin, against its row
 .RE
 .SH EXAMPLES
 \fIRead the declared plan\fR
@@ -50,6 +72,18 @@ magus ledger -o json
 .PP
 .EX
 magus ledger brief session-load/core
+.EE
+.PP
+\fIGrade what it returned\fR
+.PP
+.EX
+magus ledger accept session-load/core < report.json
+.EE
+.PP
+\fIPrint the report schema\fR
+.PP
+.EX
+magus ledger accept --schema
 .EE
 .PP
 .SH SEE ALSO

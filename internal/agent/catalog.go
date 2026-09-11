@@ -133,7 +133,11 @@ import (
 // than a wider owned_paths. Measured over 204 session transcripts: reads left the
 // units the session actually wrote to about a fifth of the time, and widening the
 // write lane to open a read is the move that puts two workers on one file.
-const SkillVersion = 64
+// 65: magus-multi-agent renders the worker prompt with `magus ledger brief` and grades
+// the report with `magus ledger accept` instead of demanding four facts in prose, and
+// carries a coalescing rule: partition by write set, then merge what the write sets
+// allow, because a worker's fixed context load is paid whatever the diff's size.
+const SkillVersion = 65
 
 const skillLicense = "GPL-3.0-or-later"
 

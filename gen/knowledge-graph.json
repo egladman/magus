@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5840,
-  "edge_count": 10394,
+  "node_count": 5842,
+  "edge_count": 10396,
   "relations": [
     {
       "id": "annotates",
@@ -1665,7 +1665,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1577",
+        "dir_files": "1578",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2035,7 +2035,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "274",
+        "dir_files": "275",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -2107,7 +2107,7 @@
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "166",
+        "dir_files": "167",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md"
       }
     },
@@ -2117,7 +2117,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "156",
+        "dir_files": "157",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -2127,7 +2127,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "153",
+        "dir_files": "154",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph,md#ask-the-workspace-where-the-seams-are,md#asse"
       }
     },
@@ -2217,8 +2217,8 @@
       "label": "internal/agent/skills/magus-multi-agent",
       "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
-        "dir_files": "9",
-        "dir_languages": "markdown,md#integrate-and-verify,md#maintain-the-global-lease-ledger,md#observe-through-the-correct-control-plane,md#prove-that-leases-do-not-collide,md#run-the-graph-engineering-loop,md#seed-the-partition-with-magus,md#set-one-topology-boundary,md#splitti"
+        "dir_files": "10",
+        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#integrate-and-verify,md#maintain-the-global-lease-ledger,md#observe-through-the-correct-control-plane,md#prove-that-leases-do-not-collide,md#run-the-graph-engineering-loop,md#seed-the-partition-with-magus,m"
       }
     },
     {
@@ -32862,6 +32862,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "kind": "docsection",
+      "label": "ledger accept options",
+      "source": "docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "attrs": {
+        "anchor": "ledger-accept-options",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
       "kind": "docsection",
       "label": "magus-ledger",
@@ -35978,6 +35988,16 @@
       "source": "internal/agent/skills/magus-memory/SKILL.md#scope-boundaries",
       "attrs": {
         "anchor": "scope-boundaries",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#coalesce-what-the-write-sets-allow",
+      "kind": "docsection",
+      "label": "Coalesce what the write sets allow",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#coalesce-what-the-write-sets-allow",
+      "attrs": {
+        "anchor": "coalesce-what-the-write-sets-allow",
         "level": "2"
       }
     },
@@ -108068,6 +108088,14 @@
       "provenance": "docs/reference/manpage/magus-init.md"
     },
     {
+      "source": "docsection:docs/reference/manpage/magus-ledger.md#description",
+      "target": "docsection:docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ledger.md"
+    },
+    {
       "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
       "target": "docsection:docs/reference/manpage/magus-ledger.md#description",
       "relation": "contains",
@@ -110130,6 +110158,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/agent/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#coalesce-what-the-write-sets-allow",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",

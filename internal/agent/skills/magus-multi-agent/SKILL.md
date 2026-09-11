@@ -39,6 +39,31 @@ coherent write set, keep the work local - fanning out one lease adds coordinatio
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
 
+## Coalesce what the write sets allow
+
+Disjoint write sets LICENSE parallelism; they do not require it. Every worker
+carries a fixed load before it reads a line of the diff{{if .Full}} - a system
+prompt, the repository's instruction file, the routing index, the skills that
+load, and the graph queries it runs to find its own footing - spent identically
+whether the unit is fifty lines or five hundred{{end}}. So the question after
+partitioning is never "may these run in parallel" but "is each one big enough to
+be worth a worker".
+
+Four rules, in the order they bite:
+
+- A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
+  Two is two loads for one unit of work plus a handoff, and the second starts by
+  rediscovering what the first just learned{{end}}.
+- Merge small disjoint units inside one project. The wall-clock gain from
+  splitting them is usually smaller than the load you pay twice{{if .Full}}, and
+  they contend on the same validation anyway{{end}}.
+- Spawn only when more than one independent BIG unit survives the merge. One unit
+  is inline work{{if .Full}}: a brief longer than the diff it asks for is the
+  tell{{end}}.
+- Fill idle root time from that pool, never by splitting finer. A root blocked on
+  a gate is a reason to start the next merged unit{{if .Full}}, and cutting a unit
+  in half to have something to spawn buys wall clock with two fixed loads{{end}}.
+
 ## Run the graph-engineering loop
 
 {{if .Full}}Graph engineering is a natural evolution of loop engineering. The
@@ -228,6 +253,16 @@ magus-change-summary skill) - review time and pickup time read the same object.
 | Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 
+Render the prompt FROM the row rather than typing it: `magus ledger brief <lease>`
+prints the row's own goal, boundary and validation, plus what the workspace knows
+and nobody wrote down{{if .Full}} - the projects the owned paths reach, the declared
+output globs that land inside them, the paths a sibling lease is holding, the build
+inputs and workspace configuration that have one owner, and the projects that
+change alongside the leased ones without declaring a dependency{{end}}. Two renders
+of one row are byte-identical, which hand-typed briefs are not{{if .Full}}: seven of
+them disagreed about a dedup key and every one ended with the gate{{end}}. It
+REFUSES a row whose validation is the gate, or a target that chains to one.
+
 Every worker prompt must include its row, its LEASE ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
 `BAGGAGE=magus.lease=<its id>` before it works{{if .Full}} - that is the W3C
@@ -239,8 +274,13 @@ and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
 verdict is ever keyed on them{{else}} - the guard grades its writes only when that is
 set{{end}}. Require it to preserve
 unrelated changes, stay inside owned paths, avoid generated outputs, run only its
-assigned Magus target, and return changed paths, validation evidence, descendants
-it created, and unresolved risks.
+assigned Magus target, and return its report in the schema `magus ledger accept
+--schema` prints: changed paths, the validation it ran with the output ref that
+proves it, descendants it created, and unresolved risks. A typed report is what
+makes acceptance mechanical{{if .Full}}; the same four facts in prose can only be
+graded by reading, and a worker that ran a filtered subset writes the same
+paragraph as one that did not{{end}}. Keep unresolved risks mandatory, so a
+mis-scoped worker can say so instead of widening silently.
 
 The checkpoint you recorded is what you HANDED the lease; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
@@ -387,9 +427,13 @@ As leases finish:
 1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Reopen each lease's acceptance evidence yourself (`magus query output <ref>`)
-   before accepting it; a worker reporting that its criteria passed is not that
-   evidence.
+2. Run `magus ledger accept <lease>` on each report BEFORE you read it. It checks
+   what is mechanical - every changed path inside the declared owned paths, the
+   validation passed, its output ref still resolving in the store - records a
+   passing row and exits non-zero naming each violation. Then reopen the evidence
+   yourself (`magus query output <ref>`): accept proves the ref RESOLVES, never
+   that the run did what the lease asked, and a worker reporting that its criteria
+   passed is not that evidence.
 3. Resolve cross-lease API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
