@@ -57,8 +57,8 @@ func TestGradeHookWiringWriteDeniesUnderALease(t *testing.T) {
 	assert.Contains(t, g.Reason, ".claude/settings.json", "the denial must name the file")
 	assert.Contains(t, g.Reason, "hook wiring", "the denial must say what the file IS")
 	assert.Contains(t, g.Reason, "Your orchestrator can", "the denial must name the actor")
-	assert.NotContains(t, g.Reason, "magus_ledger",
-		"a worker told to reach for the ledger tool reaches for it; that is the mistake this rewrite answers")
+	assert.NotContains(t, g.Reason, "magus_job",
+		"a worker told to reach for the job tool reaches for it; that is the mistake this rewrite answers")
 }
 
 // TestGradeHookWiringWriteAdvisesUnboundSessions covers the other half of the asymmetry:

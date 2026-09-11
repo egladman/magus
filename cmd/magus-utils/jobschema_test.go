@@ -48,7 +48,7 @@ type Check struct {
 const wantFixtureSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://magus.invalid/job/fixture.schema.json",
-  "$comment": "Generated from job.Fixture by ` + "`magus-utils jobschema`" + `. DO NOT EDIT; run ` + "`magus run job-generate .`" + `.",
+  "$comment": "Generated from Fixture by ` + "`magus-utils jobschema`" + `. DO NOT EDIT; run ` + "`magus run job-generate .`" + `.",
   "title": "magus fixture",
   "description": "Fixture is a record a caller declares.",
   "type": "object",
@@ -68,7 +68,7 @@ const wantFixtureSchema = `{
     },
     "state": {
       "type": "string",
-      "enum": ["", "declared", "running", "pass", "fail", "no_return"],
+      "enum": ["", "declared", "running", "exited", "pass", "fail", "no_return"],
       "description": "State is where the lease stands."
     },
     "check": {

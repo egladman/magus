@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://magus.invalid/job/job.schema.json",
-  "$comment": "Generated from job.Declaration by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
+  "$comment": "Generated from Declaration by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
   "title": "magus job",
   "description": "Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
   "type": "object",
@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 1,
+      "const": 3,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See types.JobSchemaVersion."
     },
     "id": {
@@ -113,7 +113,7 @@
     },
     "state": {
       "type": "string",
-      "enum": ["", "declared", "running", "pass", "fail", "no_return"],
+      "enum": ["", "declared", "running", "exited", "pass", "fail", "no_return"],
       "description": "State is the row's lifecycle position, empty for a row that has not said where it stands. no_return is a lease that never reported, which is not a failure."
     },
     "read_only": {

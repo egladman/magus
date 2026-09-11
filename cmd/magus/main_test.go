@@ -501,7 +501,7 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		},
 		{
 			name:  "server job",
-			print: serverJobUsage,
+			print: jobRunUsage,
 			want:  []string{"magus server job <name>", "Jobs:"},
 		},
 		{

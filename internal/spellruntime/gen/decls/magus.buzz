@@ -465,6 +465,29 @@ export object JobActor {
     host: str = "",
 }
 
+export object JobResultValidation {
+    command: str = "",
+    outputRef: str = "",
+}
+
+export object JobResult {
+    schemaVersion: int = 0,
+    job: str = "",
+    changedPaths: [str] = [],
+    validation: JobResultValidation = JobResultValidation{},
+    descendants: [str] = [],
+    unresolvedRisks: [str] = [],
+}
+
+export object JobAttempt {
+    found: bool = false,
+    ref: str = "",
+    project: str = "",
+    target: str = "",
+    spell: str = "",
+    failed: bool = false,
+}
+
 export object Job {
     schemaVersion: int = 0,
     id: str = "",
@@ -488,6 +511,8 @@ export object Job {
     registered: int = 0,
     created: int = 0,
     updated: int = 0,
+    result: JobResult? = null,
+    attempt: JobAttempt? = null,
 }
 
 export object JobOverlap {
@@ -561,8 +586,8 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared lease ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_ledger MCP tool and `magus ledger` (register, accept) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
-export object ledger {
+// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+export object job {
     static extern fun clear() > int !> any;
     static extern fun list() > JobList !> any;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;

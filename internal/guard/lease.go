@@ -340,7 +340,7 @@ func denyUndeclaredLease(standing leaseStanding, actingLease, command string) st
 	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
 		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+
 		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
-		actingLease, hint.Ledger.String())
+		actingLease, hint.LsJobs.String())
 }
 
 // undeclaredLeaseRepairs reports a shell line that only looks at this checkout or repairs
@@ -474,15 +474,15 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 // a different transport, and a rule that held on one channel would move the traffic rather
 // than stop it.
 func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
-	if c.Name == hint.ToolLedger.String() {
-		return ledgerToolRebind(mcpParams(c.Args), me)
+	if c.Name == hint.ToolJob.String() {
+		return jobToolRebind(mcpParams(c.Args), me)
 	}
 	if path.Base(c.Name) != "magus" {
 		return ""
 	}
 	// A usage line and a schema are reads: neither reaches a store, and the rule below
-	// reads the subcommand without them, so `ledger accept --schema` was refused to the one
-	// caller who needs the shape of the report it has to file.
+	// reads the subcommand without them, so `job wait --schema` was refused to the one
+	// caller who needs the shape of the result it has to file.
 	if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
 		return ""
 	}
@@ -491,19 +491,20 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 		return ""
 	}
 	switch {
-	// The read form prints the binding and takes no operand; only the form carrying one
-	// rebinds. Refusing the read would leave a worker unable to find out what it is bound
-	// to, which is the opposite of what this rule is for. A binding that names NO row is
-	// not a boundary either, so re-binding out of one is the remedy rather than an escape.
-	case words[0] == hint.SessionLease.Head() && words[1] == hint.SessionLease.Leaf() && len(words) > 2:
+	// The read form prints the job this checkout holds and takes no operand; only the form
+	// carrying one takes a different job. Refusing the read would leave a holder unable to
+	// find out what it holds, which is the opposite of what this rule is for. A binding
+	// that names NO job is not a boundary either, so taking another one out of that state
+	// is the remedy rather than an escape.
+	case words[0] == hint.JobExec.Head() && words[1] == hint.JobExec.Leaf() && len(words) > 2:
 		if !me().declared {
 			return ""
 		}
-		return "bind this checkout to another lease"
-	case words[0] == hint.LedgerAccept.Head() && words[1] == hint.LedgerAccept.Leaf():
-		return "grade a lease row"
-	case words[0] == hint.LedgerRegister.Head() && words[1] == hint.LedgerRegister.Leaf():
-		return "write a lease row"
+		return "take the lease on another job here"
+	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
+		return "verify a job"
+	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
+		return "declare a job"
 	}
 	return ""
 }
@@ -529,49 +530,49 @@ func magusSubcommandWords(args []string) []string {
 	return words
 }
 
-// ledgerToolRebind judges one call to the ledger tool against the row the caller is bound
-// to, naming what the call would do when it is something a bound caller may not.
+// jobToolRebind judges one call to the job tool against the job the caller holds, naming
+// what the call would do when it is something a holder may not.
 //
 // Three carve-outs, and each is somebody else's job rather than a hole:
 //
-//   - `op=register` on the caller's OWN row records the base it landed on. That is the
-//     worker's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
-//     and denying it here would leave a worker unable to write anywhere at all.
-//   - `op=put` on the caller's own row that only SHRINKS its write paths gives the lane
+//   - `op=exec` on the caller's OWN job records the base it landed on. That is the
+//     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
+//     and denying it here would leave a holder unable to write anywhere at all.
+//   - `op=put` on the caller's own job that only SHRINKS its write paths gives the lane
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a lane cannot widen a role.
 //   - a read (`op=list`, and the default) is not a write.
 //
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
-// must already be one the row carries, and there must be fewer of them. A cleverer pattern
+// must already be one the job carries, and there must be fewer of them. A cleverer pattern
 // that happens to cover less is not something this rule will try to prove.
-func ledgerToolRebind(params map[string]string, me func() leaseStanding) string {
+func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 	op, id := params["op"], params["id"]
 	if op == "clear" {
-		return "drop every ledger row"
+		return "drop every job"
 	}
-	if op != "put" && op != "register" {
+	if op != "fork" && op != "exec" {
 		return ""
 	}
 	standing := me()
 	if !standing.readable || standing.terminal() {
-		// The ledger could not answer, or the row has already finished and every rule
-		// keyed on it is inert. Naming somebody else's row here would be a reason the
+		// The store could not answer, or the job has already finished and every rule
+		// keyed on it is inert. Naming somebody else's job here would be a reason the
 		// caller can check and find false, in the same verdict that tells them these
 		// rules are not running.
 		return ""
 	}
 	if id == "" || id != standing.row.ID {
-		return "write another lease's ledger row"
+		return "write another job"
 	}
-	if op == "register" {
+	if op == "exec" {
 		return ""
 	}
 	row := standing.row
 	if shrinksWritePaths(params, row) {
 		return ""
 	}
-	return "rewrite its own ledger row"
+	return "rewrite the job it holds"
 }
 
 // shrinksWritePaths reports whether a put changes nothing but the row's write paths, and

@@ -94,7 +94,7 @@ func cacheDirDenial(what string) string {
 	return fmt.Sprintf("magus guard denied a write to %s, which is inside this checkout's magus cache dir. magus is the only writer of it.\n\n"+
 		"That directory is not a pile of build leftovers any more. `%s` records which lease this checkout is bound to, `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\n"+
 		"The verbs that do what you were probably after:\n"+
-		"  `"+hint.SessionLease.With("<id>")+"` binds this checkout to a lease, and writes the marker for you.\n"+
+		"  `"+hint.JobExec.With("<job>")+"` takes a job's lease here, and writes the marker for you.\n"+
 		"  `"+hint.Clean.String()+"` removes the declared outputs.\n"+
 		"  `"+hint.QueryOutput.With("<ref>")+"` prints a run's captured log.\n"+
 		"`"+hint.Session.With("hook")+"` maintains its own markers and never needs you to edit them.\n"+

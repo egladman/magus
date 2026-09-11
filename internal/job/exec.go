@@ -36,12 +36,12 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 	if base == "" {
 		return types.Job{}, fmt.Errorf("%w, in the form `magus vcs checkpoint -o name` prints"+
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
-			" and register what it prints", errNoBase)
+			" and exec what it prints", errNoBase)
 	}
 	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
-			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to register against."+
-				" Check the declared ids with `magus_ledger list` and register under the id the"+
+			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to exec against."+
+				" Check the declared ids with `magus_job list` and exec under the id the"+
 				" orchestrator handed you", ErrUnknownJob, id)
 		}
 		cur.ReportedBase = base
@@ -84,11 +84,11 @@ func baseRevision(token string) string {
 func BaseAdvice(row types.Job) string {
 	switch row.BaseVerdict {
 	case types.BaseMatch:
-		return fmt.Sprintf("registered job %s on %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
+		return fmt.Sprintf("recorded job %s's base as %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
 			row.ID, row.ReportedBase)
 
 	case types.BaseRevisionMatch:
-		return fmt.Sprintf("registered job %s on revision %s, which IS the revision it was handed,"+
+		return fmt.Sprintf("recorded job %s's base on revision %s, which IS the revision it was handed,"+
 			" but the uncommitted patch is not: the checkpoint digest is %s and yours is %s."+
 			" A checkpoint is a revision plus a dirty-patch DIGEST, so you share the commit and not the working tree."+
 			" The digest cannot give the patch back, so there is nothing here to restore from:"+
@@ -97,20 +97,20 @@ func BaseAdvice(row types.Job) string {
 			row.ID, baseRevision(row.ReportedBase), patchDigestOf(row.Checkpoint), patchDigestOf(row.ReportedBase))
 
 	case types.BaseDiverged:
-		return fmt.Sprintf("registered job %s, and it DIVERGED: your base %s is not the checkpoint %s the job was handed."+
+		return fmt.Sprintf("recorded job %s's base, and it DIVERGED: your base %s is not the checkpoint %s the job was handed."+
 			" Respawn from %s, or materialize the files you touch from it before you edit them,"+
 			" so what you write lands on the tree the plan was cut against.",
 			row.ID, baseRevision(row.ReportedBase), baseRevision(row.Checkpoint), baseRevision(row.Checkpoint))
 
 	case types.BaseUnknown:
-		return fmt.Sprintf("registered job %s on %s. It carries no checkpoint, so there is nothing to compare"+
+		return fmt.Sprintf("recorded job %s's base as %s. It carries no checkpoint, so there is nothing to compare"+
 			" your base against and the verdict is unknown rather than a match."+
 			" Have the orchestrator put one on the job (`magus vcs checkpoint -o name`) before the next job is cut,"+
 			" so a later reader can tell whether a worker was on the base it was given.",
 			row.ID, row.ReportedBase)
 
 	default:
-		return fmt.Sprintf("registered job %s on %s, and this magus does not recognize the verdict %q it computed."+
+		return fmt.Sprintf("recorded job %s's base as %s, and this magus does not recognize the verdict %q it computed."+
 			" Read the row itself rather than this sentence.", row.ID, row.ReportedBase, row.BaseVerdict)
 	}
 }

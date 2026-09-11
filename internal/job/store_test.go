@@ -401,11 +401,14 @@ func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
 	path, err := s.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"id":"adj/store","schema_version":2}]}`+"\n"), 0o644))
+	newer := types.JobSchemaVersion + 1
+	require.NoError(t, os.WriteFile(path,
+		[]byte(fmt.Sprintf(`{"jobs":[{"id":"adj/store","schema_version":%d}]}`, newer)+"\n"), 0o644))
 
 	_, err = s.List()
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "schema_version 2 and this magus accepts version 1 only")
+	assert.Contains(t, err.Error(),
+		fmt.Sprintf("schema_version %d and this magus accepts version %d only", newer, types.JobSchemaVersion))
 
 	row := lease("adj/other")
 	_, err = s.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
@@ -594,6 +597,65 @@ func TestStoreCarriesAPreRenamePlanForward(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, again, 1)
 	assert.Equal(t, "wave3/move", again[0].ID)
+}
+
+// TestStoreUpdatePreservesAnUnknownMember is the UPDATE path: mutate rewrites the WHOLE
+// file on every put, so a member neither this binary's struct nor this call introduced was
+// dropped from every row in the file, not just the one being touched. This planted the
+// member directly at the store's own path, unlike TestStoreCarriesAPreRenamePlanForward,
+// which covers the one-time carry from the pre-rename file.
+func TestStoreUpdatePreservesAnUnknownMember(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(
+		`{"jobs":[{"id":"adj/store","schema_version":%d,"state":"running","created":1,"updated":1,"woolgathering":7}]}`,
+		types.JobSchemaVersion)+"\n"), 0o644))
+
+	_, err = s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"woolgathering": 7`,
+		"a member this binary does not know survives an update to a field it does know")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StatePass, rows[0].State, "the field the update named was still applied")
+}
+
+// A pre-rename lane spelling folded onto its current field by foldStoredLanes must not
+// ride back out under the old name too: mergeRowRaw's raw baggage would otherwise carry it
+// forward forever, and the NEXT read would find the lane declared under both spellings,
+// which foldStoredLanes refuses outright.
+func TestStoreUpdateDropsAFoldedLegacySpelling(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(
+		`{"jobs":[{"id":"adj/store","schema_version":%d,"owned_paths":["internal/ledger"],"created":1,"updated":1}]}`,
+		types.JobSchemaVersion)+"\n"), 0o644))
+
+	_, err = s.Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StateRunning })
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(raw), "owned_paths", "the old spelling does not ride forward once it has been folded")
+	assert.Contains(t, string(raw), `"write_paths"`, "the current spelling carries the folded value")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"internal/ledger"}, rows[0].WritePaths, "a second read does not trip the both-spellings refusal")
 }
 
 func TestStoreListReturnsCopies(t *testing.T) {

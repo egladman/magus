@@ -113,7 +113,7 @@ func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 
 	_, err := s.Exec(ctx, "typo", baseA)
 	require.ErrorIs(t, err, ErrUnknownJob)
-	assert.Contains(t, err.Error(), "magus_ledger list", "the message names where the declared ids are")
+	assert.Contains(t, err.Error(), "magus_job list", "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 
 	got, err := s.List()

@@ -3,7 +3,6 @@ package guard
 import (
 	"path"
 	"reflect"
-	"slices"
 	"strings"
 	"testing"
 
@@ -14,16 +13,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMCPJudgedParamsCoverEveryMergedField holds the guard's view of a ledger put to the
-// ledger's own. A field job.ParseMerge applies and the renderer drops reaches the row with no
+// TestMCPJudgedParamsCoverEveryMergedField holds the guard's view of a job fork to the
+// job store's own. A field job.ParseMerge applies and the renderer drops reaches the row with no
 // rule having read it, and the rebind rule then clears a rewrite of it as a plain shrink.
 //
 // The accepted set is PROBED rather than restated: job.ParseMerge exports no key list, and a
 // second hand-written one is forgotten in the same direction as the first.
 func TestMCPJudgedParamsCoverEveryMergedField(t *testing.T) {
 	merged := 0
-	for _, field := range leaseJSONFields() {
-		if !ledgerMergeApplies(field) {
+	for _, field := range jobJSONFields() {
+		if !jobMergeApplies(field) {
 			continue
 		}
 		merged++
@@ -33,15 +32,15 @@ func TestMCPJudgedParamsCoverEveryMergedField(t *testing.T) {
 	require.NotZero(t, merged, "the probe found no merged field at all, so it is measuring nothing")
 
 	for _, key := range mcpJudgedParams {
-		if key == "op" || key == "id" || slices.Contains(mcpRenamedParams, key) {
+		if key == "op" || key == "id" {
 			continue
 		}
-		assert.True(t, ledgerMergeApplies(key), "%q is judged but no ledger put applies it", key)
+		assert.True(t, jobMergeApplies(key), "%q is judged but no job fork applies it", key)
 	}
 }
 
-// leaseJSONFields are the row's wire names, which is the vocabulary both ledger doors speak.
-func leaseJSONFields() []string {
+// jobJSONFields are the row's wire names, which is the vocabulary both job doors speak.
+func jobJSONFields() []string {
 	t := reflect.TypeFor[types.Job]()
 	out := make([]string, 0, t.NumField())
 	for i := range t.NumField() {
@@ -53,11 +52,11 @@ func leaseJSONFields() []string {
 	return out
 }
 
-// ledgerMergeApplies reports whether a put naming key changes the row. Several values are
+// jobMergeApplies reports whether a fork naming key changes the row. Several values are
 // tried because the merge is typed: a list, a boolean, a string that is also a valid
 // state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
 // the row untouched under all four.
-func ledgerMergeApplies(key string) bool {
+func jobMergeApplies(key string) bool {
 	for _, value := range []any{"declared", "magus run test .", []any{"x"}, true} {
 		apply, err := job.ParseMerge(map[string]any{key: value})
 		if err != nil {
@@ -76,12 +75,12 @@ func ledgerMergeApplies(key string) bool {
 // server's tool whose name happened to end in one of magus's decoded as a magus call, was
 // rendered into magus's activity trail, and could be denied by magus's rules.
 func TestMagusToolCallMatchesOnlyMagusTools(t *testing.T) {
-	assert.Equal(t, "magus_ledger", magusToolCall("mcp__magus__magus_ledger"))
-	assert.Equal(t, "magus_ledger", magusToolCall("magus_ledger"), "a host that does not prefix is still talking to magus")
+	assert.Equal(t, "magus_job", magusToolCall("mcp__magus__magus_job"))
+	assert.Equal(t, "magus_job", magusToolCall("magus_job"), "a host that does not prefix is still talking to magus")
 
 	for _, name := range []string{
-		"mcp__other__magus_ledger",
-		"mcp__mcp__magus__magus_ledger",
+		"mcp__other__magus_job",
+		"mcp__mcp__magus__magus_job",
 		"filesystem__write_file",
 		"mcp__magus__magus_nonexistent",
 		"",
@@ -129,8 +128,8 @@ func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
 		"a memory read":    {hint.ToolMemory, map[string]any{"op": "list"}, "magus memory ls"},
 		"a graph query":    {hint.ToolQuery, map[string]any{"query": "guard rules"}, `magus query "guard rules"`},
 		"no CLI door":      {hint.ToolInsight, map[string]any{"lens": "hotspots"}, "magus_insight"},
-		"the ledger tool":  {hint.ToolLedger, map[string]any{"op": "put", "id": "a/b"}, "magus_ledger op=put id=a/b"},
-		"an elided value":  {hint.ToolLedger, map[string]any{"op": "put", "goal": "ship the thing"}, "magus_ledger op=put goal=..."},
+		"the job tool":     {hint.ToolJob, map[string]any{"op": "fork", "id": "a/b"}, "magus_job op=fork id=a/b"},
+		"an elided value":  {hint.ToolJob, map[string]any{"op": "fork", "goal": "ship the thing"}, "magus_job op=fork goal=..."},
 		"a missing target": {hint.ToolRunAffected, map[string]any{}, "magus affected"},
 	} {
 		assert.Equal(t, tc.want, renderMCPCall(tc.tool.String(), tc.input), name)

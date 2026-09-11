@@ -145,7 +145,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 		{name: "inside a declared path", lease: "unit-a", write: filepath.Join(root, "libs/ui/button.ts"), want: true},
 		{name: "outside every declared path", lease: "unit-a", write: filepath.Join(root, "libs/core/parse.go")},
 		{name: "no lease acting", write: filepath.Join(root, "libs/ui/button.ts")},
-		{name: "a lease the ledger does not hold", lease: "unit-b", write: filepath.Join(root, "libs/ui/button.ts")},
+		{name: "a lease the store does not hold", lease: "unit-b", write: filepath.Join(root, "libs/ui/button.ts")},
 		{name: "outside the workspace", lease: "unit-a", write: "/elsewhere/x.go"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

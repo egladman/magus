@@ -131,7 +131,7 @@ func TestFocusOwnerPrefersTheInnermostProject(t *testing.T) {
 
 func TestFocusForPathsReadsGlobDeclarationsThroughTypes(t *testing.T) {
 	// The lease's own prefix rule, not a second one here: a declaration that names a
-	// project in the ledger has to name the same project in the focus.
+	// project in the job store has to name the same project in the focus.
 	f, ok := FocusForPaths(fixture(), []string{"app/plugin/**/*.go", "**"})
 	require.True(t, ok)
 	assert.Equal(t, []string{"app/plugin"}, f.Seeds,

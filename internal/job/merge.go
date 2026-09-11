@@ -10,13 +10,13 @@ import (
 )
 
 // ParseMerge builds the field merge one put applies to a row, from a param map shaped like
-// the magus_ledger MCP tool's request and magus\ledger.put's opts: only the keys the
-// caller named, so the second put in a lease's lifecycle (state=running) advances the
+// the magus_job MCP tool's request and magus\job.put's opts: only the keys the
+// caller named, so the second put in a job's lifecycle (state=running) advances the
 // state without erasing the row an earlier put declared, and a key present with an
 // empty value is an explicit clear.
 //
-// It is the ONE decoder both write doors call (internal/handler/mcp/ledger.go and
-// std/magus.go's MagusPutLedger), so a client typing either surface gets the same
+// It is the ONE decoder both write doors call (internal/handler/mcp/job.go and
+// std/magus.go's MagusPutJob), so a client typing either surface gets the same
 // accepted fields and the same rejections, rather than two hand-maintained lists that
 // can silently drift apart.
 //
@@ -53,16 +53,11 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	str("parent", func(u *types.Job, v string) { u.Parent = strings.TrimSpace(v) })
 	str("goal", func(u *types.Job, v string) { u.Goal = v })
 	str("checkpoint", func(u *types.Job, v string) { u.Checkpoint = strings.TrimSpace(v) })
-	err = errors.Join(err, bothSpellings(params))
 	list("write_paths", func(u *types.Job, v []string) { u.WritePaths = v })
-	list("owned_paths", func(u *types.Job, v []string) { u.WritePaths = v })
 	list("deny_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
-	list("forbidden_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
 	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
-	list("focus", func(u *types.Job, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
 	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
-	str("tier", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
 
 	// check and validation are two spellings of one field, and the row stores both halves,
 	// so a put naming each of them is a caller that does not know which one it meant.
@@ -132,11 +127,15 @@ var mergeFields = []string{
 	"depends_on", "model", "check", "validation", "state", "read_only",
 }
 
-// renamedFields pairs each lane's old parameter name with the one it answers to now.
+// renamedFields pairs each lane's pre-rename JSON key with the one it answers to now.
 //
-// compat(until: no client or stored ledger still sends owned_paths/focus/forbidden_paths/
-// tier; observe: grep the leases-*.json archives and the trail for the old keys): a put in
-// the old vocabulary still lands, and one naming both spellings of a lane is refused.
+// ParseMerge itself no longer accepts these spellings on a fork - that compat, and the
+// guard's mirrored allowance, were deleted outright since the MCP put surface never
+// shipped them. This table survives for a narrower, still-live reason: Store.mergeRowRaw
+// (store.go) strips an old key out of a row's raw bytes on every merge so it cannot ride
+// back out under both spellings after foldStoredLanes (decode.go) folds it onto the
+// current field on read. Declaration (decode.go) keeps its own legacy input fields
+// separately, for a client still reading `magus job fork --stdin` in the old vocabulary.
 var renamedFields = [][2]string{
 	{"owned_paths", "write_paths"},
 	{"forbidden_paths", "deny_paths"},
@@ -144,26 +143,12 @@ var renamedFields = [][2]string{
 	{"tier", "model"},
 }
 
-// bothSpellings refuses a put that names one lane twice.
-func bothSpellings(params map[string]any) error {
-	var err error
-	for _, pair := range renamedFields {
-		_, hasOld := params[pair[0]]
-		_, hasCurrent := params[pair[1]]
-		if hasOld && hasCurrent {
-			err = errors.Join(err, fmt.Errorf("job: a put carries %s or %s, not both", pair[1], pair[0]))
-		}
-	}
-	return err
-}
-
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
 // like one that was taken into account, and the tool then reports the row as written.
 func unknownParams(params map[string]any) error {
 	var unknown []string
 	for key := range params {
-		renamed := slices.ContainsFunc(renamedFields, func(p [2]string) bool { return p[0] == key })
-		if key == "op" || key == "id" || renamed || slices.Contains(mergeFields, key) {
+		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {
 			continue
 		}
 		unknown = append(unknown, key)
@@ -172,7 +157,7 @@ func unknownParams(params map[string]any) error {
 		return nil
 	}
 	slices.Sort(unknown)
-	return fmt.Errorf("job: no field of a lease row is named %s; a put carries %s",
+	return fmt.Errorf("job: no field of a job row is named %s; a put carries %s",
 		strings.Join(unknown, ", "), strings.Join(mergeFields, ", "))
 }
 

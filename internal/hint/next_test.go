@@ -268,14 +268,14 @@ func TestMutatesTreeJudgesTheCommand(t *testing.T) {
 		{[]string{"magus", "explain", "spell:go"}, false},
 		{[]string{"magus", "query", "kind=target"}, false},
 		{[]string{"magus", "query", "output", "out1a2b3c"}, false},
-		{[]string{"magus", "ledger", "accept", "harness/worker"}, true},
-		{[]string{"magus", "ledger", "brief"}, false},
+		{[]string{"magus", "job", "wait", "harness/worker"}, true},
+		{[]string{"magus", "describe", "job"}, false},
 		{[]string{"magus", "memory", "put", "a", "b"}, true},
 		{[]string{"magus", "notes", "edit", "a"}, true},
 		{[]string{"magus", "clean"}, true},
 		{[]string{"magus", "self", "update"}, true},
 		{[]string{"magus", "config", "token", "generate"}, true},
-		{[]string{"magus", "session", "lease", "harness/worker"}, true},
+		{[]string{"magus", "job", "exec", "harness/worker"}, true},
 		{[]string{"magus", "brand-new-verb"}, true},
 		{[]string{"magus"}, true},
 		{nil, true},
@@ -287,9 +287,9 @@ func TestMutatesTreeJudgesTheCommand(t *testing.T) {
 // Every declared command has to be a verb the classifier KNOWS: one that resolves to
 // itself rather than to a prefix of itself or to the deny-by-default fallthrough.
 //
-// `ledger accept` opening with the readable `ledger` is the case this catches. A
-// shortest-prefix match graded it a read, which is how a reviewer would have been
-// served a command that accepts its own work.
+// `ledger accept` (now `job wait`) opening with the readable `ledger` was the original
+// case this catches. A shortest-prefix match graded it a read, which is how a reviewer
+// would have been served a command that accepts its own work.
 func TestEveryDeclaredCommandIsClassified(t *testing.T) {
 	for _, c := range AllCommands {
 		ran, ok := longestCommand(c.Argv()[1:])

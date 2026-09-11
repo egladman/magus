@@ -1,5 +1,5 @@
 // Package apply builds per-workspace sandbox policies from config and the acting lease's
-// ledger row, and owns the process-wide landlock application state. It lives here (not in
+// job row, and owns the process-wide landlock application state. It lives here (not in
 // sandbox or config) to break the import cycle.
 package apply
 
@@ -191,7 +191,7 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 }
 
 // NarrowToLease reduces policy's filesystem WRITE grant to the boundary the lease leaseID
-// names declared in the ledger at loc. It returns policy untouched when there is no
+// names declared in the job store at loc. It returns policy untouched when there is no
 // boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
 // (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
 // that declared no write paths and is not read-only. A read-only row narrows the grant
@@ -203,7 +203,7 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 // would let the kernel refuse something other than what the guard explains, and one of
 // the two would be teaching a rule nothing enforces.
 //
-// Reads are left exactly as the workspace policy granted them: the ledger declares a
+// Reads are left exactly as the workspace policy granted them: the job store declares a
 // write boundary only, and a worker has to read the tree it is changing.
 //
 // Beyond the write paths it grants writes to the workspace cache directory and $TMPDIR,
@@ -213,7 +213,7 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 // this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
 // is replaced by grants on its children (see splitAroundDenied).
 //
-// An unreadable ledger fails OPEN with a warning, matching the guard: a lease id that
+// An unreadable job store fails OPEN with a warning, matching the guard: a lease id that
 // stops resolving must not brick the checkout a person is working in.
 func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location, leaseID string) *sandbox.Policy {
 	if policy == nil || loc.Root == "" || leaseID == "" {
@@ -222,7 +222,7 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location
 	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-			"lease ledger unreadable; sandbox running with the workspace write grant"),
+			"job store unreadable; sandbox running with the workspace write grant"),
 			"lease", leaseID, "err", err.Error())
 		return policy
 	}

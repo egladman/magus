@@ -879,8 +879,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return sessionCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
-	case "ledger":
-		return ledgerCmd(ctx, root, subArgs)
+	case "job":
+		return jobCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
 	case "diff":

@@ -43,11 +43,14 @@ type jobRecord struct {
 
 var jobRecords = []jobRecord{
 	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobSchemaVersion"},
-	{Struct: "Report", Title: "magus job result", File: "result.schema.json", Version: "ReportSchemaVersion"},
+	{Struct: "JobResult", Title: "magus job result", File: "result.schema.json", Version: "ResultSchemaVersion"},
 }
 
 // jobSources are the files the records and every type they reach are declared in.
-var jobSources = []string{"internal/job/decode.go", "internal/job/report.go", "types/job.go"}
+var jobSources = []string{
+	"internal/job/decode.go", "internal/job/verify.go",
+	"types/job.go", "types/jobresult.go",
+}
 
 const (
 	schemaDraft = "http://json-schema.org/draft-07/schema#"
@@ -120,7 +123,7 @@ func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 	root := node{
 		{"$schema", schemaDraft},
 		{"$id", schemaIDs + rec.File},
-		{"$comment", fmt.Sprintf("Generated from job.%s by `magus-utils jobschema`."+
+		{"$comment", fmt.Sprintf("Generated from %s by `magus-utils jobschema`."+
 			" DO NOT EDIT; run `magus run job-generate .`.", rec.Struct)},
 		{"title", rec.Title},
 	}

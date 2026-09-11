@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Actor is the party a ledger write is made by: the lease it is bound to, and the
+// Actor is the party a job-store write is made by: the lease it is bound to, and the
 // session and host that identify it.
 //
 // BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor is the orchestrator
@@ -29,7 +29,7 @@ type Actor struct {
 // ActingActor is the party this process acts as for the checkout whose cache dir is
 // cacheDir: the bound lease from [ActingLease], and the identity the trace channel
 // carries. A process with no lease and no trace is the unbound actor, which is what a
-// person running `magus ledger register` is.
+// person running `magus job fork` is.
 func ActingActor(cacheDir string) Actor {
 	spawn := trail.SpawnFromEnv()
 	return Actor{Lease: ActingLease(cacheDir), Session: spawn.TraceID, Host: spawn.Spawner}
@@ -105,7 +105,7 @@ func refuse(actor Actor, id, rule string) error {
 // standing for the rest of the book (a child row's boundary is read from the parent's).
 //
 // THE ENFORCEMENT POINT, and it is here rather than in a shell rule because the three
-// write doors (the CLI, the magus_ledger MCP tool, magus\ledger) all reach the store and
+// write doors (the CLI, the magus_job MCP tool, magus\job) all reach the store and
 // only one of them can be graded by a command pattern. The guard's denial text sends a
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
@@ -167,7 +167,7 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 	}
 	own := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == actor.Lease })
 	if own < 0 {
-		return refuse(actor, id, "its own row is not in the ledger, so there is no boundary to hand a child")
+		return refuse(actor, id, "its own row is not in the job store, so there is no boundary to hand a child")
 	}
 	parent := rows[own]
 	switch {
@@ -216,7 +216,7 @@ func authorizeClear(actor Actor) error {
 	if !actor.Bound() {
 		return nil
 	}
-	return refuse(actor, actor.Lease, "clearing the ledger drops every other lease's row, so it belongs to whoever declared the plan")
+	return refuse(actor, actor.Lease, "clearing the job store drops every other lease's row, so it belongs to whoever declared the plan")
 }
 
 // changedFields names the DECLARED fields that differ between two versions of a row, in

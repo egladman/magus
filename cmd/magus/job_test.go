@@ -18,14 +18,14 @@ func leaseRow(id, parent string) types.Job {
 func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
 	t.Parallel()
 
-	got := ledgerTreeOrder([]types.Job{
+	got := jobTreeOrder([]types.Job{
 		leaseRow("plan", ""),
 		leaseRow("plan/core", "plan"),
 		leaseRow("other", ""),
 		leaseRow("plan/core/deep", "plan/core"),
 	})
 
-	assert.Equal(t, []ledgerTreeLine{
+	assert.Equal(t, []jobTreeLine{
 		{lease: leaseRow("plan", ""), depth: 0},
 		{lease: leaseRow("plan/core", "plan"), depth: 1},
 		{lease: leaseRow("plan/core/deep", "plan/core"), depth: 2},
@@ -43,7 +43,7 @@ func TestLedgerTreeOrderKeepsUnrootedRows(t *testing.T) {
 		leaseRow("a", "b"),
 		leaseRow("b", "a"),
 	}
-	got := ledgerTreeOrder(rows)
+	got := jobTreeOrder(rows)
 
 	require.Len(t, got, len(rows))
 	for _, r := range got {
@@ -61,10 +61,10 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	child.WritePaths = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
-	printLedgerTree(&out, types.NewJobList([]types.Job{parent, child}))
+	printJobTree(&out, types.NewJobList([]types.Job{parent, child}))
 	got := out.String()
 
-	assert.Contains(t, got, "LEASE")
+	assert.Contains(t, got, "JOB")
 	assert.Contains(t, got, "\n  plan/cli", "a child is indented under its parent")
 	assert.Contains(t, got, "magus run test internal/ledger")
 	assert.Contains(t, got, "overlaps")
@@ -75,8 +75,8 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	printLedgerTree(&out, types.NewJobList(nil))
-	assert.Contains(t, out.String(), "magus_ledger")
+	printJobTree(&out, types.NewJobList(nil))
+	assert.Contains(t, out.String(), "magus_job")
 }
 
 // Explain resolves a bare name fuzzily, which is right for a person typing
@@ -131,7 +131,7 @@ func TestChainToGateTerminatesOnACycle(t *testing.T) {
 func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	t.Parallel()
 
-	flags := registerFlags{
+	flags := forkFlags{
 		goal:       "the store is the enforcement point",
 		parent:     "adjacency",
 		checkpoint: "cf5509d09",
@@ -143,7 +143,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		model:      "principal",
 	}
 	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 1,
+	  "schema_version": 3,
 	  "id": "adj/store",
 	  "parent": "adjacency",
 	  "goal": "the store is the enforcement point",

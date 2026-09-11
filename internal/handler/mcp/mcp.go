@@ -19,8 +19,8 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -143,13 +143,13 @@ func allToolDrivers(opts Options) []spells.Driver {
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
 	}
-	// A private ledger store only when the caller supplied none. The daemon supplies one
+	// A private job store only when the caller supplied none. The daemon supplies one
 	// so its two doors (this tool and the console's read route) share a mutex.
-	ledgerStore := opts.Ledger
-	if ledgerStore == nil {
-		ledgerStore = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+	jobStore := opts.Jobs
+	if jobStore == nil {
+		jobStore = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
-	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: ledgerStore}
+	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: jobStore}
 	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&describeFileTool{ws: opts.Magus, next: next},
@@ -171,7 +171,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&refsTool{graph: opts.Magus},
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
-		&ledgerTool{store: ledgerStore},
+		&jobTool{store: jobStore},
 	}
 }
 
@@ -259,7 +259,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 		ctx = withSecrets(ctx)
 		// The provider a tool needs to record its OWN domain metric. The wrapper can only
 		// see what every tool has in common (name, outcome, sizes, duration); a bounded
-		// vocabulary like the ledger's base verdict is known to the tool alone, and reading
+		// vocabulary like the job store's base verdict is known to the tool alone, and reading
 		// it out of the argument map here would be attributing a metric by caller-supplied
 		// text.
 		if tel != nil {

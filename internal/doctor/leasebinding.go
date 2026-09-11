@@ -17,12 +17,12 @@ func (r *runner) checkLeaseBinding() types.DoctorCheck {
 }
 
 // checkLeaseBinding grades the lease this checkout is bound to: an unknown id, a
-// row that is not live and a live row with no registered base each grade a write
+// job that is not live and a live job with no registered base each grade a write
 // differently from a normal lease, and all three render exactly like a guarded
 // session in the verdict itself (see leases.md#what-the-guard-enforces-under-a-lease).
 //
-// It reads the ledger through Root alone, so a diagnostic never adopts a legacy
-// cache-dir ledger on the way past. The MCP surface is outside what it can see: no leg
+// It reads the job store through Root alone, so a diagnostic never adopts a legacy
+// cache-dir store on the way past. The MCP surface is outside what it can see: no leg
 // here says anything about whether a magus tool call is judged.
 func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 	const name = "lease-binding"
@@ -53,7 +53,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 			Name:     name,
 			Status:   types.DoctorFail,
 			Evidence: types.EvidenceUnknown,
-			Message:  fmt.Sprintf("could not read the lease ledger: %v", err),
+			Message:  fmt.Sprintf("could not read the job store: %v", err),
 		}
 	}
 	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
@@ -64,7 +64,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 			Message: fmt.Sprintf("lease %q is bound here, and no row declares it", id),
 			Details: []string{
 				"the guard grades every write here as an unattributed edit: advisory, never denied",
-				"declare the row under this id: " + hint.LedgerRegister.With(id, "--goal", "<goal>"),
+				"declare the row under this id: " + hint.JobFork.With(id, "--goal", "<goal>"),
 			},
 		}
 	}
@@ -91,7 +91,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("lease %q is bound here and live, but has no registered base, so the guard denies every write until one is recorded", id),
-			Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then register it on this lease"},
+			Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 		}
 	}
 

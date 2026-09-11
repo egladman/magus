@@ -28,7 +28,7 @@ type Policy struct {
 	Env        env.Allowlist      // allowlist of inheritable env-var names
 	BaseEnv    []string           // frozen pre-scrubbed env snapshot (prevents cross-run mutation)
 	EnvDropped []string           // names withheld from BaseEnv by the allowlist, recorded for the env-dropped metric
-	// Lease is the ledger lease whose declared boundary narrowed FS, empty on a policy
+	// Lease is the job lease whose declared boundary narrowed FS, empty on a policy
 	// derived from config alone. Read only to name the boundary on a denial: it is not a
 	// [Policy.Fingerprint] input, because the kernel ruleset is built from FS and two
 	// policies with equal rules must still share one landlock application.

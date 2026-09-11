@@ -920,6 +920,35 @@ func (v LeaseCheck) BuzzObject() BuzzObject {
 	}
 }
 
+func (v JobResult) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"schemaVersion":   v.SchemaVersion,
+		"job":             v.Job,
+		"changedPaths":    v.ChangedPaths,
+		"validation":      v.Validation.BuzzObject(),
+		"descendants":     v.Descendants,
+		"unresolvedRisks": v.UnresolvedRisks,
+	}
+}
+
+func (v JobResultValidation) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"command":   v.Command,
+		"outputRef": v.OutputRef,
+	}
+}
+
+func (v JobAttempt) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"found":   v.Found,
+		"ref":     v.Ref,
+		"project": v.Project,
+		"target":  v.Target,
+		"spell":   v.Spell,
+		"failed":  v.Failed,
+	}
+}
+
 func (v Job) BuzzObject() BuzzObject {
 	var optCheck any
 	if v.Check != nil {
@@ -932,6 +961,14 @@ func (v Job) BuzzObject() BuzzObject {
 	itemsUnattributed := make([]any, len(v.Unattributed))
 	for indexUnattributed := range v.Unattributed {
 		itemsUnattributed[indexUnattributed] = v.Unattributed[indexUnattributed].BuzzObject()
+	}
+	var optResult any
+	if v.Result != nil {
+		optResult = (*v.Result).BuzzObject()
+	}
+	var optAttempt any
+	if v.Attempt != nil {
+		optAttempt = (*v.Attempt).BuzzObject()
 	}
 	return BuzzObject{
 		"schemaVersion": v.SchemaVersion,
@@ -956,6 +993,8 @@ func (v Job) BuzzObject() BuzzObject {
 		"registered":    v.Registered,
 		"created":       v.Created,
 		"updated":       v.Updated,
+		"result":        optResult,
+		"attempt":       optAttempt,
 	}
 }
 

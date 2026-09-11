@@ -13,8 +13,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -54,11 +54,11 @@ var Magus = Module{
 		"import is what attaches these signatures to your call sites. It resolves in a " +
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
-		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
-		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +
-		"out (see types.Job). The `magus ledger` CLI subcommand is a third write door onto " +
-		"the same rows: ls and brief read, register declares a row, and accept grades a " +
-		"worker's report. Only the members that DECLARE into " +
+		"`where` and `insight` all answer in-process, and so does `magus\\job` (list, put, " +
+		"register, clear): the job store an orchestrating agent declares about work it handed " +
+		"out (see types.Job). The `magus job` CLI subcommand is a third write door onto " +
+		"the same rows: ls and describe read, fork declares a row, exec records a worker's " +
+		"landed base, and wait blocks on a dependency. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script: there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
@@ -325,7 +325,7 @@ var Magus = Module{
 	// reads through them, and none of those calls is Raises. Every one is made at the
 	// TOP LEVEL of a magusfile, where there is no enclosing function to declare !> and
 	// nothing to catch with, so declaring them raising would make them unwritable,
-	// the same reason magus\project is not Raises. ledger is the one exception: its
+	// the same reason magus\project is not Raises. job is the one exception: its
 	// methods are ordinary calls made from inside a target or script, not top-level
 	// declarations, so they ARE Raises, the same reason magus\secret.read is too.
 	Namespaces: []Namespace{
@@ -444,26 +444,26 @@ var Magus = Module{
 			}},
 		},
 		{
-			Name: "ledger",
-			Doc: "The declared lease ledger: what an orchestrating agent said about work it " +
+			Name: "job",
+			Doc: "The declared job store: what an orchestrating agent said about work it " +
 				"handed out, recorded so a human can see the plan the agents are running. Rows are " +
 				"DECLARATIONS: this store gates no run and blocks no write to the tree; the agent " +
 				"guard is what reads them to grade a write, and register's verdict is a fact it " +
 				"returns rather than a gate. The one thing the store DOES refuse is a write to a " +
 				"row the caller does not own. See the field docs on " +
-				"types.Job. This namespace, the magus_ledger MCP tool and `magus ledger` " +
-				"(register, accept) are the three WRITE doors onto it. Bound by " +
-				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
+				"types.Job. This namespace, the magus_job MCP tool and `magus job` " +
+				"(fork, exec, wait) are the three WRITE doors onto it. Bound by " +
+				"hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
 				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
 			Methods: []Method{
 				{
 					Name: "list",
-					Doc: "Every row as one typed report: {leases, overlaps}. leases are in the order " +
+					Doc: "Every row as one typed report: {jobs, overlaps}. jobs are in the order " +
 						"they were declared; overlaps are derived on this read - every pair of live " +
-						"(non-terminal) leases whose declared write_paths intersect: the same " +
-						"derivation the magus_ledger MCP tool's \"list\" op and the console's " +
-						"/api/v1/ledger route use, so the three cannot disagree about a collision. " +
+						"(non-terminal) jobs whose declared write_paths intersect: the same " +
+						"derivation the magus_job MCP tool's \"list\" op and the console's " +
+						"/api/v1/jobs route use, so the three cannot disagree about a collision. " +
 						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
@@ -477,8 +477,8 @@ var Magus = Module{
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"goal, checkpoint, write_paths, deny_paths, read_paths, depends_on, model, " +
 						"check (`<target> <project> [-- args]`, or the rendered `magus run` line as " +
-						"validation, never both), state (declared, running, pass, fail, no_return), read_only. A " +
-						"key opts omits is left untouched, so a later put in a lease's lifecycle (e.g. " +
+						"validation, never both), state (declared, running, exited, pass, fail, no_return), read_only. A " +
+						"key opts omits is left untouched, so a later put in a job's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
 						"declared; a key present with an empty value is an explicit clear. id is the " +
 						"row's identity to upsert on - the value an orchestrator should also put in " +
@@ -499,13 +499,13 @@ var Magus = Module{
 				{
 					Name: "register",
 					Doc: "Report the base a worker actually landed on, and learn how it compares " +
-						"with the checkpoint the lease was handed. reported_base is a checkpoint token " +
+						"with the checkpoint the job was handed. reported_base is a checkpoint token " +
 						"in the form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
-						"when the tree is dirty. Returns {lease, advice}: the stored row, and a " +
+						"when the tree is dirty. Returns {job, advice}: the stored row, and a " +
 						"sentence naming both revisions and what to do next. The row carries " +
 						"reported_base, registered, and base_verdict - one of match (same token), " +
 						"revision-match (same revision, different uncommitted patch), diverged " +
-						"(different revision), or unknown (the lease was declared without a " +
+						"(different revision), or unknown (the job was declared without a " +
 						"checkpoint, so there is nothing to compare against). The verdict is a FACT " +
 						"returned and recorded, NEVER a refusal: a diverged registration succeeds " +
 						"like any other, and what to do about it is the caller's and the " +
@@ -526,9 +526,9 @@ var Magus = Module{
 				{
 					Name: "clear",
 					Doc: "Drop every row, which is how a fresh plan starts. Returns how many rows " +
-						"it dropped - a fresh or already-empty ledger clears 0, which is not an " +
+						"it dropped - a fresh or already-empty store clears 0, which is not an " +
 						"error. Clearing is also how one orchestrator can silently erase another's " +
-						"plan, so a caller unsure whether it owns the whole ledger should list() " +
+						"plan, so a caller unsure whether it owns the whole store should list() " +
 						"first. Read straight off the workspace already open on the context - no " +
 						"subprocess. Works from a magusfile target and from a `magus buzz` script " +
 						"run inside a workspace; raises MGS1022 only when there is no workspace to " +
@@ -733,25 +733,25 @@ var magusMCPTools = []MCPTool{
 		Doc:  "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
 	},
 	{
-		Name:   hint.ToolLedger.String(),
-		Member: "ledger",
-		Doc:    "Record the orchestrating agent's declared lease plan so humans can see it; the ledger gates no run, and the one write it refuses is a write to a row the caller does not own. One row per lease, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the lease was handed, write and deny paths, dependencies, model, validation, and state. Write and deny paths are a DECLARATION this store never acts on: the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning lease named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around the ledger. Every row should end in pass, fail, or no_return; a read-only lease carries an abbreviated row with no paths. One plan per REPOSITORY, so every worktree and clone reads the same rows: clear starts a fresh one and archives what it dropped beside the ledger. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the lease as possibly dead, which is the READER's judgment, since nothing here transitions a row on its own.",
+		Name:   hint.ToolJob.String(),
+		Member: "job",
+		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, validation, and state. Write and deny paths are a DECLARATION this store never acts on: the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning job named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around it. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY, so every worktree and clone reads the same rows: clear starts a fresh one and archives what it dropped beside the store. Re-fork your row on every state change: each write re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the job as possibly dead, which is the READER's judgment, since nothing here transitions a row on its own. The op set here is list, fork, exec and clear; exit and wait are `magus job exit`/`magus job wait` CLI-only for now.",
 		Params: []MCPParam{
-			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row, plus overlaps: the pairs of live leases whose write_paths intersect, reported as lease_a/lease_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), put (create or replace one row by id), register (record reported_base, the base a worker actually landed on, and get the divergence verdict back), clear (drop every row to start a fresh plan)."},
-			{Name: "reported_base", Type: TypeString, Doc: "register only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the lease was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: TypeString, Doc: "put and register, REQUIRED: the lease's id, which put upserts on. Use the same id you put in the worker's prompt."},
-			{Name: "parent", Type: TypeString, Doc: "put only: the id of the lease this one was handed out under. Omit for a lease the root spawned."},
-			{Name: "goal", Type: TypeString, Doc: "put only: the lease's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
-			{Name: "checkpoint", Type: TypeString, Doc: "put only: the working state this lease was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
-			{Name: "write_paths", Type: TypeString, Doc: "put only: space-separated paths the lease may edit. Empty on a read-only lease by design. Shrinking this set IS how a lease announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw. Accepted as owned_paths for one release."},
-			{Name: "deny_paths", Type: TypeString, Doc: "put only: space-separated paths the lease must not touch. Empty on a read-only lease by design. Accepted as forbidden_paths for one release."},
-			{Name: "read_paths", Type: TypeString, Doc: "put only: space-separated paths whose projects the lease may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen the read lane: the guard advises on an out-of-lane read and denies one under a bound lease, and there is no environment variable that turns it off. Accepted as focus for one release."},
-			{Name: "depends_on", Type: TypeString, Doc: "put only: space-separated ids of leases that must land before this one."},
-			{Name: "model", Type: TypeString, Doc: "put only: the model or effort tier the work was matched to, e.g. principal, standard, economy. Accepted as tier for one release."},
-			{Name: "check", Type: TypeString, Doc: "put only: the one check this lease runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},
-			{Name: "validation", Type: TypeString, Doc: "put only: the check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of check for one release and parsed into it. Sending both is refused."},
-			{Name: "state", Type: TypeString, Doc: "put only: declared, running, pass, fail, or no_return. no_return is not fail: it means the worker died, stalled, or was cancelled and returned no verdict at all."},
-			{Name: "read_only", Type: TypeBool, Doc: "put only: mark a lease that gathers evidence and writes nothing, so empty write and deny paths read as deliberate rather than forgotten."},
+			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row, plus overlaps: the pairs of live jobs whose write_paths intersect, reported as job_a/job_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), fork (create or replace one row by id), exec (a holder reports reported_base, the base a worker actually landed on, and gets the divergence verdict back), clear (drop every row to start a fresh plan)."},
+			{Name: "reported_base", Type: TypeString, Doc: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
+			{Name: "id", Type: TypeString, Doc: "fork and exec, REQUIRED: the job's id, which fork upserts on. Use the same id you put in the worker's prompt."},
+			{Name: "parent", Type: TypeString, Doc: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
+			{Name: "goal", Type: TypeString, Doc: "fork only: the job's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
+			{Name: "checkpoint", Type: TypeString, Doc: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
+			{Name: "write_paths", Type: TypeString, Doc: "fork only: space-separated paths the job may edit. Empty on a read-only job by design. Shrinking this set IS how a job announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed, which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits: a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
+			{Name: "deny_paths", Type: TypeString, Doc: "fork only: space-separated paths the job must not touch. Empty on a read-only job by design."},
+			{Name: "read_paths", Type: TypeString, Doc: "fork only: space-separated paths whose projects the job may READ, widened to those projects' own depends_on. Omit and write_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen the read lane: the guard advises on an out-of-lane read and denies one under a bound job, and there is no environment variable that turns it off."},
+			{Name: "depends_on", Type: TypeString, Doc: "fork only: space-separated ids of jobs that must land before this one."},
+			{Name: "model", Type: TypeString, Doc: "fork only: the model or effort tier the work was matched to, e.g. principal, standard, economy."},
+			{Name: "check", Type: TypeString, Doc: "fork only: the one check this job runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},
+			{Name: "validation", Type: TypeString, Doc: "fork only: the check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of check and parsed into it. Sending both is refused."},
+			{Name: "state", Type: TypeString, Doc: "fork only: declared, running, exited, pass, fail, or no_return. no_return is not fail: it means the worker died, stalled, or was cancelled and returned no verdict at all."},
+			{Name: "read_only", Type: TypeBool, Doc: "fork only: mark a job that gathers evidence and writes nothing, so empty write and deny paths read as deliberate rather than forgotten."},
 		},
 	},
 }
@@ -1135,28 +1135,28 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 }
 
 // workspaceCacheDir is the structural seam for the one capability
-// types.WorkspaceRepository does not carry that opening a lease-ledger Store needs: the
-// workspace's cache directory, which the ledger adopts its pre-move rows from. Satisfied
+// types.WorkspaceRepository does not carry that opening a job Store needs: the
+// workspace's cache directory, which the store adopts its pre-move rows from. Satisfied
 // by the real *magus.Magus the same way std.Analyzer is, recovered by assertion so std
 // and root magus name neither each other.
 type workspaceCacheDir interface {
 	CacheDir() string
 }
 
-// ledgerStoreFromContext opens the lease ledger for the workspace already on ctx. A
+// jobStoreFromContext opens the job store for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches job.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
-// already accepted for v1 (see internal/ledger/store.go): a magusfile target is just
+// already accepted for v1 (see internal/job/store.go): a magusfile target is just
 // another such process.
-func ledgerStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
+func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
 		// which fork a nested magus and rediscover the root. Neither stands in here, and
-		// nor does `magus ledger`, which needs a workspace for the same reason this does.
+		// nor does `magus job`, which needs a workspace for the same reason this does.
 		// Same code, because the constraint is the same one.
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"magus\\%s: no workspace on the context: the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. Run from inside the workspace instead",
+			"magus\\%s: no workspace on the context: the job store is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. Run from inside the workspace instead",
 			member)
 	}
 	cd, ok := ws.(workspaceCacheDir)
@@ -1166,29 +1166,29 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*job.Store, err
 	return job.NewStore(job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}), nil
 }
 
-// MagusListLedger backs magus\ledger.list (hand-bound in
-// internal/interp/bindings/ledger_ns.go, since a Namespace method has no Impl for
+// MagusListJob backs magus\job.list (hand-bound in
+// internal/interp/bindings/job_ns.go, since a Namespace method has no Impl for
 // codegen to reflect a trampoline from; see std.Namespace). It answers with one typed
-// report; types.NewJobList is the same constructor the magus_ledger MCP tool's
-// "list" op and the console's /api/v1/ledger route call, so the three doors cannot
+// report; types.NewJobList is the same constructor the magus_job MCP tool's
+// "list" op and the console's /api/v1/jobs route call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
-func MagusListLedger(ctx context.Context) (types.JobList, error) {
-	store, err := ledgerStoreFromContext(ctx, "ledger.list")
+func MagusListJob(ctx context.Context) (types.JobList, error) {
+	store, err := jobStoreFromContext(ctx, "job.list")
 	if err != nil {
 		return types.JobList{}, err
 	}
-	leases, err := store.List()
+	jobs, err := store.List()
 	if err != nil {
 		return types.JobList{}, err
 	}
-	return types.NewJobList(leases), nil
+	return types.NewJobList(jobs), nil
 }
 
-// MagusPutLedger backs magus\ledger.put. The field merge is decoded by
-// internal/job.ParseMerge, the same decoder the magus_ledger MCP tool's "put" op calls, so
+// MagusPutJob backs magus\job.put. The field merge is decoded by
+// internal/job.ParseMerge, the same decoder the magus_job MCP tool's "fork" op calls, so
 // a client typing either surface accepts the same fields and rejects the same mistakes.
-func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
-	store, err := ledgerStoreFromContext(ctx, "ledger.put")
+func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
+	store, err := jobStoreFromContext(ctx, "job.put")
 	if err != nil {
 		return types.Job{}, err
 	}
@@ -1199,30 +1199,30 @@ func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.
 	return store.Update(ctx, strings.TrimSpace(id), merge)
 }
 
-// MagusRegisterLedger backs magus\ledger.register: a worker reports the base it actually
-// landed on, and learns how that compares with the checkpoint its lease was handed. It
+// MagusRegisterJob backs magus\job.register: a worker reports the base it actually
+// landed on, and learns how that compares with the checkpoint its job was handed. It
 // returns the stored row and internal/job.BaseAdvice's reading of the verdict, the
-// same pair the magus_ledger tool's "register" op answers with.
+// same pair the magus_job tool's "exec" op answers with.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
 // reported like any other. See types.Job.
-func MagusRegisterLedger(ctx context.Context, id, base string) (types.Job, string, error) {
-	store, err := ledgerStoreFromContext(ctx, "ledger.register")
+func MagusRegisterJob(ctx context.Context, id, base string) (types.Job, string, error) {
+	store, err := jobStoreFromContext(ctx, "job.register")
 	if err != nil {
 		return types.Job{}, "", err
 	}
-	lease, err := store.Exec(ctx, strings.TrimSpace(id), base)
+	row, err := store.Exec(ctx, strings.TrimSpace(id), base)
 	if err != nil {
 		return types.Job{}, "", err
 	}
-	return lease, job.BaseAdvice(lease), nil
+	return row, job.BaseAdvice(row), nil
 }
 
-// MagusClearLedger backs magus\ledger.clear, matching the magus_ledger MCP tool's
+// MagusClearJob backs magus\job.clear, matching the magus_job MCP tool's
 // "clear" op: it reports how many rows it dropped rather than nothing, since a
 // destructive op should say what it destroyed.
-func MagusClearLedger(ctx context.Context) (int, error) {
-	store, err := ledgerStoreFromContext(ctx, "ledger.clear")
+func MagusClearJob(ctx context.Context) (int, error) {
+	store, err := jobStoreFromContext(ctx, "job.clear")
 	if err != nil {
 		return 0, err
 	}

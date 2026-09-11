@@ -45,8 +45,6 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverStart(ctx, rest)
 	case hint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
-	case hint.ServerJob.Leaf():
-		return serverJob(ctx, rest)
 	case hint.ServerReload.Leaf():
 		return serverReload(ctx, rest)
 	case jobs.NameRotateActivities:
@@ -640,21 +638,25 @@ func daemonDefaultAddr() string {
 	return "unix://" + filepath.Join(proc.SockDir(), "magus-daemon.sock")
 }
 
-// serverJob submits a named background maintenance job to a running daemon and returns
-// immediately, the CLI counterpart to the magus.job.v1alpha1 JobService RPC. The job set is the
-// shared jobs registry (sync-graph, rotate-activities, rotate-logs, clear-cache); `server job`
-// with no name lists them. A no-op when no persistent daemon is running, so the VCS refresh hook (which
-// calls `server job sync-graph`) never blocks or fails a checkout. The daemon coalesces an
-// identical in-flight job, reported back as an empty invocation id ("already running").
-func serverJob(ctx context.Context, args []string) error {
+// jobRunCatalog submits one of the daemon's OWN jobs and returns immediately, the CLI
+// counterpart to the magus.job.v1alpha1 JobService RPC. The set is the shared jobs registry
+// (sync-graph, rotate-activities, rotate-logs, clear-cache); `job run` with no name lists
+// them. A no-op when no persistent daemon is running, so the VCS refresh hook (which calls
+// `job run sync-graph`) never blocks or fails a checkout. The daemon coalesces an identical
+// in-flight job, reported back as an empty invocation id ("already running").
+//
+// RUN rather than fork, and the difference is the user's: fork declares work somebody else
+// will hold, and nobody forks the daemon's housekeeping. `run` is the shell's word for
+// starting something you do not hold, which is exactly what submitting this is.
+func jobRunCatalog(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		serverJobUsage()
+		jobRunUsage()
 		return nil
 	}
 	name := args[0]
 	job, ok := jobs.Lookup(name)
 	if !ok {
-		return fmt.Errorf("magus server job: unknown job %q; run `%s` to list jobs", name, hint.ServerJob)
+		return fmt.Errorf("magus job run: no job named %q; run `%s` to list them", name, hint.JobRun)
 	}
 	addr, err := resolveDaemonAddr(ctx, "")
 	if err != nil || addr == "" {
@@ -731,12 +733,12 @@ func consoleDiffURL() string {
 	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff"})
 }
 
-func serverJobUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus server job <name>")
+func jobRunUsage() {
+	fmt.Fprintln(os.Stderr, "usage: magus job run <name>")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Submit a background maintenance job to a running daemon, then return")
-	fmt.Fprintln(os.Stderr, "immediately. The job shows in the Dashboard. A no-op when no daemon is")
-	fmt.Fprintln(os.Stderr, "running, so a VCS hook can call it unconditionally.")
+	fmt.Fprintln(os.Stderr, "Submit one of the daemon's own jobs, the housekeeping magus does for itself,")
+	fmt.Fprintln(os.Stderr, "then return immediately. It shows beside every other job in `magus ls jobs`.")
+	fmt.Fprintln(os.Stderr, "A no-op when no daemon is running, so a VCS hook can call it unconditionally.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Jobs:")
 	for _, j := range jobs.All() {
@@ -755,7 +757,7 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-activities")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the activity trail to its cap and drop orphaned payload blobs. This is")
-			fmt.Fprintln(os.Stderr, "the worker for `"+hint.ServerJob.With("rotate-activities")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "the worker for `"+hint.JobRun.With("rotate-activities")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -778,7 +780,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server rotate-logs")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Trim the invocation run-log journals to their cap, keeping the most recent.")
-			fmt.Fprintln(os.Stderr, "This is the worker for `"+hint.ServerJob.With("rotate-logs")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "This is the worker for `"+hint.JobRun.With("rotate-logs")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -810,7 +812,7 @@ func serverPrunePreserved(ctx context.Context, root string, args []string) error
 			fmt.Fprintln(os.Stderr, "Drop the working-copy captures `magus vcs checkpoint --preserve` minted")
 			fmt.Fprintln(os.Stderr, "once they are past their retention. Sapling captures survive this pass;")
 			fmt.Fprintln(os.Stderr, "Jujutsu mints none. This is the worker for")
-			fmt.Fprintln(os.Stderr, "`"+hint.ServerJob.With(jobs.NamePrunePreserved)+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(jobs.NamePrunePreserved)+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err
@@ -854,7 +856,7 @@ func installRefreshHooks(ctx context.Context) {
 	if err != nil {
 		root = cwd
 	}
-	installed, err := installer.InstallRefreshHook(ctx, root, hint.ServerJob.With("sync-graph"))
+	installed, err := installer.InstallRefreshHook(ctx, root, hint.JobRun.With("sync-graph"))
 	if err != nil {
 		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
 		return
@@ -944,7 +946,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-review")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Note when a review this tree took part in has merged. This is the worker")
-			fmt.Fprintln(os.Stderr, "for `"+hint.ServerJob.With("check-review")+"`; prefer that form.")
+			fmt.Fprintln(os.Stderr, "for `"+hint.JobRun.With("check-review")+"`; prefer that form.")
 		}
 	}); err != nil {
 		return err

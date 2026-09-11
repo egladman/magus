@@ -22,12 +22,12 @@ func acceptRow() types.Job {
 	}
 }
 
-func passingReport() Report {
-	return Report{
-		SchemaVersion: ReportSchemaVersion,
-		Lease:         "harness/ledger-accept",
+func passingResult() types.JobResult {
+	return types.JobResult{
+		SchemaVersion: ResultSchemaVersion,
+		Job:           "harness/ledger-accept",
 		ChangedPaths:  []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
-		Validation: ReportValidation{
+		Validation: types.JobResultValidation{
 			Command:   "magus run go::go-test . -- -run Ledger",
 			OutputRef: "a1b2c3d4",
 		},
@@ -36,89 +36,89 @@ func passingReport() Report {
 }
 
 // passingRun is what the output store recorded for a passing run of acceptRow's own
-// validation, which is what an honest report cites. The zero Attempt is a ref the store
+// validation, which is what an honest result cites. The zero Attempt is a ref the store
 // does not hold.
-var passingRun = Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
+var passingRun = types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
 
-func TestGradeTakesAReportInsideTheBoundary(t *testing.T) {
+func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, Verdict{
-		Lease:    "harness/ledger-accept",
-		Accepted: true,
+	assert.Equal(t, Status{
+		Job:      "harness/ledger-accept",
+		Verified: true,
 		Risks:    []string{},
 		Command:  "magus run go::go-test . -- -run Ledger",
-	}, Grade(acceptRow(), passingReport(), passingRun, nil))
+	}, Verify(acceptRow(), passingResult(), passingRun, nil))
 }
 
 // Every rule reports independently: an orchestrator repartitions for one violation and
 // re-runs the check for another, so a verdict that stopped at the first would send it to
 // the wrong remedy half the time.
-func TestGradeNamesEveryViolation(t *testing.T) {
+func TestVerifyNamesEveryViolation(t *testing.T) {
 	t.Parallel()
 
-	rep := passingReport()
-	rep.Lease = "harness/other"
+	rep := passingResult()
+	rep.Job = "harness/other"
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
 	rep.Validation.OutputRef = ""
 
-	v := Grade(acceptRow(), rep, Attempt{}, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(acceptRow(), rep, types.JobAttempt{}, nil)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 3)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
 }
 
-// The report the coding-agent persona filed on 2026-09-11 and had ACCEPTED: nothing
+// The result the coding-agent persona filed on 2026-09-11 and had ACCEPTED: nothing
 // changed, a ref from an unrelated codegen run, a self-asserted pass, and two fields
 // nobody asked for. Every one of them is now a named rejection, which is the whole of
 // what "grade evidence, not assertions" means.
-func TestGradeRefusesTheFabricatedReport(t *testing.T) {
+func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"schema_version":1,"lease":"harness/ledger-accept","changed_paths":[],` +
+	raw := `{"schema_version":1,"job":"harness/ledger-accept","changed_paths":[],` +
 		`"validation":{"command":"magus run go::go-test .","output_ref":"deadbeef","passed":true},` +
 		`"unresolved_risks":[],"confidence":"high"}`
 
-	_, err := DecodeReport(strings.NewReader(raw))
+	_, err := DecodeResult(strings.NewReader(raw))
 	require.Error(t, err, "the unknown members alone stop it at the door")
 	assert.Contains(t, err.Error(), "passed")
 
 	// Decoded by hand, as the fields it invented were never read anyway: the two rules
-	// that would have caught it even in a report shaped correctly.
-	rep := passingReport()
+	// that would have caught it even in a result shaped correctly.
+	rep := passingResult()
 	rep.ChangedPaths = nil
 	rep.Validation.OutputRef = "deadbeef"
-	v := Grade(acceptRow(), rep, Attempt{Found: true, Project: ".", Target: "generate"}, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(acceptRow(), rep, types.JobAttempt{Found: true, Project: ".", Target: "generate"}, nil)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 2)
 	assert.Contains(t, v.Violations[0], "no changed paths at all")
 	assert.Contains(t, v.Violations[1], "magus run generate .")
 	assert.Contains(t, v.Violations[1], "go::go-test")
 }
 
-// The stored run's own exit status is the verdict, which is the field a worker no longer
+// The stored run's own exit status is the verdict, which is the field a holder no longer
 // gets to assert.
-func TestGradeReadsTheStoredRunsOutcome(t *testing.T) {
+func TestVerifyReadsTheStoredRunsOutcome(t *testing.T) {
 	t.Parallel()
 
 	failed := passingRun
 	failed.Failed = true
-	v := Grade(acceptRow(), passingReport(), failed, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(acceptRow(), passingResult(), failed, nil)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "failed")
 }
 
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
 // ref from any run at all passes for evidence.
-func TestGradeRefusesARowWithNoCheckToBindTo(t *testing.T) {
+func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.Check, row.Validation = nil, ""
 
-	v := Grade(row, passingReport(), passingRun, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(row, passingResult(), passingRun, nil)
+	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "declares no check")
 }
 
@@ -127,7 +127,7 @@ func TestGradeRefusesARowWithNoCheckToBindTo(t *testing.T) {
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
-	att := Attempt{Found: true, Project: "internal/ledger", Target: "test"}
+	att := types.JobAttempt{Found: true, Project: "internal/ledger", Target: "test"}
 	for _, line := range []string{
 		"magus run test internal/ledger",
 		"./magus run test:rw internal/ledger",
@@ -146,7 +146,7 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 // A directory declaration covers what is under it and a glob covers only what it matches.
 // The second half is the one worth pinning: falling back to a glob's literal prefix would
 // accept exactly the writes the declaration excludes.
-func TestGradeReadsDeclarationsAsWrittenIn(t *testing.T) {
+func TestVerifyReadsDeclarationsAsWrittenIn(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
@@ -163,109 +163,109 @@ func TestGradeReadsDeclarationsAsWrittenIn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			rep := passingReport()
+			rep := passingResult()
 			rep.ChangedPaths = []string{tc.path}
-			v := Grade(acceptRow(), rep, passingRun, nil)
-			assert.Equal(t, tc.want, v.Accepted, v.Violations)
+			v := Verify(acceptRow(), rep, passingRun, nil)
+			assert.Equal(t, tc.want, v.Verified, v.Violations)
 		})
 	}
 }
 
 // A lease over the whole tree covers every path in it. The declaration cleans to ".", and
 // reading that as covering nothing made every reported path a violation.
-func TestGradeReadsARootDeclarationAsTheWholeTree(t *testing.T) {
+func TestVerifyReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.WritePaths = []string{"."}
-	assert.True(t, Grade(row, passingReport(), passingRun, nil).Accepted)
+	assert.True(t, Verify(row, passingResult(), passingRun, nil).Verified)
 
 	row.WritePaths = []string{""}
-	assert.False(t, Grade(row, passingReport(), passingRun, nil).Accepted, "a blank declaration claims nothing")
+	assert.False(t, Verify(row, passingResult(), passingRun, nil).Verified, "a blank declaration claims nothing")
 }
 
 // The deny list is read at acceptance too: a path can be inside the owned lane and still
 // be one the row was told to leave alone.
-func TestGradeRejectsADeniedPath(t *testing.T) {
+func TestVerifyRejectsADeniedPath(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.DenyPaths = []string{"internal/ledger/store.go"}
-	rep := passingReport()
+	rep := passingResult()
 	rep.ChangedPaths = []string{"internal/ledger/store.go"}
 
-	v := Grade(row, rep, passingRun, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(row, rep, passingRun, nil)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "denied")
 }
 
 // A descendant the ledger does not carry is a branch of the plan nobody is tracking,
 // which is the fact the field was added to surface.
-func TestGradeRejectsADescendantNoRowDeclares(t *testing.T) {
+func TestVerifyRejectsADescendantNoRowDeclares(t *testing.T) {
 	t.Parallel()
 
-	rep := passingReport()
+	rep := passingResult()
 	rep.Descendants = []string{"harness/ledger-accept/child", "harness/ghost"}
 	declared := []types.Job{{ID: "harness/ledger-accept/child"}}
 
-	v := Grade(acceptRow(), rep, passingRun, declared)
-	assert.False(t, v.Accepted)
+	v := Verify(acceptRow(), rep, passingRun, declared)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "harness/ghost")
 }
 
-// A row somebody already graded is not re-graded: the second verdict overwrites the first
-// without anybody being told the first existed.
-func TestGradeRefusesARowThatIsAlreadyClosed(t *testing.T) {
+// A row somebody already verified is not re-verified: the second verdict overwrites the
+// first without anybody being told the first existed.
+func TestVerifyRefusesARowThatIsAlreadyClosed(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.State = types.StatePass
 
-	v := Grade(row, passingReport(), passingRun, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(row, passingResult(), passingRun, nil)
+	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "already pass")
 }
 
 // The ref is the whole of the evidence, so a ref that no longer resolves is a rejection
 // rather than a detail: the root cannot reopen a run that is not there.
-func TestGradeRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
+func TestVerifyRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
 	t.Parallel()
 
-	v := Grade(acceptRow(), passingReport(), Attempt{}, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(acceptRow(), passingResult(), types.JobAttempt{}, nil)
+	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "a1b2c3d4")
 }
 
 // A read-only lease has no write set, so any claimed write is a violation of a boundary
 // the row declared by being read-only rather than by listing paths.
-func TestGradeRefusesWritesFromAReadOnlyLease(t *testing.T) {
+func TestVerifyRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.ReadOnly, row.WritePaths = true, nil
 
-	v := Grade(row, passingReport(), passingRun, nil)
-	assert.False(t, v.Accepted)
+	v := Verify(row, passingResult(), passingRun, nil)
+	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "read-only")
 }
 
-// The schema is what a host compiles a worker's response format against, and it is
+// The schema is what a host compiles a holder's response format against, and it is
 // generated: a field on one side and not the other means the generator has not been run,
-// so a report would validate against a shape the grader does not read.
-func TestReportSchemaMatchesTheStruct(t *testing.T) {
+// so a result would validate against a shape the verifier does not read.
+func TestResultSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 
 	var schema, validation struct {
 		Properties map[string]json.RawMessage `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(ReportSchema), &schema))
+	require.NoError(t, json.Unmarshal([]byte(ResultSchema), &schema))
 	require.NoError(t, json.Unmarshal(schema.Properties["validation"], &validation))
 
-	assert.ElementsMatch(t, jsonFields(Report{}), keys(schema.Properties))
-	assert.ElementsMatch(t, jsonFields(ReportValidation{}), keys(validation.Properties))
+	assert.ElementsMatch(t, jsonFields(types.JobResult{}), keys(schema.Properties))
+	assert.ElementsMatch(t, jsonFields(types.JobResultValidation{}), keys(validation.Properties))
 }
 
 // jsonFields is the wire name of every field a struct serializes, which is the set the

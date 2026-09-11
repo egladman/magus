@@ -312,10 +312,10 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
-	assert.NotEqual(t, "deny", got.Decision, "a ledger magus cannot read must never block an edit")
+	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the surface that re-declares the plan")
+	assert.Contains(t, got.Context, "magus_job", "the advisory must name the surface that re-declares the plan")
 }
 
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
@@ -622,7 +622,7 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 
 		require.Equal(t, "deny", got.Decision, "owning the path is not enough; the base has to be on record")
 		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the command")
-		assert.Contains(t, got.Reason, "magus_ledger", "and where to register what it prints")
+		assert.Contains(t, got.Reason, "magus_job", "and where to exec what it prints")
 		assert.Contains(t, got.Reason, "lease-b")
 	})
 
@@ -679,7 +679,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		require.Equal(t, "advise", got.Decision)
 		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
 		assert.Equal(t, advisoryUnleasedWrite, got.Kind, "a standing fact, so it is held to one firing per session")
-		assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, "magus_job", "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
 

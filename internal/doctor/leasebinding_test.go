@@ -88,7 +88,7 @@ func TestLeaseBindingReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 	require.Equal(t, types.DoctorFail, got.Status)
 	require.Equal(t, types.EvidenceUnknown, got.Evidence)
-	require.Contains(t, got.Message, "could not read the lease ledger")
+	require.Contains(t, got.Message, "could not read the job store")
 }
 
 func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
@@ -103,7 +103,7 @@ func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
-			"declare the row under this id: " + hint.LedgerRegister.With("adj/no-such-lease", "--goal", "<goal>"),
+			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--goal", "<goal>"),
 		},
 	}, got)
 }
@@ -149,7 +149,7 @@ func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 		Name:    "lease-binding",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
-		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then register it on this lease"},
+		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 	}, got)
 }
 

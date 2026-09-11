@@ -71,25 +71,6 @@ func TestTermsRendersOnlyTheRow(t *testing.T) {
 	assert.NotContains(t, got, "goal")
 	assert.NotContains(t, got, "depends on")
 	assert.NotContains(t, got, "deny paths")
-	assert.Contains(t, got, "validation, the only check you run")
+	assert.Contains(t, got, "the only check you run")
 	assert.Contains(t, got, row.Validation)
-}
-
-// The bootstrap is commands and their reasons, and nothing else. A rules block here was
-// read once and ignored; the guard says the rules when a command meets one.
-func TestTermsBootstrapIsCommands(t *testing.T) {
-	t.Parallel()
-
-	b := NewTerms(briefRow(), TermsFacts{})
-	require.Len(t, b.Bootstrap, 3)
-	for _, step := range b.Bootstrap {
-		assert.NotEmpty(t, step.Run)
-		assert.NotEmpty(t, step.Why)
-	}
-	assert.Equal(t, "magus session lease harness/ledger-per-repo", b.Bootstrap[1].Run)
-	assert.Contains(t, b.String(), "magus vcs checkpoint -o name")
-
-	for _, gone := range []string{"skills to load", "Do not commit", "Never `magus affected ci`"} {
-		assert.NotContains(t, b.String(), gone, "the record carries no instruction blocks")
-	}
 }

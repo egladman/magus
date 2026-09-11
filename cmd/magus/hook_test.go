@@ -983,20 +983,20 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"put on another row":    {`{"op":"put","id":"harness/other","write_paths":"**"}`, "deny\n"},
-		"put widening its own":  {`{"op":"put","id":"` + wide.ID + `","write_paths":["**"]}`, "deny\n"},
+		"fork on another row":   {`{"op":"fork","id":"harness/other","write_paths":"**"}`, "deny\n"},
+		"fork widening its own": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["**"]}`, "deny\n"},
 		"clearing the board":    {`{"op":"clear"}`, "deny\n"},
-		"register elsewhere":    {`{"op":"register","id":"harness/other"}`, "deny\n"},
-		"register its own base": {`{"op":"register","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
+		"exec elsewhere":        {`{"op":"exec","id":"harness/other"}`, "deny\n"},
+		"exec its own base":     {`{"op":"exec","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
 		"listing the plan":      {`{"op":"list"}`, "pass\n"},
-		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
+		"giving a lane back":    {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
 		// The rewrite the rendered line used to drop on the floor: judged only on the keys
 		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
-		"forging its own base": {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
-		"rewriting its goal":   {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
+		"forging its own base": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
+		"rewriting its goal":   {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
 	} {
 		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
-			`","tool_name":"mcp__magus__magus_ledger","tool_input":` + tc.toolInput + `}`
+			`","tool_name":"mcp__magus__magus_job","tool_input":` + tc.toolInput + `}`
 		var out bytes.Buffer
 		err := hookCmd(ctx, strings.NewReader(envelope), &out, []string{"--lease", wide.ID, "-o", "name"})
 		if tc.want == "deny\n" {
@@ -1034,9 +1034,9 @@ func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	for _, command := range []string{
-		"magus ledger",
-		"magus ledger accept --schema",
-		"magus session lease harness/real",
+		"magus ls jobs",
+		"magus job wait --schema",
+		"magus job exec harness/real",
 		"git status --short",
 		"ls internal/job",
 	} {

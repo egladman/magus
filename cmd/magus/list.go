@@ -43,7 +43,7 @@ type listOutput struct {
 // own accept-list, the way graphSubs is graphCmd's, so a drift test can read the
 // router's data instead of the registry's mirror of it. The project noun is absent
 // because it names the DEFAULT view: anything ls does not route here lists projects.
-var lsNouns = []string{"target", "targets"}
+var lsNouns = []string{"target", "targets", "job", "jobs"}
 
 // ls enumerates what exists, optionally narrowed by a noun. It is the counterpart
 // to describe, not a duplicate of it: describe leads with a definition and teaches
@@ -63,10 +63,12 @@ func ls(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Nouns (singular or plural):")
 			fmt.Fprintln(os.Stderr, "  project   every discovered project, with spell, sources, outputs, depends_on")
 			fmt.Fprintln(os.Stderr, "  target    what a project can run, with the doc and spell ops behind each")
+			fmt.Fprintln(os.Stderr, "  job       every job this repository carries, whoever holds it")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "  magus ls                     every project in the workspace")
 			fmt.Fprintln(os.Stderr, "  magus ls targets             what the cwd project can run")
 			fmt.Fprintln(os.Stderr, "  magus ls targets libs/foo    what libs/foo can run")
+			fmt.Fprintln(os.Stderr, "  magus ls jobs                every job, with its state and lanes")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -77,6 +79,9 @@ func ls(ctx context.Context, root string, args []string) error {
 	}
 
 	if len(pos) > 0 && slices.Contains(lsNouns, pos[0]) {
+		if strings.HasPrefix(pos[0], "job") {
+			return lsJobs(resolveRootOrEmpty(root), pos[1:])
+		}
 		return lsTargets(ctx, root, pos[1:])
 	}
 	return lsProjects(ctx, root)

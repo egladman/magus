@@ -1,7 +1,6 @@
 package job
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
@@ -17,11 +16,11 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":1,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
+		`{"schema_version":3,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
 	require.Equal(t, Declaration{
-		SchemaVersion: 1,
+		SchemaVersion: 3,
 		ID:            "adj/ledger",
 		WritePaths:    []string{"internal/ledger"},
 		DenyPaths:     []string{"MAGUS.md"},
@@ -34,7 +33,7 @@ func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":1,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+		`{"schema_version":3,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -44,7 +43,7 @@ func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 func TestDecodeRejectsFieldsNobodyAskedFor(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeReport(strings.NewReader(
+	_, err := DecodeResult(strings.NewReader(
 		`{"schema_version":1,"changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
 			`"unresolved_risks":[],"confidence":"high"}`))
 	require.Error(t, err)
@@ -64,7 +63,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := DecodeReport(strings.NewReader(raw))
+			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "version 1")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
@@ -75,12 +74,12 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 	t.Parallel()
 
-	rep, err := DecodeReport(strings.NewReader(
-		`{"schema_version":1,"lease":"adj/store","changed_paths":["internal/ledger/store.go"],` +
+	rep, err := DecodeResult(strings.NewReader(
+		`{"schema_version":1,"job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
 			`"validation":{"command":"magus run test internal/ledger","output_ref":"out1a2b"},` +
 			`"unresolved_risks":["the archive is never read back"]}`))
 	require.NoError(t, err)
-	assert.Equal(t, "adj/store", rep.Lease)
+	assert.Equal(t, "adj/store", rep.Job)
 	assert.Equal(t, "out1a2b", rep.Validation.OutputRef)
 	assert.Len(t, rep.UnresolvedRisks, 1)
 }
@@ -91,7 +90,7 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 	t.Parallel()
 
 	for _, field := range []string{`"created":1`, `"registered_by":{"session":"someone"}`, `"releases":[]`} {
-		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store",` + field + `}`))
+		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj/store",` + field + `}`))
 		require.Error(t, err, field)
 	}
 }
@@ -99,16 +98,16 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj store"}`))
+	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj store"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj/store","state":"done"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":1,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
+		`{"schema_version":3,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
@@ -155,33 +154,39 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	assert.ElementsMatch(t, jsonFields(Declaration{}), keys(schema.Properties))
 }
 
-// The two write doors accept the same fields or a row declared on one is not the row the
-// other would have recorded. ParseMerge is the MCP tool's decoder and Declaration is the CLI's.
+// The two write doors accept the same CURRENT fields or a row declared on one is not the
+// row the other would have recorded. ParseMerge is the MCP tool's decoder and Declaration
+// is the CLI's. Declaration alone still carries the pre-rename spellings
+// (owned_paths/forbidden_paths/focus/tier - see foldLegacyLanes): that compat is decode.go's
+// own and was never mirrored into ParseMerge, so it is excluded from this comparison rather
+// than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
+	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
 	for _, field := range jsonFields(Declaration{}) {
-		if field == "schema_version" || field == "id" {
-			continue // the envelope and the key, which ParseMerge takes as arguments
+		if field == "schema_version" || field == "id" || legacy[field] {
+			continue // the envelope and the key (ParseMerge takes them as arguments), and decode.go's own legacy compat
 		}
 		var value any = "declared"
 		switch field {
-		case "write_paths", "deny_paths", "read_paths", "depends_on",
-			"owned_paths", "forbidden_paths", "focus":
-			value = []any{"internal/ledger"}
+		case "write_paths", "deny_paths", "read_paths", "depends_on":
+			value = []any{"internal/job"}
 		case "read_only":
 			value = true
 		case "check":
-			value = "test internal/ledger"
+			value = "test internal/job"
 		case "validation":
-			value = "magus run test internal/ledger"
+			value = "magus run test internal/job"
 		}
 		_, err := ParseMerge(map[string]any{field: value})
-		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
+		assert.NoError(t, err, "magus_job fork rejects %q, which `magus job fork` accepts", field)
 	}
-	accepted := slices.Clone(mergeFields)
-	for _, pair := range renamedFields {
-		accepted = append(accepted, pair[0])
+	var current []string
+	for _, field := range jsonFields(Declaration{})[2:] {
+		if !legacy[field] {
+			current = append(current, field)
+		}
 	}
-	assert.ElementsMatch(t, jsonFields(Declaration{})[2:], accepted, "the two doors name one vocabulary")
+	assert.ElementsMatch(t, current, mergeFields, "the two doors name one current vocabulary")
 }

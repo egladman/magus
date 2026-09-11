@@ -142,7 +142,7 @@ func TestConcurrentMarkAppliedExternallyAndApply(t *testing.T) {
 }
 
 // leaseWorkspace lays out a workspace with pkg/a, pkg/a/gen and pkg/b, writes row into
-// its ledger, and returns the resolved root and the cache directory.
+// its job store, and returns the resolved root and the cache directory.
 //
 // TMPDIR is repointed at the cache directory, and without that every assertion below
 // passes vacuously: BuildPolicy grants writes on $TMPDIR, and a workspace built by
@@ -152,9 +152,9 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	root = filesystem.ResolveRulePath(t.TempDir())
 	cacheDir = t.TempDir()
 	t.Setenv("TMPDIR", cacheDir)
-	// The ledger lives in the per-repository state dir, and NarrowToLease resolves it
+	// The job store lives in the per-repository state dir, and NarrowToLease resolves it
 	// through the environment, so without this the fixture's rows land in the
-	// developer's own ledger and the store under test is the real one.
+	// developer's own store and the store under test is the real one.
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	for _, dir := range []string{"pkg/a/gen", "pkg/a/keep", "pkg/b"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
@@ -168,7 +168,7 @@ func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 }
 
 // TestNarrowToLeaseGrantsOnlyTheWritePaths is the boundary the whole tier rests on: a
-// worker's write grant is the ledger row's write paths and nothing else in the checkout.
+// worker's write grant is the job row's write paths and nothing else in the checkout.
 // Reads stay wide, because the row declares a write boundary only.
 func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Job{

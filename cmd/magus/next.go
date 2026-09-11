@@ -59,7 +59,7 @@ func newNextGate(root string) nextGate {
 	return nextGate{gate: hint.NewGate(dir, ""), role: role, lane: lane}
 }
 
-// actingRole grades the acting lease against this checkout's ledger.
+// actingRole grades the acting lease against this checkout's job store.
 func actingRole(cacheDir, root string) (hint.Role, []string) {
 	id := job.ActingLease(cacheDir)
 	if id == "" {

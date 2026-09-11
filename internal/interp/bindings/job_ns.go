@@ -9,14 +9,14 @@ import (
 	"github.com/egladman/magus/std"
 )
 
-// buildLedgerNS assembles magus\ledger for a magusfile or `magus buzz` script:
-// list/put/register/clear over the lease ledger (see internal/ledger,
-// types.Lease).
+// buildJobNS assembles magus\job for a magusfile or `magus buzz` script:
+// list/put/register/clear over the job store (see internal/job,
+// types.Job).
 //
 // Hand-bound, like cache/ci/secret/workspace above, because a Namespace's methods are
 // Extern by construction (see std.Namespace): there is no Impl for codegen to reflect a
-// trampoline from. Unlike those, ledger needs no session-scoped state (a provider
-// selection, a resolver), so it takes no captured ctx: each closure calls std.MagusListLedger
+// trampoline from. Unlike those, job needs no session-scoped state (a provider
+// selection, a resolver), so it takes no captured ctx: each closure calls std.MagusListJob
 // et al with the CALL-TIME ctx the VM supplies, the same one every generated Impl
 // trampoline uses to find the workspace on the context.
 //
@@ -26,37 +26,37 @@ import (
 // (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
 // one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
-func buildLedgerNS(obs buzz.DirectObserver) vm.Value {
+func buildJobNS(obs buzz.DirectObserver) vm.Value {
 	ns := vm.NewMap()
-	ns.MapSet("list", directVal(obs, "magus.ledger.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		report, err := std.MagusListLedger(ctx)
+	ns.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		report, err := std.MagusListJob(ctx)
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
 		return bindinggen.AnyMapVal(report.BuzzObject()), nil
 	}))
-	ns.MapSet("put", directVal(obs, "magus.ledger.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		id := bindinggen.Str(args, 0)
 		opts := bindinggen.AnyMap(args, 1)
-		lease, err := std.MagusPutLedger(ctx, id, opts)
+		row, err := std.MagusPutJob(ctx, id, opts)
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(lease.BuzzObject()), nil
+		return bindinggen.AnyMapVal(row.BuzzObject()), nil
 	}))
 	// register answers with a two-key map rather than the row alone, which is the shape
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
-	// (see ledger.BaseAdvice), so folding it in beside the row's own keys would put a
-	// rendering where a caller reads facts; "lease" and "advice" keep the two apart.
-	ns.MapSet("register", directVal(obs, "magus.ledger.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
-		lease, advice, err := std.MagusRegisterLedger(ctx, bindinggen.Str(args, 0), bindinggen.Str(args, 1))
+	// (see job.BaseAdvice), so folding it in beside the row's own keys would put a
+	// rendering where a caller reads facts; "job" and "advice" keep the two apart.
+	ns.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		row, advice, err := std.MagusRegisterJob(ctx, bindinggen.Str(args, 0), bindinggen.Str(args, 1))
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(map[string]any{"lease": lease.BuzzObject(), "advice": advice}), nil
+		return bindinggen.AnyMapVal(map[string]any{"job": row.BuzzObject(), "advice": advice}), nil
 	}))
-	ns.MapSet("clear", directVal(obs, "magus.ledger.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
-		n, err := std.MagusClearLedger(ctx)
+	ns.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+		n, err := std.MagusClearJob(ctx)
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}

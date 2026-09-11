@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -332,7 +333,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 	actor := s.Actor()
 	var stored types.Job
 	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
+		f, rawByID, err := s.read()
 		if err != nil {
 			return err
 		}
@@ -381,7 +382,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			row.RegisteredBy = actor.leaseActor()
 			f.Jobs = append(f.Jobs, row)
 		}
-		if werr := s.write(f); werr != nil {
+		if werr := s.write(f, rawByID); werr != nil {
 			return werr
 		}
 		stored = row.Clone()
@@ -399,7 +400,7 @@ func (s *Store) List() ([]types.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, err := s.read()
+	f, _, err := s.read()
 	if err != nil {
 		return nil, err
 	}
@@ -435,17 +436,17 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 
 	var dropped int
 	err := s.withFileLock(ctx, func() error {
-		f, err := s.read()
+		f, rawByID, err := s.read()
 		if err != nil {
 			return err
 		}
 		if len(f.Jobs) > 0 {
-			if err := s.archive(f); err != nil {
+			if err := s.archive(f, rawByID); err != nil {
 				return err
 			}
 		}
 		dropped = len(f.Jobs)
-		return s.write(jobsFile{})
+		return s.write(jobsFile{}, nil)
 	})
 	if err != nil {
 		return 0, err
@@ -457,8 +458,16 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // moment they were dropped. A second clear within the same second overwrites the first
 // archive rather than growing a suffix scheme: two plans wiped in one second is one
 // mistake being repeated, and the rows worth keeping are the ones there now.
-func (s *Store) archive(f jobsFile) error {
-	raw, err := json.MarshalIndent(f, "", "  ")
+//
+// Each row goes through the same raw-merge write does (see mergeRows): the archive exists
+// so a person can read the plan that was dropped, and a member this binary does not know
+// is part of that plan too.
+func (s *Store) archive(f jobsFile, rawByID map[string]json.RawMessage) error {
+	merged, err := mergeRows(f.Jobs, rawByID)
+	if err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -565,34 +574,77 @@ const maxDigestBytes = 32 << 20
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet for this repository.
-func (s *Store) read() (jobsFile, error) {
+//
+// Alongside the decoded rows it returns each row's own raw bytes as the file held them,
+// keyed by id. That is the row's baggage: whatever member this binary's struct does not
+// declare, kept so write and archive can merge fresh field values over it rather than
+// replace it outright (see mergeRowRaw). Keyed by id rather than position because mutate
+// APPENDS a new row and rewrites the whole file, which moves nothing already there, but a
+// caller must not have to assume that positional pairing keeps holding.
+func (s *Store) read() (jobsFile, map[string]json.RawMessage, error) {
 	if s.err != nil {
-		return jobsFile{}, s.err
+		return jobsFile{}, nil, s.err
 	}
 	raw, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return jobsFile{}, nil
+		return jobsFile{}, nil, nil
 	}
 	if err != nil {
-		return jobsFile{}, err
+		return jobsFile{}, nil, err
 	}
 	var f jobsFile
 	if err := json.Unmarshal(raw, &f); err != nil {
-		return jobsFile{}, err
+		return jobsFile{}, nil, err
 	}
 	if err := foldStoredLanes(raw, f.Jobs); err != nil {
-		return jobsFile{}, fmt.Errorf("job: %s: %w", s.path, err)
+		return jobsFile{}, nil, fmt.Errorf("job: %s: %w", s.path, err)
 	}
 	// A row this binary cannot read whole stops every operation, not just the read of that
 	// row: mutate rewrites EVERY row in the file, so one unrelated put would silently drop
 	// whatever a newer magus recorded across the whole plan.
+	//
+	// This stays exactly this wide rather than narrowing to let an unrelated put through.
+	// authorizeRow and jobOverlaps both reason over every row in the plan together, so
+	// operating on a plan this binary can only read part of is worse than refusing it
+	// outright. It is also not the gap mergeRowRaw below closes: this check always aborts
+	// before any write is attempted, so it never risked dropping a newer row's fields even
+	// before that fix existed. What mergeRowRaw actually guards against is the situation the
+	// two lost rows were really in: fields added to a row WITHOUT a schema_version bump,
+	// which this check cannot see coming, because the version still reads as one this
+	// binary accepts.
 	for _, row := range f.Jobs {
 		if row.SchemaVersion > types.JobSchemaVersion {
-			return jobsFile{}, fmt.Errorf("job: row %s in %s is schema_version %d and this magus accepts version %d only."+
+			return jobsFile{}, nil, fmt.Errorf("job: row %s in %s is schema_version %d and this magus accepts version %d only."+
 				" A newer ledger is not readable by an older magus; update magus", row.ID, s.path, row.SchemaVersion, types.JobSchemaVersion)
 		}
 	}
-	return f, nil
+	rawByID, err := rawRowsByID(raw, f.Jobs)
+	if err != nil {
+		return jobsFile{}, nil, fmt.Errorf("job: %s: %w", s.path, err)
+	}
+	return f, rawByID, nil
+}
+
+// rawRowsByID pairs each decoded row with its own raw bytes as the file held them, by id.
+// The file and f.Jobs were decoded from the same bytes in the same order, so a length
+// mismatch means the shapes disagree in a way json.Unmarshal above already tolerated;
+// returning no baggage rather than erroring lets every row round-trip through a plain
+// struct marshal on the next write, which is what happened before this existed.
+func rawRowsByID(raw []byte, rows []types.Job) (map[string]json.RawMessage, error) {
+	var envelope struct {
+		Jobs []json.RawMessage `json:"jobs"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, err
+	}
+	if len(envelope.Jobs) != len(rows) {
+		return nil, nil
+	}
+	out := make(map[string]json.RawMessage, len(rows))
+	for i, row := range rows {
+		out[row.ID] = envelope.Jobs[i]
+	}
+	return out, nil
 }
 
 // withFileLock runs fn while this process holds the ledger's exclusive OS file lock, so a
@@ -650,12 +702,104 @@ const (
 )
 
 // write replaces the file atomically, so a reader never sees a half-written job store.
-func (s *Store) write(f jobsFile) error {
-	raw, err := json.MarshalIndent(f, "", "  ")
+//
+// Every row is folded through mergeRowRaw against rawByID before it is serialized, not
+// just the row this call changed: mutate rewrites the WHOLE file on every put, so a member
+// on a row nobody touched this call is exactly as exposed to being dropped as one on the
+// row being written.
+func (s *Store) write(f jobsFile, rawByID map[string]json.RawMessage) error {
+	merged, err := mergeRows(f.Jobs, rawByID)
+	if err != nil {
+		return err
+	}
+	raw, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return err
 	}
 	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
+}
+
+// jobsEnvelope is the file shape write and archive actually serialize: one raw object per
+// row rather than the typed jobsFile, because a member neither this binary's struct nor
+// this call introduced has to ride through untouched (see mergeRowRaw).
+type jobsEnvelope struct {
+	Jobs []json.RawMessage `json:"jobs"`
+}
+
+// mergeRows folds every row's known fields over its own raw baggage from rawByID, in file
+// order. A row absent from rawByID - one this binary created this call - has nothing to
+// merge over and is marshalled plain, which is what every row did before this existed.
+func mergeRows(jobs []types.Job, rawByID map[string]json.RawMessage) (jobsEnvelope, error) {
+	out := jobsEnvelope{Jobs: make([]json.RawMessage, len(jobs))}
+	for i, row := range jobs {
+		merged, err := mergeRowRaw(row, rawByID[row.ID])
+		if err != nil {
+			return jobsEnvelope{}, fmt.Errorf("job: row %s: %w", row.ID, err)
+		}
+		out.Jobs[i] = merged
+	}
+	return out, nil
+}
+
+// mergeRowRaw folds row's own current field values over prevRaw, the row's raw bytes as
+// this Store last read them from disk. A member prevRaw carries that row's struct does not
+// declare - an unreleased field, or one an OLDER binary wrote beside it - survives
+// untouched. A member the struct DOES declare is overwritten with row's current value even
+// when that value is the zero one: a field the caller just cleared has to read back
+// cleared, not come back as whatever version was still sitting in prevRaw.
+//
+// prevRaw is empty for a row this binary created this call, and there is nothing to merge
+// over: it is marshalled plain, exactly as every row was before this existed.
+func mergeRowRaw(row types.Job, prevRaw json.RawMessage) (json.RawMessage, error) {
+	if len(prevRaw) == 0 {
+		return json.Marshal(row)
+	}
+	var base map[string]json.RawMessage
+	if err := json.Unmarshal(prevRaw, &base); err != nil || base == nil {
+		// Not a JSON object, or one with nothing in it: there is nothing usable to merge
+		// over, so the row's own fields are what gets written, exactly as if it carried no
+		// baggage at all.
+		return json.Marshal(row)
+	}
+	// The pre-rename lane spellings are folded onto their current field on every read
+	// (foldStoredLanes) and must not ride back out under the old name too, or the next read
+	// finds a lane declared under both spellings, which foldStoredLanes refuses.
+	for _, pair := range renamedFields {
+		delete(base, pair[0])
+	}
+	known, err := rowFields(row)
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range known {
+		base[k] = v
+	}
+	return json.Marshal(base)
+}
+
+// rowFields is every JSON field types.Job declares, by name, marshalled at its CURRENT
+// value regardless of whether that value is the zero one - read off the struct with
+// reflect so a field added there cannot silently stay out of this merge. json.Marshal(row)
+// itself cannot serve this: its tags carry `omitempty`, which is right for a fresh row but
+// would leave an emptied field's key out of the result entirely, and the overlay in
+// mergeRowRaw would then read that absence as "unchanged" rather than "cleared".
+func rowFields(row types.Job) (map[string]json.RawMessage, error) {
+	v := reflect.ValueOf(row)
+	t := v.Type()
+	out := make(map[string]json.RawMessage, t.NumField())
+	for i := range t.NumField() {
+		tag := t.Field(i).Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name, _, _ := strings.Cut(tag, ",")
+		raw, err := json.Marshal(v.Field(i).Interface())
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		out[name] = raw
+	}
+	return out, nil
 }
 
 // LeaseMarkerName is the file, in a checkout's cache dir, that binds a lease to THAT

@@ -78,7 +78,6 @@ var (
 	GraphDiff         = cmd("graph", "diff")
 	ServerStart       = cmd("server", "start")
 	ServerStop        = cmd("server", "stop")
-	ServerJob         = cmd("server", "job")
 	ServerReload      = cmd("server", "reload")
 	Status            = cmd("status")
 	Watch             = cmd("watch")
@@ -104,17 +103,19 @@ var (
 	MemoryLs          = cmd("memory", "ls")
 	MemoryPut         = cmd("memory", "put")
 	MemoryVerify      = cmd("memory", "verify")
-	Ledger            = cmd("ledger")
-	LedgerBrief       = cmd("ledger", "brief")
-	LedgerAccept      = cmd("ledger", "accept")
-	LedgerRegister    = cmd("ledger", "register")
+	LsJobs            = cmd("ls", "jobs")
+	DescribeJob       = cmd("describe", "job")
+	JobFork           = cmd("job", "fork")
+	JobExec           = cmd("job", "exec")
+	JobExit           = cmd("job", "exit")
+	JobWait           = cmd("job", "wait")
+	JobRun            = cmd("job", "run")
 	NotesLs           = cmd("notes", "ls")
 	NotesGet          = cmd("notes", "get")
 	NotesEdit         = cmd("notes", "edit")
 	Session           = cmd("session")
 	SessionLoad       = cmd("session", "load")
 	SessionShow       = cmd("session", "show")
-	SessionLease      = cmd("session", "lease")
 	SessionAttention  = cmd("session", "attention")
 	SessionDispose    = cmd("session", "dispose")
 	SessionNotify     = cmd("session", "notify")
@@ -147,11 +148,11 @@ var (
 // routed on it.
 var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
+	GraphDiff, ServerStart, ServerStop, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, Refs,
-	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, LedgerAccept, LedgerRegister, NotesLs, NotesGet, NotesEdit,
-	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
+	DescribeMCPTools, DescribeJob, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
+	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, NotesLs, NotesGet, NotesEdit,
+	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,

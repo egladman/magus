@@ -40,6 +40,7 @@ var describeAlias = map[string]string{
 	"mcp-tool": "mcp-tool", "mcp-tools": "mcp-tool",
 	"file": "file", "files": "file",
 	"tool": "tool", "tools": "tool",
+	"job": "job", "jobs": "job",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -70,6 +71,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeFiles(ctx, root, rest)
 	case "tool":
 		return describeTools(ctx, root, rest)
+	case "job":
+		return describeJob(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.

@@ -8,24 +8,24 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Terms is the worker brief for one lease: the declared row, the workspace facts magus
-// resolved against it, and the commands the worker starts with.
+// Terms is what one job grants its holder: the declared job, and the workspace facts
+// magus resolved against it.
 //
-// CONTEXT, NEVER A VERDICT, which is the shape `magus diff --prompt` already has. magus
+// CONTEXT, NEVER A STATUS, which is the shape `magus diff --prompt` already has. magus
 // assembles what it holds and a person or an orchestrator hands it on; nothing here calls
-// a model and nothing here decides what the worker should do.
+// a model and nothing here decides what the holder should do.
 //
-// DETERMINISM IS THE REQUIREMENT, not a nicety. A brief an orchestrating model paraphrases
-// diverges between two workers reading one contract, which is what seven hand-typed briefs
+// IT CARRIES NO PROCEDURE. Taking a job is `magus job exec`'s work to DO, and the fifty
+// lines of "run this, then this" that used to render here were a procedure a reader could
+// skip, mistype, or half-follow. A command magus can run itself is not documentation.
+//
+// DETERMINISM IS THE REQUIREMENT, not a nicety. Terms an orchestrating model paraphrases
+// diverge between two holders reading one contract, which is what seven hand-typed briefs
 // did on 2026-09-09: the gate leaked into every one of them and two units disagreed about
-// a dedup key. Two renders of one row are byte-identical or the ledger has stopped being
+// a dedup key. Two renders of one job are byte-identical or the store has stopped being
 // the single statement of the plan.
 type Terms struct {
-	Lease types.Job `json:"lease" yaml:"lease"`
-	// Bind is the single command that binds this lease to the worker's checkout. It is
-	// the only instruction the brief gives that is not already a field of the row: every
-	// rule the worker owes rides on the lease, and the guard reads them from there.
-	Bind string `json:"bind" yaml:"bind"`
+	Lease types.Job `json:"job" yaml:"job"`
 	// Evidence is one line per write path the knowledge graph resolved, in declaration
 	// order. A path the graph does not know is ABSENT here rather than reported as zero:
 	// an unknown blast radius and a blast radius of zero are different facts, and the
@@ -54,21 +54,6 @@ type Terms struct {
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
 	Affinity []TermsAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
-	// Bootstrap is what the worker runs before it edits anything, one command with the
-	// reason it exists. Commands, not rules: the guard states every rule at the moment a
-	// command meets it, and a rules block in a brief is a paragraph a worker reads once
-	// and a denial is a sentence it reads when it matters.
-	Bootstrap []TermsStep `json:"bootstrap,omitempty" yaml:"bootstrap,omitempty"`
-}
-
-// TermsStep is one bootstrap command and why it is there.
-//
-// The pair rather than a rendered line, because the two halves have different readers: a
-// harness composes a prompt from Run, and a person reads Why to see what the step is for.
-// A line carrying both is one a skimmer copies with the parenthetical still in it.
-type TermsStep struct {
-	Run string `json:"run" yaml:"run"`
-	Why string `json:"why" yaml:"why"`
 }
 
 // TermsEvidence is what the knowledge graph knows about one write path: the node it
@@ -117,45 +102,28 @@ type TermsFacts struct {
 	Affinity         []TermsAffinity
 }
 
-// NewTerms renders the brief for one row: the bind line and the bootstrap steps the id
-// determines, plus what the workspace contributed. Both lines are rendered here and
-// nowhere else, so the brief, its golden test, and any caller quoting a line cannot drift.
-//
-// The steps are magus's OWN commands, which is why they are computed rather than read
-// from a workspace template: every one of them is a magus verb this binary defines, and a
-// per-workspace copy of them is a copy to keep true.
+// NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
 func NewTerms(row types.Job, facts TermsFacts) Terms {
 	return Terms{
 		Lease:            row,
-		Bind:             hint.SessionLease.With(row.ID),
 		Evidence:         facts.Evidence,
 		GraphCold:        facts.GraphCold,
 		WorkspaceCold:    facts.WorkspaceCold,
 		Projects:         facts.Projects,
 		DerivedDenyPaths: facts.DerivedDenyPaths,
 		Affinity:         facts.Affinity,
-		Bootstrap: []TermsStep{
-			{Run: "git status --short", Why: "work in your own worktree and confirm it is clean before you edit"},
-			{Run: hint.SessionLease.With(row.ID), Why: "bind the lease so every lease-scoped rule grades your writes here"},
-			{
-				Run: hint.VCSCheckpoint.With("-o name"),
-				Why: "record the base you landed on, and register what it prints on lease " + row.ID +
-					" with the " + hint.ToolLedger.String() + " tool (op register); writes are denied until the lease has one",
-			},
-		},
 	}
 }
 
-// String renders the brief. The order is fixed and nothing outside it is printed: a
-// section with nothing in it is dropped, so a worker never reads a heading that grants it
-// room the row did not.
+// String renders the terms. The order is fixed and nothing outside it is printed: a
+// section with nothing in it is dropped, so a holder never reads a heading that grants it
+// room the job did not.
 //
-// The narrowest section is the validation one, and it is the whole point of rendering at
-// all. Naming one check and no others is what stops `ci` leaking into a worker's brief.
+// The narrowest section is the check, and it is the whole point of rendering at all.
+// Naming one check and no others is what stops `ci` leaking into every job's terms.
 func (b Terms) String() string {
 	var s strings.Builder
-	fmt.Fprintf(&s, "lease: %s\n", b.Lease.ID)
-	fmt.Fprintf(&s, "bind: %s\n", b.Bind)
+	fmt.Fprintf(&s, "job: %s\n", b.Lease.ID)
 
 	writeBlock(&s, "goal and acceptance criteria", b.Lease.Goal)
 	writeList(&s, "write paths", b.Lease.WritePaths)
@@ -193,15 +161,8 @@ func (b Terms) String() string {
 		writeList(&s, "graph evidence", lines)
 	}
 
-	writeBlock(&s, "validation, the only check you run", b.Lease.Validation)
+	writeBlock(&s, "the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
-
-	if len(b.Bootstrap) > 0 {
-		fmt.Fprint(&s, "\nbootstrap\n")
-		for _, step := range b.Bootstrap {
-			fmt.Fprintf(&s, "  %s\n    %s\n", step.Why, step.Run)
-		}
-	}
 	return s.String()
 }
 

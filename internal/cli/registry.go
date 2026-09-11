@@ -25,7 +25,7 @@ var All = []Command{
 	configCommand,
 	sessionCommand,
 	memoryCommand,
-	ledgerCommand,
+	jobCommand,
 	notesCommand,
 	diffCommand,
 	serverCommand,
@@ -958,24 +958,12 @@ check for the file with [ -S "$socket" ] before starting one.`,
 				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
 			},
 		},
-		{
-			Name:  "job",
-			Short: "Submit a background maintenance job to a running daemon (no-op with no daemon)",
-			Long: `Submit a named background maintenance job to a running daemon, then
-return immediately. The job shows in the Dashboard. A no-op when no daemon is
-running, so a VCS hook can call it unconditionally.
-
-The job name is a positional argument, not a further subcommand:
-"magus server job rotate-logs". Run with no argument to list the jobs a
-running binary carries.`,
-		},
 	},
 	Examples: []Example{
 		{"Start the daemon (auto-backgrounds)", "magus server start"},
 		{"Run the daemon in the foreground (supervisor or debugging)", "magus server start --foreground"},
 		{"Stop the running daemon", "magus server stop"},
 		{"Reload configuration without restarting", "magus server reload"},
-		{"Submit a background job", "magus server job rotate-logs"},
 		{"Inspect daemon pool state", "magus status"},
 		{"Use a custom socket path", "magus --daemon-address unix:///tmp/m.sock server start"},
 	},
@@ -1388,25 +1376,6 @@ transcript pointer lead back to.`,
 			},
 		},
 		{
-			Name:        "lease",
-			Short:       "Bind a lease to this checkout so the guard applies its ledger row here",
-			Description: "Write the lease id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one; with no id, print the lease bound.",
-			Long: `Bind a lease to this checkout.
-
-A host runs its hooks with the host's own environment, so a worker that
-exports BAGGAGE for its shell is invisible to the guard judging its commands.
-A worker with its own worktree has one checkout, and a marker in it is the one
-channel both the worker's shell and the host's hook read. Once bound, every
-lease-scoped rule applies here: writes outside the row's write_paths, the ci
-gate under a narrower validation, and version-control mutation under a worker
-lease are all denied with the lease named.
-
-An explicit --lease on the hook, or BAGGAGE in the hook's environment, still
-wins over the marker. With no id the command prints the lease bound, or says
-none is.`,
-			Usage: "magus session lease [<lease-id>]",
-		},
-		{
 			Name:        "show",
 			Short:       "Report one loaded session: what it ran, what the rules say, what it loaded",
 			Description: "Summarize one loaded agent session: events by kind, commands grouped by program with re-judged verdicts, skills loaded, and files read and written.",
@@ -1678,95 +1647,116 @@ either side learning a new format.`,
 	},
 }
 
-var ledgerCommand = Command{
-	Name:        "ledger",
-	Short:       "Read the lease ledger, declare a row, and grade a worker's report",
-	Description: "Read the per-repository lease ledger: the leases an orchestrating agent or a person declared, as a tree, plus the worker brief for any one of them, the row-declaring write, and the acceptance check for a worker's report.",
-	Tags:        []string{"cli", "magus ledger", "ledger", "leases", "agents", "delegation"},
-	Long: `Read and write the lease ledger: one row per lease, rendered as a tree of
-parents and the leases they handed out.
+var jobCommand = Command{
+	Name:        "job",
+	Short:       "Fork a job, take it, return it with its result, and verify that result",
+	Description: "The POSIX child lifecycle over delegated work: fork declares a job, exec takes the lease on it in this checkout, exit returns it with its result, wait verifies that result, and run submits one of the daemon's own jobs.",
+	Tags:        []string{"cli", "magus job", "job", "jobs", "lease", "agents", "delegation"},
+	Long: `Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
+is the grant one holder has on it: its write and read lanes, plus the one check
+it runs.
 
-Two channels write it. The magus_ledger MCP tool is an agent's, this verb is a
-person's, and they reach the same store and the same rules. One author per ROW is
-the property that matters, and the store enforces it: a session acting under a
-lease may register the base it landed on, shrink its own write paths, end its own
-row in fail or no_return, and declare a child of itself inside its own paths.
-Everything else, widening a lane and accepting a row included, is refused by name.
+Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+is a person's, and they reach the same store and the same rules. One author per
+JOB is the property that matters, and the store enforces it: a session holding a
+lease may record the base it landed on, shrink its own write paths, end its own
+job in fail or no_return, and fork a child of itself inside its own paths.
+Everything else, widening a lane and verifying a job included, is refused by name.
 
-The rows are kept per repository rather than per checkout, so an orchestrator
-declaring a plan in one worktree and a worker reading it in another see the same
-book.
+Jobs are kept per repository rather than per checkout, so a session forking in one
+worktree and a holder working in another see the same set.
 
-brief renders one lease's worker brief: the row's own goal and acceptance
-criteria, its write and deny paths, the knowledge graph's blast radius for
-each write path it can resolve, the single validation target that lease is
-allowed to run, its dependencies, and the bootstrap commands the worker starts
-with, each with the reason it is there. It carries no rules: the guard states
-those at the moment a command meets one. It also carries what the WORKSPACE knows
-and the row's author may not have written down: the projects the write paths
-reach, the declared output globs that land
-inside them, the paths a sibling lease is holding, the build inputs and workspace
-config that have one owner, and the projects that change alongside the leased
-ones without declaring a dependency. It is context and never a verdict, the same
-shape magus diff --prompt has, with one refusal: a row whose validation is the ci
-gate, or a target that chains to it, is not briefed at all. The gate runs once,
-in the orchestrator's tree, after every unit lands.
-
-register declares one row, from flags for the one-row case or from a JSON record
-on --stdin. It replaces the row it names rather than merging into it, which is
-the difference between a person declaring what a lease IS and an agent advancing
-one field of a live row. Every path flag is repeatable or comma-separated, and an
+fork declares one job, from flags for the one-job case or from a JSON record on
+--stdin. It replaces the job it names rather than merging into it, which is the
+difference between a person declaring what a job IS and an agent advancing one
+field of a live one. Every path flag is repeatable or comma-separated, and an
 empty segment is refused rather than dropped. There is no --state: this declares a
-new row, and a row nobody has picked up is declared.
+new job, and one nobody has taken is declared.
 
-accept grades what comes back. It reads a worker's report as JSON on stdin and
-grades EVIDENCE, not claims: every changed path inside the declared write paths
-and outside the denied ones, a change set that is not empty on a row that
-writes, descendants the plan carries, and an output ref that resolves to a passing
-run of that row's own validation. There is no field for whether the worker thinks
-it passed. A row that passes is recorded pass. Exit 1 is a verdict, naming every
-rule that failed; exit 2 is magus unable to answer, which is a report that would
-not decode, an output store that would not open, or a row that would not write.
-Whether the work is GOOD stays the orchestrator's reading.`,
-	Usage: "magus ledger [ls|brief <lease-id>|register <lease-id>|accept <lease-id>] [flags]",
+exec takes the lease on a job in this checkout. It writes the marker every
+lease-scoped rule reads, and records the base this tree actually landed on beside
+the checkpoint the job was handed, with the divergence between them as a fact
+rather than a refusal. Two acts under one verb, because splitting them left the
+base unrecorded on every job anybody took by hand.
+
+exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
+reads the same record from any checkout. The run behind the result's output ref is
+resolved in the holder's own checkout and its record filed alongside, because an
+output store belongs to a cache dir and nobody else can reopen it. Do the work
+first, then file the result: it is a record of what happened, not a form to fill
+in while you are still deciding what to do. With no --stdin the job is abandoned
+and recorded no_return, which is not the same as returning it and failing.
+
+wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
+not claims: every changed path inside the declared write paths and outside the
+denied ones, a change set that is not empty on a job that writes, descendants the
+store carries, and a recorded run of that job's own check that passed. There is no
+field for whether the holder thinks it passed. A job that verifies is recorded
+pass. Exit 1 is a status, naming every rule that failed; exit 2 is magus unable to
+answer, which is a result that would not decode, nothing filed and nothing piped
+in, or a job that would not write. Whether the work is GOOD stays the reading of
+whoever forked it.
+
+run submits one of the daemon's own jobs, the housekeeping magus does for itself,
+and returns. It is a no-op when no persistent daemon is running, so a VCS hook can
+call it unconditionally.
+
+Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
+them and magus describe job prints one job's terms.`,
+	Usage: "magus job <fork|exec|exit|wait|run> [flags]",
 	Children: []Command{
-		{Name: "ls", Short: "Print the declared leases as a tree, with the overlapping pairs"},
-		{Name: "brief", Short: "Print one lease's worker brief"},
 		{
-			Name:  "register",
-			Short: "Declare one lease row, from flags or a JSON record on stdin",
+			Name:  "fork",
+			Short: "Declare one job, from flags or a JSON record on stdin",
 			Flags: []Flag{
-				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a row must satisfy, and exit"},
-				{Name: "stdin", Kind: FlagBool, Doc: "Read one row as JSON on stdin instead of taking it from flags"},
+				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
+				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
 				{Name: "goal", Kind: FlagString, Doc: "The goal and its observable acceptance criteria"},
-				{Name: "parent", Kind: FlagString, Doc: "The lease this one is handed out under"},
-				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this lease is handed, as `magus vcs checkpoint -o name` prints it"},
-				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this lease may write; repeatable or comma-separated"},
-				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the lane this lease may not write; repeatable or comma-separated"},
-				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this lease may read; repeatable or comma-separated (additive: the written paths are readable already)"},
-				{Name: "depends-on", Kind: FlagCustom, Doc: "A lease this one waits on; repeatable or comma-separated"},
-				{Name: "check", Kind: FlagString, Doc: "The one check this lease runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
+				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
+				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
+				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write; repeatable or comma-separated"},
+				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the lane this job may not write; repeatable or comma-separated"},
+				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this job may read; repeatable or comma-separated (additive: the written paths are readable already)"},
+				{Name: "depends-on", Kind: FlagCustom, Doc: "A job this one waits on; repeatable or comma-separated"},
+				{Name: "check", Kind: FlagString, Doc: "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
 				{Name: "model", Kind: FlagString, Doc: "The model the work was matched to"},
-				{Name: "read-only", Kind: FlagBool, Doc: "A lease that gathers evidence and writes nothing"},
+				{Name: "read-only", Kind: FlagBool, Doc: "A job that gathers evidence and writes nothing"},
 			},
 		},
 		{
-			Name:  "accept",
-			Short: "Grade a worker's report, read as JSON on stdin, against its row",
+			Name:        "exec",
+			Short:       "Take the lease on a job here, and record the base this checkout landed on",
+			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. With no job, print the one this checkout holds.",
 			Flags: []Flag{
-				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a report must satisfy, and exit"},
-				{Name: "stdin", Kind: FlagBool, Doc: "Read the worker's report from stdin (required: nothing is read without it)"},
+				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
 			},
 		},
+		{
+			Name:  "exit",
+			Short: "Return a job with its result, or abandon it",
+			Flags: []Flag{
+				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
+				{Name: "stdin", Kind: FlagBool, Doc: "Read this job's result from stdin; without it the job is abandoned"},
+			},
+		},
+		{
+			Name:  "wait",
+			Short: "Verify the result a job was exited with",
+			Flags: []Flag{
+				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
+				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
+			},
+		},
+		{Name: "run", Short: "Submit one of the daemon's own jobs and return"},
 	},
 	Examples: []Example{
-		{"Read the declared plan", "magus ledger"},
-		{"Read it as records", "magus ledger -o json"},
-		{"Brief one worker", "magus ledger brief session-load/core"},
-		{"Declare a lease", "magus ledger register session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},
-		{"Declare it from a record", "magus ledger register --stdin < row.json"},
-		{"Grade what it returned", "magus ledger accept session-load/core --stdin < report.json"},
-		{"Print the report schema", "magus ledger accept --schema"},
+		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},
+		{"Declare it from a record", "magus job fork --stdin < job.json"},
+		{"Take it in this checkout", "magus job exec session-load/core"},
+		{"Return it with its result", "magus job exit session-load/core --stdin < result.json"},
+		{"Verify what came back", "magus job wait session-load/core"},
+		{"Print the result schema", "magus job exit --schema"},
+		{"Submit a daemon job", "magus job run sync-graph"},
 	},
 }
 

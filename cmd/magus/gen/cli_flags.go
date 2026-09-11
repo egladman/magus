@@ -241,34 +241,40 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
-	// ledger accept: --schema
-	FlagLedgerAcceptSchema = "schema"
-	// ledger accept: --stdin
-	FlagLedgerAcceptStdin = "stdin"
-	// ledger register: --check
-	FlagLedgerRegisterCheck = "check"
-	// ledger register: --checkpoint
-	FlagLedgerRegisterCheckpoint = "checkpoint"
-	// ledger register: --deny-paths
-	FlagLedgerRegisterDenyPaths = "deny-paths"
-	// ledger register: --depends-on
-	FlagLedgerRegisterDependsOn = "depends-on"
-	// ledger register: --goal
-	FlagLedgerRegisterGoal = "goal"
-	// ledger register: --model
-	FlagLedgerRegisterModel = "model"
-	// ledger register: --parent
-	FlagLedgerRegisterParent = "parent"
-	// ledger register: --read-only
-	FlagLedgerRegisterReadOnly = "read-only"
-	// ledger register: --read-paths
-	FlagLedgerRegisterReadPaths = "read-paths"
-	// ledger register: --schema
-	FlagLedgerRegisterSchema = "schema"
-	// ledger register: --stdin
-	FlagLedgerRegisterStdin = "stdin"
-	// ledger register: --write-paths
-	FlagLedgerRegisterWritePaths = "write-paths"
+	// job exec: --base
+	FlagJobExecBase = "base"
+	// job exit: --schema
+	FlagJobExitSchema = "schema"
+	// job exit: --stdin
+	FlagJobExitStdin = "stdin"
+	// job fork: --check
+	FlagJobForkCheck = "check"
+	// job fork: --checkpoint
+	FlagJobForkCheckpoint = "checkpoint"
+	// job fork: --deny-paths
+	FlagJobForkDenyPaths = "deny-paths"
+	// job fork: --depends-on
+	FlagJobForkDependsOn = "depends-on"
+	// job fork: --goal
+	FlagJobForkGoal = "goal"
+	// job fork: --model
+	FlagJobForkModel = "model"
+	// job fork: --parent
+	FlagJobForkParent = "parent"
+	// job fork: --read-only
+	FlagJobForkReadOnly = "read-only"
+	// job fork: --read-paths
+	FlagJobForkReadPaths = "read-paths"
+	// job fork: --schema
+	FlagJobForkSchema = "schema"
+	// job fork: --stdin
+	FlagJobForkStdin = "stdin"
+	// job fork: --write-paths
+	FlagJobForkWritePaths = "write-paths"
+	// job wait: --schema
+	FlagJobWaitSchema = "schema"
+	// job wait: --stdin
+	FlagJobWaitStdin = "stdin"
 	// man install: --dir
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
@@ -1251,11 +1257,11 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
-// LedgerRegisterFlags are the flags declared for `magus ledger register`.
+// JobForkFlags are the flags declared for `magus job fork`.
 //
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
-type LedgerRegisterFlags struct {
+type JobForkFlags struct {
 	Schema     bool   // --schema
 	Stdin      bool   // --stdin
 	Goal       string // --goal
@@ -1266,31 +1272,57 @@ type LedgerRegisterFlags struct {
 	ReadOnly   bool   // --read-only
 }
 
-// BindLedgerRegister registers `magus ledger register`'s flags on fs and returns the destination.
-func BindLedgerRegister(fs *flag.FlagSet) *LedgerRegisterFlags {
-	var f LedgerRegisterFlags
-	fs.BoolVar(&f.Schema, FlagLedgerRegisterSchema, false, "Print the JSON schema a row must satisfy, and exit")
-	fs.BoolVar(&f.Stdin, FlagLedgerRegisterStdin, false, "Read one row as JSON on stdin instead of taking it from flags")
-	fs.StringVar(&f.Goal, FlagLedgerRegisterGoal, "", "The goal and its observable acceptance criteria")
-	fs.StringVar(&f.Parent, FlagLedgerRegisterParent, "", "The lease this one is handed out under")
-	fs.StringVar(&f.Checkpoint, FlagLedgerRegisterCheckpoint, "", "The working state this lease is handed, as `magus vcs checkpoint -o name` prints it")
-	fs.StringVar(&f.Check, FlagLedgerRegisterCheck, "", "The one check this lease runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
-	fs.StringVar(&f.Model, FlagLedgerRegisterModel, "", "The model the work was matched to")
-	fs.BoolVar(&f.ReadOnly, FlagLedgerRegisterReadOnly, false, "A lease that gathers evidence and writes nothing")
+// BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
+func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
+	var f JobForkFlags
+	fs.BoolVar(&f.Schema, FlagJobForkSchema, false, "Print the JSON schema a job must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
+	fs.StringVar(&f.Goal, FlagJobForkGoal, "", "The goal and its observable acceptance criteria")
+	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
+	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
+	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
+	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model the work was matched to")
+	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
 	return &f
 }
 
-// LedgerAcceptFlags are the flags declared for `magus ledger accept`.
-type LedgerAcceptFlags struct {
+// JobExecFlags are the flags declared for `magus job exec`.
+type JobExecFlags struct {
+	Base string // --base
+}
+
+// BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
+func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
+	var f JobExecFlags
+	fs.StringVar(&f.Base, FlagJobExecBase, "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+	return &f
+}
+
+// JobExitFlags are the flags declared for `magus job exit`.
+type JobExitFlags struct {
 	Schema bool // --schema
 	Stdin  bool // --stdin
 }
 
-// BindLedgerAccept registers `magus ledger accept`'s flags on fs and returns the destination.
-func BindLedgerAccept(fs *flag.FlagSet) *LedgerAcceptFlags {
-	var f LedgerAcceptFlags
-	fs.BoolVar(&f.Schema, FlagLedgerAcceptSchema, false, "Print the JSON schema a report must satisfy, and exit")
-	fs.BoolVar(&f.Stdin, FlagLedgerAcceptStdin, false, "Read the worker's report from stdin (required: nothing is read without it)")
+// BindJobExit registers `magus job exit`'s flags on fs and returns the destination.
+func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
+	var f JobExitFlags
+	fs.BoolVar(&f.Schema, FlagJobExitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobExitStdin, false, "Read this job's result from stdin; without it the job is abandoned")
+	return &f
+}
+
+// JobWaitFlags are the flags declared for `magus job wait`.
+type JobWaitFlags struct {
+	Schema bool // --schema
+	Stdin  bool // --stdin
+}
+
+// BindJobWait registers `magus job wait`'s flags on fs and returns the destination.
+func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
+	var f JobWaitFlags
+	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
 	return &f
 }
 

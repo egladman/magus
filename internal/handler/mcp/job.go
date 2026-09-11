@@ -12,40 +12,47 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ledgerTool (magus_ledger) records the lease ledger an orchestrating agent declares, one
-// row per lease. It is the AGENT's write door onto internal/ledger; magus\ledger and
-// `magus ledger register` are the others, and the console's /api/v1/ledger endpoint reads
-// the same file.
+// jobTool (magus_job) declares jobs and lets a holder act on one: an orchestrating agent
+// forks a job, a holder takes it (exec) and later returns its work, and anyone lists the
+// plan. It is the AGENT's write door onto internal/job; magus\job and `magus job` are the
+// others, and the console's /api/v1/jobs endpoint reads the same file.
 //
 // It blocks no write to the tree: the AGENT GUARD is what reads these rows to grade one,
-// and register's verdict is returned and stored as a fact rather than a refusal.
+// and exec's status is returned and stored as a fact rather than a refusal.
 //
 // WHAT IT DOES REFUSE is a write to a row the caller does not own, and that refusal comes
 // from the STORE rather than from here, so every door carries it. See
 // internal/job.authorizeRow.
-type ledgerTool struct{ store *job.Store }
+//
+// The op set is list | fork | exec | exit | wait, mirroring the CLI verbs
+// (hint.LsJobs, hint.JobFork, hint.JobExec, hint.JobExit, hint.JobWait). Only list, fork
+// (the old put, including the update path a state change takes) and exec (the old
+// register, which already called store.Exec) are wired here: exit and wait are full CLI
+// behaviors (cmd/magus/job.go's jobExit/jobWait) with no equivalent Store method to call
+// yet, and wiring them would be new handler logic rather than an op rename.
+type jobTool struct{ store *job.Store }
 
-func (t *ledgerTool) Name() string { return hint.ToolLedger.String() }
+func (t *jobTool) Name() string { return hint.ToolJob.String() }
 
-func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	switch op := paramString(req.Params, "op", "list"); op {
 	case "list":
-		leases, err := t.store.List()
+		jobs, err := t.store.List()
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
 		// The report, not the bare rows: the overlaps ride along, derived on this read
 		// by the same constructor the console's route uses, so the two doors cannot
-		// disagree about whether two leases claim the same path.
-		return spells.InvokeResponse{Data: types.NewJobList(leases)}, nil
+		// disagree about whether two jobs claim the same path.
+		return spells.InvokeResponse{Data: types.NewJobList(jobs)}, nil
 
-	case "put":
+	case "fork":
 		merge, err := job.ParseMerge(req.Params)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
 		// Update, not List-then-Put: the merge has to read and write the row under one
-		// lock. Two concurrent puts on one id (an orchestrator advancing state while a
+		// lock. Two concurrent forks on one id (an orchestrator advancing state while a
 		// worker records its checkpoint) would each read the row before the other wrote
 		// it, and the second write would revert the first one's field.
 		stored, err := t.store.Update(ctx, strings.TrimSpace(paramString(req.Params, "id", "")), merge)
@@ -54,7 +61,7 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		}
 		return spells.InvokeResponse{Data: stored}, nil
 
-	case "register":
+	case "exec":
 		// Text as well as Data, and the only op here that sets it. A worker calls this to
 		// learn where it stands, and "base_verdict":"diverged" in a record is a field it
 		// has to know to look for; the sentence names both revisions and what to do next.
@@ -67,7 +74,7 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		// The verdict is a fact this tool records and never acts on, and counting it is the
 		// same read one step further out: how often a fleet's workers land on the base they
 		// were handed. types.JobBaseVerdict is a closed set of four, so it is safe as
-		// an attribute; the lease id beside it is not, and stays off.
+		// an attribute; the job id beside it is not, and stays off.
 		if p := observability.FromContext(ctx); p != nil && stored.BaseVerdict != "" {
 			p.RecordLeaseRegistration(ctx, string(stored.BaseVerdict))
 		}
@@ -84,8 +91,8 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		return spells.InvokeResponse{Data: map[string]any{"cleared": dropped}}, nil
 
 	default:
-		return spells.InvokeResponse{}, errors.New("mcp: ledger op must be one of list, put, register, clear")
+		return spells.InvokeResponse{}, errors.New("mcp: job op must be one of list, fork, exec, clear")
 	}
 }
 
-var _ spells.Driver = (*ledgerTool)(nil)
+var _ spells.Driver = (*jobTool)(nil)

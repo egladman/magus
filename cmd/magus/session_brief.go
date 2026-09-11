@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -91,7 +90,7 @@ type briefTree struct {
 type briefLease struct {
 	ID         string `json:"id"`
 	State      string `json:"state,omitempty"`
-	Bind       string `json:"bind"`
+	Exec       string `json:"exec"`
 	Goal       string `json:"goal,omitempty"`
 	Validation string `json:"validation,omitempty"`
 }
@@ -222,7 +221,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // same filter the write guard applies, so the brief and the refusals agree about
 // which leases are live.
 func briefLeases(root string) []briefLease {
-	store, err := openLedger(root)
+	store, err := openJobs(root)
 	if err != nil {
 		return nil
 	}
@@ -239,12 +238,10 @@ func briefLeases(root string) []briefLease {
 		if goal == "" {
 			goal = "no goal recorded"
 		}
-		// The bind line comes from the brief constructor rather than from a second
-		// spelling here, so `magus ledger brief` and this cannot drift.
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
-			Bind:       job.NewTerms(row, job.TermsFacts{}).Bind,
+			Exec:       hint.JobExec.With(row.ID),
 			Goal:       goal,
 			Validation: row.Validation,
 		})
@@ -409,7 +406,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	briefLine(s, "leases live here:")
 	for _, l := range b.Leases {
 		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Goal))
-		briefLine(s, "    bind: %s", l.Bind)
+		briefLine(s, "    exec: %s", l.Exec)
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)
 		}

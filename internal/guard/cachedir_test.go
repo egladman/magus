@@ -173,7 +173,7 @@ func TestRankCacheDirWriteOutranksEveryOtherDeny(t *testing.T) {
 func TestCacheDirDenyNamesTheVerbs(t *testing.T) {
 	reason := cacheDirDenial(".magus/lease")
 
-	assert.Contains(t, reason, "session lease", "the deny must name the verb that binds")
+	assert.Contains(t, reason, "job exec", "the deny must name the verb that binds")
 	assert.Contains(t, reason, "clean", "the deny must name the verb that clears outputs")
 	assert.Contains(t, reason, "query output", "the deny must name how a log is read")
 	assert.Contains(t, reason, "READING in there is fine")

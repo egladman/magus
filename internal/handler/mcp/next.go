@@ -9,8 +9,8 @@ import (
 	"bytes"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 )
 
 // nextFilter grades a result's breadcrumbs for the acting role and journals what
@@ -34,7 +34,7 @@ func (f nextFilter) served(next []hint.Next) []hint.Next {
 	return served
 }
 
-// role reads the acting lease's row off this checkout's ledger.
+// role reads the acting job's row off this checkout's job store.
 func (f nextFilter) role() (hint.Role, []string) {
 	id := job.ActingLease(f.cacheDir)
 	if id == "" {

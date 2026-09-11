@@ -46130,6 +46130,16 @@
       }
     },
     {
+      "id": "function:magusfile.buzz:job_generate",
+      "kind": "function",
+      "label": "job_generate",
+      "doc": "Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.  The schemas were hand-written beside those structs, so every field was declared twice and a test could only report that the two copies had already diverged.",
+      "source": "magusfile.buzz:1078",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:magusfile.buzz:langservice_generate",
       "kind": "function",
       "label": "langservice_generate",
@@ -46144,16 +46154,6 @@
       "kind": "function",
       "label": "ld_flags",
       "source": "magusfile.buzz:368"
-    },
-    {
-      "id": "function:magusfile.buzz:ledger_generate",
-      "kind": "function",
-      "label": "ledger_generate",
-      "doc": "Regenerates the published lease schemas (internal/ledger/gen/*.schema.json) from the structs that decode a row and a worker's report.  The schemas were hand-written beside those structs, so every field was declared twice and a test could only report that the two copies had already diverged.",
-      "source": "magusfile.buzz:1078",
-      "attrs": {
-        "exported": "true"
-      }
     },
     {
       "id": "function:magusfile.buzz:lint",
@@ -55214,6 +55214,17 @@
       }
     },
     {
+      "id": "target:.:job-generate",
+      "kind": "target",
+      "label": "job-generate",
+      "doc": "Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "job_generate",
+        "engine": "buzz"
+      }
+    },
+    {
       "id": "target:.:langservice-generate",
       "kind": "target",
       "label": "langservice-generate",
@@ -55221,17 +55232,6 @@
       "source": ".",
       "attrs": {
         "declared_as": "langservice_generate",
-        "engine": "buzz"
-      }
-    },
-    {
-      "id": "target:.:ledger-generate",
-      "kind": "target",
-      "label": "ledger-generate",
-      "doc": "Regenerates the published lease schemas (internal/ledger/gen/*.schema.json) from the structs that decode a row and a worker's report.",
-      "source": ".",
-      "attrs": {
-        "declared_as": "ledger_generate",
         "engine": "buzz"
       }
     },
@@ -120288,6 +120288,14 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:job_generate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:langservice_generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -120297,14 +120305,6 @@
     {
       "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:ld_flags",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "file:magusfile.buzz",
-      "target": "function:magusfile.buzz:ledger_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -132943,7 +132943,7 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:langservice-generate",
+      "target": "target:.:job-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -132951,7 +132951,7 @@
     },
     {
       "source": "project:.",
-      "target": "target:.:ledger-generate",
+      "target": "target:.:langservice-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -135625,7 +135625,7 @@
     },
     {
       "source": "target:.:generate",
-      "target": "target:.:langservice-generate",
+      "target": "target:.:job-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -135633,7 +135633,7 @@
     },
     {
       "source": "target:.:generate",
-      "target": "target:.:ledger-generate",
+      "target": "target:.:langservice-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -135800,7 +135800,7 @@
       "provenance": "."
     },
     {
-      "source": "target:.:ledger-generate",
+      "source": "target:.:job-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -136017,7 +136017,7 @@
     },
     {
       "source": "target:.:release-index",
-      "target": "target:.:langservice-generate",
+      "target": "target:.:job-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -136025,7 +136025,7 @@
     },
     {
       "source": "target:.:release-index",
-      "target": "target:.:ledger-generate",
+      "target": "target:.:langservice-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

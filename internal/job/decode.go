@@ -250,44 +250,44 @@ func trimmed(in []string) []string {
 // into stdin from being read into memory before it is rejected.
 const maxInputBytes = 1 << 20
 
-// DecodeReport reads a worker's report, and DecodeDeclaration one declared row, from r.
+// DecodeResult reads a holder's result, and DecodeDeclaration one declared job, from r.
 //
 // STRICT AND VERSIONED, in that order of reporting: a sender a release ahead is told which
 // versions this magus knows instead of learning that one of its fields is unknown, and
-// then an unknown member is an error, because a field the grader never reads looks to its
+// then an unknown member is an error, because a field the verifier never reads looks to its
 // author exactly like one that was taken into account.
 //
 // Every failure here is one class to a caller: the input could not be understood, as
-// opposed to understood and rejected. `magus ledger accept` exits 2 for this and 1 for a
+// opposed to understood and rejected. `magus job wait` exits 2 for this and 1 for a
 // rejection.
-func DecodeReport(r io.Reader) (Report, error) {
-	raw, err := readInput(r, "report")
+func DecodeResult(r io.Reader) (types.JobResult, error) {
+	raw, err := readInput(r, "result")
 	if err != nil {
-		return Report{}, err
+		return types.JobResult{}, err
 	}
-	if err := checkVersion(raw, "report", ReportSchemaVersion); err != nil {
-		return Report{}, err
+	if err := checkVersion(raw, "result", ResultSchemaVersion); err != nil {
+		return types.JobResult{}, err
 	}
-	var rep Report
+	var rep types.JobResult
 	if err := json.UnmarshalStrict(raw, &rep); err != nil {
-		return Report{}, fmt.Errorf("job: the report is not a version %d report: %w", ReportSchemaVersion, err)
+		return types.JobResult{}, fmt.Errorf("job: the input is not a version %d result: %w", ResultSchemaVersion, err)
 	}
 	return rep, nil
 }
 
-// DecodeDeclaration reads one declared lease row. See [DecodeReport] for the rules; this is the
-// same two passes over the row's schema.
+// DecodeDeclaration reads one declared job. See [DecodeResult] for the rules; this is the
+// same two passes over the job's schema.
 func DecodeDeclaration(r io.Reader) (Declaration, error) {
-	raw, err := readInput(r, "row")
+	raw, err := readInput(r, "job")
 	if err != nil {
 		return Declaration{}, err
 	}
-	if err := checkVersion(raw, "row", types.JobSchemaVersion); err != nil {
+	if err := checkVersion(raw, "job", types.JobSchemaVersion); err != nil {
 		return Declaration{}, err
 	}
 	var row Declaration
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
-		return Declaration{}, fmt.Errorf("job: the input is not a version %d lease row: %w", types.JobSchemaVersion, err)
+		return Declaration{}, fmt.Errorf("job: the input is not a version %d job: %w", types.JobSchemaVersion, err)
 	}
 	if err := row.foldLegacyLanes(); err != nil {
 		return Declaration{}, err

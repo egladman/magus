@@ -52,9 +52,6 @@ Send a graceful shutdown request to a running daemon
 .TP
 \fBreload\fR
 Re\-read configuration without restarting: drop the daemon's open workspaces
-.TP
-\fBjob\fR
-Submit a background maintenance job to a running daemon (no\-op with no daemon)
 .RE
 .SH EXAMPLES
 \fIStart the daemon (auto\-backgrounds)\fR
@@ -79,12 +76,6 @@ magus server stop
 .PP
 .EX
 magus server reload
-.EE
-.PP
-\fISubmit a background job\fR
-.PP
-.EX
-magus server job rotate-logs
 .EE
 .PP
 \fIInspect daemon pool state\fR
@@ -121,7 +112,7 @@ magus --daemon-address unix:///tmp/m.sock server start
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-ledger\fR(1),
+\fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-mcp\fR(1),

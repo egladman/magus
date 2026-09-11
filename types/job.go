@@ -20,9 +20,13 @@ type JobState string
 const (
 	// StateDeclared is a row written before its worker was spawned.
 	StateDeclared JobState = "declared"
-	// StateRunning is a worker in flight.
+	// StateRunning is a holder in flight.
 	StateRunning JobState = "running"
-	// StatePass is a lease whose acceptance criteria and assigned validation both
+	// StateExited is a job its holder returned, with a result filed and nobody waiting on
+	// it yet. The POSIX reading exactly: the child is done and its status has not been
+	// collected, which is neither "still working" nor any judgment of the work.
+	StateExited JobState = "exited"
+	// StatePass is a job whose acceptance criteria and assigned check both
 	// passed, as judged by the agent that owns it.
 	StatePass JobState = "pass"
 	// StateFail is a lease that returned and did not meet its criteria.
@@ -36,7 +40,7 @@ const (
 // schema, and the error each of them raises) and a closed set that drifts is one a client
 // is rejected by for a value the schema told it to send.
 func JobStates() []JobState {
-	return []JobState{StateDeclared, StateRunning, StatePass, StateFail, StateNoReturn}
+	return []JobState{StateDeclared, StateRunning, StateExited, StatePass, StateFail, StateNoReturn}
 }
 
 // ValidJobState reports whether s is one of [JobStates]. An empty state is NOT: a row
@@ -153,11 +157,16 @@ func (s JobState) Terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
-// Live reports whether the lease can still act on its paths: declared or running. A
-// row with no state is not live, it has not said it is; that is the one rule the guard
-// and the sandbox both scope a worker by, so it lives here rather than in either.
+// Live reports whether the lease can still act on its paths: declared, running, or
+// exited. A job with no state is not live, it has not said it is; that is the one rule the
+// guard and the sandbox both scope a holder by, so it lives here rather than in either.
+//
+// EXITED IS LIVE, which reads oddly next to Terminal and is the safe direction. A holder
+// that filed its result still holds the lease on its checkout, and a verification that
+// rejects sends it back to the same lanes; dropping the job out of live here would leave
+// every write after `job exit` graded by nothing at all.
 func (s JobState) Live() bool {
-	return s == StateDeclared || s == StateRunning
+	return s == StateDeclared || s == StateRunning || s == StateExited
 }
 
 // MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
@@ -198,9 +207,16 @@ func ValidJobID(id string) bool {
 // meeting a shape it does not know says which versions it supports instead of rejecting
 // one field at a time.
 //
-// Bump it when a field changes meaning or a required one appears. An added optional
-// field does not: a reader that ignores it is still correct.
-const JobSchemaVersion = 1
+// BUMP IT ON EVERY CHANGE TO THE FIELD SET, an added optional field included. This used to
+// say an added optional field does not need one; measured 2026-09-11, that is exactly how
+// two live rows silently lost write_paths, read_paths, deny_paths, model and check to an
+// older binary's non-strict decoder, because those fields were added without moving this
+// constant, so the rows still read schema_version 1 and the loss was invisible. A reader
+// that quietly ignores a field it does not know is correct only until something else reads
+// its rewrite; the version is what tells such a reader to stop instead of proceeding.
+// TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
+// golden list, so a field added without a bump fails a test instead of failing a store.
+const JobSchemaVersion = 3
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -349,6 +365,16 @@ type Job struct {
 	// on its own, and silence has no verdict in it.
 	Created int64 `json:"created" yaml:"created"`
 	Updated int64 `json:"updated" yaml:"updated"`
+	// Result is what the holder filed when it exited, and Attempt is the run record behind
+	// that result's output ref, resolved in the holder's OWN checkout.
+	//
+	// Both are on the job because an output store belongs to a cache dir: a parent waiting
+	// from another worktree cannot resolve the holder's ref, so a result that travelled as
+	// a file read as evidence from nowhere every time it crossed a checkout. Carrying the
+	// run record with the result is what makes the evidence portable, and it is the
+	// store's record rather than anything the holder asserts.
+	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
+	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
 }
 
 // Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
@@ -554,5 +580,16 @@ func (u Job) Clone() Job {
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
+	if u.Result != nil {
+		result := *u.Result
+		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
+		result.Descendants = slices.Clone(u.Result.Descendants)
+		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
+		c.Result = &result
+	}
+	if u.Attempt != nil {
+		attempt := *u.Attempt
+		c.Attempt = &attempt
+	}
 	return c
 }
