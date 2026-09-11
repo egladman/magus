@@ -95,6 +95,7 @@ var (
 	Path              = cmd("path")
 	Diff              = cmd("diff")
 	Init              = cmd("init")
+	Clean             = cmd("clean")
 	Doctor            = cmd("doctor")
 	Where             = cmd("where")
 	X                 = cmd("x")
@@ -149,7 +150,7 @@ var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
+	DescribeMCPTools, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, Refs,
 	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, LedgerAccept, LedgerRegister, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,

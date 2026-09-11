@@ -64,6 +64,7 @@ const (
 	denyRuleSharedStash       denyRuleName = "shared-stash"
 	denyRuleWorktreeRemove    denyRuleName = "worktree-remove"
 	denyRuleStageAll          denyRuleName = "stage-all"
+	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a

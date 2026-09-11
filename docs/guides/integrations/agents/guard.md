@@ -178,6 +178,28 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   tree's `./magus` was linked from ITS sources and its cache is keyed to ITS
   tree, so the verdict describes neither checkout. A cd into a genuinely
   different repository is not denied; that one only draws the `--root` advisory.
+- **Writing into the workspace's magus cache dir** (`.magus/` by default), on
+  either surface and under every role, unbound sessions included. That directory
+  holds the files the guard's own verdicts are computed from: the `lease` marker
+  naming which lease this checkout is bound to, the fire-once advisory markers,
+  the touched-project set, and the served-next journal whose entries
+  pre-authorize commands, plus the activity trail, the run logs, the outputs and
+  the locks. An agent that edits any of it rewrites the evidence it is graded by,
+  and no later verdict says so, which is why this one is not scoped to a lane:
+  what it protects is whether a lane was checked at all. It ranks above the
+  lease rules, so a worker whose `owned_paths` happen to cover the directory
+  reads what the directory IS rather than a verdict about whose lane it is. The
+  path surface catches an editor tool's write; the command surface catches a
+  redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
+  (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
+  names the verbs instead: `magus session lease <id>` to bind, `magus clean` for
+  the outputs, `magus query output <ref>` for a captured log. Reading is
+  untouched, so `cat` on a log passes. A cache dir relocated by
+  `MAGUS_CACHE_DIR` or `cache.dir` is matched at its resolved location, and the
+  literal `.magus/` name is matched as well, so a command that spells it is
+  refused even where the resolution is unavailable. magus's own commands are not
+  judged here: every `magus run` writes in that directory, and the rule reads
+  redirect targets and coreutil operands, never a `magus` argv.
 - **Rewriting your own lease row, under a bound lease**: `magus session lease
   <other-id>`, `magus ledger accept`, `magus ledger register`, and the
   `magus_ledger` tool's row writes, whichever channel they arrive on. Every

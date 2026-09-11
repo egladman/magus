@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5847,
-  "edge_count": 10404,
+  "edge_count": 10405,
   "relations": [
     {
       "id": "annotates",
@@ -70556,6 +70556,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/guard.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

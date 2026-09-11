@@ -259,12 +259,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// it left: without this the second write to a skill source would draw the
 		// new-directory advisory instead of nothing.
 		spoken := false
-		switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
-		case "deny":
-			verdict.Decision = "deny"
-			verdict.Reason = g.Reason
-		case "advise":
-			advice, spoken = gate.once(g.Kind, g.Context), true
+		// The checkout's own cache dir speaks before the ledger, and it is the only rule
+		// that does. Every lease-scoped verdict below is computed from files in there, so
+		// a worker whose lane happens to cover the dir must not be told it owns the lane:
+		// what it is editing is whether the lane was checked.
+		if reason := denyCacheDirWrite(location.workspace, location.base, input.Value); reason != "" {
+			verdict.Decision, verdict.Reason = "deny", reason
+		}
+		if verdict.Decision != "deny" {
+			switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
+			case "deny":
+				verdict.Decision = "deny"
+				verdict.Reason = g.Reason
+			case "advise":
+				advice, spoken = gate.once(g.Kind, g.Context), true
+			}
 		}
 		// The guard's own installation, ranked directly under the collision report and
 		// above everything else. It is definitive the way the ledger rule is (a known
@@ -346,10 +355,15 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
 		// but reads the filesystem, so it cannot live inside evaluateBashGuard's pure
 		// rule set. Ranking the two is pure, and is where the ordering is tested.
+		// The cache-dir rule is outermost for the same reason and one more: it reads the
+		// resolved cache location, and what it refuses outranks every other deny on the
+		// line (guard_cachedir.go).
 		//
 		// The hint graph is built here unconditionally: the manifest read behind it is
 		// one small file, and laziness would buy nothing on a hook this short-lived.
-		switch v := rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)); {
+		switch v := rankCacheDirWrite(
+			rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)),
+			denyCacheDirCommand(input.Value, location.workspace, location.base)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
