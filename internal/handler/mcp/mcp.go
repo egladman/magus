@@ -149,9 +149,10 @@ func allToolDrivers(opts Options) []spells.Driver {
 	if ledgerStore == nil {
 		ledgerStore = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
+	next := newNextServer(opts.Magus.CacheDir(), ledgerStore)
 	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
-		&describeFileTool{ws: opts.Magus},
+		&describeFileTool{ws: opts.Magus, next: next},
 		&whereTool{ws: opts.Magus},
 		&affectedExplainTool{ws: opts.Magus},
 		&insightTool{ws: opts.Magus},
@@ -159,12 +160,12 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&runAffectedTool{opts: opts},
 		&doctorTool{opts: opts},
 		&statusTool{opts: opts},
-		&affectedPlanTool{opts: opts},
+		&affectedPlanTool{opts: opts, next: next},
 		&configGetTool{cfg: opts.Config},
 		&memoryTool{opts: opts},
-		&queryTool{graph: opts.Magus},
+		&queryTool{graph: opts.Magus, next: next},
 		&outputTool{reader: opts.Magus},
-		&explainTool{graph: opts.Magus},
+		&explainTool{graph: opts.Magus, next: next},
 		&pathTool{graph: opts.Magus},
 		&statsTool{graph: opts.Magus},
 		&refsTool{graph: opts.Magus},

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -85,10 +87,21 @@ func TestQueryToolInvokeThroughFake(t *testing.T) {
 	tool := &queryTool{graph: fakeGraphResolver{g: pagedGraph(3)}}
 	resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"query": "kind:target"}})
 	require.NoError(t, err)
-	got, ok := resp.Data.(paginatedQuery)
-	require.True(t, ok, "query result is a paginatedQuery")
+
+	// The payload is pre-encoded once breadcrumbs ride it, so the assertion is on the
+	// wire shape rather than on the Go type: a reply is the result plus one `next` key.
+	raw, err := json.Marshal(resp.Data)
+	require.NoError(t, err)
+	var got struct {
+		paginatedQuery
+		Next []hint.Next `json:"next"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &got))
 	assert.Equal(t, 3, got.MatchCount)
 	assert.Empty(t, got.NextCursor, "an unpaged query has no next cursor")
+	require.NotEmpty(t, got.Next, "an MCP query reply carries the same breadcrumbs the CLI serves")
+	assert.Equal(t, "query-explain", got.Next[0].ID)
+	assert.NotEmpty(t, got.Next[0].Argv, "a breadcrumb carries the argv a caller execs")
 }
 
 // The knowledge tools' graph traversal is covered by internal/graph/knowledge and the
