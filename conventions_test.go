@@ -470,14 +470,25 @@ var hookConfigExemptions = map[string]map[string]string{
 // below carries it and the parity gate can see the two apart.
 const mcpToolMatcherPrefix = "mcp__magus__"
 
-// configTemplates returns the JOBS a hook config's commands invoke, keyed by the
-// template and, where the matcher selects magus's MCP tools, by that surface too.
+// configTemplates returns the shipped template FILES a hook config's commands
+// invoke, for the gates that ask whether a file is named somewhere.
+func configTemplates(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	found := map[string]bool{}
+	for template := range configJobs(t, path) {
+		found[strings.SplitN(template, " on ", 2)[0]] = true
+	}
+	return found
+}
+
+// configJobs returns the JOBS a hook config's commands invoke, keyed by the template
+// and, where the matcher selects magus's MCP tools, by that surface too.
 //
 // Keyed by job rather than by file because a template wired twice under different
 // matchers is two jobs: claude-code runs magus-guard-command.sh on Bash AND on the
 // MCP tool call, and a gate collecting basenames alone reads the second as nothing
 // new, which is the whole absence it exists to report.
-func configTemplates(t *testing.T, path string) map[string]bool {
+func configJobs(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err, "read %s", path)
@@ -517,7 +528,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
 	wired := map[string]map[string]bool{}
 	for host, path := range shippedHookConfigs {
-		wired[host] = configTemplates(t, path)
+		wired[host] = configJobs(t, path)
 	}
 
 	for host, templates := range wired {
