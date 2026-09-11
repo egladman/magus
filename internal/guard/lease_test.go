@@ -518,3 +518,138 @@ func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
 		assert.Contains(t, reason, id, "the denial must say who magus thinks is calling")
 	}
 }
+
+// laneFleet is the plan the lane rule is graded against: the acting worker, and a sibling
+// whose tree every write below aims at.
+func laneFleet() []types.Lease {
+	return []types.Lease{
+		{
+			ID:         "lease-a",
+			Goal:       "own the ledger store",
+			WritePaths: []string{"internal/ledger"},
+			State:      types.StateRunning,
+			Registered: 1,
+		},
+		{
+			ID:         "lease-b",
+			Goal:       "grade writes in the guard",
+			WritePaths: []string{"cmd/magus"},
+			DenyPaths:  []string{"cmd/magus/gen"},
+			State:      types.StateRunning,
+			Registered: 1,
+		},
+	}
+}
+
+// TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm pins the gap this rule closed: the
+// lane was enforced only where a host reported a path, so every spelling below reached a
+// sibling's tree unjudged while the identical editor write was refused.
+//
+// Each row asserts BOTH surfaces and that they refuse in the SAME words. A rule that lands
+// on one surface and not the other is exactly how the gap happened, and a reason that
+// drifts between them teaches two different lessons for one mistake.
+func TestDenyLeaseScopedLaneWriteCatchesEveryWriterForm(t *testing.T) {
+	ctx, root := fleetFixture(t, laneFleet()...)
+
+	for _, tc := range []struct {
+		command string
+		path    string
+	}{
+		{`printf "\n" >> internal/ledger/store.go`, "internal/ledger/store.go"},
+		{"echo x > internal/ledger/store.go", "internal/ledger/store.go"},
+		{"echo x >| internal/ledger/store.go", "internal/ledger/store.go"},
+		{"echo x &> internal/ledger/store.go", "internal/ledger/store.go"},
+		{"echo x >& internal/ledger/store.go", "internal/ledger/store.go"},
+		{"exec 3<> internal/ledger/store.go", "internal/ledger/store.go"},
+		{"echo x | tee internal/ledger/store.go", "internal/ledger/store.go"},
+		{"sed -i 's/a/b/' internal/ledger/store.go", "internal/ledger/store.go"},
+		{"cp foo internal/ledger/store.go", "internal/ledger/store.go"},
+		{"mv /tmp/x internal/ledger/store.go", "internal/ledger/store.go"},
+		{"install -m 644 f internal/ledger/store.go", "internal/ledger/store.go"},
+		{"dd of=internal/ledger/store.go", "internal/ledger/store.go"},
+		{"ln -sf /dev/null internal/ledger/store.go", "internal/ledger/store.go"},
+		{"touch internal/ledger/store.go", "internal/ledger/store.go"},
+		{"truncate -s 0 internal/ledger/store.go", "internal/ledger/store.go"},
+		{"chmod 600 internal/ledger/store.go", "internal/ledger/store.go"},
+		{"chown me internal/ledger/store.go", "internal/ledger/store.go"},
+		{"sort -o internal/ledger/store.go f", "internal/ledger/store.go"},
+		{`awk '{print > "internal/ledger/store.go"}' f`, "internal/ledger/store.go"},
+		{`python3 -c "open('internal/ledger/store.go','a').write(line)"`, "internal/ledger/store.go"},
+		{"rm -rf internal/ledger", "internal/ledger"},
+		{"find internal/ledger -delete", "internal/ledger"},
+		{"sh -c 'echo x > internal/ledger/store.go'", "internal/ledger/store.go"},
+		{"bash -c 'rm internal/ledger/store.go'", "internal/ledger/store.go"},
+		{"eval 'echo x > internal/ledger/store.go'", "internal/ledger/store.go"},
+		{"sudo sh -c 'echo x >| internal/ledger/store.go'", "internal/ledger/store.go"},
+
+		// A path the acting lease's OWN row denies, which is the other half of a lane.
+		{"echo x > cmd/magus/gen/cli_flags.go", "cmd/magus/gen/cli_flags.go"},
+
+		// An interpreter fed by a heredoc, which reached a sibling's tree unjudged: the
+		// script is the heredoc body, so a walk of the arguments alone never saw the path.
+		{"python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY", "internal/ledger/store.go"},
+		{"python3 -c \"open('internal/ledger/store.go','w').write(out)\"", "internal/ledger/store.go"},
+	} {
+		onCommand := denyLeaseScopedLaneWrite(ctx, Dependencies{}, "lease-b", tc.command)
+		require.NotEmpty(t, onCommand,
+			"the COMMAND surface passed %q, which writes outside the acting lease's lane.\n"+
+				"A boundary enforced only where the host reports a PATH is one a shell line walks straight through, and that is the gap this table exists to catch. If you taught a rule a new writer spelling, teach writeTargetCandidates about it too.",
+			tc.command)
+
+		onPath := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, tc.path))
+		require.Equal(t, "deny", onPath.Decision,
+			"the PATH surface passed %s, so this row is no longer testing two surfaces against one another", tc.path)
+		assert.Equal(t, onPath.Reason, onCommand,
+			"the two surfaces refused %q in DIFFERENT words.\n"+
+				"It is one mistake however it is spelled, so it gets one explanation. The command surface is meant to call gradeLeasedWrite, the path surface's own grader; a difference here means something re-decided the verdict instead of reusing it, and the two will drift from now on.",
+			tc.command)
+	}
+}
+
+// TestDenyLeaseScopedLaneWriteStaysQuiet covers the silences. The rule is a seatbelt for
+// harnesses that opt in, so every case where nothing declared the write to be out of lane
+// has to pass: a guard that refuses reads is one agents learn to route around.
+func TestDenyLeaseScopedLaneWriteStaysQuiet(t *testing.T) {
+	ctx, _ := fleetFixture(t, laneFleet()...)
+
+	for _, command := range []string{
+		// Reads of the very file the writes above are refused for.
+		"cat internal/ledger/store.go",
+		"head -n 5 internal/ledger/store.go",
+		"grep -r lease internal/ledger",
+		"sed 's/a/b/' internal/ledger/store.go",
+		"sort internal/ledger/store.go",
+		"find internal/ledger -name '*.go'",
+		"cp internal/ledger/store.go /tmp/x",
+		`echo "rm -rf internal/ledger"`,
+
+		// magus's own argv is never a target: it writes in there by construction, and the
+		// guard grades the agent's tool calls rather than magus's own processes.
+		"./magus run test .",
+		"./magus session lease lease-b",
+		"./magus query output out123",
+
+		// Inside the acting lease's own lane.
+		"echo x > cmd/magus/diff.go",
+
+		// A word nobody declared is not a path. Without this the reader allowlist would
+		// refuse an ordinary echo for writing outside the lane.
+		"echo hi",
+		"printf 'done'",
+	} {
+		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "lease-b", command), "%q", command)
+	}
+
+	t.Run("no lease", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "", "echo x > internal/ledger/store.go"))
+	})
+
+	t.Run("a lease with no row", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedLaneWrite(ctx, Dependencies{}, "harness/absent", "echo x > internal/ledger/store.go"))
+	})
+
+	t.Run("no trail location", func(t *testing.T) {
+		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
+		assert.Empty(t, denyLeaseScopedLaneWrite(nowhere, Dependencies{}, "lease-b", "echo x > internal/ledger/store.go"))
+	})
+}

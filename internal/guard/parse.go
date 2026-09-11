@@ -308,7 +308,7 @@ func writeTargetCandidates(command string, depth int) []string {
 			}
 		}
 		for _, c := range stmtCommands(stmt) {
-			out = append(out, commandWriteCandidates(c)...)
+			out = append(out, commandWriteCandidates(c, heredocText(stmt))...)
 		}
 		return true
 	})
@@ -322,7 +322,11 @@ func writeTargetCandidates(command string, depth int) []string {
 //
 // Every word is examined, not only the operands: a flag's value names a path too
 // (`dd of=x`), and an interpreter's script is one argument carrying the path inside it.
-func commandWriteCandidates(c hint.Invocation) []string {
+//
+// heredoc is the body redirected into the statement, and it counts only for an
+// INTERPRETER, where the heredoc IS the program. For every other command a heredoc is
+// data, and folding it in would read `cat > f <<EOF` prose as a list of write targets.
+func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	name := path.Base(c.Name)
 	if onlyReads(name, c.Args) {
 		return nil
@@ -342,7 +346,10 @@ func commandWriteCandidates(c hint.Invocation) []string {
 	// inside it, and its quoted strings singly for one that has to resolve a path.
 	if scriptedRewriteInterpreters[name] || name == "awk" {
 		var out []string
-		for _, w := range words {
+		for _, w := range append(slices.Clone(words), heredoc) {
+			if w == "" {
+				continue
+			}
 			out = append(out, w)
 			out = append(out, quotedLiterals(w)...)
 		}

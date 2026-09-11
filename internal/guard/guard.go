@@ -327,9 +327,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// live inside Evaluate's pure rule set; ranking them is pure, and is
 		// where the ordering is tested. The cache dir is outermost: what it refuses
 		// outranks every other deny on the line (internal/guard/cachedir.go).
-		switch v := rankCacheDirWrite(
-			rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input)),
-			denyCacheDirCommand(location, input)); {
+		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input))
+		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -349,7 +348,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind} {
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind, denyLeaseScopedLaneWrite} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}

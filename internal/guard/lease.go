@@ -732,3 +732,59 @@ func vcsMutation(c hint.Invocation) string {
 	}
 	return ""
 }
+
+// denyLeaseScopedLaneWrite refuses a shell line that writes outside the acting lease's
+// lane, in the words the path surface would have used for the same file.
+//
+// The lane used to be enforced only where a host reported a PATH, so a bound worker that
+// redirected, tee'd, sed -i'd or cp'd into a sibling's tree was passed while the identical
+// editor-tool write was denied.
+//
+// It calls the path surface's own grader rather than deciding anything itself, so the two
+// cannot drift about who owns a path or how the refusal reads, and the extraction that
+// finds the written words is the cache-dir rule's, shared for the same reason.
+//
+// Only a candidate some live lease DECLARED is graded. The extraction offers every word a
+// non-reader command was pointed at, which is the safe direction for a boundary as
+// specific as the cache dir but not for one as ordinary as a path: grading every word
+// would refuse `echo hi` for writing outside the lane.
+func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLease, command string) string {
+	if actingLease == "" {
+		return ""
+	}
+	location := hookLocation(ctx, deps)
+	if location.workspace == "" {
+		return ""
+	}
+	rows, err := leaseRows(ctx, location)
+	if err != nil {
+		return ""
+	}
+	live := liveLeases(rows)
+	if len(live) == 0 {
+		return ""
+	}
+	for _, candidate := range writeTargetCandidates(command, 0) {
+		rel, inside := workspaceRelative(location.workspace, candidate)
+		if !inside || !declaredPath(live, rel) {
+			continue
+		}
+		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == "deny" {
+			return g.Reason
+		}
+	}
+	return ""
+}
+
+// declaredPath reports whether any live lease named rel in a boundary, as a lane it owns
+// or a path it was refused. A word no plan mentions is not treated as a path at all.
+func declaredPath(live []types.Lease, rel string) bool {
+	for _, u := range live {
+		for _, decls := range [][]string{u.WritePaths, u.DenyPaths} {
+			if _, ok, _ := declarationCovering(decls, rel); ok {
+				return true
+			}
+		}
+	}
+	return false
+}
