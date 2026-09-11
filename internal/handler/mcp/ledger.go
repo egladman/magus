@@ -12,24 +12,17 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ledgerTool (magus_ledger) records the lease ledger an orchestrating agent
-// declares: one row per lease, in the vocabulary the magus-multi-agent
-// skill defines. It is the AGENT's write door onto internal/ledger; magus\ledger's put,
-// register and clear (internal/interp/bindings/ledger_ns.go) and `magus ledger register`
-// are the others, and the console's /api/v1/ledger endpoint is a read door onto the same
-// file.
+// ledgerTool (magus_ledger) records the lease ledger an orchestrating agent declares, one
+// row per lease. It is the AGENT's write door onto internal/ledger; magus\ledger and
+// `magus ledger register` are the others, and the console's /api/v1/ledger endpoint reads
+// the same file.
 //
-// It blocks no write to the tree. This tool does not check that a worker stayed inside its
-// owned paths; the AGENT GUARD is what reads these rows to grade a write, and it is
-// elsewhere. The one verdict here (register's, on whether a worker's reported base is the
-// checkpoint its lease was handed) is returned and stored as a fact, and the registration
-// succeeds whatever it says, because a ledger that started refusing declarations is a
-// ledger agents route around. See types.Lease.
+// It blocks no write to the tree: the AGENT GUARD is what reads these rows to grade one,
+// and register's verdict is returned and stored as a fact rather than a refusal.
 //
 // WHAT IT DOES REFUSE is a write to a row the caller does not own, and that refusal comes
-// from the STORE rather than from here, so every door carries it. A worker that calls this
-// tool to widen its own owned paths (which the guard's denial text used to read as an
-// invitation) is told to ask its orchestrator. See internal/ledger.authorizeRow.
+// from the STORE rather than from here, so every door carries it. See
+// internal/ledger.authorizeRow.
 type ledgerTool struct{ store *ledger.Store }
 
 func (t *ledgerTool) Name() string { return hint.ToolLedger.String() }

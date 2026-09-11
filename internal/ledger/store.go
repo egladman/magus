@@ -1,50 +1,14 @@
-// Package ledger persists the lease ledger: the rows an orchestrating agent
-// declares about the plan it is running, kept where a human can read them.
+// Package ledger persists the lease ledger: the rows an orchestrating agent declares
+// about the plan it is running, kept where a human can read them.
 //
-// IT GATES NO RUN AND BLOCKS NO WRITE. The AGENT GUARD is what consults these rows to
-// grade one, and it is a separate thing that READS this store. Register computes a verdict
-// (whether a worker's reported base is the checkpoint its lease was handed), and that is a
-// fact recorded on the row and handed back, not a gate: the registration succeeds either
-// way and what to do about a divergence is the orchestrator's call. The store's whole job
-// is that a plan an agent stated in a prompt stops being trapped in one session's
-// transcript.
+// It gates no run and blocks no write to the tree; the one write it refuses is a write to
+// a row the caller does not own (see [authorizeRow]). One plan per REPOSITORY, so every
+// worktree and clone reads the same rows.
 //
-// THE ONE THING IT DOES REFUSE IS A WRITE TO SOMEBODY ELSE'S ROW, and that is not the
-// same kind of rule. See [authorizeRow]: a worker acting under a lease may release paths
-// and end itself, and it is refused the writes that would widen its own boundary or
-// rewrite the plan. The reason it lives here rather than in a guard rule is that three
-// doors reach this store and a command pattern can only see one of them. Everything else
-// stays outside for the reason types.Lease gives: a store that refused what an
-// orchestrator declares would make the ledger something agents route around.
-//
-// ONE PLAN PER REPOSITORY. Clear wipes the rows so the next plan starts empty, after
-// copying them to a timestamped sibling file. Nothing reads those archives back: they
-// exist so a plan wiped by somebody else is still legible to a person, not as a history
-// this package models. Naming a plan is still outside the vocabulary.
-//
-// "LEDGER" NAMES THE RECONCILIATION, NOT THE DURABILITY, and the difference is worth
-// stating because the word oversells one of them. A financial ledger is append-only and
-// historical; this is neither: Put upserts a row in place, Clear wipes the book, and
-// nothing is archived. What it does share is the part that earns the name: it is written
-// to be checked AGAINST reality later, which is exactly the skill's "compare the ledger
-// against the actual diff since each lease's checkpoint" step. Read it as a book of
-// declared intent kept for reconciliation, not as a durable record of what happened. The
-// vocabulary came from the magus-multi-agent skill, which is also where the row shape is
-// defined (see types.Lease).
-//
-// It is the INTENT layer of three, and naming the other two is what keeps them apart;
-// they are flat stores joined by lease id at render time, never a storage hierarchy:
-//
-//   - intent: this package. What an orchestrating agent SAID it would hand out.
-//     Declared up front, mutable, one plan at a time.
-//   - actions: internal/trail. What was actually DONE against the daemon, append-only.
-//     The closest sibling, and the one to reach for when the question is "did it happen"
-//     rather than "was it planned".
-//   - effects: the run itself: the pool, the locks, the outputs a target produced.
-//
-// The two stores that sound related and are NOT: internal/journal is the event stream of
-// one magus invocation (what a build executed), and internal/memory and internal/notes
-// are prose a human or an agent writes to be read later; neither models leased work.
+// The INTENT layer of three, flat stores joined by lease id at render time rather than a
+// hierarchy: intent is this package, actions are internal/trail, and effects are the run
+// itself. internal/journal (one invocation's events) and internal/memory and
+// internal/notes (prose for a later reader) model no leased work and are not siblings.
 package ledger
 
 import (
@@ -211,43 +175,35 @@ type ledgerFile struct {
 	Leases []types.Lease `json:"leases"`
 }
 
-// Put records one lease, replacing any row with the same id IN PLACE. Position is
-// preserved on update because the ledger is a table a person reads top to bottom, and
-// a row that jumped to the bottom every time its state changed would reorder itself
-// exactly when it is being watched.
+// Put records one lease, replacing any row with the same id IN PLACE: the ledger is a
+// table a person reads top to bottom, and a row that jumped to the bottom on every state
+// change would reorder itself exactly while it is being watched.
 //
-// It stamps Created on the first write and Updated on every write, ignoring whatever
-// the caller passed for either. The stored row is returned.
-func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
-	return s.Update(ctx, u.ID, func(cur *types.Lease) { *cur = u })
+// The timestamps and everything else the store computes are ignored on the way in and
+// returned on the way out; see [Store.Update], which this is a whole-row spelling of.
+func (s *Store) Put(ctx context.Context, row types.Lease) (types.Lease, error) {
+	return s.Update(ctx, row.ID, func(cur *types.Lease) { *cur = row })
 }
 
-// Update applies apply to the row with this id and writes the result back, all while
-// holding both of the Store's locks ONCE. That is the whole point: a merge spread across
-// List and Put releases them in between, so two concurrent writers advancing different
-// fields of one row each read it before the other wrote, and the second write reverts the
-// first, whether the two are goroutines or separate magus processes.
+// Update applies apply to the row with this id and writes the result back while holding
+// both of the Store's locks ONCE: a merge spread across List and Put releases them in
+// between, so two concurrent writers advancing different fields of one row each read it
+// before the other wrote, and the second write reverts the first.
 //
-// The row is CREATED when absent, matching Put: apply then sees a zero lease carrying
-// only the id, so declaring a lease and advancing one are the same call. Created is
-// preserved from the stored row and Updated is stamped on every write, exactly as Put
-// does, and the id is the key: whatever apply writes into ID is overwritten with it.
+// The row is CREATED when absent, so declaring a lease and advancing one are the same
+// call, and the id is the key: whatever apply writes into ID is overwritten with it.
 //
-// Releases are stamped here too, and for the same reason Created is: they are the
-// store's to say, not the caller's. A write that drops a path from OwnedPaths IS the
-// release announcement the skill has workers make when they finish editing a contested
-// path, so the dropped paths are digested and recorded on the row, under this same
-// lock, because reading the previous owned set and writing the next one has to be one
-// step or a concurrent put decides which release happened.
+// Releases are stamped here because they are the store's to say: a write that drops a path
+// from OwnedPaths IS the release announcement, and reading the previous owned set and
+// writing the next one has to be one step or a concurrent put decides which release
+// happened.
 //
 // apply runs while the lock is held, so it must not touch the store, and it cannot fail:
-// anything that could be rejected (an unknown state, a mistyped param) belongs in the
-// caller, before the call.
+// anything that could be rejected belongs in the caller, before the call.
 //
-// ctx reaches the release digests and nothing else. A cancelled call still WRITES the
-// row (the merge is already done and abandoning it would lose the state change), but it
-// stops hashing files, so a caller that walked away does not keep the store's lock while
-// the disk is read.
+// ctx reaches the release digests and nothing else. A cancelled call still WRITES the row,
+// since the merge is already done, but it stops hashing files rather than reading the disk
+// with the store's lock held.
 func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
 	return s.mutate(ctx, id, asDeclaration, func(cur *types.Lease, _ bool, _ int64) error {
 		apply(cur)
@@ -266,14 +222,8 @@ const MaxUnattributedWrites = 32
 // RecordUnattributedWrite notes that somebody outside lease id wrote one of its owned paths,
 // with the content they left behind.
 //
-// ONE ROW PER PATH, newest wins. A person saves a file a dozen times while an agent works; the
-// twelfth save is the only one that describes the tree, and eleven superseded digests would bury
-// it. The timestamp moves with the digest, so "when did this last move" stays answerable.
-//
-// Recording from the guard is a deliberate softening of this package's split (the ledger records,
-// the guard enforces), and it survives the rule because what lands here is an OBSERVATION and
-// never a verdict. The guard already read these boundaries to grade the write; it simply discarded
-// what it saw afterwards, leaving the one party who needed it uninformed.
+// ONE ROW PER PATH, newest wins: a person saves a file a dozen times while an agent works,
+// and the twelfth save is the only one that describes the tree.
 //
 // A missing row is not an error: the lease may have ended between the grading and this call,
 // and a write graded against a plan that has since finished is nothing to report to anybody.
@@ -315,19 +265,13 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 var errNoSuchRow = errors.New("ledger: no such lease")
 
 // mutate is the locked read-modify-write [Store.Update] and [Store.Register] share, and
-// the only place leases.json is rewritten row-wise.
+// the only place leases.json is rewritten row-wise. kind says what the write is; see
+// [grading].
 //
-// apply gets two things Update's caller does not need and Register's cannot do without.
-// exists says whether a row was already there, which is the difference between the two
-// doors: Update creates, Register refuses (a worker registering an id nobody declared was
-// handed the wrong id, and inventing a row would bury that). now is the one clock read
-// this write is stamped from, so a row cannot claim it registered a second before or
-// after it was updated.
-//
-// apply may fail, which is what lets that refusal be decided where it has to be: under
-// the lock, after the row is known present or absent. Nothing is written when it does.
-//
-// kind says what the write is; see [grading].
+// apply gets what only Register needs: exists, because Update creates a row and Register
+// refuses one nobody declared, and now, the one clock read the write is stamped from. It
+// may fail, which is what lets that refusal be decided under the lock; nothing is written
+// when it does.
 func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.Lease{}, ErrNoID
@@ -347,16 +291,16 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		if i >= 0 {
 			prev = f.Leases[i]
 		}
-		u := prev.Clone()
-		u.ID = id
+		row := prev.Clone()
+		row.ID = id
 		now := time.Now().Unix()
-		if aerr := apply(&u, i >= 0, now); aerr != nil {
+		if aerr := apply(&row, i >= 0, now); aerr != nil {
 			return aerr
 		}
-		u = u.Clone()
-		u.ID = id
+		row = row.Clone()
+		row.ID = id
 		if kind.graded() {
-			if aerr := authorizeRow(actor, id, prev, u, i >= 0, f.Leases); aerr != nil {
+			if aerr := authorizeRow(actor, id, prev, row, i >= 0, f.Leases); aerr != nil {
 				return aerr
 			}
 		}
@@ -367,30 +311,30 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		switch {
 		case i >= 0:
 			if kind != asRegistration {
-				u.ReportedBase, u.BaseVerdict, u.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
+				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 			}
 			if kind != asObservation {
-				u.Unattributed = prev.Unattributed
+				row.Unattributed = prev.Unattributed
 			}
 		case actor.Bound():
-			u.ReportedBase, u.BaseVerdict, u.Registered, u.Unattributed = "", "", 0, nil
+			row.ReportedBase, row.BaseVerdict, row.Registered, row.Unattributed = "", "", 0, nil
 		}
-		u.Updated = now
-		u.Created = now
-		u.SchemaVersion = types.LeaseSchemaVersion
-		u.Releases = s.releases(ctx, prev, u, now)
+		row.Updated = now
+		row.Created = now
+		row.SchemaVersion = types.LeaseSchemaVersion
+		row.Releases = s.releases(ctx, prev, row, now)
 		if i >= 0 {
-			u.Created = prev.Created
-			u.RegisteredBy = prev.RegisteredBy
-			f.Leases[i] = u
+			row.Created = prev.Created
+			row.RegisteredBy = prev.RegisteredBy
+			f.Leases[i] = row
 		} else {
-			u.RegisteredBy = actor.leaseActor()
-			f.Leases = append(f.Leases, u)
+			row.RegisteredBy = actor.leaseActor()
+			f.Leases = append(f.Leases, row)
 		}
 		if werr := s.write(f); werr != nil {
 			return werr
 		}
-		stored = u.Clone()
+		stored = row.Clone()
 		return nil
 	})
 	if err != nil {
@@ -410,8 +354,8 @@ func (s *Store) List() ([]types.Lease, error) {
 		return nil, err
 	}
 	out := make([]types.Lease, len(f.Leases))
-	for i, u := range f.Leases {
-		out[i] = u.Clone()
+	for i, row := range f.Leases {
+		out[i] = row.Clone()
 	}
 	return out, nil
 }

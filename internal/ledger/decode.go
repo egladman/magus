@@ -11,46 +11,42 @@ import (
 )
 
 // RowSchema is the JSON Schema for [Row], embedded so a person or a harness can see the
-// shape `magus ledger register --stdin` accepts without reading Go.
-//
-// A file beside the struct rather than reflection over it, for the reason report.schema.json
-// gives: the schema is the CONTRACT, and one generated from field tags changes shape
-// whenever the struct's internals do. TestRowSchemaMatchesTheStruct keeps the two honest.
+// shape `magus ledger register --stdin` accepts without reading Go. A file beside the
+// struct rather than reflection over it: the schema is the CONTRACT, and one generated
+// from field tags changes shape whenever the struct's internals do.
 //
 //go:embed row.schema.json
 var RowSchema string
 
 // Row is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the
-// store computes.
+// store computes. A caller cannot say when its row was created or what it released, and
+// the way to make that true is for the input type not to carry those fields rather than
+// for the store to strip them afterwards.
 //
-// Separate from types.Lease because the two answer different questions. types.Lease is the
-// record served to a reader, timestamps, releases and registration verdict included; this
-// is what a client is allowed to say. A caller cannot set when its row was created or what
-// it released, and the way to make that true is for the input type not to carry the fields
-// rather than for the store to strip them afterwards.
+// It is a DECLARATION and not a merge: every field it carries is written, so an omitted
+// one is cleared rather than kept. The magus_ledger tool's put deliberately does the
+// opposite, since an agent advancing one field of a live row must not erase the rest (see
+// [ParseMerge]).
 //
-// It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
-// is cleared rather than kept. That is what `register` means and what the magus_ledger
-// tool's put deliberately does not do, since an agent advancing one field of a live row
-// must not erase the rest (see [ParseMerge]).
+// JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 type Row struct {
 	// SchemaVersion is required. See types.LeaseSchemaVersion.
-	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
+	SchemaVersion int `json:"schema_version"`
 	// ID is the lease's identity within the plan, and the only required field besides
 	// the version.
-	ID string `json:"id" yaml:"id"`
+	ID string `json:"id"`
 	// The rest mirror types.Lease one for one; that type documents what each one means.
-	Parent         string           `json:"parent,omitempty"          yaml:"parent,omitempty"`
-	Goal           string           `json:"goal,omitempty"            yaml:"goal,omitempty"`
-	Checkpoint     string           `json:"checkpoint,omitempty"      yaml:"checkpoint,omitempty"`
-	OwnedPaths     []string         `json:"owned_paths,omitempty"     yaml:"owned_paths,omitempty"`
-	ForbiddenPaths []string         `json:"forbidden_paths,omitempty" yaml:"forbidden_paths,omitempty"`
-	Focus          []string         `json:"focus,omitempty"           yaml:"focus,omitempty"`
-	DependsOn      []string         `json:"depends_on,omitempty"      yaml:"depends_on,omitempty"`
-	Tier           string           `json:"tier,omitempty"            yaml:"tier,omitempty"`
-	Validation     string           `json:"validation,omitempty"      yaml:"validation,omitempty"`
-	State          types.LeaseState `json:"state,omitempty"           yaml:"state,omitempty"`
-	ReadOnly       bool             `json:"read_only,omitempty"       yaml:"read_only,omitempty"`
+	Parent         string           `json:"parent,omitempty"`
+	Goal           string           `json:"goal,omitempty"`
+	Checkpoint     string           `json:"checkpoint,omitempty"`
+	OwnedPaths     []string         `json:"owned_paths,omitempty"`
+	ForbiddenPaths []string         `json:"forbidden_paths,omitempty"`
+	Focus          []string         `json:"focus,omitempty"`
+	DependsOn      []string         `json:"depends_on,omitempty"`
+	Tier           string           `json:"tier,omitempty"`
+	Validation     string           `json:"validation,omitempty"`
+	State          types.LeaseState `json:"state,omitempty"`
+	ReadOnly       bool             `json:"read_only,omitempty"`
 }
 
 // Validate reports what is wrong with a declared row, or nil.
@@ -107,15 +103,14 @@ const maxInputBytes = 1 << 20
 
 // DecodeReport reads a worker's report, and DecodeRow one declared row, from r.
 //
-// STRICT AND VERSIONED, in that order of reporting. The version is read first, so a
-// sender a release ahead is told which versions this magus knows instead of learning that
-// one of its fields is unknown; then an unknown member is an error, because a field the
-// grader never reads looks to its author exactly like one that was taken into account.
+// STRICT AND VERSIONED, in that order of reporting: a sender a release ahead is told which
+// versions this magus knows instead of learning that one of its fields is unknown, and
+// then an unknown member is an error, because a field the grader never reads looks to its
+// author exactly like one that was taken into account.
 //
-// Every failure here is the same class to a caller: the input could not be understood, as
+// Every failure here is one class to a caller: the input could not be understood, as
 // opposed to understood and rejected. `magus ledger accept` exits 2 for this and 1 for a
-// rejection, which is what lets a script tell "fix your report" from "the work was not
-// accepted".
+// rejection.
 func DecodeReport(r io.Reader) (Report, error) {
 	raw, err := readInput(r, "report")
 	if err != nil {

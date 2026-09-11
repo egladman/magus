@@ -26,16 +26,13 @@ import (
 // the plan (ls, brief), declaring a row (register), and grading a worker (accept).
 //
 // BOTH CHANNELS WRITE, and the store is what keeps the book honest. The magus_ledger MCP
-// tool is the agent's channel and this verb is the person's; they reach the same store
-// and the same rules, so a row still has one author (internal/ledger.authorizeRow
-// enforces it) without a capability existing for agents that a person does not have. That
-// is the reversal of an earlier decision, which kept writing off the CLI on the ground
-// that the plan has a single author: true of the ROW, and it turned out to be a property
-// the store can enforce rather than a reason to close a door on the human.
-// It takes the --root OVERRIDE and resolves it per verb rather than once here. brief and
+// tool is the agent's channel and this verb is the person's; they reach the same store and
+// the same rules, so a row still has one author (internal/ledger.authorizeRow enforces it)
+// without a capability existing for agents that a person does not have.
+//
+// It takes the --root OVERRIDE and resolves it per verb rather than once here: brief and
 // accept both reach loadMagus, whose singleton panics when a second caller hands it a
-// different spelling of the same root, and every other command reaches it with the raw
-// flag value.
+// different spelling of the same root.
 func ledgerCmd(ctx context.Context, root string, args []string) error {
 	if len(args) > 0 {
 		switch args[0] {

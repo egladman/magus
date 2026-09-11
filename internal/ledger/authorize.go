@@ -101,7 +101,7 @@ func refuse(actor Actor, id, rule string) error {
 	}
 }
 
-// authorizeRow decides whether actor may turn prev into next on the row id, with rows
+// authorizeRow grades whether actor may turn prev into next on the row id, with rows
 // standing for the rest of the book (a child row's boundary is read from the parent's).
 //
 // THE ENFORCEMENT POINT, and it is here rather than in a shell rule because the three
@@ -137,7 +137,7 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 					types.StateFail, types.StateNoReturn, next.State))
 			}
 		case "reported_base":
-			// The registration itself, which is the one field a worker is asked for.
+			// The registration, which is what a worker is asked for.
 		default:
 			return refuse(actor, id, "a worker may not change "+field+" on its own row")
 		}
@@ -229,11 +229,12 @@ func changedFields(prev, next types.Lease) []string {
 // the strings they were declared as.
 //
 // String equality rather than path containment, because this grades a DECLARATION against
-// a declaration: "internal/ledger/store.go" is inside "internal/ledger" as a path, and a
-// worker narrowing its row to the file is narrowing it, but a worker that may rewrite its
-// declarations into any covered form can also rewrite a glob into a wider one that still
-// looks contained. The exact-string rule costs a worker one round trip and cannot be
-// argued with.
+// a declaration: a worker that may rewrite its declarations into any covered form can also
+// rewrite a glob into a wider one that still looks contained. The exact-string rule costs a
+// worker one round trip and cannot be argued with.
+//
+// Both sides are trimmed here because [Store.Put] writes a types.Lease the caller built,
+// which no door has trimmed.
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		if !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) }) {

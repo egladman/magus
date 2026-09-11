@@ -312,10 +312,9 @@ type LeaseRelease struct {
 // out by ASKING rather than by being told, and a digest that no longer matches what it read is the
 // whole signal.
 //
-// UNATTRIBUTED is the honest word and the reason this is not called a handback. magus knows only
-// that the writer named no live lease; a person editing in their own checkout and an agent
-// that forgot to export its id are indistinguishable here, and the guard says so in as many words.
-// Naming a human would be a claim magus cannot support.
+// UNATTRIBUTED is the honest word: magus knows only that the writer named no live lease,
+// so a person editing in their own checkout and an agent that forgot to export its id are
+// indistinguishable here. Naming a human would be a claim magus cannot support.
 type LeaseUnattributedWrite struct {
 	Path string `json:"path"   yaml:"path"`
 	// Digest is the content AFTER the write, on the same three-marker vocabulary as

@@ -81,11 +81,11 @@ func baseRevision(token string) string {
 //
 // Derived from the row, never stored. The verdict is the fact; this is one rendering of
 // it, and a stored sentence would be a second thing to keep true when the wording changes.
-func RegistrationAdvice(u types.Lease) string {
-	switch u.BaseVerdict {
+func RegistrationAdvice(row types.Lease) string {
+	switch row.BaseVerdict {
 	case types.BaseMatch:
 		return fmt.Sprintf("registered lease %s on %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
-			u.ID, u.ReportedBase)
+			row.ID, row.ReportedBase)
 
 	case types.BaseRevisionMatch:
 		return fmt.Sprintf("registered lease %s on revision %s, which IS the revision it was handed,"+
@@ -94,21 +94,24 @@ func RegistrationAdvice(u types.Lease) string {
 			" The digest cannot give the patch back, so there is nothing here to restore from:"+
 			" have the orchestrator commit the work the lease was cut against, or re-cut the checkpoint"+
 			" against the tree you are on.",
-			u.ID, baseRevision(u.ReportedBase), patchDigestOf(u.Checkpoint), patchDigestOf(u.ReportedBase))
+			row.ID, baseRevision(row.ReportedBase), patchDigestOf(row.Checkpoint), patchDigestOf(row.ReportedBase))
 
 	case types.BaseDiverged:
 		return fmt.Sprintf("registered lease %s, and it DIVERGED: your base %s is not the checkpoint %s the lease was handed."+
 			" Respawn from %s, or materialize the files you touch from it before you edit them,"+
 			" so what you write lands on the tree the plan was cut against.",
-			u.ID, baseRevision(u.ReportedBase), baseRevision(u.Checkpoint), baseRevision(u.Checkpoint))
+			row.ID, baseRevision(row.ReportedBase), baseRevision(row.Checkpoint), baseRevision(row.Checkpoint))
 
-	// BaseUnknown, the only verdict a registered row can carry that is not above.
-	default:
+	case types.BaseUnknown:
 		return fmt.Sprintf("registered lease %s on %s. It carries no checkpoint, so there is nothing to compare"+
 			" your base against and the verdict is unknown rather than a match."+
 			" Have the orchestrator put one on the lease (`magus vcs checkpoint -o name`) before the next lease is cut,"+
 			" so a later reader can tell whether a worker was on the base it was given.",
-			u.ID, u.ReportedBase)
+			row.ID, row.ReportedBase)
+
+	default:
+		return fmt.Sprintf("registered lease %s on %s, and this magus does not recognize the verdict %q it computed."+
+			" Read the row itself rather than this sentence.", row.ID, row.ReportedBase, row.BaseVerdict)
 	}
 }
 

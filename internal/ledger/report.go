@@ -15,73 +15,65 @@ import (
 // it. See types.LeaseSchemaVersion for the row's half of the same rule.
 const ReportSchemaVersion = 1
 
-// ReportSchema is the JSON Schema for [Report], embedded so a harness can give a
-// worker a response format without magus having to render one.
-//
-// A file beside the struct rather than reflection over it: the schema is the CONTRACT a
-// host's typed-output mode compiles against, and one generated from Go tags would change
-// shape whenever the struct's internals did. TestReportSchemaMatchesTheStruct keeps the
-// two honest in the only direction that matters, which is that neither grows a field the
-// other does not have.
+// ReportSchema is the JSON Schema for [Report], embedded so a harness can give a worker a
+// response format without magus having to render one. A file beside the struct rather than
+// reflection over it: the schema is the CONTRACT a host's typed-output mode compiles
+// against, and one generated from Go tags would change shape whenever the struct's
+// internals did.
 //
 //go:embed report.schema.json
 var ReportSchema string
 
-// Report is what a worker returns when its lease is done.
+// Report is what a worker returns when its lease is done: changed paths, validation
+// evidence, descendants created, unresolved risks.
 //
-// The magus-multi-agent skill has demanded these four things in prose since it was
-// written: changed paths, validation evidence, descendants created, unresolved risks.
-// Prose on both ends means acceptance is the root READING a paragraph, and a worker that
-// ran a filtered subset or quietly restated its criteria writes the same paragraph as one
-// that did the work. A struct does not make a worker honest; it makes the dishonest report
-// CHECKABLE, which is what [Accept] then does.
+// A struct rather than the prose the skill asked for since it was written. Prose on both
+// ends means acceptance is the root READING a paragraph, and a worker that ran a filtered
+// subset writes the same paragraph as one that did the work. This does not make a worker
+// honest; it makes a dishonest report CHECKABLE, which is what [Grade] then does.
+//
+// JSON only: it is decoded from stdin and never emitted, so it carries no yaml tags.
 type Report struct {
 	// SchemaVersion is the shape this report was written in, and it is REQUIRED: the
 	// decoder rejects a version it does not know by name, so a worker whose harness is a
 	// release ahead reads "this magus accepts version 1" instead of watching a field it
 	// was told to send be rejected as unknown. See [ReportSchemaVersion].
-	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
-	// Lease is the id the worker believes it was handed. Optional, and checked against
-	// the row when present: a report filed under the wrong id is a real failure mode
-	// when several workers share a prompt template, and one that reads as success
-	// because every other field is plausible.
-	Lease string `json:"lease,omitempty" yaml:"lease,omitempty"`
-	// ChangedPaths are the workspace-relative paths this worker wrote, as it reports
-	// them. Never proof: step 1 of the skill's integration pass compares the ledger
-	// against the ACTUAL diff since the checkpoint, and that is the half that does not
-	// depend on a worker cooperating. This is the CLAIM, and checking it against the
-	// declared boundary is what catches the worker that widened its own scope.
-	ChangedPaths []string `json:"changed_paths" yaml:"changed_paths"`
+	SchemaVersion int `json:"schema_version"`
+	// Lease is the id the worker believes it was handed. Optional, and checked against the
+	// row when present: a report filed under the wrong id happens when several workers
+	// share a prompt template, and it reads as success because every other field is
+	// plausible.
+	Lease string `json:"lease,omitempty"`
+	// ChangedPaths are the workspace-relative paths this worker wrote, as it reports them.
+	// Never proof: the integration pass compares the ledger against the ACTUAL diff since
+	// the checkpoint. This is the CLAIM, and checking it against the declared boundary is
+	// what catches the worker that widened its own scope.
+	ChangedPaths []string `json:"changed_paths"`
 	// Validation is the one check the lease was assigned, and how it ended.
-	Validation ReportValidation `json:"validation" yaml:"validation"`
-	// Descendants are the lease ids this worker handed work on to. Empty is the ordinary
-	// answer; a non-empty one the root ledger does not carry is a branch of the plan
-	// nobody is tracking.
-	Descendants []string `json:"descendants,omitempty" yaml:"descendants,omitempty"`
-	// UnresolvedRisks is what the worker could not settle. Never omitempty, and that is
-	// deliberate: an absent list and an empty one are the same JSON once the key can
-	// vanish, so a worker that never considered the question would be indistinguishable
-	// from one that considered it and found nothing. A mis-scoped worker saying so here
-	// is the cheapest signal in the whole loop.
-	UnresolvedRisks []string `json:"unresolved_risks" yaml:"unresolved_risks"`
+	Validation ReportValidation `json:"validation"`
+	// Descendants are the lease ids this worker handed work on to. One the ledger does not
+	// carry is a branch of the plan nobody is tracking, which [Grade] reports.
+	Descendants []string `json:"descendants,omitempty"`
+	// UnresolvedRisks is what the worker could not settle. Never omitempty: an absent list
+	// and an empty one are the same JSON once the key can vanish, so a worker that never
+	// considered the question would be indistinguishable from one that found nothing.
+	UnresolvedRisks []string `json:"unresolved_risks"`
 }
 
-// ReportValidation is the evidence for the lease's assigned check.
+// ReportValidation is the evidence for the lease's assigned check. OutputRef is what makes
+// it evidence rather than an assertion: it names a log magus stored, and the store's own
+// record of that run says which command produced it and how it ended.
 //
-// OutputRef is the field that makes this evidence rather than an assertion. A ref names a
-// log magus stored, so the root can reopen the bytes with `magus query output <ref>`, and
-// the store's own record of that run says which command produced it and how it ended.
-//
-// THERE IS NO `passed` FIELD, and its absence is the point. A worker's verdict on its own
-// run is exactly the assertion this type exists to replace: the one that reads identical
-// whether the check ran or not. [Accept] derives the outcome from the stored attempt.
+// THERE IS NO `passed` FIELD, and its absence is the point: a worker's verdict on its own
+// run reads identical whether the check ran or not. [Grade] derives the outcome from the
+// stored attempt.
 type ReportValidation struct {
-	// Command is the check as the worker ran it, kept for a person reading the report.
+	// Command is the check as the worker ran it, rendered beside the verdict for a person.
 	// The row's own validation is what the evidence is bound to, so a command here that
 	// disagrees with the ref is a discrepancy a reader sees rather than a rule.
-	Command string `json:"command" yaml:"command"`
+	Command string `json:"command"`
 	// OutputRef is the reference id magus stored that run's captured output under.
-	OutputRef string `json:"output_ref" yaml:"output_ref"`
+	OutputRef string `json:"output_ref"`
 }
 
 // Verdict is the result of grading one report against one row: every rule that failed,
@@ -102,12 +94,9 @@ type Verdict struct {
 }
 
 // Attempt is what the output store recorded for one captured run: which command produced
-// it, and whether that command failed.
-//
-// The identity is STRUCTURED because the store holds it that way. A worker's ref either
-// names a run of the check its lease was assigned or it does not, and comparing
-// project/target/spell answers that without either side having to spell a command line
-// the same way.
+// it, and whether that command failed. The identity is STRUCTURED because the store holds
+// it that way, so comparing project/target/spell binds a ref to a check without either
+// side having to spell a command line the same way.
 type Attempt struct {
 	// Found is false for a ref no longer in the store, which is not an error: the root
 	// cannot reopen it either way, and that is the fact acceptance turns on.

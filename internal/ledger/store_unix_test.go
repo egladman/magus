@@ -1,5 +1,8 @@
 //go:build unix
 
+// This file has no store_unix.go twin on purpose: it tests store.go's digest against a
+// fifo and a symlink, which only a unix build can create.
+
 package ledger
 
 import (
@@ -14,10 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStoreDigestRefusesWhatItCannotHash covers the paths digest must not hash. Each of
-// them used to answer "absent", which says the releaser DELETED the file (the one
-// reading that sends the next agent looking in the wrong place), and the fifo did not
-// answer at all.
+// TestStoreDigestRefusesWhatItCannotHash covers the paths digest must not hash. "absent"
+// says the releaser DELETED the file, which sends the next agent looking in the wrong
+// place, and a released fifo blocks os.Open while the store's mutex is held.
 //
 // Unix-only because it needs a fifo and a symlink; the rules they prove are not.
 func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
