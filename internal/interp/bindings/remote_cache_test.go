@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -247,6 +248,22 @@ func newGHAEmulator() *ghaEmulator {
 
 const ghaTwirp = "/twirp/github.actions.results.api.v1.CacheService/"
 
+// ghaVersionHex is the only `version` the real service accepts; it answered the old
+// salt "magus-remote-v1" with the 400 below, in CI on 2026-09-10 (run 34550323236).
+var ghaVersionHex = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+// rejectVersion answers a non-digest version the way the service does, and reports
+// whether it wrote that response.
+func (e *ghaEmulator) rejectVersion(w http.ResponseWriter, version string) bool {
+	if ghaVersionHex.MatchString(version) {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = io.WriteString(w, `{"code":"invalid_argument","msg":"version invalid length for cache entry version: must be between 1 and 64 characters","meta":{"argument":"version"}}`)
+	return true
+}
+
 func (e *ghaEmulator) handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Record the Authorization the spell's Twirp calls arrive with. The spell no
@@ -290,6 +307,9 @@ func (e *ghaEmulator) createEntry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing key", http.StatusBadRequest)
 		return
 	}
+	if e.rejectVersion(w, body.Version) {
+		return
+	}
 	e.mu.Lock()
 	_, exists := e.committed[body.Key]
 	e.mu.Unlock()
@@ -324,6 +344,9 @@ func (e *ghaEmulator) finalize(w http.ResponseWriter, r *http.Request) {
 		Version   string `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	if e.rejectVersion(w, body.Version) {
+		return
+	}
 	e.mu.Lock()
 	data, ok := e.pending[body.Key]
 	e.mu.Unlock()
@@ -349,6 +372,9 @@ func (e *ghaEmulator) downloadURL(w http.ResponseWriter, r *http.Request) {
 		Version     string   `json:"version"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
+	if e.rejectVersion(w, body.Version) {
+		return
+	}
 	e.mu.Lock()
 	_, ok := e.committed[body.Key]
 	e.mu.Unlock()
