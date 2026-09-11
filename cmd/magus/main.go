@@ -63,10 +63,6 @@ import (
 )
 
 func main() {
-	// Hints spell the binary the reader actually invoked. Set from main rather than
-	// runCLI so the in-process testscript harness keeps rendering the canonical
-	// "magus" its scripts assert on.
-	hint.SetInvokedName(os.Args[0])
 	os.Exit(runCLI())
 }
 

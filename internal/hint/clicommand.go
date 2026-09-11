@@ -16,56 +16,8 @@ package hint
 // output depending on it), so declare one when an emitter starts using it.
 
 import (
-	"path/filepath"
 	"strings"
-	"sync/atomic"
 )
-
-// invokedName is the binary as THIS process was invoked, which is what a copyable
-// hint has to spell. A bare "magus" reaches whatever the reader's PATH holds, and on
-// a machine carrying an older release that is a binary which cannot answer for this
-// workspace.
-//
-// "magus" until main says otherwise, so a library caller and every test render the
-// canonical form.
-var invokedName atomic.Pointer[string]
-
-// SetInvokedName records how this process was invoked, from os.Args[0]. A relative
-// spelling is kept whole, since `./magus` names a checkout's own binary and a base
-// name would not; anything else renders as its base name.
-//
-// A binary called something OTHER than magus is ignored, and the canonical name
-// stands. A renamed copy is usually a harness's own artifact rather than anything a
-// reader could type: the docs' example generator builds one as `magus-bin`, and a
-// hint spelling that is a hint nobody can run.
-//
-// Call it once before any hint renders: every Command reads it.
-func SetInvokedName(argv0 string) {
-	if name, ok := invokedSpelling(argv0); ok {
-		invokedName.Store(&name)
-	}
-}
-
-// invokedSpelling is SetInvokedName's decision, split out so it can be graded
-// without moving the package's global.
-func invokedSpelling(argv0 string) (string, bool) {
-	name := strings.TrimSpace(argv0)
-	if name == "" || filepath.Base(name) != "magus" {
-		return "", false
-	}
-	if strings.HasPrefix(name, ".") {
-		return name, true
-	}
-	return filepath.Base(name), true
-}
-
-// binary is the name Command renders with.
-func binary() string {
-	if p := invokedName.Load(); p != nil {
-		return *p
-	}
-	return "magus"
-}
 
 // Command is a canonical magus command path (the tokens after "magus"). Values
 // are declared once below; call sites render them with String or With.
@@ -81,9 +33,10 @@ type Command struct {
 
 func cmd(tokens ...string) Command { return Command{tokens: tokens} }
 
-// String renders the bare invocation, e.g. "magus query output", spelling the binary
-// as SetInvokedName reported it.
-func (c Command) String() string { return binary() + " " + strings.Join(c.tokens, " ") }
+// String renders the bare invocation, e.g. "magus query output". The binary is
+// spelled as this process was invoked (see BinaryName), so a hint copied out of a
+// worktree runs the binary that printed it.
+func (c Command) String() string { return BinaryName() + " " + strings.Join(c.tokens, " ") }
 
 // With renders the invocation followed by trailing args, e.g.
 // QueryOutput.With(ref, "--open") => "magus query output <ref> --open".
@@ -99,7 +52,7 @@ func (c Command) With(args ...string) string {
 // argument needing quotes differs between the two.
 func (c Command) Argv(args ...string) []string {
 	argv := make([]string, 0, 1+len(c.tokens)+len(args))
-	argv = append(argv, binary())
+	argv = append(argv, BinaryName())
 	argv = append(argv, c.tokens...)
 	return append(argv, args...)
 }
