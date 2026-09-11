@@ -1,11 +1,9 @@
 package hint
 
 import (
-	"os"
-	"strings"
+	"slices"
 	"testing"
 
-	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -163,7 +161,7 @@ func TestNextForFailureWithoutARef(t *testing.T) {
 // it is asserted on the shared trim rather than through one of them: the next builder
 // added is the one that would.
 func TestNextCapsAtThree(t *testing.T) {
-	assert.Equal(t, 3, NextCap, "three, one line each: a longer list is a wall nobody reads")
+	assert.Equal(t, 3, nextCap, "three, one line each: a longer list is a wall nobody reads")
 
 	long := []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	assert.Equal(t, []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}}, capNext(long))
@@ -183,7 +181,7 @@ func TestNextCapsAtThree(t *testing.T) {
 			})
 		},
 	} {
-		assert.LessOrEqual(t, len(build()), NextCap)
+		assert.LessOrEqual(t, len(build()), nextCap)
 	}
 }
 
@@ -198,35 +196,63 @@ func TestNextSourcePath(t *testing.T) {
 	assert.Empty(t, sourcePath("libs/gopherbuzz"))
 }
 
-// Every template, graded per role. A worker is never handed a write whose lane this
-// package cannot check, and a reviewer is handed none at all; the regeneration is the
-// one template that writes today.
-func TestForRoleDropsWritesPerRole(t *testing.T) {
-	all := []Next{
-		entry("query-explain", Explain, "why", "spell:go"),
-		entry("file-impact", Affected, "why", "--impact"),
-		entry("file-regenerate", Run, "why", "generate:rw", "."),
+// The role is read off the row, and a worker's lane comes back with it so the filter
+// can place a write.
+func TestRoleForGradesTheActingRow(t *testing.T) {
+	rows := []types.Lease{
+		{ID: "harness/worker", OwnedPaths: []string{"internal/hint/**"}},
+		{ID: "harness/reviewer", ReadOnly: true, Focus: []string{"cmd/magus/**"}},
+		{ID: "harness/watcher"},
 	}
 	for _, tc := range []struct {
+		id   string
 		role Role
+		lane []string
+	}{
+		{"", RoleUnbound, nil},
+		{"harness/worker", RoleWorker, []string{"internal/hint/**"}},
+		{"harness/reviewer", RoleReviewer, nil},
+		{"harness/watcher", RoleReviewer, nil},
+		{"harness/gone", RoleWorker, nil},
+	} {
+		role, lane := RoleFor(rows, tc.id)
+		assert.Equal(t, tc.role, role, "id %q", tc.id)
+		assert.Equal(t, tc.lane, lane, "id %q", tc.id)
+	}
+}
+
+// Every template, graded per role. A reviewer is handed no write at all; a worker
+// keeps the regeneration of its own project and loses everybody else's.
+func TestServableToDropsWritesOutsideTheLane(t *testing.T) {
+	all := []Next{
+		breadcrumb("query-explain", Explain, "why", "spell:go"),
+		breadcrumb("file-impact", Affected, "why", "--impact"),
+		breadcrumb("file-regenerate", Run, "why", "generate:rw", "docs"),
+	}
+	for _, tc := range []struct {
+		name string
+		role Role
+		lane []string
 		want []string
 	}{
-		{RoleUnbound, []string{"query-explain", "file-impact", "file-regenerate"}},
-		{RoleWorker, []string{"query-explain", "file-impact"}},
-		{RoleReviewer, []string{"query-explain", "file-impact"}},
-		{"", []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"unbound", RoleUnbound, nil, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"unset", "", nil, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"worker in its lane", RoleWorker, []string{"docs/**"}, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"worker out of its lane", RoleWorker, []string{"internal/hint/**"}, []string{"query-explain", "file-impact"}},
+		{"worker with no lane", RoleWorker, nil, []string{"query-explain", "file-impact"}},
+		{"reviewer owning the path anyway", RoleReviewer, []string{"docs/**"}, []string{"query-explain", "file-impact"}},
 	} {
 		var ids []string
-		for _, n := range ForRole(tc.role, all) {
+		for _, n := range ServableTo(tc.role, tc.lane, all) {
 			ids = append(ids, n.ID)
 		}
-		assert.Equal(t, tc.want, ids, "role %q", tc.role)
+		assert.Equal(t, tc.want, ids, tc.name)
 	}
 }
 
 // A bare `magus run` writes wherever the workspace declares default charms, so the
 // charm token is not what decides it; `affected` reads unless it is asked to run.
-func TestWritesJudgesTheCommand(t *testing.T) {
+func TestMutatesTreeJudgesTheCommand(t *testing.T) {
 	for _, tc := range []struct {
 		argv []string
 		want bool
@@ -241,63 +267,64 @@ func TestWritesJudgesTheCommand(t *testing.T) {
 		{[]string{"magus", "vcs", "checkpoint"}, false},
 		{[]string{"magus", "explain", "spell:go"}, false},
 		{[]string{"magus", "query", "kind=target"}, false},
-		{[]string{"magus"}, false},
-		{nil, false},
+		{[]string{"magus", "query", "output", "out1a2b3c"}, false},
+		{[]string{"magus", "ledger", "accept", "harness/worker"}, true},
+		{[]string{"magus", "ledger", "brief"}, false},
+		{[]string{"magus", "memory", "put", "a", "b"}, true},
+		{[]string{"magus", "notes", "edit", "a"}, true},
+		{[]string{"magus", "clean"}, true},
+		{[]string{"magus", "self", "update"}, true},
+		{[]string{"magus", "config", "token", "generate"}, true},
+		{[]string{"magus", "session", "lease", "harness/worker"}, true},
+		{[]string{"magus", "brand-new-verb"}, true},
+		{[]string{"magus"}, true},
+		{nil, true},
 	} {
-		assert.Equal(t, tc.want, Writes(tc.argv), "%v", tc.argv)
+		assert.Equal(t, tc.want, mutatesTree(tc.argv), "%v", tc.argv)
+	}
+}
+
+// Every declared command has to be a verb the classifier KNOWS: one that resolves to
+// itself rather than to a prefix of itself or to the deny-by-default fallthrough.
+//
+// `ledger accept` opening with the readable `ledger` is the case this catches. A
+// shortest-prefix match graded it a read, which is how a reviewer would have been
+// served a command that accepts its own work.
+func TestEveryDeclaredCommandIsClassified(t *testing.T) {
+	for _, c := range AllCommands {
+		ran, ok := longestCommand(c.Argv()[1:])
+		require.True(t, ok, "%s resolves to no declared command", c)
+		assert.Equal(t, c.String(), ran.String(), "%s is graded as a different command", c)
+	}
+
+	for _, c := range readCommands {
+		assert.True(t, slices.ContainsFunc(AllCommands, func(d Command) bool { return d.String() == c.String() }),
+			"%s is graded readable and is not declared in AllCommands", c)
 	}
 }
 
 // A breadcrumb renders twice: quoted for a shell, raw for an exec.
-func TestEntryRendersRunAndArgv(t *testing.T) {
-	n := entry("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
+func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
+	n := breadcrumb("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
 	assert.Equal(t, `magus query kind=docsection "id=docs/a b.md"`, n.Run)
 	assert.Equal(t, []string{"magus", "query", "kind=docsection", "id=docs/a b.md"}, n.Argv)
 }
 
-// The journal is append-only and bounded: the guard reads it for recency, so the file
-// keeps the newest servedNextKept lines and drops the rest.
-func TestServedNextJournalAppendsAndRotates(t *testing.T) {
-	base := t.TempDir()
-	one := []Next{entry("query-explain", Explain, "why", "spell:go")}
-
-	for range servedNextKept + 5 {
-		AppendServedNext(base, "session-1", one)
+// Both doors print one layout, so a reader who meets a breadcrumb over MCP and on a
+// terminal meets the same two lines. A silenced Why leaves the command standing.
+func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
+	next := []Next{
+		{Run: "magus explain spell:go", Why: "explain names a node's edges."},
+		{Run: "magus path spell:go spell:gomod"},
 	}
-
-	raw, err := os.ReadFile(ServedNextPath(base, "session-1"))
-	require.NoError(t, err)
-	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	assert.Len(t, lines, servedNextKept)
-
-	var got ServedNextEntry
-	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
-	assert.Equal(t, "query-explain", got.ID)
-	assert.Equal(t, []string{"magus", "explain", "spell:go"}, got.Argv)
-	assert.NotZero(t, got.Ts)
-}
-
-// Nothing to write to, and nothing to write: both are silent no-ops, because a
-// journal is not worth failing a query over.
-func TestServedNextJournalIsBestEffort(t *testing.T) {
-	assert.Empty(t, ServedNextPath("", "session-1"))
-	AppendServedNext("", "session-1", []Next{entry("query-explain", Explain, "why", "spell:go")})
-
-	base := t.TempDir()
-	AppendServedNext(base, "session-1", nil)
-	assert.Empty(t, ReadServedNext(base))
-}
-
-// Every session's journal is read back together, oldest first: the join in
-// `session load` asks what this checkout served, not what one door served.
-func TestReadServedNextSpansSessions(t *testing.T) {
-	base := t.TempDir()
-	AppendServedNext(base, "session-1", []Next{entry("query-explain", Explain, "why", "spell:go")})
-	AppendServedNext(base, "", []Next{entry("file-impact", Affected, "why", "--impact")})
-
-	var ids []string
-	for _, e := range ReadServedNext(base) {
-		ids = append(ids, e.ID)
-	}
-	assert.ElementsMatch(t, []string{"query-explain", "file-impact"}, ids)
+	assert.Equal(t, "\nnext:\n"+
+		"  magus explain spell:go\n"+
+		"      explain names a node's edges.\n"+
+		"  magus path spell:go spell:gomod\n",
+		Render(next, func(n Next) string { return n.Why }))
+	assert.Equal(t, "\nnext:\n"+
+		"  magus explain spell:go\n"+
+		"  magus path spell:go spell:gomod\n",
+		Render(next, func(Next) string { return "" }))
+	assert.Empty(t, Render(nil, func(n Next) string { return n.Why }))
 }
