@@ -142,7 +142,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
 	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus ledger brief`")
-	assert.Equal(t, ledger.NewBrief(types.Lease{ID: "f2-guard"}).Bind, brief.Leases[0].Bind)
+	assert.Equal(t, ledger.NewBrief(types.Lease{ID: "f2-guard"}, ledger.BriefFacts{}).Bind, brief.Leases[0].Bind)
 
 	require.Len(t, brief.Failures, 1)
 	assert.Equal(t, "ref-1", brief.Failures[0].Ref)

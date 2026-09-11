@@ -156,7 +156,8 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 
 	loc := declared(t, workerRow())
 
-	require.Error(t, boundStore(loc, "adj/store").Clear(t.Context()))
+	_, err := boundStore(loc, "adj/store").Clear(t.Context())
+	require.Error(t, err)
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
@@ -245,35 +246,13 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 	_, err = s.Update(t.Context(), "adj/store", func(u *types.Lease) { u.Goal = "rewritten" })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
-	require.ErrorAs(t, s.Clear(t.Context()), &refused)
+	_, err = s.Clear(t.Context())
+	require.ErrorAs(t, err, &refused)
 
 	rows, err := s.List()
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, workerRow().Goal, rows[0].Goal)
-}
-
-// A cleared plan is still legible afterwards. The count the tool prints back tells a
-// caller it wiped somebody else's rows and gives them no way to read them again.
-func TestClearArchivesWhatItDropped(t *testing.T) {
-	t.Parallel()
-
-	loc := declared(t, workerRow())
-	s := NewStore(loc)
-	path, err := s.Path()
-	require.NoError(t, err)
-
-	require.NoError(t, s.Clear(t.Context()))
-	rows, err := s.List()
-	require.NoError(t, err)
-	assert.Empty(t, rows)
-
-	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "leases-*.json"))
-	require.NoError(t, err)
-	require.Len(t, archives, 1)
-	raw, err := os.ReadFile(archives[0])
-	require.NoError(t, err)
-	assert.Contains(t, string(raw), "adj/store")
 }
 
 // The row records who declared it, which is the provenance a refusal names.

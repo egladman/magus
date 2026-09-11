@@ -301,7 +301,7 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 		case "read_only":
 			value = true
 		}
-		_, err := Merge(map[string]any{field: value})
+		_, err := ParseMerge(map[string]any{field: value})
 		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
 	}
 	assert.ElementsMatch(t, jsonFields(Row{})[2:], mergeFields, "the two doors name one vocabulary")

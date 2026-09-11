@@ -39,12 +39,16 @@ type Brief struct {
 	// lists below readable: a boundary without the projects it came from is a fence
 	// with no map.
 	Projects []string `json:"projects,omitempty" yaml:"projects,omitempty"`
-	// Derived is the boundary the WORKSPACE puts on this lease, kept apart from the
-	// row's own ForbiddenPaths. Those are what an orchestrator remembered to write
+	// DerivedForbidden is the boundary the WORKSPACE puts on this lease, kept apart from
+	// the row's own ForbiddenPaths. Those are what an orchestrator remembered to write
 	// down; these hold whether anybody wrote them down or not, which is why a brief
 	// that carried only the declared list handed workers a boundary its author's
 	// memory had bounded.
-	Derived []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
+	DerivedForbidden []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
+	// WorkspaceCold marks a brief rendered without a loadable workspace, so an empty
+	// DerivedForbidden reads as "not asked". The row alone carries the goal, the boundary
+	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.
+	WorkspaceCold bool `json:"workspace_cold,omitempty" yaml:"workspace_cold,omitempty"`
 	// Affinity is the co-change evidence for the lease's projects against projects it
 	// does NOT own. A WARNING and never a boundary: the skill reads strong hidden
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
@@ -101,19 +105,35 @@ type BriefAffinity struct {
 	Commits int    `json:"commits" yaml:"commits"`
 }
 
-// NewBrief starts the brief for one row with the fields the row alone determines: the
-// bind line, and the bootstrap steps that follow from the id. Both are rendered here and
-// nowhere else, so the brief, its golden test, and any caller quoting a line cannot
-// drift; evidence and the derived boundary are the caller's to add, since they need a
-// graph and a workspace.
+// BriefFacts is what the WORKSPACE contributes to a brief: everything [NewBrief] cannot
+// derive from the row alone, because it needs a knowledge graph and a loadable workspace.
+// The zero value is a brief rendered from the row and nothing else.
+type BriefFacts struct {
+	Evidence         []BriefEvidence
+	GraphCold        bool
+	WorkspaceCold    bool
+	Projects         []string
+	DerivedForbidden []BriefBoundary
+	Affinity         []BriefAffinity
+}
+
+// NewBrief renders the brief for one row: the bind line and the bootstrap steps the id
+// determines, plus what the workspace contributed. Both lines are rendered here and
+// nowhere else, so the brief, its golden test, and any caller quoting a line cannot drift.
 //
 // The steps are magus's OWN commands, which is why they are computed rather than read
 // from a workspace template: every one of them is a magus verb this binary defines, and a
 // per-workspace copy of them is a copy to keep true.
-func NewBrief(row types.Lease) Brief {
+func NewBrief(row types.Lease, facts BriefFacts) Brief {
 	return Brief{
-		Lease: row,
-		Bind:  hint.SessionLease.With(row.ID),
+		Lease:            row,
+		Bind:             hint.SessionLease.With(row.ID),
+		Evidence:         facts.Evidence,
+		GraphCold:        facts.GraphCold,
+		WorkspaceCold:    facts.WorkspaceCold,
+		Projects:         facts.Projects,
+		DerivedForbidden: facts.DerivedForbidden,
+		Affinity:         facts.Affinity,
 		Bootstrap: []BriefStep{
 			{Run: "git status --short", Why: "work in your own worktree and confirm it is clean before you edit"},
 			{Run: hint.SessionLease.With(row.ID), Why: "bind the lease so every lease-scoped rule grades your writes here"},
@@ -126,14 +146,13 @@ func NewBrief(row types.Lease) Brief {
 	}
 }
 
-// Text renders the brief. The order is fixed and nothing outside it is printed: a section
-// with nothing in it is dropped, so a worker never reads a heading that grants it room the
-// row did not.
+// String renders the brief. The order is fixed and nothing outside it is printed: a
+// section with nothing in it is dropped, so a worker never reads a heading that grants it
+// room the row did not.
 //
 // The narrowest section is the validation one, and it is the whole point of rendering at
-// all. Naming one check and no others is what stops `ci` leaking into a worker's brief,
-// which is the failure this replaced.
-func (b Brief) Text() string {
+// all. Naming one check and no others is what stops `ci` leaking into a worker's brief.
+func (b Brief) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "lease: %s\n", b.Lease.ID)
 	fmt.Fprintf(&s, "bind: %s\n", b.Bind)
@@ -143,9 +162,13 @@ func (b Brief) Text() string {
 	writeList(&s, "forbidden paths", b.Lease.ForbiddenPaths)
 	writeList(&s, "projects", b.Projects)
 
-	if len(b.Derived) > 0 {
-		lines := make([]string, len(b.Derived))
-		for i, d := range b.Derived {
+	switch {
+	case b.WorkspaceCold:
+		writeList(&s, "forbidden paths the workspace declares",
+			[]string{"none: this workspace would not load, so nothing was derived from it"})
+	case len(b.DerivedForbidden) > 0:
+		lines := make([]string, len(b.DerivedForbidden))
+		for i, d := range b.DerivedForbidden {
 			lines[i] = fmt.Sprintf("%s: %s", d.Path, d.Reason)
 		}
 		writeList(&s, "forbidden paths the workspace declares", lines)

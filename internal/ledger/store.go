@@ -384,7 +384,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 			u.RegisteredBy = prev.RegisteredBy
 			f.Leases[i] = u
 		} else {
-			u.RegisteredBy = actor.record()
+			u.RegisteredBy = actor.leaseActor()
 			f.Leases = append(f.Leases, u)
 		}
 		if werr := s.write(f); werr != nil {
@@ -416,26 +416,31 @@ func (s *Store) List() ([]types.Lease, error) {
 	return out, nil
 }
 
-// Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to
-// a timestamped sibling file first. Clearing an empty or absent ledger is not an error
-// and archives nothing: the caller asked for an empty ledger and got one.
+// Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to a
+// timestamped sibling file first, and returns how many rows it dropped. Clearing an empty
+// or absent ledger is not an error and archives nothing: the caller asked for an empty
+// ledger and got one.
 //
-// The archive is what makes this recoverable rather than merely reported. One clear wipes
-// rows the caller did not write, and the count the MCP tool prints back tells a caller it
-// destroyed somebody else's plan without giving them any way to read it again; the
-// sibling file is that way. Nothing reads these files back today, which is the point:
-// they are for the person who has to work out what the plan was.
+// The COUNT comes from inside the lock. Both doors report it, and a preceding List to
+// derive it undercounts a row a concurrent registrant appended between the two calls,
+// which is the one row its author most needs to hear about.
+//
+// The archive is what makes this recoverable rather than merely reported: one clear wipes
+// rows the caller did not write, and nothing else would let them read the plan again.
+// Nothing reads these files back, which is the point: they are for the person who has to
+// work out what the plan was.
 //
 // A bound worker is refused: see [authorizeClear]. ctx bounds the wait for the lock and
 // nothing else.
-func (s *Store) Clear(ctx context.Context) error {
+func (s *Store) Clear(ctx context.Context) (int, error) {
 	if err := authorizeClear(s.Actor()); err != nil {
-		return err
+		return 0, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.withFileLock(ctx, func() error {
+	var dropped int
+	err := s.withFileLock(ctx, func() error {
 		f, err := s.read()
 		if err != nil {
 			return err
@@ -445,8 +450,13 @@ func (s *Store) Clear(ctx context.Context) error {
 				return err
 			}
 		}
+		dropped = len(f.Leases)
 		return s.write(ledgerFile{})
 	})
+	if err != nil {
+		return 0, err
+	}
+	return dropped, nil
 }
 
 // archive writes the rows a clear is about to drop beside the ledger, named for the

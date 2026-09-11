@@ -164,8 +164,8 @@ func printLedgerTree(out io.Writer, report types.LeaseReport) {
 	}
 }
 
-// ledgerRow is one printed line: the row plus how deep its parent chain runs.
-type ledgerRow struct {
+// ledgerTreeLine is one printed line: the row plus how deep its parent chain runs.
+type ledgerTreeLine struct {
 	lease types.Lease
 	depth int
 }
@@ -176,12 +176,12 @@ type ledgerRow struct {
 // Every row reaches the output. One whose parent was cleared, and one caught in a parent
 // cycle, print at the top level instead of disappearing: a lease nobody can see is worse
 // than one shown without its indentation, and both cases mean the plan is already damaged.
-func ledgerTreeOrder(leases []types.Lease) []ledgerRow {
+func ledgerTreeOrder(leases []types.Lease) []ledgerTreeLine {
 	children := map[string][]types.Lease{}
 	for _, lease := range leases {
 		children[lease.Parent] = append(children[lease.Parent], lease)
 	}
-	out := make([]ledgerRow, 0, len(leases))
+	out := make([]ledgerTreeLine, 0, len(leases))
 	emitted := map[string]bool{}
 	var walk func(parent string, depth int)
 	walk = func(parent string, depth int) {
@@ -190,7 +190,7 @@ func ledgerTreeOrder(leases []types.Lease) []ledgerRow {
 				continue
 			}
 			emitted[lease.ID] = true
-			out = append(out, ledgerRow{lease: lease, depth: depth})
+			out = append(out, ledgerTreeLine{lease: lease, depth: depth})
 			walk(lease.ID, depth+1)
 		}
 	}
@@ -198,7 +198,7 @@ func ledgerTreeOrder(leases []types.Lease) []ledgerRow {
 	for _, lease := range leases {
 		if !emitted[lease.ID] {
 			emitted[lease.ID] = true
-			out = append(out, ledgerRow{lease: lease})
+			out = append(out, ledgerTreeLine{lease: lease})
 		}
 	}
 	return out
@@ -226,7 +226,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	if len(pos) != 1 {
 		return usagef("magus ledger brief: requires exactly one lease id")
 	}
-	override := root
+	flagRoot := root
 	root = resolveRootOrEmpty(root)
 	store, err := openLedger(root)
 	if err != nil {
@@ -241,15 +241,13 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus ledger brief: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
 	row := leases[i]
-	if reason := briefRefusesTheGate(ctx, override, row); reason != "" {
-		return errors.New(reason)
-	}
-
-	brief := ledger.NewBrief(row)
-	brief.Evidence, brief.GraphCold = leaseGraphEvidence(ctx, override, row.OwnedPaths)
-	if brief.Projects, brief.Derived, brief.Affinity, err = leaseBoundary(ctx, override, row, leases); err != nil {
+	if err := briefRefusesTheGate(ctx, flagRoot, row); err != nil {
 		return err
 	}
+
+	facts := leaseBoundary(ctx, flagRoot, row, leases)
+	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.OwnedPaths)
+	brief := ledger.NewBrief(row, facts)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -259,7 +257,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	case outputName:
 		return emitNames([]string{row.ID})
 	case outputText:
-		fmt.Print(brief.Text())
+		fmt.Print(brief.String())
 		return nil
 	default:
 		return emitFormatted(opts, brief)
@@ -439,7 +437,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 		return usagef("magus ledger accept: the report is read from stdin and only with --stdin (`%s`)",
 			hint.LedgerAccept.With(pos[0]+" --stdin < report.json"))
 	}
-	override := root
+	flagRoot := root
 	root = resolveRootOrEmpty(root)
 
 	store, err := openLedger(root)
@@ -463,7 +461,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	if !slices.ContainsFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] }) {
 		return fmt.Errorf("magus ledger accept: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
-	att, err := storedAttempt(ctx, override, report.Validation.OutputRef)
+	att, err := storedAttempt(ctx, flagRoot, report.Validation.OutputRef)
 	if err != nil {
 		// Exit 2, with the decode failures: magus could not answer, and that is not a
 		// verdict about the work. 1 is reserved for a report that was read and rejected.
@@ -564,22 +562,30 @@ const leaseAffinityCommits = 200
 //
 // A read-only lease has no write set, so it gets none of this: the skill puts such a row
 // outside the collision analysis entirely.
-func leaseBoundary(ctx context.Context, root string, row types.Lease, leases []types.Lease) ([]string, []ledger.BriefBoundary, []ledger.BriefAffinity, error) {
+//
+// A workspace that will not load DEGRADES rather than failing, the way the graph evidence
+// already does: the row alone carries the goal, the boundary and the check, and a worker
+// in a tree whose magusfile is mid-edit is exactly who needs to read them.
+func leaseBoundary(ctx context.Context, root string, row types.Lease, leases []types.Lease) ledger.BriefFacts {
 	if len(row.OwnedPaths) == 0 {
-		return nil, nil, nil, nil
+		return ledger.BriefFacts{}
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return nil, nil, nil, err
+		return ledger.BriefFacts{WorkspaceCold: true}
 	}
 	affected, err := m.AffectedFromPaths(ctx, row.OwnedPaths)
 	if err != nil {
-		return nil, nil, nil, err
+		return ledger.BriefFacts{WorkspaceCold: true}
 	}
 	derived := generatedBoundary(m, affected.Affected, row.OwnedPaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
-	return affected.Affected, derived, leaseAffinity(ctx, m, affected.Seed), nil
+	return ledger.BriefFacts{
+		Projects:         affected.Affected,
+		DerivedForbidden: derived,
+		Affinity:         leaseAffinity(ctx, m, affected.Seed),
+	}
 }
 
 // generatedBoundary is the declared output globs, across every project the lease
@@ -714,7 +720,7 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger
 	return pairs
 }
 
-// briefRefusesTheGate reports why this row must not be briefed, or "" to render it.
+// briefRefusesTheGate reports why this row must not be briefed, or nil to render it.
 //
 // The ONE verdict this command makes, and it is here rather than in ledger.Brief because
 // the brief renders context and never a verdict. The gate runs once, in the orchestrator's
@@ -727,19 +733,19 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger
 // A COMPOSITE reaching the gate is refused too. Naming the pipeline indirectly buys the
 // same seven concurrent runs, and it is the likelier mistake once this refuses the obvious
 // spelling.
-func briefRefusesTheGate(ctx context.Context, root string, row types.Lease) string {
+func briefRefusesTheGate(ctx context.Context, root string, row types.Lease) error {
 	fix := fmt.Sprintf(" The gate runs ONCE, in the orchestrator's tree, after every unit lands."+
 		" Give this row the narrowest target covering its paths (`%s` decomposes what the gate chains) with the %s tool, then ask for the brief again.",
 		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.ToolLedger)
 
 	if validationNamesGate(row.Validation) {
-		return fmt.Sprintf("magus ledger brief: lease %s is assigned %q, which names the `%s` gate.%s", row.ID, row.Validation, types.TargetCI, fix)
+		return fmt.Errorf("magus ledger brief: lease %s is assigned %q, which names the `%s` gate.%s", row.ID, row.Validation, types.TargetCI, fix)
 	}
 	if chain := validationReachesGate(ctx, root, row.Validation); len(chain) > 0 {
-		return fmt.Sprintf("magus ledger brief: lease %s is assigned %q, and that target reaches the `%s` gate through %s.%s",
+		return fmt.Errorf("magus ledger brief: lease %s is assigned %q, and that target reaches the `%s` gate through %s.%s",
 			row.ID, row.Validation, types.TargetCI, strings.Join(chain, " -> "), fix)
 	}
-	return ""
+	return nil
 }
 
 // validationReachesGate walks the ctx.needs graph from each target a validation field

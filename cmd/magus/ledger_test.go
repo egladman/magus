@@ -25,7 +25,7 @@ func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
 		leaseRow("plan/core/deep", "plan/core"),
 	})
 
-	assert.Equal(t, []ledgerRow{
+	assert.Equal(t, []ledgerTreeLine{
 		{lease: leaseRow("plan", ""), depth: 0},
 		{lease: leaseRow("plan/core", "plan"), depth: 1},
 		{lease: leaseRow("plan/core/deep", "plan/core"), depth: 2},

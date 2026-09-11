@@ -17,7 +17,7 @@ graph evidence
   internal/ledger -> dir:internal/ledger, blast radius 4
 
 validation, the only check you run
-magus run go::go-test . -- -run Ledger ./internal/ledger/
+magus run test internal/ledger
 
 depends on
   harness/session-load

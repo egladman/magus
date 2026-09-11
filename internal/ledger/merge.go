@@ -9,7 +9,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Merge builds the field merge one put applies to a row, from a param map shaped like
+// ParseMerge builds the field merge one put applies to a row, from a param map shaped like
 // the magus_ledger MCP tool's request and magus\ledger.put's opts: only the keys the
 // caller named, so the second put in a lease's lifecycle (state=running) advances the
 // state without erasing the row an earlier put declared, and a key present with an
@@ -25,7 +25,7 @@ import (
 // are joined rather than returned at the first one: a client that mistyped two params
 // should learn about both in one round trip, and a key outside [mergeFields] is one of
 // those mistakes rather than something to drop.
-func Merge(params map[string]any) (func(*types.Lease), error) {
+func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 	var (
 		set []func(*types.Lease)
 		err error

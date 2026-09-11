@@ -10,7 +10,7 @@ import (
 
 func applyMerge(t *testing.T, params map[string]any, base types.Lease) types.Lease {
 	t.Helper()
-	apply, err := Merge(params)
+	apply, err := ParseMerge(params)
 	require.NoError(t, err)
 	apply(&base)
 	return base
@@ -47,7 +47,7 @@ func TestMergeListAcceptsBothWireForms(t *testing.T) {
 func TestMergeRejectsAnUnknownState(t *testing.T) {
 	t.Parallel()
 
-	_, err := Merge(map[string]any{"state": "passed"})
+	_, err := ParseMerge(map[string]any{"state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 }
@@ -55,7 +55,7 @@ func TestMergeRejectsAnUnknownState(t *testing.T) {
 func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 	t.Parallel()
 
-	_, err := Merge(map[string]any{"goal": 3, "read_only": "yes"})
+	_, err := ParseMerge(map[string]any{"goal": 3, "read_only": "yes"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "goal")
 	assert.Contains(t, err.Error(), "read_only")
@@ -66,19 +66,19 @@ func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
 	t.Parallel()
 
-	_, err := Merge(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
+	_, err := ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "passsed")
 	assert.Contains(t, err.Error(), "owned_paths", "the message names what a put does carry")
 
-	_, err = Merge(map[string]any{"op": "put", "id": "u1", "state": "running"})
+	_, err = ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running"})
 	assert.NoError(t, err, "op and id name the call rather than a field")
 }
 
 func TestMergeRejectsAListElementOfTheWrongType(t *testing.T) {
 	t.Parallel()
 
-	_, err := Merge(map[string]any{"depends_on": []any{"a", 2}})
+	_, err := ParseMerge(map[string]any{"depends_on": []any{"a", 2}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "depends_on")
 }

@@ -47,7 +47,7 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		return spells.InvokeResponse{Data: types.NewLeaseReport(leases)}, nil
 
 	case "put":
-		merge, err := ledger.Merge(req.Params)
+		merge, err := ledger.ParseMerge(req.Params)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -84,14 +84,11 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		// Report what was dropped. Clearing is how a fresh plan starts, and it is also
 		// how one orchestrator silently erases another's plan; a count is the cheapest
 		// way for the caller to notice it wiped rows it did not write.
-		before, err := t.store.List()
+		dropped, err := t.store.Clear(ctx)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		if err := t.store.Clear(ctx); err != nil {
-			return spells.InvokeResponse{}, err
-		}
-		return spells.InvokeResponse{Data: map[string]any{"cleared": len(before)}}, nil
+		return spells.InvokeResponse{Data: map[string]any{"cleared": dropped}}, nil
 
 	default:
 		return spells.InvokeResponse{}, errors.New("mcp: ledger op must be one of list, put, register, clear")

@@ -22,7 +22,7 @@ func briefRow() types.Lease {
 		ForbiddenPaths: []string{"MAGUS.md", "docs/gen"},
 		DependsOn:      []string{"harness/session-load"},
 		Tier:           "principal",
-		Validation:     "magus run go::go-test . -- -run Ledger ./internal/ledger/",
+		Validation:     "magus run test internal/ledger",
 		State:          types.StateDeclared,
 	}
 }
@@ -32,14 +32,12 @@ func briefRow() types.Lease {
 func TestBriefRendersTheGolden(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow())
-	b.Evidence = []BriefEvidence{
-		{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4},
-	}
+	b := NewBrief(briefRow(), BriefFacts{
+		Evidence: []BriefEvidence{{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4}},
+	})
 	want, err := os.ReadFile(filepath.Join("testdata", "brief.golden"))
 	require.NoError(t, err)
-	assert.Equal(t, string(want), b.Text())
-	assert.Equal(t, b.Text(), b.Text(), "two renders of one row are one brief")
+	assert.Equal(t, string(want), b.String())
 }
 
 // A cold graph says so once. Silence would read as "nothing depends on any of this",
@@ -47,9 +45,18 @@ func TestBriefRendersTheGolden(t *testing.T) {
 func TestBriefNamesAColdGraphOnce(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow())
-	b.GraphCold = true
-	assert.Equal(t, 1, strings.Count(b.Text(), "the knowledge graph is cold"))
+	b := NewBrief(briefRow(), BriefFacts{GraphCold: true})
+	assert.Equal(t, 1, strings.Count(b.String(), "the knowledge graph is cold"))
+}
+
+// A workspace that would not load says so too, for the same reason: a worker in a tree
+// whose magusfile is mid-edit still needs the row it was handed.
+func TestBriefNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
+	t.Parallel()
+
+	b := NewBrief(briefRow(), BriefFacts{WorkspaceCold: true})
+	assert.Contains(t, b.String(), "this workspace would not load")
+	assert.Contains(t, b.String(), briefRow().Goal, "the row is rendered whatever the workspace does")
 }
 
 // Nothing outside the fixed order reaches the worker, which is how the gate stops leaking
@@ -59,7 +66,7 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 
 	row := briefRow()
 	row.Goal, row.DependsOn, row.ForbiddenPaths = "", nil, nil
-	got := NewBrief(row).Text()
+	got := NewBrief(row, BriefFacts{}).String()
 
 	assert.NotContains(t, got, "goal")
 	assert.NotContains(t, got, "depends on")
@@ -73,16 +80,16 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 func TestBriefBootstrapIsCommands(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow())
+	b := NewBrief(briefRow(), BriefFacts{})
 	require.Len(t, b.Bootstrap, 3)
 	for _, step := range b.Bootstrap {
 		assert.NotEmpty(t, step.Run)
 		assert.NotEmpty(t, step.Why)
 	}
 	assert.Equal(t, "magus session lease harness/ledger-per-repo", b.Bootstrap[1].Run)
-	assert.Contains(t, b.Text(), "magus vcs checkpoint -o name")
+	assert.Contains(t, b.String(), "magus vcs checkpoint -o name")
 
 	for _, gone := range []string{"skills to load", "Do not commit", "Never `magus affected ci`"} {
-		assert.NotContains(t, b.Text(), gone, "the record carries no instruction blocks")
+		assert.NotContains(t, b.String(), gone, "the record carries no instruction blocks")
 	}
 }

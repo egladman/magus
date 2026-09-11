@@ -417,25 +417,53 @@ func TestStoreClear(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	require.NoError(t, s.Clear(ctx), "clearing a ledger that was never written is not an error")
+	dropped, err := s.Clear(ctx)
+	require.NoError(t, err, "clearing a ledger that was never written is not an error")
+	assert.Zero(t, dropped)
 
-	_, err := s.Put(ctx, lease("a"))
+	_, err = s.Put(ctx, lease("a"))
 	require.NoError(t, err)
 	_, err = s.Put(ctx, lease("b"))
 	require.NoError(t, err)
 
-	require.NoError(t, s.Clear(ctx))
+	dropped, err = s.Clear(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, dropped, "the count comes from inside the lock, so no door recomputes it")
 	got, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, got, "a fresh plan starts from an empty ledger")
 
-	// One plan per workspace: nothing was archived, so a put after a clear is row one.
+	// One plan per repository: the rows are archived, not kept, so a put after a clear is
+	// row one.
 	_, err = s.Put(ctx, lease("c"))
 	require.NoError(t, err)
 	got, err = s.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "c", got[0].ID)
+}
+
+// A cleared plan is still legible afterwards. The count a door prints back tells a caller
+// it wiped somebody else's rows and gives them no way to read them again.
+func TestClearArchivesWhatItDropped(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	_, err := s.Put(t.Context(), lease("adj/store"))
+	require.NoError(t, err)
+	path, err := s.Path()
+	require.NoError(t, err)
+
+	dropped, err := s.Clear(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, 1, dropped)
+
+	archives, err := filepath.Glob(filepath.Join(filepath.Dir(path), "leases-*.json"))
+	require.NoError(t, err)
+	require.Len(t, archives, 1)
+	raw, err := os.ReadFile(archives[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "adj/store")
 }
 
 func TestStorePersistsAcrossStores(t *testing.T) {

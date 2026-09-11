@@ -32,7 +32,7 @@ var RowSchema string
 // It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
 // is cleared rather than kept. That is what `register` means and what the magus_ledger
 // tool's put deliberately does not do, since an agent advancing one field of a live row
-// must not erase the rest (see [Merge]).
+// must not erase the rest (see [ParseMerge]).
 type Row struct {
 	// SchemaVersion is required. See types.LeaseSchemaVersion.
 	SchemaVersion int `json:"schema_version" yaml:"schema_version"`

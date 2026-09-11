@@ -1183,14 +1183,14 @@ func MagusListLedger(ctx context.Context) (types.LeaseReport, error) {
 }
 
 // MagusPutLedger backs magus\ledger.put. The field merge is decoded by
-// internal/ledger.Merge, the same decoder the magus_ledger MCP tool's "put" op calls, so
+// internal/ledger.ParseMerge, the same decoder the magus_ledger MCP tool's "put" op calls, so
 // a client typing either surface accepts the same fields and rejects the same mistakes.
 func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Lease, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.put")
 	if err != nil {
 		return types.Lease{}, err
 	}
-	merge, err := ledger.Merge(opts)
+	merge, err := ledger.ParseMerge(opts)
 	if err != nil {
 		return types.Lease{}, err
 	}
@@ -1224,14 +1224,7 @@ func MagusClearLedger(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	before, err := store.List()
-	if err != nil {
-		return 0, err
-	}
-	if err := store.Clear(ctx); err != nil {
-		return 0, err
-	}
-	return len(before), nil
+	return store.Clear(ctx)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

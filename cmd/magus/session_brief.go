@@ -238,7 +238,7 @@ func briefLeases(root string) []briefLease {
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
-			Bind:       ledger.NewBrief(row).Bind,
+			Bind:       ledger.NewBrief(row, ledger.BriefFacts{}).Bind,
 			Goal:       goalLine(row),
 			Validation: row.Validation,
 		})

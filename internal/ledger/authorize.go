@@ -38,8 +38,8 @@ func ActingActor(cacheDir string) Actor {
 // Bound reports whether this actor is a worker acting under a lease.
 func (a Actor) Bound() bool { return a.Lease != "" }
 
-// record is what a row stores about the session that created it.
-func (a Actor) record() types.LeaseActor {
+// leaseActor is what a row stores about the session that created it.
+func (a Actor) leaseActor() types.LeaseActor {
 	return types.LeaseActor{Session: a.Session, Host: a.Host}
 }
 
