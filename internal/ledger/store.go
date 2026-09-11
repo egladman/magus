@@ -692,8 +692,10 @@ func BindLease(cacheDir, id string) error {
 		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only)", id)
 	}
 	if bound := ActingLease(cacheDir); bound != "" && bound != id {
-		return refuse(Actor{Lease: bound}, id,
-			fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id))
+		return &RefusedError{
+			Lease: id, Actor: Actor{Lease: bound},
+			Rule: fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id),
+		}
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return fmt.Errorf("ledger: bind lease: %w", err)

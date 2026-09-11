@@ -60,22 +60,32 @@ const (
 // this) from a failure (the file would not open): the first is an answer about the
 // caller and the second is not.
 type RefusedError struct {
-	// Lease is the row the write targeted, and Actor the party that attempted it.
+	// Lease is the row the write targeted, and Actor the party that attempted it. The two
+	// differ whenever a worker writes a child, which is why the message names both.
 	Lease string
 	Actor Actor
 	// Rule is the sentence naming what was refused and why.
 	Rule string
+	// Remedy is what the actor does instead, empty when there is nothing to do: a refused
+	// bind wrote nothing, so there is no unresolved risk to report.
+	Remedy string
 }
 
 func (e *RefusedError) Error() string {
-	return fmt.Sprintf("ledger: lease %s is bound to this session; %s."+
-		" Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
-		e.Actor.Lease, e.Rule)
+	msg := fmt.Sprintf("ledger: lease %s is bound to this session and row %s is what this targeted; %s",
+		e.Actor.Lease, e.Lease, e.Rule)
+	if e.Remedy == "" {
+		return msg
+	}
+	return msg + ". " + e.Remedy
 }
 
-// refuse builds the refusal for actor's attempt on lease id.
+// refuse builds the refusal for actor's attempt to WRITE lease id.
 func refuse(actor Actor, id, rule string) error {
-	return &RefusedError{Lease: id, Actor: actor, Rule: rule}
+	return &RefusedError{
+		Lease: id, Actor: actor, Rule: rule,
+		Remedy: "Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
+	}
 }
 
 // authorizeRow decides whether actor may turn prev into next on the row id, with rows

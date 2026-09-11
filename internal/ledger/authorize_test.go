@@ -52,6 +52,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, err.Error(), "adj/store is bound to this session")
 	assert.Contains(t, err.Error(), "SHRINK owned_paths")
+	assert.Contains(t, err.Error(), "row adj/store is what this targeted")
 	assert.Contains(t, err.Error(), "report it as an unresolved risk and stop")
 
 	after, err := NewStore(loc).List()
@@ -298,6 +299,7 @@ func TestBindLeaseIsOneWay(t *testing.T) {
 	err := BindLease(cacheDir, "adj/orchestrator")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "re-binding it to adj/orchestrator")
+	assert.NotContains(t, err.Error(), "unresolved risk", "a refused bind wrote nothing, so there is nothing to report")
 	assert.Equal(t, "adj/store", LeaseFromMarker(cacheDir), "the refused bind changed nothing")
 
 	assert.NoError(t, BindLease(cacheDir, "adj/store"), "a worker running its bootstrap twice is not refused")
