@@ -178,14 +178,13 @@ func evidence(row types.Lease, rep Report, att Attempt) []string {
 	}
 
 	var out []string
-	check, ok := parseCheck(row.Validation)
 	switch {
-	case !ok:
-		out = append(out, fmt.Sprintf("lease %s is assigned %q, which is not a `magus run <target> <project>` line,"+
-			" so no stored run can be bound to it", row.ID, row.Validation))
-	case !check.matches(att):
-		out = append(out, fmt.Sprintf("output ref %q records %s and this lease's validation is %s,"+
-			" so the evidence is from a different run", ref, att, check))
+	case row.Check == nil:
+		out = append(out, fmt.Sprintf("lease %s declares no check, so no stored run can be bound to it."+
+			" Declare one as `<target> <project> [-- args]` and have the worker run it", row.ID))
+	case !bindsTo(*row.Check, att):
+		out = append(out, fmt.Sprintf("output ref %q records `%s` and this lease's check is `%s`,"+
+			" so the evidence is from a different run", ref, att, row.Check))
 	}
 	if att.Failed {
 		out = append(out, fmt.Sprintf("the run behind output ref %q failed, so its validation did not pass", ref))
@@ -193,79 +192,37 @@ func evidence(row types.Lease, rep Report, att Attempt) []string {
 	return out
 }
 
-// check is the run one validation string names: what the output store records about a
-// run, in the same three parts, so the two can be compared without either side spelling
-// a command line the same way.
-type check struct {
-	Spell   string
-	Target  string
-	Project string
-}
-
-// parseCheck reads the `magus run <target> <project>` a validation field names, or
-// reports that it names none.
+// bindsTo reports whether a stored attempt is a run of this check.
 //
-// It reads POSITIONS and ignores everything else: argv[0] however the row spelled the
-// binary, flags, and everything after `--` (which belongs to the tool being run, not to
-// magus). What is left is the target and the project, which is the whole of a run's
-// identity as the output store records it.
-func parseCheck(s string) (check, bool) {
-	fields := strings.Fields(s)
-	if i := slices.Index(fields, "--"); i >= 0 {
-		fields = fields[:i]
-	}
-	var words []string
-	for i, f := range fields {
-		if i == 0 || strings.HasPrefix(f, "-") {
-			continue
-		}
-		words = append(words, f)
-	}
-	if len(words) < 2 || words[0] != "run" {
-		return check{}, false
-	}
-	spell, target, _ := strings.Cut(words[1], "::")
+// The spell filter is compared only when BOTH sides name one. A row that names
+// `go::go-test` and an attempt the store recorded under a bare target are the same run
+// selected two ways, and rejecting that pair would make the rule fire on spelling rather
+// than on identity. Target and project are compared always: those are what a run IS.
+//
+// The args past `--` are NOT compared: the output store records a run by spell, target and
+// project and holds no argv, so a rule keyed on them would reject every ref there is.
+func bindsTo(c types.LeaseCheck, a Attempt) bool {
+	spell, target, _ := strings.Cut(c.Target, "::")
 	if target == "" {
 		spell, target = "", spell
 	}
 	// A charm is a way of running the target, not another target: `generate:rw` and
 	// `generate` are one identity to the output store.
 	target, _, _ = strings.Cut(target, ":")
-	c := check{Spell: spell, Target: target, Project: "."}
-	if len(words) > 2 {
-		c.Project = words[2]
-	}
-	c.Project = path.Clean(c.Project)
-	return c, target != ""
-}
-
-// matches reports whether a stored attempt is a run of this check.
-//
-// The spell filter is compared only when BOTH sides name one. A row that names
-// `go::go-test` and an attempt the store recorded under a bare target are the same run
-// selected two ways, and rejecting that pair would make the rule fire on spelling rather
-// than on identity. Target and project are compared always: those are what a run IS.
-func (c check) matches(a Attempt) bool {
-	if c.Target != a.Target || c.Project != path.Clean(a.Project) {
+	if target != a.Target || path.Clean(c.Project) != path.Clean(a.Project) {
 		return false
 	}
-	return c.Spell == "" || a.Spell == "" || c.Spell == a.Spell
+	return spell == "" || a.Spell == "" || spell == a.Spell
 }
-
-func (c check) String() string { return "`" + renderCheck(c.Spell, c.Target, c.Project) + "`" }
 
 // String renders what the store recorded, in the same spelling a check renders, so a
 // rejection puts the two side by side.
-func (a Attempt) String() string { return "`" + renderCheck(a.Spell, a.Target, a.Project) + "`" }
-
-func renderCheck(spell, target, project string) string {
-	if spell != "" {
-		target = spell + "::" + target
+func (a Attempt) String() string {
+	target := a.Target
+	if a.Spell != "" {
+		target = a.Spell + "::" + target
 	}
-	if project == "" {
-		project = "."
-	}
-	return "magus run " + target + " " + project
+	return types.LeaseCheck{Target: target, Project: a.Project}.String()
 }
 
 // matching is the first declaration in decls that covers p. The declaration comes back

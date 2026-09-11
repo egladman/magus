@@ -58,7 +58,38 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 	list("focus", func(u *types.Lease, v []string) { u.Focus = v })
 	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
 	str("tier", func(u *types.Lease, v string) { u.Tier = strings.TrimSpace(v) })
-	str("validation", func(u *types.Lease, v string) { u.Validation = v })
+
+	// check and validation are two spellings of one field, and the row stores both halves,
+	// so a put naming each of them is a caller that does not know which one it meant.
+	check := func(key string, parse func(string) (types.LeaseCheck, error)) {
+		v, ok, e := mergeString(params, key)
+		switch {
+		case e != nil:
+			err = errors.Join(err, e)
+		case !ok:
+		case strings.TrimSpace(v) == "":
+			set = append(set, func(u *types.Lease) { u.Check, u.Validation = nil, "" })
+		default:
+			c, perr := parse(v)
+			if perr != nil {
+				err = errors.Join(err, fmt.Errorf("ledger: %s: %w", key, perr))
+				return
+			}
+			set = append(set, func(u *types.Lease) { u.Check, u.Validation = &c, c.String() })
+		}
+	}
+	_, hasCheck := params["check"]
+	_, hasLine := params["validation"]
+	switch {
+	case hasCheck && hasLine:
+		err = errors.Join(err, errors.New("ledger: a put carries `check` or a rendered `validation` line, not both"))
+	case hasCheck:
+		check("check", types.ParseLeaseCheck)
+	case hasLine:
+		// compat(until: no client still sends a rendered line; observe: the grep
+		// types.Lease.Validation names).
+		check("validation", types.ParseLeaseRunLine)
+	}
 
 	// state is the one param with a vocabulary, so it is checked against it here.
 	if v, ok, e := mergeString(params, "state"); e != nil {
@@ -93,7 +124,7 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "goal", "checkpoint", "owned_paths", "forbidden_paths", "focus",
-	"depends_on", "tier", "validation", "state", "read_only",
+	"depends_on", "tier", "check", "validation", "state", "read_only",
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly

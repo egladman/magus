@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestValidLeaseID pins the rule every lease channel shares. The marker scanner is not the
@@ -217,4 +218,60 @@ func TestLeaseCloneKeepsNilSlicesNil(t *testing.T) {
 	c := Lease{ID: "a"}.Clone()
 	assert.Nil(t, c.Unattributed)
 	assert.Nil(t, c.Releases)
+}
+
+// The parse is what makes a check comparable with a stored run, so the shapes it refuses
+// are the point: a flag read as a positional binds evidence to a target nobody ran.
+func TestParseLeaseCheck(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		in    string
+		want  LeaseCheck
+		wants string
+	}{
+		{name: "target and project", in: "test internal/ledger", want: LeaseCheck{Target: "test", Project: "internal/ledger"}},
+		{name: "the project defaults to the root", in: "ci", want: LeaseCheck{Target: "ci", Project: "."}},
+		{
+			name: "args ride past the separator",
+			in:   "go::go-test . -- -run Ledger",
+			want: LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}},
+		},
+		{name: "a flag before the separator", in: "-o json test .", wants: "carries the flag -o"},
+		{name: "a third word", in: "test a b", wants: "carries 3 words"},
+		{name: "nothing at all", in: "  ", wants: "names no target"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParseLeaseCheck(tt.in)
+			if tt.wants != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wants)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// The rendered line is what the guard and the console still read, so it has to survive a
+// round trip through the record the store keeps.
+func TestLeaseCheckRoundTripsThroughItsRenderedLine(t *testing.T) {
+	t.Parallel()
+
+	want := LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
+	assert.Equal(t, "magus run go::go-test . -- -run Ledger", want.String())
+
+	got, err := ParseLeaseRunLine(want.String())
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+
+	_, err = ParseLeaseRunLine("magus affected ci --no-default-charms")
+	require.Error(t, err, "a set of runs is not one run, so no ref can be bound to it")
+	assert.Contains(t, err.Error(), "is not one")
 }

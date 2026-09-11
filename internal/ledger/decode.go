@@ -2,6 +2,7 @@ package ledger
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -44,9 +45,16 @@ type Row struct {
 	Focus          []string         `json:"focus,omitempty"`
 	DependsOn      []string         `json:"depends_on,omitempty"`
 	Tier           string           `json:"tier,omitempty"`
-	Validation     string           `json:"validation,omitempty"`
-	State          types.LeaseState `json:"state,omitempty"`
-	ReadOnly       bool             `json:"read_only,omitempty"`
+	Check          *types.LeaseCheck `json:"check,omitempty"`
+	State          types.LeaseState  `json:"state,omitempty"`
+	ReadOnly       bool              `json:"read_only,omitempty"`
+	// Validation is the check as a rendered `magus run` line.
+	//
+	// compat(until: no client still sends a rendered line; observe: a grep of the ledger
+	// archives for a row carrying `validation` and no `check`): it is what rows declared
+	// before the check record existed, so it is accepted and parsed into Check. Sending
+	// both is refused rather than merged, since nothing here can say which one meant it.
+	Validation string `json:"validation,omitempty"`
 }
 
 // Validate reports what is wrong with a declared row, or nil.
@@ -57,7 +65,33 @@ func (r Row) Validate() error {
 	if r.State != "" && !types.ValidLeaseState(r.State) {
 		return fmt.Errorf("ledger: state must be one of %s", stateVocabulary())
 	}
-	return nil
+	_, err := r.check()
+	return err
+}
+
+// check is the row's declared check, from either spelling. A line that does not parse is
+// refused HERE, at the door, rather than at grading time, where the row is already stored
+// and the worker has already run something.
+func (r Row) check() (*types.LeaseCheck, error) {
+	line := strings.TrimSpace(r.Validation)
+	switch {
+	case r.Check != nil && line != "":
+		return nil, errors.New("ledger: a row carries `check` or a rendered `validation` line, not both")
+	case r.Check != nil:
+		parsed, err := types.ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
+		if err != nil {
+			return nil, fmt.Errorf("ledger: %w", err)
+		}
+		parsed.Args = r.Check.Args
+		return &parsed, nil
+	case line != "":
+		parsed, err := types.ParseLeaseRunLine(line)
+		if err != nil {
+			return nil, fmt.Errorf("ledger: %w", err)
+		}
+		return &parsed, nil
+	}
+	return nil, nil
 }
 
 // stateVocabulary is the closed set as an error quotes it.
@@ -81,7 +115,14 @@ func (r Row) Apply(u *types.Lease) {
 	u.Focus = trimmed(r.Focus)
 	u.DependsOn = trimmed(r.DependsOn)
 	u.Tier = strings.TrimSpace(r.Tier)
-	u.Validation = r.Validation
+	// Validate refused an unparsable check before the row reached a store, so the error
+	// here cannot fire; the rendered line is written from the record so the two agree.
+	check, _ := r.check()
+	u.Check = check
+	u.Validation = ""
+	if check != nil {
+		u.Validation = check.String()
+	}
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
 }

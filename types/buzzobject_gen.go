@@ -912,7 +912,19 @@ func (v LeaseActor) BuzzObject() BuzzObject {
 	}
 }
 
+func (v LeaseCheck) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"target":  v.Target,
+		"project": v.Project,
+		"args":    v.Args,
+	}
+}
+
 func (v Lease) BuzzObject() BuzzObject {
+	var optCheck any
+	if v.Check != nil {
+		optCheck = (*v.Check).BuzzObject()
+	}
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
@@ -932,6 +944,7 @@ func (v Lease) BuzzObject() BuzzObject {
 		"focus":          v.Focus,
 		"dependsOn":      v.DependsOn,
 		"tier":           v.Tier,
+		"check":          optCheck,
 		"validation":     v.Validation,
 		"state":          string(v.State),
 		"readOnly":       v.ReadOnly,

@@ -1,6 +1,8 @@
 package types
 
 import (
+	"errors"
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -41,6 +43,81 @@ func LeaseStates() []LeaseState {
 // that has not said where it stands carries none, and the callers that allow that test
 // for it themselves.
 func ValidLeaseState(s LeaseState) bool { return slices.Contains(LeaseStates(), s) }
+
+// LeaseCheck is the one check a lease runs, in the parts the output store records a run
+// by: the target (carrying a `spell::` filter when the row named one), the project it runs
+// in, and whatever is forwarded past `--`.
+//
+// A RECORD rather than the command line it renders to. A line has to be parsed before it
+// can be compared with a stored run, and a parser that reads positions binds
+// `magus run -o json test .` to a target named json.
+type LeaseCheck struct {
+	Target  string   `json:"target"             yaml:"target"`
+	Project string   `json:"project,omitempty"  yaml:"project,omitempty"`
+	Args    []string `json:"args,omitempty"     yaml:"args,omitempty"`
+}
+
+// String renders the check as the command that runs it.
+func (c LeaseCheck) String() string {
+	project := c.Project
+	if project == "" {
+		project = "."
+	}
+	line := "magus run " + c.Target + " " + project
+	if len(c.Args) > 0 {
+		line += " -- " + strings.Join(c.Args, " ")
+	}
+	return line
+}
+
+// ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
+// shape a record is written in. The project defaults to ".".
+//
+// A flag anywhere is REFUSED rather than read as a word: a check is an identity the output
+// store can be asked about, and `-o json` in it either names a target nobody ran or
+// silently shifts the project.
+func ParseLeaseCheck(s string) (LeaseCheck, error) {
+	words := strings.Fields(s)
+	var args []string
+	if i := slices.Index(words, "--"); i >= 0 {
+		words, args = words[:i], words[i+1:]
+	}
+	for _, w := range words {
+		if strings.HasPrefix(w, "-") {
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
+				" flags belong after `--`, where they reach the tool rather than magus", s, w)
+		}
+	}
+	switch {
+	case len(words) == 0:
+		return LeaseCheck{}, errors.New("a check is `<target> <project> [-- args]` and this one names no target")
+	case len(words) > 2:
+		return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %d words before any `--`", s, len(words))
+	}
+	c := LeaseCheck{Target: words[0], Project: ".", Args: args}
+	if len(words) == 2 {
+		c.Project = words[1]
+	}
+	c.Project = path.Clean(c.Project)
+	return c, nil
+}
+
+// ParseLeaseRunLine reads a rendered `[magus] run <target> <project> [-- args]` back into a
+// record.
+//
+// compat(until: no client still sends a rendered validation line; observe: a grep of the
+// ledger archives under the per-repository state dir for a row carrying `validation` and
+// no `check`): the line is what rows declared before the check record existed.
+func ParseLeaseRunLine(s string) (LeaseCheck, error) {
+	words := strings.Fields(s)
+	if len(words) > 0 && words[0] != "run" {
+		words = words[1:]
+	}
+	if len(words) == 0 || words[0] != "run" {
+		return LeaseCheck{}, fmt.Errorf("a check line is `magus run <target> <project> [-- args]` and %q is not one", s)
+	}
+	return ParseLeaseCheck(strings.Join(words[1:], " "))
+}
 
 // LeaseBaseVerdict says how the base a worker reported at registration compares
 // with the Checkpoint its lease was handed. A FACT computed at that moment, never a
@@ -210,8 +287,15 @@ type Lease struct {
 	// the skill's table). A free string: hosts name their tiers differently and a
 	// closed set here would force a lie for the ones that do not fit.
 	Tier string `json:"tier,omitempty" yaml:"tier,omitempty"`
-	// Validation is the magus target or named check this lease was assigned, e.g.
-	// "magus run test internal/ledger".
+	// Check is the one check this lease runs. See [LeaseCheck].
+	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
+	// Validation is Check rendered as the command that runs it.
+	//
+	// compat(until: no reader still reads the rendered line; observe: grep for
+	// `.Validation` outside internal/ledger, which is cmd/magus/guard_gate.go's gate
+	// ownership rule and the console's plan view today): the store writes it from Check
+	// on every put so the two cannot disagree, and a client that sends it instead of
+	// Check is still understood.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
 	// State is the row's lifecycle position. See LeaseState for why no_return is
 	// its own value.

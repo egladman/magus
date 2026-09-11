@@ -299,7 +299,7 @@ func (f registerFlags) row(id string) ledger.Row {
 		ForbiddenPaths: f.denyPaths,
 		Focus:          f.readPaths,
 		DependsOn:      f.dependsOn,
-		Validation:     renderCheckFlag(f.check),
+		Check:          f.declaredCheck(),
 		Tier:           f.model,
 		ReadOnly:       f.readOnly,
 		// A row a person declares is one nobody has picked up yet, which is what the
@@ -308,14 +308,20 @@ func (f registerFlags) row(id string) ledger.Row {
 	}
 }
 
-// renderCheckFlag turns `--check "<target> <project> [-- args]"` into the `magus run` line
-// the row stores. The flag drops the prefix because every check is a magus run and typing
-// it twice is how the two spellings drift.
-func renderCheckFlag(check string) string {
-	if strings.TrimSpace(check) == "" {
-		return ""
+// declaredCheck is --check as the record the row carries, or nil when the flag is absent.
+// A value that does not parse reaches ledger.Row.Validate, which is the one place a
+// declaration is refused.
+func (f registerFlags) declaredCheck() *types.LeaseCheck {
+	if strings.TrimSpace(f.check) == "" {
+		return nil
 	}
-	return "magus run " + strings.TrimSpace(check)
+	parsed, err := types.ParseLeaseCheck(f.check)
+	if err != nil {
+		// Carried through unparsed so Validate names the rule, rather than being dropped
+		// here and leaving the row silently checkless.
+		return &types.LeaseCheck{Target: f.check}
+	}
+	return &parsed
 }
 
 // ledgerRegister declares one row, from flags or from a JSON record on stdin.

@@ -12,10 +12,12 @@ import (
 )
 
 func acceptRow() types.Lease {
+	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	return types.Lease{
 		ID:         "harness/ledger-accept",
 		OwnedPaths: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"},
-		Validation: "magus run go::go-test . -- -run Ledger ./internal/ledger/",
+		Check:      &check,
+		Validation: check.String(),
 		State:      types.StateRunning,
 	}
 }
@@ -26,7 +28,7 @@ func passingReport() Report {
 		Lease:         "harness/ledger-accept",
 		ChangedPaths:  []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
 		Validation: ReportValidation{
-			Command:   "magus run go::go-test . -- -run Ledger ./internal/ledger/",
+			Command:   "magus run go::go-test . -- -run Ledger",
 			OutputRef: "a1b2c3d4",
 		},
 		UnresolvedRisks: []string{},
@@ -45,7 +47,7 @@ func TestGradeTakesAReportInsideTheBoundary(t *testing.T) {
 		Lease:    "harness/ledger-accept",
 		Accepted: true,
 		Risks:    []string{},
-		Command:  "magus run go::go-test . -- -run Ledger ./internal/ledger/",
+		Command:  "magus run go::go-test . -- -run Ledger",
 	}, Grade(acceptRow(), passingReport(), passingRun, nil))
 }
 
@@ -113,32 +115,32 @@ func TestGradeRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.Validation = "make test"
+	row.Check, row.Validation = nil, ""
 
 	v := Grade(row, passingReport(), passingRun, nil)
 	assert.False(t, v.Accepted)
-	assert.Contains(t, v.Violations[0], "not a `magus run <target> <project>` line")
+	assert.Contains(t, v.Violations[0], "declares no check")
 }
 
-// A charm, a flag, the binary's spelling and the args after `--` are all ways of running
-// one target, so none of them may decide whether the evidence binds.
+// A charm, the binary's spelling and the args after `--` are all ways of running one
+// target, so none of them may decide whether the evidence binds.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
 	att := Attempt{Found: true, Project: "internal/ledger", Target: "test"}
-	for _, validation := range []string{
+	for _, line := range []string{
 		"magus run test internal/ledger",
 		"./magus run test:rw internal/ledger",
-		"magus run test internal/ledger -s -- -run Ledger",
+		"magus run test internal/ledger -- -run Ledger",
 	} {
-		c, ok := parseCheck(validation)
-		require.True(t, ok, validation)
-		assert.True(t, c.matches(att), validation)
+		c, err := types.ParseLeaseRunLine(line)
+		require.NoError(t, err, line)
+		assert.True(t, bindsTo(c, att), line)
 	}
 
-	c, ok := parseCheck("magus run test cmd/magus")
-	require.True(t, ok)
-	assert.False(t, c.matches(att), "another project is another run")
+	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
+	require.NoError(t, err)
+	assert.False(t, bindsTo(c, att), "another project is another run")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.

@@ -476,7 +476,8 @@ var Magus = Module{
 					Name: "put",
 					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
 						"goal, checkpoint, owned_paths, forbidden_paths, focus, depends_on, tier, " +
-						"validation, state (declared, running, pass, fail, no_return), read_only. A " +
+						"check (`<target> <project> [-- args]`, or the rendered `magus run` line as " +
+						"validation, never both), state (declared, running, pass, fail, no_return), read_only. A " +
 						"key opts omits is left untouched, so a later put in a lease's lifecycle (e.g. " +
 						"{state = \"running\"}) advances it without erasing what an earlier put " +
 						"declared; a key present with an empty value is an explicit clear. id is the " +
@@ -747,7 +748,8 @@ var magusMCPTools = []MCPTool{
 			{Name: "focus", Type: TypeString, Doc: "put only: space-separated paths whose projects the lease may READ, widened to those projects' own depends_on. Omit and owned_paths stands in, which is right for a worker pointed at one project; set it to hand a worker read access to a library it must not write. This is the only way to widen the read lane: the guard advises on an out-of-focus read and denies one under a bound lease, and there is no environment variable that turns it off."},
 			{Name: "depends_on", Type: TypeString, Doc: "put only: space-separated ids of leases that must land before this one."},
 			{Name: "tier", Type: TypeString, Doc: "put only: the effort tier the work was matched to, e.g. principal, standard, economy."},
-			{Name: "validation", Type: TypeString, Doc: "put only: the magus target or named check this lease was assigned."},
+			{Name: "check", Type: TypeString, Doc: "put only: the one check this lease runs, as `<target> <project> [-- args]`. The `magus run` is implied, and a flag before the `--` is refused: acceptance binds a worker's evidence to this target and project, so a flag read as a positional would bind it to a run nobody made."},
+			{Name: "validation", Type: TypeString, Doc: "put only: the check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of check for one release and parsed into it. Sending both is refused."},
 			{Name: "state", Type: TypeString, Doc: "put only: declared, running, pass, fail, or no_return. no_return is not fail - it means the worker died, stalled, or was cancelled and returned no verdict at all."},
 			{Name: "read_only", Type: TypeBool, Doc: "put only: mark a lease that gathers evidence and writes nothing, so empty owned/forbidden paths read as deliberate rather than forgotten."},
 		},

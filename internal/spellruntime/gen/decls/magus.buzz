@@ -442,6 +442,12 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
+export object LeaseCheck {
+    target: str = "",
+    project: str = "",
+    args: [str] = [],
+}
+
 export object LeaseRelease {
     path: str = "",
     digest: str = "",
@@ -470,6 +476,7 @@ export object Lease {
     focus: [str] = [],
     dependsOn: [str] = [],
     tier: str = "",
+    check: LeaseCheck? = null,
     validation: str = "",
     state: str = "",
     readOnly: bool = false,

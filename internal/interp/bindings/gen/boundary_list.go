@@ -46,6 +46,7 @@ var RuntimeBoundaryTypes = []any{
 	types.KnowledgeSymbolGap{},
 	types.Lease{},
 	types.LeaseActor{},
+	types.LeaseCheck{},
 	types.LeaseOverlap{},
 	types.LeaseRelease{},
 	types.LeaseReport{},

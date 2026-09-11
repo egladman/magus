@@ -142,6 +142,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "LeaseRelease", Type: reflect.TypeFor[types.LeaseRelease](), RuntimeObject: true},
 	{Name: "LeaseUnattributedWrite", Type: reflect.TypeFor[types.LeaseUnattributedWrite](), RuntimeObject: true},
 	{Name: "LeaseActor", Type: reflect.TypeFor[types.LeaseActor](), RuntimeObject: true},
+	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
 	{Name: "Lease", Type: reflect.TypeFor[types.Lease](), RuntimeObject: true},
 	{Name: "LeaseOverlap", Type: reflect.TypeFor[types.LeaseOverlap](), RuntimeObject: true},
 	{Name: "LeaseReport", Type: reflect.TypeFor[types.LeaseReport](), RuntimeObject: true},

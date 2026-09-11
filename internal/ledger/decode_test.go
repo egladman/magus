@@ -141,6 +141,10 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 			value = []any{"internal/ledger"}
 		case "read_only":
 			value = true
+		case "check":
+			value = "test internal/ledger"
+		case "validation":
+			value = "magus run test internal/ledger"
 		}
 		_, err := ParseMerge(map[string]any{field: value})
 		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)

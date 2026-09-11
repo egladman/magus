@@ -54,9 +54,30 @@
       "type": "string",
       "description": "The effort tier the work was matched to. A free string: hosts name their tiers differently."
     },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "target": {
+          "type": "string",
+          "description": "The target this lease's one check runs, carrying a `spell::` filter when the row names one."
+        },
+        "project": {
+          "type": "string",
+          "description": "The project it runs in. Defaults to the workspace root."
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "What is forwarded past `--` to the tool the target runs. Not compared when evidence is bound: the output store records a run by target and project and holds no argv."
+        }
+      },
+      "description": "The one check this lease runs. Acceptance binds a worker's evidence to it."
+    },
     "validation": {
       "type": "string",
-      "description": "The one check this lease runs, as a `magus run <target> <project>` line. Acceptance binds a worker's evidence to it."
+      "description": "The check as a rendered `magus run <target> <project> [-- args]` line, accepted in place of `check` for one release and parsed into it. Sending both is refused."
     },
     "state": {
       "type": "string",
