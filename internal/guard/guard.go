@@ -207,11 +207,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
 	standing := actingLeaseStanding(ctx, deps, actingLease)
-	denyUndeclared := func() {
+	denyUndeclared := func(command string) {
 		if req.Observe || verdict.Decision == "deny" {
 			return
 		}
-		if reason := denyUndeclaredLease(standing, actingLease); reason != "" {
+		if reason := denyUndeclaredLease(standing, actingLease, command); reason != "" {
 			verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 		}
 	}
@@ -248,7 +248,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
-		denyUndeclared()
+		denyUndeclared("")
 		if verdict.Decision != "deny" {
 			switch g := gradeLeasedWrite(ctx, deps, actingLease, input); g.Decision {
 			case "deny":
@@ -343,7 +343,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Context = held
 			}
 		}
-		denyUndeclared()
+		denyUndeclared(input)
 		// The lease ledger's half of the command surface, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the

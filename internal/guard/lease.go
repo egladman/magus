@@ -324,14 +324,80 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // Not the INVALID-id case, which stays an advisory (adviseInvalidLease): an id magus cannot
 // parse is one it cannot look up either, and blocking a tool call over unparsable metadata
 // is the failure the fail-open contract is written against.
-func denyUndeclaredLease(standing leaseStanding, actingLease string) string {
+//
+// It refuses WORK and never the remedy. command is the shell line on the command surface
+// and "" on the write surface, where every call is work by definition. A rule that refused
+// the line it prints locked a checkout out of its own repair: the plan moved house once and
+// the bound worker could not read the plan, print a schema, or bind again, because each of
+// those is a command and every command was refused.
+func denyUndeclaredLease(standing leaseStanding, actingLease, command string) string {
 	if !standing.readable || standing.declared {
 		return ""
 	}
+	if command != "" && undeclaredLeaseRepairs(command) {
+		return ""
+	}
 	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
-		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.",
+		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+
+		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
 		actingLease, hint.Ledger.String())
 }
+
+// undeclaredLeaseRepairs reports a shell line that only looks at this checkout or repairs
+// the binding, so an unenrolled session can find out what it is bound to and fix it.
+//
+// EVERY invocation on the line has to qualify. One reader chained onto a build is a build,
+// and the cheap way to get work past this rule would be to put `ls &&` in front of it.
+func undeclaredLeaseRepairs(command string) bool {
+	cmds, ok := ParseCommands(command)
+	if !ok || len(cmds) == 0 {
+		return false
+	}
+	for _, c := range cmds {
+		if !repairInvocation(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// repairInvocation judges one invocation. magus answers for itself: a usage line or a
+// schema touches no store, and the verbs that read the plan or take a job are the remedy.
+// Everything else is the short reader set a person orients with, which is deliberately
+// narrower than cacheDirReaders (git and magus are wholesale readers there, and `git
+// commit` is not a way to find out what you are bound to).
+func repairInvocation(c hint.Invocation) bool {
+	if path.Base(c.Name) == "magus" {
+		if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
+			return true
+		}
+		words := magusSubcommandWords(c.Args)
+		return len(words) > 0 && undeclaredLeaseVerbs[words[0]]
+	}
+	if c.Name == "git" {
+		words := magusSubcommandWords(c.Args)
+		return len(words) > 0 && gitReadVerbs[words[0]]
+	}
+	return undeclaredLeaseReaders[path.Base(c.Name)]
+}
+
+// The three sets repairInvocation reads. The magus verbs are the ones that answer "what am
+// I bound to and what does this workspace hold"; the job verbs are in it because taking a
+// job is how a checkout stops being unenrolled.
+var (
+	undeclaredLeaseVerbs = map[string]bool{
+		"ledger": true, "job": true, "session": true, "ls": true, "describe": true,
+		"query": true, "explain": true, "path": true, "refs": true, "where": true,
+		"status": true, "doctor": true, "help": true, "version": true,
+	}
+	gitReadVerbs = map[string]bool{
+		"status": true, "log": true, "diff": true, "show": true, "branch": true, "remote": true,
+	}
+	undeclaredLeaseReaders = map[string]bool{
+		"cat": true, "head": true, "tail": true, "ls": true, "grep": true, "rg": true,
+		"find": true, "stat": true, "wc": true, "pwd": true, "echo": true,
+	}
+)
 
 // adviseInvalidLease says that an id magus cannot parse was treated as naming no lease.
 //
@@ -414,6 +480,12 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 	if path.Base(c.Name) != "magus" {
 		return ""
 	}
+	// A usage line and a schema are reads: neither reaches a store, and the rule below
+	// reads the subcommand without them, so `ledger accept --schema` was refused to the one
+	// caller who needs the shape of the report it has to file.
+	if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
+		return ""
+	}
 	words := magusSubcommandWords(c.Args)
 	if len(words) < 2 {
 		return ""
@@ -421,8 +493,12 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 	switch {
 	// The read form prints the binding and takes no operand; only the form carrying one
 	// rebinds. Refusing the read would leave a worker unable to find out what it is bound
-	// to, which is the opposite of what this rule is for.
+	// to, which is the opposite of what this rule is for. A binding that names NO row is
+	// not a boundary either, so re-binding out of one is the remedy rather than an escape.
 	case words[0] == hint.SessionLease.Head() && words[1] == hint.SessionLease.Leaf() && len(words) > 2:
+		if !me().declared {
+			return ""
+		}
 		return "bind this checkout to another lease"
 	case words[0] == hint.LedgerAccept.Head() && words[1] == hint.LedgerAccept.Leaf():
 		return "grade a lease row"

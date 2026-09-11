@@ -1017,13 +1017,40 @@ func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
-	err := hookCmd(ctx, strings.NewReader("ls"), &out, []string{"--lease", "harness/typo", "-o", "json"})
+	err := hookCmd(ctx, strings.NewReader("magus run test ."), &out, []string{"--lease", "harness/typo", "-o", "json"})
 	var silent errSilent
 	require.ErrorAs(t, err, &silent, "an assertion that does not resolve must not exit 0")
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 	assert.Contains(t, out.String(), `"decision": "deny"`)
 	assert.Contains(t, out.String(), "is not declared")
 	assert.Contains(t, out.String(), `"lease": "harness/typo"`, "the verdict names the row it graded against")
+}
+
+// The other half of C3, and the lockout it caused: the rule refused the line it printed, so
+// a checkout whose row had moved could not read the plan, print a schema, or bind again.
+func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _, _ := fleetFixture(t, narrowLease())
+
+	for _, command := range []string{
+		"magus ledger",
+		"magus ledger accept --schema",
+		"magus session lease harness/real",
+		"git status --short",
+		"ls internal/job",
+	} {
+		var out bytes.Buffer
+		err := hookCmd(ctx, strings.NewReader(command), &out, []string{"--lease", "harness/typo", "-o", "json"})
+		require.NoError(t, err, command)
+		assert.NotContains(t, out.String(), "is not declared", command)
+	}
+
+	// One reader in front of the work does not launder it.
+	var out bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader("ls && magus run test ."), &out, []string{"--lease", "harness/typo", "-o", "json"})
+	require.Error(t, err)
+	assert.Contains(t, out.String(), "is not declared")
 }
 
 // TestHookCmdNoticesATerminalLease covers the other half: a row that has finished still
