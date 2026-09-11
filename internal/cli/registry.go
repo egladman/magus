@@ -75,6 +75,8 @@ against the value -o json emits, so its field names are the json keys.`,
 	Children: []Command{
 		{Name: "targets", Short: "List what the selected projects can run, with the doc or spell ops behind each"},
 		{Name: "target", Short: "The same listing; the noun takes either spelling"},
+		{Name: "jobs", Short: "List every job this repository carries, whoever holds it, with the pairs that claim the same path"},
+		{Name: "job", Short: "The same listing; the noun takes either spelling"},
 	},
 	Examples: []Example{
 		{"List all projects", "magus ls"},
@@ -118,6 +120,26 @@ step at a time.`,
 	// all the nouns. Split, each -e is an ordinary alias of the flag beside it.
 	Children: []Command{
 		{Name: "targets", Short: "List every target the workspace defines"},
+		{
+			Name:        "job",
+			Short:       "Print one job's terms: its goal, lanes, check and dependencies",
+			Description: "Print what one job grants its holder: the goal and acceptance criteria, the write and read lanes, the one check, the dependencies, the paths this workspace puts out of reach, and the graph's blast radius for each write path.",
+			Long: `Print one job's terms, which is what a holder reads on arrival.
+
+It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
+block of "run this, then this" is a procedure a reader can skip, mistype or
+half-follow.
+
+It also carries what the WORKSPACE knows and the job's author may not have
+written down: the projects the write paths reach, the declared output globs that
+land inside them, the paths another live job is holding, the build inputs and
+workspace config that have one owner, and the projects that change alongside the
+held ones without declaring a dependency. It is context and never a status, the
+same shape magus diff --prompt has, with one refusal: a job whose check is the ci
+gate, or a target that chains to it, has no terms printed at all. The gate runs
+once, in the forking session's tree, after every job lands.`,
+			Usage: "magus describe job <job> [flags]",
+		},
 		{
 			Name:  "target",
 			Short: "Detail one target ref: its dispatch plan, globs, spells and policy",
@@ -949,6 +971,26 @@ check for the file with [ -S "$socket" ] before starting one.`,
 			Flags: []Flag{
 				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
 				{Name: "services", Kind: FlagBool, Doc: "Stop the daemon's hosted services, leaving the daemon running"},
+			},
+		},
+		{
+			Name:        "status",
+			Short:       "The daemon: whether it is up and where you reach it",
+			Description: "Report the running daemon's pid, version, uptime, socket, MCP url and console url, what it is running and queueing, and the workspaces it has loaded. Exits non-zero when no daemon is running.",
+			Long: `The daemon, and nothing else: is it up, and where do I reach it.
+
+` + "`magus status`" + ` is the other one. It answers what this workspace and this
+machine are doing: what is loaded, what holds slots, and what the cache and
+config are. It embeds the daemon block too, so this verb is the narrow view
+rather than a different fact.
+
+Both read one report and print the identity and capacity lines through one
+renderer, so the two can never disagree about a number. It exits non-zero when
+no daemon is running, matching ` + "`magus server stop`" + `, so a script can chain on
+it.`,
+			Usage: "magus server status [--socket <addr>] [flags]",
+			Flags: []Flag{
+				{Name: "socket", Kind: FlagString, Doc: "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)"},
 			},
 		},
 		{

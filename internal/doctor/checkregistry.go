@@ -260,6 +260,12 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseBinding() },
 	},
 	{
+		Name:     "daemon-version",
+		Doc:      "whether the daemon answering this workspace is the same build as the binary asking",
+		Evidence: types.EvidenceMeasured,
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkDaemonVersion() },
+	},
+	{
 		Name:           "agent-skills",
 		Doc:            "installed agent skills still current with this binary",
 		Evidence:       types.EvidenceMeasured,

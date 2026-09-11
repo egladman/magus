@@ -125,6 +125,20 @@ type FragmentParam struct {
 // This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
 // the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
 // policy (encodeComponent, the encodeURIComponent equivalent the page's hash parser reverses).
+// Root is the console's own address, the one a person opens when they want the console
+// rather than a particular surface: http://<host>/console/. Empty when there is no host.
+//
+// Beside Link rather than spelled at each caller, for the reason Link's own doc gives: the
+// grammar has one home. Link with an empty surface would render "/console//", which some
+// servers redirect and some do not, so the root is its own answer rather than a special
+// case of a surface link.
+func Root(host string) string {
+	if host == "" {
+		return ""
+	}
+	return "http://" + host + "/console/"
+}
+
 func Link(opts LinkOpts) string {
 	var parts []string
 	for _, p := range opts.Fragment {

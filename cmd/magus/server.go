@@ -33,7 +33,7 @@ import (
 func serverCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		serverUsage()
-		return usagef("magus server: target required (want start, stop, reload, or job)")
+		return usagef("magus server: target required (want start, stop, status, or reload)")
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		serverUsage()
@@ -45,6 +45,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverStart(ctx, rest)
 	case hint.ServerStop.Leaf():
 		return serverStop(ctx, rest)
+	case hint.ServerStatus.Leaf():
+		return serverStatus(ctx, rest)
 	case hint.ServerReload.Leaf():
 		return serverReload(ctx, rest)
 	case jobs.NameRotateActivities:
@@ -56,24 +58,104 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 	case jobs.NameCheckReview:
 		return serverCheckReview(ctx, root, rest)
 	default:
-		return usagef("magus server: unknown target %q (want start, stop, reload, or job); use `%s` to inspect daemon state", sub, hint.Status)
+		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
 }
 
 func serverUsage() {
-	fmt.Fprintln(os.Stderr, "usage: magus server <start|stop|reload|job> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: magus server <start|stop|status|reload> [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Targets:")
 	fmt.Fprintln(os.Stderr, "  start   start a persistent daemon and block until stopped")
 	fmt.Fprintln(os.Stderr, "  stop    send a graceful shutdown request to a running daemon")
+	fmt.Fprintln(os.Stderr, "  status  is the daemon up, and where do I reach it")
 	fmt.Fprintln(os.Stderr, "  reload  re-read configuration without restarting: drop the daemon's open workspaces")
-	fmt.Fprintln(os.Stderr, "  job     submit a background maintenance job to a running daemon (run `magus server job` to list)")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Use `%s` to inspect daemon pool state and check reachability.\n", hint.Status)
+	fmt.Fprintf(os.Stderr, "`%s` is this workspace and this machine: what is loaded, what holds slots,\n", hint.Status)
+	fmt.Fprintln(os.Stderr, "and what the cache and config are.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The socket address is taken from --daemon-address, MAGUS_DAEMON_ADDRESS,")
 	fmt.Fprintln(os.Stderr, "or daemon.address in magus.yaml. When none is set, `server start` uses:")
 	fmt.Fprintln(os.Stderr, "  "+daemonDefaultAddr())
+}
+
+// serverStatus answers one question: is my daemon up, and where do I reach it.
+//
+// Deliberately NOT a second `magus status`. That verb is this workspace and this machine,
+// and it embeds the daemon block inside a broader view; this one is the daemon and its
+// addresses, which is what somebody asks when nothing is answering. Both read the same
+// report and print the identity and capacity lines through printDaemonSummary, so the two
+// can never disagree about a number.
+//
+// It exits non-zero with no daemon, matching `server stop`, so a script can chain on it.
+func serverStatus(ctx context.Context, args []string) error {
+	var socket string
+	rest, err := cmdParse("server status", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&socket, "socket", "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server status [--socket <addr>] [flags]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The daemon: whether it is up and where you reach it. Its pid and version, how")
+			fmt.Fprintln(os.Stderr, "long it has been observing, the socket, the MCP url, the console url, what it is")
+			fmt.Fprintln(os.Stderr, "running and queueing, and the workspaces it has loaded.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintf(os.Stderr, "`%s` is the other one: this workspace and this machine, what is loaded,\n", hint.Status)
+			fmt.Fprintln(os.Stderr, "what holds slots, and what the cache and config are.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Exits non-zero when no daemon is running, so a script can chain on it.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return usagef("magus server status: takes no arguments (got %q)", rest[0])
+	}
+
+	report := buildStatusReport(ctx, socket, false)
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format != outputText {
+		if err := emitFormatted(opts, report); err != nil {
+			return err
+		}
+		if report.Pool == nil {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
+
+	if report.Pool == nil {
+		fmt.Println("no daemon is running")
+		if report.PoolError != "" {
+			fmt.Println(report.PoolError)
+		}
+		fmt.Printf("start one with `%s`. `%s` still reports this workspace and this machine without a daemon.\n",
+			hint.ServerStart, hint.Status)
+		return errSilent{exitCode: 1}
+	}
+	printDaemonSummary(os.Stdout, report.Pool, "daemon")
+	fmt.Printf("version: %s\n", orDash(report.Pool.DaemonVersion))
+	if skew := daemonVersionSkew(report.Pool); skew != "" {
+		fmt.Print(skew)
+	}
+	if !report.ObservingSince.IsZero() {
+		fmt.Printf("observing since: %s\n", report.ObservingSince.Format(time.RFC3339))
+	}
+	printMCPEndpointStatus(os.Stdout, report.MCPEndpoint)
+	printConsoleStatus(os.Stdout, report.Console)
+	if len(report.Pool.Workspaces) > 0 {
+		fmt.Printf("\nloaded workspaces (%d)\n", len(report.Pool.Workspaces))
+		for _, ws := range report.Pool.Workspaces {
+			fmt.Printf("  %s  (idle %s)\n", ws.Root, time.Since(ws.LastAccess).Round(time.Second))
+		}
+	}
+	return nil
 }
 
 // daemonDetachEnv marks the re-execed child of an auto-backgrounding `server start`. When
@@ -114,6 +196,14 @@ func serverStart(ctx context.Context, args []string) error {
 		return fmt.Errorf("magus server start: daemon socket not available (no workspace found, or socket bind failed)")
 	}
 	fmt.Fprintf(os.Stderr, "magus: daemon listening on %s\n", addr)
+	// The socket above is unusable by a person and the console is the thing they open, so
+	// it is printed here rather than left in the log. A console that is not mounted says
+	// so: a silent absence is what sends somebody reading daemon.go.
+	if u := consoleRootURL(); u != "" {
+		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` prints one)\n", u, hint.ConfigTokenPrint)
+	} else {
+		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
+	}
 	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
 
 	installRefreshHooks(ctx)
@@ -722,6 +812,20 @@ func consoleWatchURL() string {
 		return ""
 	}
 	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard"})
+}
+
+// consoleRootURL is the console's own address, for the three places a person is already
+// looking when they need it: `server start`, `status`, and `session --brief`. Empty when
+// the console is disabled or there is no address to build one from.
+//
+// It exists because the address was only ever in the daemon's log, on a line written for a
+// machine ("static console mounted path=/console/"), so the one surface built for a person
+// to look at was the one surface nothing told them how to reach.
+func consoleRootURL() string {
+	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
+		return ""
+	}
+	return console.Root(mcpAddrString())
 }
 
 // consoleDiffURL builds the console Diff surface URL for the working changeset, with the same

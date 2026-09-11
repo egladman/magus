@@ -78,6 +78,7 @@ var (
 	GraphDiff         = cmd("graph", "diff")
 	ServerStart       = cmd("server", "start")
 	ServerStop        = cmd("server", "stop")
+	ServerStatus      = cmd("server", "status")
 	ServerReload      = cmd("server", "reload")
 	Status            = cmd("status")
 	Watch             = cmd("watch")
@@ -148,7 +149,7 @@ var (
 // routed on it.
 var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	GraphDiff, ServerStart, ServerStop, ServerReload, Status, Watch, Affected,
+	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, DescribeJob, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, NotesLs, NotesGet, NotesEdit,

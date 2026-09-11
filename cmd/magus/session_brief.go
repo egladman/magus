@@ -56,6 +56,10 @@ type sessionBrief struct {
 	// Rules are the instruction files and skill directories that exist here, named
 	// so the model re-reads them instead of trusting a summary of them.
 	Rules []string `json:"rules,omitempty"`
+	// Console is where a person opens the console for this checkout, empty when none is
+	// served. It is here because this payload lands in a model's context, and a model
+	// that knows the address can hand it to the person who asked where to look.
+	Console string `json:"console,omitempty"`
 	// PromptCache is how long since a tool call last ran past the guard in this
 	// checkout, against every published cache window: a resume past a closed window
 	// re-pays the whole prompt. Empty Providers when the trail here has seen nothing.
@@ -162,6 +166,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
 	brief.Rules = ruleLocations(root)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
+	brief.Console = consoleRootURL()
 	return brief
 }
 
@@ -333,6 +338,9 @@ func (b sessionBrief) Text() string {
 			at = "at least "
 		}
 		briefLine(&s, "unpushed: %s%d commit(s) not on %s", at, u.Count, u.Base)
+	}
+	if b.Console != "" {
+		briefLine(&s, "console: %s (it asks for a token)", b.Console)
 	}
 	b.writeTree(&s)
 	b.writePromptCache(&s)

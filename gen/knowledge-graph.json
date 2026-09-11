@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5857,
-  "edge_count": 10428,
+  "node_count": 5859,
+  "edge_count": 10427,
   "relations": [
     {
       "id": "annotates",
@@ -1673,7 +1673,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1586",
+        "dir_files": "1588",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2043,7 +2043,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "276",
+        "dir_files": "278",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -6440,15 +6440,15 @@
       }
     },
     {
-      "id": "doc:docs/reference/manpage/magus-ledger.md",
+      "id": "doc:docs/reference/manpage/magus-job.md",
       "kind": "doc",
-      "label": "docs/reference/manpage/magus-ledger.md",
-      "source": "docs/reference/manpage/magus-ledger.md",
+      "label": "docs/reference/manpage/magus-job.md",
+      "source": "docs/reference/manpage/magus-job.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "cli,magus ledger,ledger,leases,agents,delegation",
-        "title": "magus ledger"
+        "tags": "cli,magus job,job,jobs,lease,agents,delegation",
+        "title": "magus job"
       }
     },
     {
@@ -32962,80 +32962,100 @@
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#description",
+      "id": "docsection:docs/reference/manpage/magus-job.md#description",
       "kind": "docsection",
       "label": "Description",
-      "source": "docs/reference/manpage/magus-ledger.md#description",
+      "source": "docs/reference/manpage/magus-job.md#description",
       "attrs": {
         "anchor": "description",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#examples",
+      "id": "docsection:docs/reference/manpage/magus-job.md#examples",
       "kind": "docsection",
       "label": "Examples",
-      "source": "docs/reference/manpage/magus-ledger.md#examples",
+      "source": "docs/reference/manpage/magus-job.md#examples",
       "attrs": {
         "anchor": "examples",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "id": "docsection:docs/reference/manpage/magus-job.md#job-exec-options",
       "kind": "docsection",
-      "label": "ledger accept options",
-      "source": "docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "label": "job exec options",
+      "source": "docs/reference/manpage/magus-job.md#job-exec-options",
       "attrs": {
-        "anchor": "ledger-accept-options",
+        "anchor": "job-exec-options",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#ledger-register-options",
+      "id": "docsection:docs/reference/manpage/magus-job.md#job-exit-options",
       "kind": "docsection",
-      "label": "ledger register options",
-      "source": "docs/reference/manpage/magus-ledger.md#ledger-register-options",
+      "label": "job exit options",
+      "source": "docs/reference/manpage/magus-job.md#job-exit-options",
       "attrs": {
-        "anchor": "ledger-register-options",
+        "anchor": "job-exit-options",
         "level": "3"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
+      "id": "docsection:docs/reference/manpage/magus-job.md#job-fork-options",
       "kind": "docsection",
-      "label": "magus-ledger",
-      "source": "docs/reference/manpage/magus-ledger.md#magus-ledger",
+      "label": "job fork options",
+      "source": "docs/reference/manpage/magus-job.md#job-fork-options",
       "attrs": {
-        "anchor": "magus-ledger",
+        "anchor": "job-fork-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-job.md#job-wait-options",
+      "kind": "docsection",
+      "label": "job wait options",
+      "source": "docs/reference/manpage/magus-job.md#job-wait-options",
+      "attrs": {
+        "anchor": "job-wait-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "kind": "docsection",
+      "label": "magus-job",
+      "source": "docs/reference/manpage/magus-job.md#magus-job",
+      "attrs": {
+        "anchor": "magus-job",
         "level": "1"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#see-also",
+      "id": "docsection:docs/reference/manpage/magus-job.md#see-also",
       "kind": "docsection",
       "label": "See Also",
-      "source": "docs/reference/manpage/magus-ledger.md#see-also",
+      "source": "docs/reference/manpage/magus-job.md#see-also",
       "attrs": {
         "anchor": "see-also",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#subcommands",
+      "id": "docsection:docs/reference/manpage/magus-job.md#subcommands",
       "kind": "docsection",
       "label": "Subcommands",
-      "source": "docs/reference/manpage/magus-ledger.md#subcommands",
+      "source": "docs/reference/manpage/magus-job.md#subcommands",
       "attrs": {
         "anchor": "subcommands",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/reference/manpage/magus-ledger.md#synopsis",
+      "id": "docsection:docs/reference/manpage/magus-job.md#synopsis",
       "kind": "docsection",
       "label": "Synopsis",
-      "source": "docs/reference/manpage/magus-ledger.md#synopsis",
+      "source": "docs/reference/manpage/magus-job.md#synopsis",
       "attrs": {
         "anchor": "synopsis",
         "level": "2"
@@ -59592,11 +59612,11 @@
     },
     {
       "source": "dir:docs/reference/manpage",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
       "source": "dir:docs/reference/manpage",
@@ -64776,14 +64796,6 @@
     },
     {
       "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
-    },
-    {
-      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
@@ -69016,14 +69028,6 @@
     },
     {
       "source": "doc:docs/doctrine.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/doctrine.md"
-    },
-    {
-      "source": "doc:docs/doctrine.md",
       "target": "doc:docs/scope.md",
       "relation": "references",
       "confidence": "extracted",
@@ -70825,14 +70829,6 @@
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/guides/integrations/agents/leases.md"
-    },
-    {
-      "source": "doc:docs/guides/integrations/agents/leases.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -73664,7 +73660,7 @@
     },
     {
       "source": "doc:docs/reference/buzz/index.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -73856,7 +73852,7 @@
     },
     {
       "source": "doc:docs/reference/buzz/magus.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -79176,7 +79172,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -79448,7 +79444,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-agent.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -79720,7 +79716,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-buzz.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -79992,7 +79988,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-clean.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -80264,7 +80260,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -80536,7 +80532,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -80808,7 +80804,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -81080,7 +81076,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-diff.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -81352,7 +81348,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -81624,7 +81620,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-events.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -81896,7 +81892,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-explain.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -82168,7 +82164,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -82440,7 +82436,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -82615,276 +82611,276 @@
       "provenance": "docs/reference/manpage/magus-init.md generated_from"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-agent.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-clean.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-completion.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-config.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-events.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-graph.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-init.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-man.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-path.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-self.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-server.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-vcs.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-version.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-watch.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-where.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus-x.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "doc:docs/reference/manpage/magus.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
+      "source": "doc:docs/reference/manpage/magus-job.md",
+      "target": "docsection:docs/reference/manpage/magus-job.md#magus-job",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "doc:docs/reference/manpage/magus-ledger.md",
+      "source": "doc:docs/reference/manpage/magus-job.md",
       "target": "file:internal/cli/registry.go",
       "relation": "documents",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md generated_from"
+      "provenance": "docs/reference/manpage/magus-job.md generated_from"
     },
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
@@ -82992,7 +82988,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -83264,7 +83260,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-man.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -83536,7 +83532,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-mcp.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -83808,7 +83804,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-memory.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -84080,7 +84076,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-notes.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -84360,7 +84356,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-path.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -84632,7 +84628,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-query.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -84904,7 +84900,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-refs.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -85200,7 +85196,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -85472,7 +85468,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -85744,7 +85740,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -86016,7 +86012,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-session.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -86288,7 +86284,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -86560,7 +86556,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-vcs.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -86832,7 +86828,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -87104,7 +87100,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -87376,7 +87372,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -87648,7 +87644,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -87928,7 +87924,7 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus.md",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -108447,60 +108443,76 @@
       "provenance": "docs/reference/manpage/magus-init.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#description",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#ledger-accept-options",
+      "source": "docsection:docs/reference/manpage/magus-job.md#description",
+      "target": "docsection:docs/reference/manpage/magus-job.md#job-exec-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#description",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#ledger-register-options",
+      "source": "docsection:docs/reference/manpage/magus-job.md#description",
+      "target": "docsection:docs/reference/manpage/magus-job.md#job-exit-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#description",
+      "source": "docsection:docs/reference/manpage/magus-job.md#description",
+      "target": "docsection:docs/reference/manpage/magus-job.md#job-fork-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#examples",
+      "source": "docsection:docs/reference/manpage/magus-job.md#description",
+      "target": "docsection:docs/reference/manpage/magus-job.md#job-wait-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#see-also",
+      "source": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "target": "docsection:docs/reference/manpage/magus-job.md#description",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#subcommands",
+      "source": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "target": "docsection:docs/reference/manpage/magus-job.md#examples",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
-      "source": "docsection:docs/reference/manpage/magus-ledger.md#magus-ledger",
-      "target": "docsection:docs/reference/manpage/magus-ledger.md#synopsis",
+      "source": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "target": "docsection:docs/reference/manpage/magus-job.md#see-also",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/manpage/magus-ledger.md"
+      "provenance": "docs/reference/manpage/magus-job.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "target": "docsection:docs/reference/manpage/magus-job.md#subcommands",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-job.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-job.md#magus-job",
+      "target": "docsection:docs/reference/manpage/magus-job.md#synopsis",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-job.md"
     },
     {
       "source": "docsection:docs/reference/manpage/magus-ls.md#magus-ls",
@@ -137161,7 +137173,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/manpage/magus-ledger.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
@@ -258,6 +259,34 @@ func buildMCPEndpointStatus(ctx context.Context, mcp config.MCP) *types.MCPEndpo
 		st.State = "unreachable"
 		st.Note = fmt.Sprintf("nothing is serving MCP at %s; start the daemon: %s", addr, hint.ServerStart)
 	}
+	return st
+}
+
+// buildConsoleStatus reports where the console is served and whether it is really there.
+//
+// It takes the MCP endpoint's already-probed health rather than probing again, because the
+// daemon serves both from ONE listener: a second probe could only ever disagree with the
+// first, and a status block that contradicts the block above it is worse than no block.
+func buildConsoleStatus(cfg config.Console, mcp *types.MCPEndpointStatus) *types.ConsoleStatus {
+	if cfg.Enabled != nil && !*cfg.Enabled {
+		return &types.ConsoleStatus{
+			State: "disabled",
+			Note:  "the console is disabled (console.enabled=false); nothing is served at /console/.",
+		}
+	}
+	if mcp == nil || !mcp.Enabled {
+		return &types.ConsoleStatus{
+			State: "disabled",
+			Note:  "the console is served by the MCP listener, which is disabled (mcp.enabled=false).",
+		}
+	}
+	st := &types.ConsoleStatus{Enabled: true, Address: mcp.Address, URL: console.Root(mcp.Address)}
+	if !mcp.Reachable {
+		st.State = "unreachable"
+		st.Note = fmt.Sprintf("nothing is listening at %s; start the daemon: %s", mcp.Address, hint.ServerStart)
+		return st
+	}
+	st.Reachable, st.State = true, "serving"
 	return st
 }
 

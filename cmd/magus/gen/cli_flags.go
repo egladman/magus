@@ -389,6 +389,8 @@ const (
 	FlagServerReloadSocket = "socket"
 	// server start: --foreground
 	FlagServerStartForeground = "foreground"
+	// server status: --socket
+	FlagServerStatusSocket = "socket"
 	// server stop: --services
 	FlagServerStopServices = "services"
 	// server stop: --socket
@@ -1410,6 +1412,18 @@ func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
 	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
 	fs.BoolVar(&f.Services, FlagServerStopServices, false, "Stop the daemon's hosted services, leaving the daemon running")
+	return &f
+}
+
+// ServerStatusFlags are the flags declared for `magus server status`.
+type ServerStatusFlags struct {
+	Socket string // --socket
+}
+
+// BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
+func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
+	var f ServerStatusFlags
+	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
 	return &f
 }
 
