@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -157,6 +158,29 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
+}
+
+// The daemon builds one Store at startup and serves every MCP caller from it, so an actor
+// frozen at construction grades a worker that bound its checkout afterwards as the daemon.
+func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+
+	loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir()}
+	s := NewStore(loc)
+	_, err := s.Put(t.Context(), workerRow())
+	require.NoError(t, err)
+
+	require.NoError(t, BindLease(loc.CacheDir, "adj/other"))
+
+	_, err = s.Update(t.Context(), "adj/store", func(u *types.Lease) { u.Goal = "rewritten" })
+	var refused *RefusedError
+	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
+	require.ErrorAs(t, s.Clear(t.Context()), &refused)
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, workerRow().Goal, rows[0].Goal)
 }
 
 // A cleared plan is still legible afterwards. The count the tool prints back tells a

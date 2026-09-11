@@ -111,11 +111,12 @@ type Store struct {
 	// decides nothing is leased.
 	err  error
 	root string
-	// actor is who this process writes as, resolved once at construction. Held on the
-	// Store rather than passed per call so that no door can forget it: a write that
-	// reached the file without being graded would be exactly the escape [authorizeRow]
-	// exists to close.
-	actor Actor
+	// actor pins who this Store writes as; nil resolves the acting party at every write
+	// from cacheDir and the environment. The daemon builds ONE Store at startup and serves
+	// every magus_ledger caller from it, so an actor frozen at construction grades all of
+	// them as whoever started the process.
+	actor    *Actor
+	cacheDir string
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -138,10 +139,10 @@ type Location struct {
 	// StateBase overrides the user state directory the ledger resolves under. Empty
 	// means config.UserStateDir, which is what every caller outside a test wants.
 	StateBase string
-	// Actor is who the Store writes as. Nil resolves it from the environment and
-	// CacheDir through [ActingActor], which is what every door outside a test wants: the
-	// party acting is a property of the process, not something a caller should get to
-	// assert about itself.
+	// Actor is who the Store writes as. A pointer because the zero Actor is UNBOUND and
+	// is a real value: nil is the only way to say "resolve it at every write, from the
+	// environment and CacheDir through [ActingActor]", which is what every door outside a
+	// test wants.
 	Actor *Actor
 }
 
@@ -157,20 +158,21 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root}
-	if loc.Actor != nil {
-		s.actor = *loc.Actor
-	} else {
-		s.actor = ActingActor(loc.CacheDir)
-	}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir}
 	s.path, s.err = leasesPath(loc)
 	return s
 }
 
-// Actor is who this Store writes as, for a door that has to refuse before it computes
-// anything: `ledger accept` grades a report and must say a worker cannot grade its own
-// row before it reads one.
-func (s *Store) Actor() Actor { return s.actor }
+// Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it
+// computes anything: `ledger accept` grades a report and must say a worker cannot grade
+// its own row before it reads one. Resolved per call unless Location pinned one, so a
+// checkout that binds a lease is graded from its next write.
+func (s *Store) Actor() Actor {
+	if s.actor != nil {
+		return *s.actor
+	}
+	return ActingActor(s.cacheDir)
+}
 
 // leasesPath places the leases file: <XDG state>/magus/ledger/<repo>/leases.json, after
 // carrying forward whatever an older magus left at <CacheDir>/ledger.
@@ -337,6 +339,7 @@ func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	actor := s.Actor()
 	var stored types.Lease
 	err := s.withFileLock(ctx, func() error {
 		f, err := s.read()
@@ -357,7 +360,7 @@ func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func
 		u = u.Clone()
 		u.ID = id
 		if grade == graded {
-			if aerr := authorizeRow(s.actor, id, prev, u, i >= 0, f.Leases); aerr != nil {
+			if aerr := authorizeRow(actor, id, prev, u, i >= 0, f.Leases); aerr != nil {
 				return aerr
 			}
 		}
@@ -370,7 +373,7 @@ func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func
 			u.RegisteredBy = prev.RegisteredBy
 			f.Leases[i] = u
 		} else {
-			u.RegisteredBy = s.actor.record()
+			u.RegisteredBy = actor.record()
 			f.Leases = append(f.Leases, u)
 		}
 		if werr := s.write(f); werr != nil {
@@ -415,7 +418,7 @@ func (s *Store) List() ([]types.Lease, error) {
 // A bound worker is refused: see [authorizeClear]. ctx bounds the wait for the lock and
 // nothing else.
 func (s *Store) Clear(ctx context.Context) error {
-	if err := authorizeClear(s.actor); err != nil {
+	if err := authorizeClear(s.Actor()); err != nil {
 		return err
 	}
 	s.mu.Lock()
