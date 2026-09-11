@@ -487,3 +487,34 @@ func TestJobToolRebindIsSilentWhenTheStoreCannotAnswer(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "magus_job op=fork id="+done.ID),
 		"a store the guard cannot read leaves nothing to judge against")
 }
+
+// TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap pins two refusals that had no
+// boundary behind them, both reported by workers that could not complete their own setup.
+//
+// Re-binding the id already bound is the bootstrap run twice, and the grading schema is a
+// read: a holder denied it writes its result from memory, which is the failure the typed
+// result exists to prevent. Binding a DIFFERENT lease is still refused, in the words it
+// always used.
+func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	id := narrowLease().ID
+
+	for _, command := range []string{
+		"./magus session lease " + id,
+		"./magus ledger accept --schema",
+		"./magus ledger accept --help",
+		"./magus ledger register --schema",
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, id, command),
+			"%q asserts a binding the holder already has, or prints a contract; neither writes a row", command)
+	}
+
+	for _, command := range []string{
+		"./magus session lease harness/other",
+		"./magus ledger accept --state pass",
+	} {
+		reason := denyLeaseScopedRebind(ctx, Dependencies{}, id, command)
+		require.NotEmpty(t, reason, "%q still moves a row", command)
+		assert.Contains(t, reason, id, "the denial must say who magus thinks is calling")
+	}
+}

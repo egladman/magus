@@ -490,6 +490,13 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 	if len(words) < 2 {
 		return ""
 	}
+	// A holder must always be able to READ the rubric it is graded against. These print the
+	// contract and touch no row, and the schema is the same for every row, so refusing them
+	// protects nothing and guarantees results written from memory of another vocabulary by
+	// the people most expected to file good ones.
+	if hasFlag(c.Args, 0, "schema") || hasFlag(c.Args, 0, "help") {
+		return ""
+	}
 	switch {
 	// The read form prints the job this checkout holds and takes no operand; only the form
 	// carrying one takes a different job. Refusing the read would leave a holder unable to
@@ -498,6 +505,14 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 	// is the remedy rather than an escape.
 	case words[0] == hint.JobExec.Head() && words[1] == hint.JobExec.Leaf() && len(words) > 2:
 		if !me().declared {
+			return ""
+		}
+		// Re-asserting the SAME job is the bootstrap run twice, which the bind verb itself
+		// permits for that reason. Refusing it left a holder unable to finish the
+		// bootstrap from inside its own worktree: the marker binds the checkout, and then
+		// the verb recording the base it landed on was refused to the only party that
+		// could run it.
+		if words[2] == me().row.ID {
 			return ""
 		}
 		return "take the lease on another job here"
