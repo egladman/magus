@@ -108,7 +108,7 @@ pointing at wherever you put your copies of the templates:
           {
             "type": "command",
             "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
-            "statusMessage": "magus: handing this checkout back"
+            "statusMessage": "magus: restating this checkout's rules"
           }
         ]
       }
