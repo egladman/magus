@@ -153,11 +153,17 @@ func hintUptake(fold sessions.Fold) []hintUptakeRow {
 		}
 		out = append(out, *r)
 	}
+	// The id breaks the last tie, because the rows come out of a map and the sort is not
+	// stable: two hints that convert alike and were served alike ordered by whatever the
+	// runtime handed back, so the table reordered itself between two runs over one store.
 	slices.SortFunc(out, func(a, b hintUptakeRow) int {
 		if a.Rate != b.Rate {
 			return cmp.Compare(b.Rate, a.Rate)
 		}
-		return cmp.Compare(b.Served, a.Served)
+		if a.Served != b.Served {
+			return cmp.Compare(b.Served, a.Served)
+		}
+		return cmp.Compare(a.ID, b.ID)
 	})
 	return out
 }
