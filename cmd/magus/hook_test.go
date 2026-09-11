@@ -116,7 +116,7 @@ func serveNext(t *testing.T, gate hint.Gate, id string, argv ...string) {
 }
 
 // touchedProjects reads the marker recording which projects this session has written
-// to, by the same kind string internal/guard's own touchedProjects (guard_drift.go)
+// to, by the same kind string internal/guard's own touchedProjects (drift.go)
 // reads ("touched-projects"); that helper is unexported to internal/guard, so this
 // package mirrors its read side for the one assertion that needs it.
 func touchedProjects(g hint.Gate) []string {

@@ -114,7 +114,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 // declared Flags), so a bogus or misspelled flag in a documented example is
 // a build-time failure instead of something a reader discovers by pasting it.
 //
-// It reuses guard.ParseCommands (guard_shellparse.go) for the shell parsing:
+// It reuses guard.ParseCommands (internal/guard/parse.go) for the shell parsing:
 // the same mvdan.cc/sh AST walk the write-guard already trusts to find every
 // command a shell line would actually run, including inside command
 // substitutions ($(...)) and pipelines, and to correctly EXCLUDE redirects
