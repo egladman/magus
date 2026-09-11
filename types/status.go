@@ -2,10 +2,10 @@ package types
 
 import "time"
 
-// StatusBase holds the static portions of a StatusReport: telemetry, cache, and
+// StatusBase holds the static portions of a StatusSnapshot: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
 // selfUpdateCompiled build-tag constant) and injected into
-// console.NewService so the bridge can assemble a full StatusReport without
+// console.NewService so the bridge can assemble a full StatusSnapshot without
 // importing cmd/magus.
 type StatusBase struct {
 	Telemetry TelemetryStatus
@@ -26,11 +26,11 @@ func (b BuildInfo) Fingerprint() string {
 	return "magus " + b.Version + " (" + b.Commit + ") built " + b.Date
 }
 
-// StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
+// StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
 // The daemon serves the same data to the console over the typed StatusService (its live
 // fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
-type StatusReport struct {
+type StatusSnapshot struct {
 	Telemetry TelemetryStatus `json:"telemetry" yaml:"telemetry"`
 	Cache     CacheStatus     `json:"cache" yaml:"cache"`
 	Build     BuildStatus     `json:"build" yaml:"build"`

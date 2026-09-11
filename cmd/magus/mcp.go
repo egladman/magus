@@ -168,7 +168,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	}
 	// The hosted-services registry (built by startMultiWorkspaceDaemon) backs the
 	// dashboard's services view the same way daemonRuns backs its runs view. Nil for a
-	// bridge started without the multi-workspace daemon, leaving StatusReport.Services empty.
+	// bridge started without the multi-workspace daemon, leaving StatusSnapshot.Services empty.
 	if daemonServices != nil {
 		daemonOpts = append(daemonOpts, daemon.WithServices(func() []types.StatusService {
 			return serviceStatuses(daemonServices)

@@ -24,7 +24,7 @@ import (
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
 type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
-	StatusReport(ctx context.Context) types.StatusReport
+	StatusReport(ctx context.Context) types.StatusSnapshot
 }
 
 // planOutputs is the stored-run half of the state overlay: the same descriptor list
@@ -150,7 +150,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 // caller's spelling back for the message); a DERIVED candidate that no project defines is
 // silently skipped instead, so `magus x <ref>` running in the pool falls through to the
 // most recent output rather than serving an empty graph while a build is visibly in flight.
-func (h *Handler) resolveAnchor(raw string, index planTargets, report types.StatusReport, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
+func (h *Handler) resolveAnchor(raw string, index planTargets, report types.StatusSnapshot, descs []cache.OutputDescriptor) (target, anchor string, ok bool) {
 	if raw != "" {
 		t, err := types.ParseTarget(raw)
 		if err != nil || !index.defines(t.Name) {
@@ -338,7 +338,7 @@ func planClosure(index planTargets, projects []types.TargetGraphProject, anchor 
 // Running WINS over a stored outcome, always: the outcome describes a run that has already
 // ended, and showing a green node for work restarted ten seconds ago is the one reading that
 // makes the view useless.
-func overlayPlanState(nodes []planNode, report types.StatusReport, descs []cache.OutputDescriptor, root string) {
+func overlayPlanState(nodes []planNode, report types.StatusSnapshot, descs []cache.OutputDescriptor, root string) {
 	last := lastOutcomes(descs)
 	live := runningNodes(report.Runs)
 	invoked := runningInvocations(report.Pool, root)

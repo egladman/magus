@@ -18,7 +18,7 @@ import (
 )
 
 func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
-	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
+	src := fakeSource{report: types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1.2.3", Commit: "abc1234"}, nil)
 
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
@@ -37,7 +37,7 @@ func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
 // deprecated JSON route onto the GetStatus response envelope: observing_since and the resolved config.
 func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	since := time.Date(2026, 7, 21, 10, 0, 0, 0, time.UTC)
-	src := fakeSource{report: types.StatusReport{
+	src := fakeSource{report: types.StatusSnapshot{
 		ObservingSince: since,
 		Config:         types.StatusConfig{DefaultCharms: []string{"rw"}, Concurrency: 8, Sandbox: true},
 	}}
@@ -66,16 +66,16 @@ func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
 // path is exercised. The mutex keeps the handler goroutine's read race-clean against the test's write.
 type mutableSource struct {
 	mu     sync.Mutex
-	report types.StatusReport
+	report types.StatusSnapshot
 }
 
-func (m *mutableSource) StatusReport(context.Context) types.StatusReport {
+func (m *mutableSource) StatusReport(context.Context) types.StatusSnapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.report
 }
 
-func (m *mutableSource) set(r types.StatusReport) {
+func (m *mutableSource) set(r types.StatusSnapshot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.report = r
@@ -86,7 +86,7 @@ func (m *mutableSource) set(r types.StatusReport) {
 // connect-time snapshot and then a fresh frame after the underlying report changes.
 func TestConnectStreamStatusPushesInitialThenOnChange(t *testing.T) {
 	src := &mutableSource{}
-	src.set(types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Running: 0}})
+	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Running: 0}})
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1"}, nil)
 	svc.interval = 10 * time.Millisecond // tighten the poll so the test does not wait on the 2s default
 
@@ -108,7 +108,7 @@ func TestConnectStreamStatusPushesInitialThenOnChange(t *testing.T) {
 	assert.Equal(t, int32(0), stream.Msg().GetStatus().GetPool().GetRunning())
 
 	// Flip the snapshot so the next tick observes a change and pushes a second frame.
-	src.set(types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Running: 2}})
+	src.set(types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Running: 2}})
 	require.True(t, stream.Receive())
 	assert.Equal(t, int32(2), stream.Msg().GetStatus().GetPool().GetRunning())
 	require.NoError(t, stream.Close())

@@ -18,9 +18,9 @@ type collector interface {
 }
 
 // statusSource is the narrow live-pool read the sampler needs, satisfied by
-// *console.Service (the same StatusReport the StatusService uses).
+// *console.Service (the same StatusSnapshot the StatusService uses).
 type statusSource interface {
-	StatusReport(context.Context) types.StatusReport
+	StatusReport(context.Context) types.StatusSnapshot
 }
 
 // startSampler runs the utilization sampler until ctx is cancelled: it appends one Sample

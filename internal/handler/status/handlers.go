@@ -17,7 +17,7 @@ import (
 // service: assemble the current domain status report. It is satisfied by
 // *console.Service; the handler package never imports the service concretely.
 type statusSource interface {
-	StatusReport(context.Context) types.StatusReport
+	StatusReport(context.Context) types.StatusSnapshot
 }
 
 // EventsHandler serves GET /api/v1/events as a Server-Sent Events stream.

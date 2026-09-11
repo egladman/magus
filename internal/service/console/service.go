@@ -40,12 +40,12 @@ type Service struct {
 
 	// runsFn returns the daemon's live runs, folded onto the status report. Nil when
 	// this service is not backed by a daemon run registry (a plain CLI status query), leaving
-	// StatusReport.Runs empty.
+	// StatusSnapshot.Runs empty.
 	runsFn func() []types.StatusRun
 
 	// servicesFn returns the daemon's hosted shared services, folded onto the status
 	// report. Nil when this service is not backed by a daemon service registry, leaving
-	// StatusReport.Services empty.
+	// StatusSnapshot.Services empty.
 	servicesFn func() []types.StatusService
 
 	// Insight cache: an assembled InsightView reused for insightTTL so repeated dashboard
@@ -55,7 +55,7 @@ type Service struct {
 	insightTTL   time.Duration
 
 	// Test seams. Production leaves these nil; the real Magus / daemon socket is used.
-	statusReportFn   func(ctx context.Context) types.StatusReport
+	statusReportFn   func(ctx context.Context) types.StatusSnapshot
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
 	insightFn        func(ctx context.Context) (types.InsightView, error)
@@ -73,9 +73,9 @@ func WithDaemonSocket(addr string) Option {
 	return func(s *Service) { s.daemonSocket = addr }
 }
 
-// WithStatusReportFn replaces the daemon query used to assemble StatusReport. Tests
+// WithStatusReportFn replaces the daemon query used to assemble StatusSnapshot. Tests
 // pass this to drive status paths without a running daemon.
-func WithStatusReportFn(fn func(ctx context.Context) types.StatusReport) Option {
+func WithStatusReportFn(fn func(ctx context.Context) types.StatusSnapshot) Option {
 	return func(s *Service) { s.statusReportFn = fn }
 }
 
@@ -142,7 +142,7 @@ func (s *Service) Version() string { return s.version }
 // from the status base merged with the live pool state. The pool comes from the injected
 // StatusReportFn when set (tests), otherwise queried from the daemon socket; a query
 // failure is reported as PoolError rather than an error return, matching `magus status`.
-func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
+func (s *Service) StatusReport(ctx context.Context) types.StatusSnapshot {
 	out := s.statusReport(ctx)
 	// Live runs come from this daemon's in-process run registry (not the pool query), so
 	// they ride the same report whether the pool is assembled from a seam or a socket query.
@@ -168,11 +168,11 @@ func (s *Service) StatusReport(ctx context.Context) types.StatusReport {
 
 // statusReport assembles the base report (telemetry/cache/build plus live pool), before the
 // daemon's live runs are folded on by StatusReport.
-func (s *Service) statusReport(ctx context.Context) types.StatusReport {
+func (s *Service) statusReport(ctx context.Context) types.StatusSnapshot {
 	if s.statusReportFn != nil {
 		return s.statusReportFn(ctx)
 	}
-	out := types.StatusReport{
+	out := types.StatusSnapshot{
 		Telemetry:      s.statusBase.Telemetry,
 		Cache:          s.statusBase.Cache,
 		Build:          s.statusBase.Build,

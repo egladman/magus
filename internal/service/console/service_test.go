@@ -83,9 +83,9 @@ func TestServiceTargetGraph(t *testing.T) {
 
 // TestServiceStatusReportSeam checks the injected report is returned verbatim.
 func TestServiceStatusReportSeam(t *testing.T) {
-	want := types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}
+	want := types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3",
-		WithStatusReportFn(func(context.Context) types.StatusReport { return want }))
+		WithStatusReportFn(func(context.Context) types.StatusSnapshot { return want }))
 	assert.Equal(t, want, svc.StatusReport(context.Background()))
 }
 

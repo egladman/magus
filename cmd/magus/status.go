@@ -70,7 +70,7 @@ func status(ctx context.Context, args []string) error {
 	}
 
 	if f.Watch == 0 {
-		return printStatus(buildStatusReport(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
+		return printStatus(buildStatusSnapshot(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
@@ -94,12 +94,12 @@ func status(ctx context.Context, args []string) error {
 	defer queryTick.Stop()
 
 	animFrame := 0
-	report := buildStatusReport(ctx, f.Socket, f.Symbols)
+	snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
 	defer repaint.Finish()
 	inline := opts.Format == outputText && canRender
 	for {
-		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.Compact); err != nil {
+		if err := paintStatusFrame(repaint, inline, snapshot, opts, animFrame, f.Compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -107,7 +107,7 @@ func status(ctx context.Context, args []string) error {
 			case <-ctx.Done():
 				return nil
 			case <-queryTick.C:
-				report = buildStatusReport(ctx, f.Socket, f.Symbols)
+				snapshot = buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 			}
 			continue
 		}
@@ -117,7 +117,7 @@ func status(ctx context.Context, args []string) error {
 		case <-animTick.C:
 			animFrame++
 		case <-queryTick.C:
-			report = buildStatusReport(ctx, f.Socket, f.Symbols)
+			snapshot = buildStatusSnapshot(ctx, f.Socket, f.Symbols)
 		}
 	}
 }
@@ -135,7 +135,7 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func printStatus(r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
@@ -143,7 +143,7 @@ func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compac
 // watch loop can render into a buffer and redraw it in place, rather than
 // printing straight at the terminal and having to erase the whole screen to
 // get rid of it.
-func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,
 	// so the terminal being rendered FOR is still standard output.
@@ -168,10 +168,10 @@ func gridEnabled(opts OutputOptions, canRender bool) bool {
 	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
-// buildStatusBase constructs the static portions of a StatusReport that depend
+// buildStatusBase constructs the static portions of a StatusSnapshot that depend
 // on the selfUpdateCompiled build-tag constant and the resolved config. Called at
 // MCP-server start to inject into dashboard.Options so the bridge can serve the full
-// types.StatusReport without importing cmd/magus.
+// types.StatusSnapshot without importing cmd/magus.
 func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
@@ -182,8 +182,8 @@ func buildStatusBase() types.StatusBase {
 	}
 }
 
-func buildStatusReport(ctx context.Context, socket string, symbols bool) types.StatusReport {
-	report := types.StatusReport{
+func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) types.StatusSnapshot {
+	snapshot := types.StatusSnapshot{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Config:    buildConfigStatus(globalCfg),
@@ -205,30 +205,30 @@ func buildStatusReport(ctx context.Context, socket string, symbols bool) types.S
 	if symbols {
 		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
 		// status remains a cheap operational snapshot rather than a second workspace scan.
-		report.SymbolIndexes = loadSymbolIndexStatus(ctx)
+		snapshot.SymbolIndexes = loadSymbolIndexStatus(ctx)
 	}
 	addrs, err := resolveStatusSockets(ctx, socket)
 	if err != nil {
-		report.PoolError = err.Error()
-		return report
+		snapshot.PoolError = err.Error()
+		return snapshot
 	}
-	applyStatusPools(ctx, &report, addrs, proc.QueryStatus)
-	return report
+	applyStatusPools(ctx, &snapshot, addrs, proc.QueryStatus)
+	return snapshot
 }
 
 // statusQuery fetches one proc server's snapshot. A seam, like probe.go's statusFunc, so
 // the multi-server assembly can be exercised without live sockets.
 type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, error)
 
-// applyStatusPools reads every proc server in addrs and folds them onto the report.
+// applyStatusPools reads every proc server in addrs and folds them onto the snapshot.
 //
 // The first one that answers (the stable daemon when it is up) becomes THE pool: every
 // renderer that shows a single pool (the grid, the compact line) reads it, and its shared
 // services are the ones reported. The rest ride along in Pools, which stays empty for the
 // single-server case so it never just repeats Pool. A server that died between discovery
-// and the query is dropped rather than failing the report; PoolError is set only when
+// and the query is dropped rather than failing the snapshot; PoolError is set only when
 // nothing answered, so more than one server is reported, never refused.
-func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []string, query statusQuery) {
+func applyStatusPools(ctx context.Context, snapshot *types.StatusSnapshot, addrs []string, query statusQuery) {
 	var pools []types.StatusOutput
 	var failed []string
 	for _, addr := range addrs {
@@ -240,22 +240,22 @@ func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []s
 		out := statusOutputFromReply(reply)
 		out.Socket = addr
 		if len(pools) == 0 {
-			report.Services = reply.Services
+			snapshot.Services = reply.Services
 		}
 		// The budget is the MACHINE's, so the first server that reports one owns the
 		// section: only the daemon arbitrates it, and there is one daemon per user.
-		if report.Machine == nil && reply.Machine != nil {
-			report.Machine = reply.Machine
+		if snapshot.Machine == nil && reply.Machine != nil {
+			snapshot.Machine = reply.Machine
 		}
 		pools = append(pools, *out)
 	}
 	if len(pools) == 0 {
-		report.PoolError = strings.Join(failed, "; ")
+		snapshot.PoolError = strings.Join(failed, "; ")
 		return
 	}
-	report.Pool = &pools[0]
+	snapshot.Pool = &pools[0]
 	if len(pools) > 1 {
-		report.Pools = pools
+		snapshot.Pools = pools
 	}
 }
 
@@ -365,7 +365,7 @@ func buildConfigStatus(c config.Config) types.StatusConfig {
 	}
 }
 
-func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame int) {
+func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -546,7 +546,7 @@ func printServiceStatus(w io.Writer, services []types.StatusService) {
 // printMCPEndpointStatus renders the runtime health of the MCP endpoint agent hosts
 // connect to. This is the answer to "are my magus tools actually reachable", separate
 // from the daemon/pool block above (which reports the proc socket). Omitted only when
-// the report carries no MCP section (e.g. a daemon self-report).
+// the snapshot carries no MCP section (e.g. a daemon's own snapshot).
 func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
 	if m == nil {
 		return
@@ -664,11 +664,11 @@ const compactRunningMax = 3
 // pathological label can't blow the line out.
 const compactRunningBudget = 32
 
-// printStatusCompact renders the report as one densely-packed line. The format
+// printStatusCompact renders the snapshot as one densely-packed line. The format
 // targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
 // static), oldest running targets first so the long-running work stays visible.
 // now is the reference time for per-target durations (parameterised for tests).
-func printStatusCompact(w io.Writer, r types.StatusReport, now time.Time) {
+func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
 	if r.Pool == nil {
 		fmt.Fprintln(w, "daemon: off")
 		return
@@ -1171,7 +1171,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}
