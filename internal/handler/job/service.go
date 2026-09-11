@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -21,9 +22,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/cache"
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 )
@@ -41,6 +44,10 @@ type workspace interface {
 type Service struct {
 	ws      workspace
 	version string
+	// store is where a catalog job's row lives, beside the delegated jobs. Nil leaves the
+	// rows unwritten, which is what a server with no store does rather than failing a
+	// submit: the job still runs, and only its row is missing.
+	store *jobstore.Store
 	// socket returns the daemon's proc socket address to submit to. The daemon sets
 	// MAGUS_DAEMON_SOCKET on itself before serving, so the default reads that.
 	socket func() string
@@ -50,11 +57,13 @@ type Service struct {
 	statusFn func(ctx context.Context, addr string) (*proc.StatusReply, error)
 }
 
-// NewService builds a JobService handler over the workspace ws, submitting jobs as version.
-func NewService(ws workspace, version string) *Service {
+// NewService builds a JobService handler over the workspace ws, submitting jobs as version
+// and recording each submitted job's row in store. store may be nil; see [Service.store].
+func NewService(ws workspace, version string, store *jobstore.Store) *Service {
 	return &Service{
 		ws:       ws,
 		version:  version,
+		store:    store,
 		socket:   func() string { return os.Getenv("MAGUS_DAEMON_SOCKET") },
 		submitFn: proc.SubmitJob,
 		statusFn: proc.QueryStatus,
@@ -118,12 +127,39 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 		state = jobv1.SubmitState_SUBMIT_STATE_ALREADY_RUNNING
 		inv = running[argvKey(j.Argv)] // report the already-running invocation
 	}
+	s.recordSubmit(ctx, j, inv)
 	return connect.NewResponse(&jobv1.RunJobResponse{
 		State:        state,
 		InvocationId: inv,
 		ConsoleUrl:   "", // TODO: deep-link once the /logs page accepts an invocation fragment
 		Job:          info,
 	}), nil
+}
+
+// recordSubmit upserts the catalog job's row as running and records the invocation id.
+// This is the only place that CAN record it: the completion callback is handed argv,
+// duration and error and no invocation, so a run first written when it ends could never
+// name the log it produced.
+//
+// Best-effort, like the trail the daemon writes beside it. The store refuses a write from
+// a checkout bound to a lease, so a daemon serving a worker's worktree leaves the row
+// alone rather than failing a submit that otherwise succeeded.
+func (s *Service) recordSubmit(ctx context.Context, j jobs.Job, inv string) {
+	if s.store == nil {
+		return
+	}
+	if _, err := s.store.Update(ctx, j.Name, func(row *types.Job) {
+		row.Holder = types.HolderDaemon
+		row.Goal = j.Desc
+		row.State = types.StateRunning
+		if row.LastRun == nil {
+			row.LastRun = &types.JobRun{}
+		}
+		row.LastRun.Invocation = inv
+	}); err != nil {
+		slog.DebugContext(ctx, "job: recording the submitted job's row failed",
+			slog.String("job", j.Name), slog.String("error", err.Error()))
+	}
 }
 
 // job assembles a job's descriptor plus its running state, last completed run (from the

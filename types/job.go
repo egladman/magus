@@ -398,7 +398,9 @@ type Job struct {
 	// store's record rather than anything the holder asserts.
 	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
 	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
-	// LastRun is the job's most recent completed run, nil until one finishes.
+	// LastRun is the job's most recent run, nil until one is submitted. It is filled in
+	// two steps because no single writer sees the whole of it: the invocation id at
+	// submit, and what the run cost and whether it worked when it ends.
 	//
 	// The SIZE of what the job maintains is deliberately not stored beside it: a trail, a
 	// run log and a cache all grow without the row being written, so a stored figure goes
