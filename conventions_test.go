@@ -1266,24 +1266,85 @@ const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
 // quietly kept testing the old cells, and a declaration nobody executes is the
 // exact failure that let a broken plugin ship.
 //
-// A cell the guard cannot currently produce is declared rather than skipped:
-// `# case: path/deny unreachable - ...` satisfies this and says why in the file
-// where the next person will look.
+// A label is not a case. The gate demands a block that actually EXECUTES a
+// template, because the one form of this file that never fails is a cell whose
+// label reads true and whose body runs nothing, and an "unreachable" note is a
+// claim about the guard that nothing rechecks once the guard grows a rule.
+// unreachableCases is the only door out, and it names the cell and the reason.
 func TestTransportCorpusCoversTheContract(t *testing.T) {
-	body, err := os.ReadFile(transportCorpus)
-	require.NoError(t, err, "read %s", transportCorpus)
-	corpus := string(body)
+	executed, noted := transportCorpusCases(t)
 
 	for _, surface := range agent.GuardSurfaces() {
 		for _, decision := range agent.GuardDecisions() {
-			label := "# case: " + surface + "/" + decision
-			assert.Contains(t, corpus, label,
-				"%s has no case labeled %q.\n"+
-					"Every surface-and-decision pair in the guard contract needs one executed case, or an\n"+
-					"explicit `%s unreachable - <why>` line when the guard cannot produce that verdict.",
-				transportCorpus, label, label)
+			cell := surface + "/" + decision
+			if why, allowed := unreachableCases[cell]; allowed {
+				assert.True(t, noted[cell],
+					"%s executes no %q case and unreachableCases says it cannot (%s), but no `# case: %s unreachable - <why>`\n"+
+						"line says so in the file. Record it where the next person looks, or drop the entry.",
+					transportCorpus, cell, why, cell)
+				continue
+			}
+			assert.True(t, executed[cell],
+				"%s has no EXECUTED case for %q: a `# case: %s` label with a block that runs a template.\n"+
+					"A label alone, or an `unreachable` note, does not satisfy this: a declared stance nobody\n"+
+					"ran is the failure that let a broken plugin ship. If the corpus genuinely cannot produce\n"+
+					"this verdict, add %q to unreachableCases with the reason.",
+				transportCorpus, cell, cell, cell)
 		}
 	}
+
+	for cell := range unreachableCases {
+		assert.False(t, executed[cell],
+			"unreachableCases says %s cannot execute %q, but a case for it runs a template. Drop the entry.",
+			transportCorpus, cell)
+	}
+	for cell := range noted {
+		_, allowed := unreachableCases[cell]
+		assert.True(t, allowed,
+			"%s calls %q unreachable and unreachableCases does not. An unreachable note is a claim about the\n"+
+				"guard that nothing rechecks once a rule grows; record it in unreachableCases so this gate owns it,\n"+
+				"or delete the note and write the case.", transportCorpus, cell)
+	}
+}
+
+// unreachableCases records a surface-and-decision cell the corpus cannot execute,
+// and why. Every other cell owes a real case.
+var unreachableCases = map[string]string{
+	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +
+		"could reach one (gate-repeat, graph-stale, stale-binary) each need state a testscript cannot " +
+		"make deterministic: run logs inside the window, a stale symbol index, a binary older than its sources",
+}
+
+// transportCorpusCases splits the corpus on its case labels and reports, per cell,
+// whether some block for it runs a template and whether some block claims it is
+// unreachable. A cell may carry several cases, so both are ORs over its blocks.
+func transportCorpusCases(t *testing.T) (executed, noted map[string]bool) {
+	t.Helper()
+	body, err := os.ReadFile(transportCorpus)
+	require.NoError(t, err, "read %s", transportCorpus)
+
+	executed, noted = map[string]bool{}, map[string]bool{}
+	cell := ""
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if rest, found := strings.CutPrefix(line, "# case: "); found {
+			fields := strings.Fields(rest)
+			if len(fields) == 0 {
+				cell = ""
+				continue
+			}
+			cell = fields[0]
+			if len(fields) > 1 && fields[1] == "unreachable" {
+				noted[cell] = true
+				cell = ""
+			}
+			continue
+		}
+		if cell != "" && strings.HasPrefix(line, "exec ") {
+			executed[cell] = true
+		}
+	}
+	return executed, noted
 }
 
 // TestParityTableMatchesTheGlueDeclarations keeps the guide's hand-written
@@ -1331,7 +1392,7 @@ func TestParityTableMatchesTheGlueDeclarations(t *testing.T) {
 			delivers := mcp["deny"] != "none" || mcp["advise"] != "none"
 			assert.Equal(t, delivers, !strings.HasPrefix(strings.ToLower(cell), "not wired"),
 				"parity table row %q, MCP call rules reads %q, which disagrees with the mcp stances the templates declare (deny=%s advise=%s).\n"+
-					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
+					"Fix whichever is wrong: the table is a promise to a reader, the declaration is what the file does.",
 				host, cell, mcp["deny"], mcp["advise"])
 		}
 	}
