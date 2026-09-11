@@ -778,7 +778,7 @@ func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLeas
 
 // declaredPath reports whether any live lease named rel in a boundary, as a lane it owns
 // or a path it was refused. A word no plan mentions is not treated as a path at all.
-func declaredPath(live []types.Lease, rel string) bool {
+func declaredPath(live []types.Job, rel string) bool {
 	for _, u := range live {
 		for _, decls := range [][]string{u.WritePaths, u.DenyPaths} {
 			if _, ok, _ := declarationCovering(decls, rel); ok {

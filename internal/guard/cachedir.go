@@ -9,7 +9,6 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"mvdan.cc/sh/v3/syntax"
 )
 
 // The checkout's own magus cache dir, on both surfaces.
