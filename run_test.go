@@ -20,12 +20,45 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// A target declared `advisory` that fails inside a composite printed [fail] on its own
+// row while the composite passed, so the gate reader met two answers and had to work out
+// which one was the run's. The row now carries the status once.
+func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", workspace.WithTarget("security",
+		workspace.Advisory("a vulnerability report is not a build failure")))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p, "the fixture project must resolve")
+	require.True(t, p.TargetPolicies["security"].Advisory, "the fixture declares an advisory target")
+
+	var out bytes.Buffer
+	c, err := cache.Open(t.Context(), t.TempDir(),
+		cache.WithLogger(slog.New(cache.NewPrettyHandler(&out, slog.LevelInfo))))
+	require.NoError(t, err, "cache.Open")
+
+	obs := stageObserver{cache: c, label: "fixture", policies: policiesOf(p)}
+	obs.TargetEnd(t.Context(), "security", time.Second, errors.New("govulncheck: exit 1"))
+	obs.TargetEnd(t.Context(), "test", time.Second, errors.New("go test: exit 1"))
+
+	assert.Contains(t, out.String(), "[advisory] fixture security")
+	assert.Contains(t, out.String(), "[fail] fixture test",
+		"a member nothing declared advisory still fails the row it is on")
+}
 
 func TestDiagEventFromError(t *testing.T) {
 	// A coded DiagnosticError yields an event tagged with the target identity.

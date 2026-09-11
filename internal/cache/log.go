@@ -867,7 +867,11 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		// running projects interleave. A stage always ran, so it is pass/fail only.
 		target := recordStr(r, "target")
 		name, color := "pass", colGreen
-		if recordStr(r, "error") != "" {
+		switch {
+		case recordStr(r, "error") == "":
+		case recordBool(r, "advisory"):
+			name, color = "advisory", colYellow
+		default:
 			name, color = "fail", colRed
 		}
 		h.printf("  %s %s %s (%s)\n", glyph(colorize, name, color), label, target, fmtDur(dur))
