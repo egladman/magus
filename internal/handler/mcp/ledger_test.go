@@ -18,12 +18,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tmpLedger keeps a test's rows under temp directories. The store resolves the
-// per-repository state directory now, so a Location without StateBase would write the
-// developer's own ledger.
+// tmpLedger keeps a test's rows under temp directories: a Location without StateBase
+// would write the developer's own per-repository ledger.
+//
+// The actor is pinned UNBOUND, or a developer running the suite from a checkout bound to
+// a lease grades every put and clear here as that worker and is refused.
 func tmpLedger(t *testing.T, root string) *ledger.Store {
 	t.Helper()
-	return ledger.NewStore(ledger.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root})
+	return ledger.NewStore(ledger.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &ledger.Actor{}})
 }
 
 func TestLedgerTool(t *testing.T) {
