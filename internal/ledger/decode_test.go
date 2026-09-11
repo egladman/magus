@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -109,4 +110,40 @@ func TestRowApplyDeclaresRatherThanMerges(t *testing.T) {
 	assert.Empty(t, stored.Tier, "an omitted field is cleared")
 	assert.Empty(t, stored.OwnedPaths)
 	assert.Equal(t, int64(42), stored.Registered, "what the store computed is not the declaration's to drop")
+}
+
+// The row schema is what a person reads before typing `register --stdin`, so a field on
+// one side and not the other is a row that validates and is not stored, or one that is
+// stored and nobody was told to send.
+func TestRowSchemaMatchesTheStruct(t *testing.T) {
+	t.Parallel()
+
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(RowSchema), &schema))
+
+	assert.ElementsMatch(t, jsonFields(Row{}), keys(schema.Properties))
+}
+
+// The two write doors accept the same fields or a row declared on one is not the row the
+// other would have recorded. ParseMerge is the MCP tool's decoder and Row is the CLI's.
+func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
+	t.Parallel()
+
+	for _, field := range jsonFields(Row{}) {
+		if field == "schema_version" || field == "id" {
+			continue // the envelope and the key, which ParseMerge takes as arguments
+		}
+		var value any = "declared"
+		switch field {
+		case "owned_paths", "forbidden_paths", "focus", "depends_on":
+			value = []any{"internal/ledger"}
+		case "read_only":
+			value = true
+		}
+		_, err := ParseMerge(map[string]any{field: value})
+		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
+	}
+	assert.ElementsMatch(t, jsonFields(Row{})[2:], mergeFields, "the two doors name one vocabulary")
 }
