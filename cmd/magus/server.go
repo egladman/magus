@@ -115,7 +115,7 @@ func serverStatus(ctx context.Context, args []string) error {
 		return usagef("magus server status: takes no arguments (got %q)", rest[0])
 	}
 
-	report := buildStatusReport(ctx, socket, false)
+	report := buildStatusSnapshot(ctx, socket, false)
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err

@@ -201,7 +201,7 @@ func buildStatusSnapshot(ctx context.Context, socket string, symbols bool) types
 		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
 	// After the literal, because it reads the MCP probe above rather than making its own.
-	report.Console = buildConsoleStatus(globalCfg.Console, report.MCPEndpoint)
+	snapshot.Console = buildConsoleStatus(globalCfg.Console, snapshot.MCPEndpoint)
 	if symbols {
 		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
 		// status remains a cheap operational snapshot rather than a second workspace scan.
