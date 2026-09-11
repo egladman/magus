@@ -227,23 +227,17 @@ type LeaseActor struct {
 // row: registration computes it, records it, and hands it back, and it refuses nothing;
 // the caller and the orchestrator decide what a divergence is worth.
 //
-// Why enforcement lives outside rather than here, which is the reason the split exists at
-// all: a store that quietly started refusing would make the ledger
-// something agents route around instead of something they keep honestly, and a ledger
-// nobody keeps honestly grades nothing. The skill that defines this vocabulary says the
-// same thing about the prompt text these rows mirror: ownership is checked by comparing
-// the ledger against the ACTUAL diff since each lease's Checkpoint, which is a job for an
-// agent reading this store rather than for the store itself.
+// Why enforcement lives outside rather than here: a store that quietly started refusing
+// would make the ledger something agents route around instead of something they keep
+// honestly, and a ledger nobody keeps honestly grades nothing.
 //
-// The field set mirrors the ledger table in the magus-multi-agent skill
-// one-for-one, so a row an agent writes down and a row it records here cannot describe
-// the same lease differently.
+// The field set mirrors the ledger table in the magus-multi-agent skill one-for-one, so a
+// row an agent writes down and a row it records here cannot describe the same lease
+// differently.
 //
-// Registered in cmd/magus-utils/boundary_types.go as a RuntimeObject: magus\ledger.put
-// and magus\ledger.list (bound in internal/interp/bindings/ledger_ns.go, backed by
-// std.MagusPutLedger/MagusListLedger) return one. VCSCheckpoint (the value Checkpoint
-// holds) stays unregistered: Checkpoint is a plain string here, the form an
-// orchestrator has at spawn time, so there is no struct to mirror yet.
+// Registered in cmd/magus-utils/boundary_types.go as a RuntimeObject, so magus\ledger.put
+// and magus\ledger.list return one. VCSCheckpoint stays unregistered: Checkpoint is a
+// plain string here, the form an orchestrator has at spawn time.
 type Lease struct {
 	// SchemaVersion is the shape this row was written in, stamped by the store on every
 	// write and never taken from a client. See LeaseSchemaVersion.
@@ -393,11 +387,9 @@ type LeaseRelease struct {
 // LeaseUnattributedWrite is one path a lease owns that somebody outside it wrote, and
 // the content that writer left behind.
 //
-// The inverse of LeaseRelease, and the half that was missing. A release is a worker saying
-// "I am done with this, here is what I left"; this is magus saying "somebody who is not you
-// changed this, here is what is there now", so a lease that read the file earlier can find
-// out by ASKING rather than by being told, and a digest that no longer matches what it read is the
-// whole signal.
+// The inverse of LeaseRelease: a release is a worker saying "I am done with this, here is
+// what I left", and this is magus saying "somebody who is not you changed this, here is
+// what is there now", so a lease that read the file earlier can find out by ASKING.
 //
 // UNATTRIBUTED is the honest word: magus knows only that the writer named no live lease,
 // so a person editing in their own checkout and an agent that forgot to export its id are
