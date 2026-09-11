@@ -134,7 +134,7 @@ func clampStatusWatch(interval time.Duration) time.Duration {
 }
 
 // printStatus renders one status snapshot; animFrame drives the active-cell pulse (0 = static).
-func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func printStatus(r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	return writeStatus(os.Stdout, r, opts, animFrame, compact)
 }
 
@@ -142,7 +142,7 @@ func printStatus(r types.StatusReport, opts OutputOptions, animFrame int, compac
 // watch loop can render into a buffer and redraw it in place, rather than
 // printing straight at the terminal and having to erase the whole screen to
 // get rid of it.
-func writeStatus(w io.Writer, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func writeStatus(w io.Writer, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	// TTY-ness is measured on os.Stdout, not on w, and that is deliberate: in
 	// watch mode w is a buffer this renders into before redrawing it in place,
 	// so the terminal being rendered FOR is still standard output.
@@ -167,10 +167,10 @@ func gridEnabled(opts OutputOptions, canRender bool) bool {
 	return opts.Format == outputText && canRender && os.Getenv("NO_COLOR") == ""
 }
 
-// buildStatusBase constructs the static portions of a StatusReport that depend
+// buildStatusBase constructs the static portions of a StatusSnapshot that depend
 // on the selfUpdateCompiled build-tag constant and the resolved config. Called at
 // MCP-server start to inject into dashboard.Options so the bridge can serve the full
-// types.StatusReport without importing cmd/magus.
+// types.StatusSnapshot without importing cmd/magus.
 func buildStatusBase() types.StatusBase {
 	return types.StatusBase{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
@@ -181,8 +181,8 @@ func buildStatusBase() types.StatusBase {
 	}
 }
 
-func buildStatusReport(ctx context.Context, socket string, symbols bool) types.StatusReport {
-	report := types.StatusReport{
+func buildStatusReport(ctx context.Context, socket string, symbols bool) types.StatusSnapshot {
+	report := types.StatusSnapshot{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
 		Config:    buildConfigStatus(globalCfg),
@@ -225,7 +225,7 @@ type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, erro
 // single-server case so it never just repeats Pool. A server that died between discovery
 // and the query is dropped rather than failing the report; PoolError is set only when
 // nothing answered, so more than one server is reported, never refused.
-func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []string, query statusQuery) {
+func applyStatusPools(ctx context.Context, report *types.StatusSnapshot, addrs []string, query statusQuery) {
 	var pools []types.StatusOutput
 	var failed []string
 	for _, addr := range addrs {
@@ -362,7 +362,7 @@ func buildConfigStatus(c config.Config) types.StatusConfig {
 	}
 }
 
-func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame int) {
+func printStatusText(w io.Writer, r types.StatusSnapshot, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
 	fmt.Fprintf(tw, "  enabled\t%t\n", r.Telemetry.Enabled)
@@ -595,7 +595,7 @@ const compactRunningBudget = 32
 // targets multiplexer sidebars: ANSI-free, no telemetry/cache config (those are
 // static), oldest running targets first so the long-running work stays visible.
 // now is the reference time for per-target durations (parameterised for tests).
-func printStatusCompact(w io.Writer, r types.StatusReport, now time.Time) {
+func printStatusCompact(w io.Writer, r types.StatusSnapshot, now time.Time) {
 	if r.Pool == nil {
 		fmt.Fprintln(w, "daemon: off")
 		return
@@ -1098,7 +1098,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much
 // better than a corrupted screen.
-func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusReport, opts OutputOptions, animFrame int, compact bool) error {
+func paintStatusFrame(p *tty.InlineView, inline bool, r types.StatusSnapshot, opts OutputOptions, animFrame int, compact bool) error {
 	if !inline {
 		return printStatus(r, opts, animFrame, compact)
 	}

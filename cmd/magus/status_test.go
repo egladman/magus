@@ -28,7 +28,7 @@ func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	at := func(ago time.Duration) time.Time { return now.Add(-ago) }
 
-	assertCompact := func(name string, report types.StatusReport, want string) {
+	assertCompact := func(name string, report types.StatusSnapshot, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
 			printStatusCompact(&buf, report, now)
@@ -38,17 +38,17 @@ func TestPrintStatusCompact(t *testing.T) {
 	}
 
 	assertCompact("no parent",
-		types.StatusReport{PoolError: "no running magus proc server found"},
+		types.StatusSnapshot{PoolError: "no running magus proc server found"},
 		"daemon: off\n")
 
 	assertCompact("daemon idle",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 0,
 		}},
 		"daemon · 0/8 idle\n")
 
 	assertCompact("proc-server label",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "proc", Capacity: 8, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "web"}, Workspace: "/w", StartedAt: at(400 * time.Millisecond)},
@@ -57,7 +57,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"pool · 1/8 running · web:test(0.4s)\n")
 
 	assertCompact("daemon running with targets, sorted oldest first",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 3,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"test", "ui"}, Workspace: "/w", StartedAt: at(500 * time.Millisecond)},
@@ -69,7 +69,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 3/8 running · api:build(2.1s) · ui:test(0.5s) · ledger:lint(0.3s) · 1 ws\n")
 
 	assertCompact("daemon queued and overflow running",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 8, Running: 8, Queued: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/w", StartedAt: at(15 * time.Second)},
@@ -86,7 +86,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 8/8 running · +2 queued · api:build(15s) · ui:test(4.0s) · ledger:lint(2.0s) · +2 more · 2 ws\n")
 
 	assertCompact("multi-workspace running prefixes ws",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 4, Running: 2,
 			RunningTargets: []types.StatusRunningTarget{
 				{Args: []string{"build", "api"}, Workspace: "/srv/alpha", StartedAt: at(1 * time.Second)},
@@ -96,7 +96,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 2/4 running · alpha/api:build(1.0s) · beta/ui:test(0.5s)\n")
 
 	assertCompact("shared services report activity and dependents",
-		types.StatusReport{
+		types.StatusSnapshot{
 			Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4},
 			Services: []types.StatusService{
 				{State: "running", Dependents: 2},
@@ -106,7 +106,7 @@ func TestPrintStatusCompact(t *testing.T) {
 		"daemon · 0/4 idle · services 1/2 active, 2 dependents\n")
 
 	assertCompact("unparsable args fall back to ?:?",
-		types.StatusReport{Pool: &types.StatusOutput{
+		types.StatusSnapshot{Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 4, Running: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
@@ -135,7 +135,7 @@ func TestClampStatusWatchFloorsANegativeInterval(t *testing.T) {
 func TestPrintStatusCompactTruncatesLongLabel(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	long := strings.Repeat("x", 80)
-	r := types.StatusReport{Pool: &types.StatusOutput{
+	r := types.StatusSnapshot{Pool: &types.StatusOutput{
 		Mode: "daemon", Capacity: 4, Running: 1,
 		RunningTargets: []types.StatusRunningTarget{{
 			Args:      []string{"build", long},
@@ -654,7 +654,7 @@ func TestRenderProbeResults(t *testing.T) {
 func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		MCPEndpoint: &types.MCPEndpointStatus{Enabled: true, URL: "http://127.0.0.1:7391/mcp", Reachable: true, State: "serving"},
 		Services:    []types.StatusService{{ID: "service-1", Label: "postgres", Command: "docker run postgres", Ports: []string{"5432"}, State: "running", Dependents: 2}},
 	}
@@ -674,7 +674,7 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 func TestPrintStatusTextFullReport(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Telemetry: types.TelemetryStatus{Note: "telemetry is disabled."},
 		Cache:     types.CacheStatus{Dir: "/cache", SizeMB: 10},
 		Pool: &types.StatusOutput{
@@ -702,7 +702,7 @@ func TestPrintStatusTextFullReport(t *testing.T) {
 func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	printStatusText(f, types.StatusReport{Pool: &types.StatusOutput{
+	printStatusText(f, types.StatusSnapshot{Pool: &types.StatusOutput{
 		Mode: "proc", Capacity: 8, Running: 1,
 	}}, false, 0)
 	require.NoError(t, f.Close())
@@ -735,7 +735,7 @@ func TestApplyStatusPools(t *testing.T) {
 	}
 
 	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
-		report := types.StatusReport{}
+		report := types.StatusSnapshot{}
 		applyStatusPools(ctx, &report, []string{sockA}, fakeProcServers(servers))
 		require.NotNil(t, report.Pool)
 		assert.Equal(t, 111, report.Pool.ParentPID)
@@ -746,13 +746,13 @@ func TestApplyStatusPools(t *testing.T) {
 	})
 
 	t.Run("carries the shared services of the first server", func(t *testing.T) {
-		report := types.StatusReport{}
+		report := types.StatusSnapshot{}
 		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
 		assert.Equal(t, servers[sockA].Services, report.Services)
 	})
 
 	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
-		report := types.StatusReport{}
+		report := types.StatusSnapshot{}
 		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
 		assert.Empty(t, report.PoolError, "more than one server is reported, not refused")
 		require.Len(t, report.Pools, 2)
@@ -764,7 +764,7 @@ func TestApplyStatusPools(t *testing.T) {
 	})
 
 	t.Run("a server that died is dropped, the rest still report", func(t *testing.T) {
-		report := types.StatusReport{}
+		report := types.StatusSnapshot{}
 		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock", sockB}, fakeProcServers(servers))
 		assert.Empty(t, report.PoolError)
 		require.NotNil(t, report.Pool)
@@ -773,7 +773,7 @@ func TestApplyStatusPools(t *testing.T) {
 	})
 
 	t.Run("nothing answered reports why", func(t *testing.T) {
-		report := types.StatusReport{}
+		report := types.StatusSnapshot{}
 		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock"}, fakeProcServers(servers))
 		assert.Nil(t, report.Pool)
 		assert.Contains(t, report.PoolError, "magus-gone.sock")
@@ -844,7 +844,7 @@ func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 		{ParentPID: 111, Mode: "proc", Socket: "unix:///run/magus-111.sock", Capacity: 8, Running: 3, Available: 5},
 		{ParentPID: 222, Mode: "proc", Socket: "unix:///run/magus-222.sock", Capacity: 4, Running: 4},
 	}
-	printStatusText(f, types.StatusReport{Pool: &pools[0], Pools: pools}, false, 0)
+	printStatusText(f, types.StatusSnapshot{Pool: &pools[0], Pools: pools}, false, 0)
 	require.NoError(t, f.Close())
 	body, err := os.ReadFile(f.Name())
 	require.NoError(t, err)
@@ -865,7 +865,7 @@ func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Config: types.StatusConfig{ConcurrencyEffective: 8},
 		Pool:   &types.StatusOutput{ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 2, Available: 6},
 	}
@@ -893,8 +893,8 @@ func TestCompactMCPToken(t *testing.T) {
 // exercised against the same data instead of each against a fixture shaped to suit it.
 // now anchors the durations: every StartedAt is an offset from it, so the rendered clock
 // is the same on every run.
-func statusFixture(now time.Time) types.StatusReport {
-	return types.StatusReport{
+func statusFixture(now time.Time) types.StatusSnapshot {
+	return types.StatusSnapshot{
 		Telemetry: types.TelemetryStatus{
 			Enabled:     true,
 			Endpoint:    "localhost:4317",
@@ -1000,7 +1000,7 @@ func TestPrintStatusTextRendersEverySection(t *testing.T) {
 
 func TestPrintStatusTextOmitsWhatWasNotMeasured(t *testing.T) {
 	var buf bytes.Buffer
-	printStatusText(&buf, types.StatusReport{}, false, 0)
+	printStatusText(&buf, types.StatusSnapshot{}, false, 0)
 	out := buf.String()
 
 	assert.Contains(t, out, "daemon: off")
@@ -1017,14 +1017,14 @@ func TestPrintStatusTextOmitsWhatWasNotMeasured(t *testing.T) {
 func TestPrintStatusTextPoolWithoutTargetDetail(t *testing.T) {
 	t.Run("idle", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusText(&buf, types.StatusReport{Pool: &types.StatusOutput{Capacity: 4}}, false, 0)
+		printStatusText(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, false, 0)
 		assert.Contains(t, buf.String(), "nothing running")
 		assert.Contains(t, buf.String(), "pool pid 0")
 	})
 
 	t.Run("busy but blind", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusText(&buf, types.StatusReport{Pool: &types.StatusOutput{Capacity: 4, Running: 2}}, false, 0)
+		printStatusText(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 2}}, false, 0)
 		assert.Contains(t, buf.String(), "local work active; detailed target data unavailable")
 	})
 }
@@ -1037,12 +1037,12 @@ func TestPrintStatusTextVerboseAddsTheBuildBlock(t *testing.T) {
 
 	var quiet bytes.Buffer
 	global.verbose = 0
-	printStatusText(&quiet, types.StatusReport{}, false, 0)
+	printStatusText(&quiet, types.StatusSnapshot{}, false, 0)
 	assert.NotContains(t, quiet.String(), "selfupdate")
 
 	var loud bytes.Buffer
 	global.verbose = 1
-	printStatusText(&loud, types.StatusReport{Build: types.BuildStatus{SelfUpdate: true}}, false, 0)
+	printStatusText(&loud, types.StatusSnapshot{Build: types.BuildStatus{SelfUpdate: true}}, false, 0)
 	assert.Contains(t, loud.String(), "selfupdate")
 	assert.Contains(t, loud.String(), "engine")
 }
@@ -1125,7 +1125,7 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 	t.Run("no daemon", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusReport{}, now)
+		printStatusCompact(&buf, types.StatusSnapshot{}, now)
 		assert.Equal(t, "daemon: off\n", buf.String())
 	})
 
@@ -1152,13 +1152,13 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 
 	t.Run("an idle pool says idle", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusReport{Pool: &types.StatusOutput{Capacity: 4}}, now)
+		printStatusCompact(&buf, types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, now)
 		assert.Contains(t, buf.String(), "0/4 idle")
 	})
 
 	t.Run("a degraded endpoint earns its width", func(t *testing.T) {
 		var buf bytes.Buffer
-		printStatusCompact(&buf, types.StatusReport{
+		printStatusCompact(&buf, types.StatusSnapshot{
 			Pool:        &types.StatusOutput{Capacity: 1},
 			MCPEndpoint: &types.MCPEndpointStatus{State: "unreachable"},
 		}, now)
@@ -1232,7 +1232,7 @@ func TestWriteStatusStructuredFormats(t *testing.T) {
 	t.Cleanup(func() { global.tee = prevTee })
 	global.tee = ""
 
-	r := types.StatusReport{Cache: types.CacheStatus{Dir: "/tmp/c"}}
+	r := types.StatusSnapshot{Cache: types.CacheStatus{Dir: "/tmp/c"}}
 
 	t.Run("json", func(t *testing.T) {
 		out := captureStdout(t, func() {

@@ -18,10 +18,10 @@ import (
 
 // fakeSource is a statusSource returning a canned report.
 type fakeSource struct {
-	report types.StatusReport
+	report types.StatusSnapshot
 }
 
-func (f fakeSource) StatusReport(context.Context) types.StatusReport { return f.report }
+func (f fakeSource) StatusReport(context.Context) types.StatusSnapshot { return f.report }
 
 func TestEventsHandler_OptionsNoContent(t *testing.T) {
 	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)
@@ -85,7 +85,7 @@ func TestEventsHandler_GraphEvent(t *testing.T) {
 }
 
 func TestEventsHandler_StatusEvent(t *testing.T) {
-	src := fakeSource{report: types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
+	src := fakeSource{report: types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}}
 	h := NewEventsHandler(src, types.BuildInfo{Version: "1.2.3"}, nil, nil, 0, 50*time.Millisecond, nil)
 	data := drainSSE(t, h, "/api/v1/events", "event: status")
 

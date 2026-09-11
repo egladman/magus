@@ -17,7 +17,7 @@ import (
 // health, slots, and the in-flight calls a dashboard shows.
 func TestStatusProtoMapsPool(t *testing.T) {
 	started := time.UnixMilli(1700)
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Pool: &types.StatusOutput{
 			ParentPID: 42, Mode: "daemon", Capacity: 8, Running: 3, Queued: 1,
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
@@ -44,7 +44,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 // configured cap) onto Pool.cache, the data the dashboard's cache tiles and per-target
 // live-log deep-links read.
 func TestStatusProtoMapsCacheAndInv(t *testing.T) {
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Cache: types.CacheStatus{SizeMB: 2048},
 		Pool: &types.StatusOutput{
 			Mode: "daemon", Capacity: 4, Running: 2,
@@ -80,14 +80,14 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusReport{}, types.BuildInfo{Version: "v1"}).GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		statusReportToProto(types.StatusReport{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
+		statusReportToProto(types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.
 func TestEncodeStatusEventRoundTrip(t *testing.T) {
-	ev, err := EncodeStatusEvent(types.StatusReport{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"})
+	ev, err := EncodeStatusEvent(types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4}}, types.BuildInfo{Version: "v1"})
 	require.NoError(t, err)
 	raw, err := base64.StdEncoding.DecodeString(ev)
 	require.NoError(t, err)
@@ -103,7 +103,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	started := time.UnixMilli(1_000)
 	execAt := time.UnixMilli(2_000)
 	doneAt := time.UnixMilli(5_000)
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Runs: []types.StatusRun{{
 			Inv:       "inv1a2b3c",
 			Trigger:   "run",
@@ -142,7 +142,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 // there must not be. magus does not store secrets (it reads them through a provider), so
 // publishing what a build CAN reach would be a map of what to go after.
 func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
-	r := types.StatusReport{
+	r := types.StatusSnapshot{
 		Pool: &types.StatusOutput{
 			Mode: "daemon",
 			Workspaces: []types.StatusWorkspace{
@@ -169,7 +169,7 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 // shares the daemon's judgment instead of picking its own constant.
 func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
 	held := time.UnixMilli(1700)
-	r := types.StatusReport{Locks: []types.StatusLock{{
+	r := types.StatusSnapshot{Locks: []types.StatusLock{{
 		Project: ".", PID: 4242, Command: "magus run build .", Dir: "/ws",
 		AcquireTime: held, StaleAfterSeconds: 600,
 	}}}

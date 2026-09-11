@@ -11,11 +11,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// statusReportToProto maps the LIVE portion of the domain status report (types.StatusReport)
+// statusReportToProto maps the LIVE portion of the domain status report (types.StatusSnapshot)
 // onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract: it is `magus status`/config.
-func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.Status {
+func statusReportToProto(r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
 	s := &statusv1.Status{
 		Health: deriveHealth(r),
 		Build: &statusv1.BuildInfo{
@@ -132,7 +132,7 @@ func targetStateToProto(s types.TargetRunState) statusv1.TargetRun_State {
 // EncodeStatusEvent marshals a status snapshot to base64(protobuf) for a StreamStatus
 // SSE `data:` line, the live-dashboard delivery. The JS client base64-decodes then
 // Status.fromBinary.
-func EncodeStatusEvent(r types.StatusReport, build types.BuildInfo) (string, error) {
+func EncodeStatusEvent(r types.StatusSnapshot, build types.BuildInfo) (string, error) {
 	raw, err := proto.Marshal(statusReportToProto(r, build))
 	if err != nil {
 		return "", err
@@ -140,7 +140,7 @@ func EncodeStatusEvent(r types.StatusReport, build types.BuildInfo) (string, err
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
-func deriveHealth(r types.StatusReport) statusv1.Health {
+func deriveHealth(r types.StatusSnapshot) statusv1.Health {
 	switch {
 	case r.Pool == nil:
 		return statusv1.Health_HEALTH_DOWN
