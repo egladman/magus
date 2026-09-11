@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/ledger/row.schema.json",
+  "$comment": "Generated from ledger.Row by `magus-utils ledgerschema`. DO NOT EDIT; run `magus run ledger-generate .`.",
+  "title": "magus lease row",
+  "description": "Row is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See types.LeaseSchemaVersion."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[./0-9:A-Z_a-z-]+$",
+      "maxLength": 128,
+      "description": "ID is the lease's identity within the plan, the key a second register replaces on, and the only required field besides the version."
+    },
+    "parent": {
+      "type": "string",
+      "description": "Parent is the lease this one was spawned under, empty for a lease the root declared."
+    },
+    "goal": {
+      "type": "string",
+      "description": "Goal is the goal and its observable acceptance criteria, as one block of text."
+    },
+    "checkpoint": {
+      "type": "string",
+      "description": "Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o name` prints it."
+    },
+    "owned_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "OwnedPaths is the declared write lane, empty on a read-only row by design."
+    },
+    "forbidden_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ForbiddenPaths are the paths inside that lane this lease may not write."
+    },
+    "focus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Focus is the declared READ lane, widened to those projects' dependencies by the guard. Empty means owned_paths stands in."
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "DependsOn names the lease ids that must land before this one."
+    },
+    "tier": {
+      "type": "string",
+      "description": "Tier is the effort tier the work was matched to, a free string because hosts name their tiers differently."
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target"],
+      "properties": {
+        "target": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Check is the one check this lease runs, and acceptance binds a worker's evidence to it."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["", "declared", "running", "pass", "fail", "no_return"],
+      "description": "State is the row's lifecycle position, empty for a row that has not said where it stands. no_return is a lease that never reported, which is not a failure."
+    },
+    "read_only": {
+      "type": "boolean",
+      "description": "ReadOnly marks a lease that gathers evidence and writes nothing, so empty owned paths are correct rather than missing."
+    },
+    "validation": {
+      "type": "string",
+      "description": "Validation is the check as a rendered `magus run` line."
+    }
+  }
+}

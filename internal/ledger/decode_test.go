@@ -112,9 +112,9 @@ func TestRowApplyDeclaresRatherThanMerges(t *testing.T) {
 	assert.Equal(t, int64(42), stored.Registered, "what the store computed is not the declaration's to drop")
 }
 
-// The row schema is what a person reads before typing `register --stdin`, so a field on
-// one side and not the other is a row that validates and is not stored, or one that is
-// stored and nobody was told to send.
+// The embedded schema is generated, so a field on one side and not the other means the
+// generator has not been run: this is the drift gate a `magus run generate` away from
+// green, not a second copy to hand-edit.
 func TestRowSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 

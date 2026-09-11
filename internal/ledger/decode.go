@@ -12,11 +12,10 @@ import (
 )
 
 // RowSchema is the JSON Schema for [Row], embedded so a person or a harness can see the
-// shape `magus ledger register --stdin` accepts without reading Go. A file beside the
-// struct rather than reflection over it: the schema is the CONTRACT, and one generated
-// from field tags changes shape whenever the struct's internals do.
+// shape `magus ledger register --stdin` accepts without reading Go. Generated from the
+// struct itself, so a field cannot reach the wire undescribed.
 //
-//go:embed row.schema.json
+//go:embed gen/row.schema.json
 var RowSchema string
 
 // Row is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the
@@ -31,23 +30,40 @@ var RowSchema string
 //
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 type Row struct {
-	// SchemaVersion is required. See types.LeaseSchemaVersion.
+	// SchemaVersion is the row shape this record is written in, and it is required: a
+	// version this magus does not know is rejected by name. See types.LeaseSchemaVersion.
 	SchemaVersion int `json:"schema_version"`
-	// ID is the lease's identity within the plan, and the only required field besides
-	// the version.
-	ID string `json:"id"`
-	// The rest mirror types.Lease one for one; that type documents what each one means.
-	Parent         string            `json:"parent,omitempty"`
-	Goal           string            `json:"goal,omitempty"`
-	Checkpoint     string            `json:"checkpoint,omitempty"`
-	OwnedPaths     []string          `json:"owned_paths,omitempty"`
-	ForbiddenPaths []string          `json:"forbidden_paths,omitempty"`
-	Focus          []string          `json:"focus,omitempty"`
-	DependsOn      []string          `json:"depends_on,omitempty"`
-	Tier           string            `json:"tier,omitempty"`
-	Check          *types.LeaseCheck `json:"check,omitempty"`
-	State          types.LeaseState  `json:"state,omitempty"`
-	ReadOnly       bool              `json:"read_only,omitempty"`
+	// ID is the lease's identity within the plan, the key a second register replaces on,
+	// and the only required field besides the version.
+	ID string `json:"id" schema:"leaseid"`
+	// Parent is the lease this one was spawned under, empty for a lease the root declared.
+	Parent string `json:"parent,omitempty"`
+	// Goal is the goal and its observable acceptance criteria, as one block of text.
+	Goal string `json:"goal,omitempty"`
+	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
+	// name` prints it.
+	Checkpoint string `json:"checkpoint,omitempty"`
+	// OwnedPaths is the declared write lane, empty on a read-only row by design.
+	OwnedPaths []string `json:"owned_paths,omitempty"`
+	// ForbiddenPaths are the paths inside that lane this lease may not write.
+	ForbiddenPaths []string `json:"forbidden_paths,omitempty"`
+	// Focus is the declared READ lane, widened to those projects' dependencies by the
+	// guard. Empty means owned_paths stands in.
+	Focus []string `json:"focus,omitempty"`
+	// DependsOn names the lease ids that must land before this one.
+	DependsOn []string `json:"depends_on,omitempty"`
+	// Tier is the effort tier the work was matched to, a free string because hosts name
+	// their tiers differently.
+	Tier string `json:"tier,omitempty"`
+	// Check is the one check this lease runs, and acceptance binds a worker's evidence
+	// to it.
+	Check *types.LeaseCheck `json:"check,omitempty"`
+	// State is the row's lifecycle position, empty for a row that has not said where it
+	// stands. no_return is a lease that never reported, which is not a failure.
+	State types.LeaseState `json:"state,omitempty"`
+	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty owned
+	// paths are correct rather than missing.
+	ReadOnly bool `json:"read_only,omitempty"`
 	// Validation is the check as a rendered `magus run` line.
 	//
 	// compat(until: no client still sends a rendered line; observe: a grep of the ledger

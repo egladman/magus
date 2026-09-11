@@ -252,24 +252,20 @@ func TestGradeRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "read-only")
 }
 
-// The schema is what a host compiles a worker's response format against, so a field on
-// one side and not the other is a report that validates and cannot be graded, or one
-// that is graded on a field no worker was asked for.
+// The schema is what a host compiles a worker's response format against, and it is
+// generated: a field on one side and not the other means the generator has not been run,
+// so a report would validate against a shape the grader does not read.
 func TestReportSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 
-	var schema struct {
-		Properties  map[string]json.RawMessage `json:"properties"`
-		Definitions struct {
-			Validation struct {
-				Properties map[string]json.RawMessage `json:"properties"`
-			} `json:"validation"`
-		} `json:"definitions"`
+	var schema, validation struct {
+		Properties map[string]json.RawMessage `json:"properties"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(ReportSchema), &schema))
+	require.NoError(t, json.Unmarshal(schema.Properties["validation"], &validation))
 
 	assert.ElementsMatch(t, jsonFields(Report{}), keys(schema.Properties))
-	assert.ElementsMatch(t, jsonFields(ReportValidation{}), keys(schema.Definitions.Validation.Properties))
+	assert.ElementsMatch(t, jsonFields(ReportValidation{}), keys(validation.Properties))
 }
 
 // jsonFields is the wire name of every field a struct serializes, which is the set the

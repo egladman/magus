@@ -16,12 +16,10 @@ import (
 const ReportSchemaVersion = 1
 
 // ReportSchema is the JSON Schema for [Report], embedded so a harness can give a worker a
-// response format without magus having to render one. A file beside the struct rather than
-// reflection over it: the schema is the CONTRACT a host's typed-output mode compiles
-// against, and one generated from Go tags would change shape whenever the struct's
-// internals did.
+// response format without magus having to render one. Generated from the struct itself;
+// see [RowSchema].
 //
-//go:embed report.schema.json
+//go:embed gen/report.schema.json
 var ReportSchema string
 
 // Report is what a worker returns when its lease is done: changed paths, validation

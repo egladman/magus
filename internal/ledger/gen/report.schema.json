@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/ledger/report.schema.json",
+  "$comment": "Generated from ledger.Report by `magus-utils ledgerschema`. DO NOT EDIT; run `magus run ledger-generate .`.",
+  "title": "magus lease worker report",
+  "description": "Report is what a worker returns when its lease is done: changed paths, validation evidence, descendants created, unresolved risks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "changed_paths", "validation", "unresolved_risks"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "SchemaVersion is the shape this report was written in, and it is REQUIRED: the decoder rejects a version it does not know by name, so a worker whose harness is a release ahead reads \"this magus accepts version 1\" instead of watching a field it was told to send be rejected as unknown. See [ReportSchemaVersion]."
+    },
+    "lease": {
+      "type": "string",
+      "description": "Lease is the id the worker believes it was handed. Optional, and checked against the row when present: a report filed under the wrong id happens when several workers share a prompt template, and it reads as success because every other field is plausible."
+    },
+    "changed_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "ChangedPaths are the workspace-relative paths this worker wrote, as it reports them. Never proof: the integration pass compares the ledger against the ACTUAL diff since the checkpoint. This is the CLAIM, and checking it against the declared boundary is what catches the worker that widened its own scope."
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "output_ref"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Command is the check as the worker ran it, rendered beside the verdict for a person. The row's own validation is what the evidence is bound to, so a command here that disagrees with the ref is a discrepancy a reader sees rather than a rule."
+        },
+        "output_ref": {
+          "type": "string",
+          "description": "OutputRef is the reference id magus stored that run's captured output under."
+        }
+      },
+      "description": "Validation is the one check the lease was assigned, and how it ended."
+    },
+    "descendants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Descendants are the lease ids this worker handed work on to. One the ledger does not carry is a branch of the plan nobody is tracking, which [Grade] reports."
+    },
+    "unresolved_risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "UnresolvedRisks is what the worker could not settle. Never omitempty: an absent list and an empty one are the same JSON once the key can vanish, so a worker that never considered the question would be indistinguishable from one that found nothing."
+    }
+  }
+}

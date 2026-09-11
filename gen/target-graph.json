@@ -321,6 +321,25 @@
           ]
         },
         {
+          "name": "ledger-generate",
+          "declared": "ledger_generate",
+          "doc": "Regenerates the published lease schemas (internal/ledger/gen/*.schema.json) from the structs that decode a row and a worker's report.",
+          "dependencies": [
+            "types-generate"
+          ],
+          "chain": [
+            {
+              "target": "types-generate"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "internal/ledger/gen/*.json"
+            }
+          ]
+        },
+        {
           "name": "spells-generate",
           "declared": "spells_generate",
           "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.",
@@ -572,6 +591,7 @@
             "graph-generate",
             "index-generate",
             "langservice-generate",
+            "ledger-generate",
             "magusfile-api-generate",
             "man-generate",
             "mcp-tools-generate",
@@ -611,6 +631,9 @@
             },
             {
               "target": "langservice-generate"
+            },
+            {
+              "target": "ledger-generate"
             },
             {
               "target": "magusfile-api-generate"
@@ -788,6 +811,7 @@
             "graph-generate",
             "index-generate",
             "langservice-generate",
+            "ledger-generate",
             "magusfile-api-generate",
             "man-generate",
             "mcp-tools-generate",
@@ -820,6 +844,9 @@
             },
             {
               "target": "langservice-generate"
+            },
+            {
+              "target": "ledger-generate"
             },
             {
               "target": "magusfile-api-generate"
