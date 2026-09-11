@@ -284,7 +284,7 @@ function declaredDrawn(model: PlanModel): Drawn {
     if (!n) continue;
     const meta = [STATE_LABEL[n.state]];
     if (n.readOnly) meta.push("read only");
-    if (n.lease.tier) meta.push(n.lease.tier);
+    if (n.lease.model) meta.push(n.lease.model);
     nodes.push({
       id: n.id,
       state: n.state,
@@ -756,8 +756,8 @@ export function activate(host: HTMLElement): PlanInstance {
   // reader has focused - the surface repaints around them, not under them.
   //
   // It covers everything the list ROW draws, meta included. Leaving meta out made the signature a
-  // near-match rather than a match: a lease whose tier changed under an unchanged state drew the same
-  // signature, and the row went on reading the old tier until something else moved.
+  // near-match rather than a match: a lease whose model changed under an unchanged state drew the same
+  // signature, and the row went on reading the old model until something else moved.
   const signature = (d: Drawn): string =>
     d.nodes
       .map((n) =>
@@ -996,10 +996,10 @@ export function activate(host: HTMLElement): PlanInstance {
     const dl = h("dl", "console-plan-detail__fields");
     field(dl, "Goal", n.lease.goal ?? "");
     field(dl, "Checkpoint", n.lease.checkpoint ?? "");
-    field(dl, "Tier", n.lease.tier ?? "");
+    field(dl, "Model", n.lease.model ?? "");
     field(dl, "Validation", n.lease.validation ?? "");
-    pathField(dl, "Owned paths", n.lease.owned_paths ?? []);
-    pathField(dl, "Forbidden paths", n.lease.forbidden_paths ?? []);
+    pathField(dl, "Write paths", n.lease.write_paths ?? []);
+    pathField(dl, "Deny paths", n.lease.deny_paths ?? []);
     pathField(dl, "Depends on", n.lease.depends_on ?? []);
     field(dl, "Parent", n.parent ?? "");
     if (n.danglingParent) {

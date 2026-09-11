@@ -110,10 +110,10 @@ export interface Lease {
   readonly parent?: string;
   readonly goal?: string;
   readonly checkpoint?: string;
-  readonly owned_paths?: readonly string[];
-  readonly forbidden_paths?: readonly string[];
+  readonly write_paths?: readonly string[];
+  readonly deny_paths?: readonly string[];
   readonly depends_on?: readonly string[];
-  readonly tier?: string;
+  readonly model?: string;
   readonly validation?: string;
   readonly state?: string;
   readonly read_only?: boolean;
@@ -198,10 +198,10 @@ export function parseLeases(body: unknown): Lease[] {
       parent: str(r.parent),
       goal: str(r.goal),
       checkpoint: str(r.checkpoint),
-      owned_paths: strList(r.owned_paths),
-      forbidden_paths: strList(r.forbidden_paths),
+      write_paths: strList(r.write_paths),
+      deny_paths: strList(r.deny_paths),
       depends_on: strList(r.depends_on),
-      tier: str(r.tier),
+      model: str(r.model),
       validation: str(r.validation),
       state: str(r.state),
       read_only: r.read_only === true,

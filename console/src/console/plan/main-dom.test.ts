@@ -329,17 +329,17 @@ test("the next-lease key selects a lease and focuses its row", async () => {
   }
 });
 
-test("selecting a lease shows its goal, checkpoint, tier, validation and owned paths", async () => {
+test("selecting a lease shows its goal, checkpoint, model, validation and write paths", async () => {
   serve({
     ledger: ok([
       {
         id: "root",
         goal: "render the ledger",
         checkpoint: "after the stage lands",
-        tier: "opus",
+        model: "opus",
         validation: "console:test",
-        owned_paths: ["console/src/console/plan/"],
-        forbidden_paths: ["internal/"],
+        write_paths: ["console/src/console/plan/"],
+        deny_paths: ["internal/"],
       },
     ]),
     feeds: true,
@@ -390,8 +390,8 @@ test("an overlap warns on both rows and names the other lease in the detail", as
   serve({
     ledger: ok(
       [
-        { id: "a", state: "running", owned_paths: ["internal/ledger"] },
-        { id: "b", state: "declared", owned_paths: ["internal/ledger/store.go"] },
+        { id: "a", state: "running", write_paths: ["internal/ledger"] },
+        { id: "b", state: "declared", write_paths: ["internal/ledger/store.go"] },
         { id: "c", state: "pass" },
       ],
       [
@@ -470,7 +470,7 @@ test("a released path shows with a short digest", async () => {
       {
         id: "a",
         state: "running",
-        owned_paths: ["docs"],
+        write_paths: ["docs"],
         releases: [
           {
             path: "internal/ledger/store.go",
@@ -993,13 +993,13 @@ test("a repaint that changes nothing leaves the focused output link where it is"
 });
 
 // The other half of the same gate: what a row SAYS is part of what decides a repaint. With meta left
-// out of the signature, a unit whose tier changed under an unchanged state keeps drawing the old one.
-test("a changed tier repaints the row that carries it", async () => {
+// out of the signature, a unit whose model changed under an unchanged state keeps drawing the old one.
+test("a changed model repaints the row that carries it", async () => {
   let reads = 0;
   serve({
     ledger: () => {
       reads++;
-      return ok([{ id: "root", state: "running", tier: reads > 1 ? "sonnet" : "opus" }])();
+      return ok([{ id: "root", state: "running", model: reads > 1 ? "sonnet" : "opus" }])();
     },
   });
   const { host, teardown } = mount();

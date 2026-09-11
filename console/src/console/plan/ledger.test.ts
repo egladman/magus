@@ -294,10 +294,10 @@ test("parseLeases keeps the documented fields and drops a row with no id", () =>
         parent: "root",
         goal: "g",
         checkpoint: "c",
-        owned_paths: ["a.ts", 7],
-        forbidden_paths: [],
+        write_paths: ["a.ts", 7],
+        deny_paths: [],
         depends_on: ["u0"],
-        tier: "sonnet",
+        model: "sonnet",
         validation: "console:test",
         state: "running",
         read_only: true,
@@ -314,12 +314,12 @@ test("parseLeases keeps the documented fields and drops a row with no id", () =>
   });
   assert.equal(leases.length, 1);
   assert.deepEqual(
-    leases[0]?.owned_paths,
+    leases[0]?.write_paths,
     ["a.ts"],
     "a non-string path is dropped, not stringified",
   );
   assert.equal(leases[0]?.read_only, true);
-  assert.equal(leases[0]?.tier, "sonnet");
+  assert.equal(leases[0]?.model, "sonnet");
   // Unix seconds, as the route serves them. Read as strings they were silently discarded, and a
   // surface that cannot read this field cannot tell a fresh row from an abandoned one.
   assert.equal(leases[0]?.updated, 1755300000);
