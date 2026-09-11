@@ -2522,21 +2522,15 @@ fun coverage_native_record(tables: {str: [str]}) > void !> any {
                    "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]);
 }
 
-// coverage_summaries reads every committed record, refusing one that names a commit this
-// checkout does not contain: a summary carried in from a branch nobody merged measures a
-// tree that exists nowhere.
+// coverage_summaries reads every committed record. A record's commit is provenance, not
+// a gate: this repo squash-merges, so a record measured on a branch names a commit main
+// never contains, and refusing it turned every darwin checkout of main red (#196). What
+// keeps a foreign record honest is the per-file digest in mergeSummaries, which credits
+// nothing to a file whose source differs from this tree.
 fun coverage_summaries() > [any] !> any {
     var records = mut [<any>];
     foreach (p in fs\glob(COVERAGE_DIR + "/*.json")) {
-        final rec = cov\decodeSummary(p.value, text: fs\readFile(p.value));
-        try {
-            vcs\cmd(["merge-base", "--is-ancestor", "{rec["commit"]}", "HEAD"], {"quiet": true});
-        } catch (e) {
-            throw "coverage-badge: " + p.value + " was measured at {rec["commit"]}, which this "
-                + "checkout does not contain. Re-measure that platform here with "
-                + "`magus run coverage-badge:rw .`, or drop the record.";
-        }
-        records.append(rec);
+        records.append(cov\decodeSummary(p.value, text: fs\readFile(p.value)));
     }
     return records;
 }
