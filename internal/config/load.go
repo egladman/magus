@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"gopkg.in/yaml.v3"
 )
 
@@ -246,6 +248,9 @@ func decodeFile(path string) ([]byte, Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
+		if ue := unknownKeyError(path, err); ue != nil {
+			return nil, Config{}, ue
+		}
 		return nil, Config{}, fmt.Errorf("config: %s: %w", path, err)
 	}
 	// A decoder reads one document; a second would be dropped without a word.
@@ -254,6 +259,91 @@ func decodeFile(path string) ([]byte, Config, error) {
 		return nil, Config{}, fmt.Errorf("config: %s: expected a single document in the stream", path)
 	}
 	return data, overlay, nil
+}
+
+// unknownFieldIssue matches yaml.v3's own wording for a key KnownFields rejected,
+// capturing the line, the key, and the Go type it was decoding into.
+var unknownFieldIssue = regexp.MustCompile(`^line (\d+): field (.+) not found in type (\S+)$`)
+
+// unknownKeyError re-renders yaml.v3's rejection as magus's own message: the file
+// and line, the key, and the nearest known key at that level. It returns nil when
+// err is not a rejection this can restate, leaving the caller's wrap in place.
+//
+// The Go type name yaml.v3 reports is a fact about magus's source, not about the
+// file the reader wrote, so it never reaches the message. A TypeError carrying
+// anything else (a type mismatch, say) is left alone whole rather than rewritten
+// in part: that detail has no place in this shape, and half a message is worse
+// than yaml's.
+func unknownKeyError(path string, err error) error {
+	var terr *yaml.TypeError
+	if !errors.As(err, &terr) || len(terr.Errors) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(terr.Errors))
+	for _, issue := range terr.Errors {
+		m := unknownFieldIssue.FindStringSubmatch(issue)
+		if m == nil {
+			return nil
+		}
+		line, key, goType := m[1], m[2], m[3]
+		msg := fmt.Sprintf("%s:%s: unknown key %q", workspaceRelPath(path), line, key)
+		if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
+			msg += fmt.Sprintf("; did you mean %q?", sug)
+		}
+		lines = append(lines, msg)
+	}
+	return errors.New(strings.Join(lines, "\n"))
+}
+
+// knownKeysIn returns the document keys accepted by the struct type yaml.v3 named
+// goType, or nil when Config's type graph holds no type by that name.
+//
+// Derived from the struct rather than listed: a hand-kept list drifts the moment a
+// field lands, and the generated inventory in schema/gen covers only the fields
+// carrying an env var or a flag, not every key the decoder takes.
+func knownKeysIn(goType string) []string {
+	seen := map[reflect.Type]bool{}
+	var walk func(reflect.Type) []string
+	walk = func(t reflect.Type) []string {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct || seen[t] {
+			return nil
+		}
+		seen[t] = true
+		if t.String() == goType {
+			keys := make([]string, 0, t.NumField())
+			for i := range t.NumField() {
+				f := t.Field(i)
+				if k := yamlKey(f); k != "" && f.IsExported() {
+					keys = append(keys, k)
+				}
+			}
+			return keys
+		}
+		for i := range t.NumField() {
+			if keys := walk(t.Field(i).Type); keys != nil {
+				return keys
+			}
+		}
+		return nil
+	}
+	return walk(reflect.TypeOf(Config{}))
+}
+
+// workspaceRelPath renders path the way the reader would type it: relative to the
+// workspace root while it is inside one, absolute otherwise.
+func workspaceRelPath(path string) string {
+	root := findWorkspaceRoot()
+	if root == "" {
+		return path
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+	return rel
 }
 
 // mergeConfig returns dst with every non-zero field from src applied on top,

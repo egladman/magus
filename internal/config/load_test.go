@@ -248,3 +248,61 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 		})
 	}
 }
+
+// TestUnknownKeyMessage pins the whole rendered message, not a substring: what
+// the rewrite buys is the shape a reader meets, and yaml.v3's own text already
+// satisfied every Contains assert around it.
+//
+// A go.mod in the temp dir makes it a workspace root, so the path renders the
+// way it does in a real workspace instead of as an absolute temp path.
+func TestUnknownKeyMessage(t *testing.T) {
+	cases := map[string]struct {
+		doc  string
+		want string
+	}{
+		"top-level typo": {
+			doc:  "concurrencyy: 4\n",
+			want: `magus.yaml:1: unknown key "concurrencyy"; did you mean "concurrency"?`,
+		},
+		"nested typo": {
+			doc:  "sandbox:\n  enabledd: true\n",
+			want: `magus.yaml:2: unknown key "enabledd"; did you mean "enabled"?`,
+		},
+		"nothing close enough to suggest": {
+			doc:  "concurrency: 2\nzzzzzzzz: 1\n",
+			want: `magus.yaml:2: unknown key "zzzzzzzz"`,
+		},
+		"two unknown keys": {
+			doc: "concurrencyy: 4\nsandbox:\n  enabledd: true\n",
+			want: "magus.yaml:1: unknown key \"concurrencyy\"; did you mean \"concurrency\"?\n" +
+				"magus.yaml:3: unknown key \"enabledd\"; did you mean \"enabled\"?",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir, err := filepath.EvalSymlinks(t.TempDir())
+			require.NoError(t, err)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module tmp\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(tc.doc), 0o644))
+			t.Chdir(dir)
+
+			_, err = loadDirInto(Defaults(), dir)
+			require.Error(t, err)
+			assert.Equal(t, tc.want, err.Error())
+		})
+	}
+}
+
+// A type mismatch is not an unknown key, and rewriting half of yaml's report
+// would drop the half that says what is wrong.
+func TestTypeMismatchKeepsYamlsOwnReport(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magus.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("concurrency: nope\n"), 0o644))
+
+	_, err := loadDirInto(Defaults(), dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), path)
+	assert.Contains(t, err.Error(), "cannot unmarshal")
+}

@@ -29,7 +29,7 @@ stderr 'for scripts use `magus run`'
 # rejects it by name rather than leaving a caller to believe it took.
 cp magus.yaml.assume magus.yaml
 ! exec magus x
-stderr 'field assume_interactive not found'
+stderr 'magus.yaml:2: unknown key "assume_interactive"'
 
 -- magus.yaml --
 concurrency: 2

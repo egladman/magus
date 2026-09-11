@@ -530,7 +530,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
-		slog.Error("load config failed", slog.String("error", err.Error()))
+		// Printed rather than logged: the unknown-key error names a file, a line and a
+		// suggestion per line, and slog's text handler escapes every quote and newline
+		// in it back into one unreadable run.
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
 	configgen.ApplyEnv(&cfg, os.Getenv)
