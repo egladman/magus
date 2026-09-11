@@ -567,9 +567,6 @@ func fileFindFires(cmds []guardCommand) bool {
 		case "find":
 			return slices.Contains(c.Args, "-name") || slices.Contains(c.Args, "-iname")
 		case "fd":
-			// fdValueFlags are fd's short flags that consume the next word, so a
-			// `-t d` type filter is not read as a name query.
-			const fdValueFlags = "tedExXS"
 			return hasFlag(c.Args, 'e', "extension") || hasFlag(c.Args, 'g', "glob") ||
 				len(operands(c.Args, fdValueFlags)) > 0
 		}

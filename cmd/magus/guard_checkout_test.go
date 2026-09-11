@@ -164,7 +164,7 @@ func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 // every one of these lines and answers "name the project instead", which is true
 // and beside the point when the command is aimed at another tree.
 func TestRankSiblingCheckoutOutranksAnAdvise(t *testing.T) {
-	cwdAdvise := bashGuardVerdict{Context: cwdGuardContext}
+	cwdAdvise := commandVerdict{Context: cwdGuardContext}
 	got := rankSiblingCheckout(cwdAdvise, "aimed at another checkout")
 
 	assert.Equal(t, "aimed at another checkout", got.Deny)
@@ -174,14 +174,14 @@ func TestRankSiblingCheckoutOutranksAnAdvise(t *testing.T) {
 // An existing DENY stands. Replacing it would swap a block the caller already has
 // for a different one, and one is enough.
 func TestRankSiblingCheckoutYieldsToAnExistingDeny(t *testing.T) {
-	got := rankSiblingCheckout(bashGuardVerdict{Deny: outputPipeDeny}, "aimed at another checkout")
+	got := rankSiblingCheckout(commandVerdict{Deny: outputPipeDeny}, "aimed at another checkout")
 
 	assert.Equal(t, outputPipeDeny, got.Deny)
 }
 
 // The common case: nothing to add, and the pure verdict passes through untouched.
 func TestRankSiblingCheckoutIsInertWithoutAReason(t *testing.T) {
-	for _, v := range []bashGuardVerdict{{}, {Context: cwdGuardContext}, {Deny: outputPipeDeny}} {
+	for _, v := range []commandVerdict{{}, {Context: cwdGuardContext}, {Deny: outputPipeDeny}} {
 		assert.Equal(t, v, rankSiblingCheckout(v, ""))
 	}
 }

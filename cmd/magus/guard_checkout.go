@@ -23,11 +23,11 @@ import (
 // An existing deny wins: that line has a second thing wrong with it, and one block
 // is enough. An ADVISE does not: guardCdMagusRe fires on exactly these lines, and
 // "name the project instead" badly understates a command pointed at another tree.
-func rankSiblingCheckout(v bashGuardVerdict, reason string) bashGuardVerdict {
+func rankSiblingCheckout(v commandVerdict, reason string) commandVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return bashGuardVerdict{Deny: reason, Rule: denyRule{Name: denyRuleSiblingCheckout}}
+	return commandVerdict{Deny: reason, Rule: denyRule{Name: denyRuleSiblingCheckout}}
 }
 
 // denySiblingCheckout returns the deny reason for a magus command relocated into
@@ -55,7 +55,7 @@ func denySiblingCheckout(command string) string {
 		if !ok || common != hereCommon || root == hereRoot {
 			continue
 		}
-		return siblingCheckoutDeny(hereRoot, root)
+		return siblingCheckoutDenial(hereRoot, root)
 	}
 	return ""
 }
@@ -130,10 +130,10 @@ func gitFileCommonDir(gitFile string) (string, bool) {
 	return filepath.Clean(p), true
 }
 
-// siblingCheckoutDeny names both trees, because the mistake is invisible when only
+// siblingCheckoutDenial names both trees, because the mistake is invisible when only
 // one of them is on screen: the command looks correct, and what is wrong with it
 // is where it points.
-func siblingCheckoutDeny(here, there string) string {
+func siblingCheckoutDenial(here, there string) string {
 	return fmt.Sprintf("magus guard denied a magus command relocated into %s.\n\n"+
 		"That is a different checkout of THIS repository, not a different workspace. Its `./magus` was linked from ITS sources and its cache is keyed to ITS tree, so a verdict from there describes neither checkout: a gate that passes says nothing about %s, and whatever it regenerates lands over there unmarked.\n\n"+
 		"Run magus from this checkout and name the project: `magus run <target> <project>`.\n"+

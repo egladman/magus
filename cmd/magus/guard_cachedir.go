@@ -270,9 +270,9 @@ func cacheDirWriteTarget(location hookActivityLocation, c guardCommand) string {
 // It OUTRANKS an existing deny, which no other rule here does. `sed -i .magus/lease` earns
 // the in-place refusal too, and that text sends the reader to an editor tool, which is the
 // same write through the surface that would refuse it again.
-func rankCacheDirWrite(v bashGuardVerdict, reason string) bashGuardVerdict {
+func rankCacheDirWrite(v commandVerdict, reason string) commandVerdict {
 	if reason == "" {
 		return v
 	}
-	return bashGuardVerdict{Deny: reason, Rule: denyRule{Name: denyRuleCacheDirWrite}}
+	return commandVerdict{Deny: reason, Rule: denyRule{Name: denyRuleCacheDirWrite}}
 }

@@ -163,7 +163,7 @@ func TestWritesToFileClassifiesEveryRedirectOperator(t *testing.T) {
 // the reader to an editor tool, which is the surface that would refuse the same bytes
 // again.
 func TestRankCacheDirWriteOutranksEveryOtherDeny(t *testing.T) {
-	existing := bashGuardVerdict{Deny: "sed -i is imprecise", Rule: denyRule{Name: denyRuleSedInPlace}}
+	existing := commandVerdict{Deny: "sed -i is imprecise", Rule: denyRule{Name: denyRuleSedInPlace}}
 
 	got := rankCacheDirWrite(existing, "magus cache dir")
 	assert.Equal(t, denyRuleCacheDirWrite, got.Rule.Name)

@@ -14,22 +14,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The SCOPE-DRIFT rule: a session that has been editing one part of the workspace is
-// about to write somewhere the rest of its work does not reach.
+// The SCOPE-DRIFT rule: a session that has been editing one part of the workspace is about
+// to write somewhere the rest of its work does not reach.
 //
-// The fact it reports is a graph fact, not a hunch: the project this write lands in
-// neither depends on nor is depended on by any project the session has written to, so
-// the two halves of the diff share no declared edge. A reviewer reading them as one
-// change has to hold two unrelated units in their head, and the second unit cannot be
-// validated by anything the first one runs.
-//
-// It ADVISES and never denies, for the same reason the focus rule advises: nobody
-// declared this boundary. A lease is the opt-in that makes a hard boundary honest, and
-// a lease already covering the path is exactly the case this rule skips.
-//
-// The definitive tier ONLY: a disjoint dependency relation. A softer "these are far
-// apart in the graph" tier would fire on projects that do connect, and an advisory
-// fired on a distance threshold nobody chose is one readers learn to skip.
+// The fact it reports is a graph fact rather than a hunch: the project this write lands in
+// shares no declared dependency edge with any project the session has written to, so
+// nothing a target run for one half validates the other. It ADVISES and never denies,
+// because nobody declared this boundary, and a lease already covering the path is exactly
+// the case it skips.
 
 // advisoryTouchedProjects names the file holding the projects a session has written
 // to. It is a marker KIND rather than a notice so that markerPath keys it on the same
@@ -47,7 +39,7 @@ const advisoryTouchedProjects advisoryKind = "touched-projects"
 // project the session had already been editing, which is the false positive that
 // teaches a reader to skip the whole family.
 type scopeDrift struct {
-	gate    advisoryGate
+	markers advisoryGate
 	project string
 	advice  string
 }
@@ -58,9 +50,9 @@ type scopeDrift struct {
 // Silent on every uncertainty, the contract every guard rule here keeps: no workspace,
 // a workspace that is not the one the host reported, a path no project owns, or a
 // session with nothing recorded yet. A first write has no scope to have drifted from.
-func gradeScopeDrift(ctx context.Context, gate advisoryGate, actingLease, writePath string) scopeDrift {
+func gradeScopeDrift(ctx context.Context, markers advisoryGate, actingLease, writePath string) scopeDrift {
 	writePath = strings.TrimSpace(writePath)
-	if writePath == "" || gate.base == "" {
+	if writePath == "" || markers.base == "" {
 		return scopeDrift{}
 	}
 	location := hookActivityTrail(ctx)
@@ -75,13 +67,14 @@ func gradeScopeDrift(ctx context.Context, gate advisoryGate, actingLease, writeP
 	if err != nil || ws == nil || ws.Root() != location.workspace {
 		return scopeDrift{}
 	}
-	proj, advice := driftVerdict(ws, writePath, gate.touchedProjects())
-	if advice != "" && leaseCoversWrite(actingLease, location, writePath) {
+	drift := driftVerdict(ws, writePath, markers.touchedProjects())
+	drift.markers = markers
+	if drift.advice != "" && leaseCoversWrite(actingLease, location, writePath) {
 		// A worker writing inside the paths its orchestrator leased it is in scope by
 		// declaration, whatever the graph says about the projects those paths span.
-		advice = ""
+		drift.advice = ""
 	}
-	return scopeDrift{gate: gate, project: proj, advice: advice}
+	return drift
 }
 
 // driftVerdict names the project writePath lands in, and the advisory owed when that
@@ -94,30 +87,31 @@ func gradeScopeDrift(ctx context.Context, gate advisoryGate, actingLease, writeP
 // the touched set reaches through depends_on is downstream work the session is already
 // paying for, and a project that reaches back into the touched set is upstream of it.
 // Only a project on neither side is a second unit.
-func driftVerdict(ws types.WorkspaceReader, writePath string, touched []string) (string, string) {
+func driftVerdict(ws types.WorkspaceReader, writePath string, touched []string) scopeDrift {
 	write, ok := project.FocusForPaths(ws, []string{writePath})
 	if !ok {
-		return "", ""
+		return scopeDrift{}
 	}
-	proj := write.Seeds[0]
+	landed := scopeDrift{project: write.Seeds[0]}
 	// The cheap check first: a project already in the set needs no graph walk, which is
 	// what keeps the common case (the same project again) off the closure path.
-	if len(touched) == 0 || slices.Contains(touched, proj) {
-		return proj, ""
+	if len(touched) == 0 || slices.Contains(touched, landed.project) {
+		return landed
 	}
 	from, ok := project.FocusForPaths(ws, touchedPaths(ws, touched))
 	if !ok {
-		return proj, ""
+		return landed
 	}
-	if slices.Contains(from.Projects, proj) {
-		return proj, ""
+	if slices.Contains(from.Projects, landed.project) {
+		return landed
 	}
 	for _, seed := range from.Seeds {
 		if slices.Contains(write.Projects, seed) {
-			return proj, ""
+			return landed
 		}
 	}
-	return proj, scopeDriftAdvice(proj, from.Seeds)
+	landed.advice = scopeDriftAdvice(landed.project, from.Seeds)
+	return landed
 }
 
 // touchedPaths spells the touched projects as paths FocusForPaths can resolve.
@@ -156,10 +150,10 @@ func scopeDriftAdvice(proj string, touched []string) string {
 // later, which is the smaller failure. Duplicate lines are harmless, so two hooks
 // racing here cost a byte rather than a wrong answer.
 func (d scopeDrift) record() {
-	if d.project == "" || d.gate.base == "" || slices.Contains(d.gate.touchedProjects(), d.project) {
+	if d.project == "" || d.markers.base == "" || slices.Contains(d.markers.touchedProjects(), d.project) {
 		return
 	}
-	path := d.gate.markerPath(advisoryTouchedProjects)
+	path := d.markers.markerPath(advisoryTouchedProjects)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}

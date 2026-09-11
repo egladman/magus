@@ -67,8 +67,13 @@ var focusReaders = map[string]focusReader{
 
 	// find's first operand is the path it walks; fd's is the name it looks for.
 	"find": {},
-	"fd":   {valueFlags: "tedExXS", pattern: true},
+	"fd":   {valueFlags: fdValueFlags, pattern: true},
 }
+
+// fdValueFlags are fd's short flags that consume the next word, so a `-t d` type filter is
+// not read as a name query. One constant because the focus rule and the file-find rule both
+// parse fd, and two copies of a flag set drift into two answers about the same line.
+const fdValueFlags = "tedExXS"
 
 // focusGrade is what the focus rule has to say about one command. Empty Decision
 // means it had nothing to say, which the wire's "pass" does not: a rule that stayed
@@ -136,8 +141,8 @@ func gradeFocusRead(ctx context.Context, actingLease, command string) focusGrade
 // Split from the resolution above so it can be graded without a workspace on disk.
 // The first operand that leaves the focus is the verdict: a line that reads three
 // files needs one explanation, not three.
-func focusVerdict(focus project.Focus, leaseID, root, dir string, operands []string) focusGrade {
-	for _, op := range operands {
+func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string) focusGrade {
+	for _, op := range paths {
 		rel, inside := workspaceRelative(root, focusResolve(dir, op))
 		if !inside || focus.Contains(rel) {
 			continue

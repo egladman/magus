@@ -21,7 +21,7 @@ import (
 // live workspace state lives beside its own reader instead (guard_gate.go). The
 // path surface is guard_write.go.
 
-// bashGuardVerdict classifies one Bash command line. Deny blocks the call with a
+// commandVerdict classifies one Bash command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
 //
 // Kind names an advisory that is held to one firing per session (guard_advisory.go).
@@ -33,7 +33,7 @@ import (
 // Brief is what Kind ships on a repeat firing, and it is empty for a kind that
 // should go quiet instead. It names the command and nothing else, because a repeat
 // is read by someone who already declined the full text once.
-type bashGuardVerdict struct {
+type commandVerdict struct {
 	Deny    string
 	Context string
 	Kind    advisoryKind
@@ -791,8 +791,8 @@ var (
 
 // denySharedStash refuses an unqualified stash restore. The verb it names in the
 // reason is also the rule's Arg, so the two cannot describe different commands.
-func denySharedStash(verb string) bashGuardVerdict {
-	return bashGuardVerdict{
+func denySharedStash(verb string) commandVerdict {
+	return commandVerdict{
 		Deny: "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
 			"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it.",
 		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
@@ -801,8 +801,8 @@ func denySharedStash(verb string) bashGuardVerdict {
 
 // denyWholeTree refuses an operation that discards the whole tree, op naming which
 // one: in the reason and, for the same reason as above, in the rule.
-func denyWholeTree(op string) bashGuardVerdict {
-	return bashGuardVerdict{
+func denyWholeTree(op string) commandVerdict {
+	return commandVerdict{
 		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckoutFor(op) + ".\n" +
 			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
@@ -847,16 +847,13 @@ func magusInvokes(cmds []guardCommand, words ...string) bool {
 	return false
 }
 
-// magusRuleFires answers off the resolved argv when the line parses and off the anchored
-// pattern when it does not, the same split gitGuard and gitGuardFallback make, and for the
-// same reason: a line with no AST to read must still be judged.
-// fires asks a parsed rule when the line parsed, and its pattern when it did not.
+// ruleFires asks a parsed rule when the line parsed, and its pattern when it did not.
 //
 // The fallback is for a line the shell parser rejects, not a second opinion: a rule that
 // consulted both would keep every false positive the pattern has, which is the whole reason
 // these moved. An unparseable line is rare and cannot be judged structurally at all, so
 // there the pattern is the only answer available.
-func fires(cmds []guardCommand, parsed bool, command string,
+func ruleFires(cmds []guardCommand, parsed bool, command string,
 	rule func([]guardCommand) bool, fallback *regexp.Regexp,
 ) bool {
 	if parsed {
@@ -865,6 +862,9 @@ func fires(cmds []guardCommand, parsed bool, command string,
 	return fallback.MatchString(command)
 }
 
+// magusRuleFires answers off the resolved argv when the line parses and off the anchored
+// pattern when it does not, the same split gitGuard and gitGuardFallback make, and for the
+// same reason: a line with no AST to read must still be judged.
 func magusRuleFires(cmds []guardCommand, parsed bool, command string, fallback *regexp.Regexp, words ...string) bool {
 	if parsed {
 		return magusInvokes(cmds, words...)
@@ -1032,14 +1032,14 @@ func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 // A deny is only legitimate once the replacement it names actually works: the
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
-func evaluateBashGuard(command string) bashGuardVerdict {
+func evaluateBashGuard(command string) commandVerdict {
 	return evaluateBashGuardWith(command, searchHints)
 }
 
 // evaluateBashGuardWith is evaluateBashGuard with the caller's hint translator,
 // so hookCmd can pass one scoped from the knowledge manifest while the verdict
 // stays a pure function of what was handed in.
-func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerdict {
+func evaluateBashGuardWith(command string, hints *hint.Translator) commandVerdict {
 	v := evaluateBashGuardRules(command, hints)
 	// A deny refuses the WHOLE line, and the reason only ever discusses the one construct
 	// that earned it. On a line holding several commands that reads as a partial refusal:
@@ -1056,7 +1056,7 @@ func evaluateBashGuardWith(command string, hints *hint.Translator) bashGuardVerd
 	return v
 }
 
-func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVerdict {
+func evaluateBashGuardRules(command string, hints *hint.Translator) commandVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE (a pipe, a redirect, a cd before a magus
 	// call) rather than which program runs.
@@ -1069,40 +1069,40 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	// whole point is that it holds on EVERY surface: the path rule sees file writes, and
 	// these verbs are commands.
 	if notesWriteFires(cmds, parsed, command) {
-		return bashGuardVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
+		return commandVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
 	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
-		return bashGuardVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
+		return commandVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
 	}
-	if fires(cmds, parsed, command, sedInPlaceFires, guardSedInPlaceRe) {
-		return bashGuardVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
+	if ruleFires(cmds, parsed, command, sedInPlaceFires, guardSedInPlaceRe) {
+		return commandVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if busyWaitFires(command) {
-		return bashGuardVerdict{Deny: denyBusyWait, Rule: denyRule{Name: denyRuleBusyWait}}
+		return commandVerdict{Deny: denyBusyWait, Rule: denyRule{Name: denyRuleBusyWait}}
 	}
 	// Beside busy-wait and for the same reason: both are an agent blocking on a condition
 	// it will be told about anyway. This one has no raw-line fallback, because an
 	// unparseable line naming `watch` is far more likely to be something else entirely.
 	if parsed && ciWatchFires(cmds) {
-		return bashGuardVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
+		return commandVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
 	}
 	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
 	// a task capture, this one refuses trimming it once it arrives. It has to sit above
 	// the search advisories, which would otherwise answer for the grep and say nothing
 	// about what it was cutting away.
 	if parsed && captureFilterFires(cmds, command) {
-		return bashGuardVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
+		return commandVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
 	}
 	if scriptedRewriteFires(command) {
-		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
+		return commandVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
-	var advisory bashGuardVerdict
+	var advisory commandVerdict
 	// Held rather than returned, like the git advisories below: a deny found later on the
 	// same line outranks it.
 	if guardChainedRunRe.MatchString(command) {
-		advisory = bashGuardVerdict{Context: adviseChainedRun}
+		advisory = commandVerdict{Context: adviseChainedRun}
 	}
 	if parsed {
 		if v, matched := gitGuard(cmds); matched {
@@ -1144,22 +1144,22 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
 			reason += "\n" + updateAdvice
 		}
-		return bashGuardVerdict{
+		return commandVerdict{
 			Deny: explainDeny(command, rawToolCmd, reason),
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
 	case magusInThrowawayCopy(command):
-		return bashGuardVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
+		return commandVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}
 	case magusPipedToFilter(command):
-		return bashGuardVerdict{Deny: outputPipeDeny, Rule: denyRule{Name: denyRuleOutputPipe}}
+		return commandVerdict{Deny: outputPipeDeny, Rule: denyRule{Name: denyRuleOutputPipe}}
 	case magusRedirected(command):
-		return bashGuardVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
+		return commandVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
-		return bashGuardVerdict{Context: updateGuardContext}
+		return commandVerdict{Context: updateGuardContext}
 	case guardCdMagusRe.MatchString(command):
-		return bashGuardVerdict{Context: cwdGuardContext}
-	case fires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
-		v := bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
+		return commandVerdict{Context: cwdGuardContext}
+	case ruleFires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
+		v := commandVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
 		if s := proseSuggestion(cmds, hints); s != nil {
 			v.Context = renderAdvisoryLead(s) + docSearchAdvice
 			v.Brief = "magus workspace: prose is queryable. `" + s[0].Run + "`"
@@ -1167,14 +1167,14 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 		return v
 	case precedentIdent(cmds) != "":
 		ident := precedentIdent(cmds)
-		return bashGuardVerdict{
+		return commandVerdict{
 			Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
 			Kind:    advisoryPrecedent,
 			Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
 		}
-	case fires(cmds, parsed, command, codeSearchFires, guardCodeSearchRe),
-		fires(cmds, parsed, command, fileFindFires, guardFileFindRe):
-		return bashGuardVerdict{
+	case ruleFires(cmds, parsed, command, codeSearchFires, guardCodeSearchRe),
+		ruleFires(cmds, parsed, command, fileFindFires, guardFileFindRe):
+		return commandVerdict{
 			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
 			Kind:    advisoryCodeSearch,
 			// Carries the ROUTING, not just the verbs. A worker meets this having never
@@ -1183,11 +1183,11 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 			Brief: "magus workspace: `" + hint.Refs.With("<sym>") + "` for code, `" + hint.Query.String() + "` for entities.",
 		}
 	case guardEchoOnSuccessRe.MatchString(command):
-		return bashGuardVerdict{Context: echoOnSuccessAdvice}
+		return commandVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):
-		return bashGuardVerdict{Context: timedMagusAdvice}
+		return commandVerdict{Context: timedMagusAdvice}
 	case guardTimeoutMagusRe.MatchString(command):
-		return bashGuardVerdict{Context: timeoutMagusAdvice}
+		return commandVerdict{Context: timeoutMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

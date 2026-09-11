@@ -77,9 +77,9 @@ func TestDriftVerdict(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			proj, advice := driftVerdict(newFocusFixture(), tc.write, tc.touched)
-			assert.Equal(t, tc.project, proj)
-			assert.Equal(t, tc.fires, advice != "", "advice: %q", advice)
+			drift := driftVerdict(newFocusFixture(), tc.write, tc.touched)
+			assert.Equal(t, tc.project, drift.project)
+			assert.Equal(t, tc.fires, drift.advice != "", "advice: %q", drift.advice)
 		})
 	}
 }
@@ -87,7 +87,7 @@ func TestDriftVerdict(t *testing.T) {
 // The text has to carry both halves of the split it is proposing, or the reader
 // cannot tell which two units it means, and one runnable command that checks it.
 func TestScopeDriftAdviceNamesBothSides(t *testing.T) {
-	_, advice := driftVerdict(newFocusFixture(), "/ws/libs/ui/button.ts", []string{"app"})
+	advice := driftVerdict(newFocusFixture(), "/ws/libs/ui/button.ts", []string{"app"}).advice
 
 	assert.Contains(t, advice, "libs/ui")
 	assert.Contains(t, advice, "app")
@@ -99,27 +99,28 @@ func TestScopeDriftAdviceNamesBothSides(t *testing.T) {
 // Once per (session, project): the recorded set is what holds it, so the second
 // write to the same new project never reaches the graph at all.
 func TestScopeDriftFiresOncePerProject(t *testing.T) {
-	gate := newAdvisoryGate(t.TempDir(), "session-1")
+	markers := newAdvisoryGate(t.TempDir(), "session-1")
 	ws := newFocusFixture()
 
-	scopeDrift{gate: gate, project: "app"}.record()
+	scopeDrift{markers: markers, project: "app"}.record()
 
-	proj, advice := driftVerdict(ws, "/ws/libs/ui/button.ts", gate.touchedProjects())
-	require.NotEmpty(t, advice, "a sibling of the only touched project is owed the advisory once")
-	scopeDrift{gate: gate, project: proj, advice: advice}.record()
+	drift := driftVerdict(ws, "/ws/libs/ui/button.ts", markers.touchedProjects())
+	require.NotEmpty(t, drift.advice, "a sibling of the only touched project is owed the advisory once")
+	drift.markers = markers
+	drift.record()
 
-	_, repeat := driftVerdict(ws, "/ws/libs/ui/input.ts", gate.touchedProjects())
-	assert.Empty(t, repeat, "the project is in the session's set now, so the second write is in scope")
-	assert.Equal(t, []string{"app", "libs/ui"}, gate.touchedProjects())
+	repeat := driftVerdict(ws, "/ws/libs/ui/input.ts", markers.touchedProjects())
+	assert.Empty(t, repeat.advice, "the project is in the session's set now, so the second write is in scope")
+	assert.Equal(t, []string{"app", "libs/ui"}, markers.touchedProjects())
 }
 
 // A gate with no cache base remembers nothing, and a rule that cannot remember must
 // not pretend the session has touched something.
 func TestScopeDriftRecordsNothingWithoutABase(t *testing.T) {
-	gate := newAdvisoryGate("", "session-1")
-	scopeDrift{gate: gate, project: "app"}.record()
+	markers := newAdvisoryGate("", "session-1")
+	scopeDrift{markers: markers, project: "app"}.record()
 
-	assert.Empty(t, gate.touchedProjects())
+	assert.Empty(t, markers.touchedProjects())
 }
 
 // A worker writing inside the lane its orchestrator declared is in scope by
