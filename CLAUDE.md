@@ -376,7 +376,10 @@ deliberately instead:
   code comments are exempt. Docs frontmatter is plain ASCII too.
 - Never hand-edit generated files (`gen/` dirs, `MAGUS.md`, `docs/gen/`); change
   the source of truth and regenerate. Generated output lives in a `gen/` dir and
-  carries no extra suffix - the directory is the signal.
+  carries no extra suffix - the directory is the signal. The one exception is a
+  generated METHOD set (`types/buzzobject_gen.go`, `types/enum_gen.go`): Go puts a
+  method in its receiver's package, so those files cannot live in a subdirectory
+  and carry the `_gen.go` suffix instead.
 - Docs site follows classless Pico: semantic HTML, minimal custom classes,
   no inline styles.
 - Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.
