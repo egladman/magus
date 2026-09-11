@@ -256,6 +256,15 @@ Two absences are boundaries nobody declared rather than boundaries of size zero,
 and both scope nothing: an empty `owned_paths` on a row that is not `read_only`,
 and an empty `validation`.
 
+None of that table is visible from the verdict a worker sees, which is exactly
+what makes a wrong binding dangerous: a checkout bound to an unknown id, a
+terminal row, or a live row that never registered its base all render as an
+ordinary advisory, indistinguishable from a session these rules are actually
+enforcing on. `magus doctor`'s **lease-enforcing** check is the other end of
+that gap - it reads the same row the guard would and says, in one line,
+whether this checkout's bound lease is live, registered, and therefore
+actually judged, or names which of the three it is not.
+
 ## What the sandbox enforces under a lease
 
 The guard above is a seatbelt for harnesses that opt in: it explains a boundary

@@ -253,6 +253,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkCheckpointWiring() },
 	},
 	{
+		Name:           "lease-enforcing",
+		Doc:            "whether the lease this checkout is bound to is a live, registered row the guard actually judges",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseEnforcing() },
+	},
+	{
 		Name:           "agent-skills",
 		Doc:            "installed agent skills still current with this binary",
 		Evidence:       types.EvidenceMeasured,
