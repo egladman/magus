@@ -32,7 +32,7 @@
         ]
       },
       {
-        "matcher": "mcp__magus__.*",
+        "matcher": "^mcp__magus__",
         "hooks": [
           {
             "type": "command",

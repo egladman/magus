@@ -71,23 +71,52 @@ exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 
 # --- magus-guard-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
 
+# Both MCP cases run under a BOUND lease, in the one fixture workspace this archive
+# carries, because the rule that reads an MCP call is lease-scoped. The row is declared
+# first: an id the ledger does not carry is refused by a different rule, and the case would
+# then pass for a reason that has nothing to do with this transport.
+#
+# Declaring a row reaches the user-global state dir, which the archive's read-only HOME is
+# not: both are pointed at the work directory for the length of this block.
+mkdir $WORK/home
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+cd notes-ws
+exec magus ledger register harness/mcp-worker --goal 'the transport corpus, bound so the rebind rule has a row to read'
+exec magus session lease harness/mcp-worker
+
 # case: mcp/pass
-# An MCP call carries no tool_input.command for HOST_EVENT_PATH to select, so
-# HOST_EVENT_RAW forwards the whole event instead. magus parses that envelope and
-# recognizes the tool name and params well enough to say there is nothing here it
-# judges, so every MCP call passes today: the transport is real, no rule reads it
-# yet.
-env HOST_EVENT_RAW=1
-stdin mcp-call.json
+# The same event WITHOUT the raw wiring. An MCP call carries no tool_input.command for
+# HOST_EVENT_PATH to select, so jq hands magus the literal `null` and the rules judge text
+# rather than a tool call: it passes. Paired with the deny below, this is what pins the raw
+# arm, since a case that passes either way pins none of the transport it was added for.
+stdin $WORK/mcp-call.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 ! stdout .
-env HOST_EVENT_RAW=
 
-# case: mcp/deny unreachable - no rule judges an MCP tool call yet; a tool_input
-# the envelope decoder does not recognize (no command, file_path or prompt) always
-# resolves to NothingToJudge, which magus renders as a pass, never a deny. Add a
-# real case here once a rule reads an MCP call's tool name.
-# case: mcp/advise unreachable - same gap: NothingToJudge never advises either.
+# case: mcp/deny
+# The same event THROUGH HOST_EVENT_RAW. `op=clear` would drop every ledger row, which is
+# the one thing a bound worker may never do, so leaseRebind refuses it and the same
+# hookSpecificOutput reply this file renders for the command surface carries the deny here.
+env HOST_EVENT_RAW=1
+stdin $WORK/mcp-call.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'leave your own row alone'
+env HOST_EVENT_RAW=
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+# The binding is dropped here, not left for the cases below: every path case in this
+# fixture workspace would otherwise be graded against a lane nobody declared for it, and
+# the lease rules answer before the rule each of those cases is about.
+rm notes-ws/.magus/lease
+
+# case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
+# denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
+# three advisory families a rendered call could reach - the gate-repeat count, the stale
+# symbol index, the stale binary - each need machine state a script cannot make
+# deterministic. A case here would pass for a reason that is not this transport.
 
 # --- magus-guard-path.sh: the same hosts, their file-writing tool -------------
 

@@ -5,8 +5,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -132,7 +134,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err != nil {
 		return err
 	}
-	input, hasInput, readErr := readGuardInput(in)
+	input, readErr := readGuardInput(in)
 	// A failed read is not an empty stdin, and collapsing the two cleared every
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
 	// which is what the manpage promises: deny and unreadable input share the code,
@@ -153,11 +155,12 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 		return enforceVerdict(opts, verdict)
 	}
+	hasInput := input != ""
 	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Transcript: hf.Transcript, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
-	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
+	if req, isEnvelope := decodeHookEnvelope(input); isEnvelope {
 		if req.NothingToJudge {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
 			// list, a search) has nothing any rule can read. Falling through judged the raw
@@ -166,7 +169,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			return writeGuardVerdict(out, opts,
 				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
 		}
-		input.Value = req.Value
+		input = req.Value
+		hasInput = input != ""
 		if req.IsPath {
 			hf.Path = true
 		}
@@ -234,7 +238,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// denies do not, and they are the ones whose reasons say why (see guard_preauth.go).
 	preauth := ""
 	if hasInput && !hf.Observe && !hf.Path {
-		preauth = servedNextPreauthorizes(gate, input.Value)
+		preauth = servedNextPreauthorizes(gate, input)
 	}
 	switch {
 	case !hasInput:
@@ -252,7 +256,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
 		// resolved inside a rung that a louder rule skips.
-		drift := gradeScopeDrift(ctx, gate, actingLease, input.Value)
+		drift := gradeScopeDrift(ctx, gate, actingLease, input)
 		// spoken reports that a rule MATCHED, which is not the same as a rule that
 		// produced text. A once-per-session advisory that already fired this session
 		// matched and stayed quiet, and the rules below it must not step into the silence
@@ -263,11 +267,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// that does. Every lease-scoped verdict below is computed from files in there, so
 		// a worker whose lane happens to cover the dir must not be told it owns the lane:
 		// what it is editing is whether the lane was checked.
-		if reason := denyCacheDirPath(location, input.Value); reason != "" {
+		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
 		if verdict.Decision != "deny" {
-			switch g := gradeLeasedWrite(ctx, actingLease, input.Value); g.Decision {
+			switch g := gradeLeasedWrite(ctx, actingLease, input); g.Decision {
 			case "deny":
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
@@ -281,7 +285,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// every rule below it depends on. It cannot outrank the collision, because that
 		// one is about a concurrent agent and stays true whatever this file is.
 		if verdict.Decision != "deny" {
-			switch g := gradeHookWiringWrite(actingLease, input.Value); g.Decision {
+			switch g := gradeHookWiringWrite(actingLease, input); g.Decision {
 			case "deny":
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":
@@ -294,7 +298,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// outranks the heuristics below; the memory nudge is a heuristic on the
 		// filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseGeneratedWrite(ctx, input.Value); text != "" {
+			if text := adviseGeneratedWrite(ctx, input); text != "" {
 				advice, spoken = text, true
 			}
 		}
@@ -303,18 +307,18 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// generated-output rule only because a path cannot honestly be both, and if
 		// it somehow were, the regeneration answer is the more actionable one.
 		if verdict.Decision == "pass" && !spoken {
-			if reason := denyNotesWrite(input.Value); reason != "" {
+			if reason := denyNotesWrite(input); reason != "" {
 				verdict.Decision = "deny"
 				verdict.Reason = reason
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseInstalledSkillWrite(input.Value); text != "" {
+			if text := adviseInstalledSkillWrite(input); text != "" {
 				advice, spoken = text, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseMemoryWrite(input.Value); text != "" {
+			if text := adviseMemoryWrite(input); text != "" {
 				advice, spoken = text, true
 			}
 		}
@@ -323,12 +327,12 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// new-directory rule because a new skill directory is both, and which method to
 		// load is the more useful of the two answers.
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseAgentSurfaceWrite(input.Value); text != "" {
+			if text := adviseAgentSurfaceWrite(input); text != "" {
 				advice, spoken = gate.once(advisorySkillSource, text), true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
-			if text := adviseDescriptorWrite(input.Value); text != "" {
+			if text := adviseDescriptorWrite(input); text != "" {
 				advice, spoken = gate.once(advisoryRegenSource, text), true
 			}
 		}
@@ -341,7 +345,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
 		if verdict.Decision == "pass" && !spoken {
-			advice = adviseNewSourceDir(input.Value)
+			advice = adviseNewSourceDir(input)
 		}
 		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"
@@ -362,8 +366,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The hint graph is built here unconditionally: the manifest read behind it is
 		// one small file, and laziness would buy nothing on a hook this short-lived.
 		switch v := rankCacheDirWrite(
-			rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)),
-			denyCacheDirCommand(location, input.Value)); {
+			rankSiblingCheckout(evaluateBashGuardWith(input, hookSearchHints(location.base)), denySiblingCheckout(input)),
+			denyCacheDirCommand(location, input)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -389,7 +393,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
-			if reason := rule(ctx, actingLease, input.Value); reason != "" {
+			if reason := rule(ctx, actingLease, input); reason != "" {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 			}
 		}
@@ -398,7 +402,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
 		// project, and the rule that caught it is also the cheaper one to have run.
 		if verdict.Decision != "deny" && preauth == "" {
-			focus := gradeFocusRead(ctx, actingLease, input.Value)
+			focus := gradeFocusRead(ctx, actingLease, input)
 			switch {
 			case focus.Decision == "deny":
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
@@ -413,7 +417,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// narrower target argues with the caller for doing what it asked. The narrow
 		// case is also the common one, so a rule that speaks there is a rule the
 		// reader learns to skip.
-		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input.Value) {
+		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input) {
 			full, brief := adviseRepeatGate(workspaceRunsDir(hookActivityTrail(ctx).base), time.Now())
 			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
@@ -424,7 +428,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// command's own output (staleindex.go). gate.seen is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
-		if verdict.Decision == "pass" && preauth == "" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input.Value) {
+		if verdict.Decision == "pass" && preauth == "" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input) {
 			if notice := gate.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
@@ -530,28 +534,28 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guardVerdict) 
 	return writeFormatted(out, opts, verdict)
 }
 
-// guardInput keeps the resolved command/path distinct from its rendering and
-// audit policy. The hook's input is deliberately plain text: host event parsing
-// belongs in the host wrapper, not in a durable magus CLI contract.
-type guardInput struct {
-	Value string
-}
+// guardInputLimit bounds the payload one hook call may carry.
+//
+// An MCP params object is caller-controlled and can be megabytes, the raw-event wiring
+// forwards the WHOLE event rather than one extracted command string, and the template
+// holds a second copy of it under the host's hook timeout. Overflow is a read FAILURE
+// rather than a truncation, for the reason readGuardInput gives: a truncated payload is
+// exactly the "not the command the guard was shown" case.
+const guardInputLimit = 1 << 20
 
-// readGuardInput reports the payload, whether one arrived, and the read failure
-// separately. The failure is its own return rather than folded into the boolean:
-// "no input" is a host that sent nothing and "the read broke" is a payload magus
-// was supposed to receive, and only the second one means the command about to run
-// is not the command the guard was shown.
-func readGuardInput(in io.Reader) (guardInput, bool, error) {
-	b, err := io.ReadAll(in)
+// readGuardInput reports the payload, and the read failure separately from an empty one.
+// "No input" is a host that sent nothing and "the read broke" is a payload magus was
+// supposed to receive, and only the second one means the command about to run is not the
+// command the guard was shown.
+func readGuardInput(in io.Reader) (string, error) {
+	b, err := io.ReadAll(io.LimitReader(in, guardInputLimit+1))
 	if err != nil {
-		return guardInput{}, false, err
+		return "", err
 	}
-	value := strings.TrimSpace(string(b))
-	if value == "" {
-		return guardInput{}, false, nil
+	if len(b) > guardInputLimit {
+		return "", fmt.Errorf("the payload is larger than the %d-byte limit, so it was not read whole", guardInputLimit)
 	}
-	return guardInput{Value: value}, true, nil
+	return strings.TrimSpace(string(b)), nil
 }
 
 // hookEnvelope is the JSON an agent host writes to a hook's stdin: which tool is about to
@@ -568,22 +572,39 @@ type hookEnvelope struct {
 	// session id in the activity view leads somewhere; magus never reads the file.
 	TranscriptPath string `json:"transcript_path"`
 	ToolName       string `json:"tool_name"`
-	ToolInput      struct {
-		Command  string `json:"command"`
-		FilePath string `json:"file_path"`
-		// A spawn: the context an orchestrator is about to hand a sub-agent, plus
-		// whatever the host calls the callee. Field PATHS, not a host name: the same line
-		// the two fields above already draw. magus does not know which tool produces them
-		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
-		Prompt       string `json:"prompt"`
-		Description  string `json:"description"`
-		SubagentType string `json:"subagent_type"`
-		// Op is the operation an MCP call to one of magus's OWN tools names. magus
-		// defines that tool's schema, so reading this field reads magus's vocabulary
-		// rather than a host's, which is the line
-		// TestGuardDoesNotBranchOnHostToolVocabulary draws.
-		Op string `json:"op"`
-	} `json:"tool_input"`
+	// ToolInput is read as a plain map, so a field arriving with a type this guard did
+	// not expect costs that field rather than the whole decode. Typed, a numeric `op`
+	// failed the unmarshal outright and the raw JSON was then judged as a shell line.
+	ToolInput map[string]any `json:"tool_input"`
+}
+
+// envelopeString reads one tool_input field, treating anything that is not a string as
+// absent. A host is free to add to the payload, and a field magus cannot read is one it
+// has no business guessing at.
+func envelopeString(input map[string]any, key string) string {
+	s, _ := input[key].(string)
+	return s
+}
+
+// envelopeWritePath is the file an edit tool is about to write, or "".
+//
+// `file_path` is the documented spelling and the others are what the same hosts use for
+// their other editors, so the fallback is any `*_path` key rather than a list magus would
+// have to grow per host: `transcript_path` and `cwd` live on the envelope itself, not in
+// tool_input, so nothing here can pick them up.
+func envelopeWritePath(input map[string]any) string {
+	if p := envelopeString(input, "file_path"); p != "" {
+		return p
+	}
+	keys := slices.Sorted(maps.Keys(input))
+	for _, key := range keys {
+		if strings.HasSuffix(key, "_path") {
+			if p := envelopeString(input, key); p != "" {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 // The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
@@ -642,26 +663,31 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		Transcript: env.TranscriptPath,
 		Event:      env.HookEventName,
 	}}
+	tool := magusToolCall(env.ToolName)
 	switch {
-	case env.ToolInput.Command != "":
-		req.Value = env.ToolInput.Command
-	case env.ToolInput.FilePath != "":
-		req.Value, req.IsPath = env.ToolInput.FilePath, true
-	case magusToolCall(env.ToolName) != "" && env.ToolInput.Op != "":
+	case tool != "":
 		// An MCP call to one of magus's own tools, normalized to the one shape every
-		// rule here reads: a command line. It is the SAME write the CLI verbs make,
-		// through a different transport, so a rule that held on one channel would move
-		// the traffic rather than stop it. Normalized rather than judged in a shape of
-		// its own so the trail records what was asked in the vocabulary a person
-		// already reads there.
-		req.Value = renderMCPCall(magusToolCall(env.ToolName), raw)
-	case env.ToolInput.Prompt != "":
-		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
+		// rule here reads: a command line. It is the SAME work the CLI verbs do, through
+		// a different transport, so a rule that held on one channel would move the
+		// traffic rather than stop it. Judged on the TOOL NAME rather than on a param
+		// being present: requiring `op` left nineteen of magus's twenty-one tools,
+		// magus_run_target and magus_run_affected among them, reaching no rule at all.
+		req.Value = renderMCPCall(tool, env.ToolInput)
+	case envelopeString(env.ToolInput, "command") != "":
+		req.Value = envelopeString(env.ToolInput, "command")
+	case envelopeWritePath(env.ToolInput) != "":
+		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
+	case envelopeString(env.ToolInput, "prompt") != "":
+		req.Value, req.IsSpawn = envelopeString(env.ToolInput, "prompt"), true
 		req.Tool = env.ToolName
 		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
 		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
-		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
+		for _, label := range []string{
+			envelopeString(env.ToolInput, "subagent_type"),
+			envelopeString(env.ToolInput, "description"),
+			env.ToolName,
+		} {
 			if label != "" {
 				req.Child = label
 				break
@@ -719,31 +745,88 @@ var mcpElidedParams = map[string]bool{"goal": true}
 // empty value is how the merge spells an explicit clear, and the two must not render alike.
 const mcpElidedValue = "..."
 
-// renderMCPCall normalizes an MCP call to a magus tool into a command line: the tool name,
-// then each judged parameter it carried as `key=value`.
+// mcpCLIEquivalent is the CLI command a magus MCP tool is the other door to.
+type mcpCLIEquivalent struct {
+	command hint.Command
+	// operands are the tool parameters that render as positional arguments, in order.
+	operands []string
+	// flags are the fixed flags that make the rendering the same work the tool does, so
+	// a REPORT about the gate does not render as a run of it.
+	flags []string
+}
+
+// mcpCLIEquivalents route each magus tool to the command line that does the same thing, so
+// the rules already written for the CLI judge the tool call rather than a second copy of
+// them being written for MCP.
+//
+// magus_insight and magus_ledger are absent for opposite reasons: nothing in internal/hint
+// spells `insight`, so there is no command to render; the ledger tool is judged on its
+// PARAMETERS by the rebind rule, which is the one rule that reads an MCP call directly.
+var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
+	hint.ToolRunTarget:       {command: hint.Run, operands: []string{"target", "projects"}},
+	hint.ToolRunAffected:     {command: hint.Affected, operands: []string{"target"}},
+	hint.ToolAffectedPlan:    {command: hint.Affected, operands: []string{"target"}, flags: []string{"--plan"}},
+	hint.ToolAffectedExplain: {command: hint.Affected, operands: []string{"project"}, flags: []string{"--explain"}},
+	hint.ToolVCSCheckpoint:   {command: hint.VCSCheckpoint},
+	hint.ToolQuery:           {command: hint.Query, operands: []string{"query"}},
+	hint.ToolExplain:         {command: hint.Explain, operands: []string{"node"}},
+	hint.ToolRefs:            {command: hint.Refs, operands: []string{"symbol"}},
+	hint.ToolPath:            {command: hint.Path, operands: []string{"from", "to"}},
+	hint.ToolDescribe:        {command: hint.Describe, operands: []string{"kind", "name"}},
+	hint.ToolDescribeFile:    {command: hint.DescribeFile, operands: []string{"paths"}},
+	hint.ToolWhere:           {command: hint.Where, operands: []string{"filter"}},
+	hint.ToolOutput:          {command: hint.QueryOutput, operands: []string{"ref"}},
+	hint.ToolStats:           {command: hint.GraphStats},
+	hint.ToolDiff:            {command: hint.Diff},
+	hint.ToolDoctor:          {command: hint.Doctor},
+	hint.ToolStatus:          {command: hint.Status},
+	hint.ToolConfigGet:       {command: hint.ConfigView},
+}
+
+// renderMCPCall normalizes an MCP call to a magus tool into a command line.
+//
+// Three shapes, in the order they are decided. The ledger tool renders `<tool> key=value`,
+// because its parameters ARE what the rebind rule judges. A tool with a CLI equivalent
+// renders that argv, so the command rules read it as the work it is. Anything else renders
+// its bare tool name: nothing judges it, and the activity trail still records that it
+// happened.
 //
 // Rendering and re-parsing rather than handing the rules a map keeps ONE judged value per
 // call: the string the rules read is the string the trail records, so what a person audits
 // later is what was graded. A value holding a space is quoted, which the shell parser the
 // rules already run unquotes.
-func renderMCPCall(name, raw string) string {
-	var payload struct {
-		ToolInput map[string]any `json:"tool_input"`
+func renderMCPCall(name string, input map[string]any) string {
+	if name == hint.ToolLedger.String() {
+		out := []string{name}
+		for _, key := range mcpJudgedParams {
+			value, ok := input[key]
+			if !ok {
+				continue
+			}
+			if mcpElidedParams[key] {
+				out = append(out, key+"="+mcpElidedValue)
+				continue
+			}
+			out = append(out, key+"="+quoteMCPValue(mcpValueString(value)))
+		}
+		return strings.Join(out, " ")
 	}
-	if json.Unmarshal([]byte(raw), &payload) != nil {
+	cli, ok := mcpCLIEquivalents[hint.ToolName(name)]
+	if name == hint.ToolMemory.String() {
+		// The one tool whose op picks the verb: a put writes, everything else reads.
+		cli, ok = mcpCLIEquivalent{command: hint.MemoryLs}, true
+		if envelopeString(input, "op") == "put" {
+			cli = mcpCLIEquivalent{command: hint.MemoryPut, operands: []string{"name"}}
+		}
+	}
+	if !ok {
 		return name
 	}
-	out := []string{name}
-	for _, key := range mcpJudgedParams {
-		value, ok := payload.ToolInput[key]
-		if !ok {
-			continue
+	out := append([]string{cli.command.String()}, cli.flags...)
+	for _, key := range cli.operands {
+		if value := mcpValueString(input[key]); value != "" {
+			out = append(out, quoteMCPValue(value))
 		}
-		if mcpElidedParams[key] {
-			out = append(out, key+"="+mcpElidedValue)
-			continue
-		}
-		out = append(out, key+"="+quoteMCPValue(mcpValueString(value)))
 	}
 	return strings.Join(out, " ")
 }
@@ -753,6 +836,8 @@ func renderMCPCall(name, raw string) string {
 // same way from both, so a rule cannot be dodged by picking a spelling.
 func mcpValueString(value any) string {
 	switch v := value.(type) {
+	case nil:
+		return ""
 	case string:
 		return v
 	case []any:
@@ -778,20 +863,22 @@ func quoteMCPValue(value string) string {
 	return value
 }
 
+// mcpMagusPrefix is how a host spells a call to magus's own MCP server. The prefix is the
+// host's, the name after it is magus's.
+const mcpMagusPrefix = "mcp__magus__"
+
 // magusToolCall returns the magus MCP tool a host's tool name refers to, or "" when it
 // refers to none.
 //
-// Hosts prefix these (`mcp__magus__magus_ledger` on one, a bare name on another), and the
-// prefix is the host's business. What magus can recognize is its OWN tool name inside it,
-// which is why the match is on the suffix rather than on any host's spelling.
+// The bare name or magus's own prefix, and nothing else. A suffix match let any other
+// server's `whatever__magus_ledger` decode as a magus ledger call, be rendered into
+// magus's activity trail, and be judged by magus's rules.
 func magusToolCall(toolName string) string {
-	for _, tool := range hint.AllToolNames {
-		name := tool.String()
-		if toolName == name || strings.HasSuffix(toolName, "__"+name) {
-			return name
-		}
+	name := strings.TrimPrefix(toolName, mcpMagusPrefix)
+	if !slices.ContainsFunc(hint.AllToolNames, func(t hint.ToolName) bool { return t.String() == name }) {
+		return ""
 	}
-	return ""
+	return name
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
@@ -845,8 +932,8 @@ type hookActivityLocationKey struct{}
 // preauth is the `next` template that had already served this command, and it is recorded
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
-func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool, lease, preauth string, verdict guardVerdict) {
-	if input.Value == "" || location.base == "" {
+func appendHookActivity(ctx context.Context, location hookActivityLocation, input string, who hookAttribution, tool, lease, preauth string, verdict guardVerdict) {
+	if input == "" || location.base == "" {
 		return
 	}
 	command := trail.AgentCommand{
@@ -864,9 +951,9 @@ func appendHookActivity(ctx context.Context, location hookActivityLocation, inpu
 		Context:    verdict.Context,
 	}
 	if tool == hookToolCommand {
-		command.Command = input.Value
+		command.Command = input
 	} else {
-		command.Path = input.Value
+		command.Path = input
 	}
 	trail.AppendAgentCommand(ctx, location.base, command)
 }
