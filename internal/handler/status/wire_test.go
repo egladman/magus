@@ -23,7 +23,7 @@ func TestStatusProtoMapsPool(t *testing.T) {
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{"run", "build", "api"}, Workspace: "/ws", StartedAt: started, Step: "go-build"}},
 		},
 	}
-	s := statusReportToProto(r, types.BuildInfo{Version: "v1.2.3"})
+	s := statusSnapshotToProto(r, types.BuildInfo{Version: "v1.2.3"})
 
 	assert.Equal(t, statusv1.Health_HEALTH_HEALTHY, s.GetHealth())
 	assert.Equal(t, "v1.2.3", s.GetBuild().GetVersion())
@@ -55,7 +55,7 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 			},
 		},
 	}
-	p := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 
 	// Per-running-target invocation id.
@@ -80,9 +80,9 @@ func TestStatusProtoMapsCacheAndInv(t *testing.T) {
 
 // TestStatusProtoHealth derives DOWN when no pool is present and DEGRADED on a pool error.
 func TestStatusProtoHealth(t *testing.T) {
-	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusReportToProto(types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
+	assert.Equal(t, statusv1.Health_HEALTH_DOWN, statusSnapshotToProto(types.StatusSnapshot{}, types.BuildInfo{Version: "v1"}).GetHealth())
 	assert.Equal(t, statusv1.Health_HEALTH_DEGRADED,
-		statusReportToProto(types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
+		statusSnapshotToProto(types.StatusSnapshot{Pool: &types.StatusOutput{}, PoolError: "boom"}, types.BuildInfo{Version: "v1"}).GetHealth())
 }
 
 // TestEncodeStatusEventRoundTrip confirms a status snapshot decodes back: base64 -> proto.
@@ -115,7 +115,7 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 			},
 		}},
 	}
-	s := statusReportToProto(r, types.BuildInfo{Version: "v1"})
+	s := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"})
 
 	require.Len(t, s.GetRuns(), 1)
 	run := s.GetRuns()[0]
@@ -151,7 +151,7 @@ func TestStatusProtoCarriesSecretProviderName(t *testing.T) {
 			},
 		},
 	}
-	p := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
+	p := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetPool()
 	require.NotNil(t, p)
 	require.Len(t, p.GetWorkspaces(), 2)
 
@@ -174,7 +174,7 @@ func TestStatusProtoCarriesTheStaleLockThreshold(t *testing.T) {
 		AcquireTime: held, StaleAfterSeconds: 600,
 	}}}
 
-	locks := statusReportToProto(r, types.BuildInfo{Version: "v1"}).GetLocks()
+	locks := statusSnapshotToProto(r, types.BuildInfo{Version: "v1"}).GetLocks()
 
 	require.Len(t, locks, 1)
 	assert.Equal(t, int32(600), locks[0].GetStaleAfterSeconds())
