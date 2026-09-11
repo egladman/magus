@@ -90,9 +90,10 @@ moment a release carries the key.
 The DEFAULT, whenever the PATH binary can load the tree, is to use it and NOT build.
 Building is the exception, and it needs a reason:
 
-- a `magus.project` option, target policy, or other magusfile schema change (the
-  released binary rejects a key it does not know, and then no magus command can
-  even load the workspace - which is the situation above)
+- a `magus.project` option, target policy, or other magusfile schema change, or a
+  new `magus.yaml` key (the released binary rejects an option and a config key it
+  does not know alike, and then no magus command can even load the workspace -
+  which is the situation above)
 - engine, daemon, spell-runtime, or CLI behavior you are about to run
 - a doctor check whose output you want to see against this tree
 

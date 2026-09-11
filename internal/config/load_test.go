@@ -180,10 +180,46 @@ func TestLoadDirIntoBoolTrueOverridesADefaultOffKey(t *testing.T) {
 	assert.True(t, cfg.Sandbox.Enabled)
 }
 
+// A key magus will not honor must fail the load, naming the key and the file it
+// is in. The empty-log assert is the load-bearing half: a warning leaves the
+// command at exit 0, and -s/--silent drops it entirely, so a change back to
+// warning has to break a test rather than pass one.
+func TestUnknownKeyIsALoadError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "magus.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("concurrencyy: 4\n"), 0o644))
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	_, err := loadDirInto(Defaults(), dir)
+	require.Error(t, err, "an unknown key must fail the load, not warn and continue")
+	assert.Contains(t, err.Error(), "concurrencyy", "the error must name the offending key")
+	assert.Contains(t, err.Error(), path, "the error must name the file the key is in")
+	assert.Empty(t, buf.String(), "the failure is the error, not a log line")
+
+	_, err = LoadFile(path, false)
+	assert.Error(t, err, "LoadFile rejects an unknown key whether or not it validates")
+}
+
+// yaml.Decoder reads the first document and stops, so a second one would apply
+// nothing and say nothing.
+func TestSecondDocumentIsALoadError(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte("concurrency: 3\n---\nconcurrency: 9\n"), 0o644))
+
+	_, err := loadDirInto(Defaults(), dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "single document")
+}
+
 // An empty or comment-only magus.yaml declares nothing, which is valid. yaml's
-// decoder reports io.EOF for it, and reading that as a decode failure made loading
-// warn about "unknown or unexpected keys ... detail=EOF" while LoadFile(strict),
-// what `magus config validate` runs, rejected the file outright.
+// decoder reports io.EOF for it, and reading that as a decode failure would turn
+// every empty file into an unknown-key error.
 func TestEmptyDocumentIsNotAnError(t *testing.T) {
 	t.Parallel()
 	for name, content := range map[string]string{
@@ -207,7 +243,7 @@ func TestEmptyDocumentIsNotAnError(t *testing.T) {
 			assert.NotContains(t, buf.String(), "EOF", "an empty document must not warn about unexpected keys")
 
 			strictCfg, err := LoadFile(path, true)
-			require.NoError(t, err, "magus config validate must accept an empty magus.yaml")
+			require.NoError(t, err, "a strict load must accept an empty magus.yaml")
 			assert.True(t, strictCfg.Daemon.Enabled, "an empty document leaves every default in place")
 		})
 	}

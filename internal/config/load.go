@@ -94,7 +94,9 @@ func UserCacheDir() (string, error) {
 	return filepath.Join(home, ".cache"), nil
 }
 
-// Load merges defaults → user-global → workspace → cwd → MAGUS_* env vars.
+// Load merges defaults → user-global → workspace → cwd. The MAGUS_* tier is NOT
+// applied here: callers overlay it with configgen.ApplyEnv, which lives in a
+// generated package this one cannot import.
 // If explicitPath is non-empty only that file is loaded (missing = hard error).
 func Load(explicitPath string) (Config, error) {
 	return LoadWithRoot(explicitPath, "")
@@ -219,29 +221,39 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 }
 
 // loadFileInto parses the YAML at path and merges its values on top of cfg.
-// Unknown YAML keys are silently accepted (non-strict mode) but a WARN is
-// emitted via slog so users can spot typos or stale config keys.
 func loadFileInto(cfg Config, path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, overlay, err := decodeFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("config: read %s: %w", path, err)
-	}
-	// Probe for unknown keys: use a strict decoder and discard the error
-	// (we still accept the file), but log a warning so users notice typos.
-	// io.EOF is an EMPTY document, not a malformed one; a magus.yaml holding
-	// only comments would otherwise warn about "unknown keys ... detail=EOF".
-	var probe Config
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if decErr := dec.Decode(&probe); decErr != nil && !errors.Is(decErr, io.EOF) {
-		slog.Warn("config: unknown or unexpected keys in config file (run 'magus config validate' for details)",
-			"path", path, "detail", decErr.Error())
-	}
-	var overlay Config
-	if err := yaml.Unmarshal(data, &overlay); err != nil {
-		return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
+		return Config{}, err
 	}
 	return mergeOverlay(cfg, overlay, data), nil
+}
+
+// decodeFile reads path and decodes it with unknown keys rejected, returning the
+// document bytes mergeOverlay needs alongside the decoded overlay. Every tier and
+// [LoadFile] decode here, so what magus doctor rejects is what loading rejects.
+//
+// An unknown key is an error because magus will not honor it, and a value the
+// tool drops must never look like one it applied. io.EOF is an EMPTY document,
+// not a malformed one; an empty or comment-only magus.yaml declares nothing,
+// which is valid.
+func decodeFile(path string) ([]byte, Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, Config{}, fmt.Errorf("config: read %s: %w", path, err)
+	}
+	var overlay Config
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
+		return nil, Config{}, fmt.Errorf("config: %s: %w", path, err)
+	}
+	// A decoder reads one document; a second would be dropped without a word.
+	var extra yaml.Node
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, Config{}, fmt.Errorf("config: %s: expected a single document in the stream", path)
+	}
+	return data, overlay, nil
 }
 
 // mergeConfig returns dst with every non-zero field from src applied on top,
@@ -332,31 +344,15 @@ func parseBoolEnv(v string, fallback bool) bool {
 	return fallback
 }
 
-// LoadFile parses the config file at path on top of Defaults() and returns
-// the merged Config. When strict is true, unknown YAML keys are rejected and
-// Validate is run on the result; errors from either step are returned as
-// structured errors (*ValidationError for validation failures, plain errors
-// for YAML syntax and unknown-field errors). When strict is false the
-// behavior mirrors the internal loadFileInto: unknown keys are silently
-// ignored and Validate is not run.
+// LoadFile parses the config file at path on top of Defaults() and returns the
+// merged Config. A YAML syntax error and an unknown key are rejected either way;
+// strict additionally runs [Validate] on the result and returns its
+// *ValidationError. A caller holding a partial or foreign file passes false to
+// read the values without grading them.
 func LoadFile(path string, strict bool) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, overlay, err := decodeFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("config: read %s: %w", path, err)
-	}
-	var overlay Config
-	if strict {
-		dec := yaml.NewDecoder(bytes.NewReader(data))
-		dec.KnownFields(true)
-		// io.EOF is an empty document: an empty or comment-only magus.yaml declares
-		// nothing, which is valid, so `magus config validate` must not reject it.
-		if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
-			return Config{}, err
-		}
-	} else {
-		if err := yaml.Unmarshal(data, &overlay); err != nil {
-			return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
-		}
+		return Config{}, err
 	}
 	merged := mergeOverlay(Defaults(), overlay, data)
 	if strict {
