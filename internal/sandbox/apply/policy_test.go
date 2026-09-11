@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/env"
@@ -147,7 +147,7 @@ func TestConcurrentMarkAppliedExternallyAndApply(t *testing.T) {
 // TMPDIR is repointed at the cache directory, and without that every assertion below
 // passes vacuously: BuildPolicy grants writes on $TMPDIR, and a workspace built by
 // t.TempDir() sits inside it, so the narrowed policy would still permit the whole tree.
-func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
+func leaseWorkspace(t *testing.T, row types.Job) (root, cacheDir string) {
 	t.Helper()
 	root = filesystem.ResolveRulePath(t.TempDir())
 	cacheDir = t.TempDir()
@@ -160,8 +160,8 @@ func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}
 	if row.ID != "" {
-		_, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).
-			Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
+		_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+			Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}
 	return root, cacheDir
@@ -171,12 +171,12 @@ func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
 // worker's write grant is the ledger row's write paths and nothing else in the checkout.
 // Reads stay wide, because the row declares a write boundary only.
 func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/a/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -193,12 +193,12 @@ func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 // it is the directory HOLDING the forbidden entry, because granting that would grant the
 // entry too.
 func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/**"}, DenyPaths: []string{"pkg/a/gen"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "gen", "x.txt")))
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "keep", "x.txt")))
@@ -210,12 +210,12 @@ func TestNarrowToLeaseRefusesAForbiddenPathInsideAnOwnedOne(t *testing.T) {
 // TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing keeps a typo from reading as a
 // grant: an owned path is a claim about files that exist.
 func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/nowhere/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -226,12 +226,12 @@ func TestNarrowToLeaseGrantsNothingForAGlobThatMatchesNothing(t *testing.T) {
 // that owns a file not yet on disk can write it, because its directory is granted. A
 // glob keeps the existing-only rule, so the two cases sit side by side.
 func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/a/new.go", "pkg/nowhere/**"},
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "new.go")))
 	assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "sibling.go")),
@@ -246,13 +246,13 @@ func TestNarrowToLeaseGrantsTheDirectoryOfALiteralPathToCreate(t *testing.T) {
 // whatever the link points at.
 func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
 	outside := filesystem.ResolveRulePath(t.TempDir())
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"../" + filepath.Base(outside) + "/x.txt", "link/x.txt", "nowhere/deeper/new.go", "."},
 	})
 	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(outside, "x.txt")), "a `..` path is not a grant on the sibling")
@@ -264,11 +264,11 @@ func TestNarrowToLeaseNeverGrantsOutsideTheCheckout(t *testing.T) {
 // TestNarrowToLeaseGrantsAReadOnlyRootNoWrites keeps a read-only declaration a boundary
 // at every tier: a root row that declares it is not the orchestrator's full grant.
 func TestNarrowToLeaseGrantsAReadOnlyRootNoWrites(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/root", State: types.StateRunning, ReadOnly: true,
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/root")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/root")
 
 	assert.Equal(t, "fleet/root", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -281,21 +281,21 @@ func TestNarrowToLeaseGrantsAReadOnlyRootNoWrites(t *testing.T) {
 func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		row   types.Lease
+		row   types.Job
 		acted string
 	}{
-		{"root lease", types.Lease{ID: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, "fleet/root"},
-		{"no row", types.Lease{}, "fleet/w1"},
-		{"no lease claimed", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, ""},
-		{"empty write paths", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
-		{"terminal row", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
-		{"no state", types.Lease{ID: "fleet/w1", Parent: "fleet/root", WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
+		{"root lease", types.Job{ID: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, "fleet/root"},
+		{"no row", types.Job{}, "fleet/w1"},
+		{"no lease claimed", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, ""},
+		{"empty write paths", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
+		{"terminal row", types.Job{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
+		{"no state", types.Job{ID: "fleet/w1", Parent: "fleet/root", WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, cacheDir := leaseWorkspace(t, tc.row)
 			base := FromConfig(t.Context(), root, config.Config{})
 
-			p := NarrowToLease(t.Context(), base, ledger.Location{CacheDir: cacheDir, Root: root}, tc.acted)
+			p := NarrowToLease(t.Context(), base, job.Location{CacheDir: cacheDir, Root: root}, tc.acted)
 
 			assert.Same(t, base, p)
 			assert.NoError(t, p.CheckWrite(filepath.Join(root, "pkg", "b", "x.txt")))
@@ -306,11 +306,11 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 // TestNarrowToLeaseGrantsAReadOnlyRowNoWrites matches the guard, which refuses every
 // write under a read-only lease: the sandbox keeps only the cache dir and $TMPDIR.
 func TestNarrowToLeaseGrantsAReadOnlyRowNoWrites(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, ReadOnly: true,
 	})
 
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 
 	assert.Equal(t, "fleet/w1", p.Lease)
 	assert.Error(t, p.CheckWrite(filepath.Join(root, "pkg", "a", "x.txt")))
@@ -322,11 +322,11 @@ func TestNarrowToLeaseGrantsAReadOnlyRowNoWrites(t *testing.T) {
 // path in ATTACH-ONLY mode. MarkAppliedExternally first is not a shortcut: a real
 // landlock_restrict_self would confine the test binary itself, permanently.
 func TestApplyAttachesANarrowedPolicy(t *testing.T) {
-	root, cacheDir := leaseWorkspace(t, types.Lease{
+	root, cacheDir := leaseWorkspace(t, types.Job{
 		ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning,
 		WritePaths: []string{"pkg/a/**"},
 	})
-	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), ledger.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
+	p := NarrowToLease(t.Context(), FromConfig(t.Context(), root, config.Config{}), job.Location{CacheDir: cacheDir, Root: root}, "fleet/w1")
 	MarkAppliedExternally(p.Fingerprint())
 
 	ctx, err := Apply(t.Context(), p, root)

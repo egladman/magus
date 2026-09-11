@@ -43,7 +43,7 @@ import (
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
@@ -175,7 +175,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 	// object. Two stores over one file each take their own mutex, and the merge Update
 	// performs under a single acquisition then serializes against nothing.
 	if opts.Ledger == nil && opts.Magus != nil {
-		opts.Ledger = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+		opts.Ledger = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No

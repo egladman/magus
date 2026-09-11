@@ -259,14 +259,14 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 
 	// A supplied lease is what the producer could correlate at the observation itself and wins;
 	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidLeaseID falls through to the environment rather than being stamped, on the same
+	// fails types.ValidJobID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
 	lease := command.Lease
-	if !types.ValidLeaseID(lease) {
+	if !types.ValidJobID(lease) {
 		lease = LeaseFromEnv()
 	}
 
@@ -397,7 +397,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 // This is the second of the two lease channels, and the two say different things. The
 // lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a spawn it
 // is making; the environment is the WORKER's own claim about itself. The ENVIRONMENT
-// wins where both are available, because this is what [ledger.ActingLease] reads first.
+// wins where both are available, because this is what [job.ActingLease] reads first.
 func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
 // leaseScanBytes bounds the head of the handed context the marker may appear in. The marker
@@ -421,7 +421,7 @@ const leaseMarker = "lease:"
 // not; the position is the only thing that separates them. Leading blank lines are
 // formatting and are skipped.
 //
-// The id itself has to satisfy [types.ValidLeaseID], which is where the charset and
+// The id itself has to satisfy [types.ValidJobID], which is where the charset and
 // its reasoning live.
 //
 // Anything else (no marker, an empty id, an id carrying spaces or punctuation outside
@@ -442,7 +442,7 @@ func leaseFromContext(handed string) string {
 			return "" // the prompt leads with something else, so it declares no lease
 		}
 		id := strings.TrimSpace(rest)
-		if !types.ValidLeaseID(id) {
+		if !types.ValidJobID(id) {
 			return ""
 		}
 		return id
@@ -882,7 +882,7 @@ func validRef(ref string) bool {
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a
 // lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [types.ValidLeaseID]'s bare-identifier
+// which is why every channel that can stamp one runs it through [types.ValidJobID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)

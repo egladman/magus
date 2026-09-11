@@ -6,7 +6,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,11 +61,11 @@ func newNextGate(root string) nextGate {
 
 // actingRole grades the acting lease against this checkout's ledger.
 func actingRole(cacheDir, root string) (hint.Role, []string) {
-	id := ledger.ActingLease(cacheDir)
+	id := job.ActingLease(cacheDir)
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}
-	rows, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).List()
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
 	if err != nil {
 		return hint.RoleWorker, nil
 	}

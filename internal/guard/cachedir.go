@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"mvdan.cc/sh/v3/syntax"
 )
 
@@ -99,7 +99,7 @@ func cacheDirDenial(what string) string {
 		"  `"+hint.QueryOutput.With("<ref>")+"` prints a run's captured log.\n"+
 		"`"+hint.Session.With("hook")+"` maintains its own markers and never needs you to edit them.\n"+
 		"READING in there is fine; it is writing that belongs to magus.",
-		what, ledger.LeaseMarkerName, advisoryMarkerDirName)
+		what, job.LeaseMarkerName, advisoryMarkerDirName)
 }
 
 // denyCacheDirPath is the path surface: the reason a file write into the cache dir is

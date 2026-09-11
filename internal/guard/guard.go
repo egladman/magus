@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -178,12 +178,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
-	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
+	// two tiers cannot disagree about who is acting (see job.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
 	ctx = withLedgerRows(ctx, location)
 	actingLease := req.Lease
 	if actingLease == "" {
-		actingLease = ledger.ActingLease(location.cacheDir)
+		actingLease = job.ActingLease(location.cacheDir)
 	}
 	markers := hint.NewGate(location.cacheDir, who.Session)
 	tool := hookToolCommand
@@ -663,7 +663,7 @@ type ledgerRowsKey struct{}
 // ledger and a ledger with no rows are different facts, and only the first means a rule
 // could not be evaluated at all.
 type ledgerRows struct {
-	rows []types.Lease
+	rows []types.Job
 	err  error
 }
 
@@ -676,17 +676,17 @@ func withLedgerRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
-	rows, err := ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
 	return context.WithValue(ctx, ledgerRowsKey{}, ledgerRows{rows: rows, err: err})
 }
 
 // leaseRows reports the pinned ledger, reading it when nothing pinned one. A test that
 // calls a single rule gets its own read, which is what every rule used to do.
-func leaseRows(ctx context.Context, at location) ([]types.Lease, error) {
+func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
 	if pinned, ok := ctx.Value(ledgerRowsKey{}).(ledgerRows); ok {
 		return pinned.rows, pinned.err
 	}
-	return ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
 }
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook

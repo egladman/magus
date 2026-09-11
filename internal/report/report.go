@@ -10,7 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -203,9 +203,9 @@ type NextServer func(next []hint.Next) []hint.Next
 func ServedIn(cacheDir, root string) NextServer {
 	return func(next []hint.Next) []hint.Next {
 		role, lane := hint.RoleUnbound, []string(nil)
-		if id := ledger.ActingLease(cacheDir); id != "" {
+		if id := job.ActingLease(cacheDir); id != "" {
 			role = hint.RoleWorker
-			if rows, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
+			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
 				role, lane = hint.RoleFor(rows, id)
 			}
 		}

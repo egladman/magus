@@ -203,7 +203,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	worker := narrowLease()
 	worker.ID, worker.Parent = "harness/worker", "harness/root"
 
-	reviewer := types.Lease{
+	reviewer := types.Job{
 		ID: "harness/reviewer", Goal: "read the guard surface",
 		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,

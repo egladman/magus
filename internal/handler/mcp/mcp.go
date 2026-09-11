@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -147,7 +147,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 	// so its two doors (this tool and the console's read route) share a mutex.
 	ledgerStore := opts.Ledger
 	if ledgerStore == nil {
-		ledgerStore = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+		ledgerStore = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
 	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: ledgerStore}
 	return []spells.Driver{

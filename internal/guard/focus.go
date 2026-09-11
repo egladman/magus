@@ -173,7 +173,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
 func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, string, bool) {
-	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
+	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
 		return project.Focus{}, "", false
 	}
 	leases, err := leaseRows(ctx, location)

@@ -199,7 +199,7 @@ func TestNextSourcePath(t *testing.T) {
 // The role is read off the row, and a worker's lane comes back with it so the filter
 // can place a write.
 func TestRoleForGradesTheActingRow(t *testing.T) {
-	rows := []types.Lease{
+	rows := []types.Job{
 		{ID: "harness/worker", WritePaths: []string{"internal/hint/**"}},
 		{ID: "harness/reviewer", ReadOnly: true, ReadPaths: []string{"cmd/magus/**"}},
 		{ID: "harness/watcher"},

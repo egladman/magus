@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -127,13 +127,13 @@ func TestLeaseCoversWrite(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
-	store := ledger.NewStore(ledger.Location{CacheDir: base, Root: root})
-	row := types.Lease{
+	store := job.NewStore(job.Location{CacheDir: base, Root: root})
+	row := types.Job{
 		ID:         "unit-a",
 		State:      types.StateRunning,
 		WritePaths: []string{"libs/ui", "app/api"},
 	}
-	_, err := store.Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
+	_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 
 	for _, tc := range []struct {

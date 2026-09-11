@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -768,7 +768,7 @@ func repoScope(dir string) func(string) bool {
 // line in a worker's brief (`magus session lease <id>`) is then what puts every
 // lease-scoped rule in force for it, instead of a paragraph of prohibitions.
 //
-// The report reads the marker through ledger.LeaseFromMarker, so what it prints is what
+// The report reads the marker through job.LeaseFromMarker, so what it prints is what
 // the guard and the sandbox act on: a marker holding something other than a lease id
 // reports as no lease, because that is what it binds.
 func sessionLease(root string, args []string) error {
@@ -795,14 +795,14 @@ func sessionLease(root string, args []string) error {
 		return fmt.Errorf("magus session lease: %w", err)
 	}
 	if len(rest) == 0 {
-		if id := ledger.LeaseFromMarker(cacheDir); id != "" {
+		if id := job.LeaseFromMarker(cacheDir); id != "" {
 			fmt.Println(id)
 		} else {
 			fmt.Println("no lease is bound to this checkout")
 		}
 		return nil
 	}
-	if err := ledger.BindLease(cacheDir, rest[0]); err != nil {
+	if err := job.BindLease(cacheDir, rest[0]); err != nil {
 		return fmt.Errorf("magus session lease: %w", err)
 	}
 	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", rest[0], root)

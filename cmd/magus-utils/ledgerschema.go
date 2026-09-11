@@ -1,6 +1,6 @@
 // Subcommand `ledgerschema` emits the published JSON Schema for each ledger record from
-// the Go struct that decodes it: internal/ledger/gen/row.schema.json from ledger.Row,
-// report.schema.json from ledger.Report.
+// the Go struct that decodes it: internal/job/gen/row.schema.json from job.Declaration,
+// report.schema.json from job.Report.
 //
 // The schema and the struct were two hand-written copies of one contract, and the test
 // between them could only report that they had already diverged. Deriving the schema
@@ -10,7 +10,7 @@
 // any of it down.
 //
 // It reads the structs through go/ast rather than reflection, which is what keeps it out
-// of internal/ledger's import graph: that package go:embeds the files written here, so a
+// of internal/job's import graph: that package go:embeds the files written here, so a
 // generator importing it could not build whenever its own output was missing.
 
 package main
@@ -42,12 +42,12 @@ type ledgerRecord struct {
 }
 
 var ledgerRecords = []ledgerRecord{
-	{Struct: "Row", Title: "magus lease row", File: "row.schema.json", Version: "LeaseSchemaVersion"},
+	{Struct: "Declaration", Title: "magus lease row", File: "row.schema.json", Version: "JobSchemaVersion"},
 	{Struct: "Report", Title: "magus lease worker report", File: "report.schema.json", Version: "ReportSchemaVersion"},
 }
 
 // ledgerSources are the files the records and every type they reach are declared in.
-var ledgerSources = []string{"internal/ledger/decode.go", "internal/ledger/report.go", "types/lease.go"}
+var ledgerSources = []string{"internal/job/decode.go", "internal/job/report.go", "types/job.go"}
 
 const (
 	schemaDraft = "http://json-schema.org/draft-07/schema#"
@@ -55,18 +55,18 @@ const (
 	// versionProperty is the one property whose value is fixed rather than described.
 	versionProperty = "schema_version"
 	// leaseIDMarker is the `schema:"leaseid"` tag: this field holds a lease id, so the
-	// pattern and length types.ValidLeaseID enforces are published with it.
+	// pattern and length types.ValidJobID enforces are published with it.
 	leaseIDMarker = "leaseid"
 )
 
 // closedSets are the named types whose values are a published vocabulary, keyed by the
 // name a field is declared with. The values come from the package that owns the set, so
 // a state added there reaches the schema with nothing here to change.
-var closedSets = map[string][]string{"LeaseState": leaseStateNames()}
+var closedSets = map[string][]string{"JobState": leaseStateNames()}
 
 func runLedgerSchema(args []string) error {
 	fs := flag.NewFlagSet("ledgerschema", flag.ExitOnError)
-	out := fs.String("out", "internal/ledger/gen", "directory the schema files are written into")
+	out := fs.String("out", "internal/job/gen", "directory the schema files are written into")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func renderLedgerSchema(rec ledgerRecord, d *goDecls) ([]byte, error) {
 	root := node{
 		{"$schema", schemaDraft},
 		{"$id", schemaIDs + rec.File},
-		{"$comment", fmt.Sprintf("Generated from ledger.%s by `magus-utils ledgerschema`."+
+		{"$comment", fmt.Sprintf("Generated from job.%s by `magus-utils ledgerschema`."+
 			" DO NOT EDIT; run `magus run ledger-generate .`.", rec.Struct)},
 		{"title", rec.Title},
 	}
@@ -189,7 +189,7 @@ func property(f *ast.Field, structName, field, name string, omitempty bool, d *g
 		tag = f.Tag.Value
 	}
 	if godecl.Tag(tag, "schema") == leaseIDMarker {
-		prop = append(prop, member{"pattern", leaseIDPattern()}, member{"maxLength", types.MaxLeaseIDLen})
+		prop = append(prop, member{"pattern", leaseIDPattern()}, member{"maxLength", types.MaxJobIDLen})
 	}
 	if doc := d.docs[structName+"."+field]; doc != "" {
 		prop = append(prop, member{"description", doc})
@@ -321,7 +321,7 @@ func firstParagraph(doc string) string {
 }
 
 func leaseStateNames() []string {
-	states := types.LeaseStates()
+	states := types.JobStates()
 	names := make([]string, len(states))
 	for i, s := range states {
 		names[i] = string(s)
@@ -329,13 +329,13 @@ func leaseStateNames() []string {
 	return names
 }
 
-// leaseIDPattern derives the id charset by asking types.ValidLeaseID about every ASCII
+// leaseIDPattern derives the id charset by asking types.ValidJobID about every ASCII
 // rune, so the published pattern cannot say something other than what the store enforces.
 // Probing ASCII alone is enough because the validator accepts nothing above it.
 func leaseIDPattern() string {
 	var accepted []rune
 	for r := rune(0); r < 0x80; r++ {
-		if types.ValidLeaseID(string(r)) {
+		if types.ValidJobID(string(r)) {
 			accepted = append(accepted, r)
 		}
 	}

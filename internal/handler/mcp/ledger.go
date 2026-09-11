@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -22,8 +22,8 @@ import (
 //
 // WHAT IT DOES REFUSE is a write to a row the caller does not own, and that refusal comes
 // from the STORE rather than from here, so every door carries it. See
-// internal/ledger.authorizeRow.
-type ledgerTool struct{ store *ledger.Store }
+// internal/job.authorizeRow.
+type ledgerTool struct{ store *job.Store }
 
 func (t *ledgerTool) Name() string { return hint.ToolLedger.String() }
 
@@ -37,10 +37,10 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		// The report, not the bare rows: the overlaps ride along, derived on this read
 		// by the same constructor the console's route uses, so the two doors cannot
 		// disagree about whether two leases claim the same path.
-		return spells.InvokeResponse{Data: types.NewLeaseReport(leases)}, nil
+		return spells.InvokeResponse{Data: types.NewJobList(leases)}, nil
 
 	case "put":
-		merge, err := ledger.ParseMerge(req.Params)
+		merge, err := job.ParseMerge(req.Params)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -58,7 +58,7 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		// Text as well as Data, and the only op here that sets it. A worker calls this to
 		// learn where it stands, and "base_verdict":"diverged" in a record is a field it
 		// has to know to look for; the sentence names both revisions and what to do next.
-		stored, err := t.store.Register(ctx,
+		stored, err := t.store.Exec(ctx,
 			strings.TrimSpace(paramString(req.Params, "id", "")),
 			paramString(req.Params, "reported_base", ""))
 		if err != nil {
@@ -66,12 +66,12 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		}
 		// The verdict is a fact this tool records and never acts on, and counting it is the
 		// same read one step further out: how often a fleet's workers land on the base they
-		// were handed. types.LeaseBaseVerdict is a closed set of four, so it is safe as
+		// were handed. types.JobBaseVerdict is a closed set of four, so it is safe as
 		// an attribute; the lease id beside it is not, and stays off.
 		if p := observability.FromContext(ctx); p != nil && stored.BaseVerdict != "" {
 			p.RecordLeaseRegistration(ctx, string(stored.BaseVerdict))
 		}
-		return spells.InvokeResponse{Text: ledger.RegistrationAdvice(stored), Data: stored}, nil
+		return spells.InvokeResponse{Text: job.BaseAdvice(stored), Data: stored}, nil
 
 	case "clear":
 		// Report what was dropped. Clearing is how a fresh plan starts, and it is also

@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"reflect"
@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func acceptRow() types.Lease {
+func acceptRow() types.Job {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
-	return types.Lease{
+	return types.Job{
 		ID:         "harness/ledger-accept",
 		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"},
 		Check:      &check,
@@ -207,7 +207,7 @@ func TestGradeRejectsADescendantNoRowDeclares(t *testing.T) {
 
 	rep := passingReport()
 	rep.Descendants = []string{"harness/ledger-accept/child", "harness/ghost"}
-	declared := []types.Lease{{ID: "harness/ledger-accept/child"}}
+	declared := []types.Job{{ID: "harness/ledger-accept/child"}}
 
 	v := Grade(acceptRow(), rep, passingRun, declared)
 	assert.False(t, v.Accepted)

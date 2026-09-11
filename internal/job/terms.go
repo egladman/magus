@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Brief is the worker brief for one lease: the declared row, the workspace facts magus
+// Terms is the worker brief for one lease: the declared row, the workspace facts magus
 // resolved against it, and the commands the worker starts with.
 //
 // CONTEXT, NEVER A VERDICT, which is the shape `magus diff --prompt` already has. magus
@@ -20,8 +20,8 @@ import (
 // did on 2026-09-09: the gate leaked into every one of them and two units disagreed about
 // a dedup key. Two renders of one row are byte-identical or the ledger has stopped being
 // the single statement of the plan.
-type Brief struct {
-	Lease types.Lease `json:"lease" yaml:"lease"`
+type Terms struct {
+	Lease types.Job `json:"lease" yaml:"lease"`
 	// Bind is the single command that binds this lease to the worker's checkout. It is
 	// the only instruction the brief gives that is not already a field of the row: every
 	// rule the worker owes rides on the lease, and the guard reads them from there.
@@ -30,7 +30,7 @@ type Brief struct {
 	// order. A path the graph does not know is ABSENT here rather than reported as zero:
 	// an unknown blast radius and a blast radius of zero are different facts, and the
 	// second one would read as permission to edit freely.
-	Evidence []BriefEvidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
+	Evidence []TermsEvidence `json:"evidence,omitempty" yaml:"evidence,omitempty"`
 	// GraphCold marks a brief rendered against no graph at all, so empty Evidence reads
 	// as "not asked" rather than "asked, and nothing depends on any of this".
 	GraphCold bool `json:"graph_cold,omitempty" yaml:"graph_cold,omitempty"`
@@ -44,7 +44,7 @@ type Brief struct {
 	// down; these hold whether anybody wrote them down or not, which is why a brief
 	// that carried only the declared list handed workers a boundary its author's
 	// memory had bounded.
-	DerivedDenyPaths []BriefBoundary `json:"derived_deny_paths,omitempty" yaml:"derived_deny_paths,omitempty"`
+	DerivedDenyPaths []TermsBoundary `json:"derived_deny_paths,omitempty" yaml:"derived_deny_paths,omitempty"`
 	// WorkspaceCold marks a brief rendered without a loadable workspace, so an empty
 	// DerivedDenyPaths reads as "not asked". The row alone carries the goal, the boundary
 	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.
@@ -53,45 +53,45 @@ type Brief struct {
 	// does NOT own. A WARNING and never a boundary: the skill reads strong hidden
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
-	Affinity []BriefAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
+	Affinity []TermsAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
 	// Bootstrap is what the worker runs before it edits anything, one command with the
 	// reason it exists. Commands, not rules: the guard states every rule at the moment a
 	// command meets it, and a rules block in a brief is a paragraph a worker reads once
 	// and a denial is a sentence it reads when it matters.
-	Bootstrap []BriefStep `json:"bootstrap,omitempty" yaml:"bootstrap,omitempty"`
+	Bootstrap []TermsStep `json:"bootstrap,omitempty" yaml:"bootstrap,omitempty"`
 }
 
-// BriefStep is one bootstrap command and why it is there.
+// TermsStep is one bootstrap command and why it is there.
 //
 // The pair rather than a rendered line, because the two halves have different readers: a
 // harness composes a prompt from Run, and a person reads Why to see what the step is for.
 // A line carrying both is one a skimmer copies with the parenthetical still in it.
-type BriefStep struct {
+type TermsStep struct {
 	Run string `json:"run" yaml:"run"`
 	Why string `json:"why" yaml:"why"`
 }
 
-// BriefEvidence is what the knowledge graph knows about one write path: the node it
+// TermsEvidence is what the knowledge graph knows about one write path: the node it
 // resolved to and how many nodes can transitively reach it, the same count
 // `magus explain` prints.
-type BriefEvidence struct {
+type TermsEvidence struct {
 	Path        string `json:"path"         yaml:"path"`
 	Node        string `json:"node"         yaml:"node"`
 	BlastRadius int    `json:"blast_radius" yaml:"blast_radius"`
 }
 
-// BriefBoundary is one path the workspace keeps out of a lease's reach, with the
+// TermsBoundary is one path the workspace keeps out of a lease's reach, with the
 // declaration that keeps it there.
 //
 // The reason is the load-bearing half. A bare path reads as an arbitrary fence, and a
 // worker cannot tell a generated file it should REGENERATE from a file another live
 // lease is holding, which are opposite instructions.
-type BriefBoundary struct {
+type TermsBoundary struct {
 	Path   string `json:"path"   yaml:"path"`
 	Reason string `json:"reason" yaml:"reason"`
 }
 
-// BriefAffinity is one project pair that changes together while the lease owns only one
+// TermsAffinity is one project pair that changes together while the lease owns only one
 // side of it, and neither project declares a dependency on the other.
 //
 // HIDDEN coupling only. A pair that changes together and says so in its declarations is
@@ -99,33 +99,33 @@ type BriefBoundary struct {
 // everything; reporting those turns a warning list into a census. What is worth a
 // worker's attention is coupling no declaration would have told it about, which is the
 // pair a partition is most likely to have split wrongly.
-type BriefAffinity struct {
+type TermsAffinity struct {
 	Project string `json:"project" yaml:"project"`
 	With    string `json:"with"    yaml:"with"`
 	Commits int    `json:"commits" yaml:"commits"`
 }
 
-// BriefFacts is what the WORKSPACE contributes to a brief: everything [NewBrief] cannot
+// TermsFacts is what the WORKSPACE contributes to a brief: everything [NewTerms] cannot
 // derive from the row alone, because it needs a knowledge graph and a loadable workspace.
 // The zero value is a brief rendered from the row and nothing else.
-type BriefFacts struct {
-	Evidence         []BriefEvidence
+type TermsFacts struct {
+	Evidence         []TermsEvidence
 	GraphCold        bool
 	WorkspaceCold    bool
 	Projects         []string
-	DerivedDenyPaths []BriefBoundary
-	Affinity         []BriefAffinity
+	DerivedDenyPaths []TermsBoundary
+	Affinity         []TermsAffinity
 }
 
-// NewBrief renders the brief for one row: the bind line and the bootstrap steps the id
+// NewTerms renders the brief for one row: the bind line and the bootstrap steps the id
 // determines, plus what the workspace contributed. Both lines are rendered here and
 // nowhere else, so the brief, its golden test, and any caller quoting a line cannot drift.
 //
 // The steps are magus's OWN commands, which is why they are computed rather than read
 // from a workspace template: every one of them is a magus verb this binary defines, and a
 // per-workspace copy of them is a copy to keep true.
-func NewBrief(row types.Lease, facts BriefFacts) Brief {
-	return Brief{
+func NewTerms(row types.Job, facts TermsFacts) Terms {
+	return Terms{
 		Lease:            row,
 		Bind:             hint.SessionLease.With(row.ID),
 		Evidence:         facts.Evidence,
@@ -134,7 +134,7 @@ func NewBrief(row types.Lease, facts BriefFacts) Brief {
 		Projects:         facts.Projects,
 		DerivedDenyPaths: facts.DerivedDenyPaths,
 		Affinity:         facts.Affinity,
-		Bootstrap: []BriefStep{
+		Bootstrap: []TermsStep{
 			{Run: "git status --short", Why: "work in your own worktree and confirm it is clean before you edit"},
 			{Run: hint.SessionLease.With(row.ID), Why: "bind the lease so every lease-scoped rule grades your writes here"},
 			{
@@ -152,7 +152,7 @@ func NewBrief(row types.Lease, facts BriefFacts) Brief {
 //
 // The narrowest section is the validation one, and it is the whole point of rendering at
 // all. Naming one check and no others is what stops `ci` leaking into a worker's brief.
-func (b Brief) String() string {
+func (b Terms) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "lease: %s\n", b.Lease.ID)
 	fmt.Fprintf(&s, "bind: %s\n", b.Bind)

@@ -5,20 +5,20 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func leaseRow(id, parent string) types.Lease {
-	return types.Lease{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
+func leaseRow(id, parent string) types.Job {
+	return types.Job{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
 }
 
 func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
 	t.Parallel()
 
-	got := ledgerTreeOrder([]types.Lease{
+	got := ledgerTreeOrder([]types.Job{
 		leaseRow("plan", ""),
 		leaseRow("plan/core", "plan"),
 		leaseRow("other", ""),
@@ -38,7 +38,7 @@ func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
 func TestLedgerTreeOrderKeepsUnrootedRows(t *testing.T) {
 	t.Parallel()
 
-	rows := []types.Lease{
+	rows := []types.Job{
 		leaseRow("orphan", "cleared-parent"),
 		leaseRow("a", "b"),
 		leaseRow("b", "a"),
@@ -61,7 +61,7 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	child.WritePaths = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
-	printLedgerTree(&out, types.NewLeaseReport([]types.Lease{parent, child}))
+	printLedgerTree(&out, types.NewJobList([]types.Job{parent, child}))
 	got := out.String()
 
 	assert.Contains(t, got, "LEASE")
@@ -75,7 +75,7 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	t.Parallel()
 
 	var out strings.Builder
-	printLedgerTree(&out, types.NewLeaseReport(nil))
+	printLedgerTree(&out, types.NewJobList(nil))
 	assert.Contains(t, out.String(), "magus_ledger")
 }
 
@@ -91,7 +91,7 @@ func TestLeaseGraphEvidenceTakesOnlyAnExactNode(t *testing.T) {
 
 	got, ok := pathEvidence(g, "cmd/magus")
 	require.True(t, ok)
-	assert.Equal(t, ledger.BriefEvidence{Path: "cmd/magus", Node: "dir:cmd/magus"}, got)
+	assert.Equal(t, job.TermsEvidence{Path: "cmd/magus", Node: "dir:cmd/magus"}, got)
 	// "brief.go" resolves to file:internal/ledger/brief.go by name. It is a match and not
 	// evidence: the lease declared a path at the workspace root, and this node is not it.
 	_, ok = pathEvidence(g, "brief.go")
@@ -142,7 +142,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		check:      "test internal/ledger",
 		model:      "principal",
 	}
-	piped, err := ledger.DecodeRow(strings.NewReader(`{
+	piped, err := job.DecodeDeclaration(strings.NewReader(`{
 	  "schema_version": 1,
 	  "id": "adj/store",
 	  "parent": "adjacency",
@@ -161,7 +161,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	fromFlags := flags.row("adj/store")
 	require.NoError(t, fromFlags.Validate())
 
-	var a, b types.Lease
+	var a, b types.Job
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)

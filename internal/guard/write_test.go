@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -47,16 +47,16 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both plus the root. Everything lands in temporary
 // directories, so a guard test never reads or writes the checkout's real ledger.
-func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string) {
+func fleetFixture(t *testing.T, leases ...types.Job) (context.Context, string) {
 	t.Helper()
 	// The ledger now lives in the per-repository state directory, and the guard resolves
 	// it with no seam a test can reach, so the environment is what keeps this off the
 	// developer's own ledger.
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root, cacheDir := t.TempDir(), t.TempDir()
-	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
-		_, err := store.Update(t.Context(), u.ID, func(cur *types.Lease) { *cur = u })
+		_, err := store.Update(t.Context(), u.ID, func(cur *types.Job) { *cur = u })
 		require.NoError(t, err)
 	}
 	location := location{cacheDir: cacheDir, workspace: root}
@@ -69,8 +69,8 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string)
 // Both are REGISTERED, because these cases are about boundaries and an unregistered lease is
 // denied before any boundary is consulted. TestGradeLeasedWriteRequiresACheckpoint covers that
 // rule on its own.
-func fleetLeases() []types.Lease {
-	return []types.Lease{
+func fleetLeases() []types.Job {
+	return []types.Job{
 		{
 			ID:           "lease-a",
 			Goal:         "own the ledger store\nacceptance: List stays cheap",
@@ -135,7 +135,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	})
 
 	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
-		leases := append(fleetLeases(), types.Lease{
+		leases := append(fleetLeases(), types.Job{
 			ID:       "scout",
 			Goal:     "inventory the guard rules",
 			ReadOnly: true,
@@ -275,7 +275,7 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	t.Run("the notice itself is the id rule, not the write rule", func(t *testing.T) {
 		assert.Contains(t, adviseInvalidLease("lease b!"), "not a valid lease id")
 		assert.Contains(t, adviseInvalidLease("lease b!"), "magus.lease")
-		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxLeaseIDLen+1)), "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxJobIDLen+1)), "not a valid lease id")
 		assert.Empty(t, adviseInvalidLease("lease-a"))
 		assert.Empty(t, adviseInvalidLease(""), "naming no lease is not a typo")
 	})
@@ -533,13 +533,13 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 
 // fleetLedger reopens the ledger the guard just graded against, resolved exactly the way the guard
 // resolves it, so these assertions read the same store the code under test wrote.
-func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
+func fleetLedger(t *testing.T, ctx context.Context) *job.Store {
 	t.Helper()
 	loc := hookLocation(ctx, Dependencies{})
-	return ledger.NewStore(ledger.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
+	return job.NewStore(job.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
-func unattributedOf(t *testing.T, store *ledger.Store, id string) []types.LeaseUnattributedWrite {
+func unattributedOf(t *testing.T, store *job.Store, id string) []types.JobUnattributedWrite {
 	t.Helper()
 	rows, err := store.List()
 	require.NoError(t, err)
@@ -607,7 +607,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 // This is the enforcement point, and it is a deny because an advisory is the same pinky promise
 // with better wording.
 func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
-	unregistered := func() []types.Lease {
+	unregistered := func() []types.Job {
 		fleet := fleetLeases()
 		fleet[1].Registered = 0
 		fleet[1].ReportedBase = ""

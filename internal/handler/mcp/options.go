@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -72,7 +72,7 @@ type Options struct {
 	//
 	// Nil builds a private one, which is correct for a single-door server (the stdio MCP
 	// process) and wrong for the daemon, where the daemon sets it.
-	Ledger *ledger.Store
+	Ledger *job.Store
 }
 
 func (o Options) validate() error {

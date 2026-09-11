@@ -11,7 +11,7 @@ import (
 
 	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +23,9 @@ import (
 //
 // The actor is pinned UNBOUND, or a developer running the suite from a checkout bound to
 // a lease grades every put and clear here as that worker and is refused.
-func tmpLedger(t *testing.T, root string) *ledger.Store {
+func tmpLedger(t *testing.T, root string) *job.Store {
 	t.Helper()
-	return ledger.NewStore(ledger.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &ledger.Actor{}})
+	return job.NewStore(job.Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &job.Actor{}})
 }
 
 func TestLedgerTool(t *testing.T) {
@@ -38,15 +38,15 @@ func TestLedgerTool(t *testing.T) {
 		require.NoError(t, err)
 		return resp
 	}
-	report := func(t *testing.T, resp spells.InvokeResponse) types.LeaseReport {
+	report := func(t *testing.T, resp spells.InvokeResponse) types.JobList {
 		t.Helper()
-		got, ok := resp.Data.(types.LeaseReport)
+		got, ok := resp.Data.(types.JobList)
 		require.True(t, ok)
 		return got
 	}
-	leases := func(t *testing.T, resp spells.InvokeResponse) []types.Lease {
+	leases := func(t *testing.T, resp spells.InvokeResponse) []types.Job {
 		t.Helper()
-		return report(t, resp).Leases
+		return report(t, resp).Jobs
 	}
 
 	t.Run("an unwritten ledger lists empty", func(t *testing.T) {
@@ -60,7 +60,7 @@ func TestLedgerTool(t *testing.T) {
 			"deny_paths": "MAGUS.md", "model": "standard", "validation": "magus run test",
 			"state": "running",
 		})
-		got, ok := resp.Data.(types.Lease)
+		got, ok := resp.Data.(types.Job)
 		require.True(t, ok, "Data is the record itself, so the console and the tool cannot disagree")
 		assert.Equal(t, "lease-a", got.ID)
 		assert.Equal(t, []string{"internal/ledger", "types/lease.go"}, got.WritePaths)
@@ -82,7 +82,7 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("a read-only lease carries no paths", func(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "put", "id": "scout", "read_only": true, "state": "no_return"})
-		got := resp.Data.(types.Lease)
+		got := resp.Data.(types.Job)
 		assert.True(t, got.ReadOnly)
 		assert.Empty(t, got.WritePaths)
 		assert.Equal(t, types.StateNoReturn, got.State, "no_return is its own terminal state, not fail")
@@ -101,7 +101,7 @@ func TestLedgerTool(t *testing.T) {
 			"checkpoint": "abc123", "write_paths": "internal/ledger", "model": "opus",
 		})
 		resp := invoke(t, map[string]any{"op": "put", "id": "lease-life", "state": "pass"})
-		got, ok := resp.Data.(types.Lease)
+		got, ok := resp.Data.(types.Job)
 		require.True(t, ok)
 		assert.Equal(t, types.StatePass, got.State)
 		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
@@ -114,7 +114,7 @@ func TestLedgerTool(t *testing.T) {
 		resp := invoke(t, map[string]any{
 			"op": "put", "id": "lease-arr", "write_paths": []any{"a/b", "c d"},
 		})
-		got, ok := resp.Data.(types.Lease)
+		got, ok := resp.Data.(types.Job)
 		require.True(t, ok)
 		assert.Equal(t, []string{"a/b", "c d"}, got.WritePaths, "array elements are paths verbatim; only the string form splits on spaces")
 	})
@@ -129,7 +129,7 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("put with no id is rejected", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "put", "goal": "nameless"}})
-		require.ErrorIs(t, err, ledger.ErrNoID)
+		require.ErrorIs(t, err, job.ErrNoID)
 	})
 
 	t.Run("an unknown op is rejected, not silently listed", func(t *testing.T) {
@@ -147,7 +147,7 @@ func TestLedgerTool(t *testing.T) {
 		invoke(t, map[string]any{"op": "put", "id": "lease-reg", "checkpoint": "aaaa1111", "state": "declared"})
 
 		resp := invoke(t, map[string]any{"op": "register", "id": "lease-reg", "reported_base": "bbbb2222"})
-		got, ok := resp.Data.(types.Lease)
+		got, ok := resp.Data.(types.Job)
 		require.True(t, ok)
 		assert.Equal(t, types.BaseDiverged, got.BaseVerdict)
 		assert.Equal(t, "bbbb2222", got.ReportedBase)
@@ -170,7 +170,7 @@ func TestLedgerTool(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
 			"op": "register", "id": "never-declared", "reported_base": "aaaa1111",
 		}})
-		require.ErrorIs(t, err, ledger.ErrUnknownLease)
+		require.ErrorIs(t, err, job.ErrUnknownJob)
 		assert.Contains(t, err.Error(), "magus_ledger list")
 	})
 
@@ -226,24 +226,24 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	invoke(map[string]any{"op": "put", "id": "u1", "write_paths": "shared.go docs", "state": "running"})
 	invoke(map[string]any{"op": "put", "id": "u2", "write_paths": "shared.go", "state": "declared"})
 
-	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
+	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.JobList)
 	require.True(t, ok)
 	require.Len(t, got.Overlaps, 1)
-	assert.Equal(t, "u1", got.Overlaps[0].LeaseA)
-	assert.Equal(t, "u2", got.Overlaps[0].LeaseB)
+	assert.Equal(t, "u1", got.Overlaps[0].JobA)
+	assert.Equal(t, "u2", got.Overlaps[0].JobB)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsA)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsB)
 
 	// u1 finishes editing the contested file and announces it by shrinking the row. The
 	// digest is what tells u2 which version it is starting from.
 	invoke(map[string]any{"op": "put", "id": "u1", "write_paths": "docs"})
-	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
+	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.JobList)
 	require.True(t, ok)
 	assert.Empty(t, got.Overlaps, "the released path is no longer claimed twice")
-	require.Len(t, got.Leases[0].Releases, 1)
-	assert.Equal(t, "shared.go", got.Leases[0].Releases[0].Path)
-	assert.Contains(t, got.Leases[0].Releases[0].Digest, "sha256:")
-	assert.NotZero(t, got.Leases[0].Updated, "every put re-stamps the row a reader watches for staleness")
+	require.Len(t, got.Jobs[0].Releases, 1)
+	assert.Equal(t, "shared.go", got.Jobs[0].Releases[0].Path)
+	assert.Contains(t, got.Jobs[0].Releases[0].Digest, "sha256:")
+	assert.NotZero(t, got.Jobs[0].Updated, "every put re-stamps the row a reader watches for staleness")
 }
 
 // TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
@@ -295,7 +295,7 @@ func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 
 // TestLedgerDoorsAgreeOnAnEmptyLedger is the parity the constructor exists to guarantee.
 // The ledger has two read doors (this tool and the console's GET /api/v1/ledger), and an
-// unwritten ledger is the case they used to answer differently, one serving "leases":[]
+// unwritten ledger is the case they used to answer differently, one serving "jobs":[]
 // because the route normalized it by hand and the other serving null.
 func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	t.Parallel()
@@ -315,5 +315,5 @@ func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &route))
 	require.NoError(t, json.Unmarshal(fromTool, &toolBody))
 	assert.Equal(t, route, toolBody)
-	assert.Contains(t, string(fromTool), `"leases":[]`)
+	assert.Contains(t, string(fromTool), `"jobs":[]`)
 }

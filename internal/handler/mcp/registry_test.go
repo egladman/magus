@@ -106,9 +106,9 @@ func TestRegistry_HandlersReadTheDeclaredParams(t *testing.T) {
 		require.NoError(t, err)
 		sources = append(sources, b...)
 	}
-	// magus_ledger decodes its row through types.Lease's JSON tags (ledger.Merge) rather
+	// magus_ledger decodes its row through types.Job's JSON tags (job.Merge) rather
 	// than reading each key, so that struct is where its param names are bound.
-	lease, err := os.ReadFile(filepath.Join("..", "..", "..", "types", "lease.go"))
+	lease, err := os.ReadFile(filepath.Join("..", "..", "..", "types", "job.go"))
 	require.NoError(t, err)
 	sources = append(sources, lease...)
 	for _, d := range Registry {

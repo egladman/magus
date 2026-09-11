@@ -66,7 +66,7 @@ type Spawn struct {
 	ParentSpanID string
 	Flags        string
 	// Lease is the ledger lease the process acts as, from the magus.lease
-	// baggage member, percent-decoded and validated by [types.ValidLeaseID], the same
+	// baggage member, percent-decoded and validated by [types.ValidJobID], the same
 	// rule every lease channel shares, and what keeps the trail's redaction exemption
 	// honest.
 	Lease string
@@ -214,12 +214,12 @@ func validLease(id string) string {
 	if id == "" {
 		return ""
 	}
-	if !types.ValidLeaseID(id) {
+	if !types.ValidJobID(id) {
 		baggageNoteOnce.Do(func() {
 			slog.WarnContext(context.Background(),
 				"magus: ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxLeaseIDLen))
+				slog.Int("max_length", types.MaxJobIDLen))
 		})
 		return ""
 	}

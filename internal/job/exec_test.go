@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"testing"
@@ -16,14 +16,14 @@ const (
 	baseB      = "b0000000000000000000000000000000000000000"
 )
 
-func TestStoreRegister(t *testing.T) {
+func TestStoreExec(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name       string
 		checkpoint string
 		reported   string
-		want       types.LeaseBaseVerdict
+		want       types.JobBaseVerdict
 		says       []string
 		saysNot    []string
 	}{
@@ -71,9 +71,9 @@ func TestStoreRegister(t *testing.T) {
 
 			ctx := t.Context()
 			s := tmpStore(t, t.TempDir())
-			seed(t, s, types.Lease{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
+			seed(t, s, types.Job{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
 
-			got, err := s.Register(ctx, "u1", tt.reported)
+			got, err := s.Exec(ctx, "u1", tt.reported)
 			require.NoError(t, err, "the ledger records every verdict and refuses none of them")
 			assert.Equal(t, tt.want, got.BaseVerdict)
 			assert.Equal(t, tt.reported, got.ReportedBase)
@@ -81,7 +81,7 @@ func TestStoreRegister(t *testing.T) {
 			assert.Equal(t, tt.checkpoint, got.Checkpoint, "registering does not overwrite the checkpoint it compares against")
 			assert.Equal(t, types.StateDeclared, got.State, "registering advances no state; that is the caller's put")
 
-			advice := RegistrationAdvice(got)
+			advice := BaseAdvice(got)
 			assert.Contains(t, advice, "u1")
 			for _, want := range tt.says {
 				assert.Contains(t, advice, want)
@@ -104,15 +104,15 @@ func TestStoreRegister(t *testing.T) {
 
 // A worker registering an id nobody declared has been handed the wrong id. Every other
 // write here creates the row it names, so the message has to say where the real ids are.
-func TestStoreRegisterRefusesAnUnknownLease(t *testing.T) {
+func TestStoreExecRefusesAnUnknownLease(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Lease{ID: "declared", Checkpoint: baseA})
+	seed(t, s, types.Job{ID: "declared", Checkpoint: baseA})
 
-	_, err := s.Register(ctx, "typo", baseA)
-	require.ErrorIs(t, err, ErrUnknownLease)
+	_, err := s.Exec(ctx, "typo", baseA)
+	require.ErrorIs(t, err, ErrUnknownJob)
 	assert.Contains(t, err.Error(), "magus_ledger list", "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
 
@@ -122,14 +122,14 @@ func TestStoreRegisterRefusesAnUnknownLease(t *testing.T) {
 	assert.Equal(t, "declared", got[0].ID)
 }
 
-func TestStoreRegisterRequiresABase(t *testing.T) {
+func TestStoreExecRequiresABase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Lease{ID: "u1", Checkpoint: baseA})
+	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA})
 
-	_, err := s.Register(ctx, "u1", "   ")
+	_, err := s.Exec(ctx, "u1", "   ")
 	require.ErrorIs(t, err, errNoBase)
 	assert.Contains(t, err.Error(), "magus vcs checkpoint -o name", "the message names how to produce one")
 
@@ -141,18 +141,18 @@ func TestStoreRegisterRequiresABase(t *testing.T) {
 
 // Registering twice is ordinary: a worker that rebases reports its new base, and the row
 // carries where it stands NOW rather than where it first stood.
-func TestStoreRegisterIsIdempotentPerBase(t *testing.T) {
+func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	seed(t, s, types.Lease{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
+	seed(t, s, types.Job{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
 
-	diverged, err := s.Register(ctx, "u1", baseB)
+	diverged, err := s.Exec(ctx, "u1", baseB)
 	require.NoError(t, err)
 	require.Equal(t, types.BaseDiverged, diverged.BaseVerdict)
 
-	settled, err := s.Register(ctx, "u1", baseA)
+	settled, err := s.Exec(ctx, "u1", baseA)
 	require.NoError(t, err)
 	assert.Equal(t, types.BaseMatch, settled.BaseVerdict)
 	assert.Equal(t, "declared goal", settled.Goal, "registering erased nothing the orchestrator declared")
@@ -165,7 +165,7 @@ func TestCompareBase(t *testing.T) {
 	tests := []struct {
 		name                 string
 		checkpoint, reported string
-		want                 types.LeaseBaseVerdict
+		want                 types.JobBaseVerdict
 	}{
 		{name: "identical clean tokens", checkpoint: baseA, reported: baseA, want: types.BaseMatch},
 		{name: "identical dirty tokens", checkpoint: baseADirty, reported: baseADirty, want: types.BaseMatch},

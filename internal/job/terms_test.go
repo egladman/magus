@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"os"
@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func briefRow() types.Lease {
-	return types.Lease{
+func briefRow() types.Job {
+	return types.Job{
 		ID:     "harness/ledger-per-repo",
 		Parent: "harness",
 		Goal: "Move the lease ledger to the per-repository state dir.\n" +
@@ -29,11 +29,11 @@ func briefRow() types.Lease {
 
 // The brief is only worth building if two renders of one row agree byte for byte, so the
 // golden IS the contract.
-func TestBriefRendersTheGolden(t *testing.T) {
+func TestTermsRendersTheGolden(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow(), BriefFacts{
-		Evidence: []BriefEvidence{{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4}},
+	b := NewTerms(briefRow(), TermsFacts{
+		Evidence: []TermsEvidence{{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4}},
 	})
 	want, err := os.ReadFile(filepath.Join("testdata", "brief.golden"))
 	require.NoError(t, err)
@@ -42,31 +42,31 @@ func TestBriefRendersTheGolden(t *testing.T) {
 
 // A cold graph says so once. Silence would read as "nothing depends on any of this",
 // which is the opposite of what magus knows.
-func TestBriefNamesAColdGraphOnce(t *testing.T) {
+func TestTermsNamesAColdGraphOnce(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow(), BriefFacts{GraphCold: true})
+	b := NewTerms(briefRow(), TermsFacts{GraphCold: true})
 	assert.Equal(t, 1, strings.Count(b.String(), "the knowledge graph is cold"))
 }
 
 // A workspace that would not load says so too, for the same reason: a worker in a tree
 // whose magusfile is mid-edit still needs the row it was handed.
-func TestBriefNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
+func TestTermsNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow(), BriefFacts{WorkspaceCold: true})
+	b := NewTerms(briefRow(), TermsFacts{WorkspaceCold: true})
 	assert.Contains(t, b.String(), "this workspace would not load")
 	assert.Contains(t, b.String(), briefRow().Goal, "the row is rendered whatever the workspace does")
 }
 
 // Nothing outside the fixed order reaches the worker, which is how the gate stops leaking
 // into a brief: `ci` is not rendered because nothing renders it.
-func TestBriefRendersOnlyTheRow(t *testing.T) {
+func TestTermsRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
 	row.Goal, row.DependsOn, row.DenyPaths = "", nil, nil
-	got := NewBrief(row, BriefFacts{}).String()
+	got := NewTerms(row, TermsFacts{}).String()
 
 	assert.NotContains(t, got, "goal")
 	assert.NotContains(t, got, "depends on")
@@ -77,10 +77,10 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 
 // The bootstrap is commands and their reasons, and nothing else. A rules block here was
 // read once and ignored; the guard says the rules when a command meets one.
-func TestBriefBootstrapIsCommands(t *testing.T) {
+func TestTermsBootstrapIsCommands(t *testing.T) {
 	t.Parallel()
 
-	b := NewBrief(briefRow(), BriefFacts{})
+	b := NewTerms(briefRow(), TermsFacts{})
 	require.Len(t, b.Bootstrap, 3)
 	for _, step := range b.Bootstrap {
 		assert.NotEmpty(t, step.Run)

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -305,9 +305,9 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
-	require.Len(t, report.Leases, 1)
-	assert.Equal(t, "u1", report.Leases[0].ID)
-	assert.Equal(t, types.StateRunning, report.Leases[0].State)
+	require.Len(t, report.Jobs, 1)
+	assert.Equal(t, "u1", report.Jobs[0].ID)
+	assert.Equal(t, types.StateRunning, report.Jobs[0].State)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
@@ -336,7 +336,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 }
 
 // TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
-// internal/ledger.Merge with the magus_ledger MCP tool: a later put naming only
+// internal/job.Merge with the magus_ledger MCP tool: a later put naming only
 // `state` must not erase the goal an earlier put declared.
 func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	t.Parallel()
@@ -354,7 +354,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
-// silently ignored; internal/ledger.Merge is what enforces this, and this pins that
+// silently ignored; internal/job.Merge is what enforces this, and this pins that
 // the Buzz binding does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	t.Parallel()
@@ -380,12 +380,12 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, report.Leases)
+	assert.Empty(t, report.Jobs)
 }
 
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_ledger MCP
 // tool are two doors onto the same file: a row put through one is visible through the
-// other, and internal/ledger.Store's own path derivation (CacheDir/ledger/leases.json)
+// other, and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
 // is what makes that true without either side naming the other.
 func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	stateBase := t.TempDir()
@@ -397,7 +397,7 @@ func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "shared row"})
 	require.NoError(t, err)
 
-	store := ledger.NewStore(ledger.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
 	leases, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, leases, 1)

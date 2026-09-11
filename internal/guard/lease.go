@@ -262,10 +262,10 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 // ledger cannot answer. An unreadable ledger and an id nobody declared are one silence
 // here: both leave nothing to judge against, and a rule the guard cannot evaluate must
 // not block a tool call.
-func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string) (types.Lease, bool) {
+func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string) (types.Job, bool) {
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if !standing.declared || !standing.state.Live() {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
 	return standing.row, true
 }
@@ -279,8 +279,8 @@ func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string)
 type leaseStanding struct {
 	readable bool
 	declared bool
-	state    types.LeaseState
-	row      types.Lease
+	state    types.JobState
+	row      types.Job
 }
 
 // terminal reports a row that is declared and has stopped running, so its rules are inert.
@@ -294,7 +294,7 @@ func (s leaseStanding) terminal() bool {
 // typo from a plan that has already finished, and the two cases want opposite verdicts: a
 // dead id looked exactly like a guarded session.
 func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease string) leaseStanding {
-	if !types.ValidLeaseID(actingLease) {
+	if !types.ValidJobID(actingLease) {
 		return leaseStanding{}
 	}
 	location := hookLocation(ctx, deps)
@@ -340,13 +340,13 @@ func denyUndeclaredLease(standing leaseStanding, actingLease string) string {
 // from Judge: it used to be produced inside gradeLeasedWrite, so a command-surface call
 // under a typo'd id ran fully un-enrolled with no notice at all.
 func adviseInvalidLease(actingLease string) string {
-	if actingLease == "" || types.ValidLeaseID(actingLease) {
+	if actingLease == "" || types.ValidJobID(actingLease) {
 		return ""
 	}
 	return fmt.Sprintf(
 		"magus workspace: fix the lease id and re-run, so the guard can grade this call against your lease's declared boundary.\n"+
 			"%s=%q is not a valid lease id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no lease.",
-		envHookLease, actingLease, types.MaxLeaseIDLen)
+		envHookLease, actingLease, types.MaxJobIDLen)
 }
 
 // adviseTerminalLease says that a declared row has stopped running, or "" for a live one.
@@ -505,7 +505,7 @@ func ledgerToolRebind(params map[string]string, me func() leaseStanding) string 
 // know: a key outside the three below is a rewrite of something else on the row whatever
 // it holds, and reading a list of known keys instead means every key added to the ledger's
 // merge is cleared here until somebody remembers to add it in two places.
-func shrinksWritePaths(params map[string]string, row types.Lease) bool {
+func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	declared, present := "", false
 	for key, value := range params {
 		switch key {
@@ -538,7 +538,7 @@ func shrinksWritePaths(params map[string]string, row types.Lease) bool {
 //
 // The check RECORD decides it whenever the row carries one: a target field cannot be
 // confused by a stray word the way a rendered line can.
-func LeaseOwnsGate(row types.Lease) bool {
+func LeaseOwnsGate(row types.Job) bool {
 	if row.Check != nil {
 		t, err := types.ParseTarget(row.Check.Target)
 		return err == nil && t.Name == types.TargetCI

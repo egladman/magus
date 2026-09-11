@@ -3,7 +3,7 @@
 // This file has no store_unix.go twin on purpose: it tests store.go's digest against a
 // fifo and a symlink, which only a unix build can create.
 
-package ledger
+package job
 
 import (
 	"os"
@@ -37,7 +37,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Close())
 
 	s := tmpStore(t, root)
-	seed(t, s, types.Lease{
+	seed(t, s, types.Job{
 		ID:         "u1",
 		WritePaths: []string{"escape.go", "pipe", "big.bin"},
 		State:      types.StateRunning,
@@ -47,12 +47,12 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	// really about is a HANG: os.Open on a fifo blocks until somebody writes to it, and
 	// it would block holding the store's mutex, wedging every other ledger caller.
 	type result struct {
-		lease types.Lease
+		lease types.Job
 		err   error
 	}
 	done := make(chan result, 1)
 	go func() {
-		u, uerr := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
+		u, uerr := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
 		done <- result{lease: u, err: uerr}
 	}()
 
@@ -86,8 +86,8 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := tmpStore(t, root)
-	seed(t, s, types.Lease{ID: "u1", WritePaths: []string{"link.go"}})
-	stored, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
+	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"link.go"}})
+	stored, err := s.Update(ctx, "u1", func(u *types.Job) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	assert.Equal(t, "sha256:"+hashOf(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)

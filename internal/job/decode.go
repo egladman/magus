@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	_ "embed"
@@ -11,14 +11,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RowSchema is the JSON Schema for [Row], embedded so a person or a harness can see the
+// DeclarationSchema is the JSON Schema for [Declaration], embedded so a person or a harness can see the
 // shape `magus ledger register --stdin` accepts without reading Go. Generated from the
 // struct itself, so a field cannot reach the wire undescribed.
 //
 //go:embed gen/row.schema.json
-var RowSchema string
+var DeclarationSchema string
 
-// Row is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the
+// Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the
 // store computes. A caller cannot say when its row was created or what it released, and
 // the way to make that true is for the input type not to carry those fields rather than
 // for the store to strip them afterwards.
@@ -29,9 +29,9 @@ var RowSchema string
 // [ParseMerge]).
 //
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
-type Row struct {
+type Declaration struct {
 	// SchemaVersion is the row shape this record is written in, and it is required: a
-	// version this magus does not know is rejected by name. See types.LeaseSchemaVersion.
+	// version this magus does not know is rejected by name. See types.JobSchemaVersion.
 	SchemaVersion int `json:"schema_version"`
 	// ID is the lease's identity within the plan, the key a second register replaces on,
 	// and the only required field besides the version.
@@ -75,7 +75,7 @@ type Row struct {
 	Check *types.LeaseCheck `json:"check,omitempty"`
 	// State is the row's lifecycle position, empty for a row that has not said where it
 	// stands. no_return is a lease that never reported, which is not a failure.
-	State types.LeaseState `json:"state,omitempty"`
+	State types.JobState `json:"state,omitempty"`
 	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitempty"`
@@ -91,14 +91,14 @@ type Row struct {
 // foldLegacyLanes moves a lane declared under its old name onto the field that carries it,
 // refusing a row that names one lane twice.
 //
-// compat: see the legacy fields on [Row].
-func (r *Row) foldLegacyLanes() error {
+// compat: see the legacy fields on [Declaration].
+func (r *Declaration) foldLegacyLanes() error {
 	var err error
 	fold := func(name string, into *[]string, from []string) {
 		switch {
 		case len(from) == 0:
 		case len(*into) > 0:
-			err = errors.Join(err, fmt.Errorf("ledger: a row declares %s or its renamed spelling, not both", name))
+			err = errors.Join(err, fmt.Errorf("job: a row declares %s or its renamed spelling, not both", name))
 		default:
 			*into = from
 		}
@@ -109,7 +109,7 @@ func (r *Row) foldLegacyLanes() error {
 	switch {
 	case r.LegacyModel == "":
 	case r.Model != "":
-		err = errors.Join(err, errors.New("ledger: a row declares tier or its renamed spelling, not both"))
+		err = errors.Join(err, errors.New("job: a row declares tier or its renamed spelling, not both"))
 	default:
 		r.Model = r.LegacyModel
 	}
@@ -120,25 +120,25 @@ func (r *Row) foldLegacyLanes() error {
 // foldStoredLanes reads the four lanes out of a ledger file a previous magus wrote and
 // puts them on the rows raw was decoded into, which carry only the current spelling.
 //
-// compat: see the legacy fields on [Row]. Without it a plan written before the rename
+// compat: see the legacy fields on [Declaration]. Without it a plan written before the rename
 // comes back with every boundary empty, and the next put stores that as the truth.
-func foldStoredLanes(raw []byte, rows []types.Lease) error {
+func foldStoredLanes(raw []byte, rows []types.Job) error {
 	var stored struct {
-		Leases []struct {
+		Jobs []struct {
 			WritePaths []string `json:"owned_paths"`
 			DenyPaths  []string `json:"forbidden_paths"`
 			ReadPaths  []string `json:"focus"`
 			Model      string   `json:"tier"`
-		} `json:"leases"`
+		} `json:"jobs"`
 	}
 	if err := json.Unmarshal(raw, &stored); err != nil {
 		return err
 	}
-	if len(stored.Leases) != len(rows) {
+	if len(stored.Jobs) != len(rows) {
 		return nil
 	}
 	for i := range rows {
-		old := stored.Leases[i]
+		old := stored.Jobs[i]
 		fold := func(name string, into *[]string, from []string) error {
 			if len(from) == 0 {
 				return nil
@@ -167,12 +167,12 @@ func foldStoredLanes(raw []byte, rows []types.Lease) error {
 }
 
 // Validate reports what is wrong with a declared row, or nil.
-func (r Row) Validate() error {
-	if !types.ValidLeaseID(strings.TrimSpace(r.ID)) {
-		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, types.MaxLeaseIDLen)
+func (r Declaration) Validate() error {
+	if !types.ValidJobID(strings.TrimSpace(r.ID)) {
+		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, types.MaxJobIDLen)
 	}
-	if r.State != "" && !types.ValidLeaseState(r.State) {
-		return fmt.Errorf("ledger: state must be one of %s", stateVocabulary())
+	if r.State != "" && !types.ValidJobState(r.State) {
+		return fmt.Errorf("job: state must be one of %s", stateVocabulary())
 	}
 	_, _, err := r.check()
 	return err
@@ -181,22 +181,22 @@ func (r Row) Validate() error {
 // check is the row's declared check, from either spelling, and whether it declares one at
 // all. A line that does not parse is refused HERE, at the door, rather than at grading
 // time, where the row is already stored and the worker has already run something.
-func (r Row) check() (types.LeaseCheck, bool, error) {
+func (r Declaration) check() (types.LeaseCheck, bool, error) {
 	line := strings.TrimSpace(r.Validation)
 	switch {
 	case r.Check != nil && line != "":
-		return types.LeaseCheck{}, false, errors.New("ledger: a row carries `check` or a rendered `validation` line, not both")
+		return types.LeaseCheck{}, false, errors.New("job: a row carries `check` or a rendered `validation` line, not both")
 	case r.Check != nil:
 		parsed, err := types.ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
-			return types.LeaseCheck{}, false, fmt.Errorf("ledger: %w", err)
+			return types.LeaseCheck{}, false, fmt.Errorf("job: %w", err)
 		}
 		parsed.Args = r.Check.Args
 		return parsed, true, nil
 	case line != "":
 		parsed, err := types.ParseLeaseRunLine(line)
 		if err != nil {
-			return types.LeaseCheck{}, false, fmt.Errorf("ledger: %w", err)
+			return types.LeaseCheck{}, false, fmt.Errorf("job: %w", err)
 		}
 		return parsed, true, nil
 	}
@@ -205,7 +205,7 @@ func (r Row) check() (types.LeaseCheck, bool, error) {
 
 // stateVocabulary is the closed set as an error quotes it.
 func stateVocabulary() string {
-	states := types.LeaseStates()
+	states := types.JobStates()
 	names := make([]string, len(states))
 	for i, s := range states {
 		names[i] = string(s)
@@ -215,7 +215,7 @@ func stateVocabulary() string {
 
 // Apply writes this declaration onto a row, for [Store.Update]. Store-computed fields are
 // untouched: a row that already carries releases or a registration keeps them.
-func (r Row) Apply(u *types.Lease) {
+func (r Declaration) Apply(u *types.Job) {
 	u.Parent = strings.TrimSpace(r.Parent)
 	u.Goal = r.Goal
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
@@ -250,7 +250,7 @@ func trimmed(in []string) []string {
 // into stdin from being read into memory before it is rejected.
 const maxInputBytes = 1 << 20
 
-// DecodeReport reads a worker's report, and DecodeRow one declared row, from r.
+// DecodeReport reads a worker's report, and DecodeDeclaration one declared row, from r.
 //
 // STRICT AND VERSIONED, in that order of reporting: a sender a release ahead is told which
 // versions this magus knows instead of learning that one of its fields is unknown, and
@@ -270,27 +270,27 @@ func DecodeReport(r io.Reader) (Report, error) {
 	}
 	var rep Report
 	if err := json.UnmarshalStrict(raw, &rep); err != nil {
-		return Report{}, fmt.Errorf("ledger: the report is not a version %d report: %w", ReportSchemaVersion, err)
+		return Report{}, fmt.Errorf("job: the report is not a version %d report: %w", ReportSchemaVersion, err)
 	}
 	return rep, nil
 }
 
-// DecodeRow reads one declared lease row. See [DecodeReport] for the rules; this is the
+// DecodeDeclaration reads one declared lease row. See [DecodeReport] for the rules; this is the
 // same two passes over the row's schema.
-func DecodeRow(r io.Reader) (Row, error) {
+func DecodeDeclaration(r io.Reader) (Declaration, error) {
 	raw, err := readInput(r, "row")
 	if err != nil {
-		return Row{}, err
+		return Declaration{}, err
 	}
-	if err := checkVersion(raw, "row", types.LeaseSchemaVersion); err != nil {
-		return Row{}, err
+	if err := checkVersion(raw, "row", types.JobSchemaVersion); err != nil {
+		return Declaration{}, err
 	}
-	var row Row
+	var row Declaration
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
-		return Row{}, fmt.Errorf("ledger: the input is not a version %d lease row: %w", types.LeaseSchemaVersion, err)
+		return Declaration{}, fmt.Errorf("job: the input is not a version %d lease row: %w", types.JobSchemaVersion, err)
 	}
 	if err := row.foldLegacyLanes(); err != nil {
-		return Row{}, err
+		return Declaration{}, err
 	}
 	return row, row.Validate()
 }
@@ -298,13 +298,13 @@ func DecodeRow(r io.Reader) (Row, error) {
 func readInput(r io.Reader, what string) ([]byte, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxInputBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("ledger: read the %s: %w", what, err)
+		return nil, fmt.Errorf("job: read the %s: %w", what, err)
 	}
 	if len(raw) > maxInputBytes {
-		return nil, fmt.Errorf("ledger: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what)
+		return nil, fmt.Errorf("job: the %s is larger than %d bytes, which no %s is", what, maxInputBytes, what)
 	}
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, fmt.Errorf("ledger: the %s is empty", what)
+		return nil, fmt.Errorf("job: the %s is empty", what)
 	}
 	return raw, nil
 }
@@ -318,13 +318,13 @@ func checkVersion(raw []byte, what string, supported int) error {
 		SchemaVersion int `json:"schema_version"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return fmt.Errorf("ledger: the %s is not JSON: %w", what, err)
+		return fmt.Errorf("job: the %s is not JSON: %w", what, err)
 	}
 	switch v := envelope.SchemaVersion; {
 	case v == 0:
-		return fmt.Errorf("ledger: the %s carries no schema_version; this magus accepts version %d", what, supported)
+		return fmt.Errorf("job: the %s carries no schema_version; this magus accepts version %d", what, supported)
 	case v != supported:
-		return fmt.Errorf("ledger: the %s is schema_version %d and this magus accepts version %d only."+
+		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts version %d only."+
 			" A newer record is not readable by an older magus; update magus, or send version %d", what, v, supported, supported)
 	}
 	return nil

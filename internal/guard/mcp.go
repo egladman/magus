@@ -15,7 +15,7 @@ import (
 
 // mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
 //
-// Every field ledger.Merge applies, plus the two that name the call. A key this list omits
+// Every field job.Merge applies, plus the two that name the call. A key this list omits
 // reaches the row with no rule having seen it, which is how a bound worker rewrote the
 // checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
 // the two sides together.
@@ -27,7 +27,7 @@ var mcpJudgedParams = append([]string{
 // mcpRenamedParams are the row's lanes under the spelling they carried before the rename.
 //
 // compat(until: no ledger door accepts these spellings any more; observe it by calling
-// ledger.ParseMerge with each of them and finding it rejected): both vocabularies are
+// job.ParseMerge with each of them and finding it rejected): both vocabularies are
 // judged for one cycle, so a put cannot dodge a rule by picking the word on whichever side
 // of the rename the guard has not learned yet.
 var mcpRenamedParams = []string{"owned_paths", "forbidden_paths", "focus", "tier"}

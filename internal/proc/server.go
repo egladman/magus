@@ -69,7 +69,7 @@ func CwdFromContext(ctx context.Context) string {
 }
 
 // WithLease returns ctx carrying the client's lease, readable via
-// LeaseFromContext. An id failing [types.ValidLeaseID] (including the empty
+// LeaseFromContext. An id failing [types.ValidJobID] (including the empty
 // string a client that predates the field sends) stores nothing, so a reader sees "".
 //
 // The validation is here rather than at the call site because the value crosses a socket
@@ -77,7 +77,7 @@ func CwdFromContext(ctx context.Context) string {
 // storing an unvalidated one would let the wire carry a credential onto an event line.
 // Dropping it matches what trail.LeaseFromEnv does with a malformed environment value.
 func WithLease(ctx context.Context, lease string) context.Context {
-	if !types.ValidLeaseID(lease) {
+	if !types.ValidJobID(lease) {
 		return ctx
 	}
 	return context.WithValue(ctx, leaseCtxKey, lease)

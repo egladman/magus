@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -269,7 +269,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
 	// The notice that says so is adviseInvalidLease, fired from Judge so both surfaces
 	// get it.
-	if !types.ValidLeaseID(actingLease) {
+	if !types.ValidJobID(actingLease) {
 		actingLease = ""
 	}
 
@@ -290,7 +290,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		//
 		// Best-effort by construction: a failure here is swallowed, because this whole function
 		// fails open and a ledger that would not accept a note must not cost somebody a save.
-		_ = ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace}).
+		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
@@ -336,7 +336,7 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // the orchestrator handed out, and a worker that widens its own lane is the failure the
 // declaration exists to catch. An EMPTY write set is not a lane of size zero, it is a
 // boundary nobody declared, so it scopes nothing.
-func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeGrade {
+func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade {
 	// Ahead of the registration rule below: a read-only lease has no base to register for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -411,8 +411,8 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 // A terminal row has stopped competing for its paths, which is the same rule
 // types.leaseOverlaps applies when it decides which pairs to report. A row with no
 // state at all is not live either: it has not said it is.
-func liveLeases(leases []types.Lease) []types.Lease {
-	live := make([]types.Lease, 0, len(leases))
+func liveLeases(leases []types.Job) []types.Job {
+	live := make([]types.Job, 0, len(leases))
 	for _, u := range leases {
 		if u.State == types.StateDeclared || u.State == types.StateRunning {
 			live = append(live, u)
@@ -423,13 +423,13 @@ func liveLeases(leases []types.Lease) []types.Lease {
 
 // liveLease finds the acting lease's own row. An empty id matches nothing, so an
 // un-enrolled caller cannot collide with a row whose id was never written.
-func liveLease(live []types.Lease, id string) (types.Lease, bool) {
+func liveLease(live []types.Job, id string) (types.Job, bool) {
 	if id == "" {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
-	i := slices.IndexFunc(live, func(u types.Lease) bool { return u.ID == id })
+	i := slices.IndexFunc(live, func(u types.Job) bool { return u.ID == id })
 	if i < 0 {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
 	return live[i], true
 }
@@ -440,20 +440,20 @@ func liveLease(live []types.Lease, id string) (types.Lease, bool) {
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file: an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error) {
+func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 	for _, u := range live {
 		if u.ID == exclude {
 			continue
 		}
 		_, ok, err := declarationCovering(u.WritePaths, rel)
 		if err != nil {
-			return types.Lease{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
+			return types.Job{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
 		}
 		if ok {
 			return u, true, nil
 		}
 	}
-	return types.Lease{}, false, nil
+	return types.Job{}, false, nil
 }
 
 // declarationCovering reports which declaration covers rel, and whether any did. rel is
@@ -542,9 +542,9 @@ func workspaceRelative(root, p string) (string, bool) {
 }
 
 // goalLine is the lease's goal reduced to its first line. Goal holds the goal AND its
-// acceptance criteria as one block (see types.Lease), and pasting all of that
+// acceptance criteria as one block (see types.Job), and pasting all of that
 // into a denial would bury the next step under it.
-func goalLine(u types.Lease) string {
+func goalLine(u types.Job) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(u.Goal), "\n")
 	if line == "" {
 		return "no goal recorded"

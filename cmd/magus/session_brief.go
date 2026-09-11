@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -244,7 +244,7 @@ func briefLeases(root string) []briefLease {
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
-			Bind:       ledger.NewBrief(row, ledger.BriefFacts{}).Bind,
+			Bind:       job.NewTerms(row, job.TermsFacts{}).Bind,
 			Goal:       goal,
 			Validation: row.Validation,
 		})

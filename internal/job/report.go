@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	_ "embed"
@@ -12,12 +12,12 @@ import (
 
 // ReportSchemaVersion is the version of the report shape this magus accepts. A worker
 // sends it, the decoder rejects what it does not know by name, and the schema requires
-// it. See types.LeaseSchemaVersion for the row's half of the same rule.
+// it. See types.JobSchemaVersion for the row's half of the same rule.
 const ReportSchemaVersion = 1
 
 // ReportSchema is the JSON Schema for [Report], embedded so a harness can give a worker a
 // response format without magus having to render one. Generated from the struct itself;
-// see [RowSchema].
+// see [DeclarationSchema].
 //
 //go:embed gen/report.schema.json
 var ReportSchema string
@@ -122,7 +122,7 @@ type Attempt struct {
 // the report names none; resolving it is the caller's, so no rule here reads a file while
 // the ledger's lock is held. declared is the rest of the plan, which is what the report's
 // descendant ids are checked against.
-func Grade(row types.Lease, rep Report, att Attempt, declared []types.Lease) Verdict {
+func Grade(row types.Job, rep Report, att Attempt, declared []types.Job) Verdict {
 	v := Verdict{Lease: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
 
 	if rep.Lease != "" && rep.Lease != row.ID {
@@ -154,7 +154,7 @@ func Grade(row types.Lease, rep Report, att Attempt, declared []types.Lease) Ver
 		}
 	}
 	for _, id := range rep.Descendants {
-		if !slices.ContainsFunc(declared, func(r types.Lease) bool { return r.ID == id }) {
+		if !slices.ContainsFunc(declared, func(r types.Job) bool { return r.ID == id }) {
 			v.Violations = append(v.Violations, fmt.Sprintf("the report names descendant %q and no row declares it,"+
 				" so that branch of the plan is one nobody is tracking", id))
 		}
@@ -166,7 +166,7 @@ func Grade(row types.Lease, rep Report, att Attempt, declared []types.Lease) Ver
 }
 
 // evidence grades the ref against the row's check, one violation per rule that failed.
-func evidence(row types.Lease, rep Report, att Attempt) []string {
+func evidence(row types.Job, rep Report, att Attempt) []string {
 	ref := strings.TrimSpace(rep.Validation.OutputRef)
 	if ref == "" {
 		return []string{"the report carries no validation output_ref, so there is no run to reopen"}

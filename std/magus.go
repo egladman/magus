@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -56,7 +56,7 @@ var Magus = Module{
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
 		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +
-		"out (see types.Lease). The `magus ledger` CLI subcommand is a third write door onto " +
+		"out (see types.Job). The `magus ledger` CLI subcommand is a third write door onto " +
 		"the same rows: ls and brief read, register declares a row, and accept grades a " +
 		"worker's report. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
@@ -451,7 +451,7 @@ var Magus = Module{
 				"guard is what reads them to grade a write, and register's verdict is a fact it " +
 				"returns rather than a gate. The one thing the store DOES refuse is a write to a " +
 				"row the caller does not own. See the field docs on " +
-				"types.Lease. This namespace, the magus_ledger MCP tool and `magus ledger` " +
+				"types.Job. This namespace, the magus_ledger MCP tool and `magus ledger` " +
 				"(register, accept) are the three WRITE doors onto it. Bound by " +
 				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
@@ -464,11 +464,11 @@ var Magus = Module{
 						"(non-terminal) leases whose declared write_paths intersect: the same " +
 						"derivation the magus_ledger MCP tool's \"list\" op and the console's " +
 						"/api/v1/ledger route use, so the three cannot disagree about a collision. " +
-						"Annotate the result `> LeaseReport` for compile-checked field access. " +
+						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
 						"workspace; raises MGS1022 only when there is no workspace to read.",
-					Returns: []Ret{{Type: TypeAnyMap, Object: "LeaseReport"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "JobList"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -492,7 +492,7 @@ var Magus = Module{
 						{Name: "id", Type: TypeString},
 						{Name: "opts", Type: TypeAnyMap, Optional: true},
 					},
-					Returns: []Ret{{Type: TypeAnyMap, Object: "Lease"}},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "Job"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -1144,11 +1144,11 @@ type workspaceCacheDir interface {
 }
 
 // ledgerStoreFromContext opens the lease ledger for the workspace already on ctx. A
-// fresh Store per call is deliberate and matches ledger.Store's own documented contract:
+// fresh Store per call is deliberate and matches job.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
 // already accepted for v1 (see internal/ledger/store.go): a magusfile target is just
 // another such process.
-func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, error) {
+func ledgerStoreFromContext(ctx context.Context, member string) (*job.Store, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
@@ -1163,59 +1163,59 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	return ledger.NewStore(ledger.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}), nil
+	return job.NewStore(job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}), nil
 }
 
 // MagusListLedger backs magus\ledger.list (hand-bound in
 // internal/interp/bindings/ledger_ns.go, since a Namespace method has no Impl for
 // codegen to reflect a trampoline from; see std.Namespace). It answers with one typed
-// report; types.NewLeaseReport is the same constructor the magus_ledger MCP tool's
+// report; types.NewJobList is the same constructor the magus_ledger MCP tool's
 // "list" op and the console's /api/v1/ledger route call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
-func MagusListLedger(ctx context.Context) (types.LeaseReport, error) {
+func MagusListLedger(ctx context.Context) (types.JobList, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.list")
 	if err != nil {
-		return types.LeaseReport{}, err
+		return types.JobList{}, err
 	}
 	leases, err := store.List()
 	if err != nil {
-		return types.LeaseReport{}, err
+		return types.JobList{}, err
 	}
-	return types.NewLeaseReport(leases), nil
+	return types.NewJobList(leases), nil
 }
 
 // MagusPutLedger backs magus\ledger.put. The field merge is decoded by
-// internal/ledger.ParseMerge, the same decoder the magus_ledger MCP tool's "put" op calls, so
+// internal/job.ParseMerge, the same decoder the magus_ledger MCP tool's "put" op calls, so
 // a client typing either surface accepts the same fields and rejects the same mistakes.
-func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Lease, error) {
+func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.Job, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.put")
 	if err != nil {
-		return types.Lease{}, err
+		return types.Job{}, err
 	}
-	merge, err := ledger.ParseMerge(opts)
+	merge, err := job.ParseMerge(opts)
 	if err != nil {
-		return types.Lease{}, err
+		return types.Job{}, err
 	}
 	return store.Update(ctx, strings.TrimSpace(id), merge)
 }
 
 // MagusRegisterLedger backs magus\ledger.register: a worker reports the base it actually
 // landed on, and learns how that compares with the checkpoint its lease was handed. It
-// returns the stored row and internal/ledger.RegistrationAdvice's reading of the verdict, the
+// returns the stored row and internal/job.BaseAdvice's reading of the verdict, the
 // same pair the magus_ledger tool's "register" op answers with.
 //
 // The verdict is a FACT, never a refusal: a diverged registration is recorded and
-// reported like any other. See types.Lease.
-func MagusRegisterLedger(ctx context.Context, id, base string) (types.Lease, string, error) {
+// reported like any other. See types.Job.
+func MagusRegisterLedger(ctx context.Context, id, base string) (types.Job, string, error) {
 	store, err := ledgerStoreFromContext(ctx, "ledger.register")
 	if err != nil {
-		return types.Lease{}, "", err
+		return types.Job{}, "", err
 	}
-	lease, err := store.Register(ctx, strings.TrimSpace(id), base)
+	lease, err := store.Exec(ctx, strings.TrimSpace(id), base)
 	if err != nil {
-		return types.Lease{}, "", err
+		return types.Job{}, "", err
 	}
-	return lease, ledger.RegistrationAdvice(lease), nil
+	return lease, job.BaseAdvice(lease), nil
 }
 
 // MagusClearLedger backs magus\ledger.clear, matching the magus_ledger MCP tool's

@@ -448,24 +448,24 @@ export object LeaseCheck {
     args: [str] = [],
 }
 
-export object LeaseRelease {
+export object JobRelease {
     path: str = "",
     digest: str = "",
     releasedAt: int = 0,
 }
 
-export object LeaseUnattributedWrite {
+export object JobUnattributedWrite {
     path: str = "",
     digest: str = "",
     at: int = 0,
 }
 
-export object LeaseActor {
+export object JobActor {
     session: str = "",
     host: str = "",
 }
 
-export object Lease {
+export object Job {
     schemaVersion: int = 0,
     id: str = "",
     parent: str = "",
@@ -480,26 +480,26 @@ export object Lease {
     validation: str = "",
     state: str = "",
     readOnly: bool = false,
-    releases: [LeaseRelease] = [],
-    unattributed: [LeaseUnattributedWrite] = [],
+    releases: [JobRelease] = [],
+    unattributed: [JobUnattributedWrite] = [],
     reportedBase: str = "",
     baseVerdict: str = "",
-    registeredBy: LeaseActor = LeaseActor{},
+    registeredBy: JobActor = JobActor{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,
 }
 
-export object LeaseOverlap {
-    leaseA: str = "",
-    leaseB: str = "",
+export object JobOverlap {
+    jobA: str = "",
+    jobB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
 }
 
-export object LeaseReport {
-    leases: [Lease] = [],
-    overlaps: [LeaseOverlap] = [],
+export object JobList {
+    jobs: [Job] = [],
+    overlaps: [JobOverlap] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
@@ -561,11 +561,11 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared lease ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Lease. This namespace, the magus_ledger MCP tool and `magus ledger` (register, accept) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+// The declared lease ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_ledger MCP tool and `magus ledger` (register, accept) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
 export object ledger {
     static extern fun clear() > int !> any;
-    static extern fun list() > LeaseReport !> any;
-    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Lease !> any;
+    static extern fun list() > JobList !> any;
+    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
 }
 

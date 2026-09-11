@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"errors"
@@ -25,44 +25,44 @@ import (
 // are joined rather than returned at the first one: a client that mistyped two params
 // should learn about both in one round trip, and a key outside [mergeFields] is one of
 // those mistakes rather than something to drop.
-func ParseMerge(params map[string]any) (func(*types.Lease), error) {
+func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	var (
-		set []func(*types.Lease)
+		set []func(*types.Job)
 		err error
 	)
 	err = unknownParams(params)
-	str := func(key string, apply func(*types.Lease, string)) {
+	str := func(key string, apply func(*types.Job, string)) {
 		v, ok, e := mergeString(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Lease) { apply(u, v) })
+			set = append(set, func(u *types.Job) { apply(u, v) })
 		}
 	}
-	list := func(key string, apply func(*types.Lease, []string)) {
+	list := func(key string, apply func(*types.Job, []string)) {
 		v, ok, e := mergeList(params, key)
 		switch {
 		case e != nil:
 			err = errors.Join(err, e)
 		case ok:
-			set = append(set, func(u *types.Lease) { apply(u, v) })
+			set = append(set, func(u *types.Job) { apply(u, v) })
 		}
 	}
 
-	str("parent", func(u *types.Lease, v string) { u.Parent = strings.TrimSpace(v) })
-	str("goal", func(u *types.Lease, v string) { u.Goal = v })
-	str("checkpoint", func(u *types.Lease, v string) { u.Checkpoint = strings.TrimSpace(v) })
+	str("parent", func(u *types.Job, v string) { u.Parent = strings.TrimSpace(v) })
+	str("goal", func(u *types.Job, v string) { u.Goal = v })
+	str("checkpoint", func(u *types.Job, v string) { u.Checkpoint = strings.TrimSpace(v) })
 	err = errors.Join(err, bothSpellings(params))
-	list("write_paths", func(u *types.Lease, v []string) { u.WritePaths = v })
-	list("owned_paths", func(u *types.Lease, v []string) { u.WritePaths = v })
-	list("deny_paths", func(u *types.Lease, v []string) { u.DenyPaths = v })
-	list("forbidden_paths", func(u *types.Lease, v []string) { u.DenyPaths = v })
-	list("read_paths", func(u *types.Lease, v []string) { u.ReadPaths = v })
-	list("focus", func(u *types.Lease, v []string) { u.ReadPaths = v })
-	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
-	str("model", func(u *types.Lease, v string) { u.Model = strings.TrimSpace(v) })
-	str("tier", func(u *types.Lease, v string) { u.Model = strings.TrimSpace(v) })
+	list("write_paths", func(u *types.Job, v []string) { u.WritePaths = v })
+	list("owned_paths", func(u *types.Job, v []string) { u.WritePaths = v })
+	list("deny_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
+	list("forbidden_paths", func(u *types.Job, v []string) { u.DenyPaths = v })
+	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
+	list("focus", func(u *types.Job, v []string) { u.ReadPaths = v })
+	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
+	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
+	str("tier", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
 
 	// check and validation are two spellings of one field, and the row stores both halves,
 	// so a put naming each of them is a caller that does not know which one it meant.
@@ -73,26 +73,26 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 			err = errors.Join(err, e)
 		case !ok:
 		case strings.TrimSpace(v) == "":
-			set = append(set, func(u *types.Lease) { u.Check, u.Validation = nil, "" })
+			set = append(set, func(u *types.Job) { u.Check, u.Validation = nil, "" })
 		default:
 			c, perr := parse(v)
 			if perr != nil {
-				err = errors.Join(err, fmt.Errorf("ledger: %s: %w", key, perr))
+				err = errors.Join(err, fmt.Errorf("job: %s: %w", key, perr))
 				return
 			}
-			set = append(set, func(u *types.Lease) { u.Check, u.Validation = &c, c.String() })
+			set = append(set, func(u *types.Job) { u.Check, u.Validation = &c, c.String() })
 		}
 	}
 	_, hasCheck := params["check"]
 	_, hasLine := params["validation"]
 	switch {
 	case hasCheck && hasLine:
-		err = errors.Join(err, errors.New("ledger: a put carries `check` or a rendered `validation` line, not both"))
+		err = errors.Join(err, errors.New("job: a put carries `check` or a rendered `validation` line, not both"))
 	case hasCheck:
 		check("check", types.ParseLeaseCheck)
 	case hasLine:
 		// compat(until: no client still sends a rendered line; observe: the grep
-		// types.Lease.Validation names).
+		// types.Job.Validation names).
 		check("validation", types.ParseLeaseRunLine)
 	}
 
@@ -100,25 +100,25 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 	if v, ok, e := mergeString(params, "state"); e != nil {
 		err = errors.Join(err, e)
 	} else if ok {
-		s := types.LeaseState(strings.TrimSpace(v))
-		if !types.ValidLeaseState(s) {
-			err = errors.Join(err, fmt.Errorf("ledger: state must be one of %s", stateVocabulary()))
+		s := types.JobState(strings.TrimSpace(v))
+		if !types.ValidJobState(s) {
+			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", stateVocabulary()))
 		} else {
-			set = append(set, func(u *types.Lease) { u.State = s })
+			set = append(set, func(u *types.Job) { u.State = s })
 		}
 	}
 	if v, present := params["read_only"]; present {
 		b, ok := v.(bool)
 		if !ok {
-			err = errors.Join(err, errors.New("ledger: read_only must be a boolean"))
+			err = errors.Join(err, errors.New("job: read_only must be a boolean"))
 		} else {
-			set = append(set, func(u *types.Lease) { u.ReadOnly = b })
+			set = append(set, func(u *types.Job) { u.ReadOnly = b })
 		}
 	}
 	if err != nil {
 		return nil, err
 	}
-	return func(u *types.Lease) {
+	return func(u *types.Job) {
 		for _, apply := range set {
 			apply(u)
 		}
@@ -151,7 +151,7 @@ func bothSpellings(params map[string]any) error {
 		_, hasOld := params[pair[0]]
 		_, hasCurrent := params[pair[1]]
 		if hasOld && hasCurrent {
-			err = errors.Join(err, fmt.Errorf("ledger: a put carries %s or %s, not both", pair[1], pair[0]))
+			err = errors.Join(err, fmt.Errorf("job: a put carries %s or %s, not both", pair[1], pair[0]))
 		}
 	}
 	return err
@@ -172,7 +172,7 @@ func unknownParams(params map[string]any) error {
 		return nil
 	}
 	slices.Sort(unknown)
-	return fmt.Errorf("ledger: no field of a lease row is named %s; a put carries %s",
+	return fmt.Errorf("job: no field of a lease row is named %s; a put carries %s",
 		strings.Join(unknown, ", "), strings.Join(mergeFields, ", "))
 }
 
@@ -187,7 +187,7 @@ func mergeString(params map[string]any, key string) (string, bool, error) {
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", false, fmt.Errorf("ledger: %s must be a string", key)
+		return "", false, fmt.Errorf("job: %s must be a string", key)
 	}
 	return s, true, nil
 }
@@ -201,7 +201,7 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 	if !present {
 		return nil, false, nil
 	}
-	badType := fmt.Errorf("ledger: %s must be an array of strings or a space-separated string", key)
+	badType := fmt.Errorf("job: %s must be an array of strings or a space-separated string", key)
 	switch t := v.(type) {
 	case string:
 		return strings.Fields(t), true, nil

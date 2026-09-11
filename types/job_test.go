@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestValidLeaseID pins the rule every lease channel shares. The marker scanner is not the
-// only producer: whatever stamps a Lease has to agree with this, or internal/trail's
+// TestValidJobID pins the rule every lease channel shares. The marker scanner is not the
+// only producer: whatever stamps a Job has to agree with this, or internal/trail's
 // redaction exemption starts covering strings nobody checked.
-func TestValidLeaseID(t *testing.T) {
+func TestValidJobID(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
@@ -21,8 +21,8 @@ func TestValidLeaseID(t *testing.T) {
 		"plain":               {"MGS1021", true},
 		"every separator":     {"a.b:c_d-1/2", true},
 		"branch shaped":       {"feat/spawn-capture", true},
-		"at the length cap":   {strings.Repeat("u", MaxLeaseIDLen), true},
-		"past the length cap": {strings.Repeat("u", MaxLeaseIDLen+1), false},
+		"at the length cap":   {strings.Repeat("u", MaxJobIDLen), true},
+		"past the length cap": {strings.Repeat("u", MaxJobIDLen+1), false},
 		"empty":               {"", false},
 		"space":               {"two words", false},
 		"punctuation":         {"MGS1021!", false},
@@ -31,48 +31,48 @@ func TestValidLeaseID(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tc.want, ValidLeaseID(tc.id))
+			assert.Equal(t, tc.want, ValidJobID(tc.id))
 		})
 	}
 }
 
-func owner(id string, state LeaseState, paths ...string) Lease {
-	return Lease{ID: id, State: state, WritePaths: paths}
+func owner(id string, state JobState, paths ...string) Job {
+	return Job{ID: id, State: state, WritePaths: paths}
 }
 
-func TestLeaseOverlaps(t *testing.T) {
+func TestJobOverlaps(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name   string
-		leases []Lease
-		want   []LeaseOverlap
+		leases []Job
+		want   []JobOverlap
 	}{
 		{
 			name:   "the same path claimed twice",
-			leases: []Lease{owner("a", StateRunning, "internal/ledger"), owner("b", StateDeclared, "internal/ledger")},
-			want: []LeaseOverlap{
-				{LeaseA: "a", LeaseB: "b", PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger"}},
+			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateDeclared, "internal/ledger")},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger"}},
 			},
 		},
 		{
 			// The common case a reader most needs told: one lease owns the directory, the
 			// other owns a file inside it, and nothing about either row says so.
 			name:   "a file inside a claimed directory, and both declarations are named",
-			leases: []Lease{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger/store.go")},
-			want: []LeaseOverlap{
+			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger/store.go")},
+			want: []JobOverlap{
 				{
-					LeaseA: "a", LeaseB: "b",
+					JobA: "a", JobB: "b",
 					PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger/store.go"},
 				},
 			},
 		},
 		{
 			name:   "a glob is judged by the directories it names",
-			leases: []Lease{owner("a", StateRunning, "console/src/**/*.ts"), owner("b", StateRunning, "console/src/console/plan/main.ts")},
-			want: []LeaseOverlap{
+			leases: []Job{owner("a", StateRunning, "console/src/**/*.ts"), owner("b", StateRunning, "console/src/console/plan/main.ts")},
+			want: []JobOverlap{
 				{
-					LeaseA: "a", LeaseB: "b",
+					JobA: "a", JobB: "b",
 					PathsA: []string{"console/src/**/*.ts"},
 					PathsB: []string{"console/src/console/plan/main.ts"},
 				},
@@ -80,35 +80,35 @@ func TestLeaseOverlaps(t *testing.T) {
 		},
 		{
 			name:   "sibling directories are not an overlap",
-			leases: []Lease{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledgerx", "console/")},
+			leases: []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledgerx", "console/")},
 		},
 		{
 			// A prefix that stops mid-segment is a different directory, not a parent.
 			name:   "a shared name prefix inside a segment is not containment",
-			leases: []Lease{owner("a", StateRunning, "internal/led"), owner("b", StateRunning, "internal/ledger/store.go")},
+			leases: []Job{owner("a", StateRunning, "internal/led"), owner("b", StateRunning, "internal/ledger/store.go")},
 		},
 		{
 			// A blank entry names nothing. It cleans to ".", and reading THAT as a claim on
 			// the whole tree paired the row holding it with every other lease in the plan.
 			name:   "a blank declaration claims nothing, not everything",
-			leases: []Lease{owner("a", StateRunning, "  ", ""), owner("b", StateRunning, "internal/ledger")},
+			leases: []Job{owner("a", StateRunning, "  ", ""), owner("b", StateRunning, "internal/ledger")},
 		},
 		{
 			name:   "a read-only lease declares no paths, so it collides with nothing",
-			leases: []Lease{owner("a", StateRunning, "internal/ledger"), {ID: "scout", State: StateRunning, ReadOnly: true}},
+			leases: []Job{owner("a", StateRunning, "internal/ledger"), {ID: "scout", State: StateRunning, ReadOnly: true}},
 		},
 		{
 			// The pair is reported once, and the ids read in ledger order so a reader can
 			// find both rows in the table they are looking at.
 			name: "three leases claiming one tree are three pairs, each named once",
-			leases: []Lease{
+			leases: []Job{
 				owner("a", StateRunning, "internal"),
 				owner("b", StateRunning, "internal/ledger"),
 				owner("c", StateDeclared, "internal/handler"),
 			},
-			want: []LeaseOverlap{
-				{LeaseA: "a", LeaseB: "b", PathsA: []string{"internal"}, PathsB: []string{"internal/ledger"}},
-				{LeaseA: "a", LeaseB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
+			want: []JobOverlap{
+				{JobA: "a", JobB: "b", PathsA: []string{"internal"}, PathsB: []string{"internal/ledger"}},
+				{JobA: "a", JobB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
 			},
 		},
 	}
@@ -117,7 +117,7 @@ func TestLeaseOverlaps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, leaseOverlaps(tt.leases))
+			assert.Equal(t, tt.want, jobOverlaps(tt.leases))
 		})
 	}
 }
@@ -125,44 +125,44 @@ func TestLeaseOverlaps(t *testing.T) {
 // A finished lease is not competing for anything. The skill has a worker RELEASE its
 // paths when it stops editing, so reporting a pass, a fail, or a no-return as a
 // collision would make the surface loudest exactly as the plan winds down.
-func TestLeaseOverlapsSkipsTerminalLeases(t *testing.T) {
+func TestJobOverlapsSkipsTerminalJobs(t *testing.T) {
 	t.Parallel()
 
 	live := owner("live", StateRunning, "internal/ledger")
-	for _, state := range []LeaseState{StatePass, StateFail, StateNoReturn} {
+	for _, state := range []JobState{StatePass, StateFail, StateNoReturn} {
 		t.Run(string(state), func(t *testing.T) {
 			t.Parallel()
 
 			done := owner("done", state, "internal/ledger")
-			assert.Empty(t, leaseOverlaps([]Lease{live, done}))
-			assert.Empty(t, leaseOverlaps([]Lease{done, live}), "whichever order the rows sit in")
+			assert.Empty(t, jobOverlaps([]Job{live, done}))
+			assert.Empty(t, jobOverlaps([]Job{done, live}), "whichever order the rows sit in")
 		})
 	}
 }
 
-func TestNewLeaseReportDerivesOverlapsFromTheRows(t *testing.T) {
+func TestNewJobListDerivesOverlapsFromTheRows(t *testing.T) {
 	t.Parallel()
 
-	leases := []Lease{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger")}
-	report := NewLeaseReport(leases)
-	assert.Equal(t, leases, report.Leases, "the rows are served exactly as they were recorded")
+	leases := []Job{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger")}
+	report := NewJobList(leases)
+	assert.Equal(t, leases, report.Jobs, "the rows are served exactly as they were recorded")
 	assert.Len(t, report.Overlaps, 1)
 
 	// Derived on read: the same rows with one of them finished report nothing, and no
 	// row had to be rewritten for that to happen.
 	leases[1].State = StatePass
-	assert.Empty(t, NewLeaseReport(leases).Overlaps)
+	assert.Empty(t, NewJobList(leases).Overlaps)
 }
 
 // The empty case is settled in the constructor rather than at each read door, so the MCP
 // tool and the console's route cannot disagree about it: an unwritten ledger serves an
 // empty list, never null, whichever door served it.
-func TestNewLeaseReportNormalizesTheEmptyLedger(t *testing.T) {
+func TestNewJobListNormalizesTheEmptyLedger(t *testing.T) {
 	t.Parallel()
 
-	report := NewLeaseReport(nil)
-	assert.NotNil(t, report.Leases, "a workspace where nobody has declared a lease yet is empty, not broken")
-	assert.Empty(t, report.Leases)
+	report := NewJobList(nil)
+	assert.NotNil(t, report.Jobs, "a workspace where nobody has declared a lease yet is empty, not broken")
+	assert.Empty(t, report.Jobs)
 	assert.Empty(t, report.Overlaps)
 }
 
@@ -173,49 +173,49 @@ func TestNewLeaseReportNormalizesTheEmptyLedger(t *testing.T) {
 // appender: it shows up as the NEXT reader's append overwriting the first one's row. So
 // this asserts across two clones rather than back at the original, which is the only form
 // of the check that can fail.
-func TestLeaseCloneCopiesEverySliceField(t *testing.T) {
+func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	t.Parallel()
 
-	orig := Lease{
+	orig := Job{
 		ID:           "a",
 		WritePaths:   append(make([]string, 0, 4), "types/"),
 		DenyPaths:    append(make([]string, 0, 4), "gen/"),
 		DependsOn:    append(make([]string, 0, 4), "b"),
-		Releases:     append(make([]LeaseRelease, 0, 4), LeaseRelease{Path: "types/x.go"}),
-		Unattributed: append(make([]LeaseUnattributedWrite, 0, 4), LeaseUnattributedWrite{Path: "types/y.go"}),
+		Releases:     append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
+		Unattributed: append(make([]JobUnattributedWrite, 0, 4), JobUnattributedWrite{Path: "types/y.go"}),
 	}
 
 	first, second := orig.Clone(), orig.Clone()
 	first.WritePaths = append(first.WritePaths, "first/")
 	first.DenyPaths = append(first.DenyPaths, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
-	first.Releases = append(first.Releases, LeaseRelease{Path: "first/z.go"})
-	first.Unattributed = append(first.Unattributed, LeaseUnattributedWrite{Path: "first/z.go"})
+	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
+	first.Unattributed = append(first.Unattributed, JobUnattributedWrite{Path: "first/z.go"})
 
 	second.WritePaths = append(second.WritePaths, "second/")
 	second.DenyPaths = append(second.DenyPaths, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
-	second.Releases = append(second.Releases, LeaseRelease{Path: "second/z.go"})
-	second.Unattributed = append(second.Unattributed, LeaseUnattributedWrite{Path: "second/z.go"})
+	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
+	second.Unattributed = append(second.Unattributed, JobUnattributedWrite{Path: "second/z.go"})
 
 	assert.Equal(t, []string{"types/", "first/"}, first.WritePaths)
 	assert.Equal(t, []string{"gen/", "first/"}, first.DenyPaths)
 	assert.Equal(t, []string{"b", "first"}, first.DependsOn)
-	assert.Equal(t, []LeaseRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
-	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
+	assert.Equal(t, []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
+	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
 
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
 	assert.Equal(t, []string{"types/"}, orig.WritePaths)
-	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
+	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
 }
 
 // slices.Clone preserves nil, which is what keeps a row that stored null from coming back
 // as [] through the JSON door.
-func TestLeaseCloneKeepsNilSlicesNil(t *testing.T) {
+func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
 	t.Parallel()
 
-	c := Lease{ID: "a"}.Clone()
+	c := Job{ID: "a"}.Clone()
 	assert.Nil(t, c.Unattributed)
 	assert.Nil(t, c.Releases)
 }

@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"slices"
@@ -11,16 +11,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// compat: see the legacy fields on Row. A client one release behind still registers, and
+// compat: see the legacy fields on Declaration. A client one release behind still registers, and
 // one that names a lane twice is refused rather than silently taking either spelling.
-func TestDecodeRowReadsALaneUnderItsOldName(t *testing.T) {
+func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
-	row, err := DecodeRow(strings.NewReader(
+	row, err := DecodeDeclaration(strings.NewReader(
 		`{"schema_version":1,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
-	require.Equal(t, Row{
+	require.Equal(t, Declaration{
 		SchemaVersion: 1,
 		ID:            "adj/ledger",
 		WritePaths:    []string{"internal/ledger"},
@@ -30,10 +30,10 @@ func TestDecodeRowReadsALaneUnderItsOldName(t *testing.T) {
 	}, row)
 }
 
-func TestDecodeRowRefusesALaneSpelledBothWays(t *testing.T) {
+func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeRow(strings.NewReader(
+	_, err := DecodeDeclaration(strings.NewReader(
 		`{"schema_version":1,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
@@ -87,27 +87,27 @@ func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 
 // A row a client sends carries what it DECLARES. The store's own fields are not on the
 // input type at all, which is what makes sending one an error instead of a lie recorded.
-func TestDecodeRowRefusesTheStoresOwnFields(t *testing.T) {
+func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 	t.Parallel()
 
 	for _, field := range []string{`"created":1`, `"registered_by":{"session":"someone"}`, `"releases":[]`} {
-		_, err := DecodeRow(strings.NewReader(`{"schema_version":1,"id":"adj/store",` + field + `}`))
+		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store",` + field + `}`))
 		require.Error(t, err, field)
 	}
 }
 
-func TestDecodeRowValidatesWhatItRead(t *testing.T) {
+func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeRow(strings.NewReader(`{"schema_version":1,"id":"adj store"}`))
+	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj store"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeRow(strings.NewReader(`{"schema_version":1,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":1,"id":"adj/store","state":"done"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
-	row, err := DecodeRow(strings.NewReader(
+	row, err := DecodeDeclaration(strings.NewReader(
 		`{"schema_version":1,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
@@ -118,22 +118,22 @@ func TestDecodeRowValidatesWhatItRead(t *testing.T) {
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeRow(strings.NewReader("  \n"))
+	_, err := DecodeDeclaration(strings.NewReader("  \n"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
 
 // A declaration REPLACES: an omitted field is cleared, which is what a person typing the
 // row means, and the store's own fields survive it.
-func TestRowApplyDeclaresRatherThanMerges(t *testing.T) {
+func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 	t.Parallel()
 
-	stored := types.Lease{
+	stored := types.Job{
 		ID: "adj/store", Goal: "old", Model: "principal",
 		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}
-	Row{ID: "adj/store", Goal: "new"}.Apply(&stored)
+	Declaration{ID: "adj/store", Goal: "new"}.Apply(&stored)
 
 	assert.Equal(t, "new", stored.Goal)
 	assert.Empty(t, stored.Model, "an omitted field is cleared")
@@ -144,23 +144,23 @@ func TestRowApplyDeclaresRatherThanMerges(t *testing.T) {
 // The embedded schema is generated, so a field on one side and not the other means the
 // generator has not been run: this is the drift gate a `magus run generate` away from
 // green, not a second copy to hand-edit.
-func TestRowSchemaMatchesTheStruct(t *testing.T) {
+func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	t.Parallel()
 
 	var schema struct {
 		Properties map[string]json.RawMessage `json:"properties"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(RowSchema), &schema))
+	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
 
-	assert.ElementsMatch(t, jsonFields(Row{}), keys(schema.Properties))
+	assert.ElementsMatch(t, jsonFields(Declaration{}), keys(schema.Properties))
 }
 
 // The two write doors accept the same fields or a row declared on one is not the row the
-// other would have recorded. ParseMerge is the MCP tool's decoder and Row is the CLI's.
-func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
+// other would have recorded. ParseMerge is the MCP tool's decoder and Declaration is the CLI's.
+func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
-	for _, field := range jsonFields(Row{}) {
+	for _, field := range jsonFields(Declaration{}) {
 		if field == "schema_version" || field == "id" {
 			continue // the envelope and the key, which ParseMerge takes as arguments
 		}
@@ -183,5 +183,5 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 	for _, pair := range renamedFields {
 		accepted = append(accepted, pair[0])
 	}
-	assert.ElementsMatch(t, jsonFields(Row{})[2:], accepted, "the two doors name one vocabulary")
+	assert.ElementsMatch(t, jsonFields(Declaration{})[2:], accepted, "the two doors name one vocabulary")
 }

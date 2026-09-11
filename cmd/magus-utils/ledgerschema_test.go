@@ -28,7 +28,7 @@ type Fixture struct {
 	// ID is the lease's identity within the plan.
 	ID string @json:"id" schema:"leaseid"@
 	// State is where the lease stands.
-	State types.LeaseState @json:"state,omitempty"@
+	State types.JobState @json:"state,omitempty"@
 	// Check is the one check this lease runs.
 	Check *Check @json:"check,omitempty"@
 	// Paths are the paths it may write.
@@ -48,7 +48,7 @@ type Check struct {
 const wantFixtureSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://magus.invalid/ledger/fixture.schema.json",
-  "$comment": "Generated from ledger.Fixture by ` + "`magus-utils ledgerschema`" + `. DO NOT EDIT; run ` + "`magus run ledger-generate .`" + `.",
+  "$comment": "Generated from job.Fixture by ` + "`magus-utils ledgerschema`" + `. DO NOT EDIT; run ` + "`magus run ledger-generate .`" + `.",
   "title": "magus fixture",
   "description": "Fixture is a record a caller declares.",
   "type": "object",

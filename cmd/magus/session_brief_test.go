@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -119,14 +119,14 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 
 	store, err := openLedger(root)
 	require.NoError(t, err)
-	guardRow := types.Lease{
+	guardRow := types.Job{
 		ID:         "f2-guard",
 		State:      types.StateRunning,
 		Goal:       "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
 		WritePaths: []string{"internal/ledger"},
 	}
-	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Lease) { *cur = guardRow })
+	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })
 	require.NoError(t, err)
 
 	// One session, one failing target: the run history the brief reads back.
@@ -143,7 +143,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
 	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus ledger brief`")
-	assert.Equal(t, ledger.NewBrief(types.Lease{ID: "f2-guard"}, ledger.BriefFacts{}).Bind, brief.Leases[0].Bind)
+	assert.Equal(t, job.NewTerms(types.Job{ID: "f2-guard"}, job.TermsFacts{}).Bind, brief.Leases[0].Bind)
 
 	require.Len(t, brief.Failures, 1)
 	assert.Equal(t, "ref-1", brief.Failures[0].Ref)
@@ -168,11 +168,11 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 
 	store, err := openLedger(root)
 	require.NoError(t, err)
-	landed := types.Lease{ID: "landed", State: types.StatePass}
-	_, err = store.Update(ctx, landed.ID, func(cur *types.Lease) { *cur = landed })
+	landed := types.Job{ID: "landed", State: types.StatePass}
+	_, err = store.Update(ctx, landed.ID, func(cur *types.Job) { *cur = landed })
 	require.NoError(t, err)
-	running := types.Lease{ID: "running", State: types.StateRunning}
-	_, err = store.Update(ctx, running.ID, func(cur *types.Lease) { *cur = running })
+	running := types.Job{ID: "running", State: types.StateRunning}
+	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := gatherSessionBrief(ctx, root, nil)

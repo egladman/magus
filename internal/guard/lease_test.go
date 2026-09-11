@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,8 +182,8 @@ func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
 // multi-agent skill hands out, and the shape the gate deny is scoped to.
-func narrowLease() types.Lease {
-	return types.Lease{
+func narrowLease() types.Job {
+	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Goal:       "lease-scoped denies in the guard",
 		WritePaths: []string{"cmd/magus/**"},
@@ -272,18 +272,18 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 
 // TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
 // hook through: a marker in the checkout's cache dir, honored only when it holds a lease
-// id, and read by the same ledger.ActingLease the sandbox resolves through.
+// id, and read by the same job.ActingLease the sandbox resolves through.
 func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookLocation(ctx, Dependencies{}).cacheDir
 
-	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
+	assert.Empty(t, job.ActingLease(base), "no marker, no lease")
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	assert.Equal(t, "harness/lease-scoped-deny", ledger.ActingLease(base))
+	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	assert.Equal(t, "harness/lease-scoped-deny", job.ActingLease(base))
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
-	assert.Empty(t, ledger.ActingLease(base), "a malformed marker binds nothing rather than something")
+	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	assert.Empty(t, job.ActingLease(base), "a malformed marker binds nothing rather than something")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the

@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +28,7 @@ import (
 //
 // BOTH CHANNELS WRITE, and the store is what keeps the book honest. The magus_ledger MCP
 // tool is the agent's channel and this verb is the person's; they reach the same store and
-// the same rules, so a row still has one author (internal/ledger.authorizeRow enforces it)
+// the same rules, so a row still has one author (internal/job.authorizeRow enforces it)
 // without a capability existing for agents that a person does not have.
 //
 // It takes the --root OVERRIDE and resolves it per verb rather than once here: brief and
@@ -77,12 +77,12 @@ func ledgerUsage() {
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
 
-func openLedger(root string) (*ledger.Store, error) {
+func openLedger(root string) (*job.Store, error) {
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
 		return nil, err
 	}
-	return ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root}), nil
 }
 
 func ledgerList(root string, args []string) error {
@@ -114,7 +114,7 @@ func ledgerList(root string, args []string) error {
 	// The report, not the bare rows: the overlaps are derived by the same constructor
 	// the magus_ledger list op and the console's route use, so the three doors cannot
 	// disagree about whether two leases claim one path.
-	report := types.NewLeaseReport(leases)
+	report := types.NewJobList(leases)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -122,8 +122,8 @@ func ledgerList(root string, args []string) error {
 	}
 	switch opts.Format {
 	case outputName:
-		ids := make([]string, len(report.Leases))
-		for i, lease := range report.Leases {
+		ids := make([]string, len(report.Jobs))
+		for i, lease := range report.Jobs {
 			ids[i] = lease.ID
 		}
 		return emitNames(ids)
@@ -135,15 +135,15 @@ func ledgerList(root string, args []string) error {
 	}
 }
 
-func printLedgerTree(out io.Writer, report types.LeaseReport) {
-	if len(report.Leases) == 0 {
+func printLedgerTree(out io.Writer, report types.JobList) {
+	if len(report.Jobs) == 0 {
 		fmt.Fprintln(out, "No leases declared. An orchestrating agent declares a plan with the `"+
 			hint.ToolLedger.String()+"` MCP tool (op=put), and every worktree of this repository then reads it here.")
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "LEASE\tSTATE\tMODEL\tPATHS\tVALIDATION")
-	for _, row := range ledgerTreeOrder(report.Leases) {
+	for _, row := range ledgerTreeOrder(report.Jobs) {
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%d\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
 			orDash(string(row.lease.State)), orDash(row.lease.Model),
@@ -156,15 +156,15 @@ func printLedgerTree(out io.Writer, report types.LeaseReport) {
 	}
 	fmt.Fprintln(out, "\noverlaps")
 	for _, o := range report.Overlaps {
-		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.LeaseA, o.LeaseB)
-		fmt.Fprintf(out, "    %s: %s\n", o.LeaseA, strings.Join(o.PathsA, ", "))
-		fmt.Fprintf(out, "    %s: %s\n", o.LeaseB, strings.Join(o.PathsB, ", "))
+		fmt.Fprintf(out, "  %s and %s claim common ground\n", o.JobA, o.JobB)
+		fmt.Fprintf(out, "    %s: %s\n", o.JobA, strings.Join(o.PathsA, ", "))
+		fmt.Fprintf(out, "    %s: %s\n", o.JobB, strings.Join(o.PathsB, ", "))
 	}
 }
 
 // ledgerTreeLine is one printed line: the row plus how deep its parent chain runs.
 type ledgerTreeLine struct {
-	lease types.Lease
+	lease types.Job
 	depth int
 }
 
@@ -174,8 +174,8 @@ type ledgerTreeLine struct {
 // Every row reaches the output. One whose parent was cleared, and one caught in a parent
 // cycle, print at the top level instead of disappearing: a lease nobody can see is worse
 // than one shown without its indentation, and both cases mean the plan is already damaged.
-func ledgerTreeOrder(leases []types.Lease) []ledgerTreeLine {
-	children := map[string][]types.Lease{}
+func ledgerTreeOrder(leases []types.Job) []ledgerTreeLine {
+	children := map[string][]types.Job{}
 	for _, lease := range leases {
 		children[lease.Parent] = append(children[lease.Parent], lease)
 	}
@@ -234,7 +234,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	i := slices.IndexFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] })
+	i := slices.IndexFunc(leases, func(lease types.Job) bool { return lease.ID == pos[0] })
 	if i < 0 {
 		return fmt.Errorf("magus ledger brief: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
@@ -245,7 +245,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 
 	facts := leaseBoundary(ctx, flagRoot, row, leases)
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.WritePaths)
-	brief := ledger.NewBrief(row, facts)
+	brief := job.NewTerms(row, facts)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -289,9 +289,9 @@ type registerFlags struct {
 	readOnly                               bool
 }
 
-func (f registerFlags) row(id string) ledger.Row {
-	return ledger.Row{
-		SchemaVersion: types.LeaseSchemaVersion,
+func (f registerFlags) row(id string) job.Declaration {
+	return job.Declaration{
+		SchemaVersion: types.JobSchemaVersion,
 		ID:            id,
 		Parent:        f.parent,
 		Goal:          f.goal,
@@ -310,7 +310,7 @@ func (f registerFlags) row(id string) ledger.Row {
 }
 
 // declaredCheck is --check as the record the row carries, or nil when the flag is absent.
-// A value that does not parse reaches ledger.Row.Validate, which is the one place a
+// A value that does not parse reaches job.Declaration.Validate, which is the one place a
 // declaration is refused.
 func (f registerFlags) declaredCheck() *types.LeaseCheck {
 	if strings.TrimSpace(f.check) == "" {
@@ -338,7 +338,7 @@ func (f registerFlags) declaredCheck() *types.LeaseCheck {
 // live row must not erase the rest.
 func ledgerRegister(ctx context.Context, root string, args []string) error {
 	var (
-		row           ledger.Row
+		row           job.Declaration
 		declared      registerFlags
 		schema, stdin bool
 	)
@@ -376,7 +376,7 @@ func ledgerRegister(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(ledger.RowSchema)
+		fmt.Print(job.DeclarationSchema)
 		return nil
 	}
 
@@ -385,7 +385,7 @@ func ledgerRegister(ctx context.Context, root string, args []string) error {
 		if len(pos) > 0 {
 			return usagef("magus ledger register: --stdin reads the id from the record, so %q is one id too many", pos[0])
 		}
-		if row, err = ledger.DecodeRow(os.Stdin); err != nil {
+		if row, err = job.DecodeDeclaration(os.Stdin); err != nil {
 			return usagef("magus ledger register: %s (`%s` prints the schema it must satisfy)", err, hint.LedgerRegister.With("--schema"))
 		}
 	case len(pos) != 1:
@@ -466,7 +466,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if schema {
-		fmt.Print(ledger.ReportSchema)
+		fmt.Print(job.ReportSchema)
 		return nil
 	}
 	if len(pos) != 1 {
@@ -488,7 +488,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 			" Report what you changed and what you verified, and let the orchestrator accept it", actor.Lease)
 	}
 
-	report, err := ledger.DecodeReport(os.Stdin)
+	report, err := job.DecodeReport(os.Stdin)
 	if err != nil {
 		return usagef("magus ledger accept: %s (`%s` prints the schema it must satisfy)", err, hint.LedgerAccept.With("--schema"))
 	}
@@ -497,7 +497,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] }) {
+	if !slices.ContainsFunc(leases, func(lease types.Job) bool { return lease.ID == pos[0] }) {
 		return fmt.Errorf("magus ledger accept: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
 	att, err := storedAttempt(ctx, flagRoot, report.Validation.OutputRef)
@@ -510,9 +510,9 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	// Graded and recorded under ONE lock: the row a two-step read-then-write graded is not
 	// the row it stamps, so a release or a clear landing in between grades a boundary that
 	// is gone. Only the state moves, so a rejection leaves every declared field alone.
-	var verdict ledger.Verdict
-	if _, err := store.Update(ctx, pos[0], func(u *types.Lease) {
-		verdict = ledger.Grade(*u, report, att, leases)
+	var verdict job.Verdict
+	if _, err := store.Update(ctx, pos[0], func(u *types.Job) {
+		verdict = job.Grade(*u, report, att, leases)
 		if verdict.Accepted {
 			u.State = types.StatePass
 		}
@@ -545,27 +545,27 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 //
 // The DESCRIPTOR, not the bytes. Acceptance reads the run's identity and its exit status,
 // both of which are metadata, and a captured log is as large as the target was noisy.
-func storedAttempt(ctx context.Context, root, ref string) (ledger.Attempt, error) {
+func storedAttempt(ctx context.Context, root, ref string) (job.Attempt, error) {
 	if strings.TrimSpace(ref) == "" {
-		return ledger.Attempt{}, nil
+		return job.Attempt{}, nil
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return ledger.Attempt{}, err
+		return job.Attempt{}, err
 	}
 	switch d, err := m.OutputDescriptorByRef(ref); {
 	case err == nil:
-		return ledger.Attempt{
+		return job.Attempt{
 			Found: true, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
 		}, nil
 	case errors.Is(err, fs.ErrNotExist):
-		return ledger.Attempt{}, nil
+		return job.Attempt{}, nil
 	default:
-		return ledger.Attempt{}, err
+		return job.Attempt{}, err
 	}
 }
 
-func printLeaseVerdict(out io.Writer, v ledger.Verdict) {
+func printLeaseVerdict(out io.Writer, v job.Verdict) {
 	if v.Accepted {
 		fmt.Fprintf(out, "accepted %s, recorded %s\n", v.Lease, types.StatePass)
 	} else {
@@ -605,22 +605,22 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the goal, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func leaseBoundary(ctx context.Context, root string, row types.Lease, leases []types.Lease) ledger.BriefFacts {
+func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) job.TermsFacts {
 	if len(row.WritePaths) == 0 {
-		return ledger.BriefFacts{}
+		return job.TermsFacts{}
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return ledger.BriefFacts{WorkspaceCold: true}
+		return job.TermsFacts{WorkspaceCold: true}
 	}
 	affected, err := m.AffectedFromPaths(ctx, row.WritePaths)
 	if err != nil {
-		return ledger.BriefFacts{WorkspaceCold: true}
+		return job.TermsFacts{WorkspaceCold: true}
 	}
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
-	return ledger.BriefFacts{
+	return job.TermsFacts{
 		Projects:         affected.Affected,
 		DerivedDenyPaths: derived,
 		Affinity:         leaseAffinity(ctx, m, affected.Seed),
@@ -638,8 +638,8 @@ func leaseBoundary(ctx context.Context, root string, row types.Lease, leases []t
 //
 // The AFFECTED set rather than the seeds, because a project writes outputs into trees it
 // does not own: a glob from a downstream project can land in this lease's paths.
-func generatedBoundary(m *magus.Magus, projects, owned []string) []ledger.BriefBoundary {
-	var out []ledger.BriefBoundary
+func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoundary {
+	var out []job.TermsBoundary
 	seen := map[string]bool{}
 	for _, path := range projects {
 		p := m.Get(path)
@@ -652,7 +652,7 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []ledger.BriefB
 				continue
 			}
 			seen[rooted] = true
-			out = append(out, ledger.BriefBoundary{
+			out = append(out, job.TermsBoundary{
 				Path:   rooted,
 				Reason: fmt.Sprintf("generated by %s: regenerate it, never hand-edit", types.ProjectLabel(p.Path, p.Name)),
 			})
@@ -664,14 +664,14 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []ledger.BriefB
 // leasedBoundary is every path another LIVE lease claims. A terminal row claims nothing:
 // that is the same rule the overlap report follows, and the reason a worker releasing a
 // path early lets a waiter start against it.
-func leasedBoundary(row types.Lease, leases []types.Lease) []ledger.BriefBoundary {
-	var out []ledger.BriefBoundary
+func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
+	var out []job.TermsBoundary
 	for _, other := range leases {
 		if other.ID == row.ID || !other.State.Live() {
 			continue
 		}
 		for _, p := range other.WritePaths {
-			out = append(out, ledger.BriefBoundary{
+			out = append(out, job.TermsBoundary{
 				Path:   p,
 				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),
 			})
@@ -687,8 +687,8 @@ func leasedBoundary(row types.Lease, leases []types.Lease) []ledger.BriefBoundar
 // One owner each, which is the skill's collision rule. They are named from what is on
 // disk rather than from a list of every manifest a monorepo could hold, so the boundary
 // describes this workspace instead of a catalogue.
-func sharedBoundary(m *magus.Magus, seeds []string) []ledger.BriefBoundary {
-	var out []ledger.BriefBoundary
+func sharedBoundary(m *magus.Magus, seeds []string) []job.TermsBoundary {
+	var out []job.TermsBoundary
 	seen := map[string]bool{}
 	for _, dir := range append([]string{"."}, seeds...) {
 		entries, err := os.ReadDir(filepath.Join(m.Root(), filepath.FromSlash(dir)))
@@ -705,7 +705,7 @@ func sharedBoundary(m *magus.Magus, seeds []string) []ledger.BriefBoundary {
 				continue
 			}
 			seen[rel] = true
-			out = append(out, ledger.BriefBoundary{Path: rel, Reason: reason})
+			out = append(out, job.TermsBoundary{Path: rel, Reason: reason})
 		}
 	}
 	return out
@@ -730,11 +730,11 @@ func sharedReason(rel, name string) string {
 //
 // A pair INSIDE the lease is dropped: two projects one worker owns move together by
 // assignment, and saying so is not evidence about anything. A pair that declares its
-// dependency is dropped for the reason ledger.BriefAffinity documents.
+// dependency is dropped for the reason job.TermsAffinity documents.
 //
 // Best-effort. A repository with no readable history yields nothing, and a partition
 // decided without this evidence is the ordinary case rather than a failure.
-func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger.BriefAffinity {
+func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []job.TermsAffinity {
 	if len(seeds) == 0 {
 		return nil
 	}
@@ -742,7 +742,7 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger
 	if err != nil {
 		return nil
 	}
-	var pairs []ledger.BriefAffinity
+	var pairs []job.TermsAffinity
 	for _, pair := range out.Pairs {
 		if !pair.Hidden {
 			continue
@@ -754,14 +754,14 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger
 		if !slices.Contains(seeds, mine) || slices.Contains(seeds, theirs) {
 			continue
 		}
-		pairs = append(pairs, ledger.BriefAffinity{Project: mine, With: theirs, Commits: pair.Count})
+		pairs = append(pairs, job.TermsAffinity{Project: mine, With: theirs, Commits: pair.Count})
 	}
 	return pairs
 }
 
 // briefRefusesTheGate reports why this row must not be briefed, or nil to render it.
 //
-// The ONE verdict this command makes, and it is here rather than in ledger.Brief because
+// The ONE verdict this command makes, and it is here rather than in job.Terms because
 // the brief renders context and never a verdict. The gate runs once, in the orchestrator's
 // tree, after every unit lands; seven workers ran the whole pipeline concurrently on one
 // machine (2026-09-09) because every hand-typed brief ended with it. The guard already
@@ -772,7 +772,7 @@ func leaseAffinity(ctx context.Context, m *magus.Magus, seeds []string) []ledger
 // A COMPOSITE reaching the gate is refused too. Naming the pipeline indirectly buys the
 // same seven concurrent runs, and it is the likelier mistake once this refuses the obvious
 // spelling.
-func briefRefusesTheGate(ctx context.Context, root string, row types.Lease) error {
+func briefRefusesTheGate(ctx context.Context, root string, row types.Job) error {
 	fix := fmt.Sprintf(" The gate runs ONCE, in the orchestrator's tree, after every unit lands."+
 		" Give this row the narrowest target covering its paths (`%s` decomposes what the gate chains) with the %s tool, then ask for the brief again.",
 		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.ToolLedger)
@@ -859,7 +859,7 @@ func chainToGate(start string, deps map[string][]string) []string {
 // ordinary source directories the containment tree does not carry, and a "no node" line
 // per path would bury the ones that do resolve. A cold graph is different and is
 // reported once: "not asked" must not read as "nothing depends on this".
-func leaseGraphEvidence(ctx context.Context, root string, paths []string) (evidence []ledger.BriefEvidence, cold bool) {
+func leaseGraphEvidence(ctx context.Context, root string, paths []string) (evidence []job.TermsEvidence, cold bool) {
 	if len(paths) == 0 {
 		return nil, false
 	}
@@ -882,13 +882,13 @@ func leaseGraphEvidence(ctx context.Context, root string, paths []string) (evide
 // fuzzily, which is right for a person typing `magus explain build` and wrong here: asked
 // for "cmd/magus" it answered target:.:release-sign, and a brief that hands a worker the
 // blast radius of an unrelated node is worse than one that stays quiet.
-func pathEvidence(g *knowledge.Graph, declared string) (ledger.BriefEvidence, bool) {
+func pathEvidence(g *knowledge.Graph, declared string) (job.TermsEvidence, bool) {
 	for _, ref := range []string{types.KindDir + ":" + declared, types.KindFile + ":" + declared, declared} {
 		out, ok := g.Explain(ref)
 		if !ok || out.Node.ID != ref {
 			continue
 		}
-		return ledger.BriefEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
+		return job.TermsEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
 	}
-	return ledger.BriefEvidence{}, false
+	return job.TermsEvidence{}, false
 }

@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"os"
@@ -14,7 +14,7 @@ import (
 
 // declared plants one row through an unbound store, which is how an orchestrator declares
 // a plan, and returns the location the worker's own store shares.
-func declared(t *testing.T, rows ...types.Lease) Location {
+func declared(t *testing.T, rows ...types.Job) Location {
 	t.Helper()
 
 	loc := tmpLoc(t, t.TempDir())
@@ -25,8 +25,8 @@ func declared(t *testing.T, rows ...types.Lease) Location {
 	return loc
 }
 
-func workerRow() types.Lease {
-	return types.Lease{
+func workerRow() types.Job {
+	return types.Job{
 		ID:         "adj/store",
 		Goal:       "the store is the enforcement point",
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
@@ -43,7 +43,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	loc := declared(t, workerRow())
 	s := boundStore(loc, "adj/store")
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Lease) {
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) {
 		u.WritePaths = append(u.WritePaths, "internal/sessions")
 	})
 
@@ -67,7 +67,7 @@ func TestBoundWorkerReleasesAPath(t *testing.T) {
 	loc := declared(t, workerRow())
 	s := boundStore(loc, "adj/store")
 
-	stored, err := s.Update(t.Context(), "adj/store", func(u *types.Lease) {
+	stored, err := s.Update(t.Context(), "adj/store", func(u *types.Job) {
 		u.WritePaths = []string{"internal/ledger"}
 	})
 	require.NoError(t, err)
@@ -83,12 +83,12 @@ func TestBoundWorkerEndsItselfOnlyInFailure(t *testing.T) {
 
 	loc := declared(t, workerRow())
 
-	for _, state := range []types.LeaseState{types.StateFail, types.StateNoReturn} {
-		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Lease) { u.State = state })
+	for _, state := range []types.JobState{types.StateFail, types.StateNoReturn} {
+		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = state })
 		assert.NoError(t, err, "a worker reports its own %s", state)
 	}
 
-	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Lease) { u.State = types.StatePass })
+	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = types.StatePass })
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "never pass")
 }
@@ -99,12 +99,12 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 	t.Parallel()
 
 	loc := declared(t, workerRow())
-	cases := map[string]func(*types.Lease){
-		"validation": func(u *types.Lease) { u.Validation = "magus run ci ." },
-		"read_paths": func(u *types.Lease) { u.ReadPaths = []string{"/"} },
-		"parent":     func(u *types.Lease) { u.Parent = "adj/other" },
-		"model":      func(u *types.Lease) { u.Model = "principal" },
-		"read_only":  func(u *types.Lease) { u.ReadOnly = true },
+	cases := map[string]func(*types.Job){
+		"validation": func(u *types.Job) { u.Validation = "magus run ci ." },
+		"read_paths": func(u *types.Job) { u.ReadPaths = []string{"/"} },
+		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
+		"model":      func(u *types.Job) { u.Model = "principal" },
+		"read_only":  func(u *types.Job) { u.ReadOnly = true },
 	}
 	for field, apply := range cases {
 		t.Run(field, func(t *testing.T) {
@@ -121,28 +121,28 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 func TestBoundWorkerWritesOnlyItsOwnRowAndChildren(t *testing.T) {
 	t.Parallel()
 
-	loc := declared(t, workerRow(), types.Lease{ID: "adj/other", WritePaths: []string{"internal/sessions"}})
+	loc := declared(t, workerRow(), types.Job{ID: "adj/other", WritePaths: []string{"internal/sessions"}})
 
-	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Lease) {
+	_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/other", func(u *types.Job) {
 		u.Goal = "rewritten by a neighbour"
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no row but its own")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/child", func(u *types.Lease) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/child", func(u *types.Job) {
 		u.Parent = "adj/store"
 		u.WritePaths = []string{"internal/ledger"}
 	})
 	assert.NoError(t, err, "a child inside the parent's own paths")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Lease) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/store/wide", func(u *types.Job) {
 		u.Parent = "adj/store"
 		u.WritePaths = []string{"internal/ledger", "cmd/magus"}
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "only be handed paths its parent owns")
 
-	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/orphan", func(u *types.Lease) {
+	_, err = boundStore(loc, "adj/store").Update(t.Context(), "adj/orphan", func(u *types.Job) {
 		u.WritePaths = []string{"internal/ledger"}
 	})
 	require.Error(t, err)
@@ -166,7 +166,7 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 	t.Parallel()
 
-	parent := types.Lease{
+	parent := types.Job{
 		ID:         "adj/store",
 		WritePaths: []string{"internal/ledger", "types/lease.go"},
 		DenyPaths:  []string{"MAGUS.md"},
@@ -177,41 +177,41 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		child types.Lease
+		child types.Job
 		want  string
 	}{
 		{
 			name:  "inside every lane",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md", "go.mod"}, ReadPaths: []string{"internal/hint"}},
+			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md", "go.mod"}, ReadPaths: []string{"internal/hint"}},
 		},
 		{
 			name:  "no focus of its own reads the paths it was handed",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}},
+			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}},
 		},
 		{
 			name:  "a wider read lane",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, ReadPaths: []string{"/"}},
+			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, ReadPaths: []string{"/"}},
 			want:  "may only read what its parent reads",
 		},
 		{
 			name:  "a shorter deny list",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}},
+			child: types.Job{WritePaths: []string{"internal/ledger"}},
 			want:  "every deny_path its parent carries",
 		},
 		{
 			name:  "carrying a registration it never made",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, ReportedBase: "abc123", Registered: 42},
+			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, ReportedBase: "abc123", Registered: 42},
 		},
 		{
 			name:  "graded on the way out",
-			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, State: types.StatePass},
+			child: types.Job{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, State: types.StatePass},
 			want:  "never pass",
 		},
 		{
 			// The guard reads a row whose check IS the gate as owning it, so a child
 			// declaring one would be minting a capability its parent does not hold.
 			name: "a check the parent's does not name",
-			child: types.Lease{
+			child: types.Job{
 				WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"},
 				Check: &types.LeaseCheck{Target: types.TargetCI, Project: "."},
 			},
@@ -219,7 +219,7 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 		},
 		{
 			name: "a check of its own that is not the gate",
-			child: types.Lease{
+			child: types.Job{
 				WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"},
 				Check: &types.LeaseCheck{Target: "test", Project: "internal/ledger"},
 			},
@@ -233,7 +233,7 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 			child := tt.child
 			child.Parent = "adj/store"
 			id := "adj/store/" + strings.ReplaceAll(tt.name, " ", "-")
-			stored, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Lease) { *u = child })
+			stored, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Job) { *u = child })
 			if tt.want == "" {
 				require.NoError(t, err)
 				assert.Zero(t, stored.Registered, "a child registers for itself or not at all")
@@ -258,7 +258,7 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	require.NoError(t, BindLease(loc.CacheDir, "adj/other"))
 
-	_, err := s.Update(t.Context(), "adj/store", func(u *types.Lease) { u.Goal = "rewritten" })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Job) { u.Goal = "rewritten" })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -277,9 +277,9 @@ func TestRowRecordsTheSessionThatDeclaredIt(t *testing.T) {
 	loc := tmpLoc(t, t.TempDir())
 	loc.Actor = &Actor{Session: "orchestrator-1", Host: "claude-code"}
 	stored := seed(t, NewStore(loc), workerRow())
-	assert.Equal(t, types.LeaseActor{Session: "orchestrator-1", Host: "claude-code"}, stored.RegisteredBy)
+	assert.Equal(t, types.JobActor{Session: "orchestrator-1", Host: "claude-code"}, stored.RegisteredBy)
 
-	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Lease) {
+	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) {
 		u.State = types.StateFail
 	})
 	require.NoError(t, err)
@@ -314,7 +314,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
 	loc := tmpLoc(t, root)
 	loc.Actor = &Actor{}
-	seed(t, NewStore(loc), types.Lease{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
+	seed(t, NewStore(loc), types.Job{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
 
 	require.NoError(t, boundStore(loc, "adj/store").RecordUnattributedWrite(t.Context(), "adj/other", "held.go"))
 

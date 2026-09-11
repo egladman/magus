@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func applyMerge(t *testing.T, params map[string]any, base types.Lease) types.Lease {
+func applyMerge(t *testing.T, params map[string]any, base types.Job) types.Job {
 	t.Helper()
 	apply, err := ParseMerge(params)
 	require.NoError(t, err)
@@ -19,7 +19,7 @@ func applyMerge(t *testing.T, params map[string]any, base types.Lease) types.Lea
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Lease{ID: "u1", Goal: "original goal", Model: "standard"}
+	base := types.Job{ID: "u1", Goal: "original goal", Model: "standard"}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
 	assert.Equal(t, types.StateRunning, got.State)
 	assert.Equal(t, "original goal", got.Goal, "an absent key must not erase what an earlier put set")
@@ -29,7 +29,7 @@ func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 	t.Parallel()
 
-	base := types.Lease{ID: "u1", Goal: "original goal"}
+	base := types.Job{ID: "u1", Goal: "original goal"}
 	got := applyMerge(t, map[string]any{"goal": ""}, base)
 	assert.Empty(t, got.Goal, "goal present with an empty value clears it, unlike an absent key")
 }
@@ -37,10 +37,10 @@ func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
 	t.Parallel()
 
-	spaceForm := applyMerge(t, map[string]any{"write_paths": "a/b c/d"}, types.Lease{})
+	spaceForm := applyMerge(t, map[string]any{"write_paths": "a/b c/d"}, types.Job{})
 	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.WritePaths)
 
-	arrayForm := applyMerge(t, map[string]any{"write_paths": []any{"a/b", "c/d"}}, types.Lease{})
+	arrayForm := applyMerge(t, map[string]any{"write_paths": []any{"a/b", "c/d"}}, types.Job{})
 	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.WritePaths)
 }
 
@@ -50,8 +50,8 @@ func TestMergeAcceptsALaneUnderItsOldName(t *testing.T) {
 
 	got := applyMerge(t, map[string]any{
 		"owned_paths": "a/b", "forbidden_paths": "c/d", "focus": "e/f", "tier": "principal",
-	}, types.Lease{})
-	require.Equal(t, types.Lease{
+	}, types.Job{})
+	require.Equal(t, types.Job{
 		WritePaths: []string{"a/b"},
 		DenyPaths:  []string{"c/d"},
 		ReadPaths:  []string{"e/f"},

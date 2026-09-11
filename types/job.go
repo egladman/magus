@@ -8,41 +8,41 @@ import (
 	"strings"
 )
 
-// LeaseState is where one lease stands. The three terminal values are
+// JobState is where one lease stands. The three terminal values are
 // the point of the set: a row that never reaches one is a row nobody closed.
 //
 // NoReturn is deliberately distinct from Fail. A worker that died, stalled, or was
 // killed produced no verdict at all, and folding that into "failed" claims a judgment
 // nobody made: the root agent still has to go look. Silence is not a pass, and it is
 // not a failure either.
-type LeaseState string
+type JobState string
 
 const (
 	// StateDeclared is a row written before its worker was spawned.
-	StateDeclared LeaseState = "declared"
+	StateDeclared JobState = "declared"
 	// StateRunning is a worker in flight.
-	StateRunning LeaseState = "running"
+	StateRunning JobState = "running"
 	// StatePass is a lease whose acceptance criteria and assigned validation both
 	// passed, as judged by the agent that owns it.
-	StatePass LeaseState = "pass"
+	StatePass JobState = "pass"
 	// StateFail is a lease that returned and did not meet its criteria.
-	StateFail LeaseState = "fail"
+	StateFail JobState = "fail"
 	// StateNoReturn is a lease that never reported: dead, stalled, or cancelled.
-	StateNoReturn LeaseState = "no_return"
+	StateNoReturn JobState = "no_return"
 )
 
-// LeaseStates is the closed set, in lifecycle order. The vocabulary lives beside the
+// JobStates is the closed set, in lifecycle order. The vocabulary lives beside the
 // constants because four readers quote it (the row decoder, the put merge, the published
 // schema, and the error each of them raises) and a closed set that drifts is one a client
 // is rejected by for a value the schema told it to send.
-func LeaseStates() []LeaseState {
-	return []LeaseState{StateDeclared, StateRunning, StatePass, StateFail, StateNoReturn}
+func JobStates() []JobState {
+	return []JobState{StateDeclared, StateRunning, StatePass, StateFail, StateNoReturn}
 }
 
-// ValidLeaseState reports whether s is one of [LeaseStates]. An empty state is NOT: a row
+// ValidJobState reports whether s is one of [JobStates]. An empty state is NOT: a row
 // that has not said where it stands carries none, and the callers that allow that test
 // for it themselves.
-func ValidLeaseState(s LeaseState) bool { return slices.Contains(LeaseStates(), s) }
+func ValidJobState(s JobState) bool { return slices.Contains(JobStates(), s) }
 
 // LeaseCheck is the one check a lease runs, in the parts the output store records a run
 // by: the target (carrying a `spell::` filter when the row named one), the project it runs
@@ -122,7 +122,7 @@ func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 	return ParseLeaseCheck(strings.Join(words[1:], " "))
 }
 
-// LeaseBaseVerdict says how the base a worker reported at registration compares
+// JobBaseVerdict says how the base a worker reported at registration compares
 // with the Checkpoint its lease was handed. A FACT computed at that moment, never a
 // refusal: a diverged worker is registered like any other and told what diverged.
 //
@@ -130,44 +130,44 @@ func ParseLeaseRunLine(s string) (LeaseCheck, error) {
 // dirty-patch digest, so two trees can share a revision and hold different uncommitted
 // work; that is neither agreement nor the kind of divergence a respawn fixes, and folding
 // it into either one sends the worker to the wrong remedy.
-type LeaseBaseVerdict string
+type JobBaseVerdict string
 
 const (
 	// BaseMatch is a reported base identical to the checkpoint, digest included.
-	BaseMatch LeaseBaseVerdict = "match"
+	BaseMatch JobBaseVerdict = "match"
 	// BaseRevisionMatch is the same revision carrying a different uncommitted patch.
-	BaseRevisionMatch LeaseBaseVerdict = "revision-match"
+	BaseRevisionMatch JobBaseVerdict = "revision-match"
 	// BaseDiverged is a different revision: the worker is not on the tree it was handed.
-	BaseDiverged LeaseBaseVerdict = "diverged"
+	BaseDiverged JobBaseVerdict = "diverged"
 	// BaseUnknown is a registration with nothing to compare against, because the lease was
 	// declared without a Checkpoint. Distinct from BaseMatch on the same ground
 	// StateNoReturn is distinct from StateFail: claiming agreement nobody observed is a
 	// judgment the ledger did not make.
-	BaseUnknown LeaseBaseVerdict = "unknown"
+	BaseUnknown JobBaseVerdict = "unknown"
 )
 
 // Terminal reports whether the lease is done, however it ended. It keeps a finished lease
 // out of the overlap report below, and it is what `ledger accept` reads to refuse
 // re-grading a row somebody already graded.
-func (s LeaseState) Terminal() bool {
+func (s JobState) Terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
 // Live reports whether the lease can still act on its paths: declared or running. A
 // row with no state is not live, it has not said it is; that is the one rule the guard
 // and the sandbox both scope a worker by, so it lives here rather than in either.
-func (s LeaseState) Live() bool {
+func (s JobState) Live() bool {
 	return s == StateDeclared || s == StateRunning
 }
 
-// MaxLeaseIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
+// MaxJobIDLen bounds a lease id: long enough for a branch-shaped ledger name, short
 // enough that the id stays a correlation key rather than a payload riding every event
 // line.
-const MaxLeaseIDLen = 128
+const MaxJobIDLen = 128
 
-// ValidLeaseID reports whether id may be stamped as a lease: letters, digits
+// ValidJobID reports whether id may be stamped as a lease: letters, digits
 // and the separators -_./: a ledger row or a branch-shaped lease name uses, never empty,
-// at most [MaxLeaseIDLen] characters.
+// at most [MaxJobIDLen] characters.
 //
 // The narrowness is a security property, not a naming preference. A lease id is EXEMPT
 // from the redaction internal/trail applies to every other event field, so every channel
@@ -175,11 +175,11 @@ const MaxLeaseIDLen = 128
 // producer's own field) has to pass its candidate through here first, or the exemption
 // becomes a way to carry a credential onto an event line.
 //
-// It lives beside [Lease] rather than in the package that redacts, because the
+// It lives beside [Job] rather than in the package that redacts, because the
 // ledger and the trail are two readers of one id: a validator owned by either would
 // leave the other free to accept an id the first would refuse.
-func ValidLeaseID(id string) bool {
-	if id == "" || len(id) > MaxLeaseIDLen {
+func ValidJobID(id string) bool {
+	if id == "" || len(id) > MaxJobIDLen {
 		return false
 	}
 	for _, c := range id {
@@ -193,28 +193,28 @@ func ValidLeaseID(id string) bool {
 	return true
 }
 
-// LeaseSchemaVersion is the version of the row shape this magus writes and accepts. It
+// JobSchemaVersion is the version of the row shape this magus writes and accepts. It
 // is stamped on every stored row and required on every row a client sends, so a decoder
 // meeting a shape it does not know says which versions it supports instead of rejecting
 // one field at a time.
 //
 // Bump it when a field changes meaning or a required one appears. An added optional
 // field does not: a reader that ignores it is still correct.
-const LeaseSchemaVersion = 1
+const JobSchemaVersion = 1
 
-// LeaseActor identifies the session that wrote a row: the same pair the trail records
+// JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
 //
 // Both halves are often empty, and that is a fact rather than a gap: a person writing a
 // row from a terminal carries no session id and no host.
-type LeaseActor struct {
+type JobActor struct {
 	// Session is the acting session's id, as the host or the W3C trace channel names it.
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Host is the agent host that produced the write, as its own wrapper named itself.
 	Host string `json:"host,omitempty" yaml:"host,omitempty"`
 }
 
-// Lease is one row of an orchestrating agent's lease ledger: what that
+// Job is one row of an orchestrating agent's lease ledger: what that
 // agent DECLARED about a piece of work it handed out, recorded so a human can see the
 // plan the agents are running.
 //
@@ -238,9 +238,9 @@ type LeaseActor struct {
 // Registered in cmd/magus-utils/boundary_types.go as a RuntimeObject, so magus\ledger.put
 // and magus\ledger.list return one. VCSCheckpoint stays unregistered: Checkpoint is a
 // plain string here, the form an orchestrator has at spawn time.
-type Lease struct {
+type Job struct {
 	// SchemaVersion is the shape this row was written in, stamped by the store on every
-	// write and never taken from a client. See LeaseSchemaVersion.
+	// write and never taken from a client. See JobSchemaVersion.
 	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
 	// ID is the lease's identity within the plan, and the key Update upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
@@ -294,9 +294,9 @@ type Lease struct {
 	// on every put so the two cannot disagree, and a client that sends it instead of
 	// Check is still understood.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
-	// State is the row's lifecycle position. See LeaseState for why no_return is
+	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
-	State LeaseState `json:"state,omitempty" yaml:"state,omitempty"`
+	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
 	// ReadOnly marks the abbreviated row the skill describes: a lease that gathers
 	// evidence and writes nothing has no write set, so empty WritePaths and
 	// DenyPaths are correct rather than missing. Without this flag a reader
@@ -306,7 +306,7 @@ type Lease struct {
 	// carried at that moment. Store-computed and output-only, like the timestamps: a
 	// worker announces a release by shrinking WritePaths, and the digest is what the
 	// next agent needs to tell whether it inherited the file the releaser left.
-	Releases []LeaseRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
+	Releases []JobRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
 	// Unattributed are paths this lease owns that somebody outside it wrote, newest last,
 	// at most MaxUnattributedWrites of them and one row per path.
 	//
@@ -315,7 +315,7 @@ type Lease struct {
 	// boundaries and already tells the writer to coordinate. It threw the observation away
 	// afterwards, so the lease on the other side (the one whose file moved) was the one
 	// party never told.
-	Unattributed []LeaseUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
+	Unattributed []JobUnattributedWrite `json:"unattributed,omitempty" yaml:"unattributed,omitempty"`
 	// ReportedBase is the checkpoint token the lease's WORKER reported it actually landed
 	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
 	// what the orchestrator handed out; this is what the worker found. Two fields rather
@@ -326,14 +326,14 @@ type Lease struct {
 	// registered and kept as the fact it was then. Empty until a lease registers, which is
 	// why there is no vocabulary member for "never registered": an absent verdict is not
 	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
-	BaseVerdict LeaseBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
+	BaseVerdict JobBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
 	// RegisteredBy is the session that CREATED this row, stamped by the store on the
 	// first write and carried unchanged afterwards. It is the row's provenance, and the
 	// store names it when it refuses a mutation from somebody else's worker.
 	//
 	// Distinct from Registered below, which is when a WORKER reported the base it landed
 	// on: one says who declared the work, the other when somebody turned up to do it.
-	RegisteredBy LeaseActor `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
+	RegisteredBy JobActor `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
 	// Registered is unix seconds, stamped by the store on the write that recorded
 	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
@@ -354,7 +354,7 @@ type Lease struct {
 // Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
 // when the path held one; these say why it could not be, so a reader is never handed a
 // hash-shaped value that is not a hash. Named for the FIELD they land in
-// (LeaseRelease.Digest) rather than for releases, which they do not classify.
+// (JobRelease.Digest) rather than for releases, which they do not classify.
 const (
 	// DigestAbsent is a path with nothing on disk when it was released: a file the
 	// lease deleted, or a declared glob, which is a pattern rather than a path.
@@ -369,7 +369,7 @@ const (
 	DigestUnreadable = "unreadable"
 )
 
-// LeaseRelease is one path a lease stopped owning, and the version of it the
+// JobRelease is one path a lease stopped owning, and the version of it the
 // next agent inherits.
 //
 // The skill has workers release a contested path as soon as they finish EDITING it
@@ -377,40 +377,40 @@ const (
 // what makes that safe to act on: it identifies the file the releaser left behind, and
 // a mismatch at verification time means the waiter built on a tree the releaser never
 // saw.
-type LeaseRelease struct {
+type JobRelease struct {
 	Path   string `json:"path"   yaml:"path"`
 	Digest string `json:"digest" yaml:"digest"`
 	// ReleasedAt is unix seconds, stamped by the store on the put that dropped the path.
 	ReleasedAt int64 `json:"released_at" yaml:"released_at"`
 }
 
-// LeaseUnattributedWrite is one path a lease owns that somebody outside it wrote, and
+// JobUnattributedWrite is one path a lease owns that somebody outside it wrote, and
 // the content that writer left behind.
 //
-// The inverse of LeaseRelease: a release is a worker saying "I am done with this, here is
+// The inverse of JobRelease: a release is a worker saying "I am done with this, here is
 // what I left", and this is magus saying "somebody who is not you changed this, here is
 // what is there now", so a lease that read the file earlier can find out by ASKING.
 //
 // UNATTRIBUTED is the honest word: magus knows only that the writer named no live lease,
 // so a person editing in their own checkout and an agent that forgot to export its id are
 // indistinguishable here. Naming a human would be a claim magus cannot support.
-type LeaseUnattributedWrite struct {
+type JobUnattributedWrite struct {
 	Path string `json:"path"   yaml:"path"`
 	// Digest is the content AFTER the write, on the same three-marker vocabulary as
-	// LeaseRelease.Digest: a hash, or DigestAbsent / DigestDir / DigestUnreadable.
+	// JobRelease.Digest: a hash, or DigestAbsent / DigestDir / DigestUnreadable.
 	Digest string `json:"digest" yaml:"digest"`
 	// At is unix seconds, stamped by the store.
 	At int64 `json:"at" yaml:"at"`
 }
 
-// LeaseOverlap is two leases whose declared WritePaths intersect. A FACT the
+// JobOverlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
 // gates, or reorders anything.
-type LeaseOverlap struct {
-	// LeaseA and LeaseB are the lease ids, in ledger order: LeaseA was recorded first.
-	LeaseA string `json:"lease_a" yaml:"lease_a"`
-	LeaseB string `json:"lease_b" yaml:"lease_b"`
+type JobOverlap struct {
+	// JobA and JobB are the lease ids, in ledger order: JobA was recorded first.
+	JobA string `json:"job_a" yaml:"job_a"`
+	JobB string `json:"job_b" yaml:"job_b"`
 	// PathsA and PathsB are the intersecting declarations from each side, deduped and
 	// kept apart. They are rarely the same string ("internal/ledger" and
 	// "internal/ledger/store.go" intersect), so one merged list left a reader unable to
@@ -419,16 +419,16 @@ type LeaseOverlap struct {
 	PathsB []string `json:"paths_b" yaml:"paths_b"`
 }
 
-// LeaseReport is what a reader of the ledger is served: the recorded rows, plus
+// JobList is what a reader of the ledger is served: the recorded rows, plus
 // the overlaps derived from them. A constructor rather than a literal at each read
 // door, because the MCP tool and the console's route must not be able to disagree
 // about whether an overlap exists: the same reason types.NewFileReport exists.
-type LeaseReport struct {
-	Leases   []Lease        `json:"leases"             yaml:"leases"`
-	Overlaps []LeaseOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
+type JobList struct {
+	Jobs     []Job        `json:"jobs"               yaml:"jobs"`
+	Overlaps []JobOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
 }
 
-// NewLeaseReport wraps the rows and derives the overlaps. Derived on READ and
+// NewJobList wraps the rows and derives the overlaps. Derived on READ and
 // never stored: an overlap is a relation between two rows, so storing it on either
 // one would mean a row that stopped being true when its neighbor changed.
 //
@@ -440,34 +440,34 @@ type LeaseReport struct {
 // is exactly what the overlap rule above avoids in the other direction.
 //
 // The single door onto a report, which is why the empty case is normalized HERE: an
-// unwritten ledger serves "leases":[] rather than null, and the MCP tool and the HTTP
+// unwritten ledger serves "jobs":[] rather than null, and the MCP tool and the HTTP
 // route would otherwise each have to decide that for themselves.
-func NewLeaseReport(leases []Lease) LeaseReport {
-	if leases == nil {
-		leases = []Lease{}
+func NewJobList(jobs []Job) JobList {
+	if jobs == nil {
+		jobs = []Job{}
 	}
-	return LeaseReport{Leases: leases, Overlaps: leaseOverlaps(leases)}
+	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs)}
 }
 
-// leaseOverlaps reports every pair of leases whose declared write paths
+// jobOverlaps reports every pair of jobs whose declared write paths
 // intersect, in ledger order.
 //
-// A lease in a terminal state is not in any pair. A released or finished lease is not
+// A job in a terminal state is not in any pair. A released or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
 // would make the surface noisiest exactly when the plan is winding down.
-func leaseOverlaps(leases []Lease) []LeaseOverlap {
-	var out []LeaseOverlap
-	for i, a := range leases {
+func jobOverlaps(jobs []Job) []JobOverlap {
+	var out []JobOverlap
+	for i, a := range jobs {
 		if a.State.Terminal() || len(a.WritePaths) == 0 {
 			continue
 		}
-		for _, b := range leases[i+1:] {
+		for _, b := range jobs[i+1:] {
 			if b.State.Terminal() || len(b.WritePaths) == 0 {
 				continue
 			}
 			if pa, pb := intersectingPaths(a.WritePaths, b.WritePaths); len(pa) > 0 {
-				out = append(out, LeaseOverlap{LeaseA: a.ID, LeaseB: b.ID, PathsA: pa, PathsB: pb})
+				out = append(out, JobOverlap{JobA: a.ID, JobB: b.ID, PathsA: pa, PathsB: pb})
 			}
 		}
 	}
@@ -546,7 +546,7 @@ func LiteralPrefix(p string) string {
 // Clone returns a deep copy: the slice fields are the only shared state, so copying
 // them is what makes a value handed out of a store safe to keep. slices.Clone
 // preserves nil, so a row that stored null does not come back as [].
-func (u Lease) Clone() Lease {
+func (u Job) Clone() Job {
 	c := u
 	c.WritePaths = slices.Clone(u.WritePaths)
 	c.DenyPaths = slices.Clone(u.DenyPaths)

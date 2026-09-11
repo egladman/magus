@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -27,14 +27,14 @@ func (r *runner) checkLeaseBinding() types.DoctorCheck {
 func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 	const name = "lease-binding"
 
-	id := ledger.ActingLease(cacheDir)
+	id := job.ActingLease(cacheDir)
 	if id == "" {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no lease bound; the guard advises only"}
 	}
 	// A host runs its hooks with its own environment, so the guard resolves the marker
 	// while a worker's shell resolves what it exported: the two then grade different rows
 	// and every verdict in this checkout is about a lease nobody here is acting under.
-	if marker := ledger.LeaseFromMarker(cacheDir); marker != "" && marker != id {
+	if marker := job.LeaseFromMarker(cacheDir); marker != "" && marker != id {
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
@@ -47,7 +47,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 		}
 	}
 
-	rows, err := ledger.NewStore(ledger.Location{Root: root}).List()
+	rows, err := job.NewStore(job.Location{Root: root}).List()
 	if err != nil {
 		return types.DoctorCheck{
 			Name:     name,
@@ -56,7 +56,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 			Message:  fmt.Sprintf("could not read the lease ledger: %v", err),
 		}
 	}
-	i := slices.IndexFunc(rows, func(lease types.Lease) bool { return lease.ID == id })
+	i := slices.IndexFunc(rows, func(lease types.Job) bool { return lease.ID == id })
 	if i < 0 {
 		return types.DoctorCheck{
 			Name:    name,

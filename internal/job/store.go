@@ -1,15 +1,15 @@
-// Package ledger persists the lease ledger: the rows an orchestrating agent declares
+// Package job persists the job store: the jobs an orchestrating agent declares
 // about the plan it is running, kept where a human can read them.
 //
 // It gates no run and blocks no write to the tree; the one write it refuses is a write to
-// a row the caller does not own (see [authorizeRow]). One plan per REPOSITORY, so every
-// worktree and clone reads the same rows.
+// a job the caller does not own (see [authorizeRow]). One plan per REPOSITORY, so every
+// worktree and clone reads the same jobs.
 //
-// The INTENT layer of three, flat stores joined by lease id at render time rather than a
+// The INTENT layer of three, flat stores joined by job id at render time rather than a
 // hierarchy: intent is this package, actions are internal/trail, and effects are the run
 // itself. internal/journal (one invocation's events) and internal/memory and
 // internal/notes (prose for a later reader) model no leased work and are not siblings.
-package ledger
+package job
 
 import (
 	"context"
@@ -38,7 +38,7 @@ import (
 // ErrNoID reports a lease with no id. The id is what Update upserts on, so a row without
 // one could never be updated or referred to again: it is unaddressable, not merely
 // incomplete.
-var ErrNoID = errors.New("ledger: a lease needs an id")
+var ErrNoID = errors.New("job: a lease needs an id")
 
 // Store is the repository's lease ledger, a single JSON file in the per-repository state
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
@@ -50,7 +50,7 @@ var ErrNoID = errors.New("ledger: a lease needs an id")
 //   - The mutex serializes writers within one process while they share a Store, which is
 //     why the daemon builds exactly one and hands it to both of its doors (the
 //     magus_ledger MCP tool and the console's read route).
-//   - An OS file lock beside leases.json serializes writers across PROCESSES. The CLI, the
+//   - An OS file lock beside jobs.json serializes writers across PROCESSES. The CLI, the
 //     daemon, and an MCP client each hold their own Store on the same file, from any
 //     worktree or clone of the repository, and workers now register and heartbeat against
 //     it, so "one orchestrating agent writes this"
@@ -88,7 +88,7 @@ type Store struct {
 //
 // A struct rather than positional params because the paths are transposable at every
 // call site and nothing downstream would notice: a ledger written into the workspace and
-// digested against the state dir reads as an ordinary empty ledger.
+// digested against the state dir reads as an ordinary empty job store.
 type Location struct {
 	// CacheDir is the workspace's cache directory (magus.CacheDir), which is where the
 	// ledger USED to live. It is read only to adopt <CacheDir>/ledger on first use;
@@ -123,7 +123,7 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir}
-	s.path, s.err = leasesPath(loc)
+	s.path, s.err = jobsPath(loc)
 	return s
 }
 
@@ -138,29 +138,29 @@ func (s *Store) Actor() Actor {
 	return ActingActor(s.cacheDir)
 }
 
-// leasesPath places the leases file: <XDG state>/magus/ledger/<repo>/leases.json, after
-// carrying forward whatever an older magus left at <CacheDir>/ledger.
-func leasesPath(loc Location) (string, error) {
+// jobsPath places the jobs file: <XDG state>/magus/jobs/<repo>/jobs.json, after
+// carrying forward whatever an older magus left at <CacheDir>/job.
+func jobsPath(loc Location) (string, error) {
 	base := loc.StateBase
 	if base == "" {
 		var err error
 		if base, err = config.UserStateDir(); err != nil {
-			return "", fmt.Errorf("ledger: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+			return "", fmt.Errorf("job: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
 		}
 	}
-	dir, err := repoid.StateDir(base, "ledger", loc.Root)
+	dir, err := repoid.StateDir(base, "jobs", loc.Root)
 	if err != nil {
-		return "", fmt.Errorf("ledger: %w", err)
+		return "", fmt.Errorf("job: %w", err)
 	}
 	// compat(until: no checkout's cache dir still holds a ledger/ directory; observe
 	// with `find ~ -path '*/.magus/cache/ledger' -maxdepth 6` returning nothing):
 	// carries forward the rows an older magus kept per checkout.
 	if loc.CacheDir != "" {
 		if err := repoid.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
-			return "", fmt.Errorf("ledger: %w", err)
+			return "", fmt.Errorf("job: %w", err)
 		}
 	}
-	return filepath.Join(dir, "leases.json"), nil
+	return filepath.Join(dir, "jobs.json"), nil
 }
 
 // Path is the leases file this Store reads and writes, for a reader that has to name it:
@@ -168,11 +168,11 @@ func leasesPath(loc Location) (string, error) {
 // not exist yet, which is an empty ledger and not an error.
 func (s *Store) Path() (string, error) { return s.path, s.err }
 
-// ledgerFile is the on-disk envelope. An object rather than a bare array so a later
+// jobsFile is the on-disk envelope. An object rather than a bare array so a later
 // field (a plan identity, a schema version) can be added without every existing reader
 // failing to parse the file.
-type ledgerFile struct {
-	Leases []types.Lease `json:"leases"`
+type jobsFile struct {
+	Jobs []types.Job `json:"jobs"`
 }
 
 // Update applies apply to the row with this id and writes the result back while holding
@@ -198,8 +198,8 @@ type ledgerFile struct {
 // ctx reaches the release digests and nothing else. A cancelled call still WRITES the row,
 // since the merge is already done, but it stops hashing files rather than reading the disk
 // with the store's lock held.
-func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
-	return s.mutate(ctx, id, asDeclaration, func(cur *types.Lease, _ bool, _ int64) error {
+func (s *Store) Update(ctx context.Context, id string, apply func(*types.Job)) (types.Job, error) {
+	return s.mutate(ctx, id, asDeclaration, func(cur *types.Job, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -229,17 +229,17 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 	// An OBSERVATION, and the only ungraded write here: the row it lands on is by
 	// definition somebody else's, so grading it would throw the notice away precisely when
 	// it matters, which is a worker writing a path another lease holds.
-	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Lease, exists bool, now int64) error {
+	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
-			return fmt.Errorf("ledger: no such lease %q: %w", id, errNoSuchRow)
+			return fmt.Errorf("job: no such lease %q: %w", id, errNoSuchJob)
 		}
-		next := make([]types.LeaseUnattributedWrite, 0, len(cur.Unattributed)+1)
+		next := make([]types.JobUnattributedWrite, 0, len(cur.Unattributed)+1)
 		for _, w := range cur.Unattributed {
 			if w.Path != path {
 				next = append(next, w)
 			}
 		}
-		next = append(next, types.LeaseUnattributedWrite{
+		next = append(next, types.JobUnattributedWrite{
 			Path: path, Digest: s.digest(ctx, path), At: now,
 		})
 		if len(next) > MaxUnattributedWrites {
@@ -248,42 +248,42 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 		cur.Unattributed = next
 		return nil
 	})
-	if errors.Is(err, errNoSuchRow) {
+	if errors.Is(err, errNoSuchJob) {
 		return nil
 	}
 	return err
 }
 
-// errNoSuchRow is internal to RecordUnattributedWrite: mutate creates a row that is not there, and
+// errNoSuchJob is internal to RecordUnattributedWrite: mutate creates a row that is not there, and
 // this is how the apply func declines that without inventing a lease nobody declared.
-var errNoSuchRow = errors.New("ledger: no such lease")
+var errNoSuchJob = errors.New("job: no such lease")
 
-// mutate is the locked read-modify-write [Store.Update] and [Store.Register] share, and
-// the only place leases.json is rewritten row-wise. kind says what the write is; see
+// mutate is the locked read-modify-write [Store.Update] and [Store.Exec] share, and
+// the only place jobs.json is rewritten row-wise. kind says what the write is; see
 // [grading].
 //
-// apply gets what only Register needs: exists, because Update creates a row and Register
+// apply gets what only Exec needs: exists, because Update creates a row and Exec
 // refuses one nobody declared, and now, the one clock read the write is stamped from. It
 // may fail, which is what lets that refusal be decided under the lock; nothing is written
 // when it does.
-func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
+func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Job, exists bool, now int64) error) (types.Job, error) {
 	if strings.TrimSpace(id) == "" {
-		return types.Lease{}, ErrNoID
+		return types.Job{}, ErrNoID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	actor := s.Actor()
-	var stored types.Lease
+	var stored types.Job
 	err := s.withFileLock(ctx, func() error {
 		f, err := s.read()
 		if err != nil {
 			return err
 		}
-		i := slices.IndexFunc(f.Leases, func(e types.Lease) bool { return e.ID == id })
-		var prev types.Lease
+		i := slices.IndexFunc(f.Jobs, func(e types.Job) bool { return e.ID == id })
+		var prev types.Job
 		if i >= 0 {
-			prev = f.Leases[i]
+			prev = f.Jobs[i]
 		}
 		row := prev.Clone()
 		row.ID = id
@@ -294,7 +294,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		row = row.Clone()
 		row.ID = id
 		if kind.graded() {
-			if aerr := authorizeRow(actor, id, prev, row, i >= 0, f.Leases); aerr != nil {
+			if aerr := authorizeRow(actor, id, prev, row, i >= 0, f.Jobs); aerr != nil {
 				return aerr
 			}
 		}
@@ -304,7 +304,7 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		// handed a registration it never made writes without ever reporting its base.
 		switch {
 		case i >= 0:
-			if kind != asRegistration {
+			if kind != asExec {
 				row.ReportedBase, row.BaseVerdict, row.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
 			}
 			if kind != asObservation {
@@ -315,15 +315,15 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		}
 		row.Updated = now
 		row.Created = now
-		row.SchemaVersion = types.LeaseSchemaVersion
+		row.SchemaVersion = types.JobSchemaVersion
 		row.Releases = s.releases(ctx, prev, row, now)
 		if i >= 0 {
 			row.Created = prev.Created
 			row.RegisteredBy = prev.RegisteredBy
-			f.Leases[i] = row
+			f.Jobs[i] = row
 		} else {
 			row.RegisteredBy = actor.leaseActor()
-			f.Leases = append(f.Leases, row)
+			f.Jobs = append(f.Jobs, row)
 		}
 		if werr := s.write(f); werr != nil {
 			return werr
@@ -332,14 +332,14 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 		return nil
 	})
 	if err != nil {
-		return types.Lease{}, err
+		return types.Job{}, err
 	}
 	return stored, nil
 }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
-func (s *Store) List() ([]types.Lease, error) {
+func (s *Store) List() ([]types.Job, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -347,8 +347,8 @@ func (s *Store) List() ([]types.Lease, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]types.Lease, len(f.Leases))
-	for i, row := range f.Leases {
+	out := make([]types.Job, len(f.Jobs))
+	for i, row := range f.Jobs {
 		out[i] = row.Clone()
 	}
 	return out, nil
@@ -383,13 +383,13 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 		if err != nil {
 			return err
 		}
-		if len(f.Leases) > 0 {
+		if len(f.Jobs) > 0 {
 			if err := s.archive(f); err != nil {
 				return err
 			}
 		}
-		dropped = len(f.Leases)
-		return s.write(ledgerFile{})
+		dropped = len(f.Jobs)
+		return s.write(jobsFile{})
 	})
 	if err != nil {
 		return 0, err
@@ -401,12 +401,12 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 // moment they were dropped. A second clear within the same second overwrites the first
 // archive rather than growing a suffix scheme: two plans wiped in one second is one
 // mistake being repeated, and the rows worth keeping are the ones there now.
-func (s *Store) archive(f ledgerFile) error {
+func (s *Store) archive(f jobsFile) error {
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
 	}
-	name := "leases-" + time.Now().UTC().Format("20060102T150405Z") + ".json"
+	name := "jobs-" + time.Now().UTC().Format("20060102T150405Z") + ".json"
 	return file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), name), append(raw, '\n'), 0o644)
 }
 
@@ -417,16 +417,16 @@ func (s *Store) archive(f ledgerFile) error {
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
 // inherits is the one left behind last.
-func (s *Store) releases(ctx context.Context, prev, next types.Lease, now int64) []types.LeaseRelease {
-	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.LeaseRelease) bool {
+func (s *Store) releases(ctx context.Context, prev, next types.Job, now int64) []types.JobRelease {
+	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.JobRelease) bool {
 		return slices.Contains(next.WritePaths, r.Path)
 	})
 	for _, p := range prev.WritePaths {
 		if slices.Contains(next.WritePaths, p) {
 			continue
 		}
-		rel := types.LeaseRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
-		if at := slices.IndexFunc(out, func(r types.LeaseRelease) bool { return r.Path == p }); at >= 0 {
+		rel := types.JobRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
+		if at := slices.IndexFunc(out, func(r types.JobRelease) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue
 		}
@@ -509,31 +509,31 @@ const maxDigestBytes = 32 << 20
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet for this repository.
-func (s *Store) read() (ledgerFile, error) {
+func (s *Store) read() (jobsFile, error) {
 	if s.err != nil {
-		return ledgerFile{}, s.err
+		return jobsFile{}, s.err
 	}
 	raw, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return ledgerFile{}, nil
+		return jobsFile{}, nil
 	}
 	if err != nil {
-		return ledgerFile{}, err
+		return jobsFile{}, err
 	}
-	var f ledgerFile
+	var f jobsFile
 	if err := json.Unmarshal(raw, &f); err != nil {
-		return ledgerFile{}, err
+		return jobsFile{}, err
 	}
-	if err := foldStoredLanes(raw, f.Leases); err != nil {
-		return ledgerFile{}, fmt.Errorf("ledger: %s: %w", s.path, err)
+	if err := foldStoredLanes(raw, f.Jobs); err != nil {
+		return jobsFile{}, fmt.Errorf("job: %s: %w", s.path, err)
 	}
 	// A row this binary cannot read whole stops every operation, not just the read of that
 	// row: mutate rewrites EVERY row in the file, so one unrelated put would silently drop
 	// whatever a newer magus recorded across the whole plan.
-	for _, row := range f.Leases {
-		if row.SchemaVersion > types.LeaseSchemaVersion {
-			return ledgerFile{}, fmt.Errorf("ledger: row %s in %s is schema_version %d and this magus accepts version %d only."+
-				" A newer ledger is not readable by an older magus; update magus", row.ID, s.path, row.SchemaVersion, types.LeaseSchemaVersion)
+	for _, row := range f.Jobs {
+		if row.SchemaVersion > types.JobSchemaVersion {
+			return jobsFile{}, fmt.Errorf("job: row %s in %s is schema_version %d and this magus accepts version %d only."+
+				" A newer ledger is not readable by an older magus; update magus", row.ID, s.path, row.SchemaVersion, types.JobSchemaVersion)
 		}
 	}
 	return f, nil
@@ -563,7 +563,7 @@ func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
 	fl := flock.New(s.path + lockSuffix)
 	got, err := fl.TryLock()
 	if err != nil {
-		return fmt.Errorf("ledger: lock %s: %w", fl.Path(), err)
+		return fmt.Errorf("job: lock %s: %w", fl.Path(), err)
 	}
 	if !got {
 		wait, cancel := context.WithTimeout(ctx, lockWait)
@@ -573,10 +573,10 @@ func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
 			// caller has, and blaming a stuck holder for their own cancellation would send
 			// them looking for a process that is working fine.
 			if ctx.Err() != nil {
-				return fmt.Errorf("ledger: the caller was cancelled while waiting for the lease ledger lock at %s,"+
+				return fmt.Errorf("job: the caller was cancelled while waiting for the lease ledger lock at %s,"+
 					" so this write was not applied: %w", fl.Path(), ctx.Err())
 			}
-			return fmt.Errorf("ledger: another process has held the lease ledger lock at %s for more than %s,"+
+			return fmt.Errorf("job: another process has held the lease ledger lock at %s for more than %s,"+
 				" so this write was not applied. Look for a stuck magus process with `magus status`, then retry;"+
 				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
 		}
@@ -593,8 +593,8 @@ const (
 	lockRetryDelay = 20 * time.Millisecond
 )
 
-// write replaces the file atomically, so a reader never sees a half-written ledger.
-func (s *Store) write(f ledgerFile) error {
+// write replaces the file atomically, so a reader never sees a half-written job store.
+func (s *Store) write(f jobsFile) error {
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -633,14 +633,14 @@ func LeaseFromMarker(cacheDir string) string {
 		return ""
 	}
 	id := strings.TrimSpace(string(raw))
-	if !types.ValidLeaseID(id) {
+	if !types.ValidJobID(id) {
 		return ""
 	}
 	return id
 }
 
 // BindLease writes the marker binding lease id to the checkout whose cache dir is
-// cacheDir, creating the dir if needed. An id ValidLeaseID rejects is refused, so the
+// cacheDir, creating the dir if needed. An id ValidJobID rejects is refused, so the
 // marker never holds a value LeaseFromMarker would read back as nothing.
 //
 // BINDING IS ONE-WAY for a worker. A session already acting under a lease cannot bind
@@ -650,8 +650,8 @@ func LeaseFromMarker(cacheDir string) string {
 // runs its bootstrap twice is not refused. Only an UNBOUND session, which is the
 // orchestrator or the person, binds a checkout.
 func BindLease(cacheDir, id string) error {
-	if !types.ValidLeaseID(id) {
-		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only)", id)
+	if !types.ValidJobID(id) {
+		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
 	}
 	if bound := ActingLease(cacheDir); bound != "" && bound != id {
 		return &RefusedError{
@@ -660,10 +660,10 @@ func BindLease(cacheDir, id string) error {
 		}
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return fmt.Errorf("ledger: bind lease: %w", err)
+		return fmt.Errorf("job: bind lease: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte(id+"\n"), 0o644); err != nil {
-		return fmt.Errorf("ledger: bind lease: %w", err)
+		return fmt.Errorf("job: bind lease: %w", err)
 	}
 	return nil
 }

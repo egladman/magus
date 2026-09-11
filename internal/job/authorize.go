@@ -1,4 +1,4 @@
-package ledger
+package job
 
 import (
 	"fmt"
@@ -39,8 +39,8 @@ func ActingActor(cacheDir string) Actor {
 func (a Actor) Bound() bool { return a.Lease != "" }
 
 // leaseActor is what a row stores about the session that created it.
-func (a Actor) leaseActor() types.LeaseActor {
-	return types.LeaseActor{Session: a.Session, Host: a.Host}
+func (a Actor) leaseActor() types.JobActor {
+	return types.JobActor{Session: a.Session, Host: a.Host}
 }
 
 // grading is what KIND of write reaches [Store.mutate], which decides two things: whether
@@ -54,9 +54,9 @@ const (
 	// asDeclaration is a caller's row: the boundary applies and every store-owned field is
 	// carried forward from the stored row.
 	asDeclaration grading = iota
-	// asRegistration is a worker reporting the base it landed on: graded, and the one
+	// asExec is a worker reporting the base it landed on: graded, and the one
 	// write that sets the registration fields.
-	asRegistration
+	asExec
 	// asObservation is the guard recording a write by somebody else: ungraded, since the
 	// row it lands on is by definition not the writer's, and the one write that sets
 	// Unattributed.
@@ -85,7 +85,7 @@ type RefusedError struct {
 }
 
 func (e *RefusedError) Error() string {
-	msg := fmt.Sprintf("ledger: lease %s is bound to this session and row %s is what this targeted; %s",
+	msg := fmt.Sprintf("job: lease %s is bound to this session and row %s is what this targeted; %s",
 		e.Actor.Lease, e.Lease, e.Rule)
 	if e.Remedy == "" {
 		return msg
@@ -115,7 +115,7 @@ func refuse(actor Actor, id, rule string) error {
 // inside its own boundary. Widening a lane, changing the plan's shape, and grading a row
 // are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
 // can widen its own row has no boundary at all.
-func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, rows []types.Lease) error {
+func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, rows []types.Job) error {
 	if !actor.Bound() {
 		return nil
 	}
@@ -158,14 +158,14 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 // gate, which cmd/magus/guard_gate.go reads as a capability rather than as a declaration:
 // a row whose check names it may run it, so a worker declaring a child with a gate check
 // its own row lacks would be minting the capability it was refused.
-func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows []types.Lease) error {
+func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []types.Job) error {
 	if exists {
 		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
 	}
 	if next.Parent != actor.Lease {
 		return refuse(actor, id, fmt.Sprintf("a row a worker creates must name %s as its parent, and this one names %q", actor.Lease, next.Parent))
 	}
-	own := slices.IndexFunc(rows, func(r types.Lease) bool { return r.ID == actor.Lease })
+	own := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == actor.Lease })
 	if own < 0 {
 		return refuse(actor, id, "its own row is not in the ledger, so there is no boundary to hand a child")
 	}
@@ -188,12 +188,12 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
-func runsTheGate(row types.Lease) bool {
+func runsTheGate(row types.Job) bool {
 	return row.Check != nil && row.Check.Target == types.TargetCI
 }
 
 // checkLine names a row's check as a refusal quotes it.
-func checkLine(row types.Lease) string {
+func checkLine(row types.Job) string {
 	if row.Check == nil {
 		return "no check at all"
 	}
@@ -203,7 +203,7 @@ func checkLine(row types.Lease) string {
 // readLane is the declarations a row may READ: its read paths when it declares any, else
 // its own write lane, which is the fallback cmd/magus/guard_focus.go makes. A parent's
 // write lane rides along either way, since a child may already be handed it.
-func readLane(row types.Lease) []string {
+func readLane(row types.Job) []string {
 	if len(row.ReadPaths) == 0 {
 		return row.WritePaths
 	}
@@ -222,7 +222,7 @@ func authorizeClear(actor Actor) error {
 // changedFields names the DECLARED fields that differ between two versions of a row, in
 // the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
 // the registration verdict) are not here: nothing a caller sends decides them.
-func changedFields(prev, next types.Lease) []string {
+func changedFields(prev, next types.Job) []string {
 	var out []string
 	add := func(name string, differs bool) {
 		if differs {
@@ -252,7 +252,7 @@ func changedFields(prev, next types.Lease) []string {
 // rewrite a glob into a wider one that still looks contained. The exact-string rule costs a
 // worker one round trip and cannot be argued with.
 //
-// Both sides are trimmed here because [Store.Update] writes a types.Lease the caller
+// Both sides are trimmed here because [Store.Update] writes a types.Job the caller
 // built, which no door has trimmed.
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
