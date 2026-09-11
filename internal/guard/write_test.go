@@ -792,3 +792,35 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")), "SAME commit")
 	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }
+
+// TestGradeLeasedWriteHandsBackTheWideningCall pins what this denial should cost its
+// reader: one paste. The measured cost of a narrow lane was never the rule, it was the
+// negotiation, and a worker that has to describe its own row in prose makes the
+// orchestrator reconstruct what the ledger already knows.
+//
+// The call carries the paths the row already had, because op=put REPLACES the row: a call
+// naming only the blocked path hands back a narrower lane than the worker started with.
+func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+
+	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
+	require.Equal(t, "deny", got.Decision)
+	assert.Contains(t, got.Reason, "magus_ledger op=put id=lease-b")
+	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
+	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
+	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
+
+	// The two denials that must NOT offer a widening. Handing back the undo for a
+	// deliberate refusal teaches that a boundary is a formality.
+	t.Run("a path another live lease owns wants re-partitioning", func(t *testing.T) {
+		owned := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "deny", owned.Decision)
+		assert.NotContains(t, owned.Reason, "op=put")
+	})
+
+	t.Run("a path the row's own deny list names was refused on purpose", func(t *testing.T) {
+		refused := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "deny", refused.Decision)
+		assert.NotContains(t, refused.Reason, "op=put")
+	})
+}

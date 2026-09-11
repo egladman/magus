@@ -403,8 +403,26 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
-			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, goalLine(me))}
+			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+			"Report it as this call, which is the whole widening:\n  %s",
+		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, goalLine(me), widenCall(me, rel))}
+}
+
+// widenCall renders the job-store call that adds rel to the row's declared paths, so a
+// blocked worker reports a paste rather than a paragraph and whoever owns the plan acts
+// without reconstructing the row from a denial.
+//
+// It carries every path the row already declared alongside the new one, because op=put
+// REPLACES the row: a call naming only the blocked path would hand back a narrower set of
+// paths than the worker started with.
+//
+// Only this denial offers it. A path another live row owns wants the plan re-partitioned
+// rather than a second owner, and a path the row's own deny list names was refused on
+// purpose; printing the undo for either would teach the reader that a boundary is a
+// formality.
+func widenCall(me types.Job, rel string) string {
+	return fmt.Sprintf("%s op=put id=%s write_paths=%q",
+		hint.ToolJob.String(), me.ID, strings.Join(append(slices.Clone(me.WritePaths), rel), " "))
 }
 
 // liveLeases are the rows a write can still collide with: declared and running.
