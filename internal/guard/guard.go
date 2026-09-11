@@ -328,6 +328,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// where the ordering is tested. The cache dir is outermost: what it refuses
 		// outranks every other deny on the line (internal/guard/cachedir.go).
 		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input))
+		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input))
 		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
