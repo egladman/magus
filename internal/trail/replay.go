@@ -284,6 +284,41 @@ func ForSession(base, session string, limit int) SessionTrail {
 	return out
 }
 
+// AgentActivity is the newest guard observation one checkout's trail holds: when a host
+// last ran something past the guard here, and which of its sessions did.
+//
+// It is the only proxy magus has for when a session last issued an API request. A
+// pre-tool hook fires once per tool call and an agent turn makes tool calls, so the
+// newest observation bounds how long ago the last turn was. It bounds it from BELOW: a
+// turn that ran no tool at all leaves nothing here, so a session can be warmer than this
+// says and never colder.
+type AgentActivity struct {
+	Session string
+	Host    string
+	At      time.Time
+}
+
+// LastAgentActivity returns the newest agent observation in the trail at base, reading at
+// most limit recent events. It reports false for an unreadable or absent trail and for one
+// holding no agent event, which are the same fact to a caller: nothing here has been
+// observed, so there is no age to report.
+//
+// Nothing new is written to produce it. The guard already appends one event per tool call
+// (appendHookActivity), so the timestamp exists and this only reads the tail back.
+func LastAgentActivity(base string, limit int) (AgentActivity, bool) {
+	events, err := ReadRecent(base, limit)
+	if err != nil {
+		return AgentActivity{}, false
+	}
+	for _, e := range events { // newest first
+		if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn {
+			continue
+		}
+		return AgentActivity{Session: e.Session, Host: e.Host, At: time.UnixMilli(e.Ts)}, true
+	}
+	return AgentActivity{}, false
+}
+
 // relativize turns a recorded path into the workspace-relative form a review speaks. A path
 // already relative, or one outside the workspace entirely, is returned unchanged; the latter
 // then simply matches nothing, which is the honest outcome for a file this review is not about.

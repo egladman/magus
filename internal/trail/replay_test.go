@@ -3,6 +3,7 @@ package trail
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -256,4 +257,22 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 
 	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
 	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+}
+
+func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
+	base := t.TempDir()
+	_, ok := LastAgentActivity(base, 100)
+	assert.False(t, ok, "an empty trail has no activity to report")
+
+	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
+	record(t, base, AgentCommand{Session: "s2", Host: "opencode", Tool: toolRead, Path: "magus.go"})
+
+	got, ok := LastAgentActivity(base, 100)
+	require.True(t, ok)
+	assert.Equal(t, "s2", got.Session)
+	assert.Equal(t, "opencode", got.Host)
+	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
+
+	_, ok = LastAgentActivity(t.TempDir(), 100)
+	assert.False(t, ok, "an absent trail is no activity, not an error")
 }
