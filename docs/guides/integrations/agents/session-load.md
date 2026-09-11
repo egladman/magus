@@ -28,7 +28,9 @@ A loaded session answers questions the trail alone cannot:
 - what a command would be judged as TODAY, re-judged offline against the current
   rules rather than against the rules that were installed when it ran;
 - which commands ran with no guard record at all, found by joining the host's log
-  against magus's own trail for the same session id.
+  against magus's own trail for the same session id;
+- which of magus's own suggestions were taken, per hint id. See
+  [Hint uptake](#hint-uptake).
 
 That last one is the join. Neither store answers it alone. `magus session show
 <id>` makes it: below the loaded transcript it reports what the guard trail in
@@ -37,6 +39,57 @@ it denied, the lease they ran under, and the sub-agents the session spawned.
 The same join reaches review: `magus diff --impact` names the sessions that
 wrote each changed file from both stores, so a session no hook was wired for
 still appears once its transcript is loaded.
+
+## Hint uptake
+
+Every `next` entry magus prints on a result carries a stable id, and a call that
+serves one records it beside the guard's advisory markers, in this checkout's
+cache directory:
+
+```text
+.magus/advisories/<session>.served-next
+{"ts":1789124711213,"id":"query-explain","argv":["./magus","explain","spell:go"]}
+```
+
+Only what was actually served is recorded, and what is served depends on who is
+asking. The entries are filtered for the acting lease's role first: a lease that
+owns paths is never offered a write whose lane magus cannot check, and a
+read-only lease is offered no write at all. An unbound session, a person or an
+orchestrator, gets the full set.
+
+The file is append-only, bounded, and keyed the way the advisory markers are, so
+it is a recency window rather than a history. `magus session load` is what turns
+it into one: it joins the journal onto the transcript by time and stamps two
+fields on each call, the hint ids that call's RESULT served and the ids its
+COMMAND took up from a result served before it. Both come from the join; no host
+reports either.
+
+The join has to happen at load time because a command's text never reaches the
+store. `session load` re-judges a command and keeps the program, the verdict, the
+rule and a digest, and nothing else, so a later reader cannot tell `magus explain`
+from `magus refs` and could never say a suggestion was taken.
+
+Read it back per hint id:
+
+```sh
+magus session hints
+```
+
+```text
+HINT           SERVED  FOLLOWED  REJECTED  REFLEX  RATE
+explain-path   2       1         1         1       50.0%
+query-explain  4       1         3         4       25.0%
+query-path     4       0         4         4       0.0%
+```
+
+Followed means the command ran within the next five calls of the same session.
+Rejected means another magus verb ran instead, and reflex means the same command
+was simply repeated; the three describe different servings and do not sum to
+served.
+
+The output names a floor. A hint below it is spending context on advice nobody
+takes and is better deleted than reworded, which is a decision for a person to
+make: this command reports and changes nothing.
 
 ## The contract
 
