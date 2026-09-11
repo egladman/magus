@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -298,7 +300,7 @@ func TestCacheRunOptions(t *testing.T) {
 		Target:        "build",
 	}
 
-	opts := RunOptions(w)
+	opts := RunOptions(w, nil)
 
 	c, err := cache.Open(t.Context(), cdir, cache.WithMutable(true))
 	require.NoError(t, err)
@@ -342,7 +344,7 @@ func TestCacheRunOptions(t *testing.T) {
 // unchanged; this is the structural half, and it is absent on a pass so a consumer
 // counting uptake can tell "nothing to suggest" from "suggested and ignored".
 func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
-	t.Parallel()
+	t.Setenv(trail.EnvBaggage, "")
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w := openFileWriter(t, path, WithBlockOnFull())
 
@@ -357,16 +359,18 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 		Target:        "test",
 	}
 
-	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), cache.WithMutable(true))
+	cacheDir := filepath.Join(t.TempDir(), ".magus")
+	c, err := cache.Open(t.Context(), cacheDir, cache.WithMutable(true))
 	require.NoError(t, err)
+	served := ServedIn(cacheDir, root)
 	_, err = c.Run(t.Context(), spec, func(_ context.Context) error {
 		return fmt.Errorf("exit 2")
-	}, RunOptions(w)...)
+	}, RunOptions(w, served)...)
 	require.Error(t, err)
 
 	passing := spec
 	passing.Target = "build"
-	_, err = c.Run(t.Context(), passing, func(_ context.Context) error { return nil }, RunOptions(w)...)
+	_, err = c.Run(t.Context(), passing, func(_ context.Context) error { return nil }, RunOptions(w, served)...)
 	require.NoError(t, err)
 	require.NoError(t, w.Close())
 
@@ -392,6 +396,40 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 
 	assert.Empty(t, results[1].Next, "a pass has nothing to suggest")
 	assert.NotContains(t, string(body), `"next":[]`, "absence is a missing key, never an empty list")
+
+	// The journal is what makes the failure family countable in `magus session hints`
+	// and pre-authorizable by the guard, and it is the family the whole mechanism was
+	// measured against.
+	journal := hint.ReadServedNext(cacheDir)
+	journaled := make([]string, len(journal))
+	for i, e := range journal {
+		journaled[i] = e.ID
+	}
+	assert.Equal(t, ids, journaled, "every breadcrumb served by a failing run is journaled")
+	assert.Equal(t, []string{"magus", "query", "output", failed.Ref}, journal[0].Argv)
+}
+
+// A reviewer is served no write, and the breadcrumbs a failing run mints are reads, so
+// the family survives every role. The filter runs regardless: a template added to the
+// family later meets it without this site changing.
+func TestServedInFiltersForTheActingRole(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	cacheDir := t.TempDir()
+	next := []hint.Next{
+		{ID: "run-output", Run: "magus query output out1a2b3c", Argv: []string{"magus", "query", "output", "out1a2b3c"}},
+		{ID: "fabricated-write", Run: "magus run generate:rw .", Argv: []string{"magus", "run", "generate:rw", "."}},
+	}
+
+	served := ServedIn(cacheDir, t.TempDir())(next)
+	require.Len(t, served, 2, "an unbound reader keeps the lot")
+
+	require.NoError(t, os.WriteFile(filepath.Join(cacheDir, "lease"), []byte("harness/reviewer\n"), 0o644))
+	served = ServedIn(cacheDir, t.TempDir())(next)
+	ids := make([]string, len(served))
+	for i, n := range served {
+		ids[i] = n.ID
+	}
+	assert.Equal(t, []string{"run-output"}, ids, "a bound reader with no row of its own is served no write")
 }
 
 func TestWriterContextRoundTrip(t *testing.T) {

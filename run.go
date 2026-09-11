@@ -1523,7 +1523,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	cacheOpts = append(cacheOpts, observability.TargetRunOptions(ctx, m.tel, spellsOf)...)
 	if opts.Report != nil {
-		cacheOpts = append(cacheOpts, report.RunOptions(opts.Report)...)
+		cacheOpts = append(cacheOpts, report.RunOptions(opts.Report, report.ServedIn(m.CacheDir(), m.ws.Root))...)
 	}
 	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	if m.cache == nil {
