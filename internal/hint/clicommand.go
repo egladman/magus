@@ -15,7 +15,44 @@ package hint
 // a path nothing renders buys nothing though (it drifts just as quietly, with no
 // output depending on it), so declare one when an emitter starts using it.
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+)
+
+// invokedName is the binary as THIS process was invoked, which is what a copyable
+// hint has to spell. A bare "magus" reaches whatever the reader's PATH holds, and on
+// a machine carrying an older release that is a binary which cannot answer for this
+// workspace.
+//
+// "magus" until main says otherwise, so a library caller and every test render the
+// canonical form.
+var invokedName atomic.Pointer[string]
+
+// SetInvokedName records how this process was invoked, from os.Args[0]. A relative
+// spelling is kept whole, since `./magus` names a checkout's own binary and a base
+// name would not; anything else renders as its base name. An empty argv[0] is ignored.
+//
+// Call it once before any hint renders: every Command reads it.
+func SetInvokedName(argv0 string) {
+	name := strings.TrimSpace(argv0)
+	if name == "" {
+		return
+	}
+	if !strings.HasPrefix(name, ".") {
+		name = filepath.Base(name)
+	}
+	invokedName.Store(&name)
+}
+
+// binary is the name Command renders with.
+func binary() string {
+	if p := invokedName.Load(); p != nil {
+		return *p
+	}
+	return "magus"
+}
 
 // Command is a canonical magus command path (the tokens after "magus"). Values
 // are declared once below; call sites render them with String or With.
@@ -31,8 +68,9 @@ type Command struct {
 
 func cmd(tokens ...string) Command { return Command{tokens: tokens} }
 
-// String renders the bare invocation, e.g. "magus query output".
-func (c Command) String() string { return "magus " + strings.Join(c.tokens, " ") }
+// String renders the bare invocation, e.g. "magus query output", spelling the binary
+// as SetInvokedName reported it.
+func (c Command) String() string { return binary() + " " + strings.Join(c.tokens, " ") }
 
 // With renders the invocation followed by trailing args, e.g.
 // QueryOutput.With(ref, "--open") => "magus query output <ref> --open".
@@ -41,6 +79,16 @@ func (c Command) With(args ...string) string {
 		return c.String()
 	}
 	return c.String() + " " + strings.Join(args, " ")
+}
+
+// Argv renders the invocation as an argument vector, args unquoted: the form a caller
+// execs rather than pastes. String is the shell spelling of the same command, so an
+// argument needing quotes differs between the two.
+func (c Command) Argv(args ...string) []string {
+	argv := make([]string, 0, 1+len(c.tokens)+len(args))
+	argv = append(argv, binary())
+	argv = append(argv, c.tokens...)
+	return append(argv, args...)
 }
 
 // Head is the top-level subcommand token (e.g. "query" for "query output"), the
