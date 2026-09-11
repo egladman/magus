@@ -178,6 +178,31 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   tree's `./magus` was linked from ITS sources and its cache is keyed to ITS
   tree, so the verdict describes neither checkout. A cd into a genuinely
   different repository is not denied; that one only draws the `--root` advisory.
+- **Rewriting your own lease row, under a bound lease**: `magus session lease
+  <other-id>`, `magus ledger accept`, `magus ledger register`, and the
+  `magus_ledger` tool's row writes, whichever channel they arrive on. Every
+  lease-scoped rule below reads that row, so an agent that can rewrite it grades
+  itself against a boundary nobody handed it from the next call on. An unbound
+  session is untouched entirely, whether that is an orchestrator or a person in
+  their own checkout, because those are the parties that write rows.
+
+  Over MCP the operations divide like this. `op=clear` is refused outright, and so
+  is any `put` or `register` naming a row other than the one bound here. A `put`
+  on the caller's own row is refused too, with one exception: a put that changes
+  nothing but `owned_paths`, and only by dropping declarations the row already
+  carries, passes through to the store. Giving a lane back cannot widen a role,
+  and whether a particular shrink is legitimate is the store's judgment rather
+  than the guard's. `op=register` on the caller's own row passes, because
+  recording the base a lease landed on is a procedure the write surface demands.
+  Reading is untouched everywhere: `op=list`, `magus session lease` with no
+  argument, `magus ledger ls`.
+
+  The MCP form is judged because it is the same write through a different
+  transport; a rule holding on one channel would move the traffic rather than
+  stop it. magus reads its OWN tool name out of whatever the host prefixed it
+  with, and the parameters out of its own tool schema, so no host's vocabulary
+  enters the rule. The call is normalized to a command line before any rule sees
+  it, so what the activity trail records is what was graded.
 
 ## What magus explains
 
@@ -297,7 +322,8 @@ names the focus it judged against.
 The advisories that carry a standing fact rather than a correction to the
 command in front of you are held to one firing per session: the stale-binary
 notice, the graph-beats-grep hint, the classify-before-staging reminder, the
-index-staleness advisory, the enroll-a-lease notice an unleased write draws, and
+index-staleness advisory, the enroll-a-lease notice an unleased write draws, the
+host-wiring notice, the terminal-lease notice, and
 the repository-scoped path rules above. The focus advisory is held twice over:
 once per PATH, because a second out-of-focus file is a second fact, and once per
 session for the full explanation, so every firing after the first is one line.
@@ -357,6 +383,25 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
   from a worker that wandered; what it can do is keep the divergence from
   staying silent until the merge finds it.
 
+Every one of those denials names the ACTOR who can move the boundary, and it is
+never the reader: "your orchestrator can widen this lane; you cannot. Report it as
+an unresolved risk and stop." The texts they replace ended by naming the
+`magus_ledger` tool, meaning "ask the orchestrator", and two independent readers
+took it as permission and widened their own row with it.
+
+A fourth rule DENIES and is not about the lane at all: a write to the host's own
+guard wiring. `.claude/settings.json` and `.claude/settings.local.json`,
+`.claude/hooks/`, `.cursor/hooks.json` and `.cursor/hooks/`, `.codex/hooks.json`,
+and `.opencode/plugins/` (or `~/.config/opencode/plugins/`) are where every rule
+on this page is switched on, so an edit there decides whether the guard runs at
+all from the host's next session start. That is refused under ANY bound lease, no
+matter what the lane says: a lane that happens to contain `.claude/` was a lane,
+not the guard's own switch. An unbound session gets a once-per-session advisory
+instead, because rewiring a host is exactly what an orchestrator or a person does,
+and what they are owed is the sentence saying which file this is. The failure is
+silent either way, since a disarmed guard and a clean session produce identical
+output, which is the whole reason the rule exists.
+
 The rest are heuristics on the path, and each only fills a silence the
 definitive rules leave: a cross-host instruction file (`AGENTS.md`, `CLAUDE.md`)
 is where a workspace decision goes to be invisible to the next checkout, an
@@ -406,6 +451,51 @@ printf '%s' 'MAGUS.md' | magus session hook --path -o name
 A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
 empty event passes, but one the hook cannot read fails closed as a deny:
 nothing was judged, so the call is blocked rather than cleared.
+
+Every verdict carries `lease`: the ledger row it was graded under, absent when the
+call named none. `--lease <id>` sets it and `magus.lease` in `$BAGGAGE` is the
+default, so a shell that exported one for a whole session is still overridable per
+call. The field answers a question nothing else on the wire did, which
+declaration decided this, and two of the three ways to get it wrong used to look
+identical to a guarded session:
+
+- An id this workspace's ledger does not DECLARE is an error verdict: decision
+  `deny`, exit 2, naming the id. Every lease-scoped rule reads that row, so a
+  typo'd id was graded by nothing at all while the session believed itself inside
+  a boundary. An id that will not PARSE is the other case and stays an advisory:
+  magus cannot look it up either, and blocking a tool call over unreadable
+  metadata is the failure the fail-open contract is written against.
+- An id naming a row in a terminal state (`pass`, `fail`, `no_return`) prints one
+  notice per session saying its rules are inert. That is true and was invisible:
+  the lease-scoped rules only ever read live rows.
+
+## Commands magus suggested
+
+A result's `next` breadcrumbs are complete commands magus computed, and a command
+this session was served is PRE-AUTHORIZED: no advisory fires on it, and the
+role-scoped rules (the gate, version control, the rebind rule, the focus deny)
+stand down. Refusing magus's own suggestion is the tool disagreeing with itself in
+front of a reader who has no way to tell which half to believe.
+
+The workspace-wide denies never yield: whole-tree VCS, a pipe or redirect of
+magus's own output, a raw language tool, a relocated checkout. Those protect
+everyone rather than a role.
+
+The clearance is narrow by construction. It covers one command per line, matched
+argv for argv against what was served, with only the binary's spelling normalized
+(`./magus`, `magus`, an absolute path from a hook template are one command). It
+expires after twenty further servings, it is per session, and a journal that is
+not there clears nothing. The journal is one JSON line per served breadcrumb
+(`{"ts":<unix ms>,"id":"<breadcrumb id>","argv":[...]}`) under the cache
+directory, beside the advisory markers and keyed by the same hashed session id, so
+a person asking why a call passed can read what was served. A producer with no
+session id writes to the anonymous journal instead, which a CLI run always is, and
+the guard reads both. The guard's activity event records which breadcrumb
+cleared the call, so uptake per breadcrumb stays a query rather than a guess.
+
+The obligation this creates sits UPSTREAM, not here: `next` is computed for the
+acting role, and a test grades every breadcrumb the tree can serve through the
+guard under each role, so a suggestion magus would refuse cannot ship.
 
 A host integration is therefore a few lines of configuration you own, with no
 host-specific code in magus.

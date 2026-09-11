@@ -42,6 +42,8 @@ const (
 	advisoryGraphStale    advisoryKind = "graph-stale"
 	advisoryGateRepeat    advisoryKind = "gate-repeat"
 	advisoryFocus         advisoryKind = "focus"
+	advisoryHookWiring    advisoryKind = "hook-wiring"
+	advisoryLeaseTerminal advisoryKind = "lease-terminal"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

@@ -145,7 +145,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, operands []str
 		owner := focus.Owner(rel)
 		if leaseID != "" {
 			return focusGrade{Decision: "deny", Rel: rel, Reason: fmt.Sprintf(
-				"magus workspace: read inside the focus lease %s was given (%s), or ask the orchestrator to widen it with the "+hint.ToolLedger.String()+" tool (op put, focus), then retry.\n"+
+				"magus workspace: read inside the focus lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
 					"%s belongs to project %s, which is outside that focus: %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 				leaseID, strings.Join(focus.Seeds, ", "), rel, owner, strings.Join(focus.Projects, ", "))}
 		}

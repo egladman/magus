@@ -212,6 +212,21 @@ const (
 	envHookLease  = trail.EnvBaggage + "=" + trail.BaggageLease
 )
 
+// leaseActorClause is how every lease-scoped denial names WHO can move the boundary.
+//
+// The texts it replaces ended "widen owned_paths with the magus_ledger tool", meaning
+// "ask the orchestrator". Two personas reading the same sentence independently took it
+// as permission and reached for the tool (friction synthesis 2026-09-11, C2), which is
+// the re-roling the ledger exists to make visible: a worker that rewrites its own row
+// is graded against a boundary nobody handed it from the next call on.
+//
+// So the clause names the actor and ends the turn. It says nothing about how the
+// orchestrator does it, because that is not this reader's business and a command
+// spelled here is a command this reader would run.
+func leaseActorClause(what string) string {
+	return "Your orchestrator can " + what + "; you cannot. Report it as an unresolved risk and stop."
+}
+
 // writeGrade is what the lease ledger has to say about one write. Separate from
 // guardVerdict because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
@@ -361,9 +376,9 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	// denying the write anyway would be two refusals for one mistake.
 	if me.ReadOnly {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: report what you found to the orchestrator instead of writing it, or have it clear read_only and declare owned_paths for lease %s with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
+			"magus workspace: put what you found in your report instead of writing it. "+leaseActorClause("clear read_only and declare owned_paths for lease "+me.ID)+"\n"+
 				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
-			me.ID, me.ID, goalLine(me), rel)}
+			me.ID, goalLine(me), rel)}
 	}
 	// BEFORE the path checks, because an unregistered lease should not be writing anywhere,
 	// not merely outside its lane. A checkpoint is what says which base the work applies to and
@@ -413,15 +428,15 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	}
 	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If lease %s has finished with this file, have it release the path by shrinking its owned_paths with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
+			"magus workspace: edit inside your own owned paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
-			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
+			rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
 	if len(me.OwnedPaths) == 0 {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-		"magus workspace: write inside the paths lease %s was given (%s), or ask the orchestrator to widen owned_paths with the "+hint.ToolLedger.String()+" tool, then retry.\n"+
+		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
 			"%s is outside every entry in the owned_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 		me.ID, strings.Join(me.OwnedPaths, ", "), rel, me.ID, goalLine(me))}
 }

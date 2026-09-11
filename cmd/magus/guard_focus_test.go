@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -117,7 +118,10 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	got := focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"web/server.go"})
 	assert.Equal(t, "deny", got.Decision)
 	assert.Contains(t, got.Reason, "read inside the focus lease lease-a was given (app)")
-	assert.Contains(t, got.Reason, "op put, focus")
+	// The actor, not the tool. This used to demand "op put, focus", and two personas
+	// reading that sentence took it as permission and widened their own row with it.
+	assert.Contains(t, got.Reason, "Your orchestrator can widen this lane; you cannot.")
+	assert.NotContains(t, got.Reason, hint.ToolLedger.String())
 	assert.Contains(t, got.Reason, "not inventing a rule")
 	assert.Empty(t, got.Context, "a deny carries its reason, never a context the host would inject alongside it")
 

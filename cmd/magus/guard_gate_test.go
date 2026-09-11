@@ -385,3 +385,215 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
 	assert.Equal(t, worker.ID, events[0].Lease)
 }
+
+// TestDenyLeaseScopedRebind pins the rebind rule: under a bound lease, the commands that
+// rewrite who the caller is, or what its row says, are refused with the actor named.
+func TestDenyLeaseScopedRebind(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	me := narrowLease().ID
+
+	for command, what := range map[string]string{
+		"magus session lease harness/other":                                "bind this checkout to another lease",
+		"./magus session lease harness/other":                              "bind this checkout to another lease",
+		"magus -s session lease harness/other":                             "bind this checkout to another lease",
+		"magus ledger accept harness/other":                                "grade a lease row",
+		"magus ledger register":                                            "write a lease row",
+		"magus_ledger op=clear":                                            "drop every ledger row",
+		"magus_ledger op=put id=harness/other owned_paths=**":              "write another lease's ledger row",
+		"magus_ledger op=register id=harness/other":                        "write another lease's ledger row",
+		"magus_ledger op=put id=harness/lease-scoped-deny owned_paths=**":  "rewrite its own ledger row",
+		"magus_ledger op=put id=harness/lease-scoped-deny read_only=false": "rewrite its own ledger row",
+	} {
+		reason := denyLeaseScopedRebind(ctx, me, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, what, "the denial must say what the command would do")
+		assert.Contains(t, reason, me, "the denial must name the bound lease")
+		assert.Contains(t, reason, "Your orchestrator can", "the denial must name the actor")
+	}
+}
+
+// TestDenyLeaseScopedRebindStaysQuiet covers every silence. A read is not a rebind, an
+// unbound caller is the party that writes rows, and `op=register` is the worker's own
+// procedure, demanded by the checkpoint denial on the write surface.
+func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	me := narrowLease().ID
+
+	for name, command := range map[string]string{
+		"reading the binding":       "magus session lease",
+		"reading the plan":          "magus ledger ls",
+		"reading one row":           "magus ledger brief harness/lease-scoped-deny",
+		"recording its own base":    "magus_ledger op=register id=harness/lease-scoped-deny reported_base=abc123",
+		"listing rows over MCP":     "magus_ledger op=list",
+		"an unrelated magus verb":   "magus run go-build .",
+		"a lease id in an argument": "magus query \"session lease\"",
+		// A flag's value is a bare word, so this reads as a subcommand token and matches
+		// nothing. The rule fails to fire rather than firing on a path that happened to
+		// end in a verb, which is the safe direction; see magusWords.
+		"a value-taking global flag": "magus --root /tmp/x session lease harness/other",
+	} {
+		assert.Empty(t, denyLeaseScopedRebind(ctx, me, command), name)
+	}
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, "", "magus session lease harness/other"),
+		"an unbound caller is the orchestrator or the person, and they are who writes rows")
+}
+
+// TestLedgerToolRebindLetsALaneBeGivenBack pins the one put a bound caller may make:
+// giving a declaration back. The direction is what the guard judges; whether a particular
+// shrink is legitimate belongs to the store.
+func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
+	wide := narrowLease()
+	wide.OwnedPaths = []string{"cmd/magus/**", "internal/hint/**"}
+	ctx, _ := fleetFixture(t, wide)
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/**"),
+		"dropping one of its own declarations cannot widen a role")
+
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/**,internal/hint/**,docs/**"),
+		"adding a declaration is a widen however it is spelled")
+
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/**"),
+		"a pattern that happens to cover less is not a shrink this rule will try to prove")
+
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** validation=magus affected ci"),
+		"a shrink carrying another field is not a shrink")
+}
+
+// TestHookCmdJudgesTheMCPLedgerSurface is the decision table for the transport the CLI
+// rules would otherwise miss: the same envelope a host forwards for an MCP tool call.
+func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	wide := narrowLease()
+	wide.OwnedPaths = []string{"cmd/magus/**", "internal/hint/**"}
+	ctx, _ := fleetFixture(t, wide)
+
+	for name, tc := range map[string]struct {
+		toolInput string
+		want      string
+	}{
+		"put on another row":    {`{"op":"put","id":"harness/other","owned_paths":"**"}`, "deny\n"},
+		"put widening its own":  {`{"op":"put","id":"` + wide.ID + `","owned_paths":["**"]}`, "deny\n"},
+		"clearing the board":    {`{"op":"clear"}`, "deny\n"},
+		"register elsewhere":    {`{"op":"register","id":"harness/other"}`, "deny\n"},
+		"register its own base": {`{"op":"register","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
+		"listing the plan":      {`{"op":"list"}`, "pass\n"},
+		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"]}`, "pass\n"},
+	} {
+		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
+			`","tool_name":"mcp__magus__magus_ledger","tool_input":` + tc.toolInput + `}`
+		var out bytes.Buffer
+		err := hookCmd(ctx, strings.NewReader(envelope), &out, []string{"--lease", wide.ID, "-o", "name"})
+		if tc.want == "deny\n" {
+			require.Error(t, err, name)
+		} else {
+			require.NoError(t, err, name)
+		}
+		assert.Equal(t, tc.want, out.String(), name)
+	}
+}
+
+// TestActingLeaseStandingSeparatesTheThreeAnswers is what the undeclared and terminal
+// rules are built on: "not declared" and "could not be read" are different facts, and only
+// the first is the caller's mistake.
+func TestActingLeaseStandingSeparatesTheThreeAnswers(t *testing.T) {
+	done := narrowLease()
+	done.ID, done.State = "harness/finished", types.StatePass
+	ctx, _ := fleetFixture(t, narrowLease(), done)
+
+	live := actingLeaseStanding(ctx, narrowLease().ID)
+	assert.True(t, live.readable)
+	assert.True(t, live.declared)
+	assert.False(t, live.terminal(), "a running row is not terminal")
+
+	finished := actingLeaseStanding(ctx, done.ID)
+	assert.True(t, finished.declared)
+	assert.True(t, finished.terminal())
+
+	absent := actingLeaseStanding(ctx, "harness/typo")
+	assert.True(t, absent.readable, "the ledger answered; it just does not carry that id")
+	assert.False(t, absent.declared)
+
+	nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+	assert.False(t, actingLeaseStanding(nowhere, narrowLease().ID).readable,
+		"no workspace is a rule the guard cannot evaluate, not an undeclared id")
+	assert.False(t, actingLeaseStanding(ctx, "").readable, "no lease is nothing to look up")
+}
+
+// TestHookCmdErrorsOnAnUndeclaredLease is C3: an id nobody declared bought SILENT
+// un-enrolled treatment, so a worker whose orchestrator typo'd the id ran unguarded and
+// looked exactly like a guarded one.
+func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	var out bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader("ls"), &out, []string{"--lease", "harness/typo", "-o", "json"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent, "an assertion that does not resolve must not exit 0")
+	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+	assert.Contains(t, out.String(), `"decision": "deny"`)
+	assert.Contains(t, out.String(), "is not declared")
+	assert.Contains(t, out.String(), `"lease": "harness/typo"`, "the verdict names the row it graded against")
+}
+
+// TestHookCmdNoticesATerminalLease covers the other half: a row that has finished still
+// names a session, and every rule keyed on it has quietly stopped applying.
+func TestHookCmdNoticesATerminalLease(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	done := narrowLease()
+	done.State = types.StatePass
+	ctx, _ := fleetFixture(t, done)
+
+	var first bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &first,
+		[]string{"--lease", done.ID, "--session", "session-terminal"}))
+	assert.Contains(t, first.String(), "is in state pass")
+	assert.Contains(t, first.String(), "its rules are inert")
+
+	var second bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &second,
+		[]string{"--lease", done.ID, "--session", "session-terminal"}))
+	assert.Equal(t, "pass\n", second.String(), "a standing fact is said once per session")
+}
+
+// TestHookVerdictCarriesTheActingLease pins the field on the wire, which is what lets a
+// person see WHICH row decided a verdict.
+func TestHookVerdictCarriesTheActingLease(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	var leased bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &leased,
+		[]string{"--lease", narrowLease().ID, "-o", "json"}))
+	assert.Contains(t, leased.String(), `"lease": "harness/lease-scoped-deny"`)
+
+	var unbound bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("ls"), &unbound, []string{"-o", "json"}))
+	assert.NotContains(t, unbound.String(), `"lease"`, "a session nobody leased names no row")
+}
+
+// TestIsGateCommandIgnoresTheReportingForms pins the carve-out the structural breadcrumb
+// test found: these print what the gate WOULD do and run no target, so neither the deny
+// nor the cost advisory has anything to say about them. `magus affected ci --plan` is a
+// command magus itself serves as a next step.
+func TestIsGateCommandIgnoresTheReportingForms(t *testing.T) {
+	for _, args := range [][]string{
+		{"affected", "ci", "--plan"},
+		{"affected", "ci", "--impact"},
+		{"affected", "--explain", "docs", "ci"},
+		{"run", "ci", ".", "--dry-run"},
+	} {
+		assert.False(t, isGateCommand(args), "%v prints a report and runs nothing", args)
+	}
+	assert.True(t, isGateCommand([]string{"affected", "ci", "--no-default-charms"}),
+		"the gate itself still is the gate")
+}

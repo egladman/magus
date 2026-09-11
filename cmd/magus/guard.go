@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,10 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintln(w, "                        write, not as a shell command")
 	fmt.Fprintln(w, "  --observe             record the path as one the agent REACHED and judge")
 	fmt.Fprintln(w, "                        nothing; wire it to the tools that only look")
+	fmt.Fprintln(w, "  --lease <id>          the ledger row this call acts as; the lease-scoped")
+	fmt.Fprintln(w, "                        rules are graded against it, and the verdict names")
+	fmt.Fprintln(w, "                        it. Defaults to magus.lease in $BAGGAGE; an id this")
+	fmt.Fprintln(w, "                        workspace's ledger does not declare is an error")
 	fmt.Fprintln(w, "  --agent-name <name>   agent host this invocation came from (attribution")
 	fmt.Fprintln(w, "                        only; the verdict never reads it)")
 	fmt.Fprintln(w, "  --session <id>        the host's own session id, recorded on the event")
@@ -66,6 +71,15 @@ type guardVerdict struct {
 	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
+	// Lease is the row this verdict was graded under, empty when the call named none.
+	//
+	// It answers a question every other field left open: which declaration decided this.
+	// A session bound to a typo'd id, a session bound to a row that has already finished,
+	// and a session nobody leased all produced identical verdicts before this field
+	// existed, and two of the three were running unguarded (friction synthesis
+	// 2026-09-11, C3). An added optional field is not a schema bump: a glue that does not
+	// read it is unaffected, which is the rule agent.GuardSchemaVersion states.
+	Lease string `json:"lease,omitempty"`
 }
 
 // hookCmd implements `magus session hook`: evaluate one shell command or file path read
@@ -197,7 +211,31 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	case hf.Path:
 		tool = hookToolWrite
 	}
-	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease}
+	// Where the acting lease STANDS, read once and before any rule. An id the ledger does
+	// not carry is refused here rather than passed down, because every lease-scoped rule
+	// below reads that row and finding nothing is how they all fall silent at once: the
+	// call would be graded by nobody while looking exactly like a guarded one.
+	//
+	// --observe is exempt, as it is from every other verdict: it carries none.
+	standing := actingLeaseStanding(ctx, actingLease)
+	if !hf.Observe {
+		if reason := denyUndeclaredLease(standing, actingLease); reason != "" {
+			verdict.Decision, verdict.Reason = "deny", reason
+			appendHookActivity(ctx, location, input, who, tool, actingLease, "", verdict)
+			if err := writeGuardVerdict(out, opts, verdict); err != nil {
+				return err
+			}
+			return enforceVerdict(opts, verdict)
+		}
+	}
+	// A served next is magus's own suggestion, and the guard does not argue with it: no
+	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
+	// denies do not, and they are the ones whose reasons say why (see guard_preauth.go).
+	preauth := ""
+	if hasInput && !hf.Observe && !hf.Path {
+		preauth = servedNextPreauthorizes(gate, input.Value)
+	}
 	switch {
 	case !hasInput:
 		// Nothing arrived on stdin. The verdict stays pass and the append below no-ops.
@@ -227,6 +265,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Reason = g.Reason
 		case "advise":
 			advice, spoken = gate.once(g.Kind, g.Context), true
+		}
+		// The guard's own installation, ranked directly under the collision report and
+		// above everything else. It is definitive the way the ledger rule is (a known
+		// list of files, not a heuristic on the name), and what it refuses is the switch
+		// every rule below it depends on. It cannot outrank the collision, because that
+		// one is about a concurrent agent and stays true whatever this file is.
+		if verdict.Decision != "deny" {
+			switch g := gradeHookWiringWrite(actingLease, input.Value); g.Decision {
+			case "deny":
+				verdict.Decision, verdict.Reason = "deny", g.Reason
+			case "advise":
+				if !spoken {
+					advice, spoken = gate.once(g.Kind, g.Context), true
+				}
+			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the memory nudge is a heuristic on the
@@ -298,9 +351,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// one small file, and laziness would buy nothing on a hook this short-lived.
 		switch v := rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)); {
 		case v.Deny != "":
+			// These are the denies that hold for everyone, so a pre-authorization does not
+			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
+			// language tool, a relocated checkout. A next magus served would not carry one
+			// anyway, and the structural test is what says so before it ships.
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
-		case v.Context != "":
+		case v.Context != "" && preauth == "":
 			if held := gate.onceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
@@ -309,8 +366,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The lease ledger's half of the command surface. Ranked BELOW the rules above,
 		// unlike the write arm where it speaks first: those refuse a command whoever runs
 		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
-		for _, rule := range []func(context.Context, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS} {
-			if verdict.Decision == "deny" {
+		//
+		// Every one of them is ROLE-scoped, which is what a pre-authorization stands
+		// down: the command came from magus, computed for this role, so refusing it here
+		// would be the tool disagreeing with itself in front of a reader who cannot tell
+		// which half to believe.
+		for _, rule := range []func(context.Context, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind} {
+			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
 			if reason := rule(ctx, actingLease, input.Value); reason != "" {
@@ -321,7 +383,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// about a boundary an orchestrator declared; its advisory only fills a silence.
 		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
 		// project, and the rule that caught it is also the cheaper one to have run.
-		if verdict.Decision != "deny" {
+		if verdict.Decision != "deny" && preauth == "" {
 			focus := gradeFocusRead(ctx, actingLease, input.Value)
 			switch {
 			case focus.Decision == "deny":
@@ -337,7 +399,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// narrower target argues with the caller for doing what it asked. The narrow
 		// case is also the common one, so a rule that speaks there is a rule the
 		// reader learns to skip.
-		if verdict.Decision == "pass" && commandRunsGate(input.Value) {
+		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input.Value) {
 			full, brief := adviseRepeatGate(workspaceRunsDir(hookActivityTrail(ctx).base), time.Now())
 			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
@@ -348,10 +410,23 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// command's own output (staleindex.go). gate.seen is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
-		if verdict.Decision == "pass" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input.Value) {
+		if verdict.Decision == "pass" && preauth == "" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input.Value) {
 			if notice := gate.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
+			}
+		}
+	}
+	// A row that has already finished still names a session, and every rule keyed on it
+	// has quietly stopped applying: liveLeases drops a terminal row, so the verdicts that
+	// follow are the un-enrolled ones. Said once per session, and never on a deny, which
+	// already explains itself and was reached by a rule that did not need the row.
+	if notice := noticeTerminalLease(standing, actingLease); notice != "" && !hf.Observe && verdict.Decision != "deny" {
+		if held := gate.once(advisoryLeaseTerminal, notice); held != "" {
+			if verdict.Decision == "advise" {
+				verdict.Context += "\n\n" + held
+			} else {
+				verdict.Decision, verdict.Context = "advise", held
 			}
 		}
 	}
@@ -387,7 +462,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if hf.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, actingLease, record)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -489,6 +564,11 @@ type hookEnvelope struct {
 		Prompt       string `json:"prompt"`
 		Description  string `json:"description"`
 		SubagentType string `json:"subagent_type"`
+		// Op is the operation an MCP call to one of magus's OWN tools names. magus
+		// defines that tool's schema, so reading this field reads magus's vocabulary
+		// rather than a host's, which is the line
+		// TestGuardDoesNotBranchOnHostToolVocabulary draws.
+		Op string `json:"op"`
 	} `json:"tool_input"`
 }
 
@@ -553,6 +633,14 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = env.ToolInput.Command
 	case env.ToolInput.FilePath != "":
 		req.Value, req.IsPath = env.ToolInput.FilePath, true
+	case magusToolCall(env.ToolName) != "" && env.ToolInput.Op != "":
+		// An MCP call to one of magus's own tools, normalized to the one shape every
+		// rule here reads: a command line. It is the SAME write the CLI verbs make,
+		// through a different transport, so a rule that held on one channel would move
+		// the traffic rather than stop it. Normalized rather than judged in a shape of
+		// its own so the trail records what was asked in the vocabulary a person
+		// already reads there.
+		req.Value = renderMCPCall(magusToolCall(env.ToolName), raw)
 	case env.ToolInput.Prompt != "":
 		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
 		req.Tool = env.ToolName
@@ -579,6 +667,88 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.NothingToJudge = true
 	}
 	return req, true
+}
+
+// mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
+//
+// A closed list rather than everything the payload carried: the rendered line is recorded
+// in the activity trail, and a rule that swept in every key would put a goal's prose (and
+// whatever else a caller passed) into an audit record shaped like a command. These are
+// magus's own parameter names, from its own tool schema.
+var mcpJudgedParams = []string{
+	"op", "id", "owned_paths", "forbidden_paths", "focus",
+	"validation", "read_only", "parent", "state",
+}
+
+// renderMCPCall normalizes an MCP call to a magus tool into a command line: the tool name,
+// then each judged parameter it carried as `key=value`.
+//
+// Rendering and re-parsing rather than handing the rules a map keeps ONE judged value per
+// call: the string the rules read is the string the trail records, so what a person audits
+// later is what was graded. A value holding a space is quoted, which the shell parser the
+// rules already run unquotes.
+func renderMCPCall(name, raw string) string {
+	var payload struct {
+		ToolInput map[string]any `json:"tool_input"`
+	}
+	if json.Unmarshal([]byte(raw), &payload) != nil {
+		return name
+	}
+	out := []string{name}
+	for _, key := range mcpJudgedParams {
+		value, ok := payload.ToolInput[key]
+		if !ok {
+			continue
+		}
+		out = append(out, key+"="+quoteMCPValue(mcpValueString(value)))
+	}
+	return strings.Join(out, " ")
+}
+
+// mcpValueString flattens one parameter value. A list parameter arrives as either a
+// comma-separated string or an array (both are accepted by the tool), and it renders the
+// same way from both, so a rule cannot be dodged by picking a spelling.
+func mcpValueString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []any:
+		parts := make([]string, 0, len(v))
+		for _, item := range v {
+			parts = append(parts, mcpValueString(item))
+		}
+		return strings.Join(parts, ",")
+	case bool:
+		return strconv.FormatBool(v)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// quoteMCPValue keeps a value with whitespace as one word on the rendered line.
+func quoteMCPValue(value string) string {
+	if strings.ContainsAny(value, " \t\"'\\") {
+		return strconv.Quote(value)
+	}
+	return value
+}
+
+// magusToolCall returns the magus MCP tool a host's tool name refers to, or "" when it
+// refers to none.
+//
+// Hosts prefix these (`mcp__magus__magus_ledger` on one, a bare name on another), and the
+// prefix is the host's business. What magus can recognize is its OWN tool name inside it,
+// which is why the match is on the suffix rather than on any host's spelling.
+func magusToolCall(toolName string) string {
+	for _, tool := range hint.AllToolNames {
+		name := tool.String()
+		if toolName == name || strings.HasSuffix(toolName, "__"+name) {
+			return name
+		}
+	}
+	return ""
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
@@ -628,7 +798,11 @@ type hookActivityLocationKey struct{}
 // lease is the acting lease the verdict was graded under, marker included: the trail's own
 // fallback reads only the environment, which a host's hook never inherits, so without it a
 // marker-bound worker's observations would carry no lease and join nothing.
-func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool, lease string, verdict guardVerdict) {
+//
+// preauth is the `next` template that had already served this command, and it is recorded
+// because a clearance nobody counts is a clearance nobody can audit: uptake per template is
+// the number that decides whether a breadcrumb is reworded or deleted.
+func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool, lease, preauth string, verdict guardVerdict) {
 	if input.Value == "" || location.base == "" {
 		return
 	}
@@ -641,6 +815,7 @@ func appendHookActivity(ctx context.Context, location hookActivityLocation, inpu
 		Event:      who.Event,
 		Tool:       tool,
 		Lease:      lease,
+		Preauth:    preauth,
 		Decision:   verdict.Decision,
 		Reason:     verdict.Reason,
 		Context:    verdict.Context,
