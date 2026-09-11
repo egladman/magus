@@ -5,25 +5,24 @@ package main
 // two meet.
 //
 // Neither side can answer alone. The store never keeps a command's text, so a later
-// reader cannot tell `magus explain` from `magus refs` and could never say a
-// breadcrumb was taken; the journal keeps only a recency window, so it cannot say how
-// often one was. Stamping the ids on the events at load time is what makes uptake per
-// hint id a query.
+// reader cannot tell `magus explain` from `magus refs`; the journal keeps only a
+// recency window, so it cannot say how often one was taken.
 
 import (
+	"cmp"
 	"slices"
-	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 )
 
 const (
-	// nextJoinWindowMs bounds how long after a call's start a breadcrumb may have been
+	// nextJoinWindow bounds how long after a call's start a breadcrumb may have been
 	// printed and still belong to it. A host stamps the call when it STARTS and magus
 	// writes the journal line while it runs, so the gap is one command's runtime; ten
 	// minutes covers a slow gate without reaching the call after it.
-	nextJoinWindowMs = 10 * 60 * 1000
+	nextJoinWindow = 10 * time.Minute
 
 	// nextLookahead is how many calls later a breadcrumb still counts as taken up. The
 	// measurement this metric has to be comparable with used five.
@@ -47,27 +46,48 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 	if len(order) == 0 {
 		return
 	}
+	ran := make(map[int][][]string, len(order))
+	for _, at := range order {
+		ran[at] = ranArgv(commands[at])
+	}
 	for _, served := range journal {
-		i, ok := servingCall(events, order, served.Ts)
+		i, ok := servingCall(events, order, served.AtMs)
 		if !ok {
 			continue
 		}
 		at := order[i]
-		events[at].Event.NextIDs = appendUnique(events[at].Event.NextIDs, served.ID)
+		events[at].Event.NextServed = appendUnique(events[at].Event.NextServed, served.ID)
 
-		needle := strings.Join(served.Argv[1:], " ")
-		if needle == "" {
+		want := hint.NormalizeServedArgv(served.Argv)
+		if len(want) == 0 {
 			continue
 		}
-		for _, next := range order[i+1 : min(i+1+nextLookahead, len(order))] {
+		for _, next := range order[i+1:min(i+1+nextLookahead, len(order))] {
 			if events[next].Session != events[at].Session {
 				continue
 			}
-			if strings.Contains(commands[next], needle) {
+			// The whole argv, not a substring of the line: `explain spell:go`
+			// otherwise counts `explain spell:gomod` as having taken it up, and the
+			// rate is the one number this join exists to produce.
+			if slices.ContainsFunc(ran[next], func(argv []string) bool { return slices.Equal(argv, want) }) {
 				events[next].Event.NextFollowed = appendUnique(events[next].Event.NextFollowed, served.ID)
 			}
 		}
 	}
+}
+
+// ranArgv renders every command a recorded shell line would run, normalized the way
+// the journal's own argv is, so the two are comparable.
+func ranArgv(command string) [][]string {
+	cmds, ok := parseGuardCommands(command)
+	if !ok {
+		return nil
+	}
+	out := make([][]string, 0, len(cmds))
+	for _, c := range cmds {
+		out = append(out, hint.NormalizeServedArgv(append([]string{c.Name}, c.Args...)))
+	}
+	return out
 }
 
 // shellCommandOrder indexes the shell commands in the stream, oldest first. Only
@@ -80,20 +100,20 @@ func shellCommandOrder(events []sessions.LoadEvent, commands []string) []int {
 		}
 	}
 	slices.SortStableFunc(order, func(a, b int) int {
-		return int(events[a].Event.AtMs - events[b].Event.AtMs)
+		return cmp.Compare(events[a].Event.AtMs, events[b].Event.AtMs)
 	})
 	return order
 }
 
-// servingCall returns the position in order of the call a breadcrumb printed at ts
+// servingCall returns the position in order of the call a breadcrumb printed at atMs
 // belongs to: the newest one that had already started, inside the join window.
-func servingCall(events []sessions.LoadEvent, order []int, ts int64) (int, bool) {
+func servingCall(events []sessions.LoadEvent, order []int, atMs int64) (int, bool) {
 	for i := len(order) - 1; i >= 0; i-- {
 		at := events[order[i]].Event.AtMs
-		if at > ts {
+		if at > atMs {
 			continue
 		}
-		if ts-at > nextJoinWindowMs {
+		if atMs-at > nextJoinWindow.Milliseconds() {
 			return 0, false
 		}
 		return i, true

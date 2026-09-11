@@ -27,12 +27,12 @@ func TestJoinServedNextStampsServedAndFollowed(t *testing.T) {
 	commands := []string{"magus query ledger", "cat notes.md", "./magus explain spell:go"}
 
 	joinServedNext(events, commands, []hint.ServedNextEntry{
-		{Ts: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
+		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
-	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextIDs, "the query that printed it served it")
+	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextServed, "the query that printed it served it")
 	assert.Empty(t, events[0].Event.NextFollowed)
-	assert.Empty(t, events[1].Event.NextIDs)
+	assert.Empty(t, events[1].Event.NextServed)
 	assert.Equal(t, []string{"query-explain"}, events[2].Event.NextFollowed,
 		"a hint spelled ./magus is still followed when the reader types magus, and the other way round")
 }
@@ -50,10 +50,10 @@ func TestJoinServedNextStopsAtTheLookahead(t *testing.T) {
 	commands = append(commands, "magus explain spell:go")
 
 	joinServedNext(events, commands, []hint.ServedNextEntry{
-		{Ts: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
+		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
-	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextIDs)
+	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextServed)
 	assert.Empty(t, events[len(events)-1].Event.NextFollowed)
 }
 
@@ -64,11 +64,11 @@ func TestJoinServedNextLeavesUnattributableLinesAlone(t *testing.T) {
 	commands := []string{"magus query ledger"}
 
 	joinServedNext(events, commands, []hint.ServedNextEntry{
-		{Ts: 1_000, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
-		{Ts: 5_000 + nextJoinWindowMs + 1, ID: "query-path", Argv: []string{"magus", "path", "a", "b"}},
+		{AtMs: 1_000, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
+		{AtMs: 5_000 + nextJoinWindow.Milliseconds() + 1, ID: "query-path", Argv: []string{"magus", "path", "a", "b"}},
 	})
 
-	assert.Empty(t, events[0].Event.NextIDs)
+	assert.Empty(t, events[0].Event.NextServed)
 }
 
 // A follow is credited only inside the session that was served: two hosts running at
@@ -78,9 +78,40 @@ func TestJoinServedNextStaysInsideOneSession(t *testing.T) {
 	commands := []string{"magus query ledger", "magus explain spell:go"}
 
 	joinServedNext(events, commands, []hint.ServedNextEntry{
-		{Ts: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
+		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
 	})
 
-	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextIDs)
+	assert.Equal(t, []string{"query-explain"}, events[0].Event.NextServed)
 	assert.Empty(t, events[1].Event.NextFollowed)
+}
+
+// A follow is the whole command, not a substring of the line. `explain spell:go`
+// otherwise counts the later `explain spell:gomod` as having taken it up, and the rate
+// is the one number this join exists to produce.
+func TestJoinServedNextDoesNotCreditALongerArgument(t *testing.T) {
+	events := []sessions.LoadEvent{shellAt("s1", 1_000), shellAt("s1", 2_000), shellAt("s1", 3_000)}
+	commands := []string{"magus query ledger", "magus explain spell:gomod", "echo magus explain spell:go"}
+
+	joinServedNext(events, commands, []hint.ServedNextEntry{
+		{AtMs: 1_500, ID: "query-explain", Argv: []string{"magus", "explain", "spell:go"}},
+	})
+
+	assert.Empty(t, events[1].Event.NextFollowed, "spell:gomod is a different node")
+	assert.Empty(t, events[2].Event.NextFollowed, "a line that merely mentions the command did not run it")
+}
+
+// A journal line carrying no argv is skipped, not dereferenced: the file is appended to
+// by several processes and hand-editable, and `magus session load` is a user-facing
+// command that must not crash on its content.
+func TestJoinServedNextSurvivesALineWithNoArgv(t *testing.T) {
+	events := []sessions.LoadEvent{shellAt("s1", 1_000)}
+	commands := []string{"magus query ledger"}
+
+	joinServedNext(events, commands, []hint.ServedNextEntry{
+		{AtMs: 1_500, ID: "query-explain"},
+		{AtMs: 1_600, ID: "query-path", Argv: []string{"magus"}},
+	})
+
+	assert.Equal(t, []string{"query-explain", "query-path"}, events[0].Event.NextServed)
+	assert.Empty(t, events[0].Event.NextFollowed)
 }
