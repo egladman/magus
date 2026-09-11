@@ -59,7 +59,8 @@ console/gen/
 /gen/site/
 
 # Go coverage profile — throwaway intermediate from `magus run coverage`. The
-# rendered coverage.svg badge is committed; the profile is not.
+# rendered coverage.svg badge is committed, and so is coverage/, the per-platform
+# record it is rendered from; the profiles they are measured from are not.
 coverage.out
 coverage.hand.out
 

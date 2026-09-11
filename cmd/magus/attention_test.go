@@ -254,7 +254,7 @@ func TestAttentionRejectsAnUnknownSubcommand(t *testing.T) {
 
 	err := sessionCmd(context.Background(), root, []string{"resolve", "att-1"})
 	require.ErrorContains(t, err, `unknown subcommand "resolve"`)
-	require.ErrorContains(t, err, "want ls, checkpoint, attention, dispose, hook, or notify")
+	require.ErrorContains(t, err, "want ls, show, load, lease, checkpoint, attention, dispose, hook, or notify")
 }
 
 func TestRecordAttentionOpenOnlyForBlockedOutcomes(t *testing.T) {

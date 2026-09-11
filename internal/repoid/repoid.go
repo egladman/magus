@@ -50,7 +50,7 @@ import (
 func StateDir(base, kind, root string) (string, error) {
 	parent := filepath.Join(base, "magus", kind)
 	dir := filepath.Join(parent, dirName(identity(root)))
-	if err := adopt(LegacyDir(base, kind, root), dir); err != nil {
+	if err := Adopt(LegacyDir(base, kind, root), dir); err != nil {
 		return "", err
 	}
 	return dir, nil
@@ -120,9 +120,14 @@ func dirName(id string) string {
 	return base + "-" + hex.EncodeToString(sum[:])[:12]
 }
 
-// adopt moves a legacy store directory onto dir so records written under an older key
+// Adopt moves a legacy store directory onto dir so records written under an older key
 // stay reachable. There is nothing to do when the paths match, the legacy directory is
 // absent, or dir already exists.
+//
+// Exported for the legacy this package's own key cannot name: a store that lived
+// somewhere else entirely before it moved here, such as the lease ledger's old home in
+// the workspace cache directory. The caller supplies that path and the rule stays here,
+// so there is one answer to what adoption does.
 //
 // An existing dir wins and the legacy directory is left where it is. Merging two stores
 // means deciding which of two records with one name is current, and a store that
@@ -130,7 +135,7 @@ func dirName(id string) string {
 // clone's legacy store stranded where it lies: both clones now read the adopted one, so
 // nothing is lost that was not already invisible, and recovering it is a copy a person
 // makes deliberately.
-func adopt(legacy, dir string) error {
+func Adopt(legacy, dir string) error {
 	if legacy == dir || !present(legacy) || present(dir) {
 		return nil
 	}
@@ -386,4 +391,38 @@ func stripPort(host string) string {
 		return h
 	}
 	return host
+}
+
+// CheckoutRoot is the nearest ancestor of dir holding a .git entry: a directory
+// in a main checkout, a file in a linked worktree. Empty when no ancestor is a
+// checkout. It is how a path a host reported absolutely is reduced to the form
+// every checkout of one repository shares, without magus knowing where any host
+// keeps its worktrees.
+func CheckoutRoot(dir string) string {
+	for d := dir; d != "" && d != filepath.Dir(d); d = filepath.Dir(d) {
+		if _, err := os.Lstat(filepath.Join(d, ".git")); err == nil {
+			return d
+		}
+	}
+	return ""
+}
+
+// CheckoutRelative reduces an absolute file path to its slash-separated path inside
+// the nearest checkout above it, the form every checkout of one repository shares and
+// graph file nodes are keyed by. A relative path is returned as given; an absolute
+// path with no checkout above it stays absolute, which a caller can read as "this
+// checkout is gone".
+func CheckoutRelative(p string) string {
+	if !filepath.IsAbs(p) {
+		return p
+	}
+	root := CheckoutRoot(filepath.Dir(p))
+	if root == "" {
+		return p
+	}
+	rel, err := filepath.Rel(root, p)
+	if err != nil {
+		return p
+	}
+	return filepath.ToSlash(rel)
 }

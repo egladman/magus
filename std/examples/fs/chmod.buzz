@@ -1,5 +1,10 @@
+import "std";
 import "fs";
 
 // Mark the release binary executable. Buzz has no octal literal
 // (matches upstream); Unix mode 0755 = 493 decimal.
-fs\chmod("dist/magus", 493);
+try {
+    fs\chmod("dist/magus", 493);
+} catch (e) {
+    std\print("could not chmod dist/magus");
+}

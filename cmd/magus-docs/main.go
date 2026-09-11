@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/dry"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/std"
 )
 
@@ -268,12 +269,11 @@ func renderModule(m std.Module) string {
 
 	if len(m.Fields) > 0 {
 		fmt.Fprintf(&b, "## Fields\n\n")
-		fmt.Fprintln(&b, "| Field | Type | Description |")
-		fmt.Fprintln(&b, "|-------|------|-------------|")
+		fields := make([][]string, 0, len(m.Fields))
 		for _, f := range m.Fields {
-			fmt.Fprintf(&b, "| `%s` | %s | %s |\n", f.Name, typeMarkdown(f.Type), f.Doc)
+			fields = append(fields, []string{md.Code(f.Name), typeMarkdown(f.Type), f.Doc})
 		}
-		b.WriteByte('\n')
+		b.WriteString(md.Table([]string{"Field", "Type", "Description"}, nil, fields))
 	}
 
 	// notes accumulates the Buzz-stdlib footnotes; each method that duplicates a
@@ -310,16 +310,15 @@ func renderModule(m std.Module) string {
 			sig += methodSourceLink(meth)
 			fmt.Fprintf(&b, "%s\n\n", sig)
 			if len(meth.Args) > 0 {
-				fmt.Fprintln(&b, "| Parameter | Type | Optional | Description |")
-				fmt.Fprintln(&b, "|-----------|------|----------|-------------|")
+				args := make([][]string, 0, len(meth.Args))
 				for _, a := range meth.Args {
 					opt := ""
 					if a.Optional {
 						opt = "yes"
 					}
-					fmt.Fprintf(&b, "| `%s` | %s | %s | |\n", a.Name, typeMarkdown(a.Type), opt)
+					args = append(args, []string{md.Code(a.Name), typeMarkdown(a.Type), opt, ""})
 				}
-				fmt.Fprintln(&b)
+				b.WriteString(md.Table([]string{"Parameter", "Type", "Optional", "Description"}, nil, args))
 			}
 			if len(meth.Returns) > 0 {
 				rets := make([]string, len(meth.Returns))
@@ -418,12 +417,11 @@ func renderIndex(modules []std.Module) string {
 			return
 		}
 		fmt.Fprintf(&b, "## %s\n\n", title)
-		fmt.Fprintln(&b, "| Module | Description |")
-		fmt.Fprintln(&b, "|--------|-------------|")
+		cells := make([][]string, 0, len(rows))
 		for _, m := range rows {
-			fmt.Fprintf(&b, "| [`%s`](%s.md) | %s |\n", m.Name, m.Name, m.Doc)
+			cells = append(cells, []string{md.Link(md.Code(m.Name), m.Name+".md"), m.Doc})
 		}
-		b.WriteByte('\n')
+		b.WriteString(md.Table([]string{"Module", "Description"}, nil, cells))
 	}
 
 	for _, c := range moduleCategories {

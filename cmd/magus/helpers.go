@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"slices"
@@ -309,11 +310,15 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 //
 // Silent on canonical input, and deduped by interactive.Emit, so it teaches once
 // rather than nagging.
-func hintCanonicalSpelling(t types.Target) {
+func hintCanonicalSpelling(t types.Target) { hintCanonicalSpellingTo(os.Stderr, t) }
+
+// hintCanonicalSpellingTo is hintCanonicalSpelling with the destination named, so a test
+// can read what a run would print without capturing the process's stderr.
+func hintCanonicalSpellingTo(w io.Writer, t types.Target) {
 	if t.Declared != "" {
-		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
+		interactive.Emit(w, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
 	}
 	for _, c := range t.DeclaredCharms {
-		interactive.Emit(os.Stderr, fmt.Sprintf("charm %q is canonically %q", c, types.Normalize(c)))
+		interactive.Emit(w, fmt.Sprintf("charm %q is canonically %q", c, types.NormalizeCharm(c)))
 	}
 }

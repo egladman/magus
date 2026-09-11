@@ -11,13 +11,13 @@ A **target** is a named unit of work (build, test, lint, ...) declared as an `ex
 
 ## Route by question
 
-| To find out | Run |
-|---|---|
-| what exists / what relates | `magus query "<terms>"` |
-| is this file generated | `magus describe file <path>` |
-| what a target runs | `magus describe target <name>` |
-| what my change affected | `magus affected ci` |
-| a failing run's output | `magus query output <ref>` |
+| To find out                | Run                            |
+| -------------------------- | ------------------------------ |
+| what exists / what relates | `magus query "<terms>"`        |
+| is this file generated     | `magus describe file <path>`   |
+| what a target runs         | `magus describe target <name>` |
+| what my change affected    | `magus affected ci`            |
+| a failing run's output     | `magus query output <ref>`     |
 
 ## Quick start
 
@@ -33,7 +33,7 @@ Need the detail this index leaves out? Run `magus describe target <name>` for a 
 
 ## Query first
 
-This workspace has a knowledge graph (schema v11). Query it instead of grepping:
+This workspace has a knowledge graph (schema v12). Query it instead of grepping:
 
 ```sh
 magus query "<terms>"       # kind=spell, project=pkg/foo, relation=uses, free text, kind!=op
@@ -43,58 +43,59 @@ magus graph stats           # god nodes, orphans, doc coverage (MCP: magus_stats
 magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, magus_path)
 ```
 
-| Kind | Size | List them | Anchors (most connected) |
-|---|--:|---|---|
-| project | 10+ | `magus query kind=project` | `magus`, `docs`, `libs/gopherbuzz` |
-| target | 100+ | `magus query kind=target` | `content-generate`, `site-generate`, `format` |
-| spell | built in | `magus query kind=spell` | `go`, `markdown`, `typescript` |
-| op | built in | `magus query kind=op` | `go-build`, `go-test`, `dprint` |
-| tool | built in | `magus query kind=tool` | `go`, `pnpm`, `buf` |
-| charm | 10+ | `magus query kind=charm` | `rw`, `cd`, `stable` |
-| module | built in | `magus query kind=module` | `fs`, `magus`, `charm` |
-| method | built in | `magus query kind=method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS1002`, `MGS4001`, `MGS1021` |
-| doc | 300+ | `magus query kind=doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
-| dir | 100+ | `magus query kind=dir` | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage` |
-| file | 200+ | `magus query kind=file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
-| function | 900+ | `magus query kind=function` | `tail`, `sign`, `renderContentHTML` |
-| import | 100+ | `magus query kind=import` | `magus`, `fs`, `std` |
-| rationale | 6 | `magus query kind=rationale` | `TODO`, `WHY`, `NOTE` |
-| package | 100+ | `magus query kind=package` | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools` |
+| Kind       |     Size | List them                     | Anchors (most connected)                                                                                                    |
+| ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `libs/gopherbuzz`                                                                                          |
+| target     |     100+ | `magus query kind=target`     | `content-generate`, `site-generate`, `format`                                                                               |
+| spell      | built in | `magus query kind=spell`      | `go`, `markdown`, `docker`                                                                                                  |
+| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `dprint`                                                                                             |
+| tool       | built in | `magus query kind=tool`       | `go`, `pnpm`, `buf`                                                                                                         |
+| charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
+| module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
+| method     | built in | `magus query kind=method`     | `archive.compress`, `archive.list`, `archive.read_file`                                                                     |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3010`, `MGS1002`, `MGS1028`                                                                                             |
+| doc        |     300+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
+| dir        |     200+ | `magus query kind=dir`        | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage`                                           |
+| file       |     200+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
+| function   |     900+ | `magus query kind=function`   | `tail`, `sign`, `renderContentHTML`                                                                                         |
+| import     |     100+ | `magus query kind=import`     | `magus`, `std`, `fs`                                                                                                        |
+| rationale  |        6 | `magus query kind=rationale`  | `TODO`, `WHY`, `NOTE`                                                                                                       |
+| package    |     100+ | `magus query kind=package`    | `golang.org/x/mod`, `golang.org/x/sync`, `golang.org/x/tools`                                                               |
+| link       |      80+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                          |
 
-| Project | Targets | Scope a query | Key targets |
-|---|--:|---|---|
-| . | 44 | `magus query project=.` | `buzz-test`, `generate`, `release-index` |
-| console | 8 | `magus query project=console` | `preflight`, `build`, `ci` |
-| docs | 18 | `magus query project=docs` | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents | 5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint` |
-| libs/commentdash | 8 | `magus query project=libs/commentdash` | `format`, `build`, `lint` |
-| libs/diagnostics | 8 | `magus query project=libs/diagnostics` | `format`, `build`, `lint` |
-| libs/diagram | 2 | `magus query project=libs/diagram` | `test`, `ci` |
-| libs/gopherbuzz | 10 | `magus query project=libs/gopherbuzz` | `format`, `build`, `lint` |
-| libs/testlayout | 8 | `magus query project=libs/testlayout` | `format`, `build`, `lint` |
-| libs/textsearch | 6 | `magus query project=libs/textsearch` | `lint`, `preflight`, `test` |
-| proto | 3 | `magus query project=proto` | `generate`, `lint`, `ci` |
+| Project                         | Targets | Scope a query                                         | Key targets                                              |
+| ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
+| .                               |      49 | `magus query project=.`                               | `generate`, `buzz-test`, `release-index`                 |
+| console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
+| docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
+| docs/guides/integrations/agents |       5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint`                                   |
+| libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
+| libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
+| libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
+| libs/gopherbuzz                 |      10 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
+| libs/testlayout                 |       8 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
+| libs/textsearch                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `preflight`, `test`                              |
+| proto                           |       3 | `magus query project=proto`                           | `generate`, `lint`, `ci`                                 |
 
 ## Project: docs
 
-| Target | What it does |
-|---|---|
-| `site-generate` | site-generate owns publication. |
-| `generate` | generate owns the COMMITTED derived files, and nothing else. |
-| `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
-| `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `build` | build renders the site: the tree cd.yaml publishes and deploy-generate assembles. |
-| `test` |  |
-| `security` | security audits what actually ships against the npm advisory database. |
-| `ci` |  |
-| `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. |
-| `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. |
-| `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |
-| `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
-| `preflight` |  |
-| `index-generate` | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
-| `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
-| `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
-| `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
-| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |
+| Target                    | What it does                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `site-generate`           | site-generate owns publication.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `generate`                | generate owns the COMMITTED derived files, and nothing else.                                                                                                                                                                                                                                                                                                                                                                   |
+| `format`                  | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it.                                                                                                                                                                                       |
+| `lint`                    | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json).                                                                                                                                                                                                                                                                         |
+| `build`                   | build renders the site: the tree cd.yaml publishes and deploy-generate assembles.                                                                                                                                                                                                                                                                                                                                              |
+| `test`                    |                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `security`                | security audits what actually ships against the npm advisory database.                                                                                                                                                                                                                                                                                                                                                         |
+| `ci`                      |                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `build-playground`        | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it.                                                                                                                                                                                                 |
+| `build-hljs`              | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.                                                                                                                                                                                                                                                                                                          |
+| `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.                                                                                                                                                                                                                                                                                                                      |
+| `render`                  | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.                                                                                                                                                                                                                                                                                                                            |
+| `preflight`               |                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `index-generate`          | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets.                                                                                                                                                                                                                                                                                       |
+| `content-generate`        | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/cli), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
+| `conventions`             | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.                                                                                                                                                                                                                        |
+| `buzz-test`               | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve.                                                                                                                                                                                                                                                                                 |
+| `diagrams-generate`       | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/.                                                                                                                                                                                                                                                                                                                                  |

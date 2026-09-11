@@ -83,9 +83,11 @@ Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
 
 ### Calling magus from a script
 
-`import "magus"` works in a script. Ask magus about the workspace through it
-rather than shelling out to the binary{{if .Full}} - it is in-process, version-pinned, and
-has no arg-quoting to get wrong{{end}}:
+`magus` is a host module like `fs` or `vcs`, so `import "magus"` is what makes the
+namespace exist: without the import line, `magus\...` is `undefined: magus`. That
+holds in a magusfile too. With it, ask magus about the workspace through the
+namespace rather than shelling out to the binary{{if .Full}} - it is in-process,
+version-pinned, and has no arg-quoting to get wrong{{end}}:
 
 ```buzz
 import "std"; import "magus";

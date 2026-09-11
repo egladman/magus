@@ -5,12 +5,19 @@
 // see internal/spellruntime/target.go and hosttypes.go). Edit the Go struct and rerun
 // `go generate`, never this file.
 
+export enum<str> External {
+    none = "",
+    reads = "reads-external",
+    mutates = "mutates-external",
+}
+
 export object Command {
     bin: str = "",
     args: [str] = [],
     defaultArgs: [str] = [],
     charms: {str: Charm} = {},
     sources: [str] = [],
+    external: External = External.none,
     sourcesEach: bool = false,
     capture: bool = false,
     secrets: {str: str} = {},

@@ -470,6 +470,28 @@ func TestDepBarrierWaitForDepsSucceedsOnPassedUpstream(t *testing.T) {
 	assert.NoError(t, err, "a successful upstream must still unblock its dependent")
 }
 
+// TestDepBarrierReleasesADependentWhoseOwnDeadlineExpired pins the invariant the
+// 2026-09-10 stall investigation went looking for: a step that has SETTLED can never be
+// waited on. Whichever parent gets there second may already be past its own ceiling, and
+// the answer it needs is on record, so the settled state has to outrank its expiry. The
+// sibling case (a settled FAILURE outranking a cancelled ctx) is pinned below; this is
+// the success half, which had no test.
+func TestDepBarrierReleasesADependentWhoseOwnDeadlineExpired(t *testing.T) {
+	steps := []Step{depStep("", "B", "A"), depStep("", "A")}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+	defer cancel()
+
+	for range 100 {
+		b := newDepBarrier(steps)
+		b.markDone(stepKey(steps[1]), nil)
+
+		err := b.waitForDeps(ctx, steps[0])
+
+		assert.NoError(t, err, "a settled upstream must release a dependent whose ceiling already fired")
+	}
+}
+
 // TestDepBarrierNamesTheFailedUpstreamEvenWhenCtxIsCancelled pins the tie-break. When
 // an upstream fails AND a sibling has already cancelled the group, both the barrier
 // channel and ctx.Done() are ready, and a bare select over the two picks uniformly at
@@ -749,4 +771,33 @@ func TestExclusiveStepStaysExclusiveAcrossItsFanOut(t *testing.T) {
 	require.NoError(t, err, "RunAll")
 
 	assert.Empty(t, violations)
+}
+
+func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
+	withShortHeartbeat(t, 20*time.Millisecond)
+	logs := captureLogs(t)
+
+	prog := NewProgress()
+	prog.at.Store(time.Now().Add(-time.Hour).UnixNano())
+	ctx := ContextWithProgress(context.Background(), prog)
+
+	upstream := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- waitForUpstream(ctx, upstream, DepKey(".", "coverage-badge"), DepKey(".", "generate"))
+	}()
+	time.Sleep(80 * time.Millisecond)
+	assert.Less(t, prog.Idle(), time.Minute)
+	close(upstream)
+	require.NoError(t, <-done)
+
+	assert.Contains(t, logs.lines(),
+		"magus: waiting for an upstream target to finish waiting=. coverage-badge upstream=. generate")
+}
+
+func TestWaitForUpstreamEndsOnCancel(t *testing.T) {
+	withShortHeartbeat(t, time.Hour)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	assert.ErrorIs(t, waitForUpstream(ctx, make(chan struct{}), "a", "b"), context.Canceled)
 }

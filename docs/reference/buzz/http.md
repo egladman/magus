@@ -25,12 +25,12 @@ Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fa
 
 **Signature:** `http\get(url, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L169)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
@@ -40,9 +40,15 @@ Send a GET request; returns {status, body, headers}. opts (curl-style): fail, fa
 import "std";
 import "http";
 
-final r = http\get("https://api.github.com/repos/egladman/magus");
-std\print(r.status);
-std\print(r.body.sub(0, 80) + "...");
+// A transport failure (DNS, TLS, timeout) RAISES; a 4xx/5xx does not, it arrives
+// as a status. The two are different answers and are handled separately.
+try {
+    final r = http\get("https://api.github.com/repos/egladman/magus");
+    std\print(r.status);
+    std\print(r.body.sub(0, 80) + "...");
+} catch (e) {
+    std\print("request never reached the server");
+}
 ```
 
 ### download
@@ -51,13 +57,13 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 **Signature:** `http\download(url, dest, [headers], [opts], [retry]) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L183)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `dest` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `dest`    | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** int
 
@@ -67,31 +73,37 @@ Send a POST request with body; returns {status, body, headers}. opts (curl-style
 
 **Signature:** `http\post(url, body, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L244)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `url` | `string` |  | |
-| `body` | `string` |  | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `url`     | `string`            |          |             |
+| `body`    | `string`            |          |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // Post JSON. opts carries the curl-style settings; retrying is a separate,
 // typed HttpRetry argument, and without one the request runs exactly once.
 // Escape { and } as \{ \} so Buzz does not try to interpolate them.
-final r = http\post(
-    "https://httpbin.org/post",
-    "\{\"target\":\"build\"\}",
-    {"Content-Type": "application/json"},
-    {"timeout": 10},
-    http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
-);
+try {
+    final r = http\post(
+        "https://httpbin.org/post",
+        "\{\"target\":\"build\"\}",
+        {"Content-Type": "application/json"},
+        {"timeout": 10},
+        http\HttpRetry{ attempts = 3, delay_ms = 500.0 },
+    );
+    std\print(r.status);
+} catch (e) {
+    std\print("post never reached the server");
+}
 ```
 
 ### request
@@ -100,30 +112,36 @@ Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, 
 
 **Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L250)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `method` | `string` |  | |
-| `url` | `string` |  | |
-| `body` | `string` | yes | |
-| `headers` | `map[string]string` | yes | |
-| `opts` | `map[string]any` | yes | |
-| `retry` | `map[string]any` | yes | |
+| Parameter | Type                | Optional | Description |
+| --------- | ------------------- | -------- | ----------- |
+| `method`  | `string`            |          |             |
+| `url`     | `string`            |          |             |
+| `body`    | `string`            | yes      |             |
+| `headers` | `map[string]string` | yes      |             |
+| `opts`    | `map[string]any`    | yes      |             |
+| `retry`   | `map[string]any`    | yes      |             |
 
 **Returns:** map[string]any
 
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // request lets you pick any method; useful for PUT/PATCH/DELETE.
-final r = http\request(
-    "PUT",
-    "https://httpbin.org/put",
-    "hello",
-    { "Content-Type": "text/plain" },
-    { "timeout": 10 },
-);
+try {
+    final r = http\request(
+        "PUT",
+        "https://httpbin.org/put",
+        "hello",
+        { "Content-Type": "text/plain" },
+        { "timeout": 10 },
+    );
+    std\print(r.status);
+} catch (e) {
+    std\print("request never reached the server");
+}
 ```
 
 ### server
@@ -132,20 +150,25 @@ Start a static file server in the background from an options map and return the 
 
 **Signature:** `http\server(opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L262)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `opts` | `map[string]any` |  | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `opts`    | `map[string]any` |          |             |
 
 **Returns:** int
 
 **Example:**
 
 ```buzz
+import "std";
 import "http";
 
 // Serve the current build output over http on port 8080 for quick sharing.
-// Blocks until the process exits.
-http\server({"dir": "dist/", "port": 8080});
+// Blocks until the process exits; raises when the port is already taken.
+try {
+    http\server({"dir": "dist/", "port": 8080});
+} catch (e) {
+    std\print("port 8080 is not available");
+}
 ```
 
 ### byteSize
@@ -154,9 +177,9 @@ Byte length of the file at path. The companion to uploadChunked: the size a Cont
 
 **Signature:** `http\byteSize(path) -> int`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** int
 
@@ -166,13 +189,13 @@ Send the file at src as the request body. chunk_size > 0 sends it in slices (cap
 
 **Signature:** `http\upload_chunked(method, url, src, chunk_size, [headers]) -> any`
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `method` | `string` |  | |
-| `url` | `string` |  | |
-| `src` | `string` |  | |
-| `chunk_size` | `int` |  | |
-| `headers` | `map[string]string` | yes | |
+| Parameter    | Type                | Optional | Description |
+| ------------ | ------------------- | -------- | ----------- |
+| `method`     | `string`            |          |             |
+| `url`        | `string`            |          |             |
+| `src`        | `string`            |          |             |
+| `chunk_size` | `int`               |          |             |
+| `headers`    | `map[string]string` | yes      |             |
 
 **Returns:** any
 

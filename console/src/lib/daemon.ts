@@ -168,11 +168,24 @@ function loopbackPort(host: string): string | null {
 // so only the content params (e.g. { ref } or { inv }) ride the fragment. Pass the resolved
 // daemon host (or null) plus the extra content params.
 export function logsLink(host: string | null, extra: Record<string, string>): string {
+  return surfaceLink("logs", host, extra);
+}
+
+// surfaceLink builds a deep-link to any console surface by its canonical
+// /console/<surface>/ clean path, the form the shell's boot router opens. The re-attach
+// param is the same one logsLink needs and for the same reason: a console attached by
+// #port= has no stored host, so a link that drops it lands the reader on a surface that
+// cannot find the daemon. Content params ride the fragment beside it.
+export function surfaceLink(
+  surface: string,
+  host: string | null,
+  extra: Record<string, string> = {},
+): string {
   const parts: string[] = [];
   const port = host ? loopbackPort(host) : null;
   if (port) parts.push("port=" + port);
   for (const [k, v] of Object.entries(extra)) if (v) parts.push(k + "=" + encodeURIComponent(v));
-  return "../logs/" + (parts.length ? "#" + parts.join("&") : "");
+  return "../" + surface + "/" + (parts.length ? "#" + parts.join("&") : "");
 }
 
 // ---- host resolution + read-only LAN share ---------------------------------

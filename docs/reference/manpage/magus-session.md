@@ -44,13 +44,31 @@ duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each session's last fact, not its first, so a long session that is
 still working stays listed however long ago it began.
 
+--brief answers the listing's own question, where does the work stand, for a
+model instead of a person. It prints this checkout read off disk: branch and
+revision, commits not yet on the base ref, the dirty tree split by the
+classifier \`magus describe file\` uses, the live leases with the command that
+binds each one, the last recorded run's failures with the ref that holds their
+output, whether any host hook config here invokes magus, and where this
+workspace's rules live. Nothing in it is remembered: an agent host that
+replaces a session's history with a summary can wire this to its
+session-start event and hand the model state instead of prose.
+
 ## Options
+
+**--brief**
+: Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)
 
 **--limit** *int*
 : Show at most this many sessions (0 for all)
 
 **--since** *string*
 : Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
+
+### session load options
+
+**--file** *string*
+: Read the event stream from this file instead of stdin
 
 ### session dispose options
 
@@ -107,6 +125,15 @@ still working stays listed however long ago it began.
 **ls**
 : List past sessions and the targets they ran (the default)
 
+**load**
+: Load a normalized agent-session event stream from a host transcript
+
+**lease**
+: Bind a lease to this checkout so the guard applies its ledger row here
+
+**show**
+: Report one loaded session: what it ran, what the rules say, what it loaded
+
 **attention**
 : List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty
 
@@ -128,7 +155,7 @@ still working stays listed however long ago it began.
 : Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
 
 **1**
-: dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error).
+: dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error). load: at least one line was rejected; the lines that were usable are still loaded, and the summary is still printed, so fixing the recipe and re-running costs nothing. show: the session named has no loaded events.
 
 **2**
 : Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases.
@@ -147,10 +174,28 @@ magus session
 magus session --since 24h
 ```
 
+*Hand a compacted session this checkout's state*
+
+```sh
+magus session --brief
+```
+
 *Full session records as JSON*
 
 ```sh
 magus session -o json
+```
+
+*Load a host transcript a recipe normalized*
+
+```sh
+magus session load --file events.ndjson
+```
+
+*Read one loaded session back*
+
+```sh
+magus session show 8f1c2d4e
 ```
 
 *List open attention requests*
@@ -197,5 +242,5 @@ printf '%s\n' 'needs approval' | magus session notify --outcome permission --des
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-ledger**(1)](magus-ledger.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

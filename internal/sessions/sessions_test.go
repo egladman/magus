@@ -476,3 +476,82 @@ func writeRaw(t *testing.T, dir, session string, records []Record) {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(dir, session+fileExt), []byte(b.String()), 0o644))
 }
+
+func loadable(session, host, ref string, at int64) LoadEvent {
+	return LoadEvent{Session: session, Event: AgentEvent{
+		Host: host, Kind: EventFileRead, Ref: ref, AtMs: at, Text: ref + ".go",
+	}}
+}
+
+func TestLoadEventsDedupsOnHostSessionRef(t *testing.T) {
+	dir := t.TempDir()
+	events := []LoadEvent{
+		loadable("s1", "h1", "r1", 10),
+		loadable("s1", "h1", "r2", 20),
+		loadable("s2", "h1", "r1", 30),
+	}
+
+	first, err := LoadEvents(dir, events, SessionStart{})
+	require.NoError(t, err)
+	assert.Equal(t, LoadResult{Loaded: 3, ByKind: map[string]int{EventFileRead: 3}}, first,
+		"r1 under two sessions is two events")
+
+	second, err := LoadEvents(dir, events, SessionStart{})
+	require.NoError(t, err)
+	assert.Equal(t, LoadResult{Deduped: 3, ByKind: map[string]int{}}, second,
+		"a dedup run reports no kinds: the breakdown counts what was written")
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	assert.Len(t, AgentEvents(fold, "s1"), 2)
+	assert.Len(t, AgentEvents(fold, "s2"), 1)
+}
+
+// The host label is the join SessionStart.Host documents as missing, so a loaded
+// session has to carry it on the session record and not only on its events.
+func TestLoadEventsRecordsTheHostOnTheSessionStart(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadEvents(dir, []LoadEvent{loadable("s1", "h1", "r1", 10)}, SessionStart{Workspace: "/tmp/ws"})
+	require.NoError(t, err)
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "h1", summaries[0].Host)
+	assert.Equal(t, 1, summaries[0].Events)
+}
+
+// NewestEventMs reads the HOST's timestamp: a store loaded today from a month-old
+// transcript is a month-old audit, and the doctor check ages against that.
+func TestNewestEventMsReadsTheHostTimestamp(t *testing.T) {
+	dir := t.TempDir()
+	_, err := LoadEvents(dir, []LoadEvent{
+		loadable("s1", "h1", "r1", 10),
+		loadable("s1", "h1", "r2", 900),
+	}, SessionStart{})
+	require.NoError(t, err)
+
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	assert.Equal(t, int64(900), NewestEventMs(fold))
+}
+
+func TestNewestEventMsIsZeroWithoutALoad(t *testing.T) {
+	fold, err := ReadAll(t.TempDir())
+	require.NoError(t, err)
+	assert.Zero(t, NewestEventMs(fold))
+}
+
+func TestValidEventKind(t *testing.T) {
+	assert.True(t, ValidEventKind(EventShellCommand))
+	assert.True(t, ValidEventKind(EventMagusCall))
+	assert.False(t, ValidEventKind("tool.use"))
+	assert.False(t, ValidEventKind(""))
+}
+
+func TestValidSessionIDRefusesAPathSeparator(t *testing.T) {
+	assert.True(t, ValidSessionID("8f1c-2d4e_9"))
+	assert.False(t, ValidSessionID("../escape"))
+	assert.False(t, ValidSessionID(""))
+}

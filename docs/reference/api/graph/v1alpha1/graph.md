@@ -87,12 +87,12 @@ Affected is the reach of one VCS diff: which projects a change forces work in.
 
 Source: [graph.proto:190](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L190).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `base` | string | 1 | the ref actually diffed against, after resolution |
-| `changed_files` | int32 | 2 | how many paths the diff carried |
-| `ids` | repeated string | 3 | project node ids in the transitive reverse closure, sorted |
-| `fallback` | string | 4 | fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base. ids is empty whenever it is set, and the two are read together - an empty ids with no fallback means the diff genuinely reaches nothing, which is a real answer. |
+| Field           | Type            | # | Description                                                                                                                                                                                                                                                 |
+| --------------- | --------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`          | string          | 1 | the ref actually diffed against, after resolution                                                                                                                                                                                                           |
+| `changed_files` | int32           | 2 | how many paths the diff carried                                                                                                                                                                                                                             |
+| `ids`           | repeated string | 3 | project node ids in the transitive reverse closure, sorted                                                                                                                                                                                                  |
+| `fallback`      | string          | 4 | fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base. ids is empty whenever it is set, and the two are read together - an empty ids with no fallback means the diff genuinely reaches nothing, which is a real answer. |
 
 Used by: [FindAffected (response)](graph.md#findaffected).
 
@@ -102,11 +102,11 @@ Answer classifies a result against what magus could actually search. A stated re
 
 Source: [graph.proto:264](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L264).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `verdict` | string | 1 |  |
-| `reason` | string | 2 |  |
-| `gaps` | [repeated SymbolGap](#symbolgap) | 3 |  |
+| Field     | Type                             | # | Description |
+| --------- | -------------------------------- | - | ----------- |
+| `verdict` | string                           | 1 |             |
+| `reason`  | string                           | 2 |             |
+| `gaps`    | [repeated SymbolGap](#symbolgap) | 3 |             |
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
@@ -116,10 +116,10 @@ Dependents is the transitive depends\_on fan-in of one node. Ids only: a caller 
 
 Source: [graph.proto:177](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L177).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `node` | string | 1 | the resolved node the walk started from |
-| `ids` | repeated string | 2 | everything that transitively depends on it; empty is a real answer |
+| Field  | Type            | # | Description                                                        |
+| ------ | --------------- | - | ------------------------------------------------------------------ |
+| `node` | string          | 1 | the resolved node the walk started from                            |
+| `ids`  | repeated string | 2 | everything that transitively depends on it; empty is a real answer |
 
 Used by: [FindDependents (response)](graph.md#finddependents).
 
@@ -129,13 +129,13 @@ DocCoverage is doc coverage for one documentable kind. undocumented is a capped 
 
 Source: [graph.proto:252](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L252).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `kind` | string | 1 |  |
-| `total` | int32 | 2 |  |
-| `documented` | int32 | 3 |  |
-| `percent` | int32 | 4 |  |
-| `undocumented` | repeated string | 5 |  |
+| Field          | Type            | # | Description |
+| -------------- | --------------- | - | ----------- |
+| `kind`         | string          | 1 |             |
+| `total`        | int32           | 2 |             |
+| `documented`   | int32           | 3 |             |
+| `percent`      | int32           | 4 |             |
+| `undocumented` | repeated string | 5 |             |
 
 Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
@@ -145,14 +145,14 @@ Edge is one directed graph edge (a "link").
 
 Source: [graph.proto:39](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L39).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `source` | string | 1 |  |
-| `target` | string | 2 |  |
-| `relation` | string | 3 |  |
-| `confidence` | string | 4 |  |
-| `score` | double | 5 |  |
-| `provenance` | string | 6 |  |
+| Field        | Type   | # | Description |
+| ------------ | ------ | - | ----------- |
+| `source`     | string | 1 |             |
+| `target`     | string | 2 |             |
+| `relation`   | string | 3 |             |
+| `confidence` | string | 4 |             |
+| `score`      | double | 5 |             |
+| `provenance` | string | 6 |             |
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
@@ -162,14 +162,14 @@ EdgeRef is one edge seen FROM a focus node, so direction is relative to that nod
 
 Source: [graph.proto:151](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L151).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `relation` | string | 1 |  |
-| `direction` | [EdgeDirection](#edgedirection) | 2 |  |
-| `other` | string | 3 |  |
-| `other_kind` | string | 4 |  |
-| `other_label` | string | 5 |  |
-| `provenance` | string | 6 |  |
+| Field         | Type                            | # | Description |
+| ------------- | ------------------------------- | - | ----------- |
+| `relation`    | string                          | 1 |             |
+| `direction`   | [EdgeDirection](#edgedirection) | 2 |             |
+| `other`       | string                          | 3 |             |
+| `other_kind`  | string                          | 4 |             |
+| `other_label` | string                          | 5 |             |
+| `provenance`  | string                          | 6 |             |
 
 Used by: [ExplainNode (response)](graph.md#explainnode).
 
@@ -177,8 +177,8 @@ Used by: [ExplainNode (response)](graph.md#explainnode).
 
 Source: [graph.proto:135](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L135).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                      |
+| ------ | ------ | - | ------------------------------------------------ |
 | `name` | string | 1 | a node id, or any reference ResolveNodes accepts |
 
 Used by: [ExplainNode (request)](graph.md#explainnode).
@@ -187,8 +187,8 @@ Used by: [ExplainNode (request)](graph.md#explainnode).
 
 Source: [graph.proto:182](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L182).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                                                                                                                                                         |
+| ------ | ------ | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `base` | string | 1 | base is the VCS ref to diff against. Empty takes the workspace's configured base - the same resolution `magus affected` uses - so a caller with no opinion gets the one the repo already agreed on. |
 
 Used by: [FindAffected (request)](graph.md#findaffected).
@@ -197,8 +197,8 @@ Used by: [FindAffected (request)](graph.md#findaffected).
 
 Source: [graph.proto:171](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L171).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                      |
+| ------ | ------ | - | ------------------------------------------------ |
 | `name` | string | 1 | a node id, or any reference ResolveNodes accepts |
 
 Used by: [FindDependents (request)](graph.md#finddependents).
@@ -207,10 +207,10 @@ Used by: [FindDependents (request)](graph.md#finddependents).
 
 Source: [graph.proto:166](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L166).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `from` | string | 1 |  |
-| `to` | string | 2 |  |
+| Field  | Type   | # | Description |
+| ------ | ------ | - | ----------- |
+| `from` | string | 1 |             |
+| `to`   | string | 2 |             |
 
 Used by: [FindPath (request)](graph.md#findpath).
 
@@ -218,8 +218,8 @@ Used by: [FindPath (request)](graph.md#findpath).
 
 Source: [graph.proto:216](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L216).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                        |
+| ------ | ------ | - | ---------------------------------- |
 | `kind` | string | 1 | optional filter; empty = all kinds |
 
 Used by: [GetGraphStats (request)](graph.md#getgraphstats).
@@ -228,14 +228,14 @@ Used by: [GetGraphStats (request)](graph.md#getgraphstats).
 
 Source: [graph.proto:231](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L231).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `id` | string | 1 |  |
-| `kind` | string | 2 |  |
-| `label` | string | 3 |  |
-| `degree` | int32 | 4 | in + out |
-| `in` | int32 | 5 |  |
-| `out` | int32 | 6 |  |
+| Field    | Type   | # | Description |
+| -------- | ------ | - | ----------- |
+| `id`     | string | 1 |             |
+| `kind`   | string | 2 |             |
+| `label`  | string | 3 |             |
+| `degree` | int32  | 4 | in + out    |
+| `in`     | int32  | 5 |             |
+| `out`    | int32  | 6 |             |
 
 Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
@@ -243,16 +243,16 @@ Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
 Source: [graph.proto:220](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L220).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `node_count` | int32 | 1 |  |
-| `edge_count` | int32 | 2 |  |
-| `gods` | [repeated GodNode](#godnode) | 3 |  |
-| `orphans` | [repeated Orphan](#orphan) | 4 |  |
-| `coverage` | [repeated DocCoverage](#doccoverage) | 5 |  |
-| `isolated_count` | int32 | 6 |  |
-| `component_count` | int32 | 7 |  |
-| `largest_component_size` | int32 | 8 |  |
+| Field                    | Type                                 | # | Description |
+| ------------------------ | ------------------------------------ | - | ----------- |
+| `node_count`             | int32                                | 1 |             |
+| `edge_count`             | int32                                | 2 |             |
+| `gods`                   | [repeated GodNode](#godnode)         | 3 |             |
+| `orphans`                | [repeated Orphan](#orphan)           | 4 |             |
+| `coverage`               | [repeated DocCoverage](#doccoverage) | 5 |             |
+| `isolated_count`         | int32                                | 6 |             |
+| `component_count`        | int32                                | 7 |             |
+| `largest_component_size` | int32                                | 8 |             |
 
 Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
@@ -262,14 +262,14 @@ Match is one ranked node. staleness/outrun\_days carry the EVIDENCE for a prose 
 
 Source: [graph.proto:126](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L126).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `id` | string | 1 |  |
-| `kind` | string | 2 |  |
-| `label` | string | 3 |  |
-| `score` | int32 | 4 |  |
-| `staleness` | string | 5 |  |
-| `outrun_days` | int32 | 6 |  |
+| Field         | Type   | # | Description |
+| ------------- | ------ | - | ----------- |
+| `id`          | string | 1 |             |
+| `kind`        | string | 2 |             |
+| `label`       | string | 3 |             |
+| `score`       | int32  | 4 |             |
+| `staleness`   | string | 5 |             |
+| `outrun_days` | int32  | 6 |             |
 
 Used by: [QueryNodes (response)](graph.md#querynodes), [ResolveNodes (response)](graph.md#resolvenodes).
 
@@ -279,14 +279,14 @@ Node is one graph node.
 
 Source: [graph.proto:29](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L29).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `id` | string | 1 |  |
-| `kind` | string | 2 |  |
-| `label` | string | 3 |  |
-| `doc` | string | 4 |  |
-| `source` | string | 5 | path or path:line provenance |
-| `attrs` | map<string, string> | 6 | kind-specific (charm pointer, MGS URL, ...) |
+| Field    | Type                | # | Description                                 |
+| -------- | ------------------- | - | ------------------------------------------- |
+| `id`     | string              | 1 |                                             |
+| `kind`   | string              | 2 |                                             |
+| `label`  | string              | 3 |                                             |
+| `doc`    | string              | 4 |                                             |
+| `source` | string              | 5 | path or path:line provenance                |
+| `attrs`  | map<string, string> | 6 | kind-specific (charm pointer, MGS URL, ...) |
 
 Used by: [ExplainNode (response)](graph.md#explainnode), [QueryNodes (response)](graph.md#querynodes).
 
@@ -294,12 +294,12 @@ Used by: [ExplainNode (response)](graph.md#explainnode), [QueryNodes (response)]
 
 Source: [graph.proto:139](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L139).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `node` | [Node](#node) | 1 |  |
-| `blast_radius` | int32 | 2 | How many nodes transitively REACH this one, by ANY relation. A reach measure - read it as "how connected is this", not as "what breaks if I change it". Those diverge: nothing depends\_on a spell, so a spell scores in the hundreds here and has no dependents at all. FindDependents answers the rebuild question; do not substitute this for it. |
-| `out` | [repeated EdgeRef](#edgeref) | 3 |  |
-| `in` | [repeated EdgeRef](#edgeref) | 4 |  |
+| Field          | Type                         | # | Description                                                                                                                                                                                                                                                                                                                                          |
+| -------------- | ---------------------------- | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node`         | [Node](#node)                | 1 |                                                                                                                                                                                                                                                                                                                                                      |
+| `blast_radius` | int32                        | 2 | How many nodes transitively REACH this one, by ANY relation. A reach measure - read it as "how connected is this", not as "what breaks if I change it". Those diverge: nothing depends\_on a spell, so a spell scores in the hundreds here and has no dependents at all. FindDependents answers the rebuild question; do not substitute this for it. |
+| `out`          | [repeated EdgeRef](#edgeref) | 3 |                                                                                                                                                                                                                                                                                                                                                      |
+| `in`           | [repeated EdgeRef](#edgeref) | 4 |                                                                                                                                                                                                                                                                                                                                                      |
 
 Used by: [ExplainNode (response)](graph.md#explainnode).
 
@@ -309,12 +309,12 @@ Orphan is a node missing the connection its KIND implies - a doc that documents 
 
 Source: [graph.proto:243](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L243).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `id` | string | 1 |  |
-| `kind` | string | 2 |  |
-| `label` | string | 3 |  |
-| `reason` | string | 4 |  |
+| Field    | Type   | # | Description |
+| -------- | ------ | - | ----------- |
+| `id`     | string | 1 |             |
+| `kind`   | string | 2 |             |
+| `label`  | string | 3 |             |
+| `reason` | string | 4 |             |
 
 Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
@@ -322,12 +322,12 @@ Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
 Source: [graph.proto:200](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L200).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `from` | string | 1 |  |
-| `to` | string | 2 |  |
-| `found` | bool | 3 |  |
-| `steps` | [repeated PathStep](#pathstep) | 4 |  |
+| Field   | Type                           | # | Description |
+| ------- | ------------------------------ | - | ----------- |
+| `from`  | string                         | 1 |             |
+| `to`    | string                         | 2 |             |
+| `found` | bool                           | 3 |             |
+| `steps` | [repeated PathStep](#pathstep) | 4 |             |
 
 Used by: [FindPath (response)](graph.md#findpath).
 
@@ -337,12 +337,12 @@ PathStep is one hop as WALKED (from -> to). forward=false means the path travers
 
 Source: [graph.proto:209](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L209).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `from` | string | 1 |  |
-| `to` | string | 2 |  |
-| `relation` | string | 3 |  |
-| `forward` | bool | 4 |  |
+| Field      | Type   | # | Description |
+| ---------- | ------ | - | ----------- |
+| `from`     | string | 1 |             |
+| `to`       | string | 2 |             |
+| `relation` | string | 3 |             |
+| `forward`  | bool   | 4 |             |
 
 Used by: [FindPath (response)](graph.md#findpath).
 
@@ -350,12 +350,12 @@ Used by: [FindPath (response)](graph.md#findpath).
 
 Source: [graph.proto:96](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L96).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `query` | string | 1 | the magus query grammar, verbatim |
-| `budget` | int32 | 2 | neighborhood node budget; 0 = server default |
-| `offset` | int32 | 3 |  |
-| `page_size` | int32 | 4 | 0 = every match from offset on |
+| Field       | Type   | # | Description                                  |
+| ----------- | ------ | - | -------------------------------------------- |
+| `query`     | string | 1 | the magus query grammar, verbatim            |
+| `budget`    | int32  | 2 | neighborhood node budget; 0 = server default |
+| `offset`    | int32  | 3 |                                              |
+| `page_size` | int32  | 4 | 0 = every match from offset on               |
 
 Used by: [QueryNodes (request)](graph.md#querynodes).
 
@@ -363,16 +363,16 @@ Used by: [QueryNodes (request)](graph.md#querynodes).
 
 Source: [graph.proto:103](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L103).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `query` | string | 1 |  |
-| `budget` | int32 | 2 |  |
-| `match_count` | int32 | 3 | TOTAL matches, not this page |
-| `offset` | int32 | 4 |  |
-| `matches` | [repeated Match](#match) | 5 |  |
-| `nodes` | [repeated Node](#node) | 6 |  |
-| `links` | [repeated Edge](#edge) | 7 |  |
-| `answer` | [Answer](#answer) | 8 |  |
+| Field         | Type                     | # | Description                  |
+| ------------- | ------------------------ | - | ---------------------------- |
+| `query`       | string                   | 1 |                              |
+| `budget`      | int32                    | 2 |                              |
+| `match_count` | int32                    | 3 | TOTAL matches, not this page |
+| `offset`      | int32                    | 4 |                              |
+| `matches`     | [repeated Match](#match) | 5 |                              |
+| `nodes`       | [repeated Node](#node)   | 6 |                              |
+| `links`       | [repeated Edge](#edge)   | 7 |                              |
+| `answer`      | [Answer](#answer)        | 8 |                              |
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
@@ -380,10 +380,10 @@ Used by: [QueryNodes (response)](graph.md#querynodes).
 
 Source: [graph.proto:114](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L114).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `reference` | string | 1 |  |
-| `limit` | int32 | 2 |  |
+| Field       | Type   | # | Description |
+| ----------- | ------ | - | ----------- |
+| `reference` | string | 1 |             |
+| `limit`     | int32  | 2 |             |
 
 Used by: [ResolveNodes (request)](graph.md#resolvenodes).
 
@@ -391,9 +391,9 @@ Used by: [ResolveNodes (request)](graph.md#resolvenodes).
 
 Source: [graph.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L119).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `matches` | [repeated Match](#match) | 1 |  |
+| Field     | Type                     | # | Description |
+| --------- | ------------------------ | - | ----------- |
+| `matches` | [repeated Match](#match) | 1 |             |
 
 Used by: [ResolveNodes (response)](graph.md#resolvenodes).
 
@@ -403,12 +403,12 @@ SymbolGap is one project whose declared symbol index magus could not read: the e
 
 Source: [graph.proto:273](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L273).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `project_path` | string | 1 | workspace-relative; "." is the root |
+| Field          | Type   | # | Description                                                   |
+| -------------- | ------ | - | ------------------------------------------------------------- |
+| `project_path` | string | 1 | workspace-relative; "." is the root                           |
 | `project_name` | string | 2 | the human label, which differs from the path only at the root |
-| `state` | string | 3 |  |
-| `detail` | string | 4 |  |
+| `state`        | string | 3 |                                                               |
+| `detail`       | string | 4 |                                                               |
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
@@ -418,11 +418,11 @@ Used by: [QueryNodes (response)](graph.md#querynodes).
 
 Source: [graph.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L160).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `EDGE_DIRECTION_UNSPECIFIED` | 0 |  |
-| `EDGE_DIRECTION_OUT` | 1 | the focus node is the edge's source |
-| `EDGE_DIRECTION_IN` | 2 | the focus node is the edge's target |
+| Value                        | # | Description                         |
+| ---------------------------- | - | ----------------------------------- |
+| `EDGE_DIRECTION_UNSPECIFIED` | 0 |                                     |
+| `EDGE_DIRECTION_OUT`         | 1 | the focus node is the edge's source |
+| `EDGE_DIRECTION_IN`          | 2 | the focus node is the edge's target |
 
 Used by: [ExplainNode (response)](graph.md#explainnode).
 

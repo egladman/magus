@@ -432,6 +432,50 @@ fun resolved() > str {
         + footer();
 }
 
+// The sections that get a fixed place in the comment. Anything unlisted appends, so a new
+// advisor needs no entry here and the rest keep the order of the steps in action.yml.
+//
+// unclaimed leads because it is the finding that undercuts the others: a file no project
+// declares reruns its containing project on every touch without moving a cache key, and
+// when that file really is an input (a lint rule set, a toolchain pin, a formatter config)
+// the same missing declaration lets a verdict computed under the old rules replay.
+// See MGS1028.
+final section_order = ["unclaimed"];
+
+fun rankOf(name: str) > int {
+    var i = 0;
+    foreach (ranked in section_order) {
+        if (ranked == name) { return i; }
+        i = i + 1;
+    }
+    return section_order.len();
+}
+
+// rankedInsert returns where a NEW section of `name` belongs, or null to append.
+//
+// It reads placement off the markers rather than tracking positions, because the comment
+// it splices into was composed by one separate script run per advisor.
+fun rankedInsert(text: str, name: str) > int? {
+    final mine = rankOf(name);
+    if (mine == section_order.len()) { return null; }
+    final prefix = "<!-- magus:advice:";
+    var scan = 0;
+    while (true) {
+        final at = text.indexOf(prefix, from: scan);
+        if (at == null) { return null; }
+        scan = at + prefix.len();
+        final rest = text.sub(scan);
+        final closes = rest.indexOf(" -->");
+        if (closes == null) { return null; }
+        // An end marker, the footer, and the legacy footnotes marker share the prefix and
+        // open no section.
+        final marker = rest.sub(0, len: closes);
+        final opens = marker.indexOf(":begin");
+        if (opens == null) { continue; }
+        if (rankOf(marker.sub(0, len: opens)) > mine) { return at; }
+    }
+}
+
 export fun compose(current: str, name: str, title: str, body: str) > str {
     final begin = beginMarker(name);
     final end = endMarker(name);
@@ -442,6 +486,17 @@ export fun compose(current: str, name: str, title: str, body: str) > str {
         head = current.sub(0, len: at);
         final closes = current.indexOf(end);
         if (closes != null) { tail = current.sub(closes + end.len()); }
+    } else {
+        // Only for a section actually being written. Splicing on a retraction moves bytes
+        // with nothing to place, and the withoutFooter guard reads that as a change and
+        // PATCHes the comment on every push.
+        if (body != "") {
+            final slot = rankedInsert(current, name: name);
+            if (slot != null) {
+                head = current.sub(0, len: slot);
+                tail = "\n\n" + current.sub(slot);
+            }
+        }
     }
     if (head.indexOf(comment_marker) == null) { head = comment_marker + "\n" + preface(); }
     // The definitions block is rebuilt from the finished comment, so strip whatever is
@@ -627,6 +682,33 @@ test "compose replaces only its own section" {
     std\assert(body.indexOf("old conflicts") == null, message: "the old text is gone");
     std\assert(body.indexOf("new conflicts") != null, message: "the new text is there");
     std\assert(body.indexOf("drift text") != null, message: "the other section survives");
+}
+
+test "unclaimed leads however late its advisor ran" {
+    var body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    body = compose(body, name: "unclaimed", title: "Files no project claims", body: "a stray file");
+    body = compose(body, name: "blast-radius", title: "Blast radius", body: "wide");
+    final lead = body.indexOf(beginMarker("unclaimed"));
+    std\assert(lead != null, message: "the section composed at all");
+    std\assert(lead! < body.indexOf(beginMarker("doctor"))!,
+        message: "above a section composed before it");
+    std\assert(lead! < body.indexOf(beginMarker("blast-radius"))!,
+        message: "and above one composed after it");
+}
+
+test "sections nothing ranks keep the order their advisors ran in" {
+    var body = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    body = compose(body, name: "conformance", title: "Divergent target", body: "one");
+    std\assert(body.indexOf(beginMarker("doctor"))! < body.indexOf(beginMarker("conformance"))!,
+        message: "appended where it ran, not reordered");
+}
+
+test "a retracted ranked section leaves the comment where it was" {
+    // Splicing on an empty body would edit bytes on every push, which the withoutFooter
+    // guard would then read as a real change.
+    final one = compose("", name: "doctor", title: "Workspace health", body: "a target failed");
+    assert\equal(withoutFooter(compose(one, name: "unclaimed", title: "Files", body: "")),
+        want: withoutFooter(one), message: "nothing to place, nothing to move");
 }
 
 test "an empty body retracts the section and its heading" {

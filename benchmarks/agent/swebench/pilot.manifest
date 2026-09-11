@@ -1,0 +1,104 @@
+# SWE-bench Verified pilot: the 24 instances in swebench/pilot.jsonl, controls
+# first, then three reps per arm on Sonnet 5 at high effort. Every trial runs in
+# the instance's container for the host's architecture, so --magus-binary is the
+# matching linux build; run.sh fills {arch} in with arm64 or amd64 (see the
+# SWE-bench section of README.md for how to produce one at that path).
+#
+# Run from benchmarks/agent with docker up and a token in the environment:
+#   ./run.sh --manifest swebench/pilot.manifest
+--arm rampant --task swebench:astropy__astropy-12907 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:astropy__astropy-12907 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:astropy__astropy-13033 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:astropy__astropy-13033 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:django__django-10097 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:django__django-10097 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:django__django-10554 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:django__django-10554 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:django__django-10880 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:django__django-10880 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:matplotlib__matplotlib-13989 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:matplotlib__matplotlib-13989 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:matplotlib__matplotlib-14623 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:matplotlib__matplotlib-14623 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:mwaskom__seaborn-3069 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:mwaskom__seaborn-3069 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:mwaskom__seaborn-3187 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:mwaskom__seaborn-3187 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pallets__flask-5014 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pallets__flask-5014 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:psf__requests-1142 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:psf__requests-1142 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:psf__requests-1724 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:psf__requests-1724 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pydata__xarray-2905 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pydata__xarray-2905 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pydata__xarray-3095 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pydata__xarray-3095 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pylint-dev__pylint-4551 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pylint-dev__pylint-4551 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pylint-dev__pylint-4604 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pylint-dev__pylint-4604 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pytest-dev__pytest-10051 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pytest-dev__pytest-10051 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:pytest-dev__pytest-10081 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:pytest-dev__pytest-10081 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:scikit-learn__scikit-learn-10297 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:scikit-learn__scikit-learn-10297 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:scikit-learn__scikit-learn-10844 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:scikit-learn__scikit-learn-10844 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:sphinx-doc__sphinx-10323 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:sphinx-doc__sphinx-10323 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:sphinx-doc__sphinx-10435 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:sphinx-doc__sphinx-10435 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:sympy__sympy-11618 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:sympy__sympy-11618 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:sympy__sympy-12096 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control golden
+--arm rampant --task swebench:sympy__sympy-12096 --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus --control null
+--arm rampant --task swebench:astropy__astropy-12907 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:astropy__astropy-12907 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:astropy__astropy-13033 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:astropy__astropy-13033 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:django__django-10097 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:django__django-10097 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:django__django-10554 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:django__django-10554 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:django__django-10880 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:django__django-10880 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:matplotlib__matplotlib-13989 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:matplotlib__matplotlib-13989 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:matplotlib__matplotlib-14623 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:matplotlib__matplotlib-14623 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:mwaskom__seaborn-3069 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:mwaskom__seaborn-3069 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:mwaskom__seaborn-3187 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:mwaskom__seaborn-3187 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pallets__flask-5014 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pallets__flask-5014 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:psf__requests-1142 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:psf__requests-1142 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:psf__requests-1724 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:psf__requests-1724 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pydata__xarray-2905 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pydata__xarray-2905 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pydata__xarray-3095 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pydata__xarray-3095 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pylint-dev__pylint-4551 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pylint-dev__pylint-4551 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pylint-dev__pylint-4604 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pylint-dev__pylint-4604 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pytest-dev__pytest-10051 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pytest-dev__pytest-10051 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:pytest-dev__pytest-10081 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:pytest-dev__pytest-10081 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:scikit-learn__scikit-learn-10297 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:scikit-learn__scikit-learn-10297 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:scikit-learn__scikit-learn-10844 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:scikit-learn__scikit-learn-10844 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:sphinx-doc__sphinx-10323 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:sphinx-doc__sphinx-10323 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:sphinx-doc__sphinx-10435 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:sphinx-doc__sphinx-10435 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:sympy__sympy-11618 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:sympy__sympy-11618 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm rampant --task swebench:sympy__sympy-12096 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus
+--arm full --task swebench:sympy__sympy-12096 --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../dist/linux-{arch}/magus

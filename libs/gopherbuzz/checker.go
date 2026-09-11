@@ -125,8 +125,9 @@ type checker struct {
 	private map[string]bool
 }
 
-// Check type-checks prog after pre-registering extraGlobals as types.Any.
-// This allows callers to inject dynamically-defined names (e.g. from SetVal) so the
+// checkWithGlobals type-checks prog after pre-registering extraGlobals: as the typed
+// namespace a host declared for the name when there is one, else as Unknown. This
+// allows callers to inject dynamically-defined names (e.g. from SetVal) so the
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
@@ -140,22 +141,78 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 	}
 	c.pushScope()
 	c.registerBuiltins()
-	for _, name := range extraGlobals {
-		if _, ok := c.scopes[len(c.scopes)-1][name]; !ok {
-			c.define(name, types.Unknown, false)
-		}
-	}
 	// Register object/enum types pulled in from flat imports before collecting
 	// the current file's top-level names, so the importer can use them in
 	// annotations and literals. Same registration as collectTopLevel's
 	// Object/Enum cases; field cross-references resolve lazily via resolveType.
 	c.registerTypeDecls(imported)
+	for _, name := range extraGlobals {
+		if _, ok := c.scopes[len(c.scopes)-1][name]; ok {
+			continue
+		}
+		// A host may bind a namespace as a GLOBAL rather than behind an import and
+		// declare it through DeclareModuleTypes. Its declarations are collected under
+		// the same bound name an import would use, so the namespace object is built the
+		// same way; without this the global falls back to Unknown and every call
+		// through it goes unchecked.
+		if nt := c.namespaceType(name); nt != nil {
+			c.define(name, nt, false)
+			continue
+		}
+		c.define(name, types.Unknown, false)
+	}
 	c.collectTopLevel(prog)
 	c.inferUnannotatedReturns(prog)
 	for _, s := range prog.Stmts {
 		c.checkStmt(s)
 	}
 	return c.errors, c.warnings
+}
+
+// namespaceType builds the typed namespace object for a module bound under name,
+// so qualified access (`state\wm()`) resolves to its declared return type instead
+// of any, and a member the module does not export is BZZ1007 rather than a runtime
+// null call. It returns nil when nothing declares that name.
+func (c *checker) namespaceType(name string) *types.ObjectType {
+	fds := c.moduleFuncs[name]
+	decls := c.moduleTypes[name]
+	vars := c.moduleVars[name]
+	if len(fds) == 0 && len(decls) == 0 && len(vars) == 0 {
+		return nil
+	}
+	nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
+	for _, fd := range fds {
+		nt.Fields[fd.Name] = c.funDeclType(fd)
+	}
+	// An exported final/var is a member too. The TYPE is best-effort: an
+	// unannotated one stays Unknown rather than being inferred, since its
+	// initializer may name things private to the defining module. Recording
+	// the NAME is the point.
+	for _, vd := range vars {
+		var vt types.Type = types.Unknown
+		if vd.TypeAnnot != "" {
+			vt = c.resolveAnnot(vd.TypeAnnot)
+		}
+		nt.Fields[vd.Name] = vt
+	}
+	// An exported TYPE is reachable through the namespace too, as the type value
+	// itself, so `io\File.open(...)` resolves the same static method a bare
+	// `File.open(...)` does, and `io\FileMode.read` the same case.
+	for _, d := range decls {
+		switch v := d.(type) {
+		case *ast.ObjectDecl:
+			nt.Fields[v.Name] = c.buildObjectType(v)
+		case *ast.EnumDecl:
+			nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
+			// The enum's VALUE lives behind the namespace, so a resolved case has to
+			// compile to `ns\Enum.case` rather than the bare name the checker uses.
+			if c.enumNS == nil {
+				c.enumNS = map[string]string{}
+			}
+			c.enumNS[v.Name] = name
+		}
+	}
+	return nt
 }
 
 // registerBuiltins pre-defines the stdlib functions so the checker doesn't
@@ -259,42 +316,7 @@ func (c *checker) collectTopLevel(prog *ast.Program) {
 			// typed namespace object so qualified access (e.g. state\wm()) resolves
 			// to the declared return type instead of any. This lets the checker
 			// propagate types through cross-module calls and enforce E28 correctly.
-			fds := c.moduleFuncs[name]
-			decls := c.moduleTypes[name]
-			vars := c.moduleVars[name]
-			if len(fds) > 0 || len(decls) > 0 || len(vars) > 0 {
-				nt := &types.ObjectType{Name: name, Fields: map[string]types.Type{}, Methods: map[string]*types.FuncType{}, IsNamespace: true}
-				for _, fd := range fds {
-					nt.Fields[fd.Name] = c.funDeclType(fd)
-				}
-				// An exported final/var is a member too. The TYPE is best-effort: an
-				// unannotated one stays Unknown rather than being inferred, since its
-				// initializer may name things private to the defining module. Recording
-				// the NAME is the point.
-				for _, vd := range vars {
-					var vt types.Type = types.Unknown
-					if vd.TypeAnnot != "" {
-						vt = c.resolveAnnot(vd.TypeAnnot)
-					}
-					nt.Fields[vd.Name] = vt
-				}
-				// An exported TYPE is reachable through the namespace too, as the type value
-				// itself, so `io\File.open(...)` resolves the same static method a bare
-				// `File.open(...)` does, and `io\FileMode.read` the same case.
-				for _, d := range decls {
-					switch v := d.(type) {
-					case *ast.ObjectDecl:
-						nt.Fields[v.Name] = c.buildObjectType(v)
-					case *ast.EnumDecl:
-						nt.Fields[v.Name] = &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
-						// The enum's VALUE lives behind the namespace, so a resolved case has to
-						// compile to `ns\Enum.case` rather than the bare name the checker uses.
-						if c.enumNS == nil {
-							c.enumNS = map[string]string{}
-						}
-						c.enumNS[v.Name] = name
-					}
-				}
+			if nt := c.namespaceType(name); nt != nil {
 				c.define(name, nt, false)
 			} else {
 				// No tracked function signatures (native module or no exported funs):
@@ -375,6 +397,9 @@ func (c *checker) registerTypeDecls(decls []ast.Node) {
 			et := &types.EnumType{Name: v.Name, Cases: v.Cases, Backing: v.Backing}
 			c.types[v.Name] = et
 			c.define(v.Name, et, true)
+			// A local enum shadows a namespaced one of the same bare name; its cases
+			// compile to the bare name, not to the namespace the earlier one lived in.
+			delete(c.enumNS, v.Name)
 		}
 	}
 }
@@ -1198,18 +1223,26 @@ func (c *checker) infer(n ast.Node) types.Type {
 		return types.Null // yield expression evaluates to null (the resumed value)
 	case *ast.FiberExpr:
 		calleeTyp := c.infer(v.Call.Callee)
+		argsResolved := true
 		if ft, ok := calleeTyp.(*types.FuncType); ok {
+			before := len(c.errors)
 			c.resolveNamedArgs(v.Call, ft)
+			argsResolved = len(c.errors) == before
 		} else {
 			v.Call.ArgNames = nil
 		}
 		// A fiber wraps an ordinary call, so its arguments get their parameter types the
 		// same way a direct call's do (inferCall). Inferring them bare left an anonymous
 		// `.{ ... }` argument as a map, so `&f(.{ points = 8 })` produced something
-		// whose methods did not exist.
+		// whose methods did not exist. A failed named-arg resolution already reported
+		// the mismatch, and the positions it left are not worth a second error each.
 		for i, a := range v.Call.Args {
 			if ft, ok := calleeTyp.(*types.FuncType); ok && i < len(ft.Params) {
-				c.inferExpected(a, c.resolveType(ft.Params[i]))
+				want := c.resolveType(ft.Params[i])
+				got := c.inferExpected(a, want)
+				if argsResolved {
+					c.checkArgType(ft, i, a, got, want)
+				}
 				continue
 			}
 			c.infer(a)
@@ -1388,6 +1421,7 @@ func (c *checker) inferUnary(v *ast.UnaryExpr) types.Type {
 func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 	calleeTyp := c.infer(v.Callee)
 	ft, ok := calleeTyp.(*types.FuncType)
+	argsResolved := true
 	if ok {
 		// Propagate-or-catch: a call to a function that declared !> (or, for a
 		// host extern, is authored as raising in std.Method) is only legal when
@@ -1416,7 +1450,12 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 				c.errorfc(v.Pos, TypeMismatch, "yield type mismatch: callee yields %s, enclosing function declares %s", ft.Yield.TypeName(), c.yieldTyp.TypeName())
 			}
 		}
+		// A call whose labels could not be matched to slots has already reported why;
+		// typing its arguments against slots they never landed in would stack a second
+		// error on the first, so the per-argument check below runs only on a resolved call.
+		before := len(c.errors)
 		c.resolveNamedArgs(v, ft)
+		argsResolved = len(c.errors) == before
 	} else {
 		// Dynamic callee (any-typed value, host function): labels cannot be
 		// resolved, so arguments pass in written order. Upstream-style call
@@ -1451,7 +1490,11 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 			// types, so `task: FiberTask` arrives as a NamedType. An anonymous `.{ ... }`
 			// argument looks for an OBJECT in its expected type and would find none, and
 			// so stay a plain map whose methods then do not exist.
-			c.inferExpected(a, c.resolveType(ft.Params[i]))
+			want := c.resolveType(ft.Params[i])
+			got := c.inferExpected(a, want)
+			if argsResolved {
+				c.checkArgType(ft, i, a, got, want)
+			}
 			continue
 		}
 		c.infer(a)
@@ -1485,6 +1528,64 @@ func (c *checker) inferCall(v *ast.CallExpr) types.Type {
 		return types.Void
 	}
 	return ft.Ret
+}
+
+// checkArgType reports an argument whose type does not match the parameter it
+// fills. Upstream Buzz rejects this at compile time (TypeChecker.zig's
+// `.call_argument_type`, "Bad argument type"); gopherbuzz inferred the argument
+// against the parameter and then discarded the answer, so a declaration bought
+// existence and arity but never argument types.
+//
+// Compat, not upstream's `eql`: this checker already models `mut T` assignable
+// to `T`, protocol conformance, and Any/Unknown as escapes, and an equality test
+// would reject all three.
+//
+// An unresolved NamedType on EITHER side is a type this checker cannot see through:
+// an erased generic parameter on the want side, a value whose declaring module names
+// a type it never declares on the got side. Asserting against one invents errors on
+// correct programs, so it is skipped the way Unknown is everywhere else.
+func (c *checker) checkArgType(ft *types.FuncType, i int, arg ast.Node, got, want types.Type) {
+	// Only what the CALLER wrote. Upstream walks the call's own arguments and fills
+	// the rest from defaults untouched; resolveNamedArgs splices a default into
+	// v.Args, which is a representation detail this check must not read as a written
+	// argument. Node identity is what distinguishes them: a spliced slot IS the
+	// declaration's node.
+	if i < len(ft.ParamDefaults) && ft.ParamDefaults[i] != nil && ft.ParamDefaults[i] == arg {
+		return
+	}
+	if hasErasedType(want) || hasErasedType(got) {
+		return
+	}
+	if types.Compat(got, want) {
+		return
+	}
+	slot := fmt.Sprintf("argument %d", i+1)
+	if i < len(ft.ParamNames) && ft.ParamNames[i] != "" {
+		slot = fmt.Sprintf("argument %q", ft.ParamNames[i])
+	}
+	c.errorfc(ast.NodePos(arg), TypeMismatch, "cannot pass %s as %s of type %s", got.TypeName(), slot, want.TypeName())
+}
+
+// hasErasedType reports whether t still carries a NamedType resolveType could not
+// resolve, at any depth. `list: [T]` inside a generic function is the shape that
+// matters: the element is erased even though the list itself is concrete.
+func hasErasedType(t types.Type) bool {
+	switch v := t.(type) {
+	case *types.NamedType:
+		return true
+	case *types.ListType:
+		return hasErasedType(v.Elem)
+	case *types.MapType:
+		return hasErasedType(v.Key) || hasErasedType(v.Val)
+	case *types.FuncType:
+		for _, p := range v.Params {
+			if hasErasedType(p) {
+				return true
+			}
+		}
+		return hasErasedType(v.Ret)
+	}
+	return false
 }
 
 // resolveNamedArgs reorders a call's labeled arguments (upstream Buzz's

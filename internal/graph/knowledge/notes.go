@@ -28,11 +28,11 @@ const sharedNotesShardName = "@notes/shared"
 // been the wrong way to support this.
 const privateNotesShardName = "@notes/private"
 
-// isLocalShard reports whether a shard holds machine-local content that must never reach
+// isMachineLocalShard reports whether a shard holds machine-local content that must never reach
 // the remote cache. Kept as one predicate so a new local shard is added in a single place
 // rather than at every push site.
-func isLocalShard(name string) bool {
-	return isRuntimeShard(name) || isCoverageShard(name) || name == privateNotesShardName
+func isMachineLocalShard(name string) bool {
+	return isRuntimeShard(name) || isCoverageShard(name) || isSessionShard(name) || name == privateNotesShardName
 }
 
 // attrScope distinguishes a note the team committed from one only this machine has, so

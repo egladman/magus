@@ -130,24 +130,31 @@ fun install() > void !> any {
 // only the first, Node reads the sourcemap for stack traces alone and every record stays
 // SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.
 //
-// The badge sits in this project's own tree, NOT in <root>/assets/ beside the Go and textsearch ones,
-// and so is not copied into the docs site (docs/render.buzz copies exactly one directory). It cannot
-// be: `magus describe project console` reports depends_on=[. libs/textsearch], and writing another
+// The badge sits in this project's own tree, NOT in <root>/assets/ beside the Go one. It cannot:
+// `magus describe project console` reports depends_on=[. libs/textsearch], and writing another
 // project's tree makes THAT project depend on this one, which magus rejects as a 2-cycle
 // (MGS8003/CrossOutputCycle) - correctly, since the root would then have to run both before and after
-// the console. Putting it on the site would mean widening render.buzz's asset copy, which is a
-// separate call about the site rather than about this gate.
+// the console. docs/render.buzz copies this one file into the site beside the libs/* badges, so the
+// README's badge path resolves on GitHub and on the site alike.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
+    ctx.needs(preflight, textsearch\test);
     ctx.writesFiles("coverage.svg");
     final before = drift\hashes(["coverage.svg"]);
     install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
+    // One badge per LANGUAGE, not per project: this figure spans every TypeScript
+    // project with a suite, which today is this one and libs/textsearch. The console
+    // renders it because it sits at the top of the TypeScript dependency graph, so its
+    // test is where every report has already been produced. The textsearch report's
+    // paths are prefixed before the merge: both projects name their files src/..., and
+    // the merge unions DA: records by path, so unprefixed they would read as one file.
+    final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
+        .replace("SF:src/", "SF:libs/textsearch/src/");
     final pct = lcov\mergePercent(
-        [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov")],
+        [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
-    fs\writeFile("coverage.svg", badge\coverage("console coverage", percent: pct, radius: 3));
+    fs\writeFile("coverage.svg", badge\coverage("typescript coverage", percent: pct, radius: 3));
     if (ctx.hasCharm("rw")) { return; }
     if (drift\changedSince(before, ["coverage.svg"]).len() > 0) {
         // Names the figure this run measured. Node's line coverage differs by a fraction

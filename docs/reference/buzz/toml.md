@@ -20,9 +20,9 @@ Decode a TOML document into a value (tables become maps, arrays become lists, pl
 
 **Signature:** `toml\parse(source) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L49)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `source` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
 **Returns:** any
 
@@ -32,9 +32,9 @@ Encode a value to a TOML string; the top level must be a table/map, as TOML requ
 
 **Signature:** `toml\stringify(value) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/toml/toml.go#L58)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `value` | `any` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `value`   | `any` |          |             |
 
 **Returns:** string
 

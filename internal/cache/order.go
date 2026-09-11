@@ -1,10 +1,19 @@
 package cache
 
 import (
+	"fmt"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/bmatcuk/doublestar/v4"
+
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 )
 
 // TargetNode is one target's declared file footprint, the unit order derivation
@@ -35,6 +44,50 @@ type TargetNode struct {
 	// A fallback reader provably never sees files under them, so writes landing
 	// wholly inside one derive no edge.
 	IgnoreDirs []string
+	// Needs are the ctx.needs calls this target makes, in body order. They are the only
+	// sequencing that exists INSIDE a step: a call fans its members out unordered and
+	// returns when all of them have run, so the members of one call are siblings, every
+	// call completes before this target's own work, and a later call starts after the
+	// earlier ones have completed. That is what decides whether a same-step overlap is
+	// ordered or unschedulable; see FindSameStepConflicts.
+	Needs Calls
+}
+
+// Call is one ctx.needs call: the node keys it fans out, in argument order.
+type Call []string
+
+// Calls is a target's ctx.needs calls in body order, built the way the body reads:
+// Needs(a, b) is one call, .Needs(c) the call after it. ChainCalls builds the real thing
+// from a project's chain; this is for code that states the calls by hand.
+type Calls []Call
+
+// Needs starts the calls with the first ctx.needs call.
+func Needs(keys ...string) Calls { return Calls{Call(keys)} }
+
+// Needs appends one more ctx.needs call, ordered after every call before it.
+func (c Calls) Needs(keys ...string) Calls { return append(c, Call(keys)) }
+
+// members is every node key the calls dispatch, in body order.
+func (c Calls) members() []string {
+	var out []string
+	for _, call := range c {
+		out = append(out, call...)
+	}
+	return out
+}
+
+// before lists the members of the calls before the one naming member: the nodes that
+// have completed before member starts, by this composer's own sequencing. Nil when
+// member is in the first call or is not a member at all.
+func (c Calls) before(member string) []string {
+	var out []string
+	for _, call := range c {
+		if slices.Contains(call, member) {
+			return out
+		}
+		out = append(out, call...)
+	}
+	return nil
 }
 
 // Key returns the node's scheduling identity, shared with the step barrier.
@@ -76,6 +129,10 @@ type DerivedOrder struct {
 	// RunAfter maps a step's node key to the step node keys it must wait for,
 	// beyond its coarse DependsOn. RunAll's barrier waits these exactly.
 	RunAfter map[string][]string
+	// SameStep holds the overlaps inside one step that nothing sequences. They are not
+	// edges: no schedule can express them, and settling cannot repair them either, since
+	// both targets run in one window. The caller refuses the run over them.
+	SameStep SameStepConflicts
 }
 
 // DeriveTargetOrder derives cross-step, target-granular ordering from declared
@@ -95,23 +152,24 @@ type DerivedOrder struct {
 // entries; the rest are marked unordered for the caller to settle. Coarse
 // DependsOn edges always win over derived ones: project-level ordering (and the
 // affected set) is never widened or narrowed here.
-func DeriveTargetOrder(steps []Step, nodes []TargetNode) *DerivedOrder {
-	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}}
+func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
+	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}, SameStep: FindSameStepConflicts(nodes, witness)}
 
-	sharesStep := func(a, b TargetNode) bool {
-		return slices.ContainsFunc(a.Steps, func(s string) bool { return slices.Contains(b.Steps, s) })
-	}
 	for w := range nodes {
 		for r := range nodes {
 			if w == r || nodes[w].Key() == nodes[r].Key() {
 				continue
 			}
-			// Same-step pairs are the body's own ctx.needs sequencing, which stays
-			// untouched; only cross-step order is magus's to derive.
-			if sharesStep(nodes[w], nodes[r]) {
+			// A pair that runs in exactly the same steps is the body's own ctx.needs
+			// sequencing, which stays untouched; only cross-step order is magus's to
+			// derive, and an unsequenced pair is already in SameStep above, for the
+			// caller to refuse over. A pair that only PARTLY shares its steps still
+			// meets across the steps it does not share, so the edge derives and the
+			// projection decides, per owner, whether the schedule can honor it.
+			if nodes[w].identicalSteps(nodes[r]) {
 				continue
 			}
-			if !footprintsIntersect(nodes[w], nodes[r]) {
+			if _, _, ok := nodes[w].overlap(nodes[r]); !ok {
 				continue
 			}
 			d.Edges = append(d.Edges, DerivedEdge{
@@ -156,21 +214,47 @@ func (d *DerivedOrder) TopoNodes() []int {
 	return out
 }
 
-// footprintsIntersect reports whether w's writes can produce a path r's reads
-// match. For a fallback reader, writes confined to the reader's pruned dirs are
-// invisible to it and derive nothing.
-func footprintsIntersect(w, r TargetNode) bool {
-	for _, wg := range w.Writes {
+// overlap reports whether n's writes can produce a path r's reads match, and names the
+// first write glob and read glob that can meet: a refusal has to say which, and
+// recomputing the pair in the message would be a second answer to the same question.
+// For a fallback reader, writes confined to the reader's pruned dirs are invisible to
+// it and derive nothing.
+func (n TargetNode) overlap(r TargetNode) (write, read string, ok bool) {
+	for _, wg := range n.Writes {
 		if !r.DeclaredReads && underIgnoredDir(wg, r.IgnoreDirs) {
 			continue
 		}
 		for _, rg := range r.Reads {
 			if globsOverlap(wg, rg) {
-				return true
+				return wg, rg, true
 			}
 		}
 	}
-	return false
+	return "", "", false
+}
+
+// sharedStep returns the first step key (in n's order) that runs both nodes.
+func (n TargetNode) sharedStep(other TargetNode) (string, bool) {
+	for _, s := range n.Steps {
+		if slices.Contains(other.Steps, s) {
+			return s, true
+		}
+	}
+	return "", false
+}
+
+// identicalSteps reports that the two nodes run in exactly the same steps, so no step
+// runs one without the other.
+func (n TargetNode) identicalSteps(other TargetNode) bool {
+	if len(n.Steps) != len(other.Steps) {
+		return false
+	}
+	for _, s := range n.Steps {
+		if !slices.Contains(other.Steps, s) {
+			return false
+		}
+	}
+	return true
 }
 
 // underIgnoredDir reports whether every path glob can match lies inside one of
@@ -218,16 +302,18 @@ func globsOverlap(a, b string) bool {
 		if as[i] != bs[i] {
 			return false
 		}
-		// Both consumed a literal segment; a shorter glob than the other's prefix
-		// cannot match a longer path, unless it still has segments to offer.
+		// Both consumed a literal segment. The shorter side, exhausted, may name a
+		// directory the longer one descends into, which is an overlap this cannot
+		// rule out; conservative, since over-ordering is cheap and a refusal stands on
+		// a witnessed file besides.
 		if i == len(as)-1 || i == len(bs)-1 {
-			return i == len(as)-1 && i == len(bs)-1
+			return true
 		}
 	}
-	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
 	if as[len(as)-1] == "**" || bs[len(bs)-1] == "**" {
 		return true
 	}
+	sa, sb := literalSuffix(as[len(as)-1]), literalSuffix(bs[len(bs)-1])
 	return strings.HasSuffix(sa, sb) || strings.HasSuffix(sb, sa)
 }
 
@@ -436,4 +522,444 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 	for k := range d.RunAfter {
 		slices.Sort(d.RunAfter[k])
 	}
+}
+
+// SameStepConflict is one target reading, inside a single step, what another target of
+// that same step writes, with nothing sequencing the two.
+//
+// This is the one overlap magus must refuse rather than schedule around. Across steps the
+// engine derives writer-before-reader order itself (DeriveTargetOrder); within one step
+// the sequencing belongs to the composing body, and ctx.needs is the only thing that can
+// express it.
+type SameStepConflict struct {
+	// Step is the node key of the step whose chain runs both targets.
+	Step string
+	// Writer and Reader are node keys (DepKey).
+	Writer, Reader string
+	// WriteGlob and ReadGlob are the overlapping pair of declared globs, workspace-rooted.
+	WriteGlob, ReadGlob string
+}
+
+// SameProject reports that reader and writer belong to one project, so the fix is a
+// ctx.needs in the file that composes both. A cross-project pair is real too, but its
+// sequencing may belong to another project's magusfile, so it advises rather than
+// refuses (see SameStepConflicts.Refusal).
+func (c SameStepConflict) SameProject() bool { return projectOf(c.Writer) == projectOf(c.Reader) }
+
+// SameStepConflicts is one plan's unordered pairs, sorted; the refusal and the advice are
+// two readings of the same list.
+type SameStepConflicts []SameStepConflict
+
+// OverlapWitness decides whether a write glob and a read glob meet on a path that
+// actually exists. Glob-against-glob intersection is conservative on purpose, since
+// over-ordering is cheap, but a refusal has to stand on a file: "reads **/MAGUS.md
+// alongside a writer of cmd/magus/completions/*" intersects as globs and never as paths.
+// nil means no witness is required, which keeps fixtures with invented globs testable.
+//
+// ignore is the reader's own pruned directory names beyond the ones every walk prunes
+// (a spell's build dirs). A pattern read never reaches a file under one of them when
+// the key is hashed (expandSources prunes the walk by name), so a file there witnesses
+// nothing for a pattern; an exact read names its file deliberately and is hashed by
+// stat, so it does. What orders and what hashes agree.
+type OverlapWitness func(write, read string, ignore []string) bool
+
+// WorkspaceOverlapWitness answers from the workspace tree. The tree is walked once,
+// pruned by the same directory names the hasher prunes (isIgnoreDir: VCS and magus
+// metadata, gen, vendor, node_modules, ...), since a file under those is one no pattern
+// glob ever hashes; each write glob is then matched over that list once, memoized,
+// because one writer meets many readers in a plan. An exact read is answered by a stat
+// instead, which is how the hasher reaches it too. Safe for concurrent callers.
+//
+// An unreadable or absent root reads as no witness anywhere: a refusal over a glob that
+// matched nothing on disk is the guess this exists to rule out.
+func WorkspaceOverlapWitness(root string) OverlapWitness {
+	var (
+		mu    sync.Mutex
+		files []string
+		once  sync.Once
+		hits  = map[string][]string{}
+	)
+	tree := os.DirFS(root)
+	walk := func() {
+		_ = fs.WalkDir(tree, ".", func(p string, d fs.DirEntry, err error) error {
+			switch {
+			case err != nil:
+				// An entry the walk cannot read is no witness, and must not end the walk
+				// for the entries it can.
+				return nil //nolint:nilerr // see above
+			case d.IsDir():
+				if p != "." && isIgnoreDir(d.Name(), nil) {
+					return fs.SkipDir
+				}
+			case d.Type().IsRegular():
+				files = append(files, p)
+			}
+			return nil
+		})
+	}
+	return func(write, read string, ignore []string) bool {
+		if !strings.ContainsAny(read, "*?[{") {
+			if ok, err := doublestar.Match(write, read); !ok || err != nil {
+				return false
+			}
+			info, err := os.Stat(filepath.Join(root, filepath.FromSlash(read)))
+			return err == nil && info.Mode().IsRegular()
+		}
+		once.Do(walk)
+		mu.Lock()
+		paths, seen := hits[write]
+		if !seen {
+			for _, f := range files {
+				if ok, err := doublestar.Match(write, f); ok && err == nil {
+					paths = append(paths, f)
+				}
+			}
+			hits[write] = paths
+		}
+		mu.Unlock()
+		for _, p := range paths {
+			if underIgnoredDir(p, ignore) {
+				continue
+			}
+			if ok, err := doublestar.Match(read, p); ok && err == nil {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// FindSameStepConflicts reports the same-step pairs no schedule can order: both sides
+// declared explicitly, the writer's writes reaching the reader's reads on a path the
+// witness confirms, and no ctx.needs path between the two in either direction.
+//
+// Baseline fallbacks are excluded on either side. A fallback footprint is a whole-project
+// over-approximation, so an overlap through one is a guess, and refusing a run over a
+// guess costs more than the stale read it would prevent.
+//
+// A needs path in EITHER direction clears the pair. Reader-after-writer is the fix this
+// reports. Writer-after-reader is a sequencing the author wrote down: the reader reads
+// what was there beforehand, which is a staleness question rather than a plan that cannot
+// be scheduled.
+//
+// Deterministic: results are sorted by step, then writer, then reader.
+func FindSameStepConflicts(nodes []TargetNode, witness OverlapWitness) SameStepConflicts {
+	order := newNodeOrder(nodes)
+	var out SameStepConflicts
+	for w := range nodes {
+		for r := range nodes {
+			if w == r || nodes[w].Key() == nodes[r].Key() {
+				continue
+			}
+			if !nodes[w].DeclaredWrites || !nodes[r].DeclaredReads {
+				continue
+			}
+			step, ok := nodes[w].sharedStep(nodes[r])
+			if !ok {
+				continue
+			}
+			write, read, ok := nodes[w].overlap(nodes[r])
+			if !ok {
+				continue
+			}
+			if witness != nil && !witness(write, read, nodes[r].IgnoreDirs) {
+				continue
+			}
+			if order.runsAfter(nodes[r].Key(), nodes[w].Key()) || order.runsAfter(nodes[w].Key(), nodes[r].Key()) {
+				continue
+			}
+			out = append(out, SameStepConflict{
+				Step: step, Writer: nodes[w].Key(), Reader: nodes[r].Key(),
+				WriteGlob: write, ReadGlob: read,
+			})
+		}
+	}
+	// Joined on a byte no key carries, the way cycleBackEdge keys a pair, so fields
+	// cannot transpose across the boundary.
+	slices.SortFunc(out, func(a, b SameStepConflict) int {
+		return strings.Compare(a.Step+"\x00"+a.Writer+"\x00"+a.Reader, b.Step+"\x00"+b.Writer+"\x00"+b.Reader)
+	})
+	return out
+}
+
+// nodeOrder answers, over one collection of nodes, whether one node's own work runs
+// after another has completed. Every answer is a lookup in two sets per node, settled
+// once for the collection, so a plan's N^2 pairs cost one settlement rather than a walk
+// each.
+//
+// The two sets define each other (what is done once a target completes includes what
+// preceded it; what precedes a target is what its composers completed first, which is
+// what THEY had done), and a target reached under two composers closes that definition
+// into a loop. A recursion with memoization answered such a loop with whichever partial
+// set it was building when it came back around, so the verdict depended on which pair
+// asked first. The sets are instead grown to a fixpoint: every rule only ever adds, so
+// the iteration climbs to the least sets consistent with all of them and stops, and the
+// least sets are the ones that order nothing a rule cannot prove.
+type nodeOrder struct {
+	byKey map[string]TargetNode
+	// done holds, per key, everything complete once the key has completed: the key, its
+	// members transitively, and whatever preceded each of them.
+	done map[string]map[string]bool
+	// preceded holds, per key, everything complete before the key STARTS. A node is
+	// dispatched by whichever composer reaches it first and runs once, so only what
+	// EVERY composer puts before it is certain: the intersection, over its composers,
+	// of what that composer's earlier calls completed plus what preceded the composer
+	// itself. A composer's other members never count; those are the key's siblings,
+	// fanned out unordered beside it.
+	preceded map[string]map[string]bool
+}
+
+func newNodeOrder(nodes []TargetNode) *nodeOrder {
+	o := &nodeOrder{
+		byKey:    make(map[string]TargetNode, len(nodes)),
+		done:     make(map[string]map[string]bool, len(nodes)),
+		preceded: make(map[string]map[string]bool, len(nodes)),
+	}
+	composers := map[string][]string{}
+	for _, n := range nodes {
+		o.byKey[n.Key()] = n
+		o.done[n.Key()] = map[string]bool{n.Key(): true}
+		o.preceded[n.Key()] = map[string]bool{}
+		for _, member := range n.Needs.members() {
+			composers[member] = append(composers[member], n.Key())
+		}
+	}
+	for changed := true; changed; {
+		changed = false
+		for _, n := range nodes {
+			key := n.Key()
+			done := o.done[key]
+			before := len(done)
+			for _, m := range n.Needs.members() {
+				maps.Copy(done, o.done[m])
+			}
+			maps.Copy(done, o.preceded[key])
+			changed = changed || len(done) > before
+
+			var preceded map[string]bool
+			for _, c := range composers[key] {
+				via := map[string]bool{}
+				for _, m := range o.byKey[c].Needs.before(key) {
+					maps.Copy(via, o.done[m])
+				}
+				maps.Copy(via, o.preceded[c])
+				if preceded == nil {
+					preceded = via
+					continue
+				}
+				for k := range preceded {
+					if !via[k] {
+						delete(preceded, k)
+					}
+				}
+			}
+			if len(preceded) > len(o.preceded[key]) {
+				o.preceded[key] = preceded
+				changed = true
+			}
+		}
+	}
+	return o
+}
+
+// runsAfter reports whether later's own work runs after earlier has completed, so the
+// body's sequencing already puts earlier first: earlier precedes later, or completes
+// with one of later's own members.
+func (o *nodeOrder) runsAfter(later, earlier string) bool {
+	if o.preceded[later][earlier] {
+		return true
+	}
+	for _, m := range o.byKey[later].Needs.members() {
+		if o.done[m][earlier] {
+			return true
+		}
+	}
+	return false
+}
+
+// Refusal is the MGS4008 refusal for the SAME-project conflicts, or nil for none. It
+// names the reader, the writer, the globs that overlap and both fixes, because a reader
+// meeting this has to change a declaration and the message is where the choice is made.
+//
+// Same-project only: there the fix is one ctx.needs in the file that composes both, and
+// nothing else can be meant. A cross-project pair reaches the same step through another
+// project's chain, whose sequencing that project's author owns, and this tree's routing
+// indexes read each other by design, so those pairs go to Advice instead.
+//
+// Only the first conflict is spelled out. The rest are counted: they are usually the same
+// authoring mistake seen from several members, and a wall of near-identical sentences
+// buries the one worth reading.
+func (cs SameStepConflicts) Refusal() error {
+	own := cs.within(true)
+	if len(own) == 0 {
+		return nil
+	}
+	c := own[0]
+	more := ""
+	if n := len(own) - 1; n > 0 {
+		more = fmt.Sprintf(" %d further pair(s) in this run overlap the same way.", n)
+	}
+	return types.DiagnosticErrorf(types.UnorderedSameStepWrite,
+		"refusing to run %s: %s reads %q, which %s writes as %q, and nothing orders the two."+
+			" Both run inside %s's ctx.needs chain, with no needs path between them, so the reader"+
+			" can start before the writer finishes and can wedge the run waiting for a slot the"+
+			" writer needs. Declare ctx.needs(%s) in %s so it runs after the writer, or narrow %s's"+
+			" ctx.readsFiles so it no longer matches what the writer produces.%s",
+		DisplayNodeKey(c.Step), DisplayNodeKey(c.Reader), c.ReadGlob, DisplayNodeKey(c.Writer), c.WriteGlob,
+		DisplayNodeKey(c.Step), targetOf(c.Writer), DisplayNodeKey(c.Reader), DisplayNodeKey(c.Reader), more)
+}
+
+// Advice is the one-line notice for the CROSS-project conflicts, or "" for none: the
+// same overlap, reported rather than refused, with the first pair named and the rest
+// counted. `magus doctor` lists every one under the same code.
+func (cs SameStepConflicts) Advice() string {
+	cross := cs.within(false)
+	if len(cross) == 0 {
+		return ""
+	}
+	c := cross[0]
+	more := ""
+	if n := len(cross) - 1; n > 0 {
+		more = fmt.Sprintf("; %d more such pair(s)", n)
+	}
+	return fmt.Sprintf("[%s] %s reads %q inside %s's chain, which %s writes as %q, and nothing orders the two across projects%s; `magus doctor` lists them (see %s)",
+		types.UnorderedSameStepWrite, DisplayNodeKey(c.Reader), c.ReadGlob, DisplayNodeKey(c.Step),
+		DisplayNodeKey(c.Writer), c.WriteGlob, more, types.CodeURL(types.UnorderedSameStepWrite))
+}
+
+// within selects the pairs whose SameProject answer is same.
+func (cs SameStepConflicts) within(same bool) SameStepConflicts {
+	var out SameStepConflicts
+	for _, c := range cs {
+		if c.SameProject() == same {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// targetOf is a node key's target half, which is what a ctx.needs call names.
+func targetOf(key string) string {
+	_, target, ok := strings.Cut(key, nodeKeySep)
+	if !ok {
+		return key
+	}
+	return target
+}
+
+// projectOf is a node key's project half.
+func projectOf(key string) string {
+	project, _, _ := strings.Cut(key, nodeKeySep)
+	return project
+}
+
+// DeclaredNodes builds the nodes of one composer's ctx.needs closure: the composer itself
+// and every target it composes, transitively, with the step key of the composer.
+//
+// It reads DECLARED footprints only, where a batch's own node collection also carries a
+// project baseline for a target that declares none. That is not a second opinion about
+// what a target touches: FindSameStepConflicts ignores a baseline on either side, so the
+// two collections agree on every pair either can report, and a caller with no batch in
+// hand (doctor) needs no engine to ask the question.
+//
+// lookup resolves a cross-project chain step and may return nil, in which case that step
+// and everything under it contribute nothing rather than a guess.
+func DeclaredNodes(p *types.Project, composer string, lookup func(path string) *types.Project) []TargetNode {
+	if p == nil {
+		return nil
+	}
+	step := DepKey(p.Path, composer)
+	var nodes []TargetNode
+	_ = types.WalkChain(p, composer, lookup, func(v types.ChainVisit) error {
+		nodes = append(nodes, DeclaredNode(v.Project, v.Target, step, lookup))
+		return nil
+	})
+	return nodes
+}
+
+// DeclaredNode is one target's node as its declarations describe it, run inside step:
+// workspace-rooted reads, writes and in-place updates, and its ctx.needs calls resolved
+// through lookup.
+func DeclaredNode(proj *types.Project, target, step string, lookup func(path string) *types.Project) TargetNode {
+	updates := make([]string, 0, len(proj.TargetUpdates[target]))
+	for _, ref := range proj.TargetUpdates[target] {
+		updates = append(updates, types.RootGlob(ref.Project, ref.Glob))
+	}
+	var reads []string
+	declaredReads := len(proj.TargetInputs[target]) > 0
+	if declaredReads {
+		for _, ref := range proj.TargetInputs[target] {
+			reads = append(reads, types.RootGlob(ref.Project, ref.Glob))
+		}
+		reads = append(reads, updates...)
+	}
+	writes := make([]string, 0, len(proj.TargetOutputs[target])+len(updates))
+	for _, ref := range proj.TargetOutputs[target] {
+		writes = append(writes, types.RootGlob(ref.Project, ref.Glob))
+	}
+	writes = append(writes, updates...)
+	return TargetNode{
+		Project: proj.Path, Target: target, Steps: []string{step},
+		Reads: reads, Writes: writes,
+		DeclaredReads:  declaredReads,
+		DeclaredWrites: len(proj.TargetOutputs[target]) > 0 || len(updates) > 0,
+		IgnoreDirs:     prunedDirs(proj),
+		Needs:          ChainCalls(proj, target, lookup),
+	}
+}
+
+// prunedDirs is the directory-name set the project's source walk prunes: the core
+// names every walk skips plus what each resolved spell declares, the same union
+// buildStep hands the hasher. A project loaded without resolved spells (a doctor
+// fixture) prunes the core set alone.
+func prunedDirs(proj *types.Project) []string {
+	out := slices.Clone(project.IgnoreDirs)
+	for _, sp := range proj.ResolvedSpells {
+		for _, d := range sp.IgnoreDirs() {
+			if !slices.Contains(out, d) {
+				out = append(out, d)
+			}
+		}
+	}
+	return out
+}
+
+// lookupOwner resolves the project a chain step runs in: the composer's own for a local
+// step, lookup's answer for a cross-project one, nil when there is none.
+func lookupOwner(proj *types.Project, cs types.ChainStep, lookup func(path string) *types.Project) *types.Project {
+	if cs.Project == "" || cs.Project == proj.Path {
+		return proj
+	}
+	if lookup == nil {
+		return nil
+	}
+	return lookup(cs.Project)
+}
+
+// ChainCalls groups target's chain by the ctx.needs call that named each step, in body
+// order, as the node keys the steps resolve to. A step lookup cannot resolve neither
+// orders nor is ordered, and a call left with no member is dropped.
+func ChainCalls(proj *types.Project, target string, lookup func(path string) *types.Project) Calls {
+	var out Calls
+	var call Call
+	index := 0
+	flush := func() {
+		if len(call) > 0 {
+			out = append(out, call)
+		}
+		call = nil
+	}
+	for _, cs := range proj.TargetChains[target] {
+		owner := lookupOwner(proj, cs, lookup)
+		if owner == nil {
+			continue
+		}
+		if cs.CallIndex != index {
+			flush()
+			index = cs.CallIndex
+		}
+		call = append(call, DepKey(owner.Path, cs.Target))
+	}
+	flush()
+	return out
 }

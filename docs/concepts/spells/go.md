@@ -21,10 +21,10 @@ The `go` spell wires the Go toolchain into a magusfile: each op forks a `go` (or
 
 Every op is invoked as `go["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
-| Key | Type | Description | Source |
-|-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `go["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L172) |
+| Key     | Type    | Description                                                                                                                                                                                                                                                                                                                                                          | Source                                                                                              |
+| ------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `args`  | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `go["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
+| `stdin` | `str`   | Data written to the command's standard input.                                                                                                                                                                                                                                                                                                                        | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L172) |
 
 
 Working directory and environment are NOT options: they ride the context, as `go["<op>"](ctx.withCwd("sub"))` and `go["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
@@ -130,7 +130,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 
 ## go-mod-edit
 
-Edit is offline: it "reads only go.mod; it does not look up information about the modules involved" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not relock.
+Edit is offline: it "reads only go.mod; it does not look up information about the modules involved" (go help mod edit), so the same tree always yields the same bytes. The write charm is therefore rw, not update.
 
 **Command:** `go mod edit -print`
 
@@ -160,11 +160,11 @@ Captures Go's structured module view for the spell's higher-level Buzz helper. T
 
 ## go-mod-tidy
 
-Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore relock, not rw.
+Tidy resolves against the module proxy, and an import go.mod does not require yet arrives at latest, so its result turns on what upstream serves today rather than on this tree alone. The write charm is therefore update, not rw.
 
 **Command:** `go mod tidy --diff`
 
-### relock
+### update
 
 Drops `--diff`.
 

@@ -17,6 +17,10 @@ type Limiter struct {
 	cap     int
 	running atomic.Int64
 	queued  atomic.Int64
+	// watch records who holds the slots and what each holder is waiting on, so a wait
+	// nothing in this process can end is refused rather than hung. Nil on an unlimited
+	// limiter, where no caller ever queues. See deadlock.go.
+	watch *slotWatch
 
 	onAcquire atomic.Pointer[func(waitNs int64, n int)]
 	onRelease atomic.Pointer[func(n int)]
@@ -39,7 +43,7 @@ func (l *Limiter) SetHooks(onAcquire func(waitNs int64, n int), onRelease func(n
 // NewLimiter returns a Limiter with capacity n. n <= 0 means unlimited
 // (Acquire and AcquireN always succeed immediately).
 func NewLimiter(n int) *Limiter {
-	l := &Limiter{cap: n}
+	l := &Limiter{cap: n, watch: newSlotWatch(n)}
 	if n > 0 {
 		l.sem = semaphore.NewWeighted(int64(n))
 	}
@@ -127,9 +131,29 @@ func (l *Limiter) Yield(ctx context.Context, fn func() error) error {
 	if n < 1 {
 		n = 1
 	}
+	// The hold record has to say so too: a step whose slots are back in the pool occupies
+	// nothing, and a watch that still counted them would read a pool with room as full.
+	hold := admissionFrom(ctx).hold
+	defer hold.yield()()
 	l.ReleaseN(n)
-	defer func() { _ = l.AcquireN(context.WithoutCancel(ctx), n) }()
+	defer l.reacquireYielded(ctx, n)
 	return fn()
+}
+
+// reacquireYielded takes back the slots Yield handed out. Non-cancellable, since the
+// caller must return holding them; but VISIBLE to the slot watch, registered as a
+// waiter so a pool wedged with only re-acquirers queued still reads as wedged and the
+// refusal names them. The refusal cannot end this wait (nothing may return slotless),
+// so what ends it is the refusal ending every other waiter, whose steps then unwind and
+// release.
+func (l *Limiter) reacquireYielded(ctx context.Context, n int) {
+	if w := l.watch; w != nil {
+		waiter := w.beginWait(fmt.Sprintf("%s (taking back yielded slots)", admissionFrom(ctx).hold.name()), n, func() {})
+		// The refusal it may carry is for the waiters the verdict could end; this one it
+		// could not, and the caller returns holding its slots either way.
+		defer func() { _ = w.endWait(waiter) }()
+	}
+	_ = l.AcquireN(context.WithoutCancel(ctx), n)
 }
 
 // LimiterStats is a point-in-time view of the concurrency pool.

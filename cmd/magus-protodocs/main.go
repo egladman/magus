@@ -31,6 +31,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -41,6 +42,7 @@ import (
 	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 
 	"github.com/egladman/magus/internal/docs"
+	"github.com/egladman/magus/internal/render/md"
 )
 
 func main() {
@@ -984,28 +986,28 @@ func renderIndex(a api) string {
 	b.WriteString("Start the daemon with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.\n\n")
 
 	b.WriteString("## Services\n\n")
-	b.WriteString("| Service | Methods | Package |\n")
-	b.WriteString("|---------|---------|--------|\n")
+	services := make([][]string, 0, len(a.services))
 	for _, s := range a.services {
-		fmt.Fprintf(&b, "| [%s](%s.md) | %d | `%s` |\n", s.Name, a.pagePathOf(s), len(s.Methods), s.Package)
+		services = append(services, []string{
+			md.Link(s.Name, a.pagePathOf(s)+".md"), strconv.Itoa(len(s.Methods)), md.Code(s.Package),
+		})
 	}
-	b.WriteString("\n")
+	b.WriteString(md.Table([]string{"Service", "Methods", "Package"}, nil, services))
 
 	if len(a.packages) > 0 {
 		b.WriteString("## Shared types\n\n")
 		b.WriteString("A package with no service of its own: its types are documented here instead of on a service page, and a service that uses one links to it.\n\n")
-		b.WriteString("| Package | File |\n")
-		b.WriteString("|---------|------|\n")
 		pkgs := make([]string, 0, len(a.packages))
 		for pkg := range a.packages {
 			pkgs = append(pkgs, pkg)
 		}
 		slices.Sort(pkgs)
+		rows := make([][]string, 0, len(pkgs))
 		for _, pkg := range pkgs {
 			p := a.packages[pkg]
-			fmt.Fprintf(&b, "| [%s](%s.md) | `proto/%s` |\n", pkg, pagePath(p.File), p.File)
+			rows = append(rows, []string{md.Link(pkg, pagePath(p.File)+".md"), md.Code("proto/" + p.File)})
 		}
-		b.WriteString("\n")
+		b.WriteString(md.Table([]string{"Package", "File"}, nil, rows))
 	}
 
 	b.WriteString("## Calling a method without a generated client\n\n")
@@ -1266,8 +1268,7 @@ func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath s
 	if len(m.Fields) == 0 {
 		b.WriteString("No fields.\n\n")
 	} else {
-		b.WriteString("| Field | Type | # | Description |\n")
-		b.WriteString("|-------|------|---|-------------|\n")
+		rows := make([][]string, 0, len(m.Fields))
 		for _, f := range m.Fields {
 			var notes []string
 			if f.Deprecated {
@@ -1291,9 +1292,9 @@ func writeMessage(b *strings.Builder, a api, m message, used []usage, fromPath s
 			if f.Ref != "" {
 				typeCell = a.typeLink(f.Type, f.Ref, m.Package, fromPath)
 			}
-			fmt.Fprintf(b, "| `%s` | %s | %d | %s |\n", f.Name, typeCell, f.Number, desc)
+			rows = append(rows, []string{md.Code(f.Name), typeCell, strconv.Itoa(int(f.Number)), desc})
 		}
-		b.WriteString("\n")
+		b.WriteString(md.Table([]string{"Field", "Type", "#", "Description"}, nil, rows))
 	}
 	if m.Reserved != "" {
 		fmt.Fprintf(b, "_%s_\n\n", m.Reserved)
@@ -1310,16 +1311,15 @@ func writeEnum(b *strings.Builder, e enumType, used []usage, fromPath string) {
 		fmt.Fprintf(b, "%s\n\n", e.Doc)
 	}
 	fmt.Fprintf(b, "Source: %s.\n\n", sourceLink(e.File, e.Line))
-	b.WriteString("| Value | # | Description |\n")
-	b.WriteString("|-------|---|-------------|\n")
+	rows := make([][]string, 0, len(e.Values))
 	for _, v := range e.Values {
 		doc := v.Doc
 		if v.Deprecated {
 			doc = strings.TrimSpace("**Deprecated.** " + doc)
 		}
-		fmt.Fprintf(b, "| `%s` | %d | %s |\n", v.Name, v.Number, doc)
+		rows = append(rows, []string{md.Code(v.Name), strconv.Itoa(int(v.Number)), doc})
 	}
-	b.WriteString("\n")
+	b.WriteString(md.Table([]string{"Value", "#", "Description"}, nil, rows))
 	if e.Reserved != "" {
 		fmt.Fprintf(b, "_%s_\n\n", e.Reserved)
 	}

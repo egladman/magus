@@ -20,10 +20,10 @@ Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. N
 
 **Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L421)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `env` | `map[string]string` |  | |
-| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
+| Parameter  | Type                                                                        | Optional | Description |
+| ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `env`      | `map[string]string`                                                         |          |             |
+| `callback` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
 
 ### platform
 
@@ -39,9 +39,9 @@ Abort the current run with the given exit code - typically after logging an erro
 
 **Signature:** `os\exit(code)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L231)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `code` | `int` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `code`    | `int` |          |             |
 
 ### sleep
 
@@ -49,9 +49,9 @@ Pause for the given number of milliseconds (fractional allowed), matching Buzz's
 
 **Signature:** `os\sleep(ms)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L207)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `ms` | `float64` |  | |
+| Parameter | Type      | Optional | Description |
+| --------- | --------- | -------- | ----------- |
+| `ms`      | `float64` |          |             |
 
 ### numCpu
 
@@ -83,11 +83,11 @@ Call fn up to max times, retrying on error with exponential backoff; returns fn'
 
 **Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L437)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `max` | `int` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `opts` | `map[string]any` | yes | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `max`     | `int`                                                                       |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `opts`    | `map[string]any`                                                            | yes      |             |
 
 **Returns:** any
 

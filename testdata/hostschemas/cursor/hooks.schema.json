@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/hostschemas/cursor/hooks.schema.json",
+  "$comment": "OURS, but transcribed from Cursor's OWN validator rather than from its prose. Cursor publishes no schema for .cursor/hooks.json; cursor.com/schemas/hooks.schema.json serves the docs SPA. It does ship the validator: the bundled hooks package rejects an unknown event name, a missing or fractional version, and a malformed handler before a hook can fire. Read 2026-09-10 out of two artifacts that carry the same code, the cursor-agent CLI package (2026.09.08-6caf4ff, dist-package/index.js, module ../hooks/dist/index.js) and the desktop app (3.19.19, resources/app/extensions/cursor-agent-host/dist/main.js). Digests and URLs are in testdata/hostschemas/SOURCES.md.",
+  "title": "Cursor hooks.json",
+  "type": "object",
+  "required": ["version", "hooks"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "$comment": "Required. Cursor rejects a missing or fractional version, so a config without one loads nowhere."
+    },
+    "stop_hook_loop_limit": {
+      "$comment": "Deprecated. Cursor warns and ignores it; loop_limit on a handler replaced it."
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "$comment": "The 21 events Cursor's own enum names, in its order. Cursor errors on any other key, so this list is a rename detector rather than a preference.",
+      "properties": {
+        "beforeShellExecution": {"$ref": "#/definitions/handlers"},
+        "beforeMCPExecution": {"$ref": "#/definitions/handlers"},
+        "afterShellExecution": {"$ref": "#/definitions/handlers"},
+        "afterMCPExecution": {"$ref": "#/definitions/handlers"},
+        "beforeReadFile": {"$ref": "#/definitions/handlers"},
+        "afterFileEdit": {"$ref": "#/definitions/handlers"},
+        "beforeTabFileRead": {"$ref": "#/definitions/handlers"},
+        "afterTabFileEdit": {"$ref": "#/definitions/handlers"},
+        "stop": {"$ref": "#/definitions/handlers"},
+        "beforeSubmitPrompt": {"$ref": "#/definitions/handlers"},
+        "afterAgentResponse": {"$ref": "#/definitions/handlers"},
+        "afterAgentThought": {"$ref": "#/definitions/handlers"},
+        "sessionStart": {"$ref": "#/definitions/handlers"},
+        "sessionEnd": {"$ref": "#/definitions/handlers"},
+        "preCompact": {"$ref": "#/definitions/handlers"},
+        "subagentStart": {"$ref": "#/definitions/handlers"},
+        "subagentStop": {"$ref": "#/definitions/handlers"},
+        "preToolUse": {"$ref": "#/definitions/handlers"},
+        "postToolUse": {"$ref": "#/definitions/handlers"},
+        "postToolUseFailure": {"$ref": "#/definitions/handlers"},
+        "workspaceOpen": {"$ref": "#/definitions/handlers"}
+      }
+    }
+  },
+  "definitions": {
+    "handlers": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/handler"}
+    },
+    "handler": {
+      "type": "object",
+      "$comment": "Open on purpose: Cursor reports no unknown-key error, so a schema that closed the object would be stricter than the host and fail a config Cursor loads.",
+      "properties": {
+        "type": {
+          "enum": ["command", "prompt"],
+          "$comment": "Omitted means command."
+        },
+        "command": {"type": "string"},
+        "prompt": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "Cursor trims before testing for empty, so a whitespace-only prompt passes here and fails there."
+        },
+        "model": {"type": "string", "minLength": 1},
+        "matcher": {
+          "type": "string",
+          "$comment": "A STRING, and outside \"\" and \"*\" it must compile as a regex. The field table on cursor.com/docs/agent/hooks types it as an object, which the validator contradicts; the binary is what runs."
+        },
+        "timeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "$comment": "Seconds. Over 3600 Cursor warns and still runs."
+        },
+        "loop_limit": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "$comment": "null means no limit."
+        },
+        "failClosed": {"type": "boolean"}
+      },
+      "if": {
+        "properties": {"type": {"const": "prompt"}},
+        "required": ["type"]
+      },
+      "then": {"required": ["prompt"]},
+      "else": {"required": ["command"]}
+    }
+  }
+}

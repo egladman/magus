@@ -201,16 +201,20 @@ func (s *Session) SetModuleDecls(importPath, src string) {
 // statement to trigger it (contrast SetModuleDecls, whose src is only collected
 // lazily, when resolveImport processes a real `import "<importPath>";`).
 //
-// Every native module (crypto, io, os, vcs, ...) can use the lazy path, because
-// nothing binds its name into the session env before the import runs. It does NOT
-// work for a module whose native value a host binds some OTHER way before any
-// import is processed, e.g. a namespace meant to be callable without an explicit
-// import, via SetGlobal. resolveImport's "already bound" check fires before it ever
-// consults moduleDecls, so a SetModuleDecls registered under that same name would
-// never be collected. Call DeclareModuleTypes directly instead, once, when setting
-// up such a namespace, to get the same "import this path, get its types" outcome
-// SetModuleDecls gives every other module.
+// Collection order is precedence order: a type collected later shadows an earlier
+// one of the same name. So a host whose declarations mirror large return shapes
+// under generic names declares them HERE, before any file import runs, and a
+// program's own object of that name still wins. Registering the same source with
+// SetModuleDecls instead would collect it at the import point, which for an import
+// partway down a chain outranks types the chain already declared.
 func (s *Session) DeclareModuleTypes(boundName, src string) {
+	// A host's declaration source is static text a person wrote, so a parse error is a
+	// bug in the host and must not read as an empty declaration: collectImportedModule
+	// ignores parse errors because a real import is re-parsed by the Exec that follows,
+	// and nothing re-parses this.
+	if _, err := parseModed(src, !s.embedded); err != nil {
+		panic(fmt.Sprintf("gopherbuzz: DeclareModuleTypes(%q): declarations do not parse: %v", boundName, err))
+	}
 	s.collectImportedModule(boundName, src)
 }
 

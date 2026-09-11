@@ -43,16 +43,26 @@ fun normalize_percent(percent: str) > str {
     return percent;
 }
 
-// severity_color maps coverage to color: red below 50, up through orange, yellow,
-// yellowgreen, green, to brightgreen at 90.
-fun severity_color(figure: str) > str !> str {
+// The palette is the GitHub Actions workflow badge's, so this badge sits beside the CI
+// one in the README without a second visual language. Read off live badges on
+// 2026-09-10 (github.com/<owner>/<repo>/actions/workflows/<file>/badge.svg): the label
+// is a #444D56 to #24292E gradient, "passing" is #34D058 to #28A745, "failing" is
+// #D73A49 to #CB2431. Actions has no yellow state to copy, so the middle band takes the
+// two adjacent steps of Primer's yellow scale (@primer/primitives 7.11.0, light.json:
+// #d4a72c, #bf8700), the palette the other two pairs came from.
+final LABEL_GRADIENT = ["#444D56", "#24292E"];
+final GREEN_GRADIENT = ["#34D058", "#28A745"];
+final YELLOW_GRADIENT = ["#d4a72c", "#bf8700"];
+final RED_GRADIENT = ["#D73A49", "#CB2431"];
+
+// severity_gradient maps coverage to a band: green from 80, yellow from 50, red below.
+// Three bands rather than the six of a shields badge, because the Actions palette has
+// three states and a finer scale would need colors GitHub never uses.
+fun severity_gradient(figure: str) > [str] !> str {
     final whole = whole_percent(figure);
-    if (whole >= 90) { return "#4c1"; }     // brightgreen
-    if (whole >= 80) { return "#97ca00"; }  // green
-    if (whole >= 70) { return "#a4a61d"; }  // yellowgreen
-    if (whole >= 60) { return "#dfb317"; }  // yellow
-    if (whole >= 50) { return "#fe7d37"; }  // orange
-    return "#e05d44";                       // red
+    if (whole >= 80) { return GREEN_GRADIENT; }
+    if (whole >= 50) { return YELLOW_GRADIENT; }
+    return RED_GRADIENT;
 }
 
 // coverage is the only public entry: a label, a percentage figure ("56.8", trailing "%"
@@ -60,12 +70,21 @@ fun severity_color(figure: str) > str !> str {
 // figure, never passed. Throws on a non-numeric figure.
 export fun coverage(label: str, percent: str, radius: int) > str !> any {
     final figure = normalize_percent(percent);
-    return flat_badge(label, value: "{figure}%", color: severity_color(figure), radius: radius);
+    return flat_badge(label, value: "{figure}%", gradient: severity_gradient(figure), radius: radius);
 }
 
-// flat_badge builds the SVG: a grey label cell, a colored value cell, centered text. Private
-// - the color arrives already derived.
-fun flat_badge(label: str, value: str, color: str, radius: int) > str !> any {
+// gradient is one vertical two-stop gradient, the shape the Actions badge draws both of
+// its cells with.
+fun two_stop(id: str, stops: [str]) > any !> any {
+    return xml\element("linearGradient", attrs: ["id", id, "x1", "50%", "y1", "0%", "x2", "50%", "y2", "100%"], children: [
+        xml\element("stop", attrs: ["stop-color", stops[0], "offset", "0%"], children: []),
+        xml\element("stop", attrs: ["stop-color", stops[1], "offset", "100%"], children: []),
+    ]);
+}
+
+// flat_badge builds the SVG: a label cell, a value cell, each on its own gradient, and
+// centered text. Private, the gradient arrives already derived.
+fun flat_badge(label: str, value: str, gradient: [str], radius: int) > str !> any {
     final label_width = text_width(label);
     final value_width = text_width(value);
     final total_width = label_width + value_width;
@@ -73,17 +92,14 @@ fun flat_badge(label: str, value: str, color: str, radius: int) > str !> any {
     final value_center_x = halve(2 * label_width + value_width - 2);
 
     final tree = xml\element("svg", attrs: ["xmlns", "http://www.w3.org/2000/svg", "xmlns:xlink", "http://www.w3.org/1999/xlink", "width", "{total_width}", "height", "20"], children: [
-        xml\element("linearGradient", attrs: ["id", "smooth", "x2", "0", "y2", "100%"], children: [
-            xml\element("stop", attrs: ["offset", "0", "stop-color", "#bbb", "stop-opacity", ".1"], children: []),
-            xml\element("stop", attrs: ["offset", "1", "stop-opacity", ".1"], children: []),
-        ]),
+        two_stop("label-fill", stops: LABEL_GRADIENT),
+        two_stop("value-fill", stops: gradient),
         xml\element("mask", attrs: ["id", "round"], children: [
             xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "rx", "{radius}", "fill", "#fff"], children: []),
         ]),
         xml\element("g", attrs: ["mask", "url(#round)"], children: [
-            xml\element("rect", attrs: ["width", "{label_width}", "height", "20", "fill", "#555"], children: []),
-            xml\element("rect", attrs: ["x", "{label_width}", "width", "{value_width}", "height", "20", "fill", color], children: []),
-            xml\element("rect", attrs: ["width", "{total_width}", "height", "20", "fill", "url(#smooth)"], children: []),
+            xml\element("rect", attrs: ["width", "{label_width}", "height", "20", "fill", "url(#label-fill)"], children: []),
+            xml\element("rect", attrs: ["x", "{label_width}", "width", "{value_width}", "height", "20", "fill", "url(#value-fill)"], children: []),
         ]),
         xml\element("g", attrs: ["fill", "#fff", "text-anchor", "middle", "font-family", "DejaVu Sans,Verdana,Geneva,sans-serif", "font-size", "11"], children: [
             xml\element("text", attrs: ["x", label_center_x, "y", "15", "fill", "#010101", "fill-opacity", ".3"], children: [label]),
@@ -100,9 +116,10 @@ test "text_width estimates width from length" {
     assert\equal(text_width("go coverage"), want: 90, message: "11 glyphs + padding");
 }
 
-test "coverage derives color and value, accepting a trailing percent" {
-    final b = coverage("go coverage", percent: "56.8%", radius: 3);   // 56 -> orange, % dropped
-    assert\contains(b, item: `fill="#fe7d37"`, message: "orange from 56.8");
+test "coverage derives the band and value, accepting a trailing percent" {
+    final b = coverage("go coverage", percent: "56.8%", radius: 3);   // 56 -> yellow, % dropped
+    assert\contains(b, item: `stop-color="#d4a72c"`, message: "yellow band from 56.8");
+    assert\contains(b, item: `stop-color="#444D56"`, message: "the Actions label gradient");
     assert\contains(b, item: `>56.8%<`, message: "single percent shown");
     assert\contains(b, item: `>go coverage<`, message: "label");
     assert\contains(b, item: `rx="3"`, message: "flat corner");
@@ -121,11 +138,9 @@ test "radius 0 is square" {
     assert\contains(coverage("go coverage", percent: "56.8", radius: 0), item: `rx="0"`, message: "square");
 }
 
-test "severity_color maps the scale" {
-    assert\equal(severity_color("92.0"), want: "#4c1", message: "90+");
-    assert\equal(severity_color("85"), want: "#97ca00", message: "80s");
-    assert\equal(severity_color("72.1"), want: "#a4a61d", message: "70s");
-    assert\equal(severity_color("61"), want: "#dfb317", message: "60s");
-    assert\equal(severity_color("56.8"), want: "#fe7d37", message: "50s");
-    assert\equal(severity_color("40"), want: "#e05d44", message: "below 50");
+test "severity_gradient maps the three Actions bands" {
+    assert\equal(severity_gradient("92.0")[0], want: "#34D058", message: "80+ is the passing green");
+    assert\equal(severity_gradient("80")[1], want: "#28A745", message: "the band starts at 80");
+    assert\equal(severity_gradient("56.8")[0], want: "#d4a72c", message: "50s are yellow");
+    assert\equal(severity_gradient("40")[1], want: "#CB2431", message: "below 50 is the failing red");
 }

@@ -254,6 +254,11 @@ var boundaryEnums = []boundaryEnum{
 		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
 		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
 	},
+	{
+		Name:  "External",
+		Type:  reflect.TypeFor[spells.External](),
+		Cases: []enumCase{{"none", ""}, {"reads", "reads-external"}, {"mutates", "mutates-external"}},
+	},
 }
 
 type boundaryEnum struct {

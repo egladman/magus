@@ -20,9 +20,9 @@ Append vals to the end of the argv.
 
 **Signature:** `charm\append(vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L216)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `vals` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `vals`    | `[]string` |          |             |
 
 **Returns:** map[string]any
 
@@ -32,9 +32,9 @@ Insert vals at the front of the argv, in order.
 
 **Signature:** `charm\prepend(vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L225)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `vals` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `vals`    | `[]string` |          |             |
 
 **Returns:** map[string]any
 
@@ -44,11 +44,11 @@ Insert vals immediately after the first argv element equal to anchor.
 
 **Signature:** `charm\after(argv, anchor, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L230)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
-| `vals` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
+| `vals`    | `[]string` |          |             |
 
 **Returns:** map[string]any
 
@@ -58,11 +58,11 @@ Insert vals immediately before the first argv element equal to anchor.
 
 **Signature:** `charm\before(argv, anchor, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L239)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
-| `vals` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
+| `vals`    | `[]string` |          |             |
 
 **Returns:** map[string]any
 
@@ -72,11 +72,11 @@ Replace the first argv element equal to anchor with val.
 
 **Signature:** `charm\set(argv, anchor, val) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L248)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
-| `val` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
+| `val`     | `string`   |          |             |
 
 **Returns:** map[string]any
 
@@ -86,10 +86,10 @@ Drop (remove) the first argv element equal to anchor.
 
 **Signature:** `charm\drop(argv, anchor) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L257)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
 
 **Returns:** map[string]any
 
@@ -99,11 +99,11 @@ Insert vals after the first argv element for which fn(s) is truthy.
 
 **Signature:** `charm\afterFunc(argv, fn, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L266)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `vals` | `[]string` |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `vals`    | `[]string`                                                                  |          |             |
 
 **Returns:** map[string]any
 
@@ -113,11 +113,11 @@ Insert vals before the first argv element for which fn(s) is truthy.
 
 **Signature:** `charm\beforeFunc(argv, fn, vals) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L275)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `vals` | `[]string` |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `vals`    | `[]string`                                                                  |          |             |
 
 **Returns:** map[string]any
 
@@ -127,11 +127,11 @@ Replace the first argv element for which fn(s) is truthy with val.
 
 **Signature:** `charm\setFunc(argv, fn, val) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L284)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `val` | `string` |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `val`     | `string`                                                                    |          |             |
 
 **Returns:** map[string]any
 
@@ -141,10 +141,10 @@ Drop (remove) the first argv element for which fn(s) is truthy.
 
 **Signature:** `charm\dropFunc(argv, fn) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L293)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
 
 **Returns:** map[string]any
 
@@ -154,10 +154,10 @@ Return the JSON Pointer ("/N") of the first argv element equal to anchor - the i
 
 **Signature:** `charm\path(argv, anchor) -> string` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L302)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
 
 **Returns:** string
 
@@ -167,10 +167,10 @@ Return the JSON Pointer ("/N") of the first argv element for which fn(s) is trut
 
 **Signature:** `charm\pathFunc(argv, fn) -> string` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L311)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
 
 **Returns:** string
 
@@ -180,11 +180,11 @@ Move the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 **Signature:** `charm\move(argv, anchor, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L329)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
-| `to` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
+| `to`      | `string`   |          |             |
 
 **Returns:** map[string]any
 
@@ -194,11 +194,11 @@ Move the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 **Signature:** `charm\moveFunc(argv, fn, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L341)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `to` | `string` |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `to`      | `string`                                                                    |          |             |
 
 **Returns:** map[string]any
 
@@ -208,11 +208,11 @@ Copy the first argv element equal to anchor to the JSON Pointer to ("/-" end, "/
 
 **Signature:** `charm\copy(argv, anchor, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L353)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
-| `to` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
+| `to`      | `string`   |          |             |
 
 **Returns:** map[string]any
 
@@ -222,11 +222,11 @@ Copy the first argv element for which fn(s) is truthy to the JSON Pointer to.
 
 **Signature:** `charm\copyFunc(argv, fn, to) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L365)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
-| `to` | `string` |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
+| `to`      | `string`                                                                    |          |             |
 
 **Returns:** map[string]any
 
@@ -236,10 +236,10 @@ Guard: assert the first argv element equal to anchor is still at its position wh
 
 **Signature:** `charm\test(argv, anchor) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L378)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `anchor` | `string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `argv`    | `[]string` |          |             |
+| `anchor`  | `string`   |          |             |
 
 **Returns:** map[string]any
 
@@ -249,10 +249,10 @@ Guard: assert the first argv element for which fn(s) is truthy is still at its p
 
 **Signature:** `charm\testFunc(argv, fn) -> Charm` - [source](https://github.com/egladman/magus/blob/main/std/charm.go#L387)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `argv` | `[]string` |  | |
-| `fn` | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |  | |
+| Parameter | Type                                                                        | Optional | Description |
+| --------- | --------------------------------------------------------------------------- | -------- | ----------- |
+| `argv`    | `[]string`                                                                  |          |             |
+| `fn`      | [`Callback`](https://github.com/egladman/magus/blob/main/std/module.go#L23) |          |             |
 
 **Returns:** map[string]any
 

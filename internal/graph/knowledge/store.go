@@ -123,8 +123,12 @@ func (s *Store) Sync(ctx context.Context, shards []Shard, fps map[string]string,
 		// merged into the default graph: they can dwarf the domain graph, so a query
 		// that needs them loads them lazily (MergeSymbolShards). The @symbols name
 		// suffix is the routing marker.
-		if !isSymbolsShard(sh.Name) && !isCoverageShard(sh.Name) {
+		if !isLazyShard(sh.Name) {
 			g.Merge(sh.Nodes, sh.Edges)
+		}
+		if sh.Dropped > 0 {
+			s.log.DebugContext(ctx, "knowledge: shard inputs resolved to no node",
+				slog.String("shard", sh.Name), slog.Int("dropped", sh.Dropped), slog.Int("nodes", len(sh.Nodes)))
 		}
 		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
 
@@ -210,7 +214,7 @@ func (s *Store) Load(ctx context.Context) (*Graph, error) {
 	// gen/*.json and a freshly built one disagreed on "source" lines alone.
 	names := make([]string, 0, len(man.Shards))
 	for name := range man.Shards {
-		if isSymbolsShard(name) || isCoverageShard(name) {
+		if isLazyShard(name) {
 			continue // lazily loaded via MergeSymbolShards, not part of the default graph
 		}
 		names = append(names, name)
@@ -273,22 +277,36 @@ func (s *Store) MergeSymbolShards(ctx context.Context, g *Graph) error {
 			return err
 		}
 	}
-	return s.mergeCoverageShard(ctx, g, man)
+	s.mergeOverlayShard(ctx, g, man, coverageShardName)
+	s.mergeOverlayShard(ctx, g, man, sessionShardName)
+	return nil
 }
 
-// mergeCoverageShard folds the observed @coverage overlay into g if the manifest lists
-// it. The overlay annotates the file/symbol nodes the symbol shards define, so it is
-// merged on the symbol-load path (never in the default graph). Best-effort: a missing
-// or unreadable overlay just leaves the coverage attrs absent, never an error, so a
-// workspace that never ran `magus run coverage` behaves exactly as before.
-func (s *Store) mergeCoverageShard(ctx context.Context, g *Graph, man *manifest) error {
-	if _, ok := man.shard(coverageShardName); !ok {
-		return nil
+// isLazyShard reports whether a shard is persisted but held out of the default graph,
+// loaded only when a query reaches for it. One predicate rather than a disjunction at
+// each site, for the reason isMachineLocalShard gives: the exclusion must be added in one place
+// or a new lazy shard leaks into the default graph through whichever site was missed.
+//
+// The @symbols shards are lazy for SCALE (they can dwarf the domain graph); the overlays
+// are lazy because the nodes they annotate are the symbol shards' own, so loading them
+// eagerly would put bare attr-only nodes in the default graph.
+func isLazyShard(name string) bool {
+	return isSymbolsShard(name) || isCoverageShard(name) || isSessionShard(name)
+}
+
+// mergeOverlayShard folds one observed overlay into g if the manifest lists it. The
+// overlays annotate the file/symbol nodes the symbol shards define, so they merge on the
+// symbol-load path and never in the default graph. Best-effort: a missing or unreadable
+// overlay leaves its attrs absent rather than failing the load, so a workspace that never
+// ran `magus run coverage` or `magus session load` behaves exactly as before.
+func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, name string) {
+	if _, ok := man.shard(name); !ok {
+		return
 	}
-	if err := s.readMergeShard(ctx, g, man, coverageShardName); err != nil {
-		s.log.DebugContext(ctx, "knowledge: coverage overlay merge failed", slog.String("error", err.Error()))
+	if err := s.readMergeShard(ctx, g, man, name); err != nil {
+		s.log.DebugContext(ctx, "knowledge: overlay merge failed",
+			slog.String("shard", name), slog.String("error", err.Error()))
 	}
-	return nil
 }
 
 // restoreShard pulls a shard file from the remote backend by fingerprint and
@@ -485,7 +503,7 @@ const remotePushTimeout = 15 * time.Second
 // content fingerprint, so teammates and CI can restore it. A remote error or slow
 // backend is logged and dropped: the local write already succeeded.
 func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
-	if s.remote == nil || isLocalShard(name) {
+	if s.remote == nil || isMachineLocalShard(name) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)

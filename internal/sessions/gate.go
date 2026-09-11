@@ -45,6 +45,11 @@ type GateResult struct {
 	// different charms verifies different things, so equivalence requires an
 	// equal set.
 	Charms []string `json:"charms,omitempty"`
+	// UndeclaredSeeds are the projects this gate covered that a changed file no
+	// project declares put in the set on its own (MGS1028): work the gate paid for
+	// whose answer could not have moved. Recorded per gate so the debt is countable
+	// across a branch rather than only visible in the run that printed it.
+	UndeclaredSeeds []string `json:"undeclared_seeds,omitempty"`
 	// Inv is the invocation id of the run that produced this verdict, joining
 	// it to the execution journal (`magus query <inv>`). Empty on a deferral:
 	// nothing ran, so there is no journal to join.

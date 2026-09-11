@@ -233,6 +233,10 @@ func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
 // the event line, not only into the request blob.
 func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	global = globalFlags{}
+	// The whole-struct assertion below includes Lease, which the hook reads off the
+	// environment, so a developer or CI job that exported one would fail this test over
+	// its own baggage.
+	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	var out bytes.Buffer

@@ -1,7 +1,9 @@
 package types
 
 import (
+	"path"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/spells"
 )
@@ -311,6 +313,12 @@ func (r CrossTargetRef) Ref() string {
 type ChainStep struct {
 	Project string `json:"project,omitempty" yaml:"project,omitempty"`
 	Target  string `json:"target"            yaml:"target"`
+	// CallIndex counts the ctx.needs calls before the one that named this step, so the
+	// members of one call share an index. One call fans its arguments out unordered and
+	// returns when all of them have run, so a later call is ordered after every earlier
+	// one by the body itself; that is the only within-step sequencing there is, and the
+	// order derivation reads it from here. Zero for the first call, the common case.
+	CallIndex int `json:"callIndex,omitzero" yaml:"callIndex,omitempty"`
 }
 
 // Ref spells the step the way the CLI takes a target ref: "target" for a same-project
@@ -320,6 +328,32 @@ func (s ChainStep) Ref() string {
 		return s.Target
 	}
 	return s.Project + ":" + s.Target
+}
+
+// Chain is a target's ctx.needs chain built the way its body reads: Needs("generate",
+// "lint") is one call, .Needs("build") the call after it. Each ref is spelled as Ref
+// prints it, "target" or "project:target". A Chain is a []ChainStep, so it goes wherever
+// one does; the extractor builds the real thing from the body and this is for code that
+// states a chain by hand.
+type Chain []ChainStep
+
+// Needs starts a chain with its first ctx.needs call.
+func Needs(refs ...string) Chain { return Chain(nil).Needs(refs...) }
+
+// Needs appends one more ctx.needs call, ordered after every call before it.
+func (c Chain) Needs(refs ...string) Chain {
+	index := 0
+	if len(c) > 0 {
+		index = c[len(c)-1].CallIndex + 1
+	}
+	for _, ref := range refs {
+		step := ChainStep{Target: ref, CallIndex: index}
+		if project, target, ok := strings.Cut(ref, ":"); ok {
+			step.Project, step.Target = project, target
+		}
+		c = append(c, step)
+	}
+	return c
 }
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
@@ -741,6 +775,21 @@ type FileEntry struct {
 	// both "who owns this path" and "what does that owner run behind". It is not
 	// the transitive closure; `magus graph deps` computes that.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	// Focus is "in" or "out": whether the path is inside the focus of the project
+	// the command ran from, which is that project, what it declares depends_on, and
+	// the workspace-root files every project resolves through (project.Focus). It is
+	// "" when no focus could be computed, which is a workspace with no project
+	// holding the working directory, not a judgment.
+	//
+	// It rides here rather than on a verb of its own because the question a caller
+	// asks is always about a path they already wanted classified: the agent guard
+	// answers it from this same computation, and a second command would be a second
+	// place for the two answers to disagree.
+	//
+	// A FACT about where the reader stands, so it is not part of Role and never
+	// changes it: the same path is in focus from one directory and out of it from
+	// another, while its role is the same everywhere.
+	Focus string `json:"focus,omitempty" yaml:"focus,omitempty"`
 	// Hint is the one-line handling rule for the role, ready to surface to a
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
@@ -755,6 +804,14 @@ type FileEntry struct {
 	// is the interesting value is the one shape this cannot take.
 	Exists bool `json:"exists" yaml:"exists"`
 }
+
+// The two readings of FileEntry.Focus. Absent is the third and is not a member:
+// "no focus could be computed" is not a judgment, and giving it a spelling would
+// invite a caller to treat it as one.
+const (
+	FocusIn  = "in"
+	FocusOut = "out"
+)
 
 // FileClaim is one declaration that names a path: the project whose magusfile
 // declared it, the target that did, and the workspace-rooted glob that matched.
@@ -804,6 +861,65 @@ var magusMaintainedFiles = map[string]bool{
 // committed, rather than a target output or anything a project declares. The path is
 // workspace-relative and slash-separated, as FileEntry.Path and StagingPlan carry it.
 func IsMagusMaintained(path string) bool { return magusMaintainedFiles[path] }
+
+// buildInputNames are the exact base names that decide what a tool DOES rather
+// than what it reads: a resolved dependency lock, a linter's rule set, a
+// formatter's config, a pinned toolchain version. Lowercased for matching.
+var buildInputNames = map[string]bool{
+	// Dependency locks: the graph a build actually compiles against.
+	"go.sum": true, "go.mod": true, "go.work": true, "go.work.sum": true,
+	"package-lock.json": true, "npm-shrinkwrap.json": true, "pnpm-lock.yaml": true,
+	"yarn.lock": true, "bun.lock": true, "bun.lockb": true,
+	"cargo.lock": true, "composer.lock": true, "gemfile.lock": true,
+	"poetry.lock": true, "pdm.lock": true, "uv.lock": true, "pipfile.lock": true,
+	// Rule sets. Editing one means every verdict already in the cache was
+	// computed under rules that no longer apply.
+	".golangci.yml": true, ".golangci.yaml": true, ".golangci.toml": true,
+	"biome.json": true, "biome.jsonc": true, "dprint.json": true,
+	".editorconfig": true, ".clang-format": true, "rustfmt.toml": true,
+	".flake8": true, "ruff.toml": true, ".rubocop.yml": true, ".swiftlint.yml": true,
+	// Toolchain pins: which compiler, formatter or linter version ran.
+	".tool-versions": true, "mise.toml": true, ".mise.toml": true,
+	".nvmrc": true, ".node-version": true, ".python-version": true,
+	".ruby-version": true, ".go-version": true, ".terraform-version": true,
+}
+
+// buildInputPrefixes cover the config families that spell themselves several ways
+// (.eslintrc.json, eslint.config.mjs, .prettierrc.yaml, rust-toolchain.toml),
+// where the stem is the stable half and the extension is not.
+var buildInputPrefixes = []string{
+	".eslintrc", "eslint.config.",
+	".prettierrc", "prettier.config.",
+	".stylelintrc", "stylelint.config.",
+	".markdownlint",
+	"rust-toolchain",
+}
+
+// LooksLikeBuildInput reports whether a workspace-relative path reads as a build
+// INPUT: a dependency lock, a rule set, or a toolchain pin. A heuristic over the
+// base name, and it has to be one, because it is asked about files no project
+// declares, where there is no declaration to read the answer off.
+//
+// The path is slash-separated, as FileEntry.Path and the affected set carry it.
+//
+// ONE function rather than a list per caller, because the callers must not drift
+// on it: MGS1028 ranks an undeclared .golangci.yml ahead of an undeclared
+// LICENSE, and the console decides whether that seeding is worth interrupting a
+// reader over on the same answer. An unrecognized name reads as NOT an input,
+// which is the safe direction: a miss costs a quieter notice, a false hit costs
+// an interruption over somebody's editor config.
+func LooksLikeBuildInput(p string) bool {
+	name := strings.ToLower(path.Base(p))
+	if buildInputNames[name] {
+		return true
+	}
+	for _, prefix := range buildInputPrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 // The *Report types below are RENDER shapes, not domain types: the {definition,
 // count, items} envelope `magus describe ... -o json` emits. The Inspector method

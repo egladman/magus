@@ -356,6 +356,21 @@ type Tool struct {
 	// Key narrows what Probe's output contributes to the cache key. The zero value
 	// keys on the whole output; see VersionKey.
 	Key VersionKey `json:"key,omitempty"`
+	// Observe prints the identity of the external data this binary answers FROM: a
+	// vulnerability database's version and publication time, a feed's revision. Run at
+	// key time like Probe and hashed whole (there is no narrowing: magus never
+	// interprets the value, it only compares it), landing in the key as an obs: line.
+	//
+	// The pair is deliberate. Probe answers "which build of the tool", Observe answers
+	// "which copy of the world it is reading", and those change on different clocks:
+	// trivy ships a release every few weeks and its database every six hours. Keying
+	// only the version replays yesterday's CVEs against today's image.
+	//
+	// This is the PROBED half of the same input class ctx.observes states by hand. Use
+	// ctx.observes for a fact a person bumps; declare Observe when the tool can be
+	// asked. Unlike Probe it is not run for every project on every run: only a target
+	// that actually composes an op driving this binary pays for the spawn.
+	Observe Command `json:"observe,omitempty"`
 	// Ready gates an op on this binary being usable, for a client whose server may be
 	// down. Its result is a precondition and never enters a cache key.
 	Ready Command `json:"ready,omitempty"`
@@ -380,3 +395,7 @@ type Tool struct {
 // HasProbe reports whether magus can learn a version for this tool, by running one or
 // by being handed a constant.
 func (t Tool) HasProbe() bool { return t.Probe.Bin != "" || t.Key.Const != "" }
+
+// HasObservationProbe reports whether this tool can be asked which copy of its external
+// data it holds.
+func (t Tool) HasObservationProbe() bool { return t.Observe.Bin != "" }

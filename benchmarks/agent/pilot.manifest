@@ -1,0 +1,10 @@
+# The first real pilot: one task, both arms, three reps, controls first.
+# Sonnet 5 at high effort proves the runner; the scored baseline is Opus 5 high, five
+# reps over all eight tasks, once this grid produces a report.
+#
+# Run from benchmarks/agent with a logged-in claude CLI on PATH:
+#   ./run.sh --manifest pilot.manifest
+--arm rampant --task merge-config-falsy --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../magus --control golden
+--arm rampant --task merge-config-falsy --reps 1 --model claude-sonnet-5 --effort high --magus-binary ../../magus --control null
+--arm rampant --task merge-config-falsy --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../magus
+--arm full --task merge-config-falsy --reps 3 --model claude-sonnet-5 --effort high --magus-binary ../../magus

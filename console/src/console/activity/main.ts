@@ -30,6 +30,7 @@ import {
   tsMillis,
   type PayloadRef,
 } from "./adapter";
+import { sessionKey, sessionLabel, sessionLineage, type SessionNode } from "./lineage";
 import { notify } from "../../lib/notifications";
 import { buildSection, renderLine } from "../render/sections";
 import { chevron, mountCollapsiblePanel, relTime, type CollapsiblePanel } from "../logs/runtree";
@@ -170,106 +171,275 @@ function leafLabel(ev: ActivityEvent, now: number): string {
   return when ? action + "  " + when : action;
 }
 
-// renderIndexTree (re)builds the event index into container: a PF TreeView grouping the page's events
-// by kind (a branch per kind with a count badge) over per-event leaves. Selecting a leaf calls
-// onSelect(index) with the event's position in the page, so the caller can reveal that section. The
+// IndexMode is how the event index groups the page: by the source that recorded each event, or by
+// the agent session that produced it.
+type IndexMode = "kind" | "session";
+
+// IndexState is what survives a repaint of the index: the branches the reader opened or closed,
+// keyed by mode and branch id so each grouping holds its own, and the leaf they selected, by the
+// event's position in the page. A branch with no entry takes the grouping's default.
+interface IndexState {
+  open: Map<string, boolean>;
+  current: number | null;
+}
+
+// indexBranch builds one collapsible tree branch: a labelled node with a count badge over the list
+// its children go in, wired to its own expand toggle. sub takes the second row of PF's node content
+// slot; "" leaves the branch a single line. onToggle reports each open or close so the caller can
+// remember it past the next repaint.
+function indexBranch(
+  label: string,
+  sub: string,
+  count: number,
+  expanded: boolean,
+  onToggle: (open: boolean) => void,
+): { branch: HTMLElement; kids: HTMLElement } {
+  const branch = h("li", "pf-v6-c-tree-view__list-item");
+  branch.setAttribute("role", "treeitem");
+  branch.setAttribute("aria-expanded", String(expanded));
+  if (expanded) branch.classList.add("pf-m-expanded");
+
+  const bContent = h("div", "pf-v6-c-tree-view__content");
+  const bNode = h("button", "pf-v6-c-tree-view__node");
+  bNode.type = "button";
+  bNode.title = sub ? label + "  " + sub : label;
+  const toggle = h("span", "pf-v6-c-tree-view__node-toggle");
+  const ticon = h("span", "pf-v6-c-tree-view__node-toggle-icon");
+  ticon.append(chevron());
+  toggle.append(ticon);
+  const bContainer = h("span", "pf-v6-c-tree-view__node-container");
+  const bNodeContent = h("span", "pf-v6-c-tree-view__node-content");
+  bNodeContent.append(h("span", "pf-v6-c-tree-view__node-text", label));
+  if (sub) bNodeContent.append(h("span", "console-activity-index__session", sub));
+  bContainer.append(bNodeContent);
+  const badge = h("span", "pf-v6-c-tree-view__node-count");
+  badge.append(h("span", "pf-v6-c-badge pf-m-read", String(count)));
+  bContainer.append(badge);
+  bNode.append(toggle, bContainer);
+  bContent.append(bNode);
+  branch.append(bContent);
+
+  const kids = h("ul", "pf-v6-c-tree-view__list");
+  kids.setAttribute("role", "group");
+  branch.append(kids);
+
+  bNode.addEventListener("click", () => {
+    const open = branch.classList.toggle("pf-m-expanded");
+    branch.setAttribute("aria-expanded", String(open));
+    onToggle(open);
+  });
+  return { branch, kids };
+}
+
+// indexLeaf builds one event row. Selecting it marks the row current across the whole tree,
+// records it in state, and calls onSelect with the event's position in the page.
+function indexLeaf(
+  event: ActivityEvent,
+  index: number,
+  now: number,
+  state: IndexState,
+  onSelect: (index: number) => void,
+): HTMLElement {
+  const leaf = h("li", "pf-v6-c-tree-view__list-item");
+  leaf.setAttribute("role", "treeitem");
+  const lContent = h("div", "pf-v6-c-tree-view__content");
+  const lNode = h("button", "pf-v6-c-tree-view__node");
+  lNode.type = "button";
+  if (state.current === index) lNode.classList.add("pf-m-current");
+  const err = event.outcome === Outcome.ERROR;
+  lNode.title = (err ? "error" : "ok") + " - " + leafLabel(event, now);
+  const lContainer = h("span", "pf-v6-c-tree-view__node-container");
+  const lNodeContent = h("span", "pf-v6-c-tree-view__node-content");
+  // node-content is a COLUMN in PatternFly - its slot for a title over a description - so
+  // anything appended here takes a row of its own. The dot went in beside the text and got
+  // one, landing on a line above the name it was marking rather than in front of it.
+  //
+  // Two rows now, which is what the slot is for: the dot and the action name on the first,
+  // the timestamp on the second. The break falls between the name and the time instead of
+  // between the mark and everything it refers to.
+  const title = h("span", "pf-v6-c-tree-view__node-text");
+  // EVERY row carries the dot, not just the failures. It is the run browser's outcome dot
+  // (logs.css, which this surface loads), and there it marks every row - so marking only
+  // errors here taught two rules for one symbol: "outcome" one tab over, "this one broke"
+  // in this list. A reader cannot tell a passing event from an unmarked one.
+  const dot = h("span", "console-log-runs__dot");
+  dot.dataset.status = err ? "fail" : "pass";
+  title.append(dot);
+  title.append(h("span", "console-activity-index__action", leafAction(event)));
+  lNodeContent.append(title);
+  const when = leafWhen(event, now);
+  if (when !== "") {
+    lNodeContent.append(h("span", "console-activity-index__when", when));
+  }
+  lContainer.append(lNodeContent);
+  lNode.append(lContainer);
+  lContent.append(lNode);
+  leaf.append(lContent);
+  lNode.addEventListener("click", () => {
+    const root = leaf.closest(".pf-v6-c-tree-view");
+    root
+      ?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
+      .forEach((n) => n.classList.remove("pf-m-current"));
+    lNode.classList.add("pf-m-current");
+    state.current = index;
+    onSelect(index);
+  });
+  return leaf;
+}
+
+// kindBranches lists a branch per kind that occurred, in the adapter's fixed source order. The
 // first kind starts expanded so the newest events show without a click.
+function kindBranches(
+  events: ActivityEvent[],
+  now: number,
+  state: IndexState,
+  onSelect: (index: number) => void,
+): HTMLElement[] {
+  return groupEventsByKind(events).map((group, gi) => {
+    const key = "kind:" + group.label;
+    const { branch, kids } = indexBranch(
+      group.label,
+      "",
+      group.events.length,
+      state.open.get(key) ?? gi === 0,
+      (open) => state.open.set(key, open),
+    );
+    for (const { event, index } of group.events)
+      kids.append(indexLeaf(event, index, now, state, onSelect));
+    return branch;
+  });
+}
+
+// sessionBranch builds one session's branch: its own events in page order, then the sessions it
+// spawned. A spawned session is drawn EXPANDED whatever its parent's state: this mode exists to
+// show a fan-out, and a collapsed child hides the thing the reader switched modes to see.
+function sessionBranch(
+  node: SessionNode,
+  now: number,
+  state: IndexState,
+  expanded: boolean,
+  onSelect: (index: number) => void,
+): HTMLElement {
+  const key = "session:" + sessionKey(node.host, node.session);
+  const { branch, kids } = indexBranch(
+    sessionLabel(node),
+    node.session,
+    node.events.length,
+    state.open.get(key) ?? expanded,
+    (open) => state.open.set(key, open),
+  );
+  branch.dataset.session = node.session;
+  for (const { event, index } of node.events)
+    kids.append(indexLeaf(event, index, now, state, onSelect));
+  for (const child of node.children) kids.append(sessionBranch(child, now, state, true, onSelect));
+  return branch;
+}
+
+// sessionBranches lists a branch per session that produced agent events. Only an agent command or
+// spawn carries a session, so this mode lists FEWER events than "by kind": an MCP call or a job has
+// no agent behind it to group by.
+function sessionBranches(
+  events: ActivityEvent[],
+  now: number,
+  state: IndexState,
+  onSelect: (index: number) => void,
+): HTMLElement[] {
+  return sessionLineage(events).map((node, i) =>
+    sessionBranch(node, now, state, i === 0, onSelect),
+  );
+}
+
+// renderIndexTree (re)builds the event index into container as a PF TreeView grouped the given way:
+// branches with a count badge over per-event leaves. Selecting a leaf calls onSelect(index) with
+// the event's position in the page, so the caller can reveal that section.
 function renderIndexTree(
   container: HTMLElement,
   events: ActivityEvent[],
   now: number,
+  mode: IndexMode,
+  state: IndexState,
   onSelect: (index: number) => void,
 ): void {
   container.replaceChildren();
-  const groups = groupEventsByKind(events);
-  if (groups.length === 0) return; // the panel is hidden when empty; no note needed
+  const branches =
+    mode === "session"
+      ? sessionBranches(events, now, state, onSelect)
+      : kindBranches(events, now, state, onSelect);
+  if (branches.length === 0) {
+    // By kind, an empty tree means an empty page, and the panel hides itself. By session the page
+    // can be full and still group nothing, and a blank panel reads as a broken one.
+    if (mode === "session") {
+      container.append(
+        h(
+          "p",
+          "console-log-runs__empty",
+          "No agent sessions on this page. Only agent commands and spawns carry a session; By kind lists every event.",
+        ),
+      );
+    }
+    return;
+  }
 
   const tree = h("div", "pf-v6-c-tree-view pf-m-guides");
   const list = h("ul", "pf-v6-c-tree-view__list");
   list.setAttribute("role", "tree");
-
-  groups.forEach((group, gi) => {
-    const branch = h("li", "pf-v6-c-tree-view__list-item");
-    branch.setAttribute("role", "treeitem");
-    const expanded = gi === 0;
-    branch.setAttribute("aria-expanded", String(expanded));
-    if (expanded) branch.classList.add("pf-m-expanded");
-
-    const bContent = h("div", "pf-v6-c-tree-view__content");
-    const bNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
-    bNode.type = "button";
-    const toggle = h("span", "pf-v6-c-tree-view__node-toggle");
-    const ticon = h("span", "pf-v6-c-tree-view__node-toggle-icon");
-    ticon.append(chevron());
-    toggle.append(ticon);
-    const bContainer = h("span", "pf-v6-c-tree-view__node-container");
-    const bNodeContent = h("span", "pf-v6-c-tree-view__node-content");
-    bNodeContent.append(h("span", "pf-v6-c-tree-view__node-text", group.label));
-    bContainer.append(bNodeContent);
-    const badge = h("span", "pf-v6-c-tree-view__node-count");
-    badge.append(h("span", "pf-v6-c-badge pf-m-read", String(group.events.length)));
-    bContainer.append(badge);
-    bNode.append(toggle, bContainer);
-    bContent.append(bNode);
-    branch.append(bContent);
-
-    const kids = h("ul", "pf-v6-c-tree-view__list");
-    kids.setAttribute("role", "group");
-    for (const { event, index } of group.events) {
-      const leaf = h("li", "pf-v6-c-tree-view__list-item");
-      leaf.setAttribute("role", "treeitem");
-      const lContent = h("div", "pf-v6-c-tree-view__content");
-      const lNode = h("button", "pf-v6-c-tree-view__node") as HTMLButtonElement;
-      lNode.type = "button";
-      const err = event.outcome === Outcome.ERROR;
-      lNode.title = (err ? "error" : "ok") + " - " + leafLabel(event, now);
-      const lContainer = h("span", "pf-v6-c-tree-view__node-container");
-      const lNodeContent = h("span", "pf-v6-c-tree-view__node-content");
-      // node-content is a COLUMN in PatternFly - its slot for a title over a description - so
-      // anything appended here takes a row of its own. The dot went in beside the text and got
-      // one, landing on a line above the name it was marking rather than in front of it.
-      //
-      // Two rows now, which is what the slot is for: the dot and the action name on the first,
-      // the timestamp on the second. The break falls between the name and the time instead of
-      // between the mark and everything it refers to.
-      const title = h("span", "pf-v6-c-tree-view__node-text");
-      // EVERY row carries the dot, not just the failures. It is the run browser's outcome dot
-      // (logs.css, which this surface loads), and there it marks every row - so marking only
-      // errors here taught two rules for one symbol: "outcome" one tab over, "this one broke"
-      // in this list. A reader cannot tell a passing event from an unmarked one.
-      const dot = h("span", "console-log-runs__dot");
-      dot.dataset.status = err ? "fail" : "pass";
-      title.append(dot);
-      title.append(h("span", "console-activity-index__action", leafAction(event)));
-      lNodeContent.append(title);
-      const when = leafWhen(event, now);
-      if (when !== "") {
-        lNodeContent.append(h("span", "console-activity-index__when", when));
-      }
-      lContainer.append(lNodeContent);
-      lNode.append(lContainer);
-      lContent.append(lNode);
-      leaf.append(lContent);
-      lNode.addEventListener("click", () => {
-        const root = leaf.closest(".pf-v6-c-tree-view");
-        root
-          ?.querySelectorAll(".pf-v6-c-tree-view__node.pf-m-current")
-          .forEach((n) => n.classList.remove("pf-m-current"));
-        lNode.classList.add("pf-m-current");
-        onSelect(index);
-      });
-      kids.append(leaf);
-    }
-    branch.append(kids);
-    bNode.addEventListener("click", () => {
-      const open = branch.classList.toggle("pf-m-expanded");
-      branch.setAttribute("aria-expanded", String(open));
-    });
-    list.append(branch);
-  });
-
+  for (const branch of branches) list.append(branch);
   tree.append(list);
   container.append(tree);
+}
+
+// The grouping modes the toggle offers, in order. The first is the resting one.
+const INDEX_MODES: ReadonlyArray<{ id: IndexMode; label: string; title: string }> = [
+  { id: "kind", label: "By kind", title: "Group by the source that recorded the event" },
+  {
+    id: "session",
+    label: "By session",
+    title: "Group agent commands by session, nesting a spawned session under its parent",
+  },
+];
+
+// indexModeCell remembers which grouping the reader last chose, so reopening Activity resumes it.
+const indexModeCell = persisted<IndexMode>("activity-index-mode", INDEX_MODES[0].id);
+
+// mountIndexModes docks the grouping toggle between the index header and the tree and returns the
+// current mode's getter. It reuses the run browser's control strip and segmented-toggle rules
+// rather than authoring a second pair: this IS that aside, and the strip was written for exactly
+// this slot.
+function mountIndexModes(panel: CollapsiblePanel, onChange: () => void): () => IndexMode {
+  const bar = h("div", "console-log-runs__controls");
+  bar.dataset.controlSize = "compact";
+  const group = h("div", "pf-v6-c-toggle-group console-log-runs__modes");
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", "Group events by");
+
+  const buttons = new Map<IndexMode, HTMLButtonElement>();
+  for (const m of INDEX_MODES) {
+    const item = h("div", "pf-v6-c-toggle-group__item");
+    const btn = h("button", "pf-v6-c-toggle-group__button");
+    btn.type = "button";
+    btn.title = m.title;
+    btn.dataset.indexMode = m.id;
+    const selected = m.id === indexModeCell.get();
+    btn.setAttribute("aria-pressed", String(selected));
+    if (selected) btn.classList.add("pf-m-selected");
+    btn.append(h("span", "pf-v6-c-toggle-group__text", m.label));
+    btn.addEventListener("click", () => {
+      if (indexModeCell.get() === m.id) return;
+      indexModeCell.set(m.id);
+      for (const [id, b] of buttons) {
+        b.classList.toggle("pf-m-selected", id === m.id);
+        b.setAttribute("aria-pressed", String(id === m.id));
+      }
+      onChange();
+    });
+    buttons.set(m.id, btn);
+    item.append(btn);
+    group.append(item);
+  }
+
+  bar.append(group);
+  panel.head.after(bar);
+  return indexModeCell.get;
 }
 
 // PayloadControl is one "show request/response" control: the body line it sits on, its button and
@@ -334,9 +504,24 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // hidden along with the rest of the aside. reopen is the one piece of the panel still on
   // screen in that state, so the count rides there too instead of vanishing with the tree.
   const countBadge = h("span", "console-log-runs__reopen-badge");
+  // What the index is currently listing, held apart from the trail itself: switching the grouping
+  // repaints the tree alone, and re-rendering the whole surface for it would rebuild every section
+  // and throw away the reader's scroll position and any payload they had expanded.
+  let indexEvents: ActivityEvent[] = [];
+  let indexSelect: (index: number) => void = () => {};
+  const indexState: IndexState = { open: new Map(), current: null };
+  let indexMode: () => IndexMode = () => INDEX_MODES[0].id;
+
+  function repaintIndex(): void {
+    if (panel) {
+      renderIndexTree(panel.treeBox, indexEvents, Date.now(), indexMode(), indexState, indexSelect);
+    }
+  }
+
   if (panel) {
     panel.head.insertBefore(conn, panel.refreshBtn);
     panel.reopen.append(countBadge);
+    indexMode = mountIndexModes(panel, repaintIndex);
   }
 
   // reveal scrolls a section into view and expands it, so clicking an index leaf lands on that event.
@@ -442,13 +627,15 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // it is not cleared to an error/status string elsewhere, so it always reflects what is actually
     // loaded even while conn is saying something else (e.g. a failed "load older" page).
     countBadge.textContent = n > 0 ? String(n) + (nextPageToken ? "+" : "") : "";
+    indexEvents = events;
+    indexSelect = (i): void => reveal(i, sectionEls);
     if (panel) {
-      renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
+      repaintIndex();
       panel.applyDefault(has);
     }
     revealDeepLink(events, sectionEls);
     if (nextPageToken && loadMore) {
-      const more = h("button", "pf-v6-c-button pf-m-secondary") as HTMLButtonElement;
+      const more = h("button", "pf-v6-c-button pf-m-secondary");
       more.type = "button";
       more.append(h("span", "pf-v6-c-button__text", "Load older activity"));
       more.addEventListener("click", loadMore);
@@ -483,8 +670,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
     conn.textContent = connText;
+    indexEvents = [];
+    indexSelect = (): void => {};
+    // The selected position named an event in a list that is gone.
+    indexState.current = null;
     if (panel) {
-      renderIndexTree(panel.treeBox, [], Date.now(), () => {});
+      repaintIndex();
       panel.applyDefault(keepIndex);
     }
   }

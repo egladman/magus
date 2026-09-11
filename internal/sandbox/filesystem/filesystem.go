@@ -63,7 +63,7 @@ func (rs Ruleset) checkAccess(path string, mode accessMode) error {
 		return fmt.Errorf("%w: %s: %w", ErrDenied, path, err)
 	}
 	for _, r := range rs.Rules {
-		if !under(abs, r.Path) {
+		if !Under(abs, r.Path) {
 			continue
 		}
 		switch mode {
@@ -140,8 +140,9 @@ func ResolveRulePath(path string) string {
 	return resolved
 }
 
-// under reports whether child is at or beneath parent (both must be absolute and lexically clean).
-func under(child, parent string) bool {
+// Under reports whether child is at or beneath parent (both must be absolute and
+// lexically clean). An empty parent contains nothing.
+func Under(child, parent string) bool {
 	if parent == "" {
 		return false
 	}

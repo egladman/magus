@@ -302,8 +302,9 @@ func (v UpdateRef) BuzzObject() BuzzObject {
 
 func (v ChainStep) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"project": v.Project,
-		"target":  v.Target,
+		"project":   v.Project,
+		"target":    v.Target,
+		"callIndex": v.CallIndex,
 	}
 }
 
@@ -400,6 +401,7 @@ func (v FileEntry) BuzzObject() BuzzObject {
 		"sourceOf":  v.SourceOf,
 		"claims":    itemsClaims,
 		"dependsOn": v.DependsOn,
+		"focus":     v.Focus,
 		"hint":      v.Hint,
 		"exists":    v.Exists,
 	}
@@ -919,6 +921,7 @@ func (v Lease) BuzzObject() BuzzObject {
 		"checkpoint":     v.Checkpoint,
 		"ownedPaths":     v.OwnedPaths,
 		"forbiddenPaths": v.ForbiddenPaths,
+		"focus":          v.Focus,
 		"dependsOn":      v.DependsOn,
 		"tier":           v.Tier,
 		"validation":     v.Validation,

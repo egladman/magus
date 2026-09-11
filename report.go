@@ -52,6 +52,13 @@ func (rw *ReportWriter) RecordShardTotal(shardID string, nShards int, duration t
 	})
 }
 
+// RecordDiagnostic appends one coded diagnostic raised ABOUT a run rather than by an
+// executed target, so a consumer reads it as the same run.diagnostic event the engine's
+// own sink emits. unit is a project path or "<project>:<target>".
+func (rw *ReportWriter) RecordDiagnostic(unit string, code types.DiagnosticCode, message string) error {
+	return report.Record(rw.w, report.DiagnosticEmitted{Unit: unit, Code: string(code), Message: message})
+}
+
 // WithReport attaches rw to receive one JSONL event per executed target.
 // Mutually exclusive with [WithReportWriter].
 func WithReport(rw *ReportWriter) RunOption {

@@ -10,7 +10,7 @@ import (
 // TestAccessForPathTypeDropsDirRightsOnFiles pins the masking rule that keeps
 // landlock_add_rule from returning EINVAL. Directory-only rights on a regular file are
 // invalid, and an allowlist entry naming a file (a resolv.conf, a socket, a config) is
-// ordinary - it took down every sandboxed run on a systemd host before this masked.
+// ordinary; it took down every sandboxed run on a systemd host before this masked.
 func TestAccessForPathTypeDropsDirRightsOnFiles(t *testing.T) {
 	both := fsAccessReadOnly | unix.LANDLOCK_ACCESS_FS_WRITE_FILE
 

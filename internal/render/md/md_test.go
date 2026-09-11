@@ -3,6 +3,7 @@ package md
 import (
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -45,11 +46,53 @@ func TestTableAlignmentAndCells(t *testing.T) {
 		[]Align{Left, Right},
 		[][]string{{"spell", "12", "`magus query kind=spell`"}},
 	)
-	want := "| Kind | Count | List them |\n" +
-		"|---|--:|---|\n" +
-		"| spell | 12 | `magus query kind=spell` |\n\n"
+	want := "| Kind  | Count | List them                |\n" +
+		"| ----- | ----: | ------------------------ |\n" +
+		"| spell |    12 | `magus query kind=spell` |\n\n"
 	if got := string(b.Bytes()); got != want {
 		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// A one-character column is `| - |`: the padding has no minimum width, which is
+// what dprint writes and therefore what a committed file has to say.
+func TestTableLinesPadsWithNoMinimumWidth(t *testing.T) {
+	got := TableLines([]string{"n"}, nil, [][]string{{"1"}, {"22"}})
+	want := []string{"| n  |", "| -- |", "| 1  |", "| 22 |"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+func TestTableLinesMeasuresCellsInRunes(t *testing.T) {
+	got := TableLines([]string{"x"}, nil, [][]string{{"café"}})
+	want := []string{"| x    |", "| ---- |", "| café |"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// No rows still renders the header and its delimiter: a report section says
+// "nothing here" with an empty table rather than a missing one.
+func TestTableLinesWithNoRows(t *testing.T) {
+	got := TableLines([]string{"Kind", "n"}, nil, nil)
+	want := []string{"| Kind | n |", "| ---- | - |"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// The block form ends the table with one blank line and nothing more, so a
+// generator that closes its file with a table leaves the single trailing
+// newline dprint keeps.
+func TestTableBlockEndsWithOneBlankLine(t *testing.T) {
+	got := Table([]string{"n"}, nil, [][]string{{"1"}})
+	want := "| n |\n| - |\n| 1 |\n\n"
+	if got != want {
+		t.Fatalf("got:\n%q\nwant:\n%q", got, want)
+	}
+	if strings.TrimRight(got, "\n")+"\n\n" != got {
+		t.Fatalf("trailing newlines beyond the blank line: %q", got)
 	}
 }
 

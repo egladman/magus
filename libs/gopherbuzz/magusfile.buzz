@@ -105,7 +105,11 @@ export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go
 // under -tags buzz_safe.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    go["go-test"](ctx);
+    // The profile is a declared output because the root's coverage badge is one figure
+    // over every Go module, merged from each module's own run: a cache hit here still
+    // leaves the profile for the root to read, and nothing re-measures this module.
+    ctx.writesFiles("coverage.out");
+    go["go-test"](ctx, {"args": ["-covermode=atomic", "-coverprofile=coverage.out", "./..."]});
     proc\exec("go", ["test", "-tags", "buzz_safe", "./..."]);
 }
 

@@ -52,6 +52,7 @@ func Merge(params map[string]any) (func(*types.Lease), error) {
 	str("checkpoint", func(u *types.Lease, v string) { u.Checkpoint = strings.TrimSpace(v) })
 	list("owned_paths", func(u *types.Lease, v []string) { u.OwnedPaths = v })
 	list("forbidden_paths", func(u *types.Lease, v []string) { u.ForbiddenPaths = v })
+	list("focus", func(u *types.Lease, v []string) { u.Focus = v })
 	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
 	str("tier", func(u *types.Lease, v string) { u.Tier = strings.TrimSpace(v) })
 	str("validation", func(u *types.Lease, v string) { u.Validation = v })

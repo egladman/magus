@@ -1,0 +1,118 @@
+# EXTRACTION PARITY: a shipped session-load recipe, executed against a synthetic
+# transcript.
+#
+# The sibling gate in conventions_test.go checks that every recipe DECLARES what
+# its host supplies and that the guide's table agrees. A declaration can be
+# sincere and still wrong, because nothing there runs the file: the OpenCode guard
+# plugin declared a correct stance for months while invoking a subcommand that no
+# longer existed. This runs the real file (GUARD_TEMPLATES is an absolute path to
+# docs/guides/integrations/agents, never a copy) and asserts the lines it emits.
+#
+# Every case is labeled `# kind: <kind>`; TestSessionRecipeCorpusCoversEveryKind
+# fails when the contract grows a kind no case covers.
+#
+# The fixture is SYNTHETIC and stays that way. A real transcript carries a
+# person's own commands, paths and prompts, and a fixture is committed forever.
+
+[!exec:jq] skip 'the session recipes extract with jq, which is not installed'
+[windows] skip 'POSIX sh recipes; a Windows host reads the same stores differently'
+
+env HOST_REPO_ROOT=/repo
+env HOST_PROJECT_DIRS=$WORK/transcripts
+env SESSION_STATE_DIR=$WORK/state
+
+exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+
+# kind: skill.load
+# The skill NAME, not the tool call: what an audit counts is which skill loaded.
+stdout '"kind":"skill.load","ref":"t1","text":"magus-run"'
+
+# kind: shell.command
+# The denial rides on the command it belongs to. Claude Code records the tool_use
+# and its result as two records, so an event that did not carry its outcome back
+# would report every blocked command as one that ran.
+stdout '"kind":"shell.command","ref":"t2","text":"blocked-command"'
+stdout '"denied":true'
+
+# kind: hook.output
+# What magus's OWN hook said, joined to the command by the ref it shares with it.
+# Only one host of the three supplies this, which is why the coverage line exists.
+stdout '"kind":"hook.output","ref":"t2","text":"the guard said so"'
+
+# kind: spawn
+# The subagent TYPE. The prompt beside it in the fixture must not appear anywhere
+# in the output: it is unbounded, it is the delegating agent's own words, and no
+# report asks what an agent was told.
+stdout '"kind":"spawn","ref":"t3","text":"Explore"'
+! stdout 'private words'
+
+# kind: file.read
+# kind: file.write
+stdout '"kind":"file.read","ref":"t5","text":"README.md"'
+stdout '"kind":"file.write","ref":"t6","text":"AGENTS.md"'
+
+# kind: magus.call
+# A direct MCP call to magus. It never appears as a shell command, so a recipe
+# that only read Bash tool uses would report a session driving magus hard as one
+# that never touched it.
+stdout '"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"'
+
+# A cwd outside the repository is dropped. Scoping is on the record's own cwd
+# rather than on which directory the file was found in, which is what keeps a
+# worktree under the root in and a different checkout out.
+! stdout 'out-of-scope-command'
+
+# The host records no exit status, which the coverage line declares as exit=none.
+# The honest value is null: a zero here would be a measurement nobody made.
+stdout '"exit":null'
+! stdout '"exit":0'
+
+# A re-run reads only what is new. Without the checkpoint an audit re-loads the
+# whole store on every invocation, which is the cost that gets a recipe switched
+# off after the first week.
+exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+! stdout .
+
+# An appended record is picked up on the next run, and only that record.
+cp $WORK/appended.jsonl $WORK/transcripts/s1.jsonl
+exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+stdout '"kind":"shell.command","ref":"t8"'
+! stdout '"ref":"t1"'
+
+# --- fail-open: a recipe that cannot run says so ------------------------------
+#
+# A recipe that loaded nothing looks exactly like a host nobody used, and that is
+# the reading this whole arrangement exists to make impossible.
+
+env HOST_REPO_ROOT=
+cd $WORK/nogit
+exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+! stdout .
+stderr 'no repository here'
+cd $WORK
+
+-- transcripts/s1.jsonl --
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:00.100Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"magus-run"}}]}}
+{"type":"user","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:01.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:02.000Z","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"blocked-command"}}]}}
+{"type":"attachment","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:02.500Z","uuid":"u9","attachment":{"type":"hook_blocking_error","hookName":"PreToolUse:Bash","toolUseID":"t2","content":"the guard said so"}}
+{"type":"user","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:03.000Z","toolDenialKind":"rule","message":{"content":[{"type":"tool_result","tool_use_id":"t2"}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:04.000Z","message":{"content":[{"type":"tool_use","id":"t3","name":"Agent","input":{"subagent_type":"Explore","prompt":"private words"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/elsewhere","timestamp":"2026-09-09T12:00:05.000Z","message":{"content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"out-of-scope-command"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:06.000Z","message":{"content":[{"type":"tool_use","id":"t5","name":"Read","input":{"file_path":"README.md"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:07.000Z","message":{"content":[{"type":"tool_use","id":"t6","name":"Write","input":{"file_path":"AGENTS.md"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:08.000Z","message":{"content":[{"type":"tool_use","id":"t7","name":"mcp__magus__magus_query","input":{}}]}}
+-- appended.jsonl --
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:00.100Z","message":{"content":[{"type":"tool_use","id":"t1","name":"Skill","input":{"skill":"magus-run"}}]}}
+{"type":"user","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:01.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:02.000Z","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"blocked-command"}}]}}
+{"type":"attachment","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:02.500Z","uuid":"u9","attachment":{"type":"hook_blocking_error","hookName":"PreToolUse:Bash","toolUseID":"t2","content":"the guard said so"}}
+{"type":"user","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:03.000Z","toolDenialKind":"rule","message":{"content":[{"type":"tool_result","tool_use_id":"t2"}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:04.000Z","message":{"content":[{"type":"tool_use","id":"t3","name":"Agent","input":{"subagent_type":"Explore","prompt":"private words"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/elsewhere","timestamp":"2026-09-09T12:00:05.000Z","message":{"content":[{"type":"tool_use","id":"t4","name":"Bash","input":{"command":"out-of-scope-command"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:06.000Z","message":{"content":[{"type":"tool_use","id":"t5","name":"Read","input":{"file_path":"README.md"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:07.000Z","message":{"content":[{"type":"tool_use","id":"t6","name":"Write","input":{"file_path":"AGENTS.md"}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:08.000Z","message":{"content":[{"type":"tool_use","id":"t7","name":"mcp__magus__magus_query","input":{}}]}}
+{"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:09.000Z","message":{"content":[{"type":"tool_use","id":"t8","name":"Bash","input":{"command":"a later command"}}]}}
+-- nogit/keep.txt --
+a directory outside any checkout, so the recipe has nothing to scope to

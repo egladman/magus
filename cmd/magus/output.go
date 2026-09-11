@@ -103,55 +103,78 @@ func writeJSONL(w io.Writer, v any) error {
 	case reflect.Slice, reflect.Array:
 		return encodeEach(enc, rv)
 	case reflect.Struct:
-		idx, err := jsonlPrimaryField(rv.Type())
+		path, err := jsonlPrimaryField(rv.Type())
 		if err != nil {
 			return err
 		}
-		if idx >= 0 {
-			return encodeEach(enc, rv.Field(idx))
+		if len(path) > 0 {
+			return encodeEach(enc, rv.FieldByIndex(path))
 		}
 	}
 	return enc.Encode(v)
 }
 
-// jsonlPrimaryField returns the index of rt's streamable collection, or -1 when rt has
-// none. It errors when the choice is ambiguous: more than one field marked primary, or
-// several collections with none marked.
-func jsonlPrimaryField(rt reflect.Type) (int, error) {
-	tagged := -1
-	var candidates []int
-	for i := range rt.NumField() {
-		f := rt.Field(i)
-		if !f.IsExported() || jsonFieldKey(f) == "" {
-			continue
-		}
-		if f.Type.Kind() != reflect.Slice && f.Type.Kind() != reflect.Array {
-			continue
-		}
-		if f.Tag.Get(jsonlPrimaryTag) == "primary" {
-			if tagged >= 0 {
-				return -1, fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\"; exactly one collection streams",
-					typeLabel(rt), jsonFieldKey(rt.Field(tagged)), jsonFieldKey(f))
+// jsonlPrimaryField returns the index path of rt's streamable collection, or nil when
+// rt has none. It errors when the choice is ambiguous: more than one field marked
+// primary, or several collections with none marked.
+//
+// It descends into EMBEDDED structs because json flattens them: a wrapper that adds
+// one field beside an embedded result puts that result's own collections on the wire
+// at the top level, and counting only the wrapper's own fields would elect the added
+// field as the stream nobody declared.
+func jsonlPrimaryField(rt reflect.Type) ([]int, error) {
+	var tagged []int
+	var taggedKey string
+	var candidates [][]int
+	var keys []string
+
+	var walk func(reflect.Type, []int) error
+	walk = func(t reflect.Type, prefix []int) error {
+		for i := range t.NumField() {
+			f := t.Field(i)
+			if !f.IsExported() {
+				continue
 			}
-			tagged = i
+			at := append(append([]int(nil), prefix...), i)
+			if f.Anonymous && f.Type.Kind() == reflect.Struct && f.Tag.Get("json") == "" {
+				if err := walk(f.Type, at); err != nil {
+					return err
+				}
+				continue
+			}
+			if jsonFieldKey(f) == "" {
+				continue
+			}
+			if f.Type.Kind() != reflect.Slice && f.Type.Kind() != reflect.Array {
+				continue
+			}
+			if f.Tag.Get(jsonlPrimaryTag) == "primary" {
+				if tagged != nil {
+					return fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\"; exactly one collection streams",
+						typeLabel(rt), taggedKey, jsonFieldKey(f))
+				}
+				tagged, taggedKey = at, jsonFieldKey(f)
+			}
+			candidates = append(candidates, at)
+			keys = append(keys, jsonFieldKey(f))
 		}
-		candidates = append(candidates, i)
+		return nil
 	}
-	if tagged >= 0 {
+	if err := walk(rt, nil); err != nil {
+		return nil, err
+	}
+
+	if tagged != nil {
 		return tagged, nil
 	}
 	switch len(candidates) {
 	case 0:
-		return -1, nil
+		return nil, nil
 	case 1:
 		return candidates[0], nil
 	}
-	names := make([]string, len(candidates))
-	for i, idx := range candidates {
-		names[i] = jsonFieldKey(rt.Field(idx))
-	}
-	return -1, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit; use -o json for the whole record",
-		typeLabel(rt), len(names), strings.Join(names, ", "))
+	return nil, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit; use -o json for the whole record",
+		typeLabel(rt), len(keys), strings.Join(keys, ", "))
 }
 
 // encodeEach writes one JSON line per element of list.

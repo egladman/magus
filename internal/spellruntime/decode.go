@@ -326,6 +326,16 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin
 	}
+	if e, ok := o.Str("external"); ok {
+		c.External = spells.External(e)
+		// Rejected at LOAD, not read leniently at doctor time: an op that meant to say
+		// mutates-external and typed it wrong would otherwise decode as ExternalNone
+		// and be silently exempt from the very check it was declaring itself into.
+		if !c.External.Valid() {
+			return spells.Command{}, fmt.Errorf("%scommand: external is %s; want one of %s",
+				where, c.External, strings.Join(c.External.Values(), ", "))
+		}
+	}
 	secrets, err := o.StrMap("secrets")
 	if err != nil {
 		return spells.Command{}, fmt.Errorf("%scommand secrets: %w", where, err)
@@ -543,11 +553,18 @@ func decodeTools(src obj) (map[string]spells.Tool, error) {
 			}
 			t.Ready = cmd
 		}
+		if ob, ok := o.Obj("observe"); ok {
+			cmd, err := decodeCommand("", "", ob)
+			if err != nil {
+				return nil, fmt.Errorf("tools[%q].observe: %w", name, err)
+			}
+			t.Observe = cmd
+		}
 		if d, ok := o.Str("diagnostics"); ok {
 			t.Diagnostics = spells.DiagnosticFormat(d)
 		}
 		if t.Probe.Bin == "" && t.Key.IsZero() && t.Ready.Bin == "" && t.Supported.IsZero() &&
-			t.Diagnostics == spells.DiagnosticNone {
+			t.Observe.Bin == "" && t.Diagnostics == spells.DiagnosticNone {
 			continue
 		}
 		if out == nil {

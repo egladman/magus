@@ -20,9 +20,9 @@ Serialize an XML node to a string. A node is a string (text) or an element map {
 
 **Signature:** `xml\render(node) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go#L84)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `node` | `any` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `node`    | `any` |          |             |
 
 **Returns:** string
 
@@ -32,11 +32,11 @@ Build an element node from a tag, a flat [name, value, ...] attribute list, and 
 
 **Signature:** `xml\element(tag, attrs, children) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go#L71)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `tag` | `string` |  | |
-| `attrs` | `[]string` |  | |
-| `children` | `any` |  | |
+| Parameter  | Type       | Optional | Description |
+| ---------- | ---------- | -------- | ----------- |
+| `tag`      | `string`   |          |             |
+| `attrs`    | `[]string` |          |             |
+| `children` | `any`      |          |             |
 
 **Returns:** any
 
@@ -46,9 +46,9 @@ Parse an XML string into a node tree: each element becomes {"tag": name, "attrs"
 
 **Signature:** `xml\parse(s) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/xml/xml.go#L142)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** any
 

@@ -235,10 +235,11 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
         // is hashed, not executed, so no buf step enters this project's boundary.
         workspace\file("proto/magus/**/*.proto"),
-        workspace\file("proto/gen/descriptor.binpb"), workspace\file("CHANGELOG.md"));
+        workspace\file("proto/gen/descriptor.binpb"), workspace\file("CHANGELOG.md"),
+        workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/**/*.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -277,6 +278,34 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"
         + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
         + changelogMd);
+
+    // Benchmark results as docs pages, the same way and for the same reason: a result
+    // that lives only in the repository is one a reader never meets. Each committed
+    // report under benchmarks/agent/reports (written by `agent-bench-report --publish`)
+    // and the build-tool comparison at benchmarks/BENCHMARKS.md become a page under
+    // benchmarks/, linked from the hand-written benchmarks.md index.
+    fs\mkdirAll("benchmarks");
+    // A report sits at reports/<date>/<provider>/<model>.md and keeps that path on
+    // the site, so a URL names the run the way the tree does.
+    foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
+        final rel = report.value.split("../benchmarks/agent/reports/").join("");
+        final segments = rel.split("/");
+        final date = segments[0];
+        final provider = segments[1];
+        final model = segments[2].split(".md").join("");
+        fs\mkdirAll(fs\join("benchmarks", date, provider));
+        fs\writeFile(fs\join("benchmarks", rel),
+            "---\ntitle: \"Agent harness benchmark (" + date + ", " + provider + " " + model + ")\"\n"
+            + "generated_from: benchmarks/agent/reports/" + rel + "\n"
+            + "description: One published run of the agent harness benchmark, the controls first, then cost-of-pass, paired deltas and pass rates. Generated from the committed report.\n"
+            + "tags: [benchmarks, agents, harness, measurement]\n---\n\n"
+            + fs\readFile(report.value));
+    }
+    fs\writeFile("benchmarks/build-tools.md",
+        "---\ntitle: Build-tool benchmarks\ngenerated_from: benchmarks/BENCHMARKS.md\n"
+        + "description: magus timed against make on one fixture with hyperfine, stamped with the date, hardware and tool versions. Generated from the committed results.\n"
+        + "tags: [benchmarks, performance, measurement]\n---\n\n"
+        + fs\readFile("../benchmarks/BENCHMARKS.md"));
 }
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
@@ -429,7 +458,11 @@ export fun conventions(ctx: magus\Context, args: [str]) > void !> any {
 // dprint.json at the workspace root), so `format` here is a dependency edge and nothing
 // else. This project only lints prose; see docs/concepts/generated-files.md.
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(format, conventions);
+    // A stage of its own, ahead of conventions: format reaches content-generate, and a page
+    // generated for the first time is absent from disk while the two fan out together, so
+    // every link to it reads as missing-link on that one run.
+    ctx.needs(format);
+    ctx.needs(conventions);
     // The site bundle imports the search grammar from the shared libs/textsearch source,
     // so gate its type-check + biome here: a lib edit fails docs lint through the graph.
     ctx.needs(textsearch\lint);
@@ -476,7 +509,11 @@ export fun security(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(generate, lint, build, test);
+    // build renders every page format rewrites in place, so the render waits for the
+    // format under lint rather than racing it (MGS4008). Two calls, not an edge on
+    // build: a site built alone from unformatted markdown is a fine site.
+    ctx.needs(generate, lint, test);
+    ctx.needs(build);
 }
 
 // build-playground rebuilds the WebAssembly interpreter the playground loads: the

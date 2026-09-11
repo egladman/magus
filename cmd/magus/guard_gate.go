@@ -2,15 +2,19 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
 
@@ -196,4 +200,147 @@ func gateRepeatAdvice(runs int, spent time.Duration) string {
 func gateRepeatBrief(runs int, spent time.Duration) string {
 	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. `%s` lists narrower targets.\n",
 		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), hint.LsTargets.With("<project>"))
+}
+
+// denyLeaseScopedGate refuses the gate to a lease that was handed a narrower check, and
+// returns "" for everybody else.
+//
+// The gate runs ONCE per branch, in the orchestrator's tree, after every unit lands. A
+// delegated worker's `validation` is the narrow target it was assigned, and until this
+// rule the field declared that and enforced nothing: seven workers each ran the whole
+// pipeline concurrently on one machine because every brief ended with it (2026-09-09).
+// Gate redundancy cannot catch that, since it keys on identical tree content and seven
+// worktrees are seven trees.
+//
+// Same seatbelt contract gradeLeasedWrite documents. A caller naming no lease, a lease
+// with no live row, an unreadable ledger, and a row that declared no validation all pass:
+// the last of those is a boundary nobody wrote, not a narrow one. A person running their
+// own gate names no lease and never reaches this rule.
+func denyLeaseScopedGate(ctx context.Context, actingLease, command string) string {
+	if actingLease == "" || !commandRunsGate(command) {
+		return ""
+	}
+	me, ok := actingLiveLease(ctx, actingLease)
+	if !ok || me.Validation == "" || validationNamesGate(me.Validation) {
+		return ""
+	}
+	return fmt.Sprintf(
+		"magus workspace: run `%s` instead, which is the check lease %s was assigned. The orchestrator gates once, in its own tree, after every unit lands.\n"+
+			"`%s` runs the `%s` gate, and the validation field on lease %s's ledger row reads %q, which does not name it. If this lease really owns the gate, widen that field with the "+hint.ToolLedger.String()+" tool and retry.",
+		me.Validation, me.ID, command, types.TargetCI, me.ID, me.Validation)
+}
+
+// actingLiveLease reads the acting lease's own live row, reporting none whenever the
+// ledger cannot answer. An unreadable ledger and an id nobody declared are one silence
+// here: both leave nothing to judge against, and a rule the guard cannot evaluate must
+// not block a tool call.
+func actingLiveLease(ctx context.Context, actingLease string) (types.Lease, bool) {
+	if !types.ValidLeaseID(actingLease) {
+		return types.Lease{}, false
+	}
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return types.Lease{}, false
+	}
+	leases, err := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace}).List()
+	if err != nil {
+		return types.Lease{}, false
+	}
+	return liveLease(liveLeases(leases), actingLease)
+}
+
+// validationNamesGate reports whether a lease's declared validation IS the gate, in which
+// case the lease owns it and nothing is refused.
+//
+// Read as words rather than through parseGuardCommands: the field is a declaration a
+// person wrote, and `ci`, `magus run ci` and `affected ci` are all things they write. A
+// stray `ci` elsewhere in the field reads as ownership and clears the deny, which is the
+// direction this rule fails in on purpose.
+func validationNamesGate(validation string) bool {
+	for _, word := range strings.Fields(validation) {
+		if t, err := types.ParseTarget(word); err == nil && t.Name == types.TargetCI {
+			return true
+		}
+	}
+	return false
+}
+
+// denyLeaseScopedVCS refuses version-control mutation under a WORKER lease: a row with
+// a parent. The orchestrator lands every unit from the worker's tree, so a worker that
+// commits, pushes, stashes or reverts edits the state it is being integrated from, and a
+// whole-tree revert destroys a sibling's uncommitted work. A root lease, a lease with no
+// row, and no lease at all are untouched: a boundary nobody declared is not one of size
+// zero, the same rule the gate and the write arms follow.
+//
+// The command is parsed before the ledger is read: every tool call under a bound lease
+// reaches this rule, and most of them are not git.
+func denyLeaseScopedVCS(ctx context.Context, actingLease, command string) string {
+	if actingLease == "" {
+		return ""
+	}
+	cmds, ok := parseGuardCommands(command)
+	if !ok {
+		return ""
+	}
+	for _, c := range cmds {
+		op := vcsMutation(c)
+		if op == "" {
+			continue
+		}
+		me, ok := actingLiveLease(ctx, actingLease)
+		if !ok || me.Parent == "" {
+			return ""
+		}
+		return fmt.Sprintf(
+			"magus workspace: leave version control to the orchestrator: report your worktree path and `git status --short`, and it lands the work from there.\n"+
+				"`%s` runs `%s`, and lease %s is a worker under %s in this workspace's ledger. A worker that commits, pushes, stashes or reverts changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. If this lease really owns version control, clear its parent with the "+hint.ToolLedger.String()+" tool and retry.",
+			command, op, me.ID, me.Parent)
+	}
+	return ""
+}
+
+// vcsMutation names the git operation a parsed command performs when it is one a
+// worker must leave to the orchestrator, or "" for anything else. Global options
+// before the subcommand (-C <dir>, -c k=v, --work-tree <dir>) are skipped so a relocated
+// commit is still a commit. Only git is read: the guard's command grammar knows no other VCS, and a
+// name here that promised more would be a rule nothing enforces.
+//
+// `git stash list` and `git stash show` read the stash rather than moving work onto
+// it, so they pass; every other stash form is a mutation.
+func vcsMutation(c guardCommand) string {
+	if c.Name != "git" {
+		return ""
+	}
+	var sub string
+	var rest []string
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
+		if strings.HasPrefix(a, "-") {
+			switch a {
+			case "-C", "-c", "--work-tree", "--git-dir", "--namespace":
+				i++
+			}
+			continue
+		}
+		sub, rest = a, c.Args[i+1:]
+		break
+	}
+	switch sub {
+	case "commit", "push", "reset", "clean", "revert", "rebase", "merge", "cherry-pick":
+		return "git " + sub
+	case "stash":
+		if len(rest) > 0 && (rest[0] == "list" || rest[0] == "show") {
+			return ""
+		}
+		return "git stash"
+	case "worktree":
+		if slices.Contains(rest, "remove") {
+			return "git worktree remove"
+		}
+	case "checkout", "restore":
+		if slices.Contains(rest, ".") {
+			return "git " + sub + " ."
+		}
+	}
+	return ""
 }

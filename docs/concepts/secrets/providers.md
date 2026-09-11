@@ -74,6 +74,45 @@ magus ships this one at `spells/onepassword/`, imported by path because a spell 
 imports a host module cannot be compiled into the binary. Copy it as the starting point
 for any provider with a CLI that prints a secret to stdout.
 
+### The system keychain provider
+
+`spells/system-keychain/` is the same contract over whatever keychain the
+platform ships, chosen at run time: the macOS keychain through `security`, and on
+Linux the freedesktop Secret Service (GNOME Keyring, KDE Wallet) through
+`secret-tool` from libsecret. A reference is the item's service name, and a
+person stores the value once at a prompt that never echoes it:
+
+```sh
+security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w     # macOS
+secret-tool store --label=CLAUDE_BENCH_TOKEN service CLAUDE_BENCH_TOKEN  # Linux
+```
+
+```buzz
+import "./spells/system-keychain" as system_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
+    magus\secret.provider(system_keychain);
+}
+
+final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+```
+
+Windows is not implemented yet: the provider says so, and names the environment
+provider as the way through, rather than pretending Credential Manager is wired.
+The Linux path follows the `secret-tool` manual and has not been run in this
+repository's own checks, which run on macOS.
+
+Spell the reference like a shell variable and select the provider from the
+environment rather than from the platform: the same line then reads a repository
+secret in CI through the environment provider, and a laptop that has not stored the
+item keeps every other secret-reading target working.
+
+The shape earns its keep when the shell running magus is an agent's. Nothing is
+exported into that shell, so nothing reaches its transcript: the agent runs the
+target, magus reads the keychain, the child process receives the value, and the value
+is redacted from every captured line the way any provider-resolved secret is. The
+first read makes the keychain ask whether `security` may have the item; "Always
+Allow" is what keeps later runs unattended.
+
 ### The GitHub Actions provider
 
 magus also ships `spells/github/actions`, the same spell that carries the Actions cache

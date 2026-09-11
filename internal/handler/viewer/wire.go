@@ -39,6 +39,13 @@ func eventToProto(e journal.Event) *viewerv1.Event {
 		out.Command = commandToProto(*e.Command)
 		out.MagusVersion = e.MagusVersion
 	}
+	for _, s := range e.Undeclared {
+		out.Undeclared = append(out.Undeclared, &viewerv1.UndeclaredSeed{
+			Project: s.Project,
+			Files:   s.Files,
+			Inputs:  s.Inputs,
+		})
+	}
 	return out
 }
 

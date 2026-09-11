@@ -1,3 +1,8 @@
+import "std";
 import "fs";
 
-fs\copyFile("dist/magus", "/usr/local/bin/magus");
+try {
+    fs\copyFile("dist/magus", "/usr/local/bin/magus");
+} catch (e) {
+    std\print("could not install dist/magus");
+}

@@ -13,8 +13,222 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **A run that cannot be scheduled is refused before it starts, and a pool that cannot free
+  a slot is refused within seconds.** Two targets inside one composed step, one declaring it
+  writes files the other declares it reads, with no `ctx.needs` path between them, is a plan
+  no order can express: the reader either reads bytes the writer had not produced yet or
+  waits for the writer while holding the seat the writer needs. magus now refuses that plan
+  at derivation time, naming the reader, the writer, the globs that overlap, and both fixes
+  (MGS4008), and `magus doctor` asks the same question of every composed target in every
+  project, so the answer arrives when the magusfile is being edited rather than twenty
+  minutes into a gate. Only explicit declarations count on either side: a project baseline
+  is an over-approximation, and a refusal may not rest on a guess. Nor on a pattern: the
+  refusal stands on a file in the tree both globs match, and on one project, since a pair
+  split across two is advice rather than a refusal. A later `ctx.needs` call in the
+  composer's body counts as ordering everything an earlier call ran, and everything under
+  a later call's members with it; each chain step records which call named it. A cited
+  URL whose path names a file the VCS ignores is an upstream link, never a source: the
+  built binary at the root had been turning the docs site's own URL into a file node on
+  one machine and a link node on another. The same
+  record makes a chain's memory claim honest: the members of one call run together, so
+  their declarations now add, and the claim is the largest call rather than the largest
+  member. Where the wedge is
+  reached anyway, the concurrency pool now knows who holds its slots and what each holder is
+  waiting on, and refuses the wait once every slot is held by a step that is itself waiting,
+  naming every holder (MGS3013). Waiting for the per-key cache lock and waiting for an
+  upstream target both report themselves and beat the invocation heartbeat, so a legitimate
+  long wait is no longer a stall to the watchdog and an aborted run reads as one target
+  waiting on another. Behind the incident: a gate held every project lock for fifteen
+  minutes with nothing running, because a badge target read every Go file its siblings were
+  still writing.
+- **A newer gate no longer queues behind an older one on the same tree.** When
+  `magus affected ci` or `magus run ci` contends for a project lock held by an earlier gate
+  on the same workspace root, the earlier run stops with MGS3014 and the later one takes
+  the lock, usually within a second. The earlier verdict would have described a tree that
+  has since changed, so waiting for it bought a stale answer at the price of the machine.
+  The ordering is decided by the tree and never by the caller: one resolved root, both
+  invocations the whole `ci` target, later start wins, and there is no priority to set. A
+  sibling worktree is a different tree and still waits; a `run build` behind a `run test`
+  still waits; a lock held by one of the run's own ancestors is still MGS3007. The earlier
+  run cancels through the same path the stall watchdog uses, so its targets stop and its
+  locks and budget come back rather than timing out, and it exits 75 (`EX_TEMPFAIL`) so a
+  caller can tell a yielded gate from a failed one. The later run prints one line naming
+  what it superseded, on the stream `-s` does not bound. A holder that does not answer
+  inside thirty seconds is waited on exactly as before.
+- **A spell can now tell magus which copy of the world its tool is reading, and a doctor
+  check asks when it should.** A `Tool` may declare an `observe` command beside its version
+  probe; magus runs it at key time and folds the output into the cache key as an `obs:`
+  line, the same input class `ctx.observes` states by hand. The pair matters because the
+  two answers move on different clocks: trivy ships a release every few weeks and its
+  vulnerability database is built every six hours, so keying only the version replays
+  yesterday's CVEs against today's image. Unlike a version probe it is scoped to the
+  targets whose ops actually drive that binary, so a value that changes every six hours
+  does not cost an unrelated build its cache. Alongside it, an op declares its relation to
+  the world outside the tree: `reads-external` for a verdict that comes from a live feed,
+  `mutates-external` for a push, a signature or a deploy. `magus doctor` fails a
+  cacheable target composing one that has neither an observation probe nor `skip_cache`
+  (MGS1033). Reaching the network is not the test: `go mod tidy` declares nothing, because
+  `go.sum` pins what comes back. The docker spell gains a `trivy-image` op that scans
+  offline by default (`--skip-db-update`) and refreshes under the update charm, and this
+  repository's own `image-scan` drops `skip_cache` on the strength of it.
+- **A URL in a comment is now a link the graph can follow.** Every http(s) URL in a Go or
+  Buzz comment, every absolute markdown link on a page, and the source a generated page
+  names in its `generated_from` frontmatter becomes an edge from the file or page that
+  wrote it. A URL naming a page this workspace holds resolves to that page or heading; a
+  forge URL naming a path it holds resolves to that file or directory; everything else
+  becomes a `link` node keyed by the normalized URL, so `kind=link` is the set of external
+  documents the tree depends on and `magus explain` on one lists every file citing it. A
+  page that cites a source path now documents it, which `magus graph stats` reads as file
+  doc coverage, and a page code points at ranks above prose nothing cites. Only text a
+  lexer called a comment is read, so a URL in a string literal is out of reach; a citation
+  must clear a closed scheme set, carry no credentials, sit under a length cap and name a
+  plausible public host; and nothing is ever fetched. Knowledge-graph schema v12.
+- **A read that leaves the project you are working in now says so.** The agent guard
+  computes a session's focus from the project graph: the project holding the working
+  directory, everything it declares `depends_on` transitively, the projects nested inside
+  it, and the files at the workspace root plus `.claude/skills` that every project resolves
+  through. A `cat`, `sed`, `grep`, `rg` or `find` pointed outside that set draws one
+  advisory naming what owns the path, held to one firing per path and one full explanation
+  per session. It denies instead when a lease is bound to the checkout with `magus session
+  lease`, where the boundary is one an orchestrator declared: a new `focus` field on the
+  lease row names the paths a worker may READ, falling back to `owned_paths`, so a worker
+  that needs to read a shared library no longer has to be handed the right to write it.
+  There is no environment variable that switches the rule off. `magus describe file`
+  carries the same answer as a `focus` field per path, and names the focus it judged
+  against. Measured over 204 session transcripts in this repository: reads landed outside
+  the units a session actually wrote to about a fifth of the time, and 17,353 reads left
+  the workspace root altogether.
+- **Every documented host now delivers an `advise` verdict to the model, and three of the
+  four hand a compacted session its checkout back.** The guard rules were always identical
+  across hosts; what differed was how much of a verdict survived the trip, and two hosts
+  were dropping the explaining half entirely. Codex was sent no advisory at all, on a
+  reading of its hook contract that OpenAI's current reference contradicts: the response
+  keys it rejects are `continue`, `stopReason` and `suppressOutput`, and `additionalContext`
+  is supported, so the shipped `codex-hooks.json` no longer sets `GUARD_NO_ADVISE=1` and
+  also wires `SessionStart` with matcher `compact` for the post-compaction brief. Cursor's
+  write guard moved from `afterFileEdit`, which fires once the file has changed, to
+  `preToolUse`, which blocks it, and its advisories now ride
+  `postToolUse.additional_context` instead of stderr prose; its script also records a
+  checkpoint on `sessionEnd` and captures a lease on `subagentStart`, which its payload
+  carries as `task`. The OpenCode plugin appends an advisory to the tool result that
+  produced it, joined by `callID`, pushes the brief into `experimental.session.compacting`,
+  and records a checkpoint on the `session.idle` bus event. `magus-rehydrate.sh` gained
+  `REHYDRATE_FORMAT=json`, which wraps its text in the `hookSpecificOutput` envelope a host
+  that parses a session-start hook's stdout as a reply needs, escaped in the template so
+  the file still needs no `jq`. Guard template version 12: re-copy your installed copies.
+  Cursor's post-compaction gap is named rather than approximated, because its `preCompact`
+  returns a message for the person only, and the guide now carries a table of every job magus
+  does through a host event, with the event that carries it or the reason nothing does.
+- **The hook configs magus ships are graded against the agent hosts' own schemas.** Claude
+  Code's `.claude/settings.json`, the `codex-hooks.json` wiring, and every hooks block the
+  Claude Code, Codex and Cursor guide pages embed now validate against a schema vendored
+  under `testdata/hostschemas/`: SchemaStore's for Claude Code settings and Codex hooks, and
+  OpenAI's own generated one for a Codex `PreToolUse` reply. The JSON the shipped guard
+  templates print is rendered from the template bodies in those files and graded the same
+  way, so a host renaming a field surfaces as a failing test rather than as a hook that
+  quietly stopped judging. Deliberately wrong event names are asserted to fail, because a
+  schema that only ever sees valid input cannot be told from an empty one. Claude Code and
+  Cursor publish nothing for hook stdout and Cursor nothing for `.cursor/hooks.json`, so
+  those three schemas are transcribed by hand from the reference pages and the
+  `@anthropic-ai/claude-agent-sdk` types and are recorded as ours, not theirs, in
+  `testdata/hostschemas/SOURCES.md` beside each file's URL, read date and digest. OpenCode
+  has no hook config to check; its plugin is type-checked against `@opencode-ai/plugin`
+  already. `HOST_SCHEMAS_MODE=verify magus buzz tools/host-schemas.buzz` re-fetches and
+  reports what moved upstream. No test reaches the network.
+- **A rule set nothing declares reaches the console's notification center.** A run's scope
+  event now carries the projects it selected on changed files no project declares
+  (MGS1028), split into the ones that read as build inputs and the rest. An undeclared
+  linter config, lockfile or toolchain pin rings the bell, because it keys no cache and a
+  verdict recorded under the rules it replaced can still replay; anything else records
+  silently in the history tier. Both link to the review surface filtered to unclaimed files.
+- **A session that lost its history can be handed this checkout back.** `magus session
+  --brief` prints where the work stands, read off the disk on the call: branch and
+  revision, commits not yet on the base ref, the dirty tree split into sources,
+  generated outputs and unclaimed paths by the classifier `magus describe file` uses,
+  the live leases with the command that binds each one, the last recorded run's failing
+  targets with the ref that holds their output, whether any host hook config in this
+  checkout invokes magus, and which instruction files and skill directories the rules
+  live in. It restates no rule and remembers nothing. `-o json` carries the same record.
+  A host that replaces a long session's history with a summary can wire the new
+  `magus-rehydrate.sh` template to its session-start event and give the model state
+  instead of a retelling.
+- **The doc-section route arrives with the reader's own terms in it.** The advisory on a
+  markdown search now leads with the query hint composes for that exact search, and repeats
+  it in the same concrete form, instead of a command still carrying a `<terms>` placeholder;
+  a plain read, which has no pattern to query with, keeps the placeholder wording. A graph
+  search that matched a doc page but no section carries a `query-doc-sections` breadcrumb to
+  the page's headings, and the docs-lookup skill names the section query as the in-workspace
+  route ahead of the published-site index. Measured over 1,907 session transcripts: the
+  advisory fired 1,420 times and `magus query kind=docsection` ran 11 times ever, against
+  9,237 prose greps and 964 reads of a markdown file under `docs/`.
+- **A target whose inputs have not moved since it failed says so before it runs again.** A
+  failure is not a cache entry, but its descriptor is still stored under the step's cache
+  key, so a miss can check whether this exact tree has already been seen to fail. When it
+  has, the run prints one line naming the recorded ref, the error it ended with, and the
+  `magus query output` that reads it. Nothing is replayed and nothing is skipped: the
+  target executes exactly as before, and the line is context rather than a verdict. It
+  fires once per cache key, so an edit that moves the inputs speaks again; `-s` keeps it
+  and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. The result record
+  carries `"hint_id": "unchanged-failure"` in `-o jsonl`, a stable id to count instead of
+  the wording.
+- **A text filter over a backgrounded run's capture is denied like a pipe over magus
+  itself.** The file a host writes a detached command's console output to, and a persisted
+  `.magus/logs/<hex>.log`, are magus output one step removed, so `grep -n cause: <capture> |
+  head -8` was cutting the `output:` and `inspect:` lines that read the rest of the failure
+  while nothing on the line looked like magus. A range print counts as a filter; reading the
+  file whole does not, and backgrounding the run as `-o jsonl --tee <file>` makes the capture
+  a contract that `jq` may consume.
+- **The run that pays for an undeclared seeding file says so before it spends.** MGS1028
+  fired only on `magus affected --impact` and `--explain`, the two commands that report on
+  a changeset without running anything; the `magus affected <target>` run that reruns those
+  targets said nothing. It now names each project a changed file no project declares put in
+  the set on its own, with the files and the one-line fix, before the first target starts.
+  Nothing is skipped and nothing is refused: the run proceeds exactly as before, `-s` keeps
+  the line, and `MAGUS_HINTS_ENABLED=false` (or `hints.enabled: false`) drops it. `-o json`
+  carries the same set as `undeclared_seeds` and `-o jsonl` as one `run.diagnostic` event
+  per project, so a consumer counts the code instead of matching the wording. A `ci` gate
+  records the set on its gate result too, next to the projects it covered, so a branch's
+  accumulated debt is countable rather than only visible in the run that printed it.
+- **A lease's declared boundary is enforced, not merely recorded.** Under a lease with a
+  live ledger row, the agent guard now denies a write outside every entry in that row's
+  `owned_paths`, any write at all by a `read_only` row, and a command running the `ci`
+  gate when the row's `validation` names something narrower. Each denial names the lease,
+  the path or command, and the row field that decided it, so a reader can repair the row.
+  An empty `owned_paths` on a row that is not `read_only`, an empty `validation`, a caller
+  naming no lease, and a lease with no live row are all unaffected: an absent declaration
+  is a boundary nobody wrote rather than one of size zero, and the guard stays a seatbelt
+  for a harness that opted in.
+- **Every result that has a next step names it, as a field rather than as prose.**
+  `magus query`, `magus explain`, `magus describe file`, the affected listing and a failing
+  target's result event now carry up to three `next` entries: a stable id, a complete
+  command with the real ids already filled in, and one sentence of why. Text mode prints
+  the commands under a `next:` label and `-o json` carries them beside the record, so a
+  person and a tool meet the same suggestion. The reason fires once per session through
+  the marker store the guard advisories already keep, and the command prints every time;
+  `-s` keeps the commands and drops the reasons. A result with nothing to suggest carries
+  no field at all, never an empty list, so absence stays countable, and the line a failing
+  run prints is unchanged. It replaces prose that was measured not working: over 21 days
+  the printed `magus query output <ref>` line after a failing run was followed 21% of the
+  time, the same rate as no hint at all, while re-running the same failing target won 84%.
+  Each id exists so a suggestion nobody takes is deleted from the data rather than
+  reworded.
+
 ### Fixed
 
+- **One target's declared timeout no longer becomes the timeout of the work its siblings
+  share.** A target reached through `ctx.needs` runs once and is awaited by every target
+  that needs it, so whichever caller arrived first supplied the context the work ran under.
+  When that caller declared a timeout, its ceiling silently governed a step other callers
+  also depended on: in this repository `security` declares fifteen minutes and reaches
+  `generate`, so an expiry there killed the whole codegen chain and took `lint`, `build`
+  and `test` down with it under a deadline none of them had asked for. A shared step now
+  runs under the invocation's own cancellation, which Ctrl-C, a failing batch and the stall
+  watchdog all still reach; a declared timeout continues to bound the target that declared
+  it. The stall abort (MGS3012) also lists what was still admitted when it fired, so the
+  next report says whether the work beneath the last step was moving instead of only naming
+  the step.
 - **A release whose publish step fails can be finished without rewriting the tag.** Cutting
   the manifest is idempotent: a second cut of a version whose manifest already names exactly
   the artifacts on disk reports what is there and leaves it untouched, instead of refusing
@@ -44,6 +258,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   empty command string.
 
 ### Changed
+
+- **The Cursor hook schemas come from Cursor's own validator.** Cursor publishes no schema for
+  `.cursor/hooks.json`, but its shipped hooks bundle validates the file and every event's stdout
+  before a hook fires, so the vendored Cursor schemas are now transcribed from that code (read
+  out of the cursor-agent CLI package and the desktop app, digests in the provenance table)
+  rather than from the docs page, which types `matcher` as an object where the validator
+  requires a string. The gating reply and the advisory reply are graded against the event that
+  reads each, so a renamed field costs a test rather than a silently dropped verdict. The
+  OpenCode plugin type-check moves to the current `@opencode-ai/plugin` release.
+- **The Go coverage badge now spans every platform, and is refreshed locally rather than by
+  CI.** The figure used to be whatever the CI runner compiled, which made it a property of
+  that machine: 119 non-test files sit behind build constraints, and macOS and Linux read
+  67.6% and 66.9% for one commit. It is now split. The denominator is enumerated from
+  source, by instrumenting each Go file in each module on its own with `go tool cover`,
+  which parses without a build context and so reports a Windows-only file's blocks on a
+  Mac; those blocks stay in the denominator at zero until something runs them. The
+  numerator is the union of committed per-platform records under `coverage/`, one small
+  JSON per GOOS/GOARCH carrying a digest and a bitset per file, the commit measured and
+  when. `magus run coverage-badge:rw .` refreshes the record for the platform it runs on,
+  from the suites that just ran; a platform's record is raised by running the refresh
+  there, never by a CI matrix or a container. CI no longer measures anything to judge the
+  badge; it re-derives it from the tree and the records, which is a pure function, so the
+  `gha`-only arm is gone. A record measured against source that has since changed is
+  reported and credited nothing, so an unrefreshed platform can only pull the figure down.
+  The 70% floor in `test` is unchanged and stays per-platform on purpose.
+- **One coverage badge per language.** The README carries a Go badge and a TypeScript badge,
+  and the TypeScript figure spans every TypeScript project with a suite (the console and
+  libs/textsearch), merged line by line from their lcov reports by the console's test target
+  and rendered at console/coverage.svg, which the docs site now copies beside the libs badges.
+  The per-project textsearch badge under assets/ is gone. CI's fail-fast generate gate no
+  longer skips the docs project: its generate step refreshes committed content only, so the
+  deferral it was written for no longer exists.
+- **The `relock` charm is now `update`.** One charm, one meaning: move a pinned copy of
+  upstream state forward to what upstream serves today. Re-resolving a lockfile and
+  refreshing a scanner's vulnerability database are the same grant, so they share a name,
+  and `relock` could not be stretched over a database that locks nothing. `ci` strips it
+  exactly as it stripped `relock`, and it is still deliberately not part of `rw`, which
+  covers output reproducible from a clean checkout. `relock` remains accepted everywhere
+  `update` is for one release, resolving to it wherever a charm name is read, and magus
+  prints the new spelling the first time a run uses the old one.
+- **The PR advice comment leads with the files no project claims.** The section is ranked
+  first rather than posted in the order its step ran, and it now names what an undeclared
+  file costs: the containing project reruns on every touch while the cache key stays put,
+  and a file that really is an input replays a verdict computed under the rules it just
+  changed. The fix is a snippet naming the file, the deliberately undeclared case still
+  reads as correct, and MGS1028 carries the argument in full.
+- **MAGUS.md is formatted with the rest of the repo's Markdown instead of excluded from it.**
+  One renderer now writes every generated Markdown table, padding each column to its widest
+  cell the way dprint does, so the routing index, the Buzz stdlib and spell references, the
+  config reference, the daemon API pages and the benchmark report all come out of the
+  generator in the formatter's own shape. CHANGELOG.md stays excluded: its generated block
+  and the prose around it still disagree.
+- **The MCP tool catalog is generated from the `std.Magus` descriptor.** It was the one
+  agent-facing surface with no generator behind it: 22 hand-written descriptors and ~22 KB
+  of prose beside a descriptor that already generates the Buzz bindings, the checker
+  declarations and the reference docs. Declaring an `MCPTool` on the module is now what
+  adds a tool, the existing drift gate covers the output, and a tool naming a member the
+  descriptor does not declare fails at init. `magus_tail_log` is gone with it: it was a
+  second door onto the bytes `magus_output` already returns, keyed by project rather than
+  by ref, and the duplication was on record since the 2026-08-25 post that found it. The
+  SDK keeps the project-scoped route as `Magus.TailLog`; on the CLI the ref every run
+  prints is the route, as it always was. `magus\review.provider` gains a
+  declaration too, so it has a checker signature and a doc page like every other member;
+  a new test fails on any magus member bound at run time that the descriptor does not
+  declare, which is how that one went missing.
 
 - **A redundant ci gate is refused whether or not the machine is busy.** MGS3010 used to
   require a saturated admission pool as well, which made it unreachable in the case it was

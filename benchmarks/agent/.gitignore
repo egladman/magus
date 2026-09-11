@@ -1,0 +1,16 @@
+# benchmarks/.gitignore already excludes results/ everywhere below it; a
+# negation cannot reach inside an excluded DIRECTORY, so the directory itself is
+# re-included here before its contents are excluded again.
+!results/
+results/*
+!results/.gitkeep
+# written by agent-bench-report from whatever results/ holds, and any other results
+# tree a manifest is pointed at (BENCH_RESULTS_DIR=results-opus)
+results-*/
+metrics.jsonl
+analysis.json
+report.md
+# the full SWE-bench Verified table swebench/fetch.sh downloads; swebench/verified.sha256 pins it
+swebench/verified.jsonl
+# swegrade, built by `magus run swegrade-build .` and read by swebench/lib.sh
+bin/

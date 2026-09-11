@@ -119,6 +119,29 @@ even set up, so a blocked run does not yet appear in `magus status` (there is no
 running to report - it is queued behind the lock). The stderr line above is how you
 know why.
 
+### When the waiter is a newer gate
+
+One contention does not wait. A **gate** is the whole `ci` target, run through
+`magus affected ci` or `magus run ci`. A gate that contends for a lock held by an
+**earlier gate on the same workspace root** does not queue behind it: it asks the earlier
+run to stop, which it does
+with [MGS3014](../reference/codes/sandbox/MGS3014.md), and takes the lock, usually within
+a second:
+
+```text
+magus: superseded the earlier gate on project . (held by pid 40118 (magus affected ci .),
+running 4m12s, in /Users/me/src/acme); its verdict would have described a tree that has
+since changed.
+```
+
+The older run's verdict is about files that have already changed, so the machine spends
+its time on the newer one instead. The ordering comes from the tree and never from the
+caller: one resolved root, both invocations the whole `ci` target, later start wins.
+There is no priority to set. A sibling worktree is a different tree and still waits, a
+`run build` behind a `run test` still waits, and a lock held by one of the run's own
+ancestors is still refused as [MGS3007](../reference/codes/sandbox/MGS3007.md). A holder
+that does not answer within thirty seconds is waited on exactly as above.
+
 ## Across the whole machine: the budget
 
 The lock protects a project's outputs. Nothing in it protects the machine: two runs

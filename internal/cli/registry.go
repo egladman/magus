@@ -25,6 +25,7 @@ var All = []Command{
 	configCommand,
 	sessionCommand,
 	memoryCommand,
+	ledgerCommand,
 	notesCommand,
 	diffCommand,
 	serverCommand,
@@ -1326,14 +1327,103 @@ rather than failing the read.
 The listing takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each session's last fact, not its first, so a long session that is
-still working stays listed however long ago it began.`,
+still working stays listed however long ago it began.
+
+--brief answers the listing's own question, where does the work stand, for a
+model instead of a person. It prints this checkout read off disk: branch and
+revision, commits not yet on the base ref, the dirty tree split by the
+classifier ` + "`magus describe file`" + ` uses, the live leases with the command that
+binds each one, the last recorded run's failures with the ref that holds their
+output, whether any host hook config here invokes magus, and where this
+workspace's rules live. Nothing in it is remembered: an agent host that
+replaces a session's history with a summary can wire this to its
+session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
+		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
 		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
 		{Name: "since", Kind: FlagString, Doc: "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
 	Children: []Command{
 		{Name: "ls", Short: "List past sessions and the targets they ran (the default)"},
+		{
+			Name:        "load",
+			Short:       "Load a normalized agent-session event stream from a host transcript",
+			Description: "Read one JSON event per line from stdin, re-judge every shell command against the current guard rules, and record the result in this repository's session store.",
+			Long: `Load what an agent host's own transcript says a session did.
+
+The guard's activity trail records what the hook SAW. A transcript records
+what actually ran, including commands no hook was wired for, the skills a
+session loaded, and what the hook printed back. Joining the two is what makes
+"was this session guarded, and did it comply" answerable at all.
+
+Extraction is NOT magus's job. A per-host recipe you own turns a transcript
+into this stream, the same division ` + "`magus agent adoption`" + ` draws: magus takes
+a corpus in its own vocabulary rather than learning to read a host's logs, so
+a host changing its format costs you one recipe edit instead of a magus
+release.
+
+The stream is one JSON object per line, on stdin or from --file. Every line
+needs host, session, kind and ref; kind is one of shell.command, file.read,
+file.write, skill.load, hook.output, spawn, or magus.call, and any other kind
+is rejected with a diagnostic naming the set. cwd, ts, text, transcript and
+outcome are optional.
+
+Events are keyed on (host, session, kind, ref), so re-running a recipe over the same
+transcript loads nothing twice: a recipe re-reads whole files instead of
+tracking where it stopped. Events whose cwd belongs to another repository are
+dropped, and worktrees of this one are kept. A checkout that no longer exists
+identifies as its own path, so events from a worktree since deleted drop too.
+
+A shell command's TEXT is never stored. It is re-judged in-process against the
+current rules and kept as its program, the verdict (pass, advise or deny), the
+rule or advisory behind that verdict, and a sha256 of the line. That is the
+question the trail cannot answer - would today's rules have caught yesterday's
+command - and it is also the rule the trail already settled: a command line is
+content, and content stays in the host's own transcript, which ref and the
+transcript pointer lead back to.`,
+			Usage: "magus session load [--file <path>]",
+			Flags: []Flag{
+				{Name: "file", Kind: FlagString, Doc: "Read the event stream from this file instead of stdin"},
+			},
+		},
+		{
+			Name:        "lease",
+			Short:       "Bind a lease to this checkout so the guard applies its ledger row here",
+			Description: "Write the lease id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one; with no id, print the lease bound.",
+			Long: `Bind a lease to this checkout.
+
+A host runs its hooks with the host's own environment, so a worker that
+exports BAGGAGE for its shell is invisible to the guard judging its commands.
+A worker with its own worktree has one checkout, and a marker in it is the one
+channel both the worker's shell and the host's hook read. Once bound, every
+lease-scoped rule applies here: writes outside the row's owned_paths, the ci
+gate under a narrower validation, and version-control mutation under a worker
+lease are all denied with the lease named.
+
+An explicit --lease on the hook, or BAGGAGE in the hook's environment, still
+wins over the marker. With no id the command prints the lease bound, or says
+none is.`,
+			Usage: "magus session lease [<lease-id>]",
+		},
+		{
+			Name:        "show",
+			Short:       "Report one loaded session: what it ran, what the rules say, what it loaded",
+			Description: "Summarize one loaded agent session: events by kind, commands grouped by program with re-judged verdicts, skills loaded, and files read and written.",
+			Long: `Report one loaded session.
+
+Commands are grouped by program and carry two counts that are deliberately
+separate: how many of them today's rules would DENY, and how many the host
+recorded as actually denied. The gap between the two is the audit. A command
+the rules refuse that ran anyway was never judged, because no guard was wired,
+because the binary was too old to judge it, or because the rule arrived after
+the command did.
+
+The id is a host session id, listed by ` + "`magus session`" + `. Sessions reach this
+store through ` + "`magus session load`" + `; a session magus itself ran has target
+results rather than events and is read from the listing instead.`,
+			Usage: "magus session show <session-id>",
+		},
 		{
 			Name:  "attention",
 			Short: "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
@@ -1482,7 +1572,10 @@ none. This is the only command that opens one.`,
 	Examples: []Example{
 		{"Show recent sessions", "magus session"},
 		{"Show today's work", "magus session --since 24h"},
+		{"Hand a compacted session this checkout's state", "magus session --brief"},
 		{"Full session records as JSON", "magus session -o json"},
+		{"Load a host transcript a recipe normalized", "magus session load --file events.ndjson"},
+		{"Read one loaded session back", "magus session show 8f1c2d4e"},
 		{"List open attention requests", "magus session attention"},
 		{"Ask whether anyone is waiting", "magus session attention -q"},
 		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
@@ -1496,7 +1589,7 @@ none. This is the only command that opens one.`,
 	// that advise passes and that 2 is overloaded.
 	ExitStatus: []ExitCode{
 		{0, "Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
-		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error)."},
+		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error). load: at least one line was rejected; the lines that were usable are still loaded, and the summary is still printed, so fixing the recipe and re-running costs nothing. show: the session named has no loaded events."},
 		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
 	},
 }
@@ -1560,6 +1653,42 @@ either side learning a new format.`,
 		{"Record what an investigation ruled out", "magus memory put resize-bar-misreported --type elimination --ref 'output: out1a2b3c' --body 'Not the BIOS: the aperture is reported correctly.' --excerpt 'BAR0: 256M ...'"},
 		{"Refresh one field and keep the rest", "magus memory put release-checklist --amend --status done"},
 		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var ledgerCommand = Command{
+	Name:        "ledger",
+	Short:       "Read the lease ledger a fan-out declared",
+	Description: "Read the per-repository lease ledger: the leases an orchestrating agent declared, as a tree, plus the worker brief for any one of them.",
+	Tags:        []string{"cli", "magus ledger", "ledger", "leases", "agents", "delegation"},
+	Long: `Read the lease ledger: one row per lease an orchestrating agent declared,
+rendered as a tree of parents and the leases they handed out.
+
+The ledger is written by AGENTS, through the magus_ledger MCP tool, and read by
+PEOPLE here. put, register and clear are deliberately not on this verb: the plan
+has one author by definition of what it records, and a second write door invites
+two.
+
+The rows are kept per repository rather than per checkout, so an orchestrator
+declaring a plan in one worktree and a worker reading it in another see the same
+book.
+
+brief renders one lease's worker brief: the row's own goal and acceptance
+criteria, its owned and forbidden paths, the knowledge graph's blast radius for
+each owned path it can resolve, the single validation target that lease is
+allowed to run, its dependencies, and the fixed bootstrap, rules and skills
+blocks this workspace's docs/guides/integrations/agents/brief.md.tmpl carries. It
+is context and never a verdict, the same shape magus diff --prompt has: magus
+assembles what it holds, and you hand it to the worker.`,
+	Usage: "magus ledger [ls|brief <lease-id>] [flags]",
+	Children: []Command{
+		{Name: "ls", Short: "Print the declared leases as a tree, with the overlapping pairs"},
+		{Name: "brief", Short: "Print one lease's worker brief"},
+	},
+	Examples: []Example{
+		{"Read the declared plan", "magus ledger"},
+		{"Read it as records", "magus ledger -o json"},
+		{"Brief one worker", "magus ledger brief session-load/core"},
 	},
 }
 
@@ -1764,6 +1893,10 @@ current directory loaded, its targets and bindings ready. A piped or
 redirected stdin runs as a script instead. In both, the Buzz stdlib, every
 magus host module (fs, os, http, markdown, and the rest), and the magus
 namespace are available, so a one-off script needs no dependency install.
+
+A script run inside a workspace runs under that workspace's sandbox policy,
+the same one a target gets, so its file, process and network access is
+governed identically and a refusal is recorded on the activity trail.
 
 Parsing is upstream-strict by default: a file written for the magusfile
 engine needs --embedded, or it fails on rules upstream Buzz enforces and

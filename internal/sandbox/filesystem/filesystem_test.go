@@ -184,7 +184,7 @@ func TestAnyMatchingRuleGrants(t *testing.T) {
 // prefix-match every absolute path), and an empty checked path is rejected outright.
 func TestEmptyInputsAreDenied(t *testing.T) {
 	t.Parallel()
-	assert.False(t, under("/anything", ""), "an empty rule path must match nothing")
+	assert.False(t, Under("/anything", ""), "an empty rule path must match nothing")
 
 	rs := Ruleset{Rules: []Rule{{Path: "", Read: true, Write: true}}}
 	assert.ErrorIs(t, rs.CheckRead("/etc/passwd"), ErrDenied)

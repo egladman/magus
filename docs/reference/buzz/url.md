@@ -20,9 +20,9 @@ Percent-encode s for use in a URL query component.
 
 **Signature:** `url\encode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L66)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Decode a percent-encoded URL query component; errors on malformed input.
 
 **Signature:** `url\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L71)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -44,9 +44,9 @@ Parse a URL string into {scheme, host, port, path, query, fragment}; errors on m
 
 **Signature:** `url\parse(raw_url) -> URL` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L80)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `raw_url` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `raw_url` | `string` |          |             |
 
 **Returns:** map[string]any
 
@@ -56,9 +56,9 @@ Build a URL string from a URL object - the same shape parse returns, so the two 
 
 **Signature:** `url\build(parts) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/url/url.go#L97)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `parts` | `map[string]any` |  | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `parts`   | `map[string]any` |          |             |
 
 **Returns:** string
 

@@ -24,7 +24,14 @@ type MCPToolsOutput struct {
 func DescribeTools() MCPToolsOutput {
 	entries := make([]MCPToolEntry, 0, len(Registry))
 	for _, d := range Registry {
-		entries = append(entries, MCPToolEntry(d))
+		// Field by field, not a conversion: ToolDescriptor also carries Member, the
+		// descriptor member the tool wraps, which is a fact about how magus is built
+		// rather than something an agent reading the catalog acts on.
+		entries = append(entries, MCPToolEntry{
+			Name:        d.Name,
+			Description: d.Description,
+			Params:      d.Params,
+		})
 	}
 	return MCPToolsOutput{
 		Definition: MCPToolDefinition,

@@ -1,4 +1,5 @@
 import "magus/spell";
+import "magus/charm";
 
 export fun mgs_getName() > str { return "docker"; }
 
@@ -62,8 +63,33 @@ fun hadolint(target: Target) > Command { return Command{bin = "hadolint", args =
 // disk leak. The caller supplies mounts, workdir, image and command through args.
 fun dockerRun(target: Target) > Command { return Command{bin = "docker", args = ["run", "--rm"]}; }
 
+// Scans an image OFFLINE by default: --skip-db-update is documented as "skip updating
+// vulnerability database", so a plain run answers from the copy already on disk and
+// downloads nothing (https://trivy.dev/latest/docs/references/configuration/cli/trivy_image/,
+// read 2026-09-10). The caller appends the image reference and any output flags.
+//
+// The update charm drops the flag, which is the whole refresh: trivy pulls a stale
+// database itself before scanning, so the arm needs no second command the way a
+// separate --download-db-only pass would.
+//
+// Offline is the DEFAULT rather than the option because the charm is what says a run may
+// move pinned upstream state forward, and a scan that silently refreshed its feed would
+// be doing exactly that without being asked, and would change its verdict under an
+// unchanged tree. What keeps that honest is the observe probe in mgs_getTools: the
+// database on disk is in the cache key, so a scan replays only against the copy it was
+// run against, and `image-scan:update` is what mints a new key.
+//
+// --offline-scan is NOT this flag and is deliberately not set: it stops trivy issuing API
+// requests to identify dependencies (a Java-analysis concern), not database downloads.
+fun trivyImage(target: Target) > Command {
+    final args = ["image", "--skip-db-update"];
+    return Command{bin = "trivy", args = args, external = External.reads, charms = {
+        "update": drop(args, "--skip-db-update"),
+    }};
+}
+
 export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "docker-run": dockerRun, "hadolint": hadolint};
+    return {"docker-build": dockerBuild, "docker-buildx": dockerBuildx, "docker-build-check": dockerBuildCheck, "docker-run": dockerRun, "hadolint": hadolint, "trivy-image": trivyImage};
 }
 
 // `docker --version` ends in a build hash (`29.3.1, build c2be9cc`) that moves with a
@@ -72,6 +98,20 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 //
 // hadolint gets no readiness probe: linting a Dockerfile talks to no daemon, and gating
 // it here would make a lint wait on a service it never uses.
+//
+// trivy declares BOTH probes, and they answer different questions on different clocks.
+// The release moves every few weeks; the vulnerability database is built every six hours
+// (https://github.com/aquasecurity/trivy-db, read 2026-09-10). Keying only the version is
+// what makes a cached scan report yesterday's CVEs against today's image.
+//
+// `trivy version --format json` is the observation: it carries a VulnerabilityDB record
+// with Version, UpdatedAt, NextUpdate and DownloadedAt. trivy.dev documents the --format
+// flag but shows no sample output, so the field names are cited from the tool's own
+// source (pkg/types/version.go and pkg/version/version.go on aquasecurity/trivy main,
+// read 2026-09-10) rather than from the docs. magus never parses it: the whole output is
+// the observation, so the shape only has to be STABLE, not understood. The record is
+// omitted entirely when no database is cached, which reads as a distinct observation, and
+// correctly: a scan with no database is not the same run as a scan with one.
 export fun mgs_getTools() > {str: Tool} {
     return {
         "docker": Tool{
@@ -82,6 +122,11 @@ export fun mgs_getTools() > {str: Tool} {
         "hadolint": Tool{
             probe = Command{bin = "hadolint", args = ["--version"]},
             diagnostics = DiagnosticFormat.gnu,
+        },
+        "trivy": Tool{
+            probe = Command{bin = "trivy", args = ["version"]},
+            key = VersionKey{upTo = VersionComponent.patch},
+            observe = Command{bin = "trivy", args = ["version", "--format", "json"]},
         },
     };
 }

@@ -292,10 +292,13 @@ type fakeLedgerWorkspace struct {
 func (f *fakeLedgerWorkspace) CacheDir() string { return f.cacheDir }
 func (f *fakeLedgerWorkspace) Root() string     { return f.root }
 
+// Not parallel: the ledger resolves the per-repository state directory, and
+// ledgerStoreFromContext offers no seam to redirect it, so the environment is the only
+// thing keeping these rows out of the developer's own ledger.
 func TestLedgerIsServedInProcess(t *testing.T) {
-	t.Parallel()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "ship it", "state": "running"})
 	require.NoError(t, err)
@@ -385,15 +388,16 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 // other, and internal/ledger.Store's own path derivation (CacheDir/ledger/leases.json)
 // is what makes that true without either side naming the other.
 func TestLedgerAndTheMCPToolAgree(t *testing.T) {
-	t.Parallel()
+	stateBase := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateBase)
 
-	cacheDir := t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir})
+	cacheDir, root := t.TempDir(), t.TempDir()
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir, root: root})
 
 	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "shared row"})
 	require.NoError(t, err)
 
-	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir})
+	store := ledger.NewStore(ledger.Location{StateBase: stateBase, CacheDir: cacheDir, Root: root})
 	leases, err := store.List()
 	require.NoError(t, err)
 	require.Len(t, leases, 1)

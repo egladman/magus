@@ -439,6 +439,41 @@ page. The magus-specific part is that the root `generate` target already drift-g
 every generated file in the workspace, so a per-artifact drift test in Go is redundant
 and will drift from the real `//go:generate` directive.
 
+## The coverage badge is a record, not a measurement
+
+`assets/coverage.svg` is one figure over the whole Go codebase, and no single machine
+can measure that: 119 non-test files sit behind `//go:build` constraints, so macOS and
+Linux read 67.6% and 66.9% for the same commit. The badge is therefore split in two.
+
+The **denominator** is static. Which statements exist does not depend on where you
+stand, so `coverage.buzz` enumerates every statement block of every Go file in every
+module by running `go tool cover -mode=set` over one file at a time. That instruments
+syntactically, resolving no import and consulting no build context, so a Windows-only
+file yields its block table on a Mac and lands in the denominator at zero. Verified
+against a real profile: over the 418 files both a `go test -coverprofile` run and this
+pass covered, the block sets were identical.
+
+The **numerator** is recorded. `coverage/<goos>-<goarch>.json` holds one committed
+record per platform: a digest and a bitset per file, the commit it was measured at, and
+when. `magus run coverage-badge:rw .` refreshes the record for the platform it runs on,
+from the suites that just ran, and writes the badge from every committed record. A
+platform's record is raised by running that command on a machine of that platform, never
+by a container run or a CI matrix: both would re-measure what such a machine already
+measures, and the commit each record names says how current it is.
+
+Two consequences worth knowing:
+
+- **CI never measures.** `coverage-badge` under any charm re-derives the badge from the
+  tree and `coverage/` and fails when it disagrees. That is a pure function, so it runs
+  without a test matrix and anyone can check it. There is no CI test matrix here and
+  there is not going to be one.
+- **An unrefreshed record can only pull the figure down.** A file whose digest no longer
+  matches the tree is reported and credited nothing, rather than misread against the
+  wrong block list. Refresh a platform the way you refresh a lockfile.
+
+The 70% floor in `test` is a different number on purpose: it is this machine's coverage
+of this module, guarding the suite that just ran.
+
 ## Workflow targets, not inline shell
 
 The GitHub Actions workflow files are intentionally thin. Every meaningful

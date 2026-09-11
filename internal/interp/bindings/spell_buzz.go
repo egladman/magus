@@ -69,7 +69,7 @@ func loadBuzzSpell(ctx context.Context, path string) (spells.Descriptor, *spells
 	// all of this, which is why built-in spells were unaffected and the gap stayed
 	// invisible.
 	var extra []spells.Option
-	extra = append(extra, spells.WithTools(spec.Tools), spells.WithVersionProber(versionProber))
+	extra = append(extra, spells.WithOps(spec.Ops), spells.WithTools(spec.Tools), spells.WithVersionProber(versionProber))
 	if spec.Language != "" {
 		extra = append(extra, spells.WithLanguage(spec.Language))
 	}

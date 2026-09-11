@@ -144,6 +144,28 @@ func TestStatsCoverage(t *testing.T) {
 	assert.Equal(t, []string{"MGS2001"}, diag.Undocumented)
 }
 
+// TestStatsFileDocCoverage pins the citation layer's reading of doc coverage: a source
+// file counts as documented when a page points at it, and every other file is the
+// undocumented remainder that number exists to show.
+func TestStatsFileDocCoverage(t *testing.T) {
+	g := NewGraph()
+	g.AddNode(types.KnowledgeNode{ID: fileID("a.go"), Kind: types.KindFile, Label: "a.go"})
+	g.AddNode(types.KnowledgeNode{ID: fileID("b.go"), Kind: types.KindFile, Label: "b.go"})
+	g.AddNode(types.KnowledgeNode{ID: docID("docs/a.md"), Kind: types.KindDoc, Label: "docs/a.md"})
+	g.AddEdge(extractedEdge(docID("docs/a.md"), fileID("a.go"), types.RelationDocuments, "docs/a.md"))
+
+	var files types.KnowledgeDocCoverage
+	for _, c := range g.Stats("").Coverage {
+		if c.Kind == types.KindFile {
+			files = c
+		}
+	}
+	require.Equal(t, types.KindFile, files.Kind)
+	assert.Equal(t, 2, files.Total)
+	assert.Equal(t, 1, files.Documented)
+	assert.Equal(t, []string{"b.go"}, files.Undocumented)
+}
+
 func TestStatsGodsSortedByDegree(t *testing.T) {
 	s := statsFixture().Stats("")
 	require.NotEmpty(t, s.Gods)

@@ -106,7 +106,34 @@ import (
 // 56: magus-architecture-review gains "Say when not to build it". It already applied
 // that test to a graph kind, which earns its place only by answering a question the
 // others cannot; nothing applied it to a mechanism that ACTS.
-const SkillVersion = 56
+// 57: magus-multi-agent says what a lease's validation is FOR. The field declared a
+// narrow target and enforced nothing, so seven fanned-out workers each ran the whole
+// pipeline concurrently; the guard now denies the gate under a lease that declared
+// something narrower, and the skill is where a worker learns why before it is refused.
+// 58: magus-query says every result names its own next step, and that following it is
+// optional. The breadcrumb is a field on the result now, so a reader that never meets
+// the text still meets the suggestion.
+// 59: magus-run stops naming magus_tail_log, which is gone. It was a second door
+// onto the bytes magus_output already returns, keyed by project instead of by ref.
+// 60: magus-buzz-write says `magus` is a host module and the import is what makes the
+// namespace exist. It used to read as "also available in a script", from when the
+// namespace was a session global an import never had to name.
+// 61: magus-run names where a ref comes from when none is in hand: the run that
+// minted it, and `magus session`. Version 59 sent readers to a `magus tail` verb
+// that was removed in v0.4.0.
+// 62: magus-run says a backgrounded run's capture is magus output and meets the
+// same filter rule, with `-o jsonl --tee <file>` as the spelling that makes it a
+// contract.
+// 63: magus-docs-lookup names the doc-section query as the in-workspace route,
+// ahead of the published-site index it used to open with. Measured over 1,907
+// session transcripts: the section query ran 11 times ever while agents read a
+// markdown file under docs/ 964 times, and this skill is what routed them there.
+// 64: magus-multi-agent says owned_paths is read as a READ lane too, and that a
+// worker needing to read what it must not write gets a `focus` on its row rather
+// than a wider owned_paths. Measured over 204 session transcripts: reads left the
+// units the session actually wrote to about a fifth of the time, and widening the
+// write lane to open a read is the move that puts two workers on one file.
+const SkillVersion = 64
 
 const skillLicense = "GPL-3.0-or-later"
 

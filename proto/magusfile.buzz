@@ -9,6 +9,7 @@
 // generated outputs (gen/**) itself, so a .proto edit reruns codegen and invalidates
 // everything downstream that consumes the generated code.
 
+import "magus";
 import "magus/spell/buf";
 // Handles for the two projects buf.gen.yaml writes the TS client into, so generate can name
 // their trees as its own outputs (see below).

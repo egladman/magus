@@ -26,7 +26,8 @@ import (
 // repeating a standing fact.
 
 // advisoryKind names one repeatable notice. It is also a filename component, so the
-// values stay lowercase letters and dashes.
+// values stay lowercase letters, digits and dashes; advisoryFocusPath is the one
+// that appends digits, and it appends a hash rather than anything a caller chose.
 type advisoryKind string
 
 const (
@@ -40,7 +41,25 @@ const (
 	advisoryRegenSource   advisoryKind = "regen-source"
 	advisoryGraphStale    advisoryKind = "graph-stale"
 	advisoryGateRepeat    advisoryKind = "gate-repeat"
+	advisoryFocus         advisoryKind = "focus"
 )
+
+// advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session
+// that reads one out-of-focus file twice is told once.
+//
+// The focus rule is the one advisory whose subject changes call to call: every other
+// enrolled kind reports a standing fact, so one firing per session says all of it,
+// while a second out-of-focus path is a second fact the reader has not been told.
+// Two markers, then: this one silences the repeat of a path, and advisoryFocus above
+// spends the session's one full explanation, leaving the brief line for the rest.
+//
+// Hashed rather than sanitized, for the reason markerPath hashes the session id: a
+// path may hold separators, and a filename assembled from one is a filename the
+// input picked.
+func advisoryFocusPath(rel string) advisoryKind {
+	sum := sha256.Sum256([]byte(rel))
+	return advisoryFocus + "-" + advisoryKind(hex.EncodeToString(sum[:6]))
+}
 
 const (
 	// advisoryMarkerDir holds one empty marker file per (session, kind), under the same

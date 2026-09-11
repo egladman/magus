@@ -47,11 +47,11 @@ Takes [CreateTokenRequest](#createtokenrequest), returns [CreateTokenResponse](#
 
 Source: [token.proto:127](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L127).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `name` | string | 1 | A human label, unique among stored tokens. Empty asks the daemon to derive one. |
-| `scope` | [TokenScope](#tokenscope) | 2 | _enum.defined_only_ Must be TOKEN\_SCOPE\_CONSOLE or TOKEN\_SCOPE\_CONSOLE\_READ; anything else is refused. |
-| `expire_time` | Timestamp | 3 | _optional_ Absent means the token never expires. |
+| Field         | Type                      | # | Description                                                                                                 |
+| ------------- | ------------------------- | - | ----------------------------------------------------------------------------------------------------------- |
+| `name`        | string                    | 1 | A human label, unique among stored tokens. Empty asks the daemon to derive one.                             |
+| `scope`       | [TokenScope](#tokenscope) | 2 | _enum.defined_only_ Must be TOKEN\_SCOPE\_CONSOLE or TOKEN\_SCOPE\_CONSOLE\_READ; anything else is refused. |
+| `expire_time` | Timestamp                 | 3 | _optional_ Absent means the token never expires.                                                            |
 
 Used by: [CreateToken (request)](token.md#createtoken).
 
@@ -61,10 +61,10 @@ CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource
 
 Source: [token.proto:141](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L141).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `token` | [TokenInfo](#tokeninfo) | 1 |  |
-| `secret` | string | 2 | The plaintext token. Returned once and never retrievable again. |
+| Field    | Type                    | # | Description                                                     |
+| -------- | ----------------------- | - | --------------------------------------------------------------- |
+| `token`  | [TokenInfo](#tokeninfo) | 1 |                                                                 |
+| `secret` | string                  | 2 | The plaintext token. Returned once and never retrievable again. |
 
 Used by: [CreateToken (response)](token.md#createtoken).
 
@@ -80,9 +80,9 @@ Used by: [ListTokens (request)](token.md#listtokens).
 
 Source: [token.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L123).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `tokens` | [repeated TokenInfo](#tokeninfo) | 1 |  |
+| Field    | Type                             | # | Description |
+| -------- | -------------------------------- | - | ----------- |
+| `tokens` | [repeated TokenInfo](#tokeninfo) | 1 |             |
 
 Used by: [ListTokens (response)](token.md#listtokens).
 
@@ -90,8 +90,8 @@ Used by: [ListTokens (response)](token.md#listtokens).
 
 Source: [token.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L147).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
+| Field  | Type   | # | Description                                                                                                                                                                                          |
+| ------ | ------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `name` | string | 1 | _string.min_len: 1_ The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted here too, since it identifies the same token and is what a listing gives a reader to copy. |
 
 Used by: [RevokeToken (request)](token.md#revoketoken).
@@ -102,12 +102,12 @@ TokenInfo describes one manageable token WITHOUT its secret, minimized to exactl
 
 Source: [token.proto:106](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L106).
 
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `name` | string | 1 | connector name, or a label for the share token |
-| `identifier` | string | 2 | prefix-only fingerprint; the Revoke key |
-| `scope` | [TokenScope](#tokenscope) | 3 |  |
-| `expire_time` | Timestamp | 5 | unset means the token never expires |
+| Field         | Type                      | # | Description                                    |
+| ------------- | ------------------------- | - | ---------------------------------------------- |
+| `name`        | string                    | 1 | connector name, or a label for the share token |
+| `identifier`  | string                    | 2 | prefix-only fingerprint; the Revoke key        |
+| `scope`       | [TokenScope](#tokenscope) | 3 |                                                |
+| `expire_time` | Timestamp                 | 5 | unset means the token never expires            |
 
 _Reserved: 4, 6; `created`, `last_used`._
 
@@ -121,14 +121,14 @@ TokenScope names the CLASS a token belongs to in the credential model, so a clie
 
 Source: [token.proto:75](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L75).
 
-| Value | # | Description |
-|-------|---|-------------|
-| `TOKEN_SCOPE_UNSPECIFIED` | 0 |  |
-| `TOKEN_SCOPE_OPERATOR` | 3 | TOKEN\_SCOPE\_OPERATOR is the built-in cli token: auto-seeded on first daemon start, the bootstrap "god" credential that authenticates the operator to the daemon. It is managed SOLELY by the CLI and is structurally invisible+immutable to this service - it lives in a store this handler never opens, so it can be neither listed nor revoked here and this value therefore NEVER appears in a ListTokensResponse. It exists in the enum to name the class, not because the wire ever carries it. |
-| `TOKEN_SCOPE_CONNECTOR` | 1 | TOKEN\_SCOPE\_CONNECTOR reaches /mcp and nothing else: the tier an external agent holds. |
-| `TOKEN_SCOPE_SHARE_READ` | 2 | TOKEN\_SCOPE\_SHARE\_READ is the short-lived secret behind "share to phone", minted by the LAN share listener rather than stored. Distinct from CONSOLE\_READ, which reaches the same routes but is a stored, named token with its own lifetime. |
-| `TOKEN_SCOPE_CONSOLE` | 4 | TOKEN\_SCOPE\_CONSOLE reaches the console read and write surfaces, never /mcp. |
-| `TOKEN_SCOPE_CONSOLE_READ` | 5 | TOKEN\_SCOPE\_CONSOLE\_READ is the viewer tier: the console's read surface alone. |
+| Value                      | # | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| -------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `TOKEN_SCOPE_UNSPECIFIED`  | 0 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `TOKEN_SCOPE_OPERATOR`     | 3 | TOKEN\_SCOPE\_OPERATOR is the built-in cli token: auto-seeded on first daemon start, the bootstrap "god" credential that authenticates the operator to the daemon. It is managed SOLELY by the CLI and is structurally invisible+immutable to this service - it lives in a store this handler never opens, so it can be neither listed nor revoked here and this value therefore NEVER appears in a ListTokensResponse. It exists in the enum to name the class, not because the wire ever carries it. |
+| `TOKEN_SCOPE_CONNECTOR`    | 1 | TOKEN\_SCOPE\_CONNECTOR reaches /mcp and nothing else: the tier an external agent holds.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `TOKEN_SCOPE_SHARE_READ`   | 2 | TOKEN\_SCOPE\_SHARE\_READ is the short-lived secret behind "share to phone", minted by the LAN share listener rather than stored. Distinct from CONSOLE\_READ, which reaches the same routes but is a stored, named token with its own lifetime.                                                                                                                                                                                                                                                       |
+| `TOKEN_SCOPE_CONSOLE`      | 4 | TOKEN\_SCOPE\_CONSOLE reaches the console read and write surfaces, never /mcp.                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `TOKEN_SCOPE_CONSOLE_READ` | 5 | TOKEN\_SCOPE\_CONSOLE\_READ is the viewer tier: the console's read surface alone.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 Used by: [CreateToken (request)](token.md#createtoken), [CreateToken (response)](token.md#createtoken), [ListTokens (response)](token.md#listtokens), [RevokeToken (response)](token.md#revoketoken).
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -116,10 +118,6 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err != nil {
 		return err
 	}
-	// The bound value, which envDefault has already filled from the environment when no
-	// --lease was passed, so an explicit flag still wins.
-	actingLease := hf.Lease
-
 	input, hasInput, readErr := readGuardInput(in)
 	// A failed read is not an empty stdin, and collapsing the two cleared every
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
@@ -158,6 +156,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if req.IsPath {
 			hf.Path = true
 		}
+		ctx = hookContextAt(ctx, req.Cwd)
 		if who.Session == "" {
 			who.Session = req.Who.Session
 		}
@@ -181,8 +180,15 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// One gate for the whole invocation, holding each enrolled advisory to one firing per
 	// session. Built AFTER the envelope is decoded: a host that reports its session id only
 	// inside the payload would otherwise be graded as having reported none, and every
-	// session on that host would share the anonymous bucket.
+	// session on that host would share the anonymous bucket. The acting lease is resolved
+	// here for the same reason: the envelope's cwd is what locates the worker's marker.
+	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
+	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
 	location := hookActivityTrail(ctx)
+	actingLease := hf.Lease
+	if actingLease == "" {
+		actingLease = ledger.ActingLease(location.base)
+	}
 	gate := newAdvisoryGate(location.base, who.Session)
 	tool := hookToolCommand
 	switch {
@@ -285,13 +291,39 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				verdict.Context = held
 			}
 		}
+		// The lease ledger's half of the command surface. Ranked BELOW the rules above,
+		// unlike the write arm where it speaks first: those refuse a command whoever runs
+		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
+		for _, rule := range []func(context.Context, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS} {
+			if verdict.Decision == "deny" {
+				break
+			}
+			if reason := rule(ctx, actingLease, input.Value); reason != "" {
+				verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
+			}
+		}
+		// The focus rule. Its DENY outranks any advisory above it, because that one is
+		// about a boundary an orchestrator declared; its advisory only fills a silence.
+		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
+		// project, and the rule that caught it is also the cheaper one to have run.
+		if verdict.Decision != "deny" {
+			focus := gradeFocusRead(ctx, actingLease, input.Value)
+			switch {
+			case focus.Decision == "deny":
+				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
+			case verdict.Decision == "pass" && focus.Decision == "advise" && !gate.fireOnce(advisoryFocusPath(focus.Rel)):
+				if held := gate.onceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
+					verdict.Decision, verdict.Context = "advise", held
+				}
+			}
+		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
 		// advisory's own answer is to run a narrower target, and firing on that
 		// narrower target argues with the caller for doing what it asked. The narrow
 		// case is also the common one, so a rule that speaks there is a rule the
 		// reader learns to skip.
 		if verdict.Decision == "pass" && commandRunsGate(input.Value) {
-			full, brief := adviseRepeatGate(workspaceRunsDir(globalCfg.Cache.Dir), time.Now())
+			full, brief := adviseRepeatGate(workspaceRunsDir(hookActivityTrail(ctx).base), time.Now())
 			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
@@ -340,7 +372,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if hf.Observe {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
-	appendHookActivity(ctx, location, input, who, tool, record)
+	appendHookActivity(ctx, location, input, who, tool, actingLease, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -424,6 +456,10 @@ func readGuardInput(in io.Reader) (guardInput, bool, error) {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
+	// Cwd is the directory the host reports the tool call runs in. It is what locates the
+	// WORKER's checkout when the host runs its hooks somewhere else, such as the
+	// orchestrator's directory, and with it the lease marker bound there.
+	Cwd string `json:"cwd"`
 	// TranscriptPath is the host's own log of this session. Recorded as a pointer so a
 	// session id in the activity view leads somewhere; magus never reads the file.
 	TranscriptPath string `json:"transcript_path"`
@@ -492,7 +528,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
-	req := hookRequest{Who: hookAttribution{
+	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{
 		Session:    env.SessionID,
 		Transcript: env.TranscriptPath,
 		Event:      env.HookEventName,
@@ -536,6 +572,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 type hookRequest struct {
 	Value  string
 	IsPath bool
+	// Cwd is where the host says the call runs; "" when the envelope carried none.
+	Cwd string
 	// NothingToJudge is a recognized host envelope carrying no command, path or prompt.
 	// Distinct from "not an envelope", which is judged as the literal text it is.
 	NothingToJudge bool
@@ -559,6 +597,10 @@ type hookAttribution struct {
 type hookActivityLocation struct {
 	base      string
 	workspace string
+	// dir is where the tool call runs, which the focus rule needs and the trail does
+	// not: a session opened in a subdirectory stands in a different project than the
+	// workspace root does, and that difference is the whole of what focus judges.
+	dir string
 }
 
 type hookActivityLocationKey struct{}
@@ -567,7 +609,11 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
+//
+// lease is the acting lease the verdict was graded under, marker included: the trail's own
+// fallback reads only the environment, which a host's hook never inherits, so without it a
+// marker-bound worker's observations would carry no lease and join nothing.
+func appendHookActivity(ctx context.Context, location hookActivityLocation, input guardInput, who hookAttribution, tool, lease string, verdict guardVerdict) {
 	if input.Value == "" || location.base == "" {
 		return
 	}
@@ -579,6 +625,7 @@ func appendHookActivity(ctx context.Context, location hookActivityLocation, inpu
 		Transcript: who.Transcript,
 		Event:      who.Event,
 		Tool:       tool,
+		Lease:      lease,
 		Decision:   verdict.Decision,
 		Reason:     verdict.Reason,
 		Context:    verdict.Context,
@@ -632,18 +679,60 @@ func hookSearchHints(cacheDir string) *hint.Translator {
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
 // client process, outside the daemon's memory. Tests can pin a temporary base through context so
-// a guard unit test never writes its checkout's real activity trail.
+// a guard unit test never writes its checkout's real activity trail; hookContextAt pins the
+// checkout a host's envelope named the same way.
 func hookActivityTrail(ctx context.Context) hookActivityLocation {
 	if location, ok := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); ok {
 		return location
 	}
-	root, err := magus.FindRoot("")
+	return hookActivityLocationAt("")
+}
+
+// hookActivityLocationAt resolves the workspace holding dir, or the process cwd for "".
+// The process cwd's workspace is the one globalCfg was loaded for, so its resolved config
+// applies; another checkout reads its own magus.yaml, because a cache dir configured in
+// the orchestrator's tree says nothing about where a worker's cache lives.
+func hookActivityLocationAt(dir string) hookActivityLocation {
+	root, err := magus.FindRoot(dir)
 	if err != nil {
 		return hookActivityLocation{}
 	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	var opts []magus.Option
+	if dir == "" {
+		opts = append(opts, magus.WithLoadedConfig(globalCfg))
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, opts...)
 	if err != nil {
 		return hookActivityLocation{}
 	}
-	return hookActivityLocation{base: cacheDir, workspace: root}
+	if dir == "" {
+		// The process cwd, which for "" is what root was found from. Read rather than
+		// assumed to be the root: a session opened in a subdirectory is exactly the
+		// case focus exists for, and collapsing it to the root would hide it.
+		if wd, wderr := os.Getwd(); wderr == nil {
+			dir = wd
+		}
+	}
+	return hookActivityLocation{base: cacheDir, workspace: root, dir: dir}
+}
+
+// hookContextAt pins the trail location to the checkout holding cwd, the directory the host
+// reported its tool call runs in. A host runs its hooks from wherever it likes, and the
+// process cwd is then the orchestrator's tree rather than the worker's: the marker bound
+// with `magus session lease` lives in the worker's checkout, so the envelope's cwd is the
+// only thing that finds it. A location already pinned (a test's) wins, and a cwd magus
+// cannot resolve to a workspace changes nothing. A relative cwd is ignored rather than
+// resolved against the hook process, whose directory is the thing it must not stand for.
+func hookContextAt(ctx context.Context, cwd string) context.Context {
+	if !filepath.IsAbs(cwd) {
+		return ctx
+	}
+	if _, pinned := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); pinned {
+		return ctx
+	}
+	location := hookActivityLocationAt(cwd)
+	if location.base == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, hookActivityLocationKey{}, location)
 }

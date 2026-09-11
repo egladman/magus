@@ -45,6 +45,7 @@
 
 import "encoding/url"
 import "http"
+import "magus"
 import "magus/spell"
 import "serialize"
 import "os"
@@ -98,7 +99,7 @@ fun base() > str { return getenv("ACTIONS_RESULTS_URL"); }
 // Under Actions no provider is selected, so the built-in environment provider resolves
 // this to exactly the same variable getenv was reading. Same source, same value, one
 // meaningful difference.
-fun token() > str { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); }
+fun token() > str !> any { return magus\secret.read("ACTIONS_RUNTIME_TOKEN"); }
 
 // has_token reports presence WITHOUT resolving, so enabled() and the cache-path guards
 // stay cheap and cannot prompt.

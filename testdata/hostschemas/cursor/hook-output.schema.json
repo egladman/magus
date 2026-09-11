@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/hostschemas/cursor/hook-output.schema.json",
+  "$comment": "OURS, transcribed from Cursor's OWN per-event stdout validators rather than from its prose, in the artifacts named in testdata/hostschemas/SOURCES.md (read 2026-09-10). This is the GATING reply, the one beforeShellExecution, preToolUse and subagentStart read; Cursor validates each event's reply with a different function, so the advise reply has its own file here, and that split is the same one cursor-guard.sh exists to work around. Open, and permission optional, because Cursor checks only the fields it knows and reads an absent permission as no opinion. What it does reject is a permission outside the enum, which is the whole bite of this file.",
+  "title": "Cursor gating hook stdout",
+  "type": "object",
+  "properties": {
+    "permission": {"enum": ["allow", "deny", "ask"]},
+    "user_message": {
+      "type": "string",
+      "$comment": "Shown to the person."
+    },
+    "agent_message": {
+      "type": "string",
+      "$comment": "Reaches the model. beforeShellExecution and preToolUse name it; subagentStart does not, and ignores it."
+    }
+  }
+}

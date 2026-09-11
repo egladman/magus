@@ -20,9 +20,9 @@ Decode a YAML string into a value (maps, lists, strings, numbers, bools, null); 
 
 **Signature:** `yaml\parse(source) -> any` - [source](https://github.com/egladman/magus/blob/main/std/encoding/yaml/yaml.go#L47)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `source` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `source`  | `string` |          |             |
 
 **Returns:** any
 
@@ -32,9 +32,9 @@ Encode a value to a YAML string; errors on unencodable input.
 
 **Signature:** `yaml\stringify(value) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/yaml/yaml.go#L56)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `value` | `any` |  | |
+| Parameter | Type  | Optional | Description |
+| --------- | ----- | -------- | ----------- |
+| `value`   | `any` |          |             |
 
 **Returns:** string
 

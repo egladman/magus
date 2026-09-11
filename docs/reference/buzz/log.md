@@ -20,10 +20,10 @@ Log at trace level (shown at -vvv). For detail worth having when reconstructing 
 
 **Signature:** `log\trace(message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L97)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 
 ### debug
 
@@ -31,10 +31,10 @@ Log at debug level (shown at -v).
 
 **Signature:** `log\debug(message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L102)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 
 ### info
 
@@ -42,10 +42,10 @@ Log at info level (shown by default, hidden by -q).
 
 **Signature:** `log\info(message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L107)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 
 ### warn
 
@@ -53,10 +53,10 @@ Log at warn level: something the reader should act on eventually.
 
 **Signature:** `log\warn(message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L112)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 
 ### error
 
@@ -64,10 +64,10 @@ Log at error level. This RECORDS a problem; it does not fail the target - raise 
 
 **Signature:** `log\error(message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L117)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 
 ### at
 
@@ -75,9 +75,9 @@ Log at a level chosen at runtime. Use it when the level is DATA rather than a li
 
 **Signature:** `log\at(level, message, [attrs])` - [source](https://github.com/egladman/magus/blob/main/std/log.go#L122)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `level` | `string` |  | |
-| `message` | `string` |  | |
-| `attrs` | `map[string]any` | yes | |
+| Parameter | Type             | Optional | Description |
+| --------- | ---------------- | -------- | ----------- |
+| `level`   | `string`         |          |             |
+| `message` | `string`         |          |             |
+| `attrs`   | `map[string]any` | yes      |             |
 

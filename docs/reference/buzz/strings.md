@@ -20,9 +20,9 @@ Convert s to camelCase.
 
 **Signature:** `strings\camelCase(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L177)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -43,9 +43,9 @@ Convert s to snake_case.
 
 **Signature:** `strings\snakeCase(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L182)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -66,9 +66,9 @@ Convert s to kebab-case.
 
 **Signature:** `strings\kebabCase(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L187)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -89,9 +89,9 @@ Convert s to PascalCase.
 
 **Signature:** `strings\pascalCase(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L192)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -112,9 +112,9 @@ Uppercase the first rune of s and lowercase the rest.
 
 **Signature:** `strings\capitalize(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L197)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -135,9 +135,9 @@ Split s into its constituent words (splitting on case changes, digits, and separ
 
 **Signature:** `strings\words(s) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L202)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** []string
 
@@ -162,10 +162,10 @@ Trim s to at most length runes, appending "..." when truncated.
 
 **Signature:** `strings\ellipsis(s, length) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L207)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `length` | `int` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `length`  | `int`    |          |             |
 
 **Returns:** string
 
@@ -186,9 +186,9 @@ Uppercase the first rune of s, leaving the rest untouched. Unlike capitalize, wh
 
 **Signature:** `strings\upperFirst(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L212)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -198,10 +198,10 @@ Compare a and b lexicographically by byte, returning -1, 0, or 1. Buzz has no < 
 
 **Signature:** `strings\compare(a, b) -> int` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L222)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `a` | `string` |  | |
-| `b` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `a`       | `string` |          |             |
+| `b`       | `string` |          |             |
 
 **Returns:** int
 
@@ -226,10 +226,10 @@ Report whether s contains substr.
 
 **Signature:** `strings\contains(s, substr) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L227)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `substr` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `substr`  | `string` |          |             |
 
 **Returns:** bool
 
@@ -239,10 +239,10 @@ Remove prefix from the start of s if present, otherwise return s unchanged. Buzz
 
 **Signature:** `strings\trimPrefix(s, prefix) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L232)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `prefix` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `prefix`  | `string` |          |             |
 
 **Returns:** string
 
@@ -252,10 +252,10 @@ Remove suffix from the end of s if present, otherwise return s unchanged.
 
 **Signature:** `strings\trimSuffix(s, suffix) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L237)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `suffix` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `suffix`  | `string` |          |             |
 
 **Returns:** string
 
@@ -265,11 +265,11 @@ Left-pad s with pad until it is length runes wide; s is returned unchanged when 
 
 **Signature:** `strings\padLeft(s, length, [pad]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L242)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `length` | `int` |  | |
-| `pad` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `length`  | `int`    |          |             |
+| `pad`     | `string` | yes      |             |
 
 **Returns:** string
 
@@ -279,11 +279,11 @@ Right-pad s with pad until it is length runes wide; s is returned unchanged when
 
 **Signature:** `strings\padRight(s, length, [pad]) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L248)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `length` | `int` |  | |
-| `pad` | `string` | yes | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `length`  | `int`    |          |             |
+| `pad`     | `string` | yes      |             |
 
 **Returns:** string
 
@@ -293,9 +293,9 @@ Split s into lines on \n, tolerating \r\n endings and dropping the trailing empt
 
 **Signature:** `strings\lines(s) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L276)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** []string
 
@@ -305,9 +305,9 @@ Split s around runs of whitespace, discarding empties. Picking a column out of a
 
 **Signature:** `strings\fields(s) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L289)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** []string
 
@@ -317,11 +317,11 @@ Split s on sep into at most n pieces, leaving any remaining separators in the fi
 
 **Signature:** `strings\splitN(s, sep, n) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L298)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
-| `sep` | `string` |  | |
-| `n` | `int` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
+| `sep`     | `string` |          |             |
+| `n`       | `int`    |          |             |
 
 **Returns:** []string
 
@@ -331,9 +331,9 @@ Fold every run of whitespace in s into a single space and trim the ends, so a mu
 
 **Signature:** `strings\collapseWs(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/strings.go#L307)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 

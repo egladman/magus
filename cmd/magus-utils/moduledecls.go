@@ -186,6 +186,14 @@ func externDecl(m std.Method) (string, error) {
 		if a.Enum != "" {
 			typ = a.Enum
 		}
+		// A byte-slice ARGUMENT accepts a str as well as a list: gen.ByteSlice decodes
+		// either, which is what lets a SigV4 chain feed a str secret into the same call
+		// whose byte-list result keys the next one. Buzz cannot spell that union, so
+		// `any` is the honest annotation; the RETURN keeps [int], which is what the host
+		// really hands back.
+		if a.Type == std.TypeByteSlice {
+			typ = "any"
+		}
 		p := a.Name + ": " + typ
 		if a.Optional {
 			def, derr := buzzDefault(a)

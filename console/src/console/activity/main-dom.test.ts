@@ -57,6 +57,39 @@ function mcpEvent(): unknown {
   };
 }
 
+// agentEvent is one host-observed shell command, attributed to a session and optionally to the
+// lease it ran under. preview is the guard verdict, which is where a denial is recorded.
+function agentEvent(
+  session: string,
+  extra: { unit?: string; preview?: string; action?: string } = {},
+): unknown {
+  return {
+    time: new Date(Date.now() - 20_000).toISOString(),
+    kind: "KIND_AGENT_COMMAND",
+    actor: "agent:claude",
+    action: extra.action ?? "Bash",
+    outcome: "OUTCOME_OK",
+    host: "claude",
+    session,
+    unit: extra.unit ?? "",
+    preview: extra.preview ?? "guard: pass",
+  };
+}
+
+// spawnEvent is the parent handing a lease to a subagent it started.
+function spawnEvent(session: string, unit: string): unknown {
+  return {
+    time: new Date(Date.now() - 25_000).toISOString(),
+    kind: "KIND_AGENT_SPAWN",
+    actor: "agent:claude",
+    action: "Task",
+    outcome: "OUTCOME_OK",
+    host: "claude",
+    session,
+    unit,
+  };
+}
+
 // serve answers the two ActivityService procedures. payload is what GetPayload gives back: either
 // the stored bytes, or the failure to answer with.
 function serve(
@@ -180,6 +213,146 @@ test("a transient failure keeps the control and names the reason", async () => {
   assert.equal(btns[0].disabled, false, "still pressable");
   assert.equal(btns[0].textContent, "show response (2.0 KB)", "the label is restored");
   assert.match(sectionText(host), /could not read the response: .*daemon went away/);
+});
+
+function modeButton(host: HTMLElement, mode: string): HTMLButtonElement {
+  const btn = host.querySelector<HTMLButtonElement>('[data-index-mode="' + mode + '"]');
+  assert.ok(btn, "the index offers a " + mode + " grouping");
+  return btn;
+}
+
+// A leaf's title span carries the same PF class as a branch's, so the text is read through the
+// branch's OWN content row rather than by class alone.
+function branchText(li: Element): string {
+  const text = li.querySelector(
+    ":scope > .pf-v6-c-tree-view__content .pf-v6-c-tree-view__node-text",
+  );
+  return text?.textContent ?? "";
+}
+
+function roots(host: HTMLElement): HTMLElement[] {
+  return [
+    ...host.querySelectorAll<HTMLElement>(".console-log-runs__tree > .pf-v6-c-tree-view > ul > li"),
+  ];
+}
+
+function branchLabels(host: HTMLElement): string[] {
+  return roots(host).map(branchText);
+}
+
+// The index groups one page two ways. Switching is a repaint of the tree alone, so the toggle has
+// to actually rebuild it rather than only marking itself selected.
+test("the index toggle switches the tree between kind and session grouping", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+
+  assert.deepEqual(branchLabels(host), ["MCP tool calls", "Agent commands"]);
+  assert.equal(modeButton(host, "kind").getAttribute("aria-pressed"), "true");
+
+  modeButton(host, "session").click();
+  assert.equal(modeButton(host, "session").getAttribute("aria-pressed"), "true");
+  assert.equal(modeButton(host, "kind").getAttribute("aria-pressed"), "false");
+  // The MCP call carries no session, so the session view lists the one agent that does.
+  assert.deepEqual(branchLabels(host), ["claude, 1 command"]);
+
+  modeButton(host, "kind").click();
+  assert.deepEqual(branchLabels(host), ["MCP tool calls", "Agent commands"]);
+});
+
+// The point of the mode: a fan-out reads as a tree instead of as interleaved rows from agents with
+// no visible relationship.
+test("a spawned session renders under the session that spawned it", async () => {
+  serve(
+    [
+      spawnEvent("parent", "harness/child-work"),
+      agentEvent("child", { unit: "harness/child-work", preview: "guard: deny" }),
+      agentEvent("parent"),
+    ],
+    { body: "unused" },
+  );
+  const host = await mount();
+  modeButton(host, "session").click();
+
+  const top = roots(host);
+  assert.deepEqual(
+    top.map((el) => el.dataset.session),
+    ["parent"],
+    "the child is nested, not a second root",
+  );
+  const child = top[0].querySelector<HTMLElement>('[data-session="child"]');
+  assert.ok(child, "the child session branch sits inside its parent");
+  assert.equal(branchText(child), "claude, 1 command, 1 denied, harness/child-work");
+});
+
+// A page of MCP calls and jobs has no agent behind any event. Grouped by session that is an empty
+// tree in a panel that is still open, which reads as broken rather than as empty.
+test("a page with no agent events says so in session grouping", async () => {
+  serve([mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "session").click();
+
+  assert.deepEqual(roots(host), []);
+  const note = host.querySelector(".console-log-runs__tree .console-log-runs__empty");
+  assert.ok(note, "an inline note stands in for the tree");
+  assert.match(note.textContent ?? "", /No agent sessions on this page/);
+
+  modeButton(host, "kind").click();
+  assert.equal(host.querySelector(".console-log-runs__empty"), null);
+});
+
+// A branch's text truncates like a leaf's, so it carries the full text the same way.
+test("a branch carries its label as a title", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "kind").click();
+
+  const nodes = roots(host).map(
+    (li) =>
+      li.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.title,
+  );
+  assert.deepEqual(nodes, ["MCP tool calls", "Agent commands"]);
+
+  modeButton(host, "session").click();
+  const session = roots(host)[0].querySelector<HTMLButtonElement>(
+    ":scope > .pf-v6-c-tree-view__content button",
+  );
+  assert.equal(session?.title, "claude, 1 command  s1");
+});
+
+// The index repaints on every mode switch and every page loaded, and a repaint that forgets what
+// the reader opened and picked sends them back to the top each time.
+test("expansion and selection survive a repaint", async () => {
+  serve([agentEvent("s1"), mcpEvent()], { body: "unused" });
+  const host = await mount();
+  modeButton(host, "kind").click();
+
+  const first = roots(host)[0];
+  assert.equal(
+    first.classList.contains("pf-m-expanded"),
+    true,
+    "the first branch opens by default",
+  );
+  first.querySelector<HTMLButtonElement>(":scope > .pf-v6-c-tree-view__content button")?.click();
+  assert.equal(first.classList.contains("pf-m-expanded"), false);
+  const leaf = roots(host)[1].querySelector<HTMLButtonElement>("ul button");
+  assert.ok(leaf);
+  leaf.click();
+  assert.equal(leaf.classList.contains("pf-m-current"), true);
+
+  modeButton(host, "session").click();
+  modeButton(host, "kind").click();
+
+  const again = roots(host);
+  assert.equal(
+    again[0].classList.contains("pf-m-expanded"),
+    false,
+    "the closed branch stays closed",
+  );
+  assert.equal(
+    again[1].querySelector("ul button")?.classList.contains("pf-m-current"),
+    true,
+    "the picked leaf stays current",
+  );
 });
 
 // The demo trail's refs are synthesized: no store holds them, so a control there could only ever

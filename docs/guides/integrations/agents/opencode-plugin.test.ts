@@ -81,8 +81,13 @@ async function withWarnings(body: () => Promise<void>): Promise<string[]> {
 async function hooks() {
   const plugin = MagusGuard as unknown as () => Promise<{
     "tool.execute.before": (
-      input: { tool: string },
+      input: { tool: string; callID: string },
       output: { args: Record<string, unknown> },
+    ) => Promise<void>;
+    "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
+    "experimental.session.compacting": (
+      input: Record<string, never>,
+      output: { context: string[] },
     ) => Promise<void>;
   }>;
   return await plugin();
@@ -97,7 +102,7 @@ test("a shell command is judged over stdin by the top-level hook subcommand", as
   const h = await hooks();
 
   await assert.rejects(
-    h["tool.execute.before"]({ tool: "bash" }, { args: { command: "git stash" } }),
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git stash" } }),
     /whole-tree git stash/,
   );
 
@@ -118,7 +123,10 @@ test("a file write is judged on the path surface, also over stdin", async () => 
   const h = await hooks();
 
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"]({ tool: "write" }, { args: { filePath: "gen/index.json" } });
+    await h["tool.execute.before"](
+      { tool: "write", callID: "c1" },
+      { args: { filePath: "gen/index.json" } },
+    );
   });
 
   assert.deepEqual(calls[0].argv, [
@@ -131,17 +139,55 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     "json",
   ]);
   assert.equal(calls[0].stdin, "gen/index.json");
-  // Declared advise=human: OpenCode has no context-injection arm, so an advise
-  // reaches the person and never the model. It must not throw.
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /that file is generated/);
+  // An advise must not throw, and must not be logged either: it is held for the
+  // call it judged and appended to that call's own result, which is the only
+  // channel on this host that a model reads.
+  assert.deepEqual(warnings, []);
+
+  const result = { output: "wrote gen/index.json" };
+  await h["tool.execute.after"]({ callID: "c1" }, result);
+  assert.match(result.output, /wrote gen\/index\.json/);
+  assert.match(result.output, /\[magus guard\] that file is generated/);
+  assert.equal(calls.length, 1, "the advisory is delivered, not judged a second time");
+});
+
+test("an advisory reaches only the call it judged", async () => {
+  stubBun(() => advise);
+  const h = await hooks();
+
+  await h["tool.execute.before"]({ tool: "bash", callID: "judged" }, { args: { command: "rg x" } });
+
+  const other = { output: "unrelated" };
+  await h["tool.execute.after"]({ callID: "unjudged" }, other);
+  assert.equal(other.output, "unrelated");
+
+  const mine = { output: "matches" };
+  await h["tool.execute.after"]({ callID: "judged" }, mine);
+  assert.match(mine.output, /\[magus guard\]/);
+
+  // Delivered once: the entry is dropped when its call lands, so a second result
+  // carrying the same id does not get the advisory again.
+  const again = { output: "matches" };
+  await h["tool.execute.after"]({ callID: "judged" }, again);
+  assert.equal(again.output, "matches");
+});
+
+test("a compacting session is handed the brief", async () => {
+  const calls = stubBun(() => null);
+  const h = await hooks();
+
+  const output: { context: string[] } = { context: [] };
+  await h["experimental.session.compacting"]({}, output);
+
+  assert.deepEqual(calls[0].argv, ["session", "--brief"]);
+  assert.deepEqual(output.context, [], "an empty brief adds nothing to the compaction prompt");
 });
 
 test("a pass is silent and blocks nothing", async () => {
   stubBun(() => pass);
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"]({ tool: "bash" }, { args: { command: "ls -la" } });
+    await h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls -la" } });
   });
   assert.deepEqual(warnings, []);
 });
@@ -152,7 +198,10 @@ test("an unrunnable magus fails OPEN, loudly", async () => {
   const warnings = await withWarnings(async () => {
     // Must not throw: throwing is OpenCode's only way to stop a call, so a guard
     // that threw when magus was missing would make every session unusable.
-    await h["tool.execute.before"]({ tool: "bash" }, { args: { command: "git stash" } });
+    await h["tool.execute.before"](
+      { tool: "bash", callID: "c1" },
+      { args: { command: "git stash" } },
+    );
   });
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /UNGUARDED/);
@@ -162,7 +211,10 @@ test("a verdict from an unknown schema is ignored rather than obeyed", async () 
   stubBun(() => ({ ...deny, schema_version: 99 }));
   const h = await hooks();
   const warnings = await withWarnings(async () => {
-    await h["tool.execute.before"]({ tool: "bash" }, { args: { command: "git stash" } });
+    await h["tool.execute.before"](
+      { tool: "bash", callID: "c1" },
+      { args: { command: "git stash" } },
+    );
   });
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /schema 99/);

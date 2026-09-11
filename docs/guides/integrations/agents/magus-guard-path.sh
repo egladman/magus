@@ -34,9 +34,9 @@
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 11
+# magus-guard-template: 12
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
+# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
@@ -44,10 +44,11 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-# Same split, and the same reason, as in magus-guard-command.sh: a host whose
-# PreToolUse rejects additionalContext fails OPEN on one, so an advisory it cannot
-# take disarms the call rather than merely going unread. Codex wires BOTH surfaces
-# to PreToolUse, so it suppresses here too.
+# Same split, and the same reason, as in magus-guard-command.sh: a host that
+# REJECTS the context key can mark the hook run failed and continue the call, so an
+# advisory it cannot take disarms that call rather than merely going unread. No
+# host wired to this file is in that position; the flag is there for the one you
+# may wire.
 if [ -n "$GUARD_NO_ADVISE" ]; then
   HOST_ADVISE_BRANCH=''
 else

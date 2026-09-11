@@ -18,9 +18,11 @@ event.
 | guard wiring     | `.claude/settings.json`, `PreToolUse`  |
 | command surface  | deny and advise both reach the model   |
 | file surface     | deny and advise both reach the model   |
+| read observation | `PreToolUse` on the read tool          |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
 | checkpoint       | `Stop`                                 |
+| rehydration      | `SessionStart` (`compact`, `resume`)   |
 | lease            | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
@@ -82,6 +84,36 @@ What it trades away is the templates' handling of a magus that is missing or too
 old to judge: both of those render nothing, and Claude Code reads nothing as
 allow, so the session goes unguarded with no sign of it. Use the short form
 while you are experimenting; use the templates once you rely on the guard.
+
+## Recording what was read
+
+A third `PreToolUse` entry, matching `Read`, runs
+[`magus-guard-observe.sh`](guard-templates.md#magus-guard-observesh). It judges
+nothing and prints nothing: it records the path on the activity trail so a later
+`magus session show` can say what a session looked at, not only what it changed.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This repository dogfoods it, and it is the one job here that is deliberately not
+carried to the other hosts: it changes no verdict, so a reader who skips it loses
+detail in a trail rather than enforcement.
 
 ## Lease capture
 
@@ -193,12 +225,68 @@ the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
 exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
 
+## Handing a compacted session its state back
+
+Claude Code fires `SessionStart` when a session begins, when one is resumed, and
+after it compacts a long conversation into a summary; whatever a `SessionStart`
+hook prints is added to the model's context. Wire it to
+[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and a session that
+just lost its history is handed this checkout instead: branch and revision,
+commits not yet on the base ref, the dirty tree split into sources, generated
+outputs and unclaimed paths, the live leases with the command that binds each
+one, the last recorded run's failures with the ref that holds their output, the
+guard wiring, and where the rules live.
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`compact` is the case that needs it; `resume` gets it for free and answers the
+same question, since a resumed session did not watch the tree move while it was
+away. Add `startup` if you want it at the top of every session, at the cost of
+the block on sessions that would have been fine without it.
+
+Every line is read off the disk when the hook runs, so nothing in it can be a
+retelling of a retelling. It restates no rule: the last line names the files your
+rules live in, `CLAUDE.md` by default and `REHYDRATE_RULES` when yours is
+somewhere else. Run `magus session --brief` yourself to see what a session will
+be handed.
+
 ## Coverage and limits
 
-No gaps. Both guard surfaces are wired, `deny` arrives as a
-`permissionDecision`, and `advise` arrives as `additionalContext`, which is the
-only channel that puts an explanation in front of the model rather than the
-person.
+No gaps in the guard contract: both surfaces are wired, `deny` arrives as a
+`permissionDecision`, and `advise` arrives as `additionalContext`, which puts the
+explanation in front of the model rather than the person.
+
+That is not the same as using everything this host offers. `SessionStart` with
+matcher `startup`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`,
+`PermissionRequest` and `PreCompact` are all available and all unused, on the test
+every wiring here has to pass: a hook must change a verdict or restore state the
+model cannot otherwise get. An advisory that fires every turn to restate guidance
+the skills already carry fails it.
+
+`SubagentStart` is the one worth naming, because it looks like it should replace
+the [lease wiring](#lease-capture) above and does not. It fires when a sub-agent
+is spawned and matches on agent type, but its documented input does not carry the
+prompt the orchestrator handed over, and the prompt is the whole record: it is
+what magus stores as the spawn's payload, and it is where a `lease:` marker rides.
+So the `PreToolUse` matcher `Task` wiring stays, on the tool call that does carry
+`tool_input.prompt`.
 
 ## Verify
 

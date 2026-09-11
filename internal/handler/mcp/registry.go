@@ -1,224 +1,25 @@
 package mcp
 
 import (
-	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/handler/mcp/gen"
 )
 
+// The tool catalog is GENERATED from the std module descriptors, the same source
+// the runtime bindings, the checker declarations and the reference docs come from.
+// Add a tool by declaring an MCPTool on the module (std/magus.go), not here.
+//
+//go:generate go run ../../../cmd/magus-utils mcptools -out gen/registry.go
+
 // ParamDescriptor describes a single parameter on an MCP tool.
-type ParamDescriptor struct {
-	Name        string `json:"name"                  yaml:"name"`
-	Type        string `json:"type"                  yaml:"type"`
-	Required    bool   `json:"required,omitempty"    yaml:"required,omitempty"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-}
+type ParamDescriptor = gen.ParamDescriptor
 
 // ToolDescriptor is a static description of one MCP tool, used both to
 // register the tool with the server (registerTools in mcp.go) and to populate
 // "magus describe mcp-tools" output. There is no build tag gating either use;
 // the package always compiles in.
-type ToolDescriptor struct {
-	Name        string            `json:"name"                  yaml:"name"`
-	Description string            `json:"description,omitempty" yaml:"description,omitempty"`
-	Params      []ParamDescriptor `json:"params,omitempty"      yaml:"params,omitempty"`
-}
+type ToolDescriptor = gen.ToolDescriptor
 
 // Registry is the canonical list of MCP tools the magus daemon exposes.
-// Order matches the registration order in mcp.go's registerTools.
-var Registry = []ToolDescriptor{
-	{
-		Name:        hint.ToolDescribe.String(),
-		Description: "Describe a magus concept and list every entity of that kind in the workspace: spells (language/runtime adapters), targets (targets), projects, workspaces, or mcp_tools. Pass name to narrow the list to one entity's detail: for targets it returns the fully-evaluated dispatch plan (sources, outputs, spells, rendered command, charms, policy).",
-		Params: []ParamDescriptor{
-			{Name: "kind", Type: "string", Required: true, Description: "One of: spells, charms, targets, graph, projects, workspaces, modules, mcp_tools."},
-			{Name: "name", Type: "string", Description: "Optional. Narrow the list to one entity's detail (kinds spells, targets, projects). For targets, a target name optionally followed by a project path (e.g. \"build\", \"lint:rw\", or \"build api\"); omit the project to evaluate every project. For spells, a spell name; for projects, a project path. Unknown name returns the valid values."},
-		},
-	},
-	{
-		Name:        hint.ToolDescribeFile.String(),
-		Description: "Classify paths against the workspace's declared globs: the owning project, whether each path is a declared output (generated: regenerate it, never hand-edit) or a declared source (feeds cache keys and the affected set), and which projects claim it. Answers \"can I disregard this changed file\" from the workspace's own declarations - run it over a whole dirty tree before reading diffs or committing.",
-		Params: []ParamDescriptor{
-			{Name: "paths", Type: "string", Required: true, Description: "One or more workspace-relative paths, space-separated (e.g. \"MAGUS.md web/gen/index.html cmd/api/main.go\")."},
-		},
-	},
-	{
-		Name:        hint.ToolWhere.String(),
-		Description: "Resolve a fuzzy project name to its absolute directory path. Useful for navigating to a project or passing a path to another tool.",
-		Params: []ParamDescriptor{
-			{Name: "filter", Type: "string", Description: "One or more space-separated tokens to AND-filter project names (case-insensitive leaf match). Omit to list all."},
-		},
-	},
-	{
-		Name:        hint.ToolAffectedExplain.String(),
-		Description: "Explain why a project is in the VCS-diff affected set: shows the changed files and dependency chains that caused it to be selected.",
-		Params: []ParamDescriptor{
-			{Name: "project", Type: "string", Required: true, Description: "Project path (e.g. \"api\" or \"web/studio\")."},
-			{Name: "base", Type: "string", Description: "Override the VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-		},
-	},
-	{
-		Name:        hint.ToolInsight.String(),
-		Description: "Behavioral code analysis: find where a codebase's attention and risk concentrate before diving in. VCS-history lenses (the `lens` param): hotspots (per-project churn x complexity, with authors/recency/blast-radius), files (per-file churn x complexity), affinity (projects that change together, flagging hidden undeclared coupling), ownership (author concentration, bus factor, abandonment), trend (rising vs cooling activity). One lens reads the knowledge graph instead of git: unreferenced (code symbols nothing in the workspace names). Read its answer.verdict before trusting an empty list - \"unknown\" means part of the workspace had no symbol index.",
-		Params: []ParamDescriptor{
-			{Name: "lens", Type: "string", Description: "One of: hotspots (default), files, affinity, ownership, trend, unreferenced."},
-			{Name: "commits", Type: "number", Description: "Cap on how many recent commits to scan (default 500)."},
-			{Name: "since", Type: "string", Description: "Only commits within this window, e.g. \"90d\", \"12w\", \"6mo\", \"1y\"."},
-		},
-	},
-	{
-		Name:        hint.ToolRunTarget.String(),
-		Description: "Run a build target on an EXPLICIT set of projects (or the cwd project when omitted). Use this INSTEAD of raw language tools (go test, eslint, pytest, tsc): the raw tool bypasses the cache, the sandbox, and affected tracking. Target is a target like build, test, lint, format, generate, clean, ci, or a custom magusfile target. Use this when you know which projects to run; to instead run only the projects a VCS change touched, use magus_run_affected. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Required: true, Description: "Target to run, e.g. \"build\", \"test\", \"lint\", \"format\", \"ci\", or an op-direct spell-qualified form like \"go::go-test\"."},
-			{Name: "projects", Type: "string", Description: "Space-separated project paths. Use \"/\" for all. Omit for cwd-scoped selection."},
-			{Name: "dry_run", Type: "boolean", Description: "Print what would run without executing (default false)."},
-		},
-	},
-	{
-		Name:        hint.ToolRunAffected.String(),
-		Description: "Run a build target on ONLY the projects a VCS change touched - magus computes the affected set from the diff and its dependency graph; you do not name projects. Equivalent to `" + hint.Affected.With("<target>") + "`. This is the CI/pre-commit tool; to instead run named projects explicitly, use magus_run_target. The result reports the effective charms applied (workspace default_charms plus any charm suffix on the target).",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Required: true, Description: "Target to run on affected projects (e.g. \"test\", \"lint\", \"ci\")."},
-			{Name: "base", Type: "string", Description: "Override VCS base ref for the diff (default: MAGUS_VCS_BASE_REF or origin/main)."},
-			{Name: "dry_run", Type: "boolean", Description: "Print what would run without executing."},
-		},
-	},
-	{
-		Name:        hint.ToolDoctor.String(),
-		Description: "Validate the workspace: config schema, cache writability, project discovery, language coverage, dependency cycles, tool availability, and VCS reachability.",
-	},
-	{
-		Name:        hint.ToolStatus.String(),
-		Description: "Report the workspace's configured telemetry, cache settings, and live proc-server pool state (when a parent magus is running).",
-	},
-	{
-		Name:        hint.ToolAffectedPlan.String(),
-		Description: "Emit a provider-neutral JSON shard plan for a target's VCS-affected project set. Use for CI fan-out or graph-guided work partitioning: map the matrix entries to parallel jobs, then inspect dependencies and outputs before assigning edits.",
-		Params: []ParamDescriptor{
-			{Name: "target", Type: "string", Description: "Target to plan (default: ci; any affected target is accepted)."},
-			{Name: "base", Type: "string", Description: "Optional VCS base ref override."},
-			{Name: "max_shards", Type: "number", Description: "Maximum CI shards (default: from config; -1 means unlimited)."},
-		},
-	},
-	{
-		Name:        hint.ToolConfigGet.String(),
-		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
-	},
-	{
-		Name:        hint.ToolTailLog.String(),
-		Description: "Return the captured build log of the most recent cache entry for a project. Useful after a failed magus_run_target to inspect tool output.",
-		Params: []ParamDescriptor{
-			{Name: "project", Type: "string", Required: true, Description: "Project path."},
-		},
-	},
-	{
-		Name:        hint.ToolMemory.String(),
-		Description: "A user-owned per-repository memory, shared across worktrees and kept outside the checkout. It is not automatic model memory: create a named entry only for a decision, plan, saved pointer, or ruled-out hypothesis a later person should reopen. Entries point to a query, graph node, output ref, command, or document; decision, plan and elimination entries carry a short why. Record an elimination when an investigation kills a hypothesis, so the next session reopens the reasoning; without one it re-derives the search and re-proposes a branch that is already dead. put writes only the fields you send: an entry that exists keeps every field you omit, so updating a status cannot drop the body beside it, and clearing a field means deleting the entry and creating it again. Use verify to surface malformed, stale, broken-linked entries and evidence refs that no longer resolve. The CLI (`magus memory`) and console read the same store. Legacy cursor reads remain for migration; writes are retired because one shared snapshot can erase another session's entry.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; records plus issues), get, put (create by name, or write the fields you send on an entry that exists), delete, verify. cursor is legacy read-only."},
-			{Name: "name", Type: "string", Description: "The record's kebab-slug identity. Required for get, put, delete."},
-			{Name: "type", Type: "string", Description: "put only: one of pointer, decision, plan, elimination. Required to create. On an entry that exists it must match the type already stored - a record cannot be updated into another type, because the type decides which fields it may carry; delete it and create the entry you want."},
-			{Name: "refs", Type: "string", Description: "put only, REQUIRED to create: the payload, one ref per line as 'kind: target' (e.g. 'query: kind=op depends cache' or 'node: file:internal/hash/hasher.go'). Kinds: query, node, output, command, doc. Sending refs on an entry that exists replaces its whole ref list; omitting them keeps it."},
-			{Name: "allow_missing", Type: "boolean", Description: "put only, default true: create the entry when the name is absent. Pass false when you mean to update something that already exists, so a mistyped name is an error instead of a stray second entry."},
-			{Name: "body", Type: "string", Description: "put only: the one-line caption for a decision/plan, or for an elimination the reason the hypothesis is dead. Omit for a pointer; a pointer carries no prose."},
-			{Name: "excerpt", Type: "string", Description: "put only, REQUIRED for an elimination and rejected on every other type: the evidence that ruled the hypothesis out, copied inline. An output ref resolves only from the checkout that minted it, so paste the deciding lines into the record."},
-			{Name: "status", Type: "string", Description: "put only, optional: the lifecycle field (e.g. accepted, superseded, active, done, stale)."},
-			{Name: "references", Type: "string", Description: "put only, optional: comma-separated names of other memory records this one links to."},
-			{Name: "content", Type: "string", Description: "Legacy cursor reads only. Cursor writes are retired; use a named plan or decision with put."},
-		},
-	},
-	{
-		Name:        hint.ToolQuery.String(),
-		Description: "Search the knowledge graph and return ranked node matches plus their surrounding neighborhood (the induced subgraph). Prefer this over grep to find and relate magus-domain entities: projects, targets, spells, ops, charms, modules, diagnostics. Ingested code symbols are lazily loaded: to match them, scope the query with kind=symbol (or use magus_refs) - a bare free-text query stays in the domain graph. For a large match set, pass limit to page the matches and echo the returned next_cursor to fetch the following page. To fetch a target execution's captured output by its reference id (out1a2b3c), use magus_output.",
-		Params: []ParamDescriptor{
-			{Name: "query", Type: "string", Required: true, Description: "Search terms: free text plus field matchers like kind=spell, project=pkg/foo, relation=uses, id=build, exclusion kind!=op, and a regex id=~build$."},
-			{Name: "budget", Type: "number", Description: "Max nodes in the returned neighborhood (default 50)."},
-			{Name: "limit", Type: "number", Description: "Page size: max matches to return. Omit or 0 for all matches (no paging)."},
-			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor, to fetch the next page. Only valid for the same query and an unchanged graph."},
-		},
-	},
-	{
-		Name:        hint.ToolOutput.String(),
-		Description: "Return one target run's exact captured output by its output ref (out1a2b3c, shown on each target's line in a run), plus the run's descriptor (project, target, pass/fail, duration). Fetch a failing target's full log by ref instead of re-reading a wall of text or asking the user to paste it. Accepts a unique ref prefix, like a git short hash.",
-		Params: []ParamDescriptor{
-			{Name: "ref", Type: "string", Required: true, Description: "An output ref (out1a2b3c) or a unique prefix of one, as printed on each target's result line."},
-		},
-	},
-	{
-		Name:        hint.ToolExplain.String(),
-		Description: "Show one knowledge-graph node's context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it. The argument is a node ID (target:pkg/foo:build) or a name that resolves to one.",
-		Params: []ParamDescriptor{
-			{Name: "node", Type: "string", Required: true, Description: "A node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name:        hint.ToolRefs.String(),
-		Description: "List where an ingested code symbol is defined and every file that references it, as file:line rows drawn from a SCIP index. The occurrence-shaped answer for a symbol's fan-in (magus_query renders that poorly). Symbols come from a declared knowledge.symbols index. For a large fan-in, pass limit and echo the returned next_cursor.",
-		Params: []ParamDescriptor{
-			{Name: "symbol", Type: "string", Required: true, Description: "A symbol node ID (symbol:...) or a name that resolves to one."},
-			{Name: "limit", Type: "number", Description: "Page size: max referencing files to return. Omit or 0 for all."},
-			{Name: "cursor", Type: "string", Description: "Opaque cursor from a prior response's next_cursor. Only valid for the same symbol and an unchanged graph."},
-		},
-	},
-	{
-		Name:        hint.ToolPath.String(),
-		Description: "Show the shortest path between two knowledge-graph nodes: the chain of edges connecting them, with each hop's relation. Answers how two entities relate.",
-		Params: []ParamDescriptor{
-			{Name: "from", Type: "string", Required: true, Description: "Start node ID or a name that resolves to one."},
-			{Name: "to", Type: "string", Required: true, Description: "End node ID or a name that resolves to one."},
-		},
-	},
-	{
-		Name:        hint.ToolStats.String(),
-		Description: "Report the knowledge graph's shape - where the workspace concentrates and neglects. Returns god nodes (the most connected spells, targets, modules, where structural risk concentrates), orphans (docs that document nothing, spells no target uses), and doc coverage. Answers \"where is risk concentrated\" without shelling out.",
-		Params: []ParamDescriptor{
-			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
-		},
-	},
-	{
-		Name: hint.ToolDiff.String(),
-		Description: "Join the review session a person already has open and pair with them on it. " +
-			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
-			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
-			"plus where the person is looking and what they have already read. " +
-			"op=state also returns `patch` (the unified diff) and `hunks` (per file, each hunk's 0-based index and its content digest), " +
-			"which are the coordinates comment and suggest take - so read state first and cite an index from it rather than guessing one. " +
-			"It recomputes when the working tree has moved since the session was attached, and sets `recomputed` when it did. " +
-			"op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. " +
-			"op=resolve closes a comment. Both writing ops REFUSE a path that is not in the change and a hunk index that does not exist. " +
-			"You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. " +
-			"Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
-			{Name: "projection", Type: "string", Description: "Shapes op=state's response only - comment, suggest, and resolve ignore it and always return the full session. One of: full (default; today's whole session), summary (id/base/as_of/recomputed/cursor plus counts of files, hunks, comments, suggestions, and viewed - no bodies), conversation (cursor, viewed, comments, suggestions, id/base/as_of - no diff, patch, or hunks), patch (id/base/as_of/recomputed plus patch and hunks - no diff, comments, or suggestions)."},
-			{Name: "path", Type: "string", Description: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
-			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file, as reported by op=state's `hunks`; omit for the file as a whole. An index the file does not have is refused."},
-			{Name: "body", Type: "string", Description: "The remark (comment)."},
-			{Name: "reason", Type: "string", Description: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
-			{Name: "id", Type: "string", Description: "Comment id (resolve)."},
-			{Name: "agent_name", Type: "string", Description: "Optional label for which agent is speaking; attribution only."},
-		},
-	},
-	{
-		Name:        hint.ToolVCSCheckpoint.String(),
-		Description: "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
-	},
-	{
-		Name:        hint.ToolLedger.String(),
-		Description: "Record the orchestrating agent's declared lease plan so humans can see it; the ledger itself refuses nothing. One row per lease, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the lease was handed, owned and forbidden paths, dependencies, tier, validation, and state. Owned/forbidden paths are a DECLARATION this store never acts on - the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning lease named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around the ledger. Every row should end in pass, fail, or no_return; a read-only lease carries an abbreviated row with no paths. One plan per workspace: clear starts a fresh one and keeps no history. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the lease as possibly dead - which is the READER's judgment, since nothing here transitions a row on its own.",
-		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; every row, plus overlaps - the pairs of live leases whose owned_paths intersect, reported as lease_a/lease_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), put (create or replace one row by id), register (record reported_base, the base a worker actually landed on, and get the divergence verdict back), clear (drop every row to start a fresh plan)."},
-			{Name: "reported_base", Type: "string", Description: "register only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the lease was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: "string", Description: "put and register, REQUIRED: the lease's id, which put upserts on. Use the same id you put in the worker's prompt."},
-			{Name: "parent", Type: "string", Description: "put only: the id of the lease this one was handed out under. Omit for a lease the root spawned."},
-			{Name: "goal", Type: "string", Description: "put only: the lease's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
-			{Name: "checkpoint", Type: "string", Description: "put only: the working state this lease was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
-			{Name: "owned_paths", Type: "string", Description: "put only: space-separated paths the lease may edit. Empty on a read-only lease by design. Shrinking this set IS how a lease announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed - which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits - a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
-			{Name: "forbidden_paths", Type: "string", Description: "put only: space-separated paths the lease must not touch. Empty on a read-only lease by design."},
-			{Name: "depends_on", Type: "string", Description: "put only: space-separated ids of leases that must land before this one."},
-			{Name: "tier", Type: "string", Description: "put only: the effort tier the work was matched to, e.g. principal, standard, economy."},
-			{Name: "validation", Type: "string", Description: "put only: the magus target or named check this lease was assigned."},
-			{Name: "state", Type: "string", Description: "put only: declared, running, pass, fail, or no_return. no_return is not fail - it means the worker died, stalled, or was cancelled and returned no verdict at all."},
-			{Name: "read_only", Type: "boolean", Description: "put only: mark a lease that gathers evidence and writes nothing, so empty owned/forbidden paths read as deliberate rather than forgotten."},
-		},
-	},
-}
+// registerTools pairs each entry with the SpellDriver of the same name and
+// panics in either direction when one has no counterpart.
+var Registry = gen.Registry

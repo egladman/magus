@@ -1,0 +1,11 @@
+{
+  "category": "interrogation",
+  "budget_usd": 1.5,
+  "max_turns": 40,
+  "answer_key": [
+    "apps/crew",
+    "apps/flight-simulator",
+    "apps/navigation",
+    "apps/ticket-booking"
+  ]
+}

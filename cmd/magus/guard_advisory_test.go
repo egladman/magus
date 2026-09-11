@@ -289,7 +289,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	for _, kind := range []advisoryKind{
 		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisoryPrecedent,
 		advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource, advisoryRegenSource,
-		advisoryGraphStale,
+		advisoryGraphStale, advisoryFocus,
 	} {
 		require.NotEmpty(t, gate.once(kind, "x"), "fixture: spend every family")
 		require.Empty(t, gate.once(kind, "x"), "fixture: the family is now spent")

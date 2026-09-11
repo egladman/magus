@@ -60,10 +60,10 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
-   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
-   <target>:relock <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
+   update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
+   <target>:update <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
    visible to affected tracking{{end}}. It is reserved and deliberately not part of `rw` -
-   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today{{if .Full}}. `ci` strips both, so a gate verifies
    the committed lockfile rather than refreshing it{{end}}. Applying a lockfile (`npm ci`,
    `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
@@ -157,6 +157,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
 {{if .Full}}
 
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
@@ -189,8 +195,11 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, the ref is in the run that minted it: every `magus run`
+   prints one per target, and `magus session` lists recent sessions with the
+   targets they ran{{if .Full}}. There is no tool that fetches "the latest log for a
+   project", because a second door onto the same bytes only makes an agent holding a
+   ref pick between two{{end}}.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles){{if .Full}} when failures look environmental rather than caused by
    your change{{end}}.

@@ -3,8 +3,8 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 11169
-skill_short_bytes: 7401
+skill_full_bytes: 11738
+skill_short_bytes: 7808
 ---
 
 # magus-run
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `55` |
-| `knowledge-schema-version` | `11` |
-| `skill-content` | `b94fce866f3d` |
+| `agent-skill-version` | `64` |
+| `knowledge-schema-version` | `12` |
+| `skill-content` | `230f01f61093` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -102,9 +102,9 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
-   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
-   <target>:relock <project>`. It is reserved and deliberately not part of `rw` -
-   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
+   <target>:update <project>`. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today. Applying a lockfile (`npm ci`,
    `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
@@ -156,6 +156,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
+
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
 ## When you need finer granularity
 
 Every top-level target composes spell ops (tool-native operations). address one directly
@@ -175,8 +181,9 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI. Never re-run just to see the error again.
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, the ref is in the run that minted it: every `magus run`
+   prints one per target, and `magus session` lists recent sessions with the
+   targets they ran.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles).
 
@@ -275,10 +282,10 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
 5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
-   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
-   <target>:relock <project>`, so the rewrite happens inside magus, cached and
+   update`, `uv lock`, `pip-compile`) needs the `update` charm: `magus run
+   <target>:update <project>`, so the rewrite happens inside magus, cached and
    visible to affected tracking. It is reserved and deliberately not part of `rw` -
-   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   `rw` covers output reproducible from a clean checkout, `update` covers state that
    depends on what a registry serves today. `ci` strips both, so a gate verifies
    the committed lockfile rather than refreshing it. Applying a lockfile (`npm ci`,
    `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
@@ -367,6 +374,12 @@ magus affected ci --plan | magus run ci-shard:gha   # plan -> shard matrix
 Rule of thumb: a pipe whose right-hand side is magus, or `jq` over `-o json`, is
 composition. A pipe whose right-hand side is a text filter is a missing `-o`.
 
+A backgrounded run's capture is magus output too, so the same rule reaches it:
+grepping the task file your host wrote is denied, and it drops the `output:` and
+`inspect:` lines that sit under the `cause:` you matched. Background it as `-o
+jsonl --tee <file>` and the capture is a contract you can `jq`; otherwise read
+the file whole.
+
 WRONG: `magus run test | head -50` (drops the failing tail that matters).
 WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
 CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
@@ -397,8 +410,11 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI. Do this instead of re-running the
    target to see the error again.
-2. `magus_tail_log` {project} returns the most recent captured log for a project
-   when you have no ref.
+2. With no ref in hand, the ref is in the run that minted it: every `magus run`
+   prints one per target, and `magus session` lists recent sessions with the
+   targets they ran. There is no tool that fetches "the latest log for a
+   project", because a second door onto the same bytes only makes an agent holding a
+   ref pick between two.
 3. `magus doctor` validates the workspace itself (config, cache, tool
    availability, cycles) when failures look environmental rather than caused by
    your change.

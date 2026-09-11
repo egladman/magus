@@ -67,7 +67,7 @@ func TestAssembleNotes_UnresolvedAnchorEmitsNoEdge(t *testing.T) {
 // store: shared notes are committed content everyone who clones already has, so
 // withholding them from the remote cache would hide team knowledge for no benefit.
 func TestSharedNotesShardIsExportable(t *testing.T) {
-	assert.False(t, isLocalShard(sharedNotesShardName))
+	assert.False(t, isMachineLocalShard(sharedNotesShardName))
 	assert.Equal(t, "@notes/shared", sharedNotesShardName)
 	assert.Equal(t, "@notes/private", privateNotesShardName)
 }
@@ -83,14 +83,14 @@ func TestAssembleNotes_SkipsUnnamed(t *testing.T) {
 // in nobody's repo, so pushing that shard would leak private content into a shared cache,
 // the same hazard @memory's exclusion exists to prevent.
 func TestPrivateNotesShardIsNeverExported(t *testing.T) {
-	assert.True(t, isLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")
-	assert.True(t, isLocalShard(runtimeShardName))
-	assert.True(t, isLocalShard(coverageShardName))
+	assert.True(t, isMachineLocalShard(privateNotesShardName), "personal notes must never reach the remote cache")
+	assert.True(t, isMachineLocalShard(runtimeShardName))
+	assert.True(t, isMachineLocalShard(coverageShardName))
 
-	assert.False(t, isLocalShard(sharedNotesShardName),
+	assert.False(t, isMachineLocalShard(sharedNotesShardName),
 		"the workspace's own notes ARE shared - they are committed, and withholding them would hide team knowledge for no benefit")
-	assert.False(t, isLocalShard(registryShardName))
-	assert.False(t, isLocalShard(docsShardName))
+	assert.False(t, isMachineLocalShard(registryShardName))
+	assert.False(t, isMachineLocalShard(docsShardName))
 }
 
 // TestNotesCarryTheirScope: the two stores hold the same shape of node, so without this a

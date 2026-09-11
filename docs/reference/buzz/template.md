@@ -20,10 +20,10 @@ Render a Mustache template against a context value (usually a name->value map; l
 
 **Signature:** `template\render(template, data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/template.go#L43)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `template` | `string` |  | |
-| `data` | `any` |  | |
+| Parameter  | Type     | Optional | Description |
+| ---------- | -------- | -------- | ----------- |
+| `template` | `string` |          |             |
+| `data`     | `any`    |          |             |
 
 **Returns:** string
 
@@ -36,7 +36,7 @@ import "template";
 
 // Backtick raw strings hold the Mustache verbatim; a double-quoted "{{name}}"
 // would collide with Buzz's own {expr} string interpolation.
-std\print(template\render(`Hello {{name}}`, {"name": "world"}));
+std\print(template\render(`Hello {{name}}`, {"name": "world"}) catch "");
 // -> "Hello world"
 ```
 
@@ -46,11 +46,11 @@ Render a Mustache template that includes partials via {{>name}}, resolving each 
 
 **Signature:** `template\renderPartials(template, data, partials) -> string` - [source](https://github.com/egladman/magus/blob/main/std/template.go#L54)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `template` | `string` |  | |
-| `data` | `any` |  | |
-| `partials` | `map[string]string` |  | |
+| Parameter  | Type                | Optional | Description |
+| ---------- | ------------------- | -------- | ----------- |
+| `template` | `string`            |          |             |
+| `data`     | `any`               |          |             |
+| `partials` | `map[string]string` |          |             |
 
 **Returns:** string
 
@@ -70,7 +70,7 @@ final partials = {
     "footer": `<footer>{{title}}</footer>`,
 };
 
-std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials));
+std\print(template\renderPartials(page, {"title": "magus", "body": "hi"}, partials) catch "");
 // -> "<header>magus</header><main>hi</main><footer>magus</footer>"
 ```
 

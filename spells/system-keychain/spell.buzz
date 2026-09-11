@@ -1,0 +1,132 @@
+// The system keychain secret provider: resolves a reference from whatever keychain
+// the platform ships, so a magusfile names one provider and a laptop of any kind
+// reads it. macOS asks the `security` CLI for the generic password stored under the
+// reference as its service name; Linux asks `secret-tool` (libsecret, the client of
+// the freedesktop Secret Service behind GNOME Keyring and KDE Wallet) for the item
+// whose `service` attribute is the reference; Windows is not implemented yet and
+// says so. Selected with magus\secret.provider():
+//
+//   import "spells/system-keychain" as secrets;
+//   magus\secret.provider(secrets);
+//
+//   final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+//
+// A reference is spelled like a shell variable, so the same line reads through the
+// environment provider wherever this one is not selected.
+//
+// A person stores the value once, at a prompt that never echoes it and never lands in a
+// shell history or a transcript:
+//
+//   security add-generic-password -a "$USER" -s CLAUDE_BENCH_TOKEN -w        # macOS
+//   secret-tool store --label=CLAUDE_BENCH_TOKEN service CLAUDE_BENCH_TOKEN  # Linux
+//
+// This is what lets a magus run resolve a credential on a laptop with NOTHING exported
+// into the shell, which matters most when the shell is an agent's: the agent runs the
+// target, magus reads the keychain, the child process gets the value, and no transcript
+// ever holds it. On macOS the first read prompts the keychain to allow `security`;
+// "Always Allow" is the answer that keeps later runs unattended.
+//
+// Same shape as spells/onepassword, imported by path for the same reason: a spell that
+// imports a host module cannot be compiled into the binary.
+
+import "magus/spell";
+
+import "os";
+import "proc";
+
+export fun mgs_getName() > str { return "system-keychain"; }
+
+// The probe names the platform's own keychain CLI, so `magus doctor` reports the tool
+// this machine would actually run rather than one it never will.
+export fun mgs_getTools() > {str: Tool} {
+    if (os\platform()[0] == "linux") {
+        return {"secret-tool": Tool{probe = Command{bin = "secret-tool", args = ["--help"]}}};
+    }
+    return {"security": Tool{probe = Command{bin = "security", args = ["help"]}}};
+}
+
+// has reports whether haystack contains needle; see spells/onepassword for why this is
+// a helper rather than an inline indexOf comparison.
+fun has(haystack: str, needle: str) > bool {
+    return haystack.indexOf(needle) != null;
+}
+
+// resolve_secret is the secret-provider contract magus\secret.read() invokes. The
+// reference is the item's service name on every platform; an account is never part of
+// it, because the CLIs find the item by service alone and an account in the reference
+// would make one machine's entry unreadable on another.
+export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
+    final io = {};
+    cb(io);
+    final ref = "{io["ref"]}";
+    if (ref == "") {
+        throw "system-keychain: no reference given";
+    }
+    final platform = os\platform()[0];
+    if (platform == "darwin") {
+        return from_security(ref);
+    }
+    if (platform == "linux") {
+        return from_secret_tool(ref);
+    }
+    throw "system-keychain: not implemented on " + platform + " yet; export " + ref
+        + " in the environment and select the environment provider instead";
+}
+
+// from_security reads the macOS keychain. `-w` prints the password alone to stdout with
+// a trailing newline; magus trims captured output. quiet is not optional: that stdout
+// IS the secret, and without it the value is echoed to the console and into the run
+// log magus persists.
+fun from_security(ref: str) > Secret !> any {
+    try {
+        proc\which("security");
+    } catch (e) {
+        throw "system-keychain: the `security` CLI is not on PATH";
+    }
+
+    final res = proc\exec("security", args: ["find-generic-password", "-s", ref, "-w"], dir: ".",
+        opts: {"allow_failure": true, "quiet": true});
+    if (res["code"] != 0) {
+        final err = "{res["stderr"]}";
+        if (has(err, "could not be found")) {
+            throw "system-keychain: no generic password is stored under service " + ref + ". Store one with\n"
+                + "  security add-generic-password -a \"$USER\" -s " + ref + " -w\n"
+                + "which prompts for the value and never echoes it.";
+        }
+        // Headless (no window to prompt in), a dismissed prompt, and a locked keychain
+        // are the three refusals `security` words differently; the remedy is the same.
+        if (has(err, "User interaction is not allowed") or has(err, "User canceled") or has(err, "keychain is locked")) {
+            throw "system-keychain: access to " + ref + " was refused; unlock the login keychain, or answer "
+                + "Always Allow when the keychain asks about `security`.";
+        }
+        throw "system-keychain: `security find-generic-password -s " + ref + " -w` failed: " + err.trim();
+    }
+
+    final value = "{res["stdout"]}";
+    if (value == "") {
+        throw "system-keychain: " + ref + " resolved to an empty value; store it again with a non-empty password";
+    }
+    return Secret{ value = value };
+}
+
+// from_secret_tool reads the Secret Service on Linux. `lookup` prints the matching
+// secret alone and exits non-zero, printing nothing, when no item carries the
+// attribute; quiet for the same reason as above. Written to the `secret-tool` manual
+// and not exercised by this repository's own checks, which run on macOS.
+fun from_secret_tool(ref: str) > Secret !> any {
+    try {
+        proc\which("secret-tool");
+    } catch (e) {
+        throw "system-keychain: the `secret-tool` CLI is not on PATH; it ships as libsecret-tools (Debian, Ubuntu) or libsecret (Fedora, Arch)";
+    }
+
+    final res = proc\exec("secret-tool", args: ["lookup", "service", ref], dir: ".",
+        opts: {"allow_failure": true, "quiet": true});
+    final value = "{res["stdout"]}";
+    if (res["code"] != 0 or value == "") {
+        throw "system-keychain: no secret is stored under service " + ref + ". Store one with\n"
+            + "  secret-tool store --label=" + ref + " service " + ref + "\n"
+            + "which prompts for the value and never echoes it.";
+    }
+    return Secret{ value = value };
+}

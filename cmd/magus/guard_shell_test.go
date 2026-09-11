@@ -522,6 +522,39 @@ func TestRenderAdvisoryLead(t *testing.T) {
 	}
 }
 
+// TestDocSearchAdviceCarriesTheReadersOwnTerms: the doc rule is matched before the one
+// that renders a suggestion, so nothing asserted the notice was runnable as printed and
+// a `<terms>` placeholder passed the whole suite. The repeat arm is pinned too: it is
+// the text a session meets on every firing after the first.
+func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
+	v := evaluateBashGuard(`grep -rn "cache key" docs/concepts/cache.md`)
+	assert.Empty(t, v.Deny)
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Contains(t, v.Context, `magus query kind=docsection "cache key"`, "the lead is runnable as printed")
+	assert.Contains(t, v.Brief, `magus query kind=docsection "cache key"`, "so is the repeat")
+	assert.Contains(t, v.Context, "Load the magus-query skill", "the standing advice still ships under the lead")
+}
+
+// A read carries no pattern to query with, so hint abstains and the placeholder
+// wording is what is left to say. Naming a concrete query there would be inventing
+// terms the reader never typed.
+func TestDocReadKeepsThePlaceholderAdvice(t *testing.T) {
+	v := evaluateBashGuard("cat docs/doctrine.md")
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Equal(t, docSearchBrief, v.Brief)
+	assert.Equal(t, docSearchAdvice, v.Context)
+}
+
+// A prose notice must never lead with a code lookup: the markdown read is what fired
+// it, and the grep beside it asks a different question.
+func TestProseSuggestionIgnoresACodeSearchOnTheSameLine(t *testing.T) {
+	cmds := []guardCommand{
+		{Name: "cat", Args: []string{"docs/doctrine.md"}},
+		{Name: "rg", Args: []string{"HandleFoo", "internal/"}},
+	}
+	require.Nil(t, proseSuggestion(cmds, searchHints))
+}
+
 // TestSearchAdvisoryLeadAbstains: with nothing hint recognizes on the line there is
 // no lead, and the generic reason ships alone rather than with an empty paragraph.
 func TestSearchAdvisoryLeadAbstains(t *testing.T) {
@@ -1048,15 +1081,15 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 	}
 }
 
-// TestGuardAdvisesRelockOnDependencyMutations covers the one rule that routes to a
+// TestGuardAdvisesUpdateOnDependencyMutations covers the one rule that routes to a
 // CHARM rather than a command. Re-resolving dependencies writes state that is not
-// reproducible from a clean checkout, which is the whole line between rw and relock
-// (types.CharmRelock), and relock is under-discoverable: nothing prompts for a
+// reproducible from a clean checkout, which is the whole line between rw and update
+// (types.CharmUpdate), and update is under-discoverable: nothing prompts for a
 // reserved charm nobody declared.
 //
 // ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
 // is none: magus has no verb that re-resolves dependencies on its own.
-func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
+func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
 		"go get github.com/foo/bar@latest",
@@ -1072,7 +1105,7 @@ func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
-		assert.Contains(t, v.Context, ":relock", "%q must name the charm that makes the write legal", cmd)
+		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
@@ -1080,13 +1113,13 @@ func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
 	// the reader is sent to a target that would refuse the write.
 	tidy := evaluateBashGuard("go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
-	assert.Contains(t, tidy.Deny, ":relock")
+	assert.Contains(t, tidy.Deny, ":update")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
 	// dependency at all. Firing here would put an advisory on the most routine
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
-		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":relock", "%q does not re-resolve dependencies", cmd)
+		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
 	}
 }
 
@@ -1260,6 +1293,66 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+}
+
+// A backgrounded gate's capture is magus output one step removed, and nothing on the
+// filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
+// one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
+// it, which are the only way to read the rest of the failure.
+func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
+	for _, cmd := range []string{
+		// The measured command.
+		`grep -n "^\[fail\]\|cause:" /Users/x/.claude/tasks/abc123.output | head -8`,
+		`grep -c fail tasks/abc123.output`,
+		`tail -40 /tmp/t.output`,
+		`cat tasks/abc123.output | grep cause:`,
+		`awk '/cause:/ {print}' tasks/abc123.output`,
+		`wc -l tasks/abc123.output`,
+		// A range print cuts by position, which is a filter with extra steps.
+		`sed -n '1,200p' tasks/abc123.output`,
+		// The persisted run log is the same content by another route.
+		`grep -n cause: .magus/logs/9f2c1a.log`,
+		`head -20 /Users/x/repo/.magus/logs/9f2c1a.log`,
+		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
+		// command, not the head of the line.
+		`bash -c 'grep cause: tasks/abc123.output'`,
+		`LC_ALL=C grep cause: tasks/abc123.output`,
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
+	}
+}
+
+// The deny has to name what the filter was about to cut, or the reader corrects the
+// spelling instead of the mistake, and it has to route somewhere that works.
+func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
+	v := evaluateBashGuard(`grep -n "cause:" tasks/abc123.output | head -8`)
+	require.NotEmpty(t, v.Deny)
+	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
+		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
+	}
+	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
+	assert.Contains(t, v.Deny, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+}
+
+// The rule is about the CAPTURE, not about text filters. Reading the file whole, and
+// filtering anything else, both stay allowed.
+func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
+	for _, cmd := range []string{
+		// No filter at all: the whole file is the sanctioned read.
+		`cat tasks/abc123.output`,
+		`cat /Users/x/.claude/tasks/abc123.output`,
+		// An unrelated file is an ordinary search.
+		`grep -n cause: internal/run/run.go`,
+		`head -20 CHANGELOG.md`,
+		// A --tee'd file has a contract, so consuming it is composition.
+		`jq -r 'select(.level=="error")' gate.jsonl`,
+		`cat gate.jsonl | jq -r .target`,
+	} {
+		assert.NotEqual(t, denyRuleCaptureFilter, evaluateBashGuard(cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

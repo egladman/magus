@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
@@ -742,17 +743,23 @@ func (r *runner) checkBespokePhaseFragmentTargets(projects []*types.Project) typ
 	}
 }
 
-// displayPath renders an absolute path for a check detail, workspace-relative
-// where that is possible and absolute where it is not. r.root is empty on some
-// call paths (the daemon passes the workspace through r.ws instead), and
-// filepath.Rel against an empty root fails, which silently produced details
-// naming no file at all, the one thing a detail line exists to do.
-func (r *runner) displayPath(abs string) string {
-	root := r.root
-	if root == "" && r.ws != nil {
-		root = r.ws.Root()
+// workspaceRoot is the directory a check walks. r.root is the caller's --root override,
+// empty on the ordinary CLI path and on the daemon's, so the loaded workspace is the
+// answer whenever there is one. A walk from "" silently finds nothing: the same-step
+// witness ran there and reported every workspace clean.
+func (r *runner) workspaceRoot() string {
+	if r.ws != nil {
+		return r.ws.Root()
 	}
-	if root != "" {
+	return r.root
+}
+
+// displayPath renders an absolute path for a check detail, workspace-relative
+// where that is possible and absolute where it is not; filepath.Rel against an
+// empty root fails, which silently produced details naming no file at all, the one
+// thing a detail line exists to do.
+func (r *runner) displayPath(abs string) string {
+	if root := r.workspaceRoot(); root != "" {
 		if rel, err := filepath.Rel(root, abs); err == nil {
 			return filepath.ToSlash(rel)
 		}
@@ -839,6 +846,89 @@ func (r *runner) checkCacheableSecretReads(projects []*types.Project) types.Doct
 				"skip_cache with a reason (see %s)",
 			len(details), types.CodeURL(types.CacheableSecretRead)),
 		Details: details,
+	}
+}
+
+// checkCacheableExternalOps is MGS1033: a cacheable target composing a spell op that
+// declares a relation to the world outside this tree (spells.External).
+//
+// Two shapes, one check, because the fix differs by shape and a reader meeting either
+// needs to be told which one they have:
+//
+//   - mutates-external (a push, a signature, a deploy): a replay reports a side effect
+//     that never happened. Only skip_cache answers it; an effect cannot be hashed.
+//   - reads-external (a scanner reading a vulnerability feed): a replay reports the
+//     verdict of whenever it last ran. skip_cache answers it, and so does declaring an
+//     observation probe on the tool, which puts the feed's identity in the key and keeps
+//     the target cacheable.
+//
+// The op list is the same static extraction `describe target` prints, so an op reached
+// through a helper the walk cannot follow is invisible here, exactly like MGS1004. It
+// under-reports rather than over-reports, which is the right direction for a check whose
+// remedy is to opt a target out of the cache.
+func (r *runner) checkCacheableExternalOps(projects []*types.Project) types.DoctorCheck {
+	const name = "cacheable-external-ops"
+	var details []string
+	for _, p := range projects {
+		for _, f := range magusfileSourcesInDir(p.Dir) {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			for _, n := range describe.Extract(string(data)) {
+				if pol, ok := p.TargetPolicies[n.Name]; ok && pol.SkipCache {
+					continue // declared uncacheable; the author already answered this
+				}
+				for _, use := range n.Spells {
+					i := slices.IndexFunc(p.ResolvedSpells, func(sp *spells.Spell) bool { return sp.Name() == use.Spell })
+					if i < 0 {
+						continue
+					}
+					sp := p.ResolvedSpells[i]
+					for _, opName := range use.Ops {
+						op, ok := sp.Op(opName)
+						if !ok {
+							continue
+						}
+						if d := externalOpFinding(p, sp, op, use.Spell, opName, n.Name, r.relPath(f)); d != "" {
+							details = append(details, d)
+						}
+					}
+				}
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no cacheable target composes an op that reads or mutates state outside the tree"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d cacheable target(s) compose an op whose inputs or effects the cache key cannot see, so a replay "+
+				"reports a verdict that has expired or a side effect that never happened (see %s)",
+			len(details), types.CodeURL(types.CacheableExternalOp)),
+		Details: details,
+	}
+}
+
+// externalOpFinding renders one MGS1033 finding, or "" when the op is fine. Both fixes
+// are named in every finding: which one applies is the author's call, and a message that
+// offered only skip_cache would push every scanner out of the cache when a probe would
+// have kept it in.
+func externalOpFinding(p *types.Project, sp *spells.Spell, op spells.Op, spellName, opName, target, file string) string {
+	where := fmt.Sprintf("%s: target %q composes %s::%s (%s)", p.Path, target, spellName, opName, file)
+	switch op.External {
+	case spells.ExternalMutates:
+		return where + ": the op has an effect outside this tree, which a replay would report without performing; declare skip_cache with a reason"
+	case spells.ExternalReads:
+		if t, ok := sp.Tool(op.Bin); ok && t.HasObservationProbe() {
+			return ""
+		}
+		return where + ": the op's verdict comes from data outside this tree that no probe identifies; declare skip_cache with a reason, or declare an observe probe on tool " + op.Bin + " in the spell so the data's identity keys the cache"
+	default:
+		return ""
 	}
 }
 
@@ -989,6 +1079,99 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 		Message: fmt.Sprintf(
 			"%d output glob(s) declared by more than one target; whichever runs last wins and the other's drift gate fails (see %s)",
 			len(details), types.CodeURL(types.OutputOwnedByTwoTargets)),
+		Details: details,
+	}
+}
+
+// checkSameStepWrites is MGS4008 standing still: a composed target whose chain runs a
+// reader and a writer of the same files with no ctx.needs between them.
+//
+// The engine refuses this at plan time, so the check exists to be met FIRST: a
+// magusfile edit is cheap the moment it is made and expensive when a gate refuses to
+// start twenty minutes later. It asks the same question of the same declarations, so a
+// workspace this reports is a workspace whose gate will refuse, and one it passes cannot
+// be refused for this.
+//
+// Every composer in every project, rather than the targets one run happens to select:
+// which target a reader runs is a scheduling accident, and the conflict belongs to the
+// chain either way.
+//
+// FAIL, where the neighbouring declaration checks advise. There is no reading of this
+// where the author meant it: two targets in one chain, both naming these files
+// explicitly, produce a result that depends on which goroutine won, and half the time
+// they produce no result at all.
+func (r *runner) checkSameStepWrites(projects []*types.Project) types.DoctorCheck {
+	const name = "same-step-writes"
+	lookup := func(path string) *types.Project {
+		if r.ws == nil {
+			return nil
+		}
+		return r.ws.Get(path)
+	}
+	// A pair counts only where a file on disk matches both globs: glob intersection
+	// is conservative for ordering and too coarse to fail a workspace on. With no tree
+	// to look at there is no witness, and a check that cannot see the tree must not
+	// vouch for it.
+	root := r.workspaceRoot()
+	if root == "" {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK, Evidence: types.EvidenceUnknown,
+			Message: "no workspace root to witness declared overlaps against; skipped",
+		}
+	}
+	witness := cache.WorkspaceOverlapWitness(root)
+	const refusedMark = "refused at run time"
+	var details []string
+	for _, p := range projects {
+		composers := make([]string, 0, len(p.TargetChains))
+		for target := range p.TargetChains {
+			composers = append(composers, target)
+		}
+		slices.Sort(composers)
+		for _, target := range composers {
+			for _, c := range cache.FindSameStepConflicts(cache.DeclaredNodes(p, target, lookup), witness) {
+				verdict := "advised: the sequencing belongs to another project's chain"
+				if c.SameProject() {
+					verdict = refusedMark
+				}
+				details = append(details, fmt.Sprintf(
+					"%s: %s runs %s, which reads %q, alongside %s, which writes %q, and needs neither from the other (%s)",
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), target,
+					cache.DisplayNodeKey(c.Reader), c.ReadGlob, cache.DisplayNodeKey(c.Writer), c.WriteGlob, verdict))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: "no composed target runs a reader and a writer of the same files unordered",
+		}
+	}
+	slices.Sort(details)
+	details = slices.Compact(details)
+	// Counted after the dedupe, so the message and the list agree.
+	refused := 0
+	for _, d := range details {
+		if strings.HasSuffix(d, "("+refusedMark+")") {
+			refused++
+		}
+	}
+	// FAIL only for the pairs a run refuses; a cross-project pair is real but its
+	// ctx.needs may belong to another project's file, so it advises, the way the
+	// neighbouring declaration checks do.
+	status := types.DoctorAdvice
+	if refused > 0 {
+		status = types.DoctorFail
+	}
+	verdict := "none within one project, so a run warns about them and refuses nothing"
+	if refused > 0 {
+		verdict = fmt.Sprintf("%d of them within one project, which magus refuses to run rather than schedule around", refused)
+	}
+	return types.DoctorCheck{
+		Name:   name,
+		Status: status,
+		Message: fmt.Sprintf("%d unordered reader/writer pair(s) inside one composed target, %s (see %s)",
+			len(details), verdict, types.CodeURL(types.UnorderedSameStepWrite)),
 		Details: details,
 	}
 }
@@ -1665,6 +1848,64 @@ func (r *runner) checkObserverRecording() types.DoctorCheck {
 	}
 }
 
+// checkSessionLoad reports whether this repository's session store holds anything a
+// host transcript put there, and how stale the newest of it is.
+//
+// It sits beside checkObserverRecording because it answers the half that check cannot:
+// the observer grades the hook's own trail, which by construction holds only what the
+// hook saw. A command run with no guard wired writes nothing anywhere, and the only
+// witness to it is the host's own transcript. Nothing loads one automatically, so
+// without a check the store is silently empty and every audit built on it reports zero
+// rather than "nobody looked".
+//
+// Advice rather than fail, on the doctrine that a convention magus recommends is never a
+// gate: a repository nobody audits is not a broken repository.
+func (r *runner) checkSessionLoad() types.DoctorCheck {
+	const name = "session-load"
+
+	dir, err := sessions.Dir(r.root)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: err.Error()}
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: err.Error()}
+	}
+	newest := sessions.NewestEventMs(fold)
+	if newest == 0 {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: "no agent session has ever been loaded here, so nothing can say which commands ran unguarded",
+			Details: []string{
+				"the guard trail holds only what the hook saw; a command run with no hook wired leaves no record at all",
+				"extract a host transcript with the recipe for your agent host, then: " + hint.SessionLoad.String(),
+			},
+		}
+	}
+	age := time.Since(time.UnixMilli(newest))
+	if age > sessionLoadStale {
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("the newest loaded session event is %d days old, so an audit here describes work that has moved on", int(age.Hours()/24)),
+			Details: []string{
+				"newest event: " + time.UnixMilli(newest).Format(time.RFC3339),
+				"re-run the recipe for your agent host; loading the same transcript twice loads nothing twice",
+				"then: " + hint.SessionLoad.String(),
+			},
+		}
+	}
+	return types.DoctorCheck{
+		Name: name, Status: types.DoctorOK,
+		Message: fmt.Sprintf("session history loaded, newest event %s", time.UnixMilli(newest).Format(time.RFC3339)),
+	}
+}
+
+// sessionLoadStale is how old the newest loaded event may be before a load is worth
+// repeating. Two weeks is longer than a working branch and shorter than the trail's own
+// rotation, so it fires on a repository that stopped loading rather than on one between
+// sessions.
+const sessionLoadStale = 14 * 24 * time.Hour
+
 // observerReadRatio is how many reads one write should be accompanied by before the trail is
 // considered to be explaining anything. An agent reads far more than it writes, so anything
 // below parity means the read hook is firing rarely rather than working.
@@ -1728,6 +1969,10 @@ var guardTemplateBasenames = []string{
 	// could not match the only name a config ever carries. TestGuardTemplateBasenames
 	// AreShipped is what makes the next rename fail loudly instead.
 	"magus-checkpoint.sh",
+	// Judges nothing either, and graded for the same reason: a stale copy of it hands a
+	// compacted session a brief the current binary would not have written, and the only
+	// sign is a model working from a summary that looked complete.
+	"magus-rehydrate.sh",
 }
 
 // guardWiringCandidates are the config locations a shipped host glue installs
@@ -1950,6 +2195,30 @@ func checkCheckpointWiring(root, home string) types.DoctorCheck {
 // checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
 // config that runs it. A path, which is the one host-specific shape magus owns.
 const checkpointTemplate = "magus-checkpoint.sh"
+
+// HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
+// hook, which is what a caller outside doctor needs to say whether a checkout's
+// rules are enforced by anything. It reads the same two markers the guard-wiring
+// check reads, so the two cannot disagree about what counts as wired.
+//
+// Scoped to the checkout on purpose, unlike that check: a home-relative config
+// governs the machine, and a report about this tree that named one would tell a
+// reader their tree is wired when the next clone of it is not. It grades nothing
+// either: staleness is the check's job, and it costs a canary subprocess this
+// caller must not pay.
+func HookConfigs(root string) []string {
+	var out []string
+	for _, candidate := range guardWiringCandidates(root, "") {
+		for _, path := range hookConfigFiles(candidate) {
+			body, err := os.ReadFile(path)
+			if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
+				continue
+			}
+			out = append(out, path)
+		}
+	}
+	return out
+}
 
 // hookConfigFiles expands one wiring candidate into the files worth reading: a plugin
 // DIRECTORY contributes its TypeScript, a config file contributes itself.

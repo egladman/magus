@@ -84,6 +84,10 @@ sandbox:
 
 Each entry is expanded (`~` for home, `$VAR` against the current environment), symlink-resolved, and turned into a rule. `mode: ro` grants read; `mode: rw` grants read and write. User-allowlisted paths are additionally granted **exec**, so toolchain directories like `$CARGO_HOME/bin` stay runnable. When an entry cannot be resolved (an unset `$VAR`, an invalid path) it is **skipped, not fatal** - a missing optional cache should not block a build - and [MGS2004](../reference/codes/sandbox/MGS2004.md) records that the rule did not take effect.
 
+### A lease narrows it further
+
+A checkout that acts as a delegated worker gets a write grant NARROWER than the one above. When the sandbox is enabled and the acting lease resolves to a live [ledger](../guides/integrations/agents/leases.md) row with a parent and non-empty `owned_paths`, the write grant becomes those paths (globbed against the workspace root), the cache directory and `$TMPDIR`, and nothing else; reads are unchanged, and a refusal is recorded on the trail as a `sandbox_denial` naming the lease. It is DERIVED from the row rather than declared again here, because the agent guard already grades writes against the same field and two declarations would let the kernel refuse something other than what the guard explains. A root lease, an unknown lease, and a workspace with no ledger are all unchanged.
+
 ### Environment scrubbing
 
 The child environment is not inherited; it is **rebuilt from an allowlist**. The default keeps only a small, non-secret baseline: `HOME`, `USER`, `PATH`, locale and terminal vars (`LANG`, `LC_*`, `TZ`, `TERM`, and per-platform additions like `SHELL`, `PWD`, `XDG_*`), plus the one runtime coordination var `MAGUS_RUN_ID`. Every other variable is dropped, which is what keeps `AWS_*`, `GITHUB_TOKEN`, `VAULT_*`, `NPM_TOKEN`, `ANTHROPIC_API_KEY`, and their kind out of subprocesses. When variables are dropped, [MGS2003](../reference/codes/sandbox/MGS2003.md) records the count as an informational notice - the build may well have succeeded; the message exists so a behavior change from a missing variable is traceable.

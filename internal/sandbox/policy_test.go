@@ -212,3 +212,56 @@ func TestAllowedAccessLeavesNoTrailEvent(t *testing.T) {
 		t.Errorf("an allowed access wrote %d trail events: %+v", len(events), events)
 	}
 }
+
+// TestDenialNamesTheLeaseThatNarrowedThePolicy keeps the boundary attributable. A worker's
+// run is refused by a grant derived from its ledger row, so a denial that does not carry
+// the lease leaves a reader unable to say whose boundary was hit.
+func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
+	base := t.TempDir()
+	allowed := filesystem.ResolveRulePath(t.TempDir())
+	policy := &Policy{
+		FS:    filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}},
+		Lease: "fleet/worker-3",
+	}
+	ctx := trail.ContextWithBase(t.Context(), base)
+
+	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
+		t.Fatal("CheckWriteCtx: expected the write to be denied")
+	}
+
+	events, err := trail.ReadRecent(base, 10)
+	if err != nil {
+		t.Fatalf("reading the trail: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
+	}
+	if events[0].Lease != "fleet/worker-3" {
+		t.Errorf("lease = %q, want %q", events[0].Lease, "fleet/worker-3")
+	}
+}
+
+// TestDenialUnderTheWorkspacePolicyNamesNoLease pins the other half: an unleased run's
+// denial must not claim a lease, or every workspace-default refusal reads as a boundary
+// somebody declared.
+func TestDenialUnderTheWorkspacePolicyNamesNoLease(t *testing.T) {
+	base := t.TempDir()
+	allowed := filesystem.ResolveRulePath(t.TempDir())
+	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: allowed, Read: true}}}}
+	ctx := trail.ContextWithBase(t.Context(), base)
+
+	if err := policy.CheckWriteCtx(ctx, "/definitely/not/allowed/f"); err == nil {
+		t.Fatal("CheckWriteCtx: expected the write to be denied")
+	}
+
+	events, err := trail.ReadRecent(base, 10)
+	if err != nil {
+		t.Fatalf("reading the trail: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("recorded %d events, want 1: %+v", len(events), events)
+	}
+	if events[0].Lease != "" {
+		t.Errorf("lease = %q, want empty", events[0].Lease)
+	}
+}

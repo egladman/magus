@@ -1,0 +1,17 @@
+// SWE-bench instance @@INSTANCE_ID@@. Written into /testbed by seed.sh before an
+// arm provisions the checkout; the same file reaches both arms.
+import "magus";
+import "proc";
+import "magus/spell/python";
+
+magus\project({ "spells": [python] });
+
+// The instance image's conda env is the toolchain, and it carries no uv, which is
+// what the python spell's own pytest op wraps; pytest is forked directly instead.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    var argv = mut ["-m", "pytest"];
+    foreach (a in args) { argv.append(a); }
+    proc\exec("python", argv, ".", {});
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void !> any { ctx.needs(test); }

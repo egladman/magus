@@ -124,6 +124,18 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   with the last stage's, so `magus affected ci | tail` reports tail's success
   and a failing gate reads as exit 0. `magus query output <ref>` is the one
   exemption: a raw captured tool log has no schema to project.
+
+  A text filter aimed at the file a BACKGROUNDED run was captured to denies on the
+  same ground, and it is the shape that gets past the rule above: nothing on
+  `grep -n cause: <capture> | head -8` is a magus invocation. The files are the
+  host's task capture (`<id>.output`) and a persisted run log
+  (`.magus/logs/<hex>.log`). A failure prints `[fail]`, `cause:`, `output:`,
+  `inspect:` and `reproduce:` together, so a grep for the cause drops the ref that
+  reads the rest, two lines below it. A range print (`sed -n '1,200p'`) counts: it
+  cuts by position and the block is wherever the run left it. Reading the file
+  whole does not: `cat <capture>` and an editor tool's read are both fine.
+  Backgrounding the run as `-o jsonl --tee <file>` makes the capture a contract,
+  after which `jq` over it is composition.
 - **Writing into the declared notes store** (`knowledge.notes.shared`), however
   the write is spelled. A file write into the store is caught on the path
   surface; `magus notes edit` reading piped prose is a command, so it is caught
@@ -169,11 +181,14 @@ or `bash -c '...'` all reach the same verdict as the bare command.
 
 ## What magus explains
 
-An advise verdict carries context your host can inject while the call proceeds,
-which only Claude Code does in full. Cursor delivers nothing on a command advise
-and OpenCode logs it for the person. Codex differs in kind rather than degree: its
-PreToolUse REJECTS `additionalContext` and fails open on it, so sending one there
-disarmed the guard for that call, and magus now sends it nothing.
+An advise verdict carries context your host injects, and all four documented hosts
+now deliver it to the model. What differs is WHEN. Claude Code and Codex attach it
+to the call that is about to run, as `additionalContext` on the same pre-tool
+event that carries a deny. Cursor and OpenCode have no message channel on a
+gating event, so the explanation rides the post-tool event instead and lands with
+the call's result. Codex used to be sent nothing at all, on a reading of its hook
+contract its own current reference contradicts; the keys that make Codex mark a
+hook run failed are `continue`, `stopReason` and `suppressOutput`.
 
 - `git commit` and `git add <paths>`: classify the dirty tree first. Deliberate
   staging is the replacement the rule above points at, so it is never denied.
@@ -184,13 +199,14 @@ disarmed the guard for that call, and magus now sends it nothing.
   structural questions from declared sources - `magus refs` for a code symbol,
   `magus query` for a domain entity.
 - A dependency re-resolution (`go get`, `pnpm add`, `cargo update`, `uv lock`,
-  `pip-compile`): the `relock` charm is what grants that write inside magus, and
+  `pip-compile`): the `update` charm is what grants that write inside magus, and
   it is deliberately not part of `rw` - `rw` covers output reproducible from a
-  clean checkout, `relock` covers state that depends on what a registry serves
+  clean checkout, `update` covers state that depends on what a registry or a
+  vulnerability feed serves
   today. Applying a lockfile (`npm ci`, `pnpm install --frozen-lockfile`)
   re-resolves nothing and passes. `go mod tidy` is the one that denies rather
   than advises, because a spell op renders it, and its deny reason carries the
-  same `relock` route - routing into magus without naming the charm would send
+  same `update` route - routing into magus without naming the charm would send
   you to a target that refuses the write.
 - A tree-identity read (`git rev-parse HEAD`, `git describe`, `git stash
   create`): `magus vcs checkpoint` prints the revision plus a digest of the
@@ -212,6 +228,14 @@ disarmed the guard for that call, and magus now sends it nothing.
   dependency graph knows whether the two are genuinely independent, which is why
   this advises rather than denies.
 
+- The `ci` gate, under a lease whose ledger row declares a narrower
+  `validation`: the gate runs once per branch, in the orchestrator's tree, after
+  every unit lands, and the deny hands back the narrow target this worker was
+  assigned. A caller naming no lease, a lease with no live row, a row that
+  declared no validation, and a row whose validation names `ci` are all
+  unaffected. See
+  [what the guard enforces under a lease](leases.md#what-the-guard-enforces-under-a-lease).
+
 Everything else about the command itself passes. Two rules then read state
 outside the command line, and speak only into the silence the rules above leave:
 
@@ -228,13 +252,56 @@ outside the command line, and speak only into the silence the rules above leave:
   thing under the answer, which is the half that works on every host with
   nothing wired; this one arrives a call earlier.
 
+## Focus: the read lane
+
+A command that READS a path outside the project a session is working in draws a
+focus advisory. The focus of a session is the project holding its working
+directory, everything that project declares `depends_on` transitively, any
+project nested inside it, and the files directly at the workspace root plus
+`.claude/skills`: the declaration, the config, and the instructions every
+project resolves through, whatever the cwd. Not the siblings, and not the
+projects that depend on it: `magus affected` runs that direction, from a change
+outward to what it could break, and focus runs the other one, from where you
+stand back to what you legitimately need.
+
+It is the read half of a boundary whose write half is a lease's `owned_paths`,
+and the two catch different failures. A write outside your lane collides with
+another agent, and the diff eventually shows it. A read outside it collides with
+nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
+it carries a sibling's practices and code quality into work that never chose
+them. Nothing downstream can tell that happened.
+
+The rule reads the operands of the commands that read a file or search a tree
+(`cat`, `head`, `tail`, `sed`, `wc`, `grep`, `rg`, `find`, and their neighbors),
+and says nothing about anything else: a rule that fired on an interpreter or a
+build tool would be guessing at what the program does with its arguments. A
+pattern is not a path, so `grep`'s first operand is skipped; an operand that
+resolves outside the workspace is a different rule's business; a path no project
+owns has no lane it could be outside of.
+
+It ADVISES by default and DENIES only under a bound lease
+(`magus session lease <id>`), because a hard read boundary needs somebody to have
+declared one. The lease's `focus` names the paths whose projects it may read; it
+falls back to `owned_paths`, since a worker leased to edit a project was pointed
+at that project. Widening is that field and nothing else. There is no
+environment variable that turns the rule off, because a variable would be set
+once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
+would say the lane had stopped being checked.
+
+`magus describe file <path>` answers the same question before a read rather than
+after one: each entry carries `focus: out` when it falls outside, and the report
+names the focus it judged against.
+
 ## Advisories are said once
 
 The advisories that carry a standing fact rather than a correction to the
 command in front of you are held to one firing per session: the stale-binary
 notice, the graph-beats-grep hint, the classify-before-staging reminder, the
 index-staleness advisory, the enroll-a-lease notice an unleased write draws, and
-the repository-scoped path rules above. The second
+the repository-scoped path rules above. The focus advisory is held twice over:
+once per PATH, because a second out-of-focus file is a second fact, and once per
+session for the full explanation, so every firing after the first is one line.
+The second
 identical paragraph teaches nothing, and this page's standard says why that
 matters - a check that is red by default is a check people learn to ignore,
 taking the real failures with it.
@@ -264,10 +331,12 @@ against what concurrent leases declared they own (see
 file is wasteful rather than destructive; the other two deny, on the provenance
 trigger and on a collision no later rule can outrank.
 
-The lease rule denies only where two DECLARED boundaries collide - an enrolled
-lease writing onto another live lease's owned paths, onto its own forbidden
-paths, or writing at all before it has registered the base it landed on. Four
-cases it cannot decide that way advise instead:
+The lease rule denies only what a DECLARATION settles - an enrolled lease writing
+onto another live lease's owned paths, onto its own forbidden paths, outside
+every entry in its own owned paths, at all when its row is `read_only`, or at all
+before it has registered the base it landed on. An empty owned list on a row that
+is not `read_only` is a boundary nobody wrote rather than one of size zero, and
+scopes nothing. Four cases the rule cannot decide that way advise instead:
 
 - The ledger exists but will not parse. It says no boundary was checked rather
   than blocking on a file it cannot read, because a lease whose boundary

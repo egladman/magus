@@ -45,6 +45,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
 			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools, spec.IgnoreDirs)),
+			spells.WithOps(spec.Ops),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
 			spells.WithCommandRenderer(newCommandRenderer(spec.Ops)),
@@ -589,7 +590,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 	if m.Comments != nil {
 		opts = append(opts, spells.WithComments(m.Comments))
 	}
-	opts = append(opts, spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
+	opts = append(opts, spells.WithOps(m.Ops), spells.WithTools(m.Tools), spells.WithVersionProber(versionProber))
 	return opts
 }
 

@@ -59,6 +59,7 @@ type run struct {
 	Step              bool     // forces Concurrency=1; StepGate comes from ctx
 	ExtraArgs         []string // forwarded to spells via project.WithExtraArgs
 	NoCache           bool     // force a fresh run even on a cache hit; still refreshes the entry (magus run --no-cache)
+	Gate              bool     // this invocation is the workspace's gate; admits it to lock supersession (MGS3014)
 }
 
 // WithDryRun prints what would run without invoking any handler.
@@ -103,6 +104,15 @@ func WithRaceReplay() RunOption { return func(o *run) { o.RaceReplay = true } }
 // replays the rebuilt result instead of the stale one.
 func WithNoCache() RunOption { return func(o *run) { o.NoCache = true } }
 
+// WithGate marks this invocation as the workspace's gate: the whole ci target, run to
+// judge the tree as it stands rather than to build one part of it.
+//
+// It is what admits the run to lock supersession in both directions. A gate takes a
+// project lock from an EARLIER gate on the same workspace root instead of queueing behind
+// it, and yields its own locks to a LATER one, which stops with MGS3014. Nothing else
+// about the run changes, and every non-gate invocation queues as before.
+func WithGate() RunOption { return func(o *run) { o.Gate = true } }
+
 func applyRunOpts(opts []RunOption) run {
 	var o run
 	for _, opt := range opts {
@@ -119,6 +129,43 @@ func (m *Magus) Run(ctx context.Context, targets []types.Target, opts ...RunOpti
 		return nil
 	}
 	return m.redactError(m.runResolved(ctx, targets, applyRunOpts(opts)))
+}
+
+// undeclaredScopeEvent builds the run's scope event when any selected project was
+// seeded by files nothing declares (MGS1028), reporting false when none was.
+//
+// It is emitted HERE rather than from Affected because the journal only exists once
+// the invocation has opened, and the CLI expands the affected set before that. The
+// answer is not recomputed: it rides types.Target.Undeclared from the expansion, so
+// the event cannot disagree with what `magus affected --explain` prints.
+//
+// One event for the whole run, carrying no target, for the reason the CLI's own
+// MGS1028 hint gives: the fact is about the SCOPE, and a per-project frame would
+// have a reader dismissing the same finding once per project. Splitting the files
+// into Inputs is what lets a consumer tell a stale verdict from a wasted rerun.
+func undeclaredScopeEvent(targets []types.Target) (journal.Event, bool) {
+	var seeds []journal.UndeclaredSeed
+	seen := make(map[string]bool, len(targets))
+	for _, t := range targets {
+		if len(t.Undeclared) == 0 || seen[t.Path] {
+			continue // several targets of one project describe one scope
+		}
+		seen[t.Path] = true
+		s := journal.UndeclaredSeed{Project: t.Path, Files: slices.Clone(t.Undeclared)}
+		for _, f := range t.Undeclared {
+			if types.LooksLikeBuildInput(f) {
+				s.Inputs = append(s.Inputs, f)
+			}
+		}
+		seeds = append(seeds, s)
+	}
+	if len(seeds) == 0 {
+		return journal.Event{}, false
+	}
+	slices.SortFunc(seeds, func(a, b journal.UndeclaredSeed) int {
+		return strings.Compare(a.Project, b.Project)
+	})
+	return journal.Event{Kind: journal.KindScope, Undeclared: seeds}, true
 }
 
 // redactError masks any resolved secret in err's MESSAGE while leaving the error chain
@@ -155,6 +202,9 @@ func (e redactedError) Unwrap() error { return e.err }
 // options. Shared by Run and the read-only RunCI entry point.
 func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) error {
 	ctx = attributeRun(ctx)
+	if scope, ok := undeclaredScopeEvent(targets); ok {
+		journal.Emit(ctx, scope)
+	}
 	type targetGroup struct {
 		name    string
 		targets []types.Target
@@ -189,8 +239,8 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 // reads that header is checking exactly this, so both sides read it from here.
 func CharmsForCI(charms []string) []string {
 	return slices.DeleteFunc(slices.Clone(charms), func(s string) bool {
-		n := types.Normalize(s)
-		return n == types.CharmReadWrite || n == types.CharmRelock
+		n := types.NormalizeCharm(s)
+		return n == types.CharmReadWrite || n == types.CharmUpdate
 	})
 }
 
@@ -201,8 +251,8 @@ func CharmsForCI(charms []string) []string {
 func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOption) error {
 	o := applyRunOpts(opts)
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
-	// and relock so a ci run verifies the committed dependency state rather than
-	// re-resolving it against whatever the registry serves today.
+	// and update so a ci run verifies the pinned upstream state rather than refreshing
+	// it against whatever the registry or the feed serves today.
 	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
@@ -667,8 +717,12 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 	if toolVersions == nil {
 		toolVersions = m.toolVersionsByProject(ctx, []*types.Project{p})
 	}
+	// Not part of sweepReuse: an observation probe runs only for a project whose
+	// spells declare one, so the sweep's re-probe cost this memoizes for versions does
+	// not arise. Keyed the same as a run so `describe target --cache` mints the same key.
+	observations := m.probeObservations(ctx, []*types.Project{p})
 	step := m.buildStep(p, target)
-	applyRunKeying(&step, toolVersions[p.Path], charms)
+	applyRunKeying(&step, toolVersions[p.Path], observationsForTarget(p, target, observations[p.Path]), charms)
 	return m.cache.StepKeyMemo(ctx, &step, memo)
 }
 
@@ -677,8 +731,11 @@ func (m *Magus) computeTargetKey(ctx context.Context, projectPath, target string
 // charm order never forks a key). Both the scheduler and ComputeTargetKey go through
 // it, so `describe target --cache` cannot silently drift from the key a real run
 // mints when a new key-relevant field is added here.
-func applyRunKeying(step *cache.Step, toolVersions, charms []string) {
+func applyRunKeying(step *cache.Step, toolVersions, observations, charms []string) {
 	step.ToolVersions = toolVersions
+	// Appended, not assigned: buildStep already put the target's ctx.observes lines
+	// here, and a probed observation is the same input class from the other source.
+	step.Observations = append(step.Observations, observations...)
 	ck := slices.Clone(charms)
 	slices.Sort(ck)
 	step.Charms = slices.Compact(ck)
@@ -972,6 +1029,91 @@ func (m *Magus) probeTools(ctx context.Context, projects []*types.Project, extra
 	return out
 }
 
+// probeObservations runs each resolved spell's declared observation probes and returns
+// the key lines they yield, keyed by project path and then by "spell:tool". A line is
+// "spell:tool:<raw output>": opaque to magus, which only ever compares it.
+//
+// Unlike probeTools this does NOT run per project unconditionally. A version probe is
+// cheap and its answer moves when someone upgrades a toolchain; an observation moves
+// every few hours by design, so folding one into every target's key would cost the whole
+// project's cache on a clock. observationsForTarget is what scopes it back down to the
+// targets that drive the binary.
+//
+// A probe that fails records UNPROBED, like a version probe: a scanner that cannot say
+// which database it holds is a worse reason to key on nothing than to key on a constant,
+// since the constant at least keeps the miss deterministic.
+func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	memo := map[string]string{}
+	for _, p := range projects {
+		for _, s := range p.ResolvedSpells {
+			if !s.HasObservationProbe() {
+				continue
+			}
+			for _, tool := range s.ToolNames() {
+				t, _ := s.Tool(tool)
+				if !t.HasObservationProbe() {
+					continue
+				}
+				tk := s.Name() + "\x00" + p.Dir + "\x00" + tool
+				value, hit := memo[tk]
+				if !hit {
+					probed, err := s.ProbeObservation(ctx, tool, p.Dir)
+					if err != nil {
+						slog.WarnContext(ctx, "magus: observation probe failed; cache key records UNPROBED",
+							slog.String("spell", s.Name()), slog.String("tool", tool),
+							slog.String("dir", p.Dir), slog.String("err", err.Error()))
+						probed = "UNPROBED"
+					}
+					value = probed
+					memo[tk] = value
+				}
+				if out[p.Path] == nil {
+					out[p.Path] = map[string]string{}
+				}
+				out[p.Path][s.Name()+":"+tool] = value
+			}
+		}
+	}
+	return out
+}
+
+// observationsForTarget narrows a project's probed observations to the ones target
+// actually depends on: an observation counts only when the target's body invokes an op
+// whose command drives that binary. Statically extracted (TargetSpellOps), so it
+// under-reports the way every other static footprint does, in two ways: an op reached
+// through a helper the walk cannot follow is invisible, and TargetSpellUse.Spell is the
+// IMPORT HANDLE, which equals the spell name only for an unaliased import. Both leave a
+// target keyed as it was before, never keyed on the wrong thing.
+func observationsForTarget(p *types.Project, target string, probed map[string]string) []string {
+	if len(probed) == 0 {
+		return nil
+	}
+	var out []string
+	for _, use := range p.TargetSpellOps[target] {
+		i := slices.IndexFunc(p.ResolvedSpells, func(s *spells.Spell) bool { return s.Name() == use.Spell })
+		if i < 0 {
+			continue
+		}
+		sp := p.ResolvedSpells[i]
+		for _, opName := range use.Ops {
+			op, ok := sp.Op(opName)
+			if !ok || op.Bin == "" {
+				continue
+			}
+			key := use.Spell + ":" + op.Bin
+			value, ok := probed[key]
+			if !ok {
+				continue
+			}
+			if line := key + ":" + value; !slices.Contains(out, line) {
+				out = append(out, line)
+			}
+		}
+	}
+	return out
+}
+
 // executeOnProjects runs handler for every project for a single target.
 func (m *Magus) executeOnProjects(ctx context.Context, projects []*types.Project, target string, scopeLabel string, opts run, handler TargetHandler) error {
 	return m.executeStages(ctx, []stage{{target: target, handler: handler, projects: projects}}, scopeLabel, opts)
@@ -1130,11 +1272,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// against a SEPARATE concurrent magus process; the intra-process scheduler fans
 	// out beneath it untouched. Acquired here (after the dry-run early return) so a
 	// dry run, which mutates nothing, takes no lock.
-	releaseLocks, err := m.acquireProjectLocks(ctx, uniqueProjects)
+	hold, err := m.acquireProjectLocks(ctx, uniqueProjects, opts.Gate)
 	if err != nil {
 		return err
 	}
-	defer releaseLocks()
+	defer hold.release()
 
 	// Armed once the locks are held, which is the condition that makes a stall costly:
 	// from here a wedged invocation blocks every other magus on these projects. Every
@@ -1143,9 +1285,18 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// it is not a target ceiling.
 	prog := cache.NewProgress()
 	ctx = cache.ContextWithProgress(ctx, prog)
-	ctx, stall := m.watchForStall(ctx, prog, releaseLocks)
+	ctx, stall := m.watchForStall(ctx, prog, hold.release)
 	defer stall.close()
-	defer func() { err = stall.verdict(err) }()
+
+	// Armed alongside it, over the other condition this run cannot diagnose from inside
+	// itself: a later gate on this same tree waiting for the locks held above. Inert
+	// unless this invocation is the gate. See watchForSupersede.
+	ctx, superseded := m.watchForSupersede(ctx, hold)
+	defer superseded.close()
+	// The supersede verdict is applied last: a superseded gate that goes quiet during a
+	// slow unwind trips the stall watch too, and the answer that says why it stopped is
+	// the one to keep.
+	defer func() { err = superseded.verdict(stall.verdict(err)) }()
 
 	// The probe pass doubles as the toolchain gate. Enforcement follows the
 	// DECLARATION, stated per project, not the dispatch mechanism: hanging it off
@@ -1172,9 +1323,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	// The keying every step of this invocation shares. runComposedSkipCacheGates mints
 	// steps outside the stage loop, so the two would otherwise key differently.
+	obs := m.probeObservations(ctx, uniqueProjects)
 	newStep := func(p *types.Project, target string) cache.Step {
 		step := m.buildStep(p, target)
-		applyRunKeying(&step, toolVer[p.Path], charmKey)
+		applyRunKeying(&step, toolVer[p.Path], observationsForTarget(p, target, obs[p.Path]), charmKey)
 		step.Revision = revision
 		step.Dirty = dirty
 		step.VCSName = vcsName
@@ -1226,7 +1378,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// Target-granular scheduling: order steps writer-before-reader from declared
 	// footprints, and remember pre-run bytes for the edges no step order can honor
 	// (settled after the batch).
-	settle := m.prepareOrderSettle(m.deriveBatchOrder(ctx, steps))
+	order, err := m.deriveBatchOrder(ctx, steps)
+	if err != nil {
+		return err
+	}
+	settle := m.prepareOrderSettle(order)
 
 	// Soft typo guard: warn for an active charm no selected target declares. A
 	// function target may read an undeclared charm, hence a warning, not an error.
@@ -1268,12 +1424,9 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// package importing observability; CacheTracer is nil (no-op) when disabled.
 		ctx = cache.ContextWithTracer(ctx, observability.CacheTracer(m.tel))
 	}
-	if m.cfg.Sandbox.Enabled {
-		var err error
-		ctx, err = m.applySandbox(ctx)
-		if err != nil {
-			return err
-		}
+	ctx, sandboxErr := m.ApplySandbox(ctx)
+	if sandboxErr != nil {
+		return sandboxErr
 	}
 	ctx = installWorkspaceRegistry(ctx, m.wsReg)
 	ctx = secret.ContextWithResolver(ctx, m.resolver)
@@ -1425,6 +1578,11 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			// branch and glob first, claims its TargetMemo, then delegates the
 			// already-memoed execution here.
 			spanCtx = buzz.WithTargetInterceptor(spanCtx, targetInterceptorFunc(func(memberCtx context.Context, name string, invoke func(context.Context) error) error {
+				// The member is dispatched once and awaited by every parent that needs
+				// it, so it runs under the scheduled unit rather than under whichever
+				// parent asked first; see cache.SharedStepContext for the ceiling this
+				// stops from leaking sideways.
+				memberCtx = cache.SharedStepContext(memberCtx)
 				member := newStep(p, name)
 				member.SkipReplay = opts.NoCache
 				if raceForcesNoCache(opts) {
@@ -2063,6 +2221,10 @@ func (m *Magus) targetHandler(name string) TargetHandler {
 		pol := p.TargetPolicies[name]
 		ctx, cancel := m.withTargetDeadline(ctx, pol)
 		defer cancel()
+		// The cancellation every target composed beneath this one inherits, fixed here so
+		// it carries THIS unit's ceiling and nothing a composed member declares later; see
+		// cache.SharedStepContext.
+		ctx = cache.WithSharedStepBase(ctx)
 		started := time.Now()
 		// The ceiling is annotated here as well as one layer down, because the layer
 		// down only sees a MAGUSFILE body: a spell-backed target reaches neither that

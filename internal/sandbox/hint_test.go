@@ -18,15 +18,22 @@ import (
 func TestDenyHint(t *testing.T) {
 	t.Parallel()
 
-	got := denyHint("ro", "/usr/bin/curl")
+	got := denyHint("", "ro", "/usr/bin/curl")
 	assert.Contains(t, got, "sandbox blocked access to /usr/bin/curl")
 	assert.Contains(t, got, "magus config set key=sandbox.allow.curl.path,value=/usr/bin/curl")
 	// ro must not emit a mode command (mode defaults to ro).
 	assert.NotContains(t, got, "mode", "denyHint(ro) should not set mode")
 
-	w := denyHint("rw", "/data/out")
+	w := denyHint("", "rw", "/data/out")
 	assert.Contains(t, w, "sandbox.allow.out.path,value=/data/out")
 	assert.Contains(t, w, "sandbox.allow.out.mode,value=rw")
+
+	// Under a lease the boundary is the row, not the config: the hint names the
+	// lease and never tells the worker to widen sandbox.allow itself.
+	leased := denyHint("fleet/worker-1", "rw", "/data/out")
+	assert.Contains(t, leased, "fleet/worker-1")
+	assert.Contains(t, leased, "orchestrator")
+	assert.NotContains(t, leased, "magus config set")
 }
 
 // TestEmitDenyHint verifies the hint reaches stderr as a "hint:" line, and that
@@ -38,7 +45,7 @@ func TestEmitDenyHint(t *testing.T) {
 		require.NoError(t, err)
 		orig := os.Stderr
 		os.Stderr = w
-		EmitDenyHint("ro", "/usr/bin/curl")
+		EmitDenyHint(nil, "ro", "/usr/bin/curl")
 		os.Stderr = orig
 		_ = w.Close()
 		out, _ := io.ReadAll(r)

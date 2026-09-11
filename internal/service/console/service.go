@@ -360,10 +360,9 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 	if view, ierr := s.Insight(ctx); ierr == nil {
 		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
 	}
-	// The agent trail: which sessions wrote each file and what they had read first. Bounded by
-	// diffReplayEvents rather than the whole history, because the question is about the
-	// change in front of the reader, not about the repository's whole past.
-	rev.AttachReplay(diffTouches(s.magus.Root(), s.magus.CacheDir(), paths))
+	// The agent record: which sessions wrote each file and what they had read first, from the
+	// guard hook's trail and from loaded transcripts.
+	trail.AttachTouches(&rev, s.magus.Root(), s.magus.CacheDir())
 	// Which of these files somebody has recorded reading, from the same store `magus diff
 	// --ack` writes. The console gets it because "how much of this has anyone read" is a
 	// question a review surface should answer without the reader dropping to a terminal.
@@ -381,32 +380,6 @@ func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) 
 		rev.AttachReviewed(store.ReviewedAt(paths))
 	}
 	return rev, nil
-}
-
-// diffReplayEvents bounds the trail walk behind a review. Each event costs a small blob
-// read, so this is the knob that keeps the replay join cheap; a reader asking "what was this
-// agent looking at" is asking about recent work by construction.
-const diffReplayEvents = 2000
-
-// diffTouches adapts the trail's own Touch to the review's, which is a straight rename
-// across a package boundary types must not cross: types imports nothing internal, and the
-// trail is internal.
-func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
-	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string][]types.DiffTouch, len(raw))
-	for path, touches := range raw {
-		conv := make([]types.DiffTouch, 0, len(touches))
-		for _, t := range touches {
-			conv = append(conv, types.DiffTouch{
-				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
-			})
-		}
-		out[path] = conv
-	}
-	return out
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads

@@ -68,7 +68,17 @@ import (
 // rejecting inside AddEdge would discard correct edges by arrival order.
 // Graph.UndeclaredEdges reports violations instead, and a test over this workspace's own
 // graph is what fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 11
+// v12 adds the "link" kind and the citation layer that mints it: a URL written in a code
+// comment, in a markdown link, or in a generated page's `generated_from` frontmatter now
+// carries an edge from the citing file or page. A citation that names something the
+// workspace already holds resolves to THAT node (a doc, a section, a file, a directory)
+// and mints no link node, so the kind covers only genuinely external documents. The kind
+// is additive and the relations are the existing `references` and `documents` with wider
+// endpoint shapes, so a v11 consumer parses a v12 graph unchanged; the bump is for a v11
+// store on disk, whose doc and buzz shards were extracted before citations were indexed
+// and whose sources have not changed, and for the relation fingerprint, which the wider
+// shapes move.
+const KnowledgeSchemaVersion = 12
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -153,6 +163,17 @@ const (
 	// dependency seen from two sides: the manifest says what is INSTALLED, the SCIP
 	// monikers say what is actually IMPORTED, and neither answers the other's question.
 	KindPackage = "package"
+
+	// KindLink is an external http(s) document a comment or a markdown page cites,
+	// keyed by its normalized URL. It exists only for a citation that resolves to
+	// nothing in the workspace: a URL naming a page or a source file this workspace
+	// holds becomes an edge to THAT node instead, so a citation of our own prose and
+	// a citation of an upstream vendor's are not the same kind of thing.
+	//
+	// It is the second kind whose subject lives outside the workspace (KindPackage is
+	// the first), and the graph never fetches it. A link node asserts that something
+	// here points there, never that anything is at the other end.
+	KindLink = "link"
 )
 
 // RelationID is a stable directed predicate in the knowledge graph. It is string-backed
@@ -259,8 +280,18 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	{ID: RelationUses, Description: "invokes or executes an operation, spell, or program", ForwardLabel: "uses", ReverseLabel: "used by", Shapes: joinEndpointShapes(
 		endpointShapes(KindTarget, KindSpell, KindOp), endpointShapes(KindSpell, KindTool), endpointShapes(KindOp, KindTool))},
 	{ID: RelationReferences, Description: "names another entity without invoking or containing it", ForwardLabel: "references", ReverseLabel: "referenced by", Shapes: joinEndpointShapes(
-		endpointShapes(KindCharm, KindTarget), endpointShapes(KindFile, KindSymbol), endpointShapes(KindDoc, KindDoc))},
-	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: endpointShapes(KindDoc, KindSpell, KindDiagnostic, KindModule)},
+		endpointShapes(KindCharm, KindTarget), endpointShapes(KindFile, KindSymbol),
+		// A citation written in CODE: a URL in a comment, pointing at an upstream page
+		// (link), at this workspace's own prose (doc, docsection), or at another path in
+		// the tree (file, dir). Code references what it cites; it never documents it.
+		endpointShapes(KindFile, KindLink, KindDoc, KindDocSection, KindFile, KindDir),
+		endpointShapes(KindDoc, KindDoc, KindLink, KindDocSection))},
+	// A page that cites a source path is claiming to describe it, which is what
+	// `documents` already means, so the docs-to-source direction reuses it rather than
+	// minting a near-synonym. The subject kind is what separates the two: a doc
+	// documents source, a comment in that source only references what it cites.
+	{ID: RelationDocuments, Description: "provides documentation for a domain entity", ForwardLabel: "documents", ReverseLabel: "documented by", Shapes: endpointShapes(KindDoc,
+		KindSpell, KindDiagnostic, KindModule, KindFile, KindDir, KindDoc)},
 	{ID: RelationCalls, Description: "invokes another callable", ForwardLabel: "calls", ReverseLabel: "called by", Shapes: joinEndpointShapes(
 		endpointShapes(KindFunction, KindFunction), endpointShapes(KindSymbol, KindSymbol))},
 	{ID: RelationImports, Description: "imports another source file or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: endpointShapes(KindFile, KindFile, KindImport)},
@@ -276,7 +307,7 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 		KindProject, KindTarget, KindSpell, KindOp, KindTool, KindCharm, KindModule,
 		KindMethod, KindDiagnostic, KindDoc, KindDocSection, KindFile, KindDir,
 		KindFunction, KindImport, KindRationale, KindOwner, KindSymbol, KindAuthor,
-		KindNote, KindPackage)},
+		KindNote, KindPackage, KindLink)},
 }
 
 // KnowledgeRelationDefinitions returns a deep copy of the canonical relation

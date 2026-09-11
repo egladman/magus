@@ -74,6 +74,28 @@ type Event struct {
 	// produced the run from its first frame. Omitted on every other event.
 	Command      *Command `json:"command,omitempty"`
 	MagusVersion string   `json:"magus_version,omitempty"`
+
+	// Set ONLY on a scope event (Kind==KindScope) that carries no target: the projects
+	// this run selected on files nothing declares. It rides the run's own stream rather
+	// than a second channel because it is a fact ABOUT this run's scope, and because the
+	// consumers that need it (a live viewer, the daemon's run registry) are already
+	// reading these frames.
+	Undeclared []UndeclaredSeed `json:"undeclared,omitempty"`
+}
+
+// UndeclaredSeed is one project the affected set selected on changed files that no
+// project declares (MGS1028), with the files that did the selecting.
+//
+// Inputs is the half that matters to a reader. An undeclared LICENSE costs a rerun
+// whose answer could not have differed; an undeclared rule set or toolchain pin can
+// leave a verdict computed under the OLD rules valid in the cache, which is a
+// different claim about what the workspace can be trusted to have checked. Which
+// files fall in it is types.LooksLikeBuildInput's answer, resolved by the emitter
+// because this package is a stdlib-only leaf.
+type UndeclaredSeed struct {
+	Project string   `json:"project"`
+	Files   []string `json:"files,omitempty"`
+	Inputs  []string `json:"inputs,omitempty"`
 }
 
 // invSeq makes minted invocation ids unique within a process without a uuid dep.

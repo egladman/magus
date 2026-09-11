@@ -14,15 +14,21 @@
 //   bash          the command rules
 //   edit | write  the declared-output rule
 //
-// One handler (`apply`) serves both, so both carry a verdict the same way: a
-// deny throws and its reason reaches the model as the tool error, while an
-// advise can only be logged for the human because OpenCode has no
-// context-injection arm. That is what the two declarations below record, and
-// they are machine-read by the host-parity gate - see the longer note in
+// One handler (`apply`) serves both, and both decisions now reach the model: a
+// deny throws and its reason arrives as the tool error, while an advise is
+// appended to the tool's own result by tool.execute.after, joined to the call it
+// belongs to by callID. That append is what replaced a console.warn, which reached
+// the person and never the model. The two declarations below record it, and they
+// are machine-read by the host-parity gate; see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 11
-// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
-// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
+//
+// It also carries the two jobs that are not verdicts: a compacting session is
+// handed this checkout back through the compaction prompt, and a checkpoint is
+// recorded when the session goes idle, since OpenCode has no session-end event and
+// idle is the proxy its own docs name.
+// magus-guard-template: 12
+// magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
+// magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
@@ -111,6 +117,16 @@ export const MagusGuard: Plugin = async () => {
   // for the person, with nothing in it a model can act on, so a repeat is noise.
   // Measured over recent sessions: 99% of these firings were same-session repeats.
   let saidUnguarded = false;
+
+  // Advisories waiting for the call they belong to, keyed by callID. An advise is
+  // produced BEFORE a call and delivered AFTER it, because tool.execute.after is the
+  // only hook that can rewrite what the model reads, and judging a second time there
+  // would record two verdicts for one call.
+  //
+  // An entry is dropped when its call lands. A call that never reaches
+  // tool.execute.after strands one string for the life of the session, which is a
+  // cheaper leak than judging everything twice to avoid it.
+  const pending = new Map<string, string>();
 
   /**
    * Runs one `magus session hook` invocation and returns its raw stdout, or null when the
@@ -208,22 +224,26 @@ export const MagusGuard: Plugin = async () => {
     return parsed;
   };
 
-  /** Throws on a deny; logs an advise, which OpenCode cannot inject as context. */
-  const apply = (verdict: Verdict | null): void => {
-    if (verdict === null) return;
+  /**
+   * Throws on a deny, which is OpenCode's only way to stop a call. Returns an
+   * advise's context for the caller to hold until the call lands, and "" for
+   * everything else.
+   */
+  const apply = (verdict: Verdict | null): string => {
+    if (verdict === null) return "";
     switch (verdict.decision) {
       case "deny":
         throw new Error(`[magus guard] ${verdict.reason}`);
       case "advise":
-        // OpenCode has no context-injection arm, so this cannot reach the
-        // model. Logging keeps it in front of the human instead of dropping it;
-        // the same guidance ships in the installed skills, which is why the
-        // skills and the guard say the same things.
-        console.warn(`[magus guard] ${verdict.context}`);
-        return;
+        return verdict.context;
       case "pass":
-        return;
+        return "";
     }
+  };
+
+  /** Holds an advisory for the call it judged, so tool.execute.after can deliver it. */
+  const remember = (callID: string, context: string): void => {
+    if (context !== "") pending.set(callID, context);
   };
 
   return {
@@ -231,7 +251,8 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        apply(await judge(["session", "hook", "--agent-name", "opencode", "-o", "json"], command));
+        const args = ["session", "hook", "--agent-name", "opencode", "-o", "json"];
+        remember(input.callID, apply(await judge(args, command)));
         return;
       }
 
@@ -240,13 +261,38 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        apply(
-          await judge(
-            ["session", "hook", "--path", "--agent-name", "opencode", "-o", "json"],
-            path,
-          ),
-        );
+        const args = ["session", "hook", "--path", "--agent-name", "opencode", "-o", "json"];
+        remember(input.callID, apply(await judge(args, path)));
       }
+    },
+
+    "tool.execute.after": async (input, output) => {
+      const context = pending.get(input.callID);
+      if (context === undefined) return;
+      pending.delete(input.callID);
+      // Appended to the result the model already reads, rather than replacing it:
+      // the advisory explains what to do differently NEXT time, and the tool's own
+      // output is what the call was for.
+      output.output = `${output.output}\n\n[magus guard] ${context}`;
+    },
+
+    "experimental.session.compacting": async (_input, output) => {
+      // Compaction replaces a session's history with a summary, and the model then
+      // works from prose. This puts state back in front of it instead: branch,
+      // revision, unpushed commits, the classified dirty tree, live leases and the
+      // last run's failures, all read off the disk at the moment it runs.
+      const brief = await runOnce(["session", "--brief"], "");
+      if (brief === null) return;
+      const text = brief.trim();
+      if (text !== "") output.context.push(text);
+    },
+
+    event: async ({ event }) => {
+      // OpenCode has no session-end event; session.idle is the proxy. The checkpoint
+      // records where the work stands so whoever comes back reads `magus session`
+      // rather than reconstructing it. It judges nothing and its output is ignored.
+      if (event.type !== "session.idle") return;
+      await runOnce(["session", "checkpoint", "--agent-name", "opencode"], "");
     },
   };
 };

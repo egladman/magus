@@ -112,6 +112,13 @@ type Target struct {
 	Charms []string `json:"charms,omitempty"`                    // execution charms parsed from the "target:charm,..." suffix
 	Files  []string `json:"files,omitempty"`                     // changed files within project; populated by affected expansion
 
+	// Undeclared is the subset of Files that no project declares (MGS1028): they
+	// selected this project by directory containment while moving no cache key.
+	// Carried alongside Files, and for the same reason, because the expansion is
+	// the only place the answer exists and recomputing it downstream would mean a
+	// second opinion on which project's declaration counts.
+	Undeclared []string `json:"undeclared,omitempty" buzz:"undeclared"`
+
 	// Declared and DeclaredCharms are the raw spellings ParseTarget rewrote, empty
 	// when the caller already wrote canonical form. Provenance, not identity: Name
 	// and Charms above are what magus resolves against, and these only record how it
@@ -369,10 +376,13 @@ func ParseTarget(s string) (Target, error) {
 			if err := ValidateCharmName(g); err != nil {
 				return Target{}, fmt.Errorf("magus: target %q: %w", s, err)
 			}
-			if n := Normalize(g); n != g {
+			// NormalizeCharm, not Normalize: the compat alias is a rewritten spelling
+			// like any casing fold, so it lands in DeclaredCharms and the CLI teaches
+			// the canonical name from the same place it teaches the others.
+			if n := NormalizeCharm(g); n != g {
 				declaredCharms = append(declaredCharms, g)
 			}
-			charms = append(charms, Normalize(g))
+			charms = append(charms, NormalizeCharm(g))
 		}
 	}
 	if err := ValidateTargetName(target); err != nil {
@@ -440,14 +450,11 @@ func (t Target) Key() []string {
 // scheduled as a step, so the `test` it composes reaches neither the limiter nor
 // machine-wide admission.
 //
-// The MAXIMUM, not the sum, which makes this a LOWER BOUND rather than a peak. One
-// `ctx.needs(a, b, c)` dispatches all three through the Buzz pool at once and their
-// declarations do add; only separate ctx.needs calls run in order. TargetChains cannot
-// tell the two apart, being a flat list of steps in invocation order with no record of
-// which were dispatched together, and summing is the worse guess of the two available:
-// a sequential chain would then over-declare, and an over-declaration past the whole
-// machine budget is refused outright rather than throttled. Grouping in ChainStep is
-// what would make a true peak computable here.
+// A peak, not a maximum: one `ctx.needs(a, b, c)` dispatches all three through the Buzz
+// pool at once and their declarations add, while separate ctx.needs calls run in order,
+// so the chain folds to the largest SUM over one call, and the target's own declaration
+// counts against that since its work follows every call. ChainStep.CallIndex is what
+// tells the two apart. declaredBy names the largest single contributor to the peak.
 //
 // lookup resolves a cross-project step and may return nil, in which case that step
 // contributes nothing rather than a guess. It lives here because admission and
@@ -470,7 +477,19 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 		if peak > 0 {
 			from = name
 		}
+		// One sum per call; a call's members run together, and the calls run in turn.
+		callMB, callFrom, callTop, callIndex := 0, "", 0, 0
+		close := func() {
+			if callMB > peak {
+				peak, from = callMB, callFrom
+			}
+			callMB, callFrom, callTop = 0, "", 0
+		}
 		for _, step := range proj.TargetChains[name] {
+			if step.CallIndex != callIndex {
+				close()
+				callIndex = step.CallIndex
+			}
 			next := proj
 			if step.Project != "" {
 				if lookup == nil {
@@ -478,50 +497,75 @@ func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project)
 				}
 				next = lookup(step.Project)
 			}
-			if stepMB, stepFrom := walk(next, step.Target); stepMB > peak {
-				peak, from = stepMB, stepFrom
+			stepMB, stepFrom := walk(next, step.Target)
+			callMB += stepMB
+			if stepMB > callTop {
+				callTop, callFrom = stepMB, stepFrom
 			}
 		}
+		close()
 		return peak, from
 	}
 	return walk(p, target)
 }
 
-// walkChain visits every target that target composes with ctx.needs, transitively,
-// in the order the body invokes them. target itself is not visited: it is the
-// caller's own step. visit reports whether to descend past the target it was given.
+// ErrSkipChain is a ChainWalkFunc's answer that keeps WalkChain from descending under the
+// target it was given; the walk goes on with that target's siblings, as fs.SkipDir does
+// for a directory.
+var ErrSkipChain = errors.New("skip this target's chain")
+
+// ChainVisit is one target WalkChain hands its callback: the project it belongs to,
+// its name, and how many ctx.needs hops separate it from the target the walk began at.
+type ChainVisit struct {
+	Project *Project
+	Target  string
+	Depth   int
+}
+
+// Key is the visit's identity, the one WalkChain visits once.
+func (v ChainVisit) Key() string { return chainKey(v.Project.Path, v.Target) }
+
+// ChainWalkFunc is the function WalkChain calls for every target it visits.
+type ChainWalkFunc func(v ChainVisit) error
+
+// WalkChain walks the ctx.needs closure of target: target itself first, then every
+// target its chain reaches, depth first, in the order the body invokes them. A target
+// is visited once however many chains reach it, which is also how it runs, and that is
+// what terminates a cycle the loader somehow admitted. A step lookup cannot resolve, or
+// any cross-project step with no lookup, is skipped with everything under it: it
+// contributes nothing rather than a guess.
 //
-// lookup resolves a cross-project step and may return nil, in which case that step
-// contributes nothing.
-func walkChain(p *Project, target string, lookup func(path string) *Project, visit func(proj *Project, name string) bool) {
+// fn's error stops the walk and is returned, except ErrSkipChain, which only keeps the walk
+// out of the chain under the target fn was given.
+func WalkChain(p *Project, target string, lookup func(path string) *Project, fn ChainWalkFunc) error {
 	seen := map[string]bool{}
-
-	var walk func(proj *Project, name string, root bool)
-	walk = func(proj *Project, name string, root bool) {
-		if proj == nil {
-			return
+	var walk func(v ChainVisit) error
+	walk = func(v ChainVisit) error {
+		if v.Project == nil || seen[v.Key()] {
+			return nil
 		}
-		key := proj.Path + "\x00" + name
-		if seen[key] {
-			return // load rejects cycles; the walk only has to terminate
+		seen[v.Key()] = true
+		switch err := fn(v); {
+		case errors.Is(err, ErrSkipChain):
+			return nil
+		case err != nil:
+			return err
 		}
-		seen[key] = true
-
-		if !root && !visit(proj, name) {
-			return
-		}
-		for _, step := range proj.TargetChains[name] {
-			next := proj
-			if step.Project != "" {
+		for _, step := range v.Project.TargetChains[v.Target] {
+			next := v.Project
+			if step.Project != "" && step.Project != v.Project.Path {
 				if lookup == nil {
 					continue
 				}
 				next = lookup(step.Project)
 			}
-			walk(next, step.Target, false)
+			if err := walk(ChainVisit{Project: next, Target: step.Target, Depth: v.Depth + 1}); err != nil {
+				return err
+			}
 		}
+		return nil
 	}
-	walk(p, target, true)
+	return walk(ChainVisit{Project: p, Target: target})
 }
 
 // ChainSkipCacheOutputs is the declared output of every skip_cache target a target
@@ -535,19 +579,20 @@ func walkChain(p *Project, target string, lookup func(path string) *Project, vis
 // entry recorded against different bytes.
 func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *Project) []string {
 	var out []string
-	walkChain(p, target, lookup, func(proj *Project, name string) bool {
-		if proj.TargetPolicies[name].SkipCache {
-			for _, ref := range proj.TargetOutputs[name] {
-				owner := ref.Project
-				if owner == "" {
-					owner = proj.Path
-				}
-				if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
-					out = append(out, g)
-				}
+	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
+		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
+			return nil
+		}
+		for _, ref := range v.Project.TargetOutputs[v.Target] {
+			owner := ref.Project
+			if owner == "" {
+				owner = v.Project.Path
+			}
+			if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
+				out = append(out, g)
 			}
 		}
-		return true
+		return nil
 	})
 	return out
 }
@@ -560,28 +605,33 @@ func ChainSkipCacheOutputs(p *Project, target string, lookup func(path string) *
 // the parent for a write a constituent declared.
 func ChainUpdates(p *Project, target string, lookup func(path string) *Project) []string {
 	var out []string
-	walkChain(p, target, lookup, func(proj *Project, name string) bool {
-		for _, ref := range proj.TargetUpdates[name] {
+	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
+		if v.Depth == 0 {
+			return nil
+		}
+		for _, ref := range v.Project.TargetUpdates[v.Target] {
 			owner := ref.Project
 			if owner == "" {
-				owner = proj.Path
+				owner = v.Project.Path
 			}
 			if g := RootGlob(owner, ref.Glob); !slices.Contains(out, g) {
 				out = append(out, g)
 			}
 		}
-		return true
+		return nil
 	})
 	return out
 }
 
 // chainReaches is every target reachable from name through ctx.needs, keyed the way
-// walkChain keys a visit.
+// WalkChain keys a visit.
 func chainReaches(p *Project, name string, lookup func(path string) *Project) map[string]bool {
 	out := map[string]bool{}
-	walkChain(p, name, lookup, func(proj *Project, n string) bool {
-		out[chainKey(proj.Path, n)] = true
-		return true
+	_ = WalkChain(p, name, lookup, func(v ChainVisit) error {
+		if v.Depth > 0 {
+			out[v.Key()] = true
+		}
+		return nil
 	})
 	return out
 }
@@ -611,15 +661,15 @@ func chainKey(projectPath, target string) string { return projectPath + "\x00" +
 // `generate` through `lint` and again through `security`.
 func ChainSkipCacheSteps(p *Project, target string, lookup func(path string) *Project) []ChainStep {
 	var out []ChainStep
-	walkChain(p, target, lookup, func(proj *Project, name string) bool {
-		if !proj.TargetPolicies[name].SkipCache {
-			return true
+	_ = WalkChain(p, target, lookup, func(v ChainVisit) error {
+		if v.Depth == 0 || !v.Project.TargetPolicies[v.Target].SkipCache {
+			return nil
 		}
-		if len(proj.TargetOutputs[name]) == 0 && len(ChainSkipCacheOutputs(proj, name, lookup)) == 0 {
-			return true
+		if len(v.Project.TargetOutputs[v.Target]) == 0 && len(ChainSkipCacheOutputs(v.Project, v.Target, lookup)) == 0 {
+			return nil
 		}
-		out = append(out, ChainStep{Project: proj.Path, Target: name})
-		return true
+		out = append(out, ChainStep{Project: v.Project.Path, Target: v.Target})
+		return nil
 	})
 	if len(out) < 2 {
 		return out

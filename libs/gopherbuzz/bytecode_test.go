@@ -291,7 +291,7 @@ func TestEval_NameCacheCrossInstance(t *testing.T) {
 	sess := newSession(context.Background())
 	src := `
 object Box { n: int = 0, fun get() > int { return this.n; } }
-fun run(a: int, b: int) > int {
+fun run(a: Box, b: Box) > int {
     final x = a.get();
     final y = b.get();
     return x * 10 + y;

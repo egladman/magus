@@ -56,6 +56,12 @@ only: no daemon AND no CLI, or a human asking what the committed index says.{{en
    `magus graph build` is what turns the answer into a fact. Read the verdict before
    concluding anything from an empty result.
 
+   Every result that has one names its own next step: text mode prints the commands
+   under a `next:` label and `-o json` carries them as a `next` field, each with the
+   real ids already filled in. Following one is optional - it is a suggestion magus
+   offers, never an order, and a result with nothing to suggest carries no `next` at
+   all.
+
 {{if .Full}}   The graph relates entities; the evaluated dispatch plan lives one verb over.
 {{end}}   `magus describe target <name>` prints, per project, the resolved source globs,
    output globs (the generated files), spells, and policy for that target{{if .Full}} - use it

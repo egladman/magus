@@ -1,0 +1,10 @@
+{
+  "category": "interrogation",
+  "budget_usd": 1.5,
+  "max_turns": 40,
+  "answer_key": [
+    "packages/crew/important-feature-3",
+    "packages/navigation/important-feature-7",
+    "packages/ticket-booking/important-feature-12"
+  ]
+}

@@ -1,0 +1,104 @@
+// host-schemas.buzz refreshes the agent-host schemas vendored under
+// testdata/hostschemas, and says when one has moved upstream.
+//
+// The schemas are what hostschema_test.go grades this repository's hook configs and
+// rendered verdicts against. Vendoring them is what keeps that test off the network;
+// this script is the other half, because a vendored copy with nothing that re-fetches
+// it is a snapshot that quietly ages into a claim about a host that no longer exists.
+//
+// Two modes, and the split is the same one tools/registry.buzz makes for the same
+// reason: reading upstream and WRITING from it are different acts, and only one of them
+// should be able to change the tree.
+//
+//	HOST_SCHEMAS_MODE=verify  magus buzz tools/host-schemas.buzz   re-fetch, report drift, write nothing
+//	HOST_SCHEMAS_MODE=fetch   magus buzz tools/host-schemas.buzz   re-fetch and write the moved files
+//
+// verify is the default, so a mistyped mode reports rather than overwrites.
+//
+// Only the rows the provenance table marks `published` can be refreshed. A `derived` or
+// `derived-from-binary` row is ours, transcribed by hand from a host that publishes no
+// schema for that surface, and its URL serves prose or a shipped artifact rather than
+// bytes to diff, so this names it and moves on rather than pretending to have checked it.
+//
+// Run from the workspace root: every path here is relative to it, the way `magus buzz`
+// resolves them.
+namespace hostschemas;
+
+import "std";
+import "fs";
+import "os";
+import "http";
+import "crypto";
+
+final SOURCES = "testdata/hostschemas/SOURCES.md";
+final DIR = "testdata/hostschemas";
+
+// code reads a column the table quotes in backticks, which is every path and URL.
+// Split rather than replace because this file runs WITHOUT --embedded, so strict mode
+// applies and a two-argument method call is the form that does not parse.
+fun code(cells: [str], index: int) > str {
+    return cells[index].split("`")[1];
+}
+
+// plain reads an unquoted column.
+fun plain(cells: [str], index: int) > str {
+    return cells[index].trim();
+}
+
+export fun main() > void !> any {
+    final mode = os\env("HOST_SCHEMAS_MODE") ?? "verify";
+    if (mode != "verify" and mode != "fetch") {
+        throw "host-schemas: HOST_SCHEMAS_MODE must be verify or fetch; got \"" + mode + "\"";
+    }
+
+    var checked = 0;
+    var moved = 0;
+    foreach (line in fs\readFile(SOURCES).split("\n")) {
+        // Every data row opens with a backticked file path; the header and the
+        // separator do not, which is what keeps this from parsing them as rows.
+        if (!line.startsWith("| `")) { continue; }
+        final cells = line.split("|");
+        if (cells.len() < 7) { continue; }
+
+        final file = code(cells, 1);
+        final origin = plain(cells, 2);
+        if (origin != "published") {
+            std\print("skip {file}: {origin}, so " + code(cells, 3) + " has no bytes to diff; re-read it by hand");
+            continue;
+        }
+
+        final url = code(cells, 3);
+        final recorded = code(cells, 5);
+        final body = http\get(url, opts: {"fail": true}).body;
+        final digest = crypto\sha256Hex(body);
+        checked = checked + 1;
+
+        if (digest == recorded) {
+            std\print("same {file}");
+            continue;
+        }
+        moved = moved + 1;
+        if (mode == "fetch") {
+            fs\writeFile(DIR + "/" + file, content: body);
+            std\print("wrote {file}: sha256 is now {digest}, so put that and today's date in {SOURCES}");
+            continue;
+        }
+        std\print("MOVED {file}: upstream hashes {digest}, the table records {recorded}");
+    }
+
+    // A table that matched no row means the format changed under this parser, and a
+    // silent zero would read exactly like a clean run.
+    if (checked == 0) {
+        throw "host-schemas: {SOURCES} named no published row, so nothing was checked";
+    }
+    if (mode == "fetch") {
+        std\print("fetched {checked} published schema(s); {moved} changed");
+        return;
+    }
+    // verify only. A moved schema is a finding, not an error to swallow: the tree still
+    // holds the old bytes, and whoever refreshes them owns the test failures that follow.
+    if (moved > 0) {
+        throw "host-schemas: {moved} of {checked} vendored schema(s) moved upstream. Re-run with HOST_SCHEMAS_MODE=fetch, then update the sha256 and read date in {SOURCES} in the same commit as whatever had to change with them";
+    }
+    std\print("checked {checked} published schema(s); every one matches what {SOURCES} records");
+}

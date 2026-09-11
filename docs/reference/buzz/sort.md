@@ -20,9 +20,9 @@ Return a new list ordered lexicographically by byte. The plain alphabetical sort
 
 **Signature:** `sort\strings(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L58)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `items` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `items`   | `[]string` |          |             |
 
 **Returns:** []string
 
@@ -32,9 +32,9 @@ Return a new list ordered so embedded numbers compare as numbers: file2 before f
 
 **Signature:** `sort\natural(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L65)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `items` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `items`   | `[]string` |          |             |
 
 **Returns:** []string
 
@@ -44,9 +44,9 @@ Return a new list ordered by semantic version, oldest first, so v1.9.0 precedes 
 
 **Signature:** `sort\semver(items) -> []string` - [source](https://github.com/egladman/magus/blob/main/std/sort.go#L124)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `items` | `[]string` |  | |
+| Parameter | Type       | Optional | Description |
+| --------- | ---------- | -------- | ----------- |
+| `items`   | `[]string` |          |             |
 
 **Returns:** []string
 

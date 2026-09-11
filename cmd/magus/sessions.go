@@ -1,17 +1,29 @@
 package main
 
 import (
+	"bufio"
+	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -42,6 +54,12 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return nil
 	case "ls":
 		return sessionList(ctx, root, rest)
+	case "load":
+		return sessionLoad(root, rest)
+	case "show":
+		return sessionShow(root, rest)
+	case "lease":
+		return sessionLease(root, rest)
 	case "attention":
 		return attentionList(root, rest)
 	case "dispose":
@@ -53,12 +71,16 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, show, load, lease, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
 	}
 }
 
 func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
+	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
+	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
+	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
+	fmt.Fprintln(os.Stderr, "       magus session lease [<lease-id>]  # bind a lease to this checkout for the guard")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
@@ -66,11 +88,17 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent sessions")
-	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session attention` lists the")
-	fmt.Fprintln(os.Stderr, "blocks agents raised, and `session dispose` closes one - nothing closes a")
-	fmt.Fprintln(os.Stderr, "request automatically. Humans write it too: `session checkpoint` records")
-	fmt.Fprintln(os.Stderr, "where work stands before you put it down. Agent hosts write it from hooks,")
-	fmt.Fprintln(os.Stderr, "through `session hook` and `session notify`.")
+	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session show` reports one of")
+	fmt.Fprintln(os.Stderr, "them in full, `session attention` lists the blocks agents raised, and")
+	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
+	fmt.Fprintln(os.Stderr, "Humans write it too: `session checkpoint` records where work stands before")
+	fmt.Fprintln(os.Stderr, "you put it down. Agent hosts write it from hooks, through `session hook`")
+	fmt.Fprintln(os.Stderr, "and `session notify`, and `session load` takes a normalized event stream")
+	fmt.Fprintln(os.Stderr, "extracted from a host's own transcript.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "`session --brief` answers the same question the listing opens with, for a")
+	fmt.Fprintln(os.Stderr, "session rather than a person: where this checkout stands, read off disk, for")
+	fmt.Fprintln(os.Stderr, "a model whose history a host replaced with a summary.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
@@ -80,15 +108,20 @@ func sessionUsage() {
 func sessionList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
+	var brief bool
 	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many sessions (0 for all)")
 		fs.StringVar(&since, "since", "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+		fs.BoolVar(&brief, "brief", false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
 	})
 	if err != nil {
 		return err
 	}
 	if len(rest) > 0 {
 		return usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
+	}
+	if brief {
+		return sessionBriefCmd(ctx, root)
 	}
 	if limit < 0 {
 		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every session", limit)
@@ -162,9 +195,9 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 			bySpan[s.SpanID] = s.Session
 		}
 	}
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tTARGETS")
+	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tLEASE\tSPAWNER\tPARENT\tFACTS\tEVENTS\tTARGETS")
 	for _, s := range summaries {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
 			orDash(s.Host),
@@ -172,6 +205,9 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 			orDash(s.Spawner),
 			orDash(sessionParent(bySpan, s.ParentSpanID)),
 			s.Facts,
+			// A dash rather than a zero: no loaded events is the ordinary state, and a
+			// column of zeros reads as a producer that broke.
+			orDash(strconv.Itoa(s.Events)),
 			orDash(summarizeTargets(s.Targets)))
 	}
 	if err := tw.Flush(); err != nil {
@@ -328,8 +364,10 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 	return strings.Join(out, ", ")
 }
 
+// orDash renders an empty or zero column as a dash, so a table reads "nothing here"
+// rather than "a producer wrote nothing".
 func orDash(s string) string {
-	if s == "" {
+	if strings.TrimSpace(s) == "" || s == "0" {
 		return "-"
 	}
 	return s
@@ -376,4 +414,644 @@ func sessionsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Su
 		}
 	}
 	return out
+}
+
+// `magus session load` and `magus session show`: the read and write sides of a
+// host transcript loaded into the session store.
+//
+// The guard's trail records what the hook SAW. A transcript records what actually
+// ran, including the commands no hook was wired for, the skills a session loaded,
+// and what the hook printed back. Neither store answers "did this session comply"
+// alone, and the join is what makes the question answerable at all.
+//
+// Extraction is not here and never will be: a per-host recipe the reader owns
+// turns a transcript into the stream below, exactly as `magus agent adoption`
+// takes a corpus rather than reading a host's logs. magus takes normalized events
+// in its own vocabulary, so a host renaming a tool costs its reader one config
+// line instead of costing magus a release.
+
+// loadEvent is one line of the stream. The field names are the guard envelope's
+// where they overlap, since a recipe author is already reading that contract.
+type loadEvent struct {
+	Host       string `json:"host"`
+	Session    string `json:"session"`
+	Ts         int64  `json:"ts"`
+	Cwd        string `json:"cwd"`
+	Kind       string `json:"kind"`
+	Ref        string `json:"ref"`
+	Text       string `json:"text"`
+	Transcript string `json:"transcript"`
+	Outcome    struct {
+		Exit        int  `json:"exit"`
+		Denied      bool `json:"denied"`
+		Interrupted bool `json:"interrupted"`
+	} `json:"outcome"`
+}
+
+// loadMaxLineBytes bounds one event. A hook's output is the largest thing a line
+// legitimately carries and it is prose, so a line past this was produced by a
+// recipe piping something else entirely.
+const loadMaxLineBytes = 1 << 20
+
+// loadHookTextCap bounds what a hook.output event stores. The text is magus's own
+// prose, so the head of it identifies which advisory or denial fired; the rest is
+// the same paragraph every session already has.
+const loadHookTextCap = 2000
+
+// loadRejectsShown bounds the diagnostics a failed load prints. A recipe that
+// emits one bad line emits thousands, and the first few say which field is wrong.
+const loadRejectsShown = 5
+
+// sessionLoadSummary is what a load reports, and the JSON shape `-o json` emits. The
+// events themselves ride on it between the read and the store write, and stay out of
+// the report: a load prints what it did, never the stream back.
+type sessionLoadSummary struct {
+	Loaded  int `json:"loaded"`
+	Deduped int `json:"deduped"`
+	Dropped int `json:"dropped_other_repo"`
+	// Rejects is one line per input line that was not loaded, with the reason.
+	Rejects []string             `json:"rejects,omitempty"`
+	ByKind  map[string]int       `json:"by_kind,omitempty"`
+	Store   string               `json:"store"`
+	Events  []sessions.LoadEvent `json:"-"`
+}
+
+func sessionLoadUsage(fs *flag.FlagSet) func() {
+	return func() {
+		fmt.Fprintln(os.Stderr, "Usage: magus session load [--file <path>]   # the event stream arrives on stdin")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Load a normalized agent-session event stream into this repository's session")
+		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
+		fmt.Fprintln(os.Stderr, "Every line needs host, session, kind and ref; kind is one of "+strings.Join(sessions.EventKinds, ", ")+".")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running a recipe over the same")
+		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
+		fmt.Fprintln(os.Stderr, "are dropped; worktrees of this one are kept.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "A shell command's text is never stored. It is re-judged against today's guard")
+		fmt.Fprintln(os.Stderr, "rules and kept as its program, the verdict, the rule behind it, and a digest.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+		fs.PrintDefaults()
+	}
+}
+
+// sessionLoad implements `magus session load`.
+func sessionLoad(root string, args []string) error {
+	var file string
+	rest, err := cmdParse("session load", args, func(fs *flag.FlagSet) {
+		fs.StringVar(&file, "file", "", "Read the event stream from this file instead of stdin")
+		fs.Usage = sessionLoadUsage(fs)
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 0 {
+		return usagef("magus session load: takes no arguments (got %q); the stream arrives on stdin, or name a file with --file", rest[0])
+	}
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return fmt.Errorf("magus session load: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return err
+	}
+
+	in := io.Reader(os.Stdin)
+	if file != "" {
+		f, err := os.Open(file)
+		if err != nil {
+			return fmt.Errorf("magus session load: open %s: %w", file, err)
+		}
+		defer func() { _ = f.Close() }()
+		in = f
+	}
+
+	summary, err := readLoadStream(in, dir)
+	if err != nil {
+		return err
+	}
+	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
+		Workspace: root,
+		Command:   "session load",
+		Version:   version,
+	})
+	if err != nil {
+		return err
+	}
+	summary.Loaded, summary.Deduped, summary.Store = result.Loaded, result.Deduped, dir
+	summary.ByKind = result.ByKind
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format == outputText {
+		renderLoadSummary(os.Stdout, summary)
+	} else if err := emitFormatted(opts, summary); err != nil {
+		return err
+	}
+	if len(summary.Rejects) > 0 {
+		return fmt.Errorf("magus session load: %d line(s) rejected and not loaded:\n  %s",
+			len(summary.Rejects), strings.Join(summary.Rejects[:min(len(summary.Rejects), loadRejectsShown)], "\n  "))
+	}
+	return nil
+}
+
+// readLoadStream decodes the stream, judges what it must, and returns the events
+// worth storing on the summary, with the counts and the per-line diagnostics.
+//
+// A rejected line does not stop the read, and neither does an overlong one. A recipe
+// emitting one bad shape emits it for a whole transcript, and loading the rest is what
+// lets the reader fix the recipe and re-run without losing what already worked.
+func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
+	var summary sessionLoadSummary
+	reject := func(line int, format string, args ...any) {
+		summary.Rejects = append(summary.Rejects, fmt.Sprintf("line %d: ", line)+fmt.Sprintf(format, args...))
+	}
+
+	sameRepo := repoScope(dir)
+	// ReadSlice over a buffer one byte wider than the cap is what bounds memory: ReadString
+	// would grow without limit on a line that never ends, and the overlong case has to be
+	// reported and skipped, not read to completion.
+	r := bufio.NewReaderSize(in, loadMaxLineBytes+1)
+	for line := 1; ; line++ {
+		raw, err := r.ReadSlice('\n')
+		overlong := errors.Is(err, bufio.ErrBufferFull)
+		for errors.Is(err, bufio.ErrBufferFull) {
+			_, err = r.ReadSlice('\n')
+		}
+		if err != nil && !errors.Is(err, io.EOF) {
+			return summary, fmt.Errorf("magus session load: read stream: %w", err)
+		}
+		last := errors.Is(err, io.EOF)
+		switch text := strings.TrimSpace(string(raw)); {
+		case overlong:
+			reject(line, "longer than any event (%d bytes)", loadMaxLineBytes)
+		case text == "":
+		default:
+			if ev, reason := decodeLoadEvent(text, sameRepo); reason != "" {
+				reject(line, "%s", reason)
+			} else if ev != nil {
+				summary.Events = append(summary.Events, *ev)
+			} else {
+				summary.Dropped++
+			}
+		}
+		if last {
+			return summary, nil
+		}
+	}
+}
+
+// decodeLoadEvent turns one line into the event to store. A line that fails validation
+// returns the reason; a well-formed line from another repository returns neither an
+// event nor a reason, which is the dropped case.
+func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEvent, string) {
+	var ev loadEvent
+	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
+		return nil, fmt.Sprintf("not a JSON object: %v", err)
+	}
+	if reason := validateLoadEvent(ev); reason != "" {
+		return nil, reason
+	}
+	if ev.Cwd != "" && !sameRepo(ev.Cwd) {
+		return nil, ""
+	}
+	// A host names files by absolute path; graph file nodes are keyed by the path
+	// inside the checkout, and every worktree of one repository shares that layout.
+	// Storing the checkout-relative path is what lets the @session shard land the
+	// event on a node.
+	if ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite {
+		ev.Text = repoid.CheckoutRelative(ev.Text)
+	}
+	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)}, ""
+}
+
+func validateLoadEvent(ev loadEvent) string {
+	switch {
+	case ev.Host == "":
+		return "no host"
+	case ev.Session == "":
+		return "no session"
+	case ev.Ref == "":
+		return "no ref, so the event cannot be deduplicated"
+	case !sessions.ValidEventKind(ev.Kind):
+		return fmt.Sprintf("kind %q is not one of %s", ev.Kind, strings.Join(sessions.EventKinds, ", "))
+	}
+	if !sessions.ValidSessionID(ev.Session) {
+		return fmt.Sprintf("session id %q must be alphanumeric with - and _ (it names the session file)", ev.Session)
+	}
+	return ""
+}
+
+// storedEvent is what a wire event becomes on disk. A shell command loses its text
+// here and nowhere else, so this is the one function to read when asking whether a
+// command line can reach the store.
+func storedEvent(ev loadEvent) sessions.AgentEvent {
+	out := sessions.AgentEvent{
+		Host:        ev.Host,
+		Kind:        ev.Kind,
+		Ref:         ev.Ref,
+		AtMs:        ev.Ts,
+		Transcript:  ev.Transcript,
+		Exit:        ev.Outcome.Exit,
+		Denied:      ev.Outcome.Denied,
+		Interrupted: ev.Outcome.Interrupted,
+	}
+	switch ev.Kind {
+	case sessions.EventShellCommand:
+		sum := sha256.Sum256([]byte(ev.Text))
+		out.Digest = hex.EncodeToString(sum[:])
+		out.Program, out.Verdict, out.Rule = rejudgeCommand(ev.Text)
+	case sessions.EventHookOutput:
+		out.Text = ev.Text
+		if len(out.Text) > loadHookTextCap {
+			out.Text = out.Text[:loadHookTextCap]
+		}
+	default:
+		out.Text = ev.Text
+	}
+	return out
+}
+
+// rejudgeCommand runs a past command through today's rules and reports what they
+// would say now: the program, the verdict, and the rule or advisory behind it.
+//
+// It calls the pure rule set rather than the hook, so no subprocess runs and no
+// live workspace state is read. The rules that DO read the filesystem (the sibling
+// checkout, the stale binary notice) are deliberately skipped: they describe the
+// machine at the moment of the call, and applying today's machine to a command
+// from three weeks ago would be inventing a verdict nobody ever saw.
+//
+// The rule's argument is dropped along with the text: it renders the resolved
+// argv, which is the content this whole path exists to keep out of the store.
+func rejudgeCommand(text string) (program, verdict, rule string) {
+	program = commandProgram(text)
+	v := evaluateBashGuard(text)
+	switch {
+	case v.Deny != "":
+		return program, sessions.VerdictDeny, string(v.Rule.Name)
+	case v.Context != "":
+		return program, sessions.VerdictAdvise, string(v.Kind)
+	}
+	return program, sessions.VerdictPass, ""
+}
+
+// commandProgram names the program a line runs, wrappers already peeled. A line the
+// shell parser cannot read falls back to the trail's reducer, which skips the VAR=value
+// prefix a credential is likeliest to sit in rather than storing it as the program.
+func commandProgram(text string) string {
+	if cmds, parsed := parseGuardCommands(text); parsed && len(cmds) > 0 {
+		return cmds[0].Name
+	}
+	return trail.CommandProgram(text)
+}
+
+// repoScope reports whether a cwd belongs to the repository whose store is dir,
+// memoized because a stream names a handful of checkouts across thousands of
+// events and each answer costs a config read.
+//
+// A checkout that no longer exists identifies as its own path, so events from a
+// DELETED worktree are dropped as another repository's. That is the largest known
+// hole in a load: the phase 0 measurement found 45% of commands were run in
+// worktrees that had since been removed. Closing it needs an identity the deleted
+// path can still be resolved through, which nothing records today.
+func repoScope(dir string) func(string) bool {
+	seen := map[string]bool{}
+	return func(cwd string) bool {
+		if match, ok := seen[cwd]; ok {
+			return match
+		}
+		other, err := sessions.Dir(cwd)
+		match := err == nil && other == dir
+		seen[cwd] = match
+		return match
+	}
+}
+
+// sessionLease binds a lease to this checkout, or reports the one bound. The binding
+// is a marker in the checkout's cache dir that the guard hook reads when neither
+// --lease nor BAGGAGE names one: a host runs its hooks with its own environment, so
+// the file is the only channel a worker's shell and the host's hook both see. One
+// line in a worker's brief (`magus session lease <id>`) is then what puts every
+// lease-scoped rule in force for it, instead of a paragraph of prohibitions.
+//
+// The report reads the marker through ledger.LeaseFromMarker, so what it prints is what
+// the guard and the sandbox act on: a marker holding something other than a lease id
+// reports as no lease, because that is what it binds.
+func sessionLease(root string, args []string) error {
+	rest, err := cmdParse("session lease", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus session lease [<lease-id>]")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Bind a ledger lease to this checkout, or print the one bound. Every")
+			fmt.Fprintln(os.Stderr, "lease-scoped guard and sandbox rule then reads that lease's row here.")
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) > 1 {
+		return usagef("magus session lease: takes at most one lease id")
+	}
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return fmt.Errorf("magus session lease: no workspace here: the marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
+	}
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return fmt.Errorf("magus session lease: %w", err)
+	}
+	if len(rest) == 0 {
+		if id := ledger.LeaseFromMarker(cacheDir); id != "" {
+			fmt.Println(id)
+		} else {
+			fmt.Println("no lease is bound to this checkout")
+		}
+		return nil
+	}
+	if err := ledger.BindLease(cacheDir, rest[0]); err != nil {
+		return fmt.Errorf("magus session lease: %w", err)
+	}
+	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", rest[0], root)
+	return nil
+}
+
+func renderLoadSummary(w io.Writer, s sessionLoadSummary) {
+	fmt.Fprintf(w, "loaded %d, deduped %d, dropped %d (another repository), rejected %d\n",
+		s.Loaded, s.Deduped, s.Dropped, len(s.Rejects))
+	for _, kind := range sessions.EventKinds {
+		if n := s.ByKind[kind]; n > 0 {
+			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
+		}
+	}
+	fmt.Fprintf(w, "store: %s\n", s.Store)
+	if s.Loaded > 0 {
+		fmt.Fprintf(w, "read one back with `%s`\n", hint.SessionShow.With("<session>"))
+	}
+}
+
+// countedName is one repeated thing and how often it appeared.
+type countedName struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+// commandGroup is one program a session ran, with what today's rules say about
+// the commands it ran under that name.
+//
+// WouldDeny counts what the rules WOULD refuse now; HostDenied counts what the host
+// recorded as actually refused. The gap between them is the audit: a command the
+// rules deny that ran anyway was never judged, because the guard was not wired,
+// was too old to judge, or the rule arrived after the command did.
+type commandGroup struct {
+	Program    string   `json:"program"`
+	Count      int      `json:"count"`
+	Pass       int      `json:"pass"`
+	Advise     int      `json:"advise"`
+	WouldDeny  int      `json:"would_deny"`
+	HostDenied int      `json:"host_denied"`
+	Rules      []string `json:"rules,omitempty"`
+}
+
+type sessionShowOutput struct {
+	Session      string         `json:"session"`
+	Host         string         `json:"host,omitempty"`
+	Events       int            `json:"events"`
+	FirstMs      int64          `json:"first_ms,omitempty"`
+	LastMs       int64          `json:"last_ms,omitempty"`
+	ByKind       map[string]int `json:"by_kind,omitempty"`
+	Commands     []commandGroup `json:"commands,omitempty"`
+	Skills       []countedName  `json:"skills,omitempty"`
+	FilesRead    []countedName  `json:"files_read,omitempty"`
+	FilesWritten []countedName  `json:"files_written,omitempty"`
+	HookOutputs  int            `json:"hook_outputs"`
+	Transcript   string         `json:"transcript,omitempty"`
+	// Trail is what THIS checkout's guard trail recorded for the session: the join
+	// between the host's transcript and the observations magus made while it ran. Absent
+	// when the trail here holds nothing for it, which is the case for a session that ran
+	// in another worktree.
+	Trail *trail.SessionTrail `json:"trail,omitempty"`
+}
+
+// sessionTrailEvents bounds the trail walk behind the join: recent work is what a reader
+// asking about a session is asking about.
+const sessionTrailEvents = 5000
+
+// sessionShow implements `magus session show <id>`.
+func sessionShow(root string, args []string) error {
+	rest, err := cmdParse("session show", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus session show <session-id>")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Report one loaded session: what it ran grouped by program, what today's")
+			fmt.Fprintln(os.Stderr, "guard rules say about each command, which skills it loaded, and which")
+			fmt.Fprintln(os.Stderr, "files it read and wrote.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "The id is a host session id, listed by `magus session ls`. Sessions")
+			fmt.Fprintln(os.Stderr, "arrive here through `magus session load`.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if len(rest) != 1 {
+		return usagef("magus session show: needs exactly one session id (got %d); run `"+hint.Session.String()+"` to list them", len(rest))
+	}
+	root = resolveRootOrEmpty(root)
+	if root == "" {
+		return fmt.Errorf("magus session show: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return err
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return err
+	}
+	events := sessions.AgentEvents(fold, rest[0])
+	if len(events) == 0 {
+		return fmt.Errorf("magus session show: no loaded events for session %q in %s; load a host transcript with `%s`",
+			rest[0], dir, hint.SessionLoad.String())
+	}
+
+	out := summarizeSession(rest[0], events)
+	out.Trail = sessionTrailHere(root, rest[0])
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	if opts.Format != outputText {
+		return emitFormatted(opts, out)
+	}
+	renderSessionShow(os.Stdout, out)
+	return nil
+}
+
+// sessionTrailHere folds this checkout's trail for the session, or nil when it holds
+// nothing: no cache dir, no trail, or a session that ran elsewhere all read the same.
+func sessionTrailHere(root, session string) *trail.SessionTrail {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil
+	}
+	tr := trail.ForSession(cacheDir, session, sessionTrailEvents)
+	if tr.Commands == 0 && len(tr.Spawns) == 0 {
+		return nil
+	}
+	return &tr
+}
+
+func summarizeSession(session string, events []sessions.AgentEvent) sessionShowOutput {
+	out := sessionShowOutput{Session: session, Events: len(events), ByKind: map[string]int{}}
+	byProgram := map[string]*commandGroup{}
+	skills, read, written := map[string]int{}, map[string]int{}, map[string]int{}
+
+	for _, ev := range events {
+		out.ByKind[ev.Kind]++
+		if out.Host == "" {
+			out.Host = ev.Host
+		}
+		if out.Transcript == "" {
+			out.Transcript = ev.Transcript
+		}
+		if ev.AtMs > 0 {
+			if out.FirstMs == 0 || ev.AtMs < out.FirstMs {
+				out.FirstMs = ev.AtMs
+			}
+			if ev.AtMs > out.LastMs {
+				out.LastMs = ev.AtMs
+			}
+		}
+		switch ev.Kind {
+		case sessions.EventShellCommand:
+			g := byProgram[ev.Program]
+			if g == nil {
+				g = &commandGroup{Program: ev.Program}
+				byProgram[ev.Program] = g
+			}
+			g.Count++
+			switch ev.Verdict {
+			case sessions.VerdictDeny:
+				g.WouldDeny++
+			case sessions.VerdictAdvise:
+				g.Advise++
+			default:
+				g.Pass++
+			}
+			if ev.Denied {
+				g.HostDenied++
+			}
+			if ev.Rule != "" && !slices.Contains(g.Rules, ev.Rule) {
+				g.Rules = append(g.Rules, ev.Rule)
+			}
+		case sessions.EventSkillLoad:
+			skills[ev.Text]++
+		case sessions.EventFileRead:
+			read[ev.Text]++
+		case sessions.EventFileWrite:
+			written[ev.Text]++
+		case sessions.EventHookOutput:
+			out.HookOutputs++
+		}
+	}
+
+	for _, g := range byProgram {
+		slices.Sort(g.Rules)
+		out.Commands = append(out.Commands, *g)
+	}
+	slices.SortFunc(out.Commands, func(a, b commandGroup) int {
+		if c := cmp.Compare(b.Count, a.Count); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Program, b.Program)
+	})
+	out.Skills, out.FilesRead, out.FilesWritten = counted(skills), counted(read), counted(written)
+	return out
+}
+
+// counted renders a tally most-frequent first, ties broken by name so two runs
+// over one session render identically.
+func counted(tally map[string]int) []countedName {
+	out := make([]countedName, 0, len(tally))
+	for name, n := range tally {
+		out = append(out, countedName{Name: name, Count: n})
+	}
+	slices.SortFunc(out, func(a, b countedName) int {
+		if c := cmp.Compare(b.Count, a.Count); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+	return out
+}
+
+// showListCap bounds the file and skill lists in the text view. The tail is a
+// session's whole reach, which is a different question with its own surface.
+const showListCap = 10
+
+func renderSessionShow(w io.Writer, s sessionShowOutput) {
+	fmt.Fprintf(w, "%s  host %s  %d event(s)\n", s.Session, orDash(s.Host), s.Events)
+	if s.FirstMs > 0 {
+		fmt.Fprintf(w, "%s to %s\n",
+			time.UnixMilli(s.FirstMs).Format("2006-01-02 15:04:05"),
+			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"))
+	}
+	if s.Transcript != "" {
+		fmt.Fprintf(w, "transcript %s\n", s.Transcript)
+	}
+	fmt.Fprintln(w)
+	for _, kind := range sessions.EventKinds {
+		if n := s.ByKind[kind]; n > 0 {
+			fmt.Fprintf(w, "  %-14s %d\n", kind, n)
+		}
+	}
+	if len(s.Commands) > 0 {
+		fmt.Fprintln(w, "\nCommands by program, judged against today's rules:")
+		for _, g := range s.Commands {
+			fmt.Fprintf(w, "  %-12s %4d  pass %d  advise %d  deny %d  (host recorded %d denied)",
+				orDash(g.Program), g.Count, g.Pass, g.Advise, g.WouldDeny, g.HostDenied)
+			if len(g.Rules) > 0 {
+				fmt.Fprintf(w, "  %s", strings.Join(g.Rules, ", "))
+			}
+			fmt.Fprintln(w)
+		}
+	}
+	renderCounted(w, "Skills loaded", s.Skills)
+	renderCounted(w, "Files read", s.FilesRead)
+	renderCounted(w, "Files written", s.FilesWritten)
+	fmt.Fprintf(w, "\nhook outputs: %d\n", s.HookOutputs)
+	if s.Trail != nil {
+		fmt.Fprintf(w, "\nGuard trail in this checkout: %d command(s) observed, %d denied", s.Trail.Commands, s.Trail.Denied)
+		if len(s.Trail.Leases) > 0 {
+			fmt.Fprintf(w, ", under lease %s", strings.Join(s.Trail.Leases, ", "))
+		}
+		fmt.Fprintln(w)
+		for _, sp := range s.Trail.Spawns {
+			fmt.Fprintf(w, "  spawned %s", sp.Child)
+			if sp.Lease != "" {
+				fmt.Fprintf(w, " (lease %s)", sp.Lease)
+			}
+			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
+		}
+	}
+}
+
+func renderCounted(w io.Writer, title string, items []countedName) {
+	if len(items) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n%s:\n", title)
+	for _, item := range items[:min(len(items), showListCap)] {
+		fmt.Fprintf(w, "  %4d  %s\n", item.Count, item.Name)
+	}
+	if extra := len(items) - showListCap; extra > 0 {
+		fmt.Fprintf(w, "  and %d more; `%s` lists them all\n", extra, hint.SessionShow.With("<session>", "-o", "json"))
+	}
 }

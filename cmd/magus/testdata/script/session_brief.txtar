@@ -1,0 +1,49 @@
+# The rehydration brief, through the real CLI.
+#
+# What this covers that the unit tests cannot: that `--brief` is reachable on the
+# session verb at all, and that every section survives the trip through the output
+# machinery in both text and JSON. A brief a host wires and cannot invoke fails
+# silently, because a session-start hook's stdout is nobody's error channel.
+
+env XDG_STATE_HOME=$WORK/state
+
+exec magus session --brief
+stdout 'magus brief: read from this checkout just now'
+stdout 'tree: '
+# The checkout carries a hook config and an instruction file, so both trailers are
+# the positive arm rather than the "none here" one.
+stdout 'guard wiring: \.claude/settings\.json'
+stdout 'rules live in AGENTS\.md'
+stdout 're-read them'
+
+exec magus session --brief -o json
+stdout '"workspace"'
+stdout '"tree"'
+stdout '"guard_wiring"'
+stdout '"rules"'
+
+# The listing is untouched: --brief is a second reading of the same store's question,
+# not a replacement for it.
+exec magus session
+stdout 'no sessions recorded yet'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+magus.project({"sources": ["*.md"]});
+-- AGENTS.md --
+# rules
+
+The workspace's own instructions live here.
+-- .claude/settings.json --
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "magus session hook", "timeout": 10 }]
+      }
+    ]
+  }
+}

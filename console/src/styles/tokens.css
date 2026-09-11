@@ -433,6 +433,7 @@
   --console-node-docsection: #6d4a86;  /* 6.97:1 */
   --console-node-rationale:  #75528e;  /* 6.26:1 */
   --console-node-note:       #87689e;  /* 4.66:1 */
+  --console-node-link:       #9a7fae;  /* 3.49:1 */
   /* People - neutral */
   --console-node-owner:      #615659;  /* 7.04:1 */
   --console-node-author:     #756a6d;  /* 5.20:1 */
@@ -506,6 +507,7 @@
   --console-node-docsection: #c0a3d7;  /* 6.69:1 */
   --console-node-rationale:  #c8a9e1;  /* 7.08:1 */
   --console-node-note:       #ddc1f3;  /* 9.00:1 */
+  --console-node-link:       #ecd7ff;  /* 10.90:1 */
   /* People - neutral */
   --console-node-owner:      #b4a9ac;  /* 6.38:1 */
   --console-node-author:     #cbbfc2;  /* 8.15:1 */

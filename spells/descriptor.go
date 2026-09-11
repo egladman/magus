@@ -26,6 +26,31 @@ const (
 	OpTest    PatchOpKind = "test"
 )
 
+// External is an op's declared relation to the world outside this tree: it names
+// what the op does that no source glob can see. Empty (ExternalNone) is the default
+// and the honest answer for the overwhelming majority of ops, which read this tree
+// and write into it.
+//
+// The line is narrower than "touches the network". `go mod tidy` reaches a module
+// proxy and is still ExternalNone, because go.sum pins what comes back: with the tree
+// unchanged the answer is unchanged, and a new import is a tree change. An op is
+// External only when its answer or its effect can differ with the tree byte-identical.
+type External string
+
+const (
+	// ExternalNone is the zero value: the op's inputs and effects are all in the tree.
+	ExternalNone External = ""
+	// ExternalReads is an op whose VERDICT comes from a live feed magus cannot hash:
+	// a vulnerability database, an advisory index, a registry lookup. A cached pass
+	// goes stale silently, which is the whole hazard: the target stays green while the
+	// answer it replays stopped being true.
+	ExternalReads External = "reads-external"
+	// ExternalMutates is an op with an effect OUTSIDE this tree: a push, a signature,
+	// a publish, a deploy. Replaying one is not a stale answer but a side effect that
+	// never happened, reported as success.
+	ExternalMutates External = "mutates-external"
+)
+
 // The spell value types (PatchOp, Charm, Command, Service, and the resolved Op)
 // live HERE, in package spells, beside the Descriptor that carries them. They used
 // to sit in types, referenced as types.* throughout, on the theory that magus-utils

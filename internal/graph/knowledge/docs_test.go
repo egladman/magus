@@ -10,12 +10,19 @@ import (
 	"testing"
 )
 
+// docShard is assembleDocs's shard alone. The citations it also returns are @links's
+// input, exercised in links_test.go.
+func docShard(root string, spells []types.Spell, notesPath string) Shard {
+	s, _ := assembleDocs(root, spells, nil, notesPath)
+	return s
+}
+
 func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
 	root := t.TempDir()
 	// MGS2001 is registered (PathReadDenied); MGS9998 is not.
 	writeFile(t, root, "docs/x.md", "See MGS2001, but MGS9998 does not exist.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	// A registered code still gets its inferred documents edge.
 	assert.True(t, hasEdge(out, "doc:docs/x.md", "diagnostic:MGS2001", types.RelationDocuments))
@@ -63,7 +70,7 @@ func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n# Top\n\nintro\n\n## Sub\n\nbody\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	top, ok := nodeByID(out, "docsection:docs/guide.md#top")
 	require.True(t, ok, "a section node per heading")
@@ -87,7 +94,7 @@ func TestDocsFrontmatterAttrs(t *testing.T) {
 	writeFile(t, root, "docs/charms.md", "---\ntitle: Charms\ntags: [reference, argv]\n---\n\nCharms modify argv.\n")
 	writeFile(t, root, "docs/plain.md", "# Plain\nNo frontmatter here.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	charms, ok := nodeByID(out, "doc:docs/charms.md")
 	require.True(t, ok)
@@ -107,7 +114,7 @@ func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "docs/x.md", "---\ntitle: X\n---\n\nMentions MGS9998 which does not exist.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	d, ok := nodeByID(out, "doc:docs/x.md")
 	require.True(t, ok)
@@ -124,7 +131,7 @@ func TestMagusMdNotIngested(t *testing.T) {
 	writeFile(t, root, "MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
 	writeFile(t, root, "README.md", "The `go` spell.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
 	_, ok := nodeByID(out, "doc:MAGUS.md")
 	assert.False(t, ok, "generated MAGUS.md must not be ingested as a doc node")
@@ -147,7 +154,7 @@ func TestAssembleDocs(t *testing.T) {
 	writeFile(t, root, "docs/reference/buzz/fs.md", "# fs\nFilesystem module.\n")
 	writeFile(t, root, "README.md", "Uses the `go` spell; see MGS2010 when it fails.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
 	for _, id := range []string{"doc:docs/reference/codes/sandbox/MGS2010.md", "doc:docs/concepts/spells/go.md", "doc:docs/reference/buzz/fs.md", "doc:README.md"} {
 		_, ok := nodeByID(out, id)
@@ -187,7 +194,7 @@ func TestDocsPathResilience(t *testing.T) {
 	writeFile(t, root, "handbook/errors/MGS9998.md", "# MGS9998\n") // unregistered code
 	writeFile(t, root, "handbook/spells/notaspell.md", "# not\n")   // not a known spell
 
-	out := mergeAll([]Shard{assembleDocs(root, []types.Spell{{Name: "go"}}, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
 	assert.True(t, hasEdge(out, "doc:handbook/errors/MGS2001.md", "diagnostic:MGS2001", types.RelationDocuments), "code edge is directory-agnostic")
 	assert.True(t, hasEdge(out, "doc:handbook/spells/go.md", "spell:go", types.RelationDocuments), "spell edge anchors on the spells segment")
@@ -206,7 +213,7 @@ func TestDocsSectionAttr(t *testing.T) {
 	writeFile(t, root, "docs/glossary.md", "# Glossary\n")
 	writeFile(t, root, "README.md", "# Readme\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	n, ok := nodeByID(out, "doc:docs/guides/mcp.md")
 	require.True(t, ok)
@@ -230,7 +237,7 @@ func TestDocsCommandReferences(t *testing.T) {
 	writeFile(t, root, "docs/reference/manpage/magus-run.md", "# magus run\nRun a target.\n")
 	writeFile(t, root, "docs/concepts/targets.md", "A target is what you run with `magus run`.\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
 	e, ok := findEdge(out, "doc:docs/concepts/targets.md", "doc:docs/reference/manpage/magus-run.md", types.RelationReferences)
 	require.True(t, ok, "a `magus run` mention references its manpage doc")
@@ -325,7 +332,7 @@ func TestAssembleDocs_DeclaredNotesProduceNoDocNode(t *testing.T) {
 	writeFile(t, root, "docs/guide.md", "a real doc\n")
 	writeFile(t, root, "notes/cache-pairing.md", "---\nname: cache-pairing\n---\n\nprose\n")
 
-	out := mergeAll([]Shard{assembleDocs(root, nil, nil, "notes")}).Output()
+	out := mergeAll([]Shard{docShard(root, nil, "notes")}).Output()
 
 	_, ok := nodeByID(out, "doc:docs/guide.md")
 	assert.True(t, ok, "documentation is still indexed")

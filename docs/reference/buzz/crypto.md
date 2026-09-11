@@ -20,9 +20,9 @@ Return the lowercase hex SHA-256 digest of data.
 
 **Signature:** `crypto\sha256Hex(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L247)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Return the lowercase hex SHA-256 digest of the file at path.
 
 **Signature:** `crypto\sha256File(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L252)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** string
 
@@ -44,9 +44,9 @@ Return the lowercase hex SHA-512 digest of data.
 
 **Signature:** `crypto\sha512Hex(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L257)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -56,9 +56,9 @@ Return the lowercase hex SHA-512 digest of the file at path.
 
 **Signature:** `crypto\sha512File(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L262)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** string
 
@@ -68,9 +68,9 @@ Return the lowercase hex SHA-1 digest of data. For interop with legacy/git check
 
 **Signature:** `crypto\sha1Hex(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L267)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -80,9 +80,9 @@ Return the lowercase hex SHA-1 digest of the file at path. For interop with lega
 
 **Signature:** `crypto\sha1File(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L272)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** string
 
@@ -92,11 +92,11 @@ Sign data with the private key in the named environment variable and return the 
 
 **Signature:** `crypto\sign(alg, data, key_env) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L330)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `alg` | `string` |  | |
-| `data` | `string` |  | |
-| `key_env` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `alg`     | `string` |          |             |
+| `data`    | `string` |          |             |
+| `key_env` | `string` |          |             |
 
 **Returns:** string
 
@@ -106,11 +106,11 @@ Sign the file at path, write the detached signature to path + ".sig", and return
 
 **Signature:** `crypto\signFile(alg, path, key_env) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L343)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `alg` | `string` |  | |
-| `path` | `string` |  | |
-| `key_env` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `alg`     | `string` |          |             |
+| `path`    | `string` |          |             |
+| `key_env` | `string` |          |             |
 
 **Returns:** string
 
@@ -120,12 +120,12 @@ Report whether sig_hex is a valid signature over data for the hex public key pub
 
 **Signature:** `crypto\verify(alg, data, sig_hex, pub_hex) -> bool` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L373)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `alg` | `string` |  | |
-| `data` | `string` |  | |
-| `sig_hex` | `string` |  | |
-| `pub_hex` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `alg`     | `string` |          |             |
+| `data`    | `string` |          |             |
+| `sig_hex` | `string` |          |             |
+| `pub_hex` | `string` |          |             |
 
 **Returns:** bool
 
@@ -135,10 +135,10 @@ Return the lowercase hex PUBLIC key for the private key in the named environment
 
 **Signature:** `crypto\publicKey(alg, key_env) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L394)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `alg` | `string` |  | |
-| `key_env` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `alg`     | `string` |          |             |
+| `key_env` | `string` |          |             |
 
 **Returns:** string
 
@@ -148,9 +148,9 @@ Return the lowercase hex MD5 digest of data. For interop with legacy checksum ma
 
 **Signature:** `crypto\md5Hex(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L277)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -160,9 +160,9 @@ Return the lowercase hex MD5 digest of the file at path. For interop with legacy
 
 **Signature:** `crypto\md5File(path) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L282)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** string
 
@@ -172,10 +172,10 @@ Return the raw HMAC-SHA256 of data keyed by key, as a BYTE LIST. key and data ma
 
 **Signature:** `crypto\hmacSha256(key, data) -> []byte` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L187)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `key` | `[]byte` |  | |
-| `data` | `[]byte` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `key`     | `[]byte` |          |             |
+| `data`    | `[]byte` |          |             |
 
 **Returns:** []byte
 
@@ -185,10 +185,10 @@ Return the lowercase hex HMAC-SHA256 of data keyed by key - the form a signature
 
 **Signature:** `crypto\hmacSha256Hex(key, data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L194)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `key` | `[]byte` |  | |
-| `data` | `[]byte` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `key`     | `[]byte` |          |             |
+| `data`    | `[]byte` |          |             |
 
 **Returns:** string
 
@@ -198,9 +198,9 @@ Encode raw bytes as standard (padded) base64. The byte-list counterpart to encod
 
 **Signature:** `crypto\base64EncodeBytes(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L203)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `[]byte` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `[]byte` |          |             |
 
 **Returns:** string
 
@@ -210,9 +210,9 @@ Decode standard (padded) base64 into a byte list; errors on invalid input. Retur
 
 **Signature:** `crypto\base64DecodeBytes(s) -> []byte` - [source](https://github.com/egladman/magus/blob/main/std/crypto.go#L208)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** []byte
 

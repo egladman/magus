@@ -310,7 +310,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 // the source tree, leaving an artifact that regenerates byte-identically anywhere.
 //
 // Two kinds qualify, for the same reason and not the obvious one. Locally OBSERVED data
-// (run timings, output refs, coverage) varies by machine. Git HISTORY (author nodes,
+// (run timings, output refs, coverage, loaded agent contact) varies by machine. Git HISTORY (author nodes,
 // per-file churn, the dir_commits roll-up, prose staleness) varies by COMMIT, and that is
 // the sharper problem for a checked-in export: committing anything changes the churn, so
 // the artifact invalidates itself and the drift gate fires on the commit that just fixed
@@ -320,7 +320,9 @@ func graphExport(ctx context.Context, root string, args []string) error {
 // Graph.Output shares node attribute maps with the live graph, so this copies rather than
 // deleting in place. Interactive queries and the live graph keep all of it.
 func stripUnreproducible(g *types.KnowledgeGraphOutput) {
-	drop := func(key string) bool { return knowledge.IsRuntimeAttr(key) || knowledge.IsHistoryAttr(key) }
+	drop := func(key string) bool {
+		return knowledge.IsRuntimeAttr(key) || knowledge.IsHistoryAttr(key) || knowledge.IsSessionAttr(key)
+	}
 
 	nodes := g.Nodes[:0]
 	for _, n := range g.Nodes {

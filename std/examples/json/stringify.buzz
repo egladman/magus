@@ -2,8 +2,8 @@ import "std";
 import "encoding/json";
 
 final config = { "target": "build", "parallel": true };
-std\print(json\stringify(config));
+std\print(json\stringify(config) catch "");
 // -> {"parallel":true,"target":"build"}
 
 // Pretty-printed with two-space indent:
-std\print(json\stringify(config, "  "));
+std\print(json\stringify(config, "  ") catch "");

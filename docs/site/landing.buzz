@@ -218,7 +218,7 @@ export fun build(ctx: magus&#92;Context, args: [str]) &gt; void \{ go["go-build"
 export fun test(ctx: magus&#92;Context, args: [str])  &gt; void \{ go["go-test"](ctx); \}
 export fun lint(ctx: magus&#92;Context, args: [str])  &gt; void \{ go["golangci-lint"](ctx); \}
 
-// read-only by default. format:rw writes, format:relock re-resolves go.mod
+// read-only by default. format:rw writes, format:update re-resolves go.mod
 export fun format(ctx: magus&#92;Context, args: [str]) &gt; void \{
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
@@ -235,8 +235,8 @@ export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void \{
       </div>
       <div>
         <h3 class="landing-pair-title">A charm modifies a run</h3>
-        <p class="landing-pair-body">A charm says in what manner. <code>rw</code> turns a check into a write, so <code>format</code> reports by default and <code>format:rw</code> rewrites. <code>relock</code> is separate because re-resolving dependencies is a different risk from reformatting a file.</p>
-        <p class="landing-pair-body">Underneath it is an <a href="concepts/charms/">RFC 6902 JSON Patch</a> over the command's argument vector, so a charm can replace an argument, remove one, or insert at a position - not merely append a flag. The SET you name is additive and stacks (<code>format:rw,relock</code>), and every run prints the set in effect before it starts; what each one does to the argv is as precise as it needs to be.</p>
+        <p class="landing-pair-body">A charm says in what manner. <code>rw</code> turns a check into a write, so <code>format</code> reports by default and <code>format:rw</code> rewrites. <code>update</code> is separate because moving pinned upstream state forward is a different risk from reformatting a file.</p>
+        <p class="landing-pair-body">Underneath it is an <a href="concepts/charms/">RFC 6902 JSON Patch</a> over the command's argument vector, so a charm can replace an argument, remove one, or insert at a position - not merely append a flag. The SET you name is additive and stacks (<code>format:rw,update</code>), and every run prints the set in effect before it starts; what each one does to the argv is as precise as it needs to be.</p>
       </div>
     </div>
     <h3 class="landing-pair-summary-title">Together they are the whole model</h3>

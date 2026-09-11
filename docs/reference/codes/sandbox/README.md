@@ -115,3 +115,5 @@ Two layers run together:
 - [MGS3010](MGS3010.md): redundant gate deferred.
 - [MGS3011](MGS3011.md): target exceeded its declared timeout.
 - [MGS3012](MGS3012.md): invocation stalled with its project locks held.
+- [MGS3013](MGS3013.md): every build slot held by a step that is itself waiting.
+- [MGS3014](MGS3014.md): gate superseded by a later gate on the same tree.

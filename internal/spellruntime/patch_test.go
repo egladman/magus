@@ -185,8 +185,8 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 // so a golden that inlined it per op would drift one entry at a time.
 var (
 	goldenGoModHints = []spells.Hint{
-		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
-		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run the covering target with the update charm (`magus run <target>:update`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 	}
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
@@ -278,9 +278,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Name:  "cosign",
 		Tools: map[string]spells.Tool{"cosign": {Probe: spells.Command{Bin: "cosign", Args: []string{"version"}}}},
 		Ops: map[string]spells.Op{
-			"cosign-sign":   {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}}},
-			"cosign-verify": {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}}},
-			"cosign-attest": {Command: spells.Command{Bin: "cosign", Args: []string{"attest", "--yes"}}},
+			"cosign-sign":   {Command: spells.Command{Bin: "cosign", Args: []string{"sign", "--yes"}, External: spells.ExternalMutates}},
+			"cosign-verify": {Command: spells.Command{Bin: "cosign", Args: []string{"verify"}, External: spells.ExternalReads}},
+			"cosign-attest": {Command: spells.Command{Bin: "cosign", Args: []string{"attest", "--yes"}, External: spells.ExternalMutates}},
 		},
 	},
 	"docker": {
@@ -300,9 +300,20 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Probe:       spells.Command{Bin: "hadolint", Args: []string{"--version"}},
 				Diagnostics: spells.DiagnosticGNU,
 			},
+			// Both probes, because a release and a vulnerability database move on
+			// different clocks: the version keys which build of the scanner ran, the
+			// observation keys which database it read.
+			"trivy": {
+				Probe:   spells.Command{Bin: "trivy", Args: []string{"version"}},
+				Key:     spells.VersionKey{UpTo: spells.VersionPatch},
+				Observe: spells.Command{Bin: "trivy", Args: []string{"version", "--format", "json"}},
+			},
 		},
 		Ops: map[string]spells.Op{
-			"docker-build":       {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+			"docker-build": {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+			"trivy-image": {Command: spells.Command{Bin: "trivy", Args: []string{"image", "--skip-db-update"}, External: spells.ExternalReads, Charms: map[string]spells.Charm{
+				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/1"}}},
+			}}},
 			"docker-run":         {Command: spells.Command{Bin: "docker", Args: []string{"run", "--rm"}}},
 			"docker-buildx":      {Command: spells.Command{Bin: "docker", Args: []string{"buildx", "build"}, Hints: goldenBuildxHints}},
 			"docker-build-check": {Command: spells.Command{Bin: "docker", Args: []string{"build", "--check"}}},
@@ -316,7 +327,8 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"go": {Probe: spells.Command{Bin: "go", Args: []string{"version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch},
 				Supported: spells.VersionBounds{Min: "1.21"}},
 			"golangci-lint": {Probe: spells.Command{Bin: "golangci-lint", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}},
-			"govulncheck":   {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
+			"govulncheck": {Probe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}},
+				Observe: spells.Command{Bin: "govulncheck", Args: []string{"-version"}}},
 		},
 		Language:           "go",
 		LanguageExtensions: []string{".go"},
@@ -359,13 +371,13 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				}},
 			}}},
 			// tidy checks by default (--diff exits non-zero if go.mod/go.sum need
-			// changes — safe for CI gating); relock applies the changes. relock rather
+			// changes — safe for CI gating); update applies the changes. update rather
 			// than rw because tidy re-resolves against the proxy.
 			"go-mod-tidy": {Command: spells.Command{Bin: "go", Args: []string{"mod", "tidy", "--diff"}, Charms: map[string]spells.Charm{
-				"relock": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
+				"update": {Ops: []spells.PatchOp{{Op: "remove", Path: "/2"}}},
 			}}},
 			"go-vet":      {Command: spells.Command{Bin: "go", Args: []string{"vet", "./..."}}},
-			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}}},
+			"govulncheck": {Command: spells.Command{Bin: "govulncheck", Args: []string{"./..."}, External: spells.ExternalReads}},
 			"scip":        {Command: spells.Command{Bin: "scip-go", Args: []string{"--output", "$MAGUS_SYMBOL_INDEX"}}},
 		},
 	},
@@ -401,7 +413,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		Ops: map[string]spells.Op{
 			"podman-build":    {Command: spells.Command{Bin: "podman", Args: []string{"build"}, Hints: goldenPodmanHints}},
-			"podman-push":     {Command: spells.Command{Bin: "podman", Args: []string{"push"}, Hints: goldenPodmanHints}},
+			"podman-push":     {Command: spells.Command{Bin: "podman", Args: []string{"push"}, External: spells.ExternalMutates, Hints: goldenPodmanHints}},
 			"podman-manifest": {Command: spells.Command{Bin: "podman", Args: []string{"manifest"}, Hints: goldenPodmanHints}},
 			"podman-run":      {Command: spells.Command{Bin: "podman", Args: []string{"run", "--rm"}, Hints: goldenPodmanHints}},
 		},

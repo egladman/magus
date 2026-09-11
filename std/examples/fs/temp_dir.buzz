@@ -1,6 +1,11 @@
 import "std";
 import "fs";
 
-final tmp = fs\tempDir("magus-build-");
-std\print(tmp);
-// -> "/tmp/magus-build-abc123"
+// No sensible fallback path exists, so an unwritable temp dir is reported rather
+// than substituted.
+try {
+    std\print(fs\tempDir("magus-build-"));
+    // -> "/tmp/magus-build-abc123"
+} catch (e) {
+    std\print("no writable temp dir");
+}

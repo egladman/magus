@@ -10,6 +10,7 @@ export object Target {
     name: str = "",
     charms: [str] = [],
     files: [str] = [],
+    undeclared: [str] = [],
     declared: str = "",
     declaredCharms: [str] = [],
     skip_cache: bool = false,

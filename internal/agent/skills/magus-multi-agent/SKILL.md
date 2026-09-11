@@ -90,6 +90,12 @@ composition{{if .Full}}. A worker hand-sequencing lint, format, and test is re-d
 order the magusfile already owns, and the step it forgets fails silently by
 omission{{end}}.
 
+A lease's validation is that narrow target and never the gate; the guard reads
+the row and denies `ci` to any worker whose validation names something else. The
+root gates ONCE, in its own tree, after every unit lands{{if .Full}}, which is
+what stops seven fanned-out workers from each running the whole pipeline
+concurrently on one machine{{end}}.
+
 Decide each lease's validation PLANE with its target. A worker environment that
 cannot execute magus at all - an isolated tree with no usable binary, or a
 guard that routes raw language tools back to targets it cannot run - cannot
@@ -259,6 +265,16 @@ deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss real
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct{{end}}.
+
+Owned paths are the WRITE lane. The guard reads them as a READ lane too, so a
+worker leased to `apps/web` is advised off `apps/admin` and denied it outright
+once `magus session lease <its id>` binds the row to its checkout.{{if .Full}} The
+focus set is its projects plus what they declare `depends_on`, so a shared library
+it legitimately builds on stays open.{{end}} When a worker must READ something it
+must not WRITE, put that path in the row's `focus` instead of widening
+`owned_paths`: one list cannot say both, and widening the write lane to open a
+read is how two workers end up owning one file. `focus` is the only widening
+there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the

@@ -232,6 +232,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkObserverRecording() },
 	},
 	{
+		Name:           "session-load",
+		Doc:            "whether a host transcript has ever been loaded, and how stale the newest of it is",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkSessionLoad() },
+	},
+	{
 		Name:           "guard-wiring",
 		Doc:            "whether anything in this checkout actually hands the guard a command to judge",
 		Evidence:       types.EvidenceMeasured,
@@ -337,6 +344,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkCacheableSecretReads,
 	},
 	{
+		Name:           "cacheable-external-ops",
+		Doc:            "a cacheable target composing an op that reads a live feed or has an effect outside the tree",
+		Code:           types.CacheableExternalOp,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkCacheableExternalOps,
+	},
+	{
 		Name:           "redundant-footprint-globs",
 		Doc:            "a per-target output glob already declared project-wide",
 		Code:           types.RedundantFootprintGlob,
@@ -383,6 +398,14 @@ var allChecks = []checkDef{
 		Evidence:       types.EvidenceDeclared,
 		NeedsWorkspace: true,
 		run:            (*runner).checkOutputOwnedByTwoTargets,
+	},
+	{
+		Name:           "same-step-writes",
+		Doc:            "a composed target running a reader and a writer of the same files with no ctx.needs between them",
+		Code:           types.UnorderedSameStepWrite,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkSameStepWrites,
 	},
 	{
 		Name:           "self-staling-outputs",

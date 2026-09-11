@@ -145,6 +145,9 @@ used by (10)  op:go:go-build, op:go:go-clean, op:go:go-generate,
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=tool%3Ago
 (append &token=$(magus config token print) to open it authenticated)
 (start the magus daemon if the graph does not load)
+
+next:
+  magus path tool:go op:go:go-build  (path resolves the chain between two nodes, and this is the neighbor the card names most.)
 ```
 
 <!-- /example -->
@@ -168,6 +171,9 @@ part of     project:.
 View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=target%3A.%3Atest
 (append &token=$(magus config token print) to open it authenticated)
 (start the magus daemon if the graph does not load)
+
+next:
+  magus path target:.:test op:go:go-test
 ```
 
 <!-- /example -->
@@ -315,7 +321,7 @@ builds so external consumers and agent memory can key on it. A rename is a
 delete-plus-add.
 
 Node kinds: `project`, `target`, `spell`, `op`, `charm`, `module`, `method`,
-`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`.
+`diagnostic`, `doc`, `file`, `function`, `import`, `rationale`, `owner`, `link`.
 
 Nodes also carry static metadata the extractors already parse, surfaced as
 attributes so `magus explain` answers a question without a second describe: a
@@ -388,6 +394,24 @@ target no longer in any magusfile are dropped rather than left as phantom nodes.
 This is the graph's only non-deterministic input, so it is quarantined: a distinct
 shard, excluded from remote export, derived from local run records rather than
 workspace sources.
+
+## Agent contact (`@session`)
+
+Once `magus session load` has folded an agent host's transcript into the per-repo
+session store, the `@session` shard rolls those events up onto the file and
+directory nodes the graph already holds: `agent_sessions` (how many distinct
+sessions touched it), `agent_reads`, `agent_writes`, `agent_denials`, and
+`agent_last_touched` (the host's own event time, not the load time). That answers
+"which code do agents actually touch" and "where do refusals concentrate" from a
+node, with no second query. Events themselves never become nodes: merge is a set
+union, so repeated contact would collapse to one edge, losing the count, which is
+the whole signal. A denial is credited only to an event that carries a path;
+a refused shell command names no file, so crediting it to the directory the session
+happened to be working in would invent attribution. A path that matches no node is
+counted and dropped, never minted. Like `@coverage`, the shard loads with the
+symbol layer rather than the default graph, because the file nodes it annotates are
+the symbol shards' own; like `@runtime`, it is local-only, never pushed to a remote
+cache, and stripped from `magus graph export --reproducible`.
 
 ## Code symbols (SCIP ingestion)
 
@@ -526,6 +550,43 @@ to do with a missing symbol index, so nothing about one is reported. The probe
 deliberately does not decode each index to check it parses: that is a full unmarshal per
 lookup to catch a case the graph build already logs, while a never-built index is the case
 that actually occurs.
+
+## Citations (@links)
+
+A URL written in a code comment is almost always a pointer at documentation, and until it
+is indexed it is invisible to every query. The `@links` shard reads them: every http(s)
+URL in a Go or Buzz comment, every absolute markdown link on a page, and the source a
+generated page names in its `generated_from` frontmatter.
+
+Each citation lands in one of three classes:
+
+| class | what it names | what the graph does |
+| --- | --- | --- |
+| `docs` | a page this workspace holds | an edge to that `doc`, or to the `docsection` its anchor names |
+| `source` | a forge URL naming a path this workspace holds | an edge to that `file` or `dir` |
+| `upstream` | anything else | an edge to a `link` node keyed by the normalized URL |
+
+Only `upstream` mints a node, so `kind=link` is exactly the set of external documents this
+workspace depends on, and `magus explain link:buzz-lang.dev/0.5.0/reference/std/fs.html`
+lists every file citing it. The other two cross-link to a node that already exists, so a
+docs reorg moves the edge with the page instead of stranding a URL.
+
+Which relation an edge carries follows the citing kind: a page that names a source path is
+describing it (`documents`), while a comment that names anything is only pointing at it
+(`references`). `magus graph stats` reads the first of those as file doc coverage.
+
+Resolution never asks where the site is deployed, because nothing declares it. It matches
+the URL's trailing path against the page's own path with the `docs/` prefix dropped, and an
+ambiguous match resolves to nothing rather than guessing.
+
+Nothing is fetched, ever. A link node asserts that something here points there, never that
+anything is at the other end. Only text a LEXER classified as a comment is scanned, so a
+URL in a string literal is out of reach by construction, and a citation must clear a closed
+scheme set (http, https), carry no userinfo, sit under a length cap, and name a host that
+is not an IP literal, a single label, or an RFC 2606 reserved name. Those rules exist
+because comments are full of URL-shaped prose written to show a format (`http://<host`,
+`https://endpoint/bucket/key`, `http://127.0.0.1:7391@evil.com`), and a link node minted from one
+is a phantom nothing can retire.
 
 ## Git history (@vcs)
 

@@ -193,7 +193,20 @@ const (
 	// target), while an undeclared ceiling is the documented default and harms only the
 	// runaway case, and a target that never terminates records no duration to argue
 	// from, so the evidence for that finding does not exist.
-	TimeoutDeclarationDrift   DiagnosticCode = "MGS1032"
+	TimeoutDeclarationDrift DiagnosticCode = "MGS1032"
+	// CacheableExternalOp is a cacheable target composing a spell op that declares a
+	// relation to the world outside the tree (spells.External) the cache key cannot
+	// see: a scanner reading a vulnerability feed, or a push, signature or deploy.
+	//
+	// The sibling of MGS1026, and for the same reason: what makes it worth a check is
+	// that the failure is GREEN. A replayed scan reports the CVEs of whenever it last
+	// ran, and a replayed push reports a delivery that never happened. Neither surfaces
+	// where it was caused.
+	//
+	// A reads-external op has two answers, not one: declare skip_cache, or let the
+	// spell probe the external data's identity (Tool.observe) so it keys like any other
+	// input. A mutates-external op has only the first: a side effect cannot be hashed.
+	CacheableExternalOp       DiagnosticCode = "MGS1033"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -276,7 +289,31 @@ const (
 	// making no progress AT ALL, in any of its work. The shape it exists for is a
 	// post-batch pass wedged on a network read while every observer reported an idle
 	// machine, which no target's ceiling covers because no target was running.
-	InvocationStalled         DiagnosticCode = "MGS3012"
+	InvocationStalled DiagnosticCode = "MGS3012"
+	// BuildSlotsDeadlocked is a run magus refused because every one of its concurrency
+	// slots is held by a step that is itself waiting, so no slot can free and the steps
+	// queued for one would wait forever. It joins MGS3007/MGS3009/MGS3010 in the
+	// environment family: nothing about the workspace is wrong, the process has arranged
+	// itself into a wait nothing in it can end.
+	//
+	// The half of MGS3012 that can be answered rather than merely reported. The watchdog
+	// says a run stopped moving, after the window it takes to be sure; this says why
+	// within seconds, and names every holder and what each is blocked on, because the
+	// admission path knows both.
+	BuildSlotsDeadlocked DiagnosticCode = "MGS3013"
+	// GateSuperseded is an earlier gate magus stopped because a LATER gate started on the
+	// same tree and asked for the project locks it holds. It joins MGS3007/MGS3010/MGS3012
+	// in the environment family: nothing in the workspace is wrong and nothing failed, the
+	// tree the verdict was about moved on.
+	//
+	// The ordering is decided by the tree and never by the caller: one workspace root, both
+	// invocations the whole ci target, later start wins. There is no priority to set,
+	// because a verdict about a tree that has since changed is worthless whoever asked for
+	// it, and the compute spent producing it is waste either way.
+	//
+	// Exits 75 (EX_TEMPFAIL) like MGS3009/MGS3010: nothing here is broken, and the same
+	// command is valid again the moment the later gate finishes.
+	GateSuperseded            DiagnosticCode = "MGS3014"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
 	NondeterministicOutput    DiagnosticCode = "MGS4003"
@@ -294,6 +331,20 @@ const (
 	// someone spelled it out. ctx.modifiesExistingFiles is the declaration that answers
 	// this, which is why a formatter names its edits rather than earning an exemption.
 	UndeclaredSourceModified DiagnosticCode = "MGS4007"
+	// UnorderedSameStepWrite is one target reading, inside a single step, what another
+	// target of that same step writes, with no ctx.needs path between them. Both sides
+	// are explicit declarations, so the overlap is the magusfile's own claim rather than
+	// an over-approximated baseline.
+	//
+	// Refused at PLAN time, before any goroutine launches, because both failures it
+	// produces are worse than a refusal: the reader may run first and read stale bytes,
+	// or it may wait for the writer while holding the seat the writer needs, wedging the
+	// run until the stall watchdog (MGS3012) kills it.
+	//
+	// The same-step case is the one magus must not schedule around. Across steps the
+	// engine derives writer-before-reader ordering itself; within one step the sequencing
+	// is the composing body's own, and only ctx.needs can express it.
+	UnorderedSameStepWrite   DiagnosticCode = "MGS4008"
 	NearDuplicateServices    DiagnosticCode = "MGS5001"
 	ServiceOpDetached        DiagnosticCode = "MGS5002"
 	CommandOpNeverExits      DiagnosticCode = "MGS5003"
@@ -350,15 +401,15 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
-	TimeoutDeclarationDrift,
+	TimeoutDeclarationDrift, CacheableExternalOp,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor, NoWorkspaceRoot, MachineBudgetExhausted, RedundantGateDeferred,
-	TargetCeilingExceeded, InvocationStalled,
+	TargetCeilingExceeded, InvocationStalled, BuildSlotsDeadlocked, GateSuperseded,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
-	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
+	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified, UnorderedSameStepWrite,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

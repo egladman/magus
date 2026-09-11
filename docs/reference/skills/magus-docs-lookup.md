@@ -3,8 +3,8 @@ title: magus-docs-lookup
 generated_from: internal/agent/skills/magus-docs-lookup/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs-lookup]
-skill_full_bytes: 3670
-skill_short_bytes: 2956
+skill_full_bytes: 4261
+skill_short_bytes: 3434
 ---
 
 # magus-docs-lookup
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `55` |
-| `knowledge-schema-version` | `11` |
-| `skill-content` | `0fb7b622ba6e` |
+| `agent-skill-version` | `64` |
+| `knowledge-schema-version` | `12` |
+| `skill-content` | `9d63308627a8` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -53,7 +53,7 @@ Both are hand-authored from one source body. The short form is the always-loaded
 magus agent install --tar | tar -xO -f - magus-docs-lookup/SKILL.md
 ```
 
-```markdown
+````markdown
 # Navigating the magus docs
 
 magus ships one official documentation corpus. Reach for it when a magus-domain fact
@@ -62,10 +62,23 @@ truth for magus's own behavior.
 
 Two places serve the same pages:
 
-- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): read `docs/<name>.md`
-  directly.
+- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section
+  (next), or read `docs/<name>.md` when you already know the page.
 - Published: the deployed site at `https://eli.gladman.cc/magus/`. Every page is
   also emitted as raw Markdown at `<page-url>index.md` for clean fetching.
+
+## In a magus workspace, ask the graph for the passage
+
+Every markdown heading in the workspace is a `docsection` node, so "where is this
+explained" is a query rather than a scan:
+
+```sh
+magus query kind=docsection "cache key"
+```
+
+Each result's id is `<path>#<anchor>`, a pointer to the one passage. Read that
+section, not the file it sits in. The index route
+below is for the PUBLISHED site, where there is no graph to ask.
 
 ## FAST PATH: start from the index, do not guess URLs
 
@@ -119,7 +132,7 @@ The `docs/` Markdown is the source of truth; `docs/gen/` is generated output
 generated for HUMAN readers, so do not answer from it: true only as of its last
 regeneration. `magus query "kind=doc"` lists every
 page from the graph.
-```
+````
 
 
 </section>
@@ -130,7 +143,7 @@ page from the graph.
 magus agent install --tar | tar -xO -f - magus-docs-lookup-full/SKILL.md
 ```
 
-```markdown
+````markdown
 # Navigating the magus docs
 
 magus ships one official documentation corpus. It is a static site, so its
@@ -141,10 +154,25 @@ magus's own behavior, so read them rather than guessing.
 
 Two places serve the same pages:
 
-- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): read `docs/<name>.md`
-  directly. This is where the skill is dogfooded, so prefer it here.
+- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section
+  (next), or read `docs/<name>.md` when you already know the page. This is where
+  the skill is dogfooded, so prefer it here.
 - Published: the deployed site at `https://eli.gladman.cc/magus/`. Every page is
   also emitted as raw Markdown at `<page-url>index.md` for clean fetching.
+
+## In a magus workspace, ask the graph for the passage
+
+Every markdown heading in the workspace is a `docsection` node, so "where is this
+explained" is a query rather than a scan:
+
+```sh
+magus query kind=docsection "cache key"
+```
+
+Each result's id is `<path>#<anchor>`, a pointer to the one passage. Read that
+section, not the file it sits in. `project=<p>` scopes it, and `magus explain
+"docsection:<path>#<anchor>"` walks the page's outline from there. The index route
+below is for the PUBLISHED site, where there is no graph to ask.
 
 ## FAST PATH: start from the index, do not guess URLs
 
@@ -203,7 +231,7 @@ generated for HUMAN readers, so do not answer from it: it is true only as of the
 last regeneration, and every fact in it has a live command. The knowledge graph
 carries every page as a `doc` node, so `magus query "kind=doc"` (see the
 magus-query skill) lists them from the graph.
-```
+````
 
 
 </section>

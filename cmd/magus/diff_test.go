@@ -2193,12 +2193,6 @@ func TestPathLinkerLeavesPipedOutputBare(t *testing.T) {
 	assert.Equal(t, "/abs/path.go", link("/abs/path.go"))
 }
 
-// TestDiffTouchesWithoutATrail covers the common case: no guard hook is wired, so the
-// replay is empty and the map is nil rather than an empty map that renders as a column.
-func TestDiffTouchesWithoutATrail(t *testing.T) {
-	assert.Nil(t, diffTouches(t.TempDir(), t.TempDir(), []string{"a.go"}))
-}
-
 // diffFiles returns a diff of n files, for exercising the hint's threshold.
 func diffFiles(n int) types.Diff {
 	rev := types.Diff{Base: "main"}

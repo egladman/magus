@@ -34,7 +34,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Truncate(maxDigestBytes+1), "sparse, so the cap is exercised without writing the bytes")
 	require.NoError(t, big.Close())
 
-	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	s := tmpStore(t, root)
 	_, err = s.Put(ctx, types.Lease{
 		ID:         "u1",
 		OwnedPaths: []string{"escape.go", "pipe", "big.bin"},
@@ -84,7 +84,7 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "real.go"), []byte("package real\n"), 0o644))
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
-	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	s := tmpStore(t, root)
 	_, err := s.Put(ctx, types.Lease{ID: "u1", OwnedPaths: []string{"link.go"}})
 	require.NoError(t, err)
 	stored, err := s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = nil })

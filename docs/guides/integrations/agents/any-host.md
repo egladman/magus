@@ -26,6 +26,7 @@ Any host that can run a command and read its output fits.
 | skills          | whichever directory your host discovers `SKILL.md` in |
 | always-on rules | `AGENTS.md`, if your host reads one                   |
 | guard wiring    | whatever pre-tool hook or plugin your host offers     |
+| rehydration     | whatever session-start or post-compaction event fires |
 | MCP             | [MCP](../mcp.md)                                      |
 
 ## Skills
@@ -75,13 +76,15 @@ the missing-binary and broken-binary handling without writing it again.
 Three decisions are yours to make:
 
 - **Which channel carries a deny.** Most hosts have one that reaches the model.
-- **Whether an advise can reach the model at all.** Some hosts deliver a message
-  only on a denial; there, the advisory nudges live in the installed skills
-  instead. Set `GUARD_NO_ADVISE` when your host does worse than ignore one -
-  Codex treats the `additionalContext` key as an error and then fails OPEN, so
-  sending an advisory it cannot take disarms the guard for that call. Suppressed,
-  an advise renders nothing at all; `HOST_ADVISE_BRANCH` reshapes it instead if
-  your host has some other channel.
+- **Which channel carries an advise, and when it arrives.** It is often not the
+  gating event: a host that sends a message only with a denial has nothing to
+  attach an advisory to, and its post-tool event is the channel instead, which
+  lands after the call rather than before it. `HOST_ADVISE_BRANCH` reshapes the arm for
+  whatever your host takes. Reserve `GUARD_NO_ADVISE` for a host that does worse
+  than ignore a reply it does not know: one that treats an unsupported key as an
+  error and then fails OPEN is disarmed by an advisory rather than merely deaf to
+  it. Suppressed, an advise renders nothing at all. None of the four documented
+  hosts needs it today.
 - **What happens when magus cannot be found or cannot judge.** Failing open
   keeps the session usable and is what every shipped template does. Say so
   visibly rather than exiting quietly, because an unguarded session you know
@@ -186,6 +189,21 @@ records and never opens.
 
 magus needs no release to learn about your host. `--agent-name` is an opaque
 label you choose, exactly as on the guard hook.
+
+## Handing a session its state back
+
+If your host has an event for "a session started" or "the history was
+compacted", wire it to
+[`magus-rehydrate.sh`](guard-templates.md#magus-rehydratesh) and whatever it
+prints reaches the model as context. It runs `magus session --brief`, which
+reads this checkout off the disk: branch and revision, commits not yet on the
+base ref, the dirty tree classified, the live leases, the last recorded run's
+failures, the guard wiring, and where the rules live. Set `REHYDRATE_RULES` to
+your host's own instruction file.
+
+Nothing about it is host-shaped except which event you hang it on. If your host
+has no such event, run `magus session --brief` by hand and paste it, or read it
+yourself: it is the same answer either way.
 
 ## Coverage and limits
 

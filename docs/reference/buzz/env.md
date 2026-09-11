@@ -20,9 +20,9 @@ Return the value of name, or "" if unset. Use lookup to tell unset from set-but-
 
 **Signature:** `env\get(name) -> string`[^buzz-stdlib-env-get] - [source](https://github.com/egladman/magus/blob/main/std/env.go#L118)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Return (value, found); found is false when name is unset or stripped by the sand
 
 **Signature:** `env\lookup(name) -> string, bool`[^buzz-stdlib-env-lookup] - [source](https://github.com/egladman/magus/blob/main/std/env.go#L133)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 **Returns:** string, bool
 
@@ -44,10 +44,10 @@ Set name to value in the current process environment.
 
 **Signature:** `env\set(name, value)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L142)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
-| `value` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+| `value`   | `string` |          |             |
 
 ### list
 
@@ -63,9 +63,9 @@ Remove name from the current process environment.
 
 **Signature:** `env\unset(name)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L159)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 ### expand
 
@@ -73,9 +73,9 @@ Replace $VAR and ${VAR} references in s with their values (sandbox-stripped name
 
 **Signature:** `env\expand(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L174)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 
@@ -93,10 +93,10 @@ Return the value of name, or def when name is unset or stripped by the sandbox. 
 
 **Signature:** `env\getOr(name, def) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L196)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
-| `def` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
+| `def`     | `string` |          |             |
 
 **Returns:** string
 
@@ -106,9 +106,9 @@ Return the value of name, or raise when it is unset or stripped by the sandbox. 
 
 **Signature:** `env\require(name) -> string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L211)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `name` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `name`    | `string` |          |             |
 
 **Returns:** string
 
@@ -118,9 +118,9 @@ Parse .env-format content into a name->value map. Supports KEY=VALUE, blank line
 
 **Signature:** `env\parseDotenv(content) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L244)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `content` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `content` | `string` |          |             |
 
 **Returns:** map[string]string
 
@@ -130,9 +130,9 @@ Read a .env file and return its name->value map (parse_dotenv over the file cont
 
 **Signature:** `env\readDotenv(path) -> map[string]string` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L249)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 **Returns:** map[string]string
 
@@ -142,9 +142,9 @@ Read a .env file and set each variable in the process environment, without overw
 
 **Signature:** `env\loadDotenv(path)` - [source](https://github.com/egladman/magus/blob/main/std/env.go#L264)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `path` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `path`    | `string` |          |             |
 
 [^buzz-stdlib-env-get]: `env\get` is also in Buzz's standard library (`os.env`); the magus form is sandbox-aware.
 [^buzz-stdlib-env-lookup]: `env\lookup` is also in Buzz's standard library (`os.env (returns null when unset)`); the magus form is sandbox-aware.

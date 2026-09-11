@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -48,7 +49,17 @@ type TargetResult struct {
 	Hash       string `json:"hash,omitempty"`
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Error      string `json:"error,omitempty"`
-	Ref        string `json:"ref,omitempty"` // per-execution output reference id, so a consumer can fetch this target's captured output by ref
+	Ref        string `json:"ref,omitempty"`     // per-execution output reference id, so a consumer can fetch this target's captured output by ref
+	HintID     string `json:"hint_id,omitempty"` // stable id of the advisory line this target printed, so a hint's uptake is countable without matching its wording
+	// Next carries the breadcrumbs for a FAILED result: the ref that holds the whole
+	// captured output, and the target's own graph node. Absent on a pass, and absent
+	// rather than empty when a failure minted neither, so a consumer counting uptake
+	// can tell "nothing to suggest" from "suggested and ignored".
+	//
+	// The text a failing run prints is unchanged; this is the same suggestion as a
+	// field, because the printed line was measured converting at the rate of no hint
+	// at all.
+	Next []hint.Next `json:"next,omitempty"`
 }
 
 // GraphBuild is one graph construction event, emitted once per Build.
@@ -184,10 +195,12 @@ func RunOptions(w *Writer) []cache.RunOption {
 				Hash:       r.Hash,
 				DurationMs: r.Duration.Milliseconds(),
 				Ref:        r.Ref,
+				HintID:     r.HintID,
 			}
 			if err != nil {
 				tr.Status = "failed"
 				tr.Error = err.Error()
+				tr.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
 			}
 			_ = Record(w, tr)
 		}),

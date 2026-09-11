@@ -55,11 +55,11 @@ func TestDriverEvalStatement(t *testing.T) {
 	assert.Equal(t, float64(6), n)
 }
 
-// TestDriverUserGlobalsFiltersHost verifies host bindings (magus) are omitted
-// while user definitions are listed.
+// TestDriverUserGlobalsFiltersHost verifies host bindings are omitted while user
+// definitions are listed. magus is a native module now rather than a global, so the
+// host name must not appear whichever way the host binds it.
 func TestDriverUserGlobalsFiltersHost(t *testing.T) {
 	s := newReplSession(t)
-	s.core.SetGlobal("magus", s.core.GetGlobal("magus")) // ensure a host-named global exists
 	d := driver(t, s)
 	_, err := d.EvalLine("final mine = 99")
 	require.NoError(t, err)

@@ -5,21 +5,38 @@ import (
 	"fmt"
 )
 
-// ExitError aborts the current magus run with a specific process exit code,
-// raised by os.exit(code) from a magusfile and propagated up like any other
-// target error.
+// ExitError aborts the current magus run with a specific process exit code:
+// raised bare by os.exit(code) from a magusfile, or wrapping a diagnostic that
+// states the status it asks for (a machine, slot or lock refusal, a watchdog
+// verdict), and propagated up like any other target error.
 //
 // It deliberately does NOT call os.Exit: a target can run inside a long-lived
 // daemon serving multiple workspaces (see internal/proc), where os.Exit would
 // kill unrelated in-flight work. Instead the CLI maps this error to its process
-// exit status, and the daemon to the per-run reply code.
+// exit status, and the daemon to the per-run reply code. The wrapping form exists
+// for the same daemon: a step it runs for an adopted client crosses a socket that
+// erases the Go type, and the daemon reads the code off the error rather than
+// naming a CLI package it must not import. It wraps rather than replaces, so
+// errors.Is against the diagnostic code keeps matching.
 type ExitError struct {
 	Code int
+	// Err is the refusal or verdict carrying this status, nil for a bare os.exit.
+	Err error
 }
 
-// Error reports the exit code. The message is incidental: the CLI/daemon
-// recover ExitError via errors.As and use Code, not the string.
-func (e ExitError) Error() string { return fmt.Sprintf("exit %d", e.Code) }
+// Error reports the wrapped error, or the bare exit code. For a bare exit the message
+// is incidental: the CLI/daemon recover ExitError via errors.As and use Code.
+func (e ExitError) Error() string {
+	if e.Err != nil {
+		return e.Err.Error()
+	}
+	return fmt.Sprintf("exit %d", e.Code)
+}
+
+func (e ExitError) Unwrap() error { return e.Err }
+
+// ExitCode is the seam the CLI and the daemon ask an error for its process status.
+func (e ExitError) ExitCode() int { return e.Code }
 
 // NormalizeExitCode maps a requested code onto the range a process exit status can
 // actually carry. A wait status holds 8 bits and os.Exit truncates silently, so

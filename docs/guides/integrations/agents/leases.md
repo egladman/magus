@@ -10,6 +10,8 @@ tags:
     plan,
     magus vcs checkpoint,
     magus_ledger,
+    magus ledger,
+    brief,
     console,
     activity,
   ]
@@ -35,16 +37,16 @@ that skill writes to and reads from.
 | Record the working state | `magus vcs checkpoint`, `magus_vcs_checkpoint` |
 | Hand out the leases      | the host's own spawn - recorded, never judged  |
 | Declare the plan         | `magus_ledger` (`op=put`)                      |
-| Watch it                 | the console Plan surface, `GET /api/v1/ledger` |
+| Brief each worker        | `magus ledger brief <lease-id>`                |
+| Watch it                 | `magus ledger`, the console Plan surface       |
 | Verify                   | the actual diff since each lease's checkpoint  |
 
 Only one thing in that table enforces, and it is not the ledger. The ledger is a
 declaration, the checkpoint is a reading, and the Plan surface renders both. The
-[guard](guard.md) is what reads the declaration back: on a file write it denies a
-lease that never registered its base, a path the lease itself declared forbidden,
-and a path another live lease owns. It grades only a worker that named its lease,
-so the last step below - the actual diff against the checkpoint - is still what
-catches a write nobody could attribute.
+[guard](guard.md) is what reads the declaration back, on every file write and
+every command: see [what the guard enforces under a lease](#what-the-guard-enforces-under-a-lease). It grades only a worker that named
+its lease, so the last step below - the actual diff against the checkpoint - is
+still what catches a write nobody could attribute.
 
 <!--diagram:lease-loop-->
 
@@ -104,7 +106,7 @@ person can see it. One row per lease, in the skill's vocabulary.
 A row carries `id` and optionally `parent` (the lease that handed out this one),
 `goal` with its observable acceptance criteria, `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `owned_paths` and `forbidden_paths`,
-`depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
+`focus`, `depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
 `created`, `updated`, `releases`, and `unattributed` (paths this lease owns that
 somebody outside it wrote, noticed by the guard), all output-only: a timestamp a
 client sent would be a fact about that client's clock. `register` adds three more
@@ -114,18 +116,14 @@ tree; `base_verdict`, the store's comparison of that against the row's
 
 Three properties are worth stating plainly.
 
-**Owned and forbidden paths are declared here and enforced elsewhere.** This
-store gates nothing: it records the text an orchestrator put in a worker's
-prompt, where a human can read it. The [agent guard](guard.md) is the one reader
-that turns it into a verdict, and on a file write it DENIES three things - a
-lease that has not registered the base it landed on, a path covered by that
-lease's own `forbidden_paths`, and a path covered by another live lease's
-`owned_paths`. It advises on a fourth: your own path, written from a base that
-`base_verdict` says is not the checkpoint you were handed. Everything else
-passes, and every uncertainty fails open with at most an advisory - no ledger, an
-unreadable one, a writer that named no lease - because this is a seatbelt for a
-harness that opted in and not a sandbox. Which is why the diff since each lease's
-checkpoint, the last step below, is still where ownership is finally checked.
+**A declared boundary is enforced elsewhere.** This store gates nothing: it
+records the text an orchestrator put in a worker's prompt, where a human can read
+it. The [agent guard](guard.md) is the one reader that turns it into a verdict;
+what it refuses is listed under [what the guard enforces under a lease](#what-the-guard-enforces-under-a-lease) below. Every uncertainty there
+fails open with at most an advisory - no ledger, an unreadable one, a writer that
+named no lease - because this is a seatbelt for a harness that opted in and not a
+sandbox. Which is why the diff since each lease's checkpoint, the last step
+below, is still where ownership is finally checked.
 
 **Every row ends in `pass`, `fail`, or `no_return`.** `no_return` is not a
 failure. A lease that failed came back and said so; a lease that died, stalled, or
@@ -174,12 +172,25 @@ actually left rather than the one it believed it left. Hand it to the lease taki
 the path over; a digest that no longer matches at verification time means that
 lease built on a tree the releaser never saw.
 
-The rows live in one JSON file under the cache directory
-(`<cache-dir>/ledger/leases.json`). `magus_ledger` is its write door and the
-daemon's read-only `GET /api/v1/ledger` route is its read door; there is no CLI
-verb, because the ledger has a single author by definition of what it records -
-the one agent doing the orchestrating. The store takes no cross-process lock, so
-do not point two orchestrators at one workspace.
+The rows live in one JSON file in the per-REPOSITORY state directory
+(`<XDG state>/magus/ledger/<repo>/leases.json`), keyed the way
+[memory](../../../reference/manpage/magus-memory.md) and session history are
+keyed: every worktree and every clone of one repository reads one book. That is
+what lets an orchestrator declare a plan in its own checkout and a worker read
+its lease from another. A ledger an older magus left at `<cache-dir>/ledger` is
+carried forward the first time the new one opens it.
+
+`magus_ledger` is its write door, and the daemon's read-only
+`GET /api/v1/ledger` route and `magus ledger` are its read doors. Writing stays
+off the CLI because the ledger has a single author by definition of what it
+records - the one agent doing the orchestrating - while reading it is exactly
+what the person running that agent needs.
+
+```sh
+magus ledger                # the rows as a tree, parents above the leases they handed out
+magus ledger -o json        # the same records, overlaps included
+magus ledger brief <lease>  # one lease's worker brief
+```
 
 ## Wiring the lease into a worker
 
@@ -207,6 +218,110 @@ never exported the variable is graded as an editor magus cannot attribute, which
 is an advisory rather than a deny and leaves every rule above it inert. A wrapper
 that builds its own argv can pass `magus session hook --lease <id>` instead; an
 explicit flag wins over the environment.
+
+## What the guard enforces under a lease
+
+Once a worker names a live lease, the [guard](guard.md) reads that row on every
+file write and every command. It denies:
+
+| the guard refuses                                              | the row field that decided it |
+| -------------------------------------------------------------- | ----------------------------- |
+| any write, before the worker registers the base it landed on   | `registered`                  |
+| any write, by a lease that gathers evidence and writes nothing | `read_only`                   |
+| a write covered by this lease's own forbidden list             | `forbidden_paths`             |
+| a write covered by another live lease's owned list             | `owned_paths` (that lease's)  |
+| a write outside every entry in this lease's own owned list     | `owned_paths`                 |
+| a command running the `ci` gate                                | `validation`                  |
+| a READ of a path outside the projects this lease may read      | `focus`, else `owned_paths`   |
+
+It advises on one more: your own path, written from a base that `base_verdict`
+says is not the checkpoint you were handed.
+
+The read row is the write lane read the other way. `owned_paths` stands in when
+`focus` is empty, because a worker leased to edit a project was pointed at that
+project, and the lane it opens is those projects plus what they declare
+`depends_on` (see [the guard's focus rule](guard.md#focus-the-read-lane)). Set
+`focus` when a worker must READ something it must not WRITE: widening
+`owned_paths` to open a read is how two workers end up owning one file. Without a
+lease bound to the checkout the same rule only advises, which is the opt-in: a
+hard read boundary needs somebody to have declared one.
+
+The last row is the one that surprises people. The gate runs ONCE per branch, in
+the orchestrator's tree, after every unit lands; a worker's `validation` is the
+narrow target it was assigned, so a worker that reaches for the whole pipeline is
+refused and handed its own check instead. A row whose `validation` names `ci`
+owns the gate and is not refused.
+
+Two absences are boundaries nobody declared rather than boundaries of size zero,
+and both scope nothing: an empty `owned_paths` on a row that is not `read_only`,
+and an empty `validation`.
+
+## What the sandbox enforces under a lease
+
+The guard above is a seatbelt for harnesses that opt in: it explains a boundary
+and, for a worker, denies the tool call that crosses it. The
+[sandbox](../../../concepts/sandbox.md) is the boundary itself, and it reads the
+same ledger row rather than a second declaration - a boundary written twice is a
+boundary that disagrees with itself.
+
+When `sandbox.enabled` is true and the acting lease resolves to a live row with a
+`parent` and non-empty `owned_paths`, every target run and every `magus buzz`
+script in that checkout gets a filesystem WRITE grant of exactly:
+
+- the `owned_paths`, resolved as globs against the workspace root (a glob that
+  matches nothing grants nothing). A LITERAL path that does not exist yet grants
+  the nearest directory above it that does, because a lease routinely owns a
+  file it was spawned to create and the guard already admits that write; only a
+  glob keeps the existing-files-only rule, since a typo in a glob is the case
+  that rule protects against;
+- the workspace cache directory and `$TMPDIR`, which a target needs to produce
+  output at all.
+
+Reads are untouched: the row declares a write boundary, and a worker has to read
+the tree it is changing. A refusal is recorded on the trail as a
+`sandbox_denial` carrying the lease id, so a reader can say whose boundary was
+hit rather than only that something was blocked.
+
+Nothing narrows for a ROOT lease (a row with no parent is the orchestrator, and
+it owns the checkout), for a lease id that names no live row, for a writable row
+with no owned paths, or when the sandbox is off. A `read_only` row narrows to
+the cache directory and `$TMPDIR` alone, which is the sandbox's reading of the
+guard refusing every write under such a lease.
+
+Both tiers resolve the acting lease the same way, in this order: an explicit
+`--lease`, the `BAGGAGE` a worker inherited, then the marker `magus session
+lease <id>` bound to the checkout. A host runs its hooks from wherever it likes,
+so the guard locates that checkout from the `cwd` its hook envelope reports and
+falls back to the hook process's own directory only when the envelope carries
+none.
+
+A `forbidden_path` inside an owned one is refused, and it costs the directory
+holding it as well: both this policy and landlock are allowlists with no deny
+rule, so the enclosing grant is replaced by grants on its children, and a new
+file created beside the forbidden entry is refused with it.
+
+## Briefing a worker
+
+The context a delegated agent receives should come from the row, not from the
+orchestrating model's recollection of it. `magus ledger brief <lease-id>` renders
+that context and nothing else: the lease id and the one line that binds it to a
+checkout, the goal and acceptance criteria verbatim from the row, the owned and
+forbidden paths, the knowledge graph's blast radius for each owned path it can
+resolve, the single validation target that lease is allowed to run, and the
+leases it depends on. A section with nothing in it is dropped, which is the
+mechanism rather than a nicety: `ci` cannot leak into a worker's brief because
+nothing renders it. When the graph is cold the evidence lines are replaced by one
+line saying so, so a missing blast radius never reads as "nothing depends on
+this".
+
+Below that sits a fixed footer your workspace owns: the bootstrap, rules, and
+skills blocks in `docs/guides/integrations/agents/brief.md.tmpl`, a Go
+`text/template` rendered against the lease row. A workspace with no such file
+gets a brief with no footer, which is a legitimate answer rather than an error.
+The command renders context and never a verdict, the same shape
+`magus diff --prompt` has: magus assembles what it holds and you hand it to the
+worker. `-o json` emits the same brief as a record, for an orchestrator that
+composes the prompt itself.
 
 ## Watch it: Dashboard's Lease plan
 

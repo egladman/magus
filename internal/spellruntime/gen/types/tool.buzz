@@ -13,6 +13,7 @@ export enum<str> DiagnosticFormat {
 export object Tool {
     probe: Command = Command{},
     key: VersionKey = VersionKey{},
+    observe: Command = Command{},
     ready: Command = Command{},
     supported: VersionBounds = VersionBounds{},
     diagnostics: DiagnosticFormat = DiagnosticFormat.none,

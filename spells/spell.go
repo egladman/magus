@@ -60,6 +60,11 @@ type Spell struct {
 	dependsOn   func(dir string) []string
 	// tools is every binary this spell drives, keyed by bin; see Descriptor.Tools.
 	tools map[string]Tool
+	// ops is the spell's resolved ops, keyed by op name; see Descriptor.Ops. Held
+	// whole rather than projected into per-question maps: the closures below already
+	// captured it, and every new question about an op (which binary, what relation to
+	// the world) was arriving as another parallel map to keep in step.
+	ops map[string]Op
 	// probe runs one tool's version argv in a project dir. Injected so the engine
 	// owns process execution and this package stays free of it.
 	probe func(ctx context.Context, cmd Command, dir string) (string, error)
@@ -242,6 +247,35 @@ func (s *Spell) HasVersionProbe() bool {
 	return false
 }
 
+// Op returns one resolved op and whether the spell declares it.
+func (s *Spell) Op(name string) (Op, bool) {
+	o, ok := s.ops[name]
+	return o, ok
+}
+
+// HasObservationProbe reports whether ANY tool can report which copy of its external
+// data it holds, so a caller can skip the observation pass for a spell that declares none.
+func (s *Spell) HasObservationProbe() bool {
+	for _, t := range s.tools {
+		if t.HasObservationProbe() {
+			return true
+		}
+	}
+	return false
+}
+
+// ProbeObservation runs one tool's observation argv in dir and returns its raw output,
+// empty for a tool that declares none. It shares the version prober, so an observation
+// meets the same sandbox exec check and the same hang reaping as every other
+// spell-declared command.
+func (s *Spell) ProbeObservation(ctx context.Context, tool, dir string) (string, error) {
+	t, ok := s.tools[tool]
+	if !ok || t.Observe.Bin == "" || s.probe == nil {
+		return "", nil
+	}
+	return s.probe(ctx, t.Observe, dir)
+}
+
 // ProbeVersion runs one tool's version argv in dir and returns its raw output. It
 // returns "" for a tool that declares no argv, including one whose version is a
 // constant, where the caller reads Tool.Key.Const instead of spawning anything.
@@ -255,6 +289,12 @@ func (s *Spell) ProbeVersion(ctx context.Context, tool, dir string) (string, err
 
 // Option configures NewSpell.
 type Option func(*Spell)
+
+// WithOps records the spell's resolved ops, so a caller can ask what one op runs and
+// what it declares about the world outside the tree.
+func WithOps(ops map[string]Op) Option {
+	return func(s *Spell) { s.ops = ops }
+}
 
 func WithSources(sources ...string) Option {
 	return func(s *Spell) { s.sources = append(s.sources, sources...) }

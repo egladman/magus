@@ -3,6 +3,8 @@ package magus
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +52,11 @@ func TestStallWatchdogAbortsAQuietInvocation(t *testing.T) {
 	assert.Contains(t, err.Error(), "docs:graph-generate (executing)", "it names the last step that ran")
 	assert.Contains(t, err.Error(), "/tmp/.magus/logs/docs/abc123.log", "it names the captured log")
 	assert.Contains(t, err.Error(), "stall window: 60ms", "it names the window it measured against")
-	assert.Same(t, err, context.Cause(ctx), "the same diagnostic is the context's cause")
+	assert.Contains(t, err.Error(), "still admitted:", "it says what else was in flight, or that nothing was")
+	assert.ErrorIs(t, err, context.Cause(ctx), "the same diagnostic is the context's cause")
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, err, &stated)
+	assert.Equal(t, stallExit, stated.ExitCode(), "a stall is a failure and exits like one")
 }
 
 // TestStallWatchdogLeavesAProgressingRunAlone is the test that matters. A watchdog that
@@ -149,4 +156,114 @@ func TestStallWatchdogDoesNotReleaseAfterClose(t *testing.T) {
 	time.Sleep(80 * time.Millisecond)
 
 	assert.Zero(t, releases.Load(), "a stopped watchdog must never release")
+}
+
+// gateHold builds a hold over one locked project, the shape watchForSupersede polls.
+func gateHold(t *testing.T, project string, opts ...lockerOption) *projectHold {
+	t.Helper()
+	l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false, opts...)
+	l.started = time.Now().Add(-time.Minute)
+	unlock, err := l.acquire(t.Context(), project)
+	require.NoError(t, err)
+	return &projectHold{unlock: unlock, locker: l, paths: []string{project}}
+}
+
+// deadPID is the pid of a process that has already exited: a real pid the kernel has
+// reaped, which is what a marker left by a killed gate carries.
+func deadPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command("true")
+	require.NoError(t, cmd.Run())
+	return cmd.Process.Pid
+}
+
+// requestYieldFrom writes the request a later gate on the same tree would leave.
+func requestYieldFrom(t *testing.T, hold *projectHold, project string) {
+	t.Helper()
+	later := newProjectLocker("", testWorkspaceRoot, false, asGate())
+	require.NoError(t, record.Write(hold.locker.yieldPath(project), later.selfRecord(t.Context(), time.Now())))
+}
+
+// TestSupersedeWatchCancelsAndKeepsTheLocks pins what the watch does when the request
+// arrives: it cancels with MGS3014 as the cause, and nothing more. The locks stay with
+// the run until its own unwind releases them, since a successor taking them while this
+// run's subprocesses are still being torn down would have two gates on one tree.
+func TestSupersedeWatchCancelsAndKeepsTheLocks(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	hold := gateHold(t, "app", asGate())
+	defer hold.release()
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	requestYieldFrom(t, hold, "app")
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the watch never cancelled the run")
+	}
+	assert.ErrorIs(t, context.Cause(ctx), types.GateSuperseded, "the cause is what tells the run apart from a Ctrl-C")
+	assert.ErrorIs(t, watch.verdict(nil), types.GateSuperseded)
+	var stated interface{ ExitCode() int }
+	require.ErrorAs(t, watch.verdict(nil), &stated)
+	assert.Equal(t, supersedeExit, stated.ExitCode())
+
+	other := newProjectLocker("", testWorkspaceRoot, true)
+	other.dir = hold.locker.dir
+	_, err := other.acquire(t.Context(), "app")
+	require.Error(t, err, "the lock is still held: the watch cancelled and released nothing")
+}
+
+// TestSupersedeWatchIgnoresANonGate is the containment: only a gate is superseded, so an
+// ordinary run holding the same lock must never be aborted by a marker beside it.
+func TestSupersedeWatchIgnoresANonGate(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	hold := gateHold(t, "app")
+	defer hold.release()
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	requestYieldFrom(t, hold, "app")
+	time.Sleep(100 * time.Millisecond)
+
+	assert.NoError(t, ctx.Err(), "a non-gate holder keeps waiting behind it, exactly as before")
+	assert.NoError(t, watch.verdict(nil))
+}
+
+// TestSupersedeWatchIgnoresADeadRequester: a later gate killed while parked leaves its
+// marker behind, and the next gate that started before the marker would otherwise read it
+// as live and stop for a successor that is not there.
+func TestSupersedeWatchIgnoresADeadRequester(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	hold := gateHold(t, "app", asGate())
+	defer hold.release()
+
+	later := newProjectLocker("", testWorkspaceRoot, false, asGate())
+	rec := later.selfRecord(t.Context(), time.Now())
+	rec.PID = deadPID(t)
+	require.NoError(t, record.Write(hold.locker.yieldPath("app"), rec))
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	time.Sleep(100 * time.Millisecond)
+
+	assert.NoError(t, ctx.Err(), "a request nobody is waiting on stops nothing")
+	_, err := os.Stat(hold.locker.yieldPath("app"))
+	assert.True(t, os.IsNotExist(err), "and is swept, so the next holder does not read it either")
+}
+
+// A run that finished on its own must not be cancelled by a tick that raced its own
+// stop. Same hazard as the stall watchdog's, same guard.
+func TestSupersedeWatchDoesNotCancelAfterClose(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	hold := gateHold(t, "app", asGate())
+	defer hold.release()
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	watch.close()
+	requestYieldFrom(t, hold, "app")
+	time.Sleep(80 * time.Millisecond)
+
+	assert.NoError(t, watch.verdict(nil), "a stopped watch must never trip")
+	assert.ErrorIs(t, context.Cause(ctx), context.Canceled, "close cancels plainly, never with a verdict")
 }

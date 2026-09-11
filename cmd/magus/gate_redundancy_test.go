@@ -226,3 +226,38 @@ func TestGateRenderFindingDelta(t *testing.T) {
 	lines := strings.Split(got, "\n")
 	assert.Len(t, lines, 5, "one line per file, plus the header lines; never a summary")
 }
+
+// TestGateRecordsUndeclaredSeeds: the gate verdict says whether the branch is green, and
+// nothing about what it cost to say so. The projects only an undeclared changed file put
+// in the set are the part of that cost whose answer could not have moved, so they ride the
+// record and stay countable across a branch. Nil-safe like every other method here: a
+// non-ci or dry run has no gate to note anything on.
+func TestGateRecordsUndeclaredSeeds(t *testing.T) {
+	t.Parallel()
+
+	var absent *gateRedundancy
+	absent.noteUndeclaredSeeds([]string{"."})
+
+	g := &gateRedundancy{target: types.TargetCI, ref: "b", commit: "c1", projects: []string{".", "docs"}}
+	g.noteUndeclaredSeeds([]string{"."})
+	assert.Equal(t, []string{"."}, g.undeclared)
+}
+
+// TestGateRenderFindingNamesTheUndeclaredSeeds: a refusal explains why this run adds
+// nothing. When the gate it defers to itself paid for projects nothing declares, that is
+// the same subject and the reader is already here.
+func TestGateRenderFindingNamesTheUndeclaredSeeds(t *testing.T) {
+	t.Parallel()
+
+	g := &gateRedundancy{target: types.TargetCI, ref: "b", fp: "fp-2"}
+	f := gateFinding{rec: sessions.GateRecord{GateResult: sessions.GateResult{
+		Ref: "b", Commit: "c1", Fingerprint: "fp-1", Inv: "inv123",
+		UndeclaredSeeds: []string{".", "docs"},
+	}}, identical: true}
+
+	got := g.renderFinding(f)
+	assert.Contains(t, got, "that gate covered 2 project(s) selected only by files nothing declares (MGS1028): ., docs")
+
+	f.rec.UndeclaredSeeds = nil
+	assert.NotContains(t, g.renderFinding(f), "MGS1028", "a gate with nothing undeclared-only says nothing")
+}

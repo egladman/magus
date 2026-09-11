@@ -12,7 +12,7 @@
 // store's whole job is that a plan an agent stated in a prompt stops being trapped in one
 // session's transcript.
 //
-// ONE PLAN PER WORKSPACE, and no history of past plans: Clear wipes the rows so the
+// ONE PLAN PER REPOSITORY, and no history of past plans: Clear wipes the rows so the
 // next plan starts empty. A plan that ended is not archived anywhere, which is the v1
 // scope on purpose: keeping every past plan means deciding what identifies one, and
 // nothing in the vocabulary names a plan yet.
@@ -58,8 +58,11 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,7 +71,7 @@ import (
 // incomplete.
 var ErrNoID = errors.New("ledger: a lease needs an id")
 
-// Store is the workspace's lease ledger, a single JSON file under the cache
+// Store is the repository's lease ledger, a single JSON file in the per-repository state
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
 //
@@ -79,8 +82,9 @@ var ErrNoID = errors.New("ledger: a lease needs an id")
 //     why the daemon builds exactly one and hands it to both of its doors (the
 //     magus_ledger MCP tool and the console's read route).
 //   - An OS file lock beside leases.json serializes writers across PROCESSES. The CLI, the
-//     daemon, and an MCP client each hold their own Store on the same file, and workers
-//     now register and heartbeat against it, so "one orchestrating agent writes this"
+//     daemon, and an MCP client each hold their own Store on the same file, from any
+//     worktree or clone of the repository, and workers now register and heartbeat against
+//     it, so "one orchestrating agent writes this"
 //     (the assumption that made a cross-process race acceptable) stopped being true. Two
 //     read-modify-writes that interleave drop whichever row the loser had not read.
 //
@@ -96,29 +100,82 @@ var ErrNoID = errors.New("ledger: a lease needs an id")
 type Store struct {
 	mu   sync.Mutex
 	path string
+	// err is the failure to work out where this ledger lives, kept so NewStore can stay
+	// a constructor while every operation still reports it. A Store that cannot name its
+	// file must not silently read as an empty ledger: absent rows are how the guard
+	// decides nothing is leased.
+	err  error
 	root string
 }
 
-// Location is where a Store lives: which cache directory holds the file, and which
-// workspace its rows describe. A struct rather than two string params because the two
-// are transposable at every call site and nothing downstream would notice: a ledger
-// written into the workspace and digested against the cache dir reads as an ordinary
-// empty ledger.
+// Location is where a Store lives: the repository whose rows these are, and the state
+// base and legacy cache directory that place the file.
+//
+// A struct rather than positional params because the paths are transposable at every
+// call site and nothing downstream would notice: a ledger written into the workspace and
+// digested against the state dir reads as an ordinary empty ledger.
 type Location struct {
-	// CacheDir is the workspace's cache directory (magus.CacheDir); the ledger is
-	// written to <CacheDir>/ledger/leases.json.
+	// CacheDir is the workspace's cache directory (magus.CacheDir), which is where the
+	// ledger USED to live. It is read only to adopt <CacheDir>/ledger on first use;
+	// nothing is written there any more. Empty skips the adoption.
 	CacheDir string
-	// Root is the workspace a row's paths are relative to, read for one purpose:
-	// digesting a path at the moment a lease releases it (see Update). A Store built
-	// with an empty root still records releases; it just cannot say what was in them.
+	// Root is the checkout this Store was opened from. It answers two questions: which
+	// REPOSITORY owns the rows (through repoid, which folds every worktree and clone of
+	// one repo onto a single directory), and what a row's paths are relative to when a
+	// release is digested (see Update). A Store built with an empty root still records
+	// releases; it just cannot say what was in them.
 	Root string
+	// StateBase overrides the user state directory the ledger resolves under. Empty
+	// means config.UserStateDir, which is what every caller outside a test wants.
+	StateBase string
 }
 
-// NewStore returns the ledger at loc. It touches no disk: the file is created by the
-// first Put.
+// NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
+// location on the way past. The leases file itself is created by the first Put.
+//
+// THE CACHE DIRECTORY IS NO LONGER THE HOME, and that is the whole point of this
+// resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
+// worktree were invisible to a worker in another, and a lease-scoped guard rule could
+// not bind across the two. The rows describe a repository's plan, so they key on
+// repository identity exactly as internal/sessions and internal/memory do.
+//
+// A resolution failure is held rather than returned: every operation reports it, so a
+// caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	return &Store{path: filepath.Join(loc.CacheDir, "ledger", "leases.json"), root: loc.Root}
+	s := &Store{root: loc.Root}
+	s.path, s.err = leasesPath(loc)
+	return s
 }
+
+// leasesPath places the leases file: <XDG state>/magus/ledger/<repo>/leases.json, after
+// carrying forward whatever an older magus left at <CacheDir>/ledger.
+func leasesPath(loc Location) (string, error) {
+	base := loc.StateBase
+	if base == "" {
+		var err error
+		if base, err = config.UserStateDir(); err != nil {
+			return "", fmt.Errorf("ledger: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+		}
+	}
+	dir, err := repoid.StateDir(base, "ledger", loc.Root)
+	if err != nil {
+		return "", fmt.Errorf("ledger: %w", err)
+	}
+	// compat(until: no checkout's cache dir still holds a ledger/ directory; observe
+	// with `find ~ -path '*/.magus/cache/ledger' -maxdepth 6` returning nothing):
+	// carries forward the rows an older magus kept per checkout.
+	if loc.CacheDir != "" {
+		if err := repoid.Adopt(filepath.Join(loc.CacheDir, "ledger"), dir); err != nil {
+			return "", fmt.Errorf("ledger: %w", err)
+		}
+	}
+	return filepath.Join(dir, "leases.json"), nil
+}
+
+// Path is the leases file this Store reads and writes, for a reader that has to name it:
+// a person asking where their plan is kept, or a test planting one. The file itself may
+// not exist yet, which is an empty ledger and not an error.
+func (s *Store) Path() (string, error) { return s.path, s.err }
 
 // ledgerFile is the on-disk envelope. An object rather than a bare array so a later
 // field (a plan identity, a schema version) can be added without every existing reader
@@ -415,8 +472,11 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 const maxDigestBytes = 32 << 20
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
-// been recorded yet in this workspace.
+// been recorded yet for this repository.
 func (s *Store) read() (ledgerFile, error) {
+	if s.err != nil {
+		return ledgerFile{}, s.err
+	}
 	raw, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return ledgerFile{}, nil
@@ -446,6 +506,9 @@ func (s *Store) read() (ledgerFile, error) {
 // holder is stuck rather than busy, and blocking a worker's registration on it forever
 // hides that. ctx shortens the wait and never lengthens it.
 func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
+	if s.err != nil {
+		return s.err
+	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -489,4 +552,57 @@ func (s *Store) write(f ledgerFile) error {
 		return err
 	}
 	return file.WriteFileAtomic(s.path, append(raw, '\n'), 0o644)
+}
+
+// LeaseMarkerName is the file, in a checkout's cache dir, that binds a lease to THAT
+// checkout (`magus session lease <id>` writes it through BindLease). It exists because
+// the environment cannot carry a lease into a hook: a host runs its hooks with its own
+// environment, so a worker exporting BAGGAGE for its shell is invisible to the guard
+// judging its commands. A worker with its own worktree has one checkout, and a file
+// in it is the one channel the worker's shell, the host's hook and the sandbox all
+// read. BAGGAGE and an explicit --lease still win; the marker is the last resort.
+const LeaseMarkerName = "lease"
+
+// ActingLease is the lease the current process acts under, for the checkout whose cache
+// dir is cacheDir: the W3C baggage a worker inherits, else the marker BindLease wrote,
+// else "". The guard hook and the sandbox both resolve through this one function so the
+// two enforcement tiers cannot disagree about who is acting.
+func ActingLease(cacheDir string) string {
+	if lease := trail.LeaseFromEnv(); lease != "" {
+		return lease
+	}
+	return LeaseFromMarker(cacheDir)
+}
+
+// LeaseFromMarker reads the lease bound to the checkout whose cache dir is cacheDir,
+// or "" when none is bound or the marker does not hold a lease id.
+func LeaseFromMarker(cacheDir string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(cacheDir, LeaseMarkerName))
+	if err != nil {
+		return ""
+	}
+	id := strings.TrimSpace(string(raw))
+	if !types.ValidLeaseID(id) {
+		return ""
+	}
+	return id
+}
+
+// BindLease writes the marker binding lease id to the checkout whose cache dir is
+// cacheDir, creating the dir if needed. An id ValidLeaseID rejects is refused, so the
+// marker never holds a value LeaseFromMarker would read back as nothing.
+func BindLease(cacheDir, id string) error {
+	if !types.ValidLeaseID(id) {
+		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only)", id)
+	}
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return fmt.Errorf("ledger: bind lease: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte(id+"\n"), 0o644); err != nil {
+		return fmt.Errorf("ledger: bind lease: %w", err)
+	}
+	return nil
 }

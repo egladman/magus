@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -16,10 +14,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// magus_output and magus_tail_log are the captured-output retrieval tools: they return a
-// target execution's stdout/stderr, not a knowledge-graph answer. magus_output addresses ONE
-// past execution by its reference id (out1a2b3c); magus_tail_log returns the LATEST log for a
-// project (no ref needed). Both read straight from the cache dir.
+// magus_output is the captured-output retrieval tool: it returns a target execution's
+// stdout/stderr, not a knowledge-graph answer, addressing ONE past execution by its
+// reference id (out1a2b3c) straight out of the cache dir.
+//
+// It had a sibling, magus_tail_log, which returned the LATEST log for a project instead.
+// That was a second door onto the same bytes reached by a different key, and an agent
+// with a ref in hand had two tools to choose between. The SDK keeps the project-scoped
+// route (Magus.TailLog); the agent surface does not, and the CLI never had one: every
+// run prints the ref its log is reached by.
 
 // outputReader is the slice of the workspace magus_output needs: resolve a
 // target-output ref to its stored bytes and descriptor, invert the ref back to
@@ -150,49 +153,4 @@ func isBareVariantUnreachable(cmd string) bool {
 	return strings.Contains(cmd, "--no-default-charms")
 }
 
-type tailResult struct {
-	Project string `json:"project"`
-	LogPath string `json:"log_path"`
-	Content string `json:"content"`
-}
-
-type tailLogTool struct {
-	opts Options
-}
-
-func (t *tailLogTool) Name() string { return hint.ToolTailLog.String() }
-
-func (t *tailLogTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
-	projectPath := paramString(req.Params, "project", "")
-	if projectPath == "" {
-		return spells.InvokeResponse{}, errors.New("mcp: project is required")
-	}
-
-	logPath, err := t.opts.Magus.TailLog(projectPath, "")
-	if errors.Is(err, types.ErrNoCache) {
-		return spells.InvokeResponse{}, errors.New("mcp: workspace cache is not open")
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return spells.InvokeResponse{}, errors.New("mcp: no cache entries for project " + projectPath)
-	}
-	if err != nil {
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: cache lookup: %w", err)
-	}
-
-	b, err := os.ReadFile(filepath.Clean(logPath))
-	if err != nil {
-		toolLogger(ctx).WarnContext(ctx, "mcp: read log failed", "path", logPath, "error", err)
-		return spells.InvokeResponse{}, fmt.Errorf("mcp: read log: %w", err)
-	}
-
-	return spells.InvokeResponse{Data: tailResult{
-		Project: projectPath,
-		LogPath: logPath,
-		Content: string(b),
-	}}, nil
-}
-
-var (
-	_ spells.Driver = (*outputTool)(nil)
-	_ spells.Driver = (*tailLogTool)(nil)
-)
+var _ spells.Driver = (*outputTool)(nil)

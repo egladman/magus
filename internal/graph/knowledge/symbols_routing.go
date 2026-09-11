@@ -180,7 +180,9 @@ func (s *Store) MergeSymbolShardsByID(ctx context.Context, g *Graph, symbolIDs [
 			return err
 		}
 	}
-	// The coverage overlay is a single small shard, so load it whenever symbols are
-	// pulled in: the routed subset still gets the ratio on the nodes it merged.
-	return s.mergeCoverageShard(ctx, g, man)
+	// Both overlays are single small shards, so load them whenever symbols are pulled in:
+	// the routed subset still gets the coverage ratio and agent contact on what it merged.
+	s.mergeOverlayShard(ctx, g, man, coverageShardName)
+	s.mergeOverlayShard(ctx, g, man, sessionShardName)
+	return nil
 }

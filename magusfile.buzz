@@ -20,7 +20,9 @@ import "archive";
 import "crypto";
 import "serialize";
 import "io";
+import "encoding/json";
 import "std";
+import "time";
 import "semver";
 
 import "magus/spell/go";
@@ -43,6 +45,11 @@ import "spells/golang/gomod" as gomod;
 
 // gopherbuzz is embedded (require + replace); binds its targets as cross-project handles.
 import "project/libs/gopherbuzz" as gopherbuzz;
+// diagnostics is the other embedded module; the coverage badge reads its profile, and
+// the two lint-library modules' profiles beside it.
+import "project/libs/diagnostics" as diagnostics;
+import "project/libs/commentdash" as commentdash;
+import "project/libs/testlayout" as testlayout;
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
 //
@@ -62,6 +69,20 @@ final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
 if ((cache_trusted != null and cache_trusted != "") or cache_insecure == "true" or cache_insecure == "1") {
     magus\cache.remote(github);
+}
+
+// The system keychain is the secret provider when the person launching the run asks
+// for it, so a laptop run resolves a credential with nothing exported into its shell
+// and nothing in the transcript of whoever typed the command. Opt-in rather than
+// every laptop outside CI: the environment provider is what image-login and the
+// release targets read on a laptop too, and a keychain that answers for every
+// reference would break each of them until its item was stored. A reference is
+// written to be legal under both (a shell name, which the keychain takes as a service
+// name), so the same magusfile line reads a repository secret in CI and a keychain
+// item here.
+import "spells/system-keychain" as system_keychain;
+if (os\env("MAGUS_SECRET_PROVIDER") == "system-keychain") {
+    magus\secret.provider(system_keychain);
 }
 
 // Unconditional, unlike the cache above: the spell's enabled() gates every op
@@ -106,6 +127,10 @@ magus\project({
         "magus.yaml",           // charms, cache and sandbox policy every run resolves
         "Dockerfile",           // image-build's amd64 variant
         "Dockerfile.static",    // image-build's static multi-arch variant
+        // The vendored agent-host schemas hostschema_test.go grades the hook configs
+        // against. No spell claims them (the go spell takes *.go and *.txtar), so a
+        // refresh would otherwise not invalidate the tests that read them.
+        "testdata/hostschemas/**/*.json",
     ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
@@ -138,6 +163,11 @@ magus\project({
         "index-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
+        // Its input is a host's session store, which no glob in this tree can key,
+        // and a replay would report the sessions of whatever ran last.
+        "session-load": {"skip_cache": "reads an agent host's session store, which changes independently of this tree"},
+        "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
+        "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
         // writes into .gitattributes, and /magus is gitignored, so declaring it would name
         // a path that can never conflict. A cacheable target with nothing to restore is the
@@ -150,13 +180,12 @@ magus\project({
         // would report the charms and credentials of whatever ran last.
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
         "image-login": {"skip_cache": "authenticates to a registry per invocation; a replay would reuse stale credentials"},
-        // Keyed on the image and this tree, but the ANSWER also depends on trivy's
-        // vulnerability database, which changes daily and is not an input magus can see.
-        // A hit would report yesterday's CVEs against today's image.
-        // ctx.observes is the successor, and it is not usable here YET: it keys on a value
-        // the magusfile STATES, and nothing states trivy's DB id without probing for it,
-        // which cannot run before the key is minted.
-        "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
+        // NO skip_cache, and the reason it used to carry is now an input instead. The
+        // answer still depends on trivy's vulnerability database rather than on this tree
+        // alone, which is why a hit once reported yesterday's CVEs against today's image;
+        // the docker spell now declares an observe probe on trivy, so the database's own
+        // identity keys the step and a hit can only replay a scan run against the same
+        // database. `magus run image-scan:update` is what moves it forward.
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
         // per invocation.
@@ -843,18 +872,23 @@ export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 // Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.
+//
+// Through the spell op rather than a proc\exec of the same binary, because the escape
+// cost the two things the op declares: trivy's database is offline by default and
+// identified in the cache key (see the docker spell's trivy tool), and `image-scan:update`
+// is what refreshes it. A raw exec would key on nothing and refresh on every run.
 export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(image_build);
     if (ctx.hasCharm("rw")) {
         fs\mkdirAll("dist");
-        proc\exec("trivy", ["image",
+        docker["trivy-image"](ctx, {"args": [
             "--format", "sarif",
             "--output", fs\join("dist", "trivy.sarif"),
             "--severity", "HIGH,CRITICAL",
             "--exit-code", "1",
-            image_tag()]);
+            image_tag()]});
     } else {
-        proc\exec("trivy", ["image", image_tag()]);
+        docker["trivy-image"](ctx, {"args": [image_tag()]});
     }
 }
 
@@ -946,7 +980,12 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
     //
     // It was latent for as long as machine-budget contention happened to serialize the two.
     // Nothing declared that ordering, so nothing kept it.
-    ctx.needs(spells_generate);
+    //
+    // The same race exists against every sibling that writes Go under internal/ or
+    // types/gen while this compile reads it, and MGS4008 now refuses the run rather than
+    // letting the fan-out race, so each one is declared: the compile runs after all of them.
+    ctx.needs(spells_generate, bindings_generate, langservice_generate, mcp_tools_generate,
+              config_generate, mocks_generate);
     ctx.readsFiles("releases/*.yaml", "cmd/magus-utils/**/*.go", "internal/**/*.go",
         "go.mod", "go.sum", "go.work", "go.work.sum");
     ctx.modifiesExistingFiles("CHANGELOG.md");
@@ -1012,6 +1051,17 @@ export fun magusfile_api_generate(ctx: magus\Context, args: [str]) > void !> any
 export fun langservice_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("internal/langservice/manifest_data.go");
     proc\exec("go", ["generate", "./internal/langservice"]);
+}
+
+// Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the
+// same std descriptors bindings_generate reads.
+//
+// The catalog was hand-written, and it was the one agent-facing surface with no
+// generator and no drift gate behind it: a tool could duplicate another, or keep
+// wrapping a member that had been renamed, and nothing said so.
+export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("internal/handler/mcp/gen/registry.go");
+    proc\exec("go", ["generate", "./internal/handler/mcp"]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
@@ -2407,8 +2457,103 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
+// coverage_percent is THIS machine's figure over THIS module, and the 70% floor in
+// `test` gates on it. Per-platform by design: the floor guards against a regression in
+// the suite that just ran, so it has to answer for the tree that suite compiled. The
+// badge is the cross-platform figure and belongs to coverage_badge.
 fun coverage_percent() > str !> any {
     return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+}
+
+// One committed record per platform, beside coverage.buzz. Results are RECORDED, never
+// recalculated: refreshing a platform is a local act like refreshing a lockfile, and the
+// badge is a pure function of the set that anyone can re-derive.
+final COVERAGE_DIR = "coverage";
+
+fun coverage_summary_path(goos: str, goarch: str) > str {
+    return fs\join(COVERAGE_DIR, goos + "-" + goarch + ".json");
+}
+
+// coverage_blocks_ran unions one platform's module profiles into "block -> did it run".
+// A block absent from every profile was never compiled there, which is not the same
+// answer as compiled-and-never-entered.
+fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
+    final blocks = mut {<str: bool>};
+    foreach (path in profiles) {
+        foreach (key, ran in cov\coveredBlocks(fs\readFile(path))) {
+            if (ran or blocks[key] == null) { blocks[key] = ran; }
+        }
+    }
+    return blocks;
+}
+
+// coverage_record writes one platform's summary from the profiles its suites left.
+fun coverage_record(tables: {str: [str]}, goos: str, goarch: str, profiles: [str]) > void !> any {
+    final blocks = coverage_blocks_ran(profiles);
+    final totals = cov\platformTotals(tables, blocks: blocks);
+    fs\mkdirAll(COVERAGE_DIR);
+    fs\writeFile(coverage_summary_path(goos, goarch: goarch), content: cov\encodeSummary({
+        "goos": goos,
+        "goarch": goarch,
+        "mode": "atomic",
+        "commit": vcs\commit().short,
+        "measured_at": time\nowIso(),
+        "statements": totals["statements"],
+        "covered": totals["covered"],
+        "files": cov\summaryFiles(tables, covered: blocks),
+    }));
+    magus\log.info("coverage: " + goos + "/" + goarch
+        + " ran {totals["covered"]}/{totals["statements"]} of the statements it compiled");
+}
+
+// coverage_native_record measures the host from the profiles `test` and the four Go
+// modules' suites just wrote. coverage.out rather than coverage.hand.out: generated files
+// are excluded by the DENOMINATOR, which never enumerates them, so a pre-stripped
+// numerator would only be doing the work twice. benchmarks/aggregate and
+// libs/gopherbuzz/benchmarks/comparison have no test target and stay at zero.
+//
+// This is the only numerator a machine writes: its own platform's. Another platform's
+// record is raised by running the refresh THERE. No container run and no CI matrix,
+// by decision: both re-measure what a machine of that platform already measures.
+fun coverage_native_record(tables: {str: [str]}) > void !> any {
+    final env = proc\exec("go", args: ["env", "GOOS", "GOARCH"], opts: {"quiet": true}).stdout.split("\n");
+    coverage_record(tables, goos: env[0].trim(), goarch: env[1].trim(),
+        profiles: ["coverage.out", "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
+                   "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]);
+}
+
+// coverage_summaries reads every committed record, refusing one that names a commit this
+// checkout does not contain: a summary carried in from a branch nobody merged measures a
+// tree that exists nowhere.
+fun coverage_summaries() > [any] !> any {
+    var records = mut [<any>];
+    foreach (p in fs\glob(COVERAGE_DIR + "/*.json")) {
+        final rec = cov\decodeSummary(p.value, text: fs\readFile(p.value));
+        try {
+            vcs\cmd(["merge-base", "--is-ancestor", "{rec["commit"]}", "HEAD"], {"quiet": true});
+        } catch (e) {
+            throw "coverage-badge: " + p.value + " was measured at {rec["commit"]}, which this "
+                + "checkout does not contain. Re-measure that platform here with "
+                + "`magus run coverage-badge:rw .`, or drop the record.";
+        }
+        records.append(rec);
+    }
+    return records;
+}
+
+// coverage_figure merges every committed record over the static denominator. A record
+// measured against source that has since changed is reported and credited nothing, so an
+// unrefreshed platform can only pull the figure DOWN.
+fun coverage_figure(tables: {str: [str]}) > any !> any {
+    final summaries = coverage_summaries();
+    final merged = cov\mergeSummaries(tables, summaries: summaries);
+    final stale = merged["stale"];
+    if (stale.len() > 0) {
+        magus\log.warn("coverage: {stale.len()} file(s) in the committed records were measured "
+            + "against different source and count as uncovered, first: " + stale[0]);
+    }
+    return {"covered": merged["covered"], "statements": merged["statements"],
+        "platforms": summaries.len()};
 }
 
 // Writes assets/coverage.svg, and is the only target that may.
@@ -2422,26 +2567,48 @@ fun coverage_percent() > str !> any {
 // so that suffix would pull a target that needs the race-enabled suite into the
 // drift gate.
 export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(test);
-    ctx.writesFiles("assets/coverage.svg");
-    // The three things the verdict is a function of, so this target caches honestly
-    // instead of opting out. coverage.hand.out carries the percentage and is a
-    // declared output of `test`, so a replayed suite still leaves it on disk;
-    // assets/coverage.svg is the committed file the check below compares against, so
-    // hand-editing it has to invalidate the pass; badge.buzz renders the bytes both
-    // branches produce. The charms are already in the key, which covers the two
-    // branches this body takes.
+    // One badge per LANGUAGE, over the whole codebase rather than the slice one machine
+    // compiles. Two halves: the DENOMINATOR is every statement block of every Go file in
+    // every module, enumerated from source (coverage.buzz explains how, and why that is
+    // exact); the NUMERATOR is the union of the committed platform records.
     //
-    // A footprint REPLACES the project baseline rather than adding to it (see the note
-    // on `test`), and that is the point here: the Go tree reaches this target only
-    // through the profile that ctx.needs(test) refreshes.
-    ctx.readsFiles("coverage.hand.out", "assets/coverage.svg", "badge.buzz");
-    // Only the CI runner writes or judges it. 105 non-test files carry a //go:build
-    // constraint, so the ratio is a property of the machine: 67.6% on macOS against
-    // 66.9% on Linux for one commit. A laptop that wrote it replaced CI's number.
-    if (!ctx.hasCharm("gha")) { return; }
-    final badgePct = coverage_percent().split(".")[0];
-    final wanted = badge\coverage("go coverage", percent: badgePct, radius: 3);
+    // Only the rw arm measures. The verify arm re-derives the badge from the tree and
+    // coverage/, which is a pure function, so CI stays cheap and never runs a platform
+    // suite to judge a badge. The gha-only early return that used to sit here is gone
+    // with it: the figure is no longer a property of whichever machine ran.
+    // Ordered after generate in BOTH arms. The denominator reads every Go file,
+    // generated ones included (it reads them to skip them), and the generate
+    // sub-targets write Go files in this same step. Left unordered, the verify arm
+    // waited for those writers to settle while holding its slot, and with every
+    // composer above them also holding one, the writers never got a slot: a gate
+    // stalled for fifteen minutes with nothing running (2026-09-10). A declared edge
+    // is what make's jobserver rule needs here; a settle wait is not one.
+    ctx.needs(generate);
+    if (ctx.hasCharm("rw")) {
+        ctx.needs(test, gopherbuzz\test, diagnostics\test, commentdash\test, testlayout\test);
+    }
+    ctx.writesFiles("assets/coverage.svg", "coverage/*.json");
+    // The Go tree IS an input now, because the denominator is read from it. A footprint
+    // REPLACES the project baseline rather than adding to it (see the note on `test`),
+    // so everything the verdict reads is restated here: every module's sources and
+    // go.mod for the import paths, the committed records, the badge the check compares
+    // against, and the two Buzz modules that render and merge.
+    ctx.readsFiles("**/*.go", "**/go.mod", "coverage/*.json",
+                   "assets/coverage.svg", "badge.buzz", "coverage.buzz");
+    final tables = cov\staticBlockTables();
+    if (ctx.hasCharm("rw")) {
+        // This platform only. A Windows record can only come from a Windows machine;
+        // until one runs the refresh, its files stay in the denominator at zero.
+        coverage_native_record(tables);
+    }
+    final figure = coverage_figure(tables);
+    if (figure["platforms"] == 0) {
+        throw "coverage-badge: coverage/ holds no platform record, so there is nothing to "
+            + "render the badge from. Measure this platform with "
+            + "`magus run coverage-badge:rw .` on a developer machine.";
+    }
+    final percent = cov\percentOf(figure["covered"], statements: figure["statements"]);
+    final wanted = badge\coverage("go coverage", percent: percent, radius: 3);
     if (ctx.hasCharm("rw")) {
         fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);
         return;
@@ -2449,9 +2616,11 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
     // Compared, never written: a check that mutates the tree it judges leaves its
     // own output for the next drift gate to read as an edit.
     if (fs\readFile(fs\join("assets", "coverage.svg")) != wanted) {
-        throw "coverage-badge: assets/coverage.svg does not match this runner's measurement of " + badgePct
-            + "%. This runner's platform set is the authoritative one, so commit a badge for "
-            + badgePct + "% - `badge\\coverage(\"go coverage\", percent: \"" + badgePct + "\", radius: 3)`.";
+        throw "coverage-badge: assets/coverage.svg does not match what the committed records "
+            + "render. {figure["platforms"]} platform record(s) in coverage/ cover "
+            + "{figure["covered"]} of {figure["statements"]} statements, which is " + percent
+            + "%. The badge and coverage/ are refreshed together on a developer machine: run "
+            + "`magus run coverage-badge:rw .` and commit both.";
     }
 }
 
@@ -2598,6 +2767,9 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
+    // This compiles libs/testlayout, which gofmt rewrites, so the edge is this
+    // target's own rather than a detail of how lint sequences its calls.
+    ctx.needs(format);
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
                    "libs/testlayout/go.sum", "libs/testlayout/**/*.go",
                    "libs/commentdash/go.mod", "libs/commentdash/go.sum",
@@ -2744,6 +2916,9 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // TODO: fish is uncovered for the same reason; upstream declined to publish an official
 // image in fish-shell/fish-shell#3440.
 export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
+    // The completions it checks are config-generate's output, written in this same
+    // ci fan-out; without the edge the check could read a half-written file (MGS4008).
+    ctx.needs(config_generate);
     // Declared so `magus affected` knows when this matters. Without it CI had to
     // re-derive the same answer with a git-diff grep in the workflow.
     ctx.readsFiles("hack/completion-checks/*", "cmd/magus/completions/*");
@@ -2764,6 +2939,142 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
         foreach (part in cmd.split(" ")) { argv.append(part); }
         docker["docker-run"](ctx, {"args": argv});
     }
+}
+
+// Turns a results tree into the benchmark report: build benchreport, then extract one
+// metrics record per run, analyze the paired deltas, render report.md.
+// `-- --results <dir>` names a tree under benchmarks/agent other than results/;
+// `-- --synthetic` generates the pipeline's own control, a synthetic tree, and
+// reports on that instead. Reads run artifacts that change under it, so it never
+// replays from cache. The analysis tests are ordinary Go tests in the root module,
+// so `test` covers them and there is no separate target.
+export fun agent_bench_report(ctx: magus\Context, args: [str]) > void !> any {
+    // report.md is an ignored, regenerated artifact that the root's `**/*.md` source
+    // glob covers, so the race check reads its rewrite as a source mutation. Declared
+    // as modified rather than written: a declared output lands in .gitattributes, and an
+    // ignored path there names a file that can never be tracked.
+    ctx.modifiesExistingFiles("benchmarks/agent/report.md");
+    ctx.writesFiles("benchmarks/agent/reports/**/*.md");
+    var results = "results";
+    var publish = "";
+    var synthetic = false;
+    var i = 0;
+    while (i < args.len()) {
+        if (args[i] == "--synthetic") {
+            synthetic = true;
+            i = i + 1;
+        } else if (args[i] == "--results" and i + 1 < args.len()) {
+            results = args[i + 1];
+            i = i + 2;
+        } else if (args[i] == "--publish" and i + 1 < args.len()) {
+            publish = args[i + 1];
+            i = i + 2;
+        } else {
+            throw "agent-bench-report: unknown argument " + args[i] + " (want --synthetic, --results <dir>, --publish <provider>)";
+        }
+    }
+    // The binary lands outside the tree: under benchmarks/agent it would be a path
+    // nothing declares and git would not ignore.
+    final bin = fs\join(fs\tempDir("benchreport-"), "benchreport");
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+        "args": ["-o", bin, "./benchmarks/agent/cmd/benchreport"],
+    });
+    final agent = "benchmarks/agent";
+    var steps = mut [];
+    // The synthetic tree is the pipeline's own control, the way the runner's golden
+    // and null runs are: a known results tree must produce a report before a real
+    // one is trusted to.
+    if (synthetic) {
+        // makefixture creates results/ under the directory it is given.
+        steps.append(["makefixture", fs\join(agent, "results-synthetic"), "-model", "claude-opus-5"]);
+        results = "results-synthetic/results";
+    }
+    steps.append(["extract", fs\join(agent, results), "-o", fs\join(agent, "metrics.jsonl"),
+                  "-p", fs\join(agent, "pricing.json")]);
+    steps.append(["analyze", fs\join(agent, "metrics.jsonl"), "-o", fs\join(agent, "analysis.json"),
+                  "--seed", "20260902"]);
+    steps.append(["report", fs\join(agent, "analysis.json"), "-o", fs\join(agent, "report.md")]);
+    foreach (step in steps) {
+        proc\exec(bin, step);
+    }
+    magus\log.info("benchmark report written to benchmarks/agent/report.md");
+    if (publish != "") {
+        publish_report(agent, results, publish);
+    }
+}
+
+// publish_report commits a rendered report at
+// benchmarks/agent/reports/<date>/<provider>/<model>.md with the environment stamped
+// after its title, the way BENCHMARKS.md carries its own: a number on the docs site
+// has to trace to a date, a build and a machine. The provider is given, because a
+// model id does not carry it; the model is the one the runs used, so a tree that
+// mixes models is refused rather than filed under one of them. The docs project
+// mirrors every file under that directory into a page.
+fun publish_report(agent: str, results: str, provider: str) > void !> any {
+    final report = fs\readFile(fs\join(agent, "report.md"));
+    final analysis = json\parse(fs\readFile(fs\join(agent, "analysis.json")));
+    var models = "";
+    var count = 0;
+    foreach (model in analysis["models"]) {
+        if (models != "") { models = models + ", "; }
+        models = models + "{model}";
+        count = count + 1;
+    }
+    if (count != 1) {
+        throw "agent-bench-report: --publish files a report under one model, and `" + results
+            + "` carries " + "{count}" + " (" + models + ")";
+    }
+    // The magus that ran the trials, from the first run's own record; the version
+    // string carries a second line when a daemon of another build was up.
+    var version = "unknown";
+    foreach (entry in fs\listDir(fs\join(agent, results))) {
+        final meta = fs\join(agent, results, entry, "meta.json");
+        if (fs\exists(meta)) {
+            final record = json\parse(fs\readFile(meta));
+            version = "{record["magus_version"]}".split("\n")[0];
+            break;
+        }
+    }
+    final now = time\nowIso();
+    final stamp = "Published " + now + " from `" + results + "`: {analysis["runs"]} scored run(s), "
+        + "model " + models + " (" + provider + "), " + version + ", host " + os\platform().join("/") + ".";
+    final title = report.split("\n")[0];
+    final dir = fs\join(agent, "reports", now.sub(0, len: 10), provider);
+    final target = fs\join(dir, models + ".md");
+    fs\mkdirAll(dir);
+    fs\writeFile(target, report.replace(title + "\n", title + "\n\n" + stamp + "\n"));
+    magus\log.info("benchmark report published to " + target);
+}
+
+// Builds swegrade, the grader the SWE-bench runner pipes every eval log through, at
+// the path swebench/lib.sh reads it from. Built on the host from the root module so
+// it shares the workspace's JSON codec and its tests, rather than as a throwaway
+// module inside a grader image; the binary is gitignored under benchmarks/agent/bin,
+// undeclared like ./magus for the same reason.
+export fun swegrade_build(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("benchmarks/agent/cmd/swegrade/*.go", "internal/json/*.go", "go.mod", "go.sum");
+    go["go-build"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {
+        "args": ["-o", "benchmarks/agent/bin/swegrade", "./benchmarks/agent/cmd/swegrade"],
+    });
+}
+
+// Runs a benchmark manifest with a login the launching shell never held. The
+// long-lived token `claude setup-token` mints is read through the workspace's secret
+// provider under the reference below, handed to run.sh as the one environment variable
+// the runner's scrub keeps, and redacted from everything magus captures. It never
+// touches argv, which the run log records, and it never has to be exported by the
+// person, or the agent, typing this command:
+// `MAGUS_SECRET_PROVIDER=system-keychain magus run agent-bench-run . -- <manifest>`, defaulting
+// to pilot.manifest. Every run is paid work that writes results/, so it never replays
+// from cache.
+export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(swegrade_build);
+    var manifest = "pilot.manifest";
+    if (args.len() > 0) { manifest = args[0]; }
+    final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+    os\withEnv({"CLAUDE_CODE_OAUTH_TOKEN": token}, callback: fun () > void !> any {
+        proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent", opts: {});
+    });
 }
 
 // Runs internal/compress's tests under the CGO tags, which the ordinary test target
@@ -2787,6 +3098,9 @@ export fun completion_test(ctx: magus\Context, args: [str]) > void !> any {
 // A charm variant (`test:cgo`) cannot express it either - charms patch argv, and the
 // distinguishing input here is CGO_ENABLED in the environment.
 export fun compress_cgo_test(ctx: magus\Context, args: [str]) > void !> any {
+    // After format, like every other compile in this fan-out: gofmt rewrites the files
+    // this reads, in place, and one ctx.needs on ci puts the two side by side (MGS4008).
+    ctx.needs(format);
     // Narrow: affected reaches this only when the codecs or their tests move.
     ctx.readsFiles("internal/compress/*.go");
     foreach (lib in ["libzstd", "liblzma"]) {
@@ -2977,6 +3291,17 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Reports installed toolchains; excluded from CI because it probes remote tags.
 export fun toolchain_report(ctx: magus\Context, args: [str]) > void !> any {
     toolchains\report();
+}
+
+// Loads this checkout's own Claude Code sessions, so the repository dogfoods the
+// recipe it ships the same way it invokes the guard template it ships rather than
+// keeping a private copy.
+//
+// The recipe resolves the binary itself by walking up to the magusfile, so no
+// argument names one here; from a worktree with no ./magus it falls through to
+// PATH and announces itself on stderr if that copy cannot load.
+export fun session_load(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["docs/guides/integrations/agents/magus-session-load-claude-code.sh"], ".", {});
 }
 
 export fun serve(ctx: magus\Context, args: [str]) > void !> any {

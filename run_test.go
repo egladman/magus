@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
@@ -1440,4 +1441,108 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	assert.Contains(t, got, "target="+spellName+"/flaky", "the line must name the pair, not just the project")
 	assert.Contains(t, got, "status=retried_volatile")
 	assert.Contains(t, got, "reason=bootstrap")
+}
+
+// TestUndeclaredScopeEvent pins the scope event MGS1028 rides to the console: which
+// targets produce one, that a project is reported once however many targets it
+// contributed, and the input/not-input split the notification tier keys on.
+func TestUndeclaredScopeEvent(t *testing.T) {
+	tests := []struct {
+		name    string
+		targets []types.Target
+		want    []journal.UndeclaredSeed
+	}{
+		{
+			name:    "nothing undeclared emits nothing",
+			targets: []types.Target{{Path: "api", Name: "build", Files: []string{"api/main.go"}}},
+		},
+		{
+			name: "an input-looking file is split out",
+			targets: []types.Target{{
+				Path: ".", Name: "ci",
+				Files:      []string{".golangci.yml", "LICENSE"},
+				Undeclared: []string{".golangci.yml", "LICENSE"},
+			}},
+			want: []journal.UndeclaredSeed{{
+				Project: ".",
+				Files:   []string{".golangci.yml", "LICENSE"},
+				Inputs:  []string{".golangci.yml"},
+			}},
+		},
+		{
+			name: "no file reads as an input, so Inputs stays empty",
+			targets: []types.Target{{
+				Path: "docs", Name: "lint", Undeclared: []string{"docs/NOTES.txt"},
+			}},
+			want: []journal.UndeclaredSeed{{Project: "docs", Files: []string{"docs/NOTES.txt"}}},
+		},
+		{
+			name: "one project contributing several targets is reported once, in path order",
+			targets: []types.Target{
+				{Path: "web", Name: "build", Undeclared: []string{"web/.prettierrc"}},
+				{Path: "web", Name: "test", Undeclared: []string{"web/.prettierrc"}},
+				{Path: ".", Name: "build", Undeclared: []string{"mise.toml"}},
+			},
+			want: []journal.UndeclaredSeed{
+				{Project: ".", Files: []string{"mise.toml"}, Inputs: []string{"mise.toml"}},
+				{Project: "web", Files: []string{"web/.prettierrc"}, Inputs: []string{"web/.prettierrc"}},
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := undeclaredScopeEvent(tc.targets)
+			if tc.want == nil {
+				assert.False(t, ok)
+				assert.Equal(t, journal.Event{}, got)
+				return
+			}
+			assert.True(t, ok)
+			assert.Equal(t, journal.Event{Kind: journal.KindScope, Undeclared: tc.want}, got)
+		})
+	}
+}
+
+// TestObservationsForTarget covers the scoping that makes a probed observation
+// affordable. A version probe keys every target in every project binding the spell,
+// which is fine for a value that moves when someone upgrades a toolchain. A
+// vulnerability database moves every few hours, so the same treatment would cost the
+// project's whole cache on a clock: only the targets that actually drive the binary may
+// carry it.
+func TestObservationsForTarget(t *testing.T) {
+	sp := spells.NewSpell("docker", spells.WithOps(map[string]spells.Op{
+		"trivy-image":  {Command: spells.Command{Bin: "trivy", Args: []string{"image", "--skip-db-update"}}},
+		"docker-build": {Command: spells.Command{Bin: "docker", Args: []string{"build"}}},
+	}))
+	p := &types.Project{
+		Path:           ".",
+		ResolvedSpells: []*spells.Spell{sp},
+		TargetSpellOps: map[string][]types.TargetSpellUse{
+			"image-scan":  {{Spell: "docker", Ops: []string{"trivy-image"}}},
+			"image-build": {{Spell: "docker", Ops: []string{"docker-build"}}},
+		},
+	}
+	probed := map[string]string{"docker:trivy": "db 2026-09-10"}
+
+	assert.Equal(t, []string{"docker:trivy:db 2026-09-10"}, observationsForTarget(p, "image-scan", probed),
+		"the target driving trivy carries the database it read")
+	assert.Empty(t, observationsForTarget(p, "image-build", probed),
+		"a target that drives a different binary must not pay for trivy's database")
+	assert.Empty(t, observationsForTarget(p, "test", probed),
+		"a target that names no spell op carries no observation")
+	assert.Empty(t, observationsForTarget(p, "image-scan", nil),
+		"no probe, no line: the key is unchanged for a spell that declares none")
+}
+
+// TestApplyRunKeyingCarriesObservations pins the two halves of the obs: class landing in
+// one place. buildStep puts the target's ctx.observes lines on the step and the run
+// scheduler adds the probed ones, so an assignment here would silently drop whichever
+// arrived first, and the key would lose an input with nothing to notice.
+func TestApplyRunKeyingCarriesObservations(t *testing.T) {
+	step := cache.Step{Observations: []string{"schema-rev=a1b2c3"}}
+	applyRunKeying(&step, []string{"go:go:1.25"}, []string{"docker:trivy:db 2026-09-10"}, []string{"rw"})
+
+	assert.Equal(t, []string{"schema-rev=a1b2c3", "docker:trivy:db 2026-09-10"}, step.Observations)
+	assert.Equal(t, []string{"go:go:1.25"}, step.ToolVersions)
+	assert.Equal(t, []string{"rw"}, step.Charms)
 }

@@ -138,3 +138,34 @@ func TestNewFileReportOverlaps(t *testing.T) {
 		})
 	}
 }
+
+// TestLooksLikeBuildInput pins the one classifier two surfaces read MGS1028's
+// severity off: the exact names, the config families that spell themselves several
+// ways, and the deliberate misses. A name it does not know must read as NOT an
+// input, the direction whose cost is a quieter notice rather than an interruption.
+func TestLooksLikeBuildInput(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{".golangci.yml", true},
+		{"tools/toolchain/mise.toml", true},
+		{"web/pnpm-lock.yaml", true},
+		{".tool-versions", true},
+		{"web/.eslintrc.json", true},
+		{"web/eslint.config.mjs", true},
+		{"web/.prettierrc", true},
+		{"rust-toolchain.toml", true},
+		{".EditorConfig", true}, // the base name is matched case-insensitively
+		{"LICENSE", false},
+		{"docs/notes.md", false},
+		{"api/main.go", false},
+		{"", false},
+		{"lockfiles/README.md", false}, // a directory named for one is not one
+	}
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			assert.Equal(t, tc.want, LooksLikeBuildInput(tc.path))
+		})
+	}
+}

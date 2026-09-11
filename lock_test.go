@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 )
@@ -784,5 +786,305 @@ func TestAcquireNamesTheLockItGaveUpOn(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "waiting") {
 		t.Errorf("error must say a lock wait is what failed: %v", err)
+	}
+}
+
+// captureLockOut is the buffer a test's lockers write their decision lines into, and the
+// option that points them at it. These lines are the whole user-visible half of a
+// supersede, so a test that cannot read the exact bytes proves nothing about what a
+// person sees.
+func captureLockOut() (*bytes.Buffer, lockerOption) {
+	var b bytes.Buffer
+	return &b, writingTo(&b)
+}
+
+// quickSupersede shortens the two timings a supersede is paced by, so a test that only
+// exists to observe the protocol finishes in milliseconds.
+func quickSupersede(t *testing.T, bound time.Duration) {
+	t.Helper()
+	poll, prevBound := supersedePollInterval, supersedeYieldBound
+	supersedePollInterval, supersedeYieldBound = 5*time.Millisecond, bound
+	t.Cleanup(func() { supersedePollInterval, supersedeYieldBound = poll, prevBound })
+}
+
+// TestLockRecordRoundTripsTheSupersedeFields pins the two fields the qualifier reads. A
+// sidecar that loses either one silently disqualifies its holder, which reads as
+// supersession quietly not working rather than as a failure.
+func TestLockRecordRoundTripsTheSupersedeFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lock.owner")
+	want := processRecord{
+		PID:     41221,
+		Command: "magus affected ci --no-default-charms",
+		Dir:     "/ws",
+		Started: time.Now(),
+		Inv:     "inv-0123456789abcdef",
+		Root:    "/ws",
+		Gate:    true,
+	}
+	if err := record.Write(path, want); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	var got processRecord
+	if err := record.Read(path, &got); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !got.Started.Equal(want.Started.Truncate(time.Second)) {
+		t.Errorf("Started = %v, want %v; RFC3339 keeps seconds and the comparison depends on it",
+			got.Started, want.Started.Truncate(time.Second))
+	}
+	// Compared whole, so a field added later without a tag fails here rather than going
+	// silently unpersisted. Started is checked above; RFC3339 drops its location.
+	got.Started, want.Started = time.Time{}, time.Time{}
+	if got != want {
+		t.Errorf("record round trip = %+v, want %+v", got, want)
+	}
+}
+
+// TestLockRecordReadsBothDirectionsAcrossVersions is the compat half. A magus that
+// predates supersession and one that does not share a lock directory whenever two
+// checkouts share a cache, and neither may choke on the other's sidecar.
+func TestLockRecordReadsBothDirectionsAcrossVersions(t *testing.T) {
+	dir := t.TempDir()
+
+	// An older magus wrote this: no root line, no gate line. It must decode, and decode as
+	// NOT a gate, so the holder keeps today's behavior and is waited on rather than killed.
+	old := filepath.Join(dir, "old.owner")
+	if err := os.WriteFile(old, []byte("command\tmagus run ci .\ndir\t/ws\npid\t4821\n"), 0o644); err != nil {
+		t.Fatalf("write old record: %v", err)
+	}
+	var got processRecord
+	if err := record.Read(old, &got); err != nil {
+		t.Fatalf("read old record: %v", err)
+	}
+	if got.PID != 4821 || got.Root != "" || got.Gate {
+		t.Errorf("old record decoded to %+v, want the known fields and zeroed supersede fields", got)
+	}
+
+	// And the other direction: an older reader knows only its own field names, so the two
+	// lines it has never heard of are lines it ignores rather than lines it rejects.
+	type legacyRecord struct {
+		PID     int    `record:"pid"`
+		Command string `record:"command"`
+		Dir     string `record:"dir"`
+	}
+	fresh := filepath.Join(dir, "new.owner")
+	if err := record.Write(fresh, processRecord{PID: 41221, Command: "magus affected ci .", Dir: "/ws", Root: "/ws", Gate: true}); err != nil {
+		t.Fatalf("write new record: %v", err)
+	}
+	var legacy legacyRecord
+	if err := record.Read(fresh, &legacy); err != nil {
+		t.Fatalf("old reader on a new record: %v", err)
+	}
+	if legacy.PID != 41221 || legacy.Command != "magus affected ci ." {
+		t.Errorf("old reader decoded %+v, want the fields it knows intact", legacy)
+	}
+}
+
+// TestSupersedeQualifier walks every way a contention is NOT a supersede. The positive
+// case is one line; the negatives are the test, because each one is a run that would be
+// killed for no reason if the qualifier widened.
+func TestSupersedeQualifier(t *testing.T) {
+	now := time.Now()
+	holder := func(mut func(*processRecord)) processRecord {
+		r := processRecord{
+			PID:     4821,
+			Command: "magus affected ci .",
+			Dir:     testWorkspaceRoot,
+			Started: now.Add(-time.Minute),
+			Root:    testWorkspaceRoot,
+			Gate:    true,
+		}
+		if mut != nil {
+			mut(&r)
+		}
+		return r
+	}
+
+	cases := []struct {
+		name       string
+		waiterGate bool
+		owner      processRecord
+		want       bool
+	}{
+		{"a later gate on the same tree", true, holder(nil), true},
+		{"a sibling worktree is a different tree", true, holder(func(r *processRecord) { r.Root = "/ws-other" }), false},
+		{"the holder is not a gate", true, holder(func(r *processRecord) { r.Gate = false }), false},
+		{"the waiter is not a gate", false, holder(nil), false},
+		{"the holder started later", true, holder(func(r *processRecord) { r.Started = now.Add(time.Minute) }), false},
+		{"the holder has no start time on record", true, holder(func(r *processRecord) { r.Started = time.Time{} }), false},
+		{"a sidecar from a magus that predates supersession", true, processRecord{PID: 4821, Command: "magus run ci .", Started: now.Add(-time.Minute)}, false},
+		{"no holder on record", true, processRecord{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []lockerOption
+			if tc.waiterGate {
+				opts = append(opts, asGate())
+			}
+			l := newProjectLocker(t.TempDir(), testWorkspaceRoot, false, opts...)
+			l.started = now
+			if tc.owner.PID != 0 {
+				// The acquire path creates the lock directory; this writes the sidecar
+				// without acquiring, standing in for the earlier gate that did.
+				if err := os.MkdirAll(filepath.Dir(l.ownerPath("app")), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := record.Write(l.ownerPath("app"), tc.owner); err != nil {
+					t.Fatalf("write owner: %v", err)
+				}
+			}
+			if _, got := l.supersedes("app"); got != tc.want {
+				t.Errorf("supersedes = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestALaterGateTakesTheLockAndTheEarlierOneReportsMGS3014 is the whole protocol end to
+// end: the request, the abort, the handover and both messages.
+//
+// Nothing is running in the earlier gate, which is not a simplification. It is the settle
+// tail exactly: a run that has finished its batch still holds every lock, and is
+// superseded like any other gate.
+//
+// Both lockers live in one process, which is the daemon shape rather than a shortcut:
+// flock is per open file description, so a second handle contends like any other.
+func TestALaterGateTakesTheLockAndTheEarlierOneReportsMGS3014(t *testing.T) {
+	quickSupersede(t, 5*time.Second)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+
+	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
+	earlier.started = time.Now().Add(-2 * time.Minute)
+	rel, err := earlier.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("earlier acquire: %v", err)
+	}
+	hold := &projectHold{unlock: rel, locker: earlier, paths: []string{"app"}}
+	defer hold.release()
+
+	ctx, watch := (&Magus{}).watchForSupersede(t.Context(), hold)
+	defer watch.close()
+	// The run's own unwind is what frees the locks, on its deferred release; the watch
+	// only cancels. Stand in for that unwind here.
+	go func() {
+		<-ctx.Done()
+		hold.release()
+	}()
+
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
+	start := time.Now()
+	rel2, err := later.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("later acquire: %v", err)
+	}
+	defer rel2()
+	if took := time.Since(start); took > 3*time.Second {
+		t.Errorf("the later gate waited %v; a supersede hands the lock over in seconds or it is just a wait", took)
+	}
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the earlier gate was never cancelled; a yield that does not abort leaves two gates on one tree")
+	}
+
+	verdict := watch.verdict(nil)
+	if !errors.Is(verdict, types.GateSuperseded) {
+		t.Fatalf("verdict = %v, want MGS3014", verdict)
+	}
+	var stated interface{ ExitCode() int }
+	if !errors.As(verdict, &stated) || stated.ExitCode() != 75 {
+		t.Errorf("verdict must state exit 75, so a caller can tell a yielded gate from a failed one: %v", verdict)
+	}
+	msg := verdict.Error()
+	for _, want := range []string{
+		"superseded by a later gate on the same tree",
+		later.started.UTC().Format(time.RFC3339),
+		"nothing here was wrong",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("MGS3014 = %q, want it to carry %q", msg, want)
+		}
+	}
+
+	// The successor says what it did, on the stream nothing bounds: -s is a console mode,
+	// and this line never goes through the console.
+	if line := out.String(); !strings.Contains(line, "superseded the earlier gate on project app") {
+		t.Errorf("lock output = %q, want the one line naming what was superseded", line)
+	}
+	if n := strings.Count(out.String(), "superseded the earlier gate"); n != 1 {
+		t.Errorf("supersede lines = %d, want exactly 1", n)
+	}
+	if _, err := os.Stat(later.yieldPath("app")); !os.IsNotExist(err) {
+		t.Error("the request must be retracted once the lock changes hands")
+	}
+}
+
+// TestAnAncestorHolderIsRefusedNotSuperseded keeps MGS3007 the more specific answer. A
+// nested gate that superseded its own parent would kill the run that is blocked waiting
+// for it to exit, which turns a diagnosable deadlock into a dead outer run.
+func TestAnAncestorHolderIsRefusedNotSuperseded(t *testing.T) {
+	quickSupersede(t, 200*time.Millisecond)
+	cacheDir := t.TempDir()
+
+	outer := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	outer.started = time.Now().Add(-time.Minute)
+	rel, err := outer.acquire(ancestryCtx(t, "inv-outer"), "app")
+	if err != nil {
+		t.Fatalf("outer acquire: %v", err)
+	}
+	defer rel()
+
+	nested := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate())
+	ctx, cancel := context.WithTimeout(ancestryCtx(t, "inv-outer", "inv-nested"), 5*time.Second)
+	defer cancel()
+	if _, err := nested.acquire(ctx, "app"); !errors.Is(err, types.ProjectLockHeldByAncestor) {
+		t.Fatalf("nested gate acquire = %v, want MGS3007", err)
+	}
+	if _, err := os.Stat(nested.yieldPath("app")); !os.IsNotExist(err) {
+		t.Error("a refused acquire must leave no request for the ancestor to answer")
+	}
+}
+
+// TestAnUnansweredSupersedeFallsBackToWaiting covers the holder that cannot yield: too
+// old to know what a request is, stopped, or wedged in a syscall. The bound is what keeps
+// a supersede from becoming the hang it exists to remove.
+func TestAnUnansweredSupersedeFallsBackToWaiting(t *testing.T) {
+	quickSupersede(t, 200*time.Millisecond)
+	out, toOut := captureLockOut()
+	cacheDir := t.TempDir()
+
+	// No watch is armed over this holder, so nothing ever reads the request.
+	earlier := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
+	earlier.started = time.Now().Add(-time.Minute)
+	rel, err := earlier.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("earlier acquire: %v", err)
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		rel()
+	}()
+
+	later := newProjectLocker(cacheDir, testWorkspaceRoot, false, asGate(), toOut)
+	rel2, err := later.acquire(t.Context(), "app")
+	if err != nil {
+		t.Fatalf("later acquire: %v", err)
+	}
+	defer rel2()
+
+	got := out.String()
+	if !strings.Contains(got, "did not stop within") {
+		t.Errorf("lock output = %q, want the fallback to say the supersede went unanswered", got)
+	}
+	if !strings.Contains(got, "is being changed by another magus process") {
+		t.Errorf("lock output = %q, want the ordinary wait message after the fallback", got)
+	}
+	if strings.Contains(got, "superseded the earlier gate") {
+		t.Errorf("lock output = %q, must not claim a supersede that never happened", got)
+	}
+	if _, err := os.Stat(later.yieldPath("app")); !os.IsNotExist(err) {
+		t.Error("a supersede that gave up must retract its request")
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -707,7 +708,24 @@ func renderedPage(t *testing.T, name string) string {
 	require.NoError(t, err)
 	b, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(name)))
 	require.NoError(t, err)
-	return string(b)
+	return unpadTables(string(b))
+}
+
+// tableCellPadding is the run of spaces a padded table row carries before a
+// column separator.
+var tableCellPadding = regexp.MustCompile(` +\|`)
+
+// unpadTables squeezes the column padding back out of every table row, so an
+// assertion names the cells rather than the widths the renderer chose. The
+// padding itself is pinned in internal/render/md.
+func unpadTables(page string) string {
+	lines := strings.Split(page, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "| ") {
+			lines[i] = tableCellPadding.ReplaceAllString(line, " |")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // TestServicePageStatesTheCallContract is what a third party builds a client

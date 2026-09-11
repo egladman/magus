@@ -102,8 +102,9 @@ one agent-specific field in an otherwise human-first surface - the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
 deliberate exception is the lease ledger, an agent-to-agent declaration
-under [Agents propose, humans dispose](#agents-propose-humans-dispose): it
-carries no CLI verb because no person is its audience. This prevents the
+under [Agents propose, humans dispose](#agents-propose-humans-dispose): it is
+WRITTEN by agents through MCP and READ by people at `magus ledger`, so the
+asymmetry is in who authors it, not in who may see it. This prevents the
 bolted-on AI integration, papering over a tool
 people already struggle with, and the quiet inversion where a person becomes
 the secondary user of their own build tool.
@@ -148,6 +149,36 @@ file right now - rather than a judgment about the work, and it reaches no cache
 key, no drift comparison, and no diagnostic. Its uncertainties - no ledger, no
 live lease, a file that will not parse - fail open with at most an
 advisory.
+
+### Worth cloning
+
+Assume magus can be reproduced. A model given the binary can recover the
+architecture; given the docs, it can recover the rest, and the cost of doing so
+falls every year. So no part of this project's value is allowed to rest on that
+being hard. What cannot be recovered from the artifact is the judgment that
+produced it: which capabilities were refused and why, what was measured before a
+mechanism shipped, where the line between the tool and the person was drawn and
+what it cost to hold. That record is the product, and it is published on
+purpose. A clone that carries it improves the lives of the people who run it,
+and a clone that drops it is a different tool wearing the name.
+
+The test for what to build is therefore whether it is better when copied. A
+vocabulary that another build tool adopts makes every agent better at both. A
+guard rule that another harness lifts protects someone this project will never
+meet. A measurement that kills a feature here saves the same feature elsewhere.
+Each of those returns more to this project when it spreads than it would have
+kept by staying scarce, because the thing magus optimizes for, people who can
+still fix their own software, is not a market to corner.
+
+The mechanisms are the license and the absences. GPL-3.0 makes the copy legal and
+keeps the copy's improvements public. [Scope](scope.md#the-line) records that no
+account, paid tier, or capability behind either exists, so there is nothing a
+clone would have to route around. The [refusals ledger](#a-record-of-refusals)
+and the measurements behind each rule on this page are in the tree, not in
+anyone's head. This prevents the failure that makes the assumption above
+dangerous: taking on debt to build a moat that will not exist, and then
+measuring the project by what it managed to keep from people instead of by what
+it left them able to do.
 
 ## The standard
 
@@ -211,10 +242,11 @@ authorship from the surface that performed the write, so a change made through
 the agent surface carries an agent's name no matter what the writer reports
 about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
-reaches anyone. The lease ledger has no CLI verb, unlike the attention
-events `notify` raises, because an attention event is addressed to a person
-while the ledger is an agent-to-agent declaration read back by the guard and
-the console.
+reaches anyone. The lease ledger has no CLI verb that WRITES, unlike the
+attention events `notify` raises, because an attention event is addressed to a
+person while the ledger is an agent-to-agent declaration read back by the guard
+and the console. Reading it is a person's business, so `magus ledger` does that
+and nothing else.
 
 Automated review is wrong at a steady rate, and wrong in a characteristic way:
 the confident finding that "fixes" behavior somebody chose on purpose. The
@@ -327,6 +359,35 @@ on rather than from what the writer claims. A batch waits for a person because
 publishing is one outward-facing act; splitting it into a call per remark would
 turn the act that needs confirming into a series of small ones nobody confirms.
 
+### Corrective competence
+
+The skill this page protects is narrow: your ability to fix the thing yourself
+when the agent is wrong, or gone. Not speed, and not thinking in general.
+
+Two studies set the target. Bastani et al. measured nearly a thousand high school
+students with a tutor that handed over answers: 48% better on practice while it was
+available and 17% worse on the exam once it was taken away, against 127% better and
+no measurable residual harm for a version prompted to give hints instead.[^bastani-2025]
+Sankaranarayanan found that 77% of novice programmers given unrestricted AI failed a
+30-minute maintenance task once the assistant was withdrawn, against 39% of a group
+whose tool made them explain generated code's causal logic before it would integrate
+it. The two groups produced equally functional work; the explaining group took about
+a third longer to do it.[^sankaranarayanan-2026]
+
+The mechanisms are already on this page. Notes are human-authored by
+construction. `--ack` refuses without a terminal, agent hosts are denied it
+outright, and the count is shown to nobody but the reader. The guard advises
+where advice will do and denies only what cannot be undone. magus never calls a
+model, which is what makes the Friday above an option rather than a slogan.
+
+This repository is built with agents at scale: 113,430 agent-run shell commands
+in twenty-one days. Our own oversight lapsed too. In 22 of 203 recent sessions
+the guard was not running, and those sessions carried 17% of all commands. The
+only reason that number exists is that we went looking for it.[^agent-commands-2026-09]
+Whether the surface earns its cost is measured the same way rather than
+asserted: [Benchmarks](benchmarks.md) publishes every run beside the
+environment that produced it, controls first.
+
 ## Where this is strained
 
 Friction placed wrong is bureaucracy. A refusal that teaches and one that nags
@@ -377,3 +438,50 @@ records, so each passes the scope test; none is built:
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of the table above, or a debt off this list, edit this page
 in the same commit that changes the behavior.
+
+### A record of refusals
+
+The decision to build and the decision to stop both stay with a person; what the
+tool owes them is a record that makes each one visible and cheap to revisit.
+Below is that record: capabilities magus could have had and does not, or had and
+removed, with what decided each and where to check it.
+
+| what                                                                   | what was decided                                                                                                                                                                 | where                                                     |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| an advisory when an agent edits a file it never looked up              | not built: 0.8% of 3,560 first edits were never anchored, and all 27 cases read by hand were matcher artifacts                                                                   | transcript measurement, 2026-09-02                        |
+| denying a recursive grep of a bare identifier, to force `refs`         | measured and refused: 45 such greps in the whole corpus, and `refs` answered roughly 60% of them; an advisory routed by the pattern's shape shipped instead, and it never blocks | `f963a9f1b`, measured with `9519797b3`                    |
+| an `ask` verdict, so a denial could be waved through in the moment     | built across 14 files and reverted the same day: two of the four host glues would have silently PERMITTED every raw-tool denial instead of prompting                             | `internal/agent/guard.go:25`, still three decisions       |
+| 47 half-built features found in an audit before the project was shared | each one killed, finished, or pinned with its reason; one kill was wrong and the person reversed it                                                                              | `4f8cc295a`                                               |
+| machine-wide memory admission control                                  | deleted; `memory_mb` kept as a slot weight                                                                                                                                       | `b6abdfe43`                                               |
+| rotating the activity trail from its write path                        | deleted rather than keep promising bounded retention to a workspace running no daemon                                                                                            | `42a0996c5`                                               |
+| `magus graph verify`                                                   | folded into `doctor`: no in-tree consumer, absent from the CLI registry, and filed under a graph it never read                                                                   | `3f805e159`                                               |
+| `magus_tail_log`                                                       | named in public as a duplicate of `magus_output` and shipped for two more weeks as a debt; deleted when the tool catalog became generated from the descriptor                    | `blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md` |
+| a model adapter                                                        | never built; the one extension seam that is absent rather than sealed                                                                                                            | [Scope](scope.md#where-others-drew-it)                    |
+| a paid tier, an account, a capability behind either                    | never built; there is nothing to upsell                                                                                                                                          | [Scope](scope.md#the-line)                                |
+| generating code your build depends on                                  | never built; nothing magus writes into your repository has to exist for `magus run build` to work                                                                                | [Scope](scope.md#the-line)                                |
+
+Two of those rows record a measurement that killed an idea somebody wanted,
+which is the only reason the rest of the list is worth anything. A ledger of
+things nobody was going to build proves nothing.
+
+[^bastani-2025]: Hamsa Bastani, Osbert Bastani, Alp Sungu, Haosen Ge, Ozge Kabakci, Rei Mariman,
+    "Generative AI without guardrails can harm learning: Evidence from high school
+    mathematics", PNAS 122(26), e2422633122, 2025, <https://doi.org/10.1073/pnas.2422633122>.
+    Figures are from the abstract: GPT Base and GPT Tutor practice gains of 48% and 127%
+    over control, a 17% exam reduction for GPT Base, and an effect the authors describe
+    as essentially eradicated for GPT Tutor. Checked 2026-09-10.
+
+[^sankaranarayanan-2026]: Sreecharan Sankaranarayanan, "Mitigating Epistemic Debt in
+    Generative AI-Scaffolded Novice Programming using Metacognitive Scripts", arXiv
+    2602.20206 (preprint, v2 2026-03-31), <https://arxiv.org/abs/2602.20206>. N=78
+    novices (CS undergraduates and recent bootcamp graduates), Cursor with Claude 3.5
+    Sonnet. Failure rates on the AI-blackout maintenance task were 77% unrestricted and
+    39% with the Explanation Gate; functional utility did not differ (p=.64); the gated
+    group was slower (about 64.6 versus 48.2 minutes, d=1.52). Checked 2026-09-10.
+
+[^agent-commands-2026-09]: Measured in this repository on 2026-09-09 over the Claude Code,
+    Codex and OpenCode transcripts on one machine, using the session-load recipes in
+    [the agents guide](guides/integrations/agents/session-load.md): 113,430 Bash tool
+    calls in the 21 days to that date; 22 of 203 sessions carried the guard-not-running
+    notice and accounted for 17% of those calls. Reproducible with `magus session load`
+    over the same transcripts.

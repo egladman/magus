@@ -49,6 +49,10 @@ type gateRedundancy struct {
 	fp       string
 	projects []string
 	charms   []string
+	// undeclared is the subset of projects nothing but an undeclared changed file
+	// selected; set by the affected path, empty on the `magus run ci` one, which
+	// names its own selection.
+	undeclared []string
 }
 
 // gateFinding is one redundancy match: the green gate, and either an identical
@@ -59,13 +63,23 @@ type gateFinding struct {
 	delta     internalci.GateDelta
 }
 
+// isGateInvocation reports whether this invocation is THE gate: the ci target, run whole
+// rather than as a shard, and actually executing.
+//
+// The redundancy check and lock supersession (MGS3014) both key on it, and they have to
+// agree on what a gate is. One would otherwise defer a run the other would abort, on two
+// definitions that drifted.
+func isGateInvocation(target string, partial bool) bool {
+	return target == types.TargetCI && !partial && !globalCfg.DryRun
+}
+
 // prepareGateRedundancy computes the gate identity for a ci invocation, or
 // nil when the invocation is not one the check can vouch for: not the ci
 // target, a dry run, a shard or otherwise partial run, no VCS branch to key
 // on, or a selection whose cache keys cannot be computed. nil means the run
 // proceeds exactly as before this feature existed, with no output at all.
 func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, targets []types.Target, charms []string, partial bool) *gateRedundancy {
-	if target != types.TargetCI || partial || globalCfg.DryRun {
+	if !isGateInvocation(target, partial) {
 		return nil
 	}
 	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
@@ -100,6 +114,16 @@ func prepareGateRedundancy(ctx context.Context, m *magus.Magus, target string, t
 		projects: projects,
 		charms:   sorted,
 	}
+}
+
+// noteUndeclaredSeeds records which of this gate's projects were selected only through
+// files no project declares, for the record written after the run. Nil-safe, like every
+// other method here: the gate is inert on a non-ci or dry run.
+func (g *gateRedundancy) noteUndeclaredSeeds(projects []string) {
+	if g == nil {
+		return
+	}
+	g.undeclared = projects
 }
 
 // evaluate applies the redundancy decision before the gate runs. A nil error
@@ -195,6 +219,10 @@ func (g *gateRedundancy) renderFinding(f gateFinding) string {
 	}
 	fmt.Fprintf(&b, "  green gate: run %s, branch %s, commit %s, recorded %s (%s ago), fingerprint %s",
 		inv, f.rec.Ref, shortCommit(f.rec.Commit), f.rec.At.UTC().Format(time.RFC3339), gateAge(f.rec.At), shortFingerprint(f.rec.Fingerprint))
+	if n := len(f.rec.UndeclaredSeeds); n > 0 {
+		fmt.Fprintf(&b, "\n  that gate covered %d project(s) selected only by files nothing declares (%s): %s",
+			n, types.UndeclaredSeedingFile, strings.Join(f.rec.UndeclaredSeeds, ", "))
+	}
 	if f.identical {
 		b.WriteString("\n  delta since that gate: none; this run's input fingerprint " + shortFingerprint(g.fp) + " matches it exactly")
 		return b.String()
@@ -266,14 +294,15 @@ func (g *gateRedundancy) record(ctx context.Context, runErr error) {
 		outcome = sessions.OutcomeFail
 	}
 	g.append(ctx, sessions.GateResult{
-		Target:      g.target,
-		Ref:         g.ref,
-		Commit:      g.commit,
-		Outcome:     outcome,
-		Fingerprint: g.fp,
-		Projects:    g.projects,
-		Charms:      g.charms,
-		Inv:         journal.InvocationIDFromContext(ctx),
+		Target:          g.target,
+		Ref:             g.ref,
+		Commit:          g.commit,
+		Outcome:         outcome,
+		Fingerprint:     g.fp,
+		Projects:        g.projects,
+		Charms:          g.charms,
+		UndeclaredSeeds: g.undeclared,
+		Inv:             journal.InvocationIDFromContext(ctx),
 	})
 }
 

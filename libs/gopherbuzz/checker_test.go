@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/libs/gopherbuzz/types"
+	vmpackage "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -328,6 +329,48 @@ func TestCheck_EnumDecl(t *testing.T) {
 enum Color { Red, Green, Blue }
 final c = Color.Green;
 `)
+}
+
+// A backed enum names the common values without closing the parameter: a plain value
+// of the backing type passes where the enum is declared, and only a value of another
+// type is refused. This is what lets a host declare `enum<str> TimeLayout` on a layout
+// parameter that has no finite set of values.
+func TestCheck_BackedEnumAcceptsItsBackingType(t *testing.T) {
+	checkOK(t, `
+enum<str> Layout { rfc3339 = "2006-01-02T15:04:05Z07:00" }
+fun stamp(layout: Layout) > str { return layout.value; }
+final _a = stamp(Layout.rfc3339);
+final _b = stamp("02 Jan 06");
+`)
+	checkErr(t, `
+enum<str> Layout { rfc3339 = "2006-01-02T15:04:05Z07:00" }
+fun stamp(layout: Layout) > str { return layout.value; }
+final _c = stamp(42);
+`, `cannot pass int as argument "layout" of type Layout`)
+}
+
+// A fiber wraps an ordinary call, so its arguments are checked against the callee's
+// parameters the way a direct call's are.
+func TestCheck_FiberArgumentsAreTyped(t *testing.T) {
+	checkErr(t, `
+fun greet(name: str) > str { return name; }
+final _f = &greet(1);
+`, `cannot pass int as argument "name" of type str`)
+}
+
+// A call whose labels could not be resolved reports that one problem. Checking the
+// arguments afterwards, against slots they were never matched to, would stack a
+// spurious type error on top of the real one.
+func TestCheck_UnresolvedArgumentsReportOnce(t *testing.T) {
+	errs := checkSrc(`
+fun f(a: str, b: int) > void {}
+f(b: 2);
+`)
+	require.NotEmpty(t, errs)
+	for _, e := range errs {
+		assert.NotContains(t, e.Msg, "cannot pass",
+			"the argument type check must not run over slots the labels never matched:\n%s", fmtErrors(errs))
+	}
 }
 
 func TestCheck_EnumUnknownCase(t *testing.T) {
@@ -1142,11 +1185,12 @@ fun main() > void {
 	// Both halves resolve. Either would fail with "no member" if the other had won.
 	assert.NoError(t, err, "both owners' declarations must survive")
 
-	// NOT asserted here: that a wrong argument type is rejected. Measured while
-	// writing this (an extern's parameter types are not enforced at the call site
-	// today, merged or not), so asserting it would be testing a wish. That gap is
-	// real and separate; this test's subject is only that neither owner's
-	// declarations are lost.
+	// A surviving declaration also carries its parameter types, in both halves: a
+	// merge that kept the NAME but lost the signature reads as untyped, which is the
+	// failure this test cannot see from "no member" alone.
+	_, err = sess.Eval(ctx, `import "twoowners"; final _s = twoowners\fromFirst(1);`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `cannot pass int as argument "a" of type str`)
 }
 
 // TestConformance_FiberAnnotationOrder pins `> Ret *> Yield !> Err`. gopherbuzz
@@ -1225,4 +1269,83 @@ func TestStringAccumulationStaysQuiet(t *testing.T) {
 func TestStringAccumulationReportedOnce(t *testing.T) {
 	got := warningsOf(t, `fun build(xs: [str]) > str { var s = ""; foreach (x in xs) { s = s + x; } return s; }`)
 	require.Len(t, got, 1, "the speculative pass must not double-report")
+}
+
+// TestCheck_ArgumentType covers argument type checking at a call site, which upstream
+// Buzz reports as `.call_argument_type` ("Bad argument type", TypeChecker.zig). Before
+// this the checker inferred each argument against its parameter and threw the answer
+// away, so a declaration bought existence and arity and nothing else.
+func TestCheck_ArgumentType(t *testing.T) {
+	t.Run("int for str", func(t *testing.T) {
+		checkErr(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(name: 42);`,
+			`cannot pass int as argument "name" of type str`)
+	})
+	t.Run("positional too", func(t *testing.T) {
+		checkErr(t, `fun f(name: str) > bool { return name == "x"; } final _b = f(42);`,
+			`cannot pass int as argument "name" of type str`)
+	})
+	t.Run("mut list satisfies a plain list", func(t *testing.T) {
+		checkOK(t, `fun f(xs: [int]) > int { return xs.len(); } final _n = f(mut [1, 2]);`)
+	})
+	t.Run("any escapes", func(t *testing.T) {
+		checkOK(t, `fun f(x: any) > void {} fun g(n: int) > void { f(n); }`)
+	})
+	t.Run("an erased type parameter asserts nothing", func(t *testing.T) {
+		checkOK(t, `fun count::<T>(list: [T]) > int { return list.len(); } final _n = count::<int>([1, 2]);`)
+	})
+	t.Run("a default the caller never wrote is not an argument", func(t *testing.T) {
+		// Upstream walks the call's OWN arguments and fills the rest from defaults
+		// untouched. gopherbuzz splices a default into the call node, which must not
+		// then read as something the caller passed.
+		checkOK(t, `fun f(a: str, b: any = null) > str { return a; } final _s = f("x");`)
+	})
+}
+
+// TestCheck_ExternArgumentType is the same check over a host module's declarations,
+// which is where it pays: an extern's signature is generated from the host descriptor,
+// so a magusfile calling it wrong is caught at load instead of at run time.
+func TestCheck_ExternArgumentType(t *testing.T) {
+	ctx := context.Background()
+	sess := NewSession(ctx, WithEmbedded())
+	defer sess.Close()
+	sess.SetModuleDecls("hostmod", `export extern fun readFile(path: str) > str;`)
+
+	_, err := sess.Eval(ctx, `import "hostmod"; final _s = hostmod\readFile(path: 1);`)
+	require.Error(t, err, "an extern's declared parameter types must be enforced")
+	assert.Contains(t, err.Error(), `cannot pass int as argument "path" of type str`)
+}
+
+// TestCheck_DeclaredGlobalNamespace covers a namespace a host binds as a GLOBAL rather
+// than behind an import, declaring it through DeclareModuleTypes. Its declarations were
+// collected but never built into a namespace object, so the global fell back to Unknown
+// and every call through it went unchecked - an unknown member reached the VM as "null
+// is not callable".
+func TestCheck_DeclaredGlobalNamespace(t *testing.T) {
+	newSess := func(t *testing.T) *Session {
+		t.Helper()
+		sess := NewSession(context.Background(), WithEmbedded())
+		t.Cleanup(func() { sess.Close() })
+		sess.SetGlobal("host", vmpackage.NewMap())
+		sess.DeclareModuleTypes("host", `export extern fun hasCharm(name: str) > bool;`)
+		return sess
+	}
+
+	t.Run("unknown member", func(t *testing.T) {
+		sess := newSess(t)
+		_, err := sess.Eval(context.Background(), `host\nosuch("x");`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `module host has no member "nosuch"`)
+		assert.Contains(t, err.Error(), string(UnknownMember))
+	})
+	t.Run("argument type", func(t *testing.T) {
+		sess := newSess(t)
+		_, err := sess.Eval(context.Background(), `final _b = host\hasCharm(name: 42);`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), `cannot pass int as argument "name" of type str`)
+	})
+	t.Run("a correct call still resolves", func(t *testing.T) {
+		sess := newSess(t)
+		_, err := sess.Compile(`final _b = host\hasCharm(name: "rw");`)
+		assert.NoError(t, err)
+	})
 }

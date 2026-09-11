@@ -204,6 +204,9 @@ const (
 	// depth (1 for #, 2 for ##, ...), so a reader can reconstruct the outline.
 	attrAnchor = "anchor"
 	attrLevel  = "level"
+	// attrHost is a link node's hostname, so `magus query kind=link buzz-lang.dev` groups
+	// every citation of one upstream site without matching the same string in a path.
+	attrHost = "host"
 )
 
 // Runtime-performance attribute keys. Unlike the static keys above these are
@@ -291,6 +294,39 @@ const (
 	// denominator, so a 0/0 file is distinguishable from a small sample.
 	AttrTotalStmts = "total_stmts"
 )
+
+// Agent-contact attribute keys, rolled up from the loaded agent-session events onto the
+// file and dir nodes the @session overlay annotates. Observed like the runtime and
+// coverage keys, and machine-local in the sharper sense: they describe what happened on
+// ONE developer's machine, so they ride a shard that is never pushed to a remote cache
+// and are stripped from a reproducible export.
+const (
+	// AttrAgentSessions is how many DISTINCT loaded sessions touched the node, the
+	// breadth signal: one session reading a file fifty times is not fifty agents.
+	AttrAgentSessions = "agent_sessions"
+	// AttrAgentReads and AttrAgentWrites are the read and write event counts. Omitted
+	// when zero, so a read-only file is distinguishable from an unwritten one.
+	AttrAgentReads  = "agent_reads"
+	AttrAgentWrites = "agent_writes"
+	// AttrAgentDenials is how many events against this node the HOST recorded as
+	// refused. Only path-bearing events are counted; see assembleSession's
+	// attribution rule.
+	AttrAgentDenials = "agent_denials"
+	// AttrAgentLastTouched is the newest HOST event time in unix milliseconds, not the
+	// time magus loaded it: a transcript loaded today may be months old.
+	AttrAgentLastTouched = "agent_last_touched"
+)
+
+// sessionAttrs enumerates the const block above, kept honest by
+// TestSessionAttrsCoversAssembled, which derives the set from what assembleSession emits.
+var sessionAttrs = []string{
+	AttrAgentSessions, AttrAgentReads, AttrAgentWrites, AttrAgentDenials, AttrAgentLastTouched,
+}
+
+// IsSessionAttr reports whether an attr key holds loaded agent-contact history, so a
+// reproducible export can drop it. A func rather than an exported slice for the reason
+// IsRuntimeAttr gives: an importer could write to a slice and silently un-strip a key.
+func IsSessionAttr(key string) bool { return slices.Contains(sessionAttrs, key) }
 
 // attrTestRefs is a symbol's count of referencing files whose path ends in _test.go:
 // the cheap "tested-by" lens derived from the SCIP reference edges already in the

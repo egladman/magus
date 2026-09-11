@@ -1,4 +1,9 @@
+import "std";
 import "fs";
 
 // Recursive copy; preserves file mode and dir structure.
-fs\copyDir("assets/", "dist/assets/");
+try {
+    fs\copyDir("assets/", "dist/assets/");
+} catch (e) {
+    std\print("could not copy assets/ into dist/assets/");
+}

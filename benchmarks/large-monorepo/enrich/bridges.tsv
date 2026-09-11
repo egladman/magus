@@ -1,0 +1,14 @@
+# Feature libraries that reach into the platform packages, and which package each one
+# imports. Deliberately non-uniform: this is the ground truth the agent-benchmark
+# interrogation tasks are graded against, so a change here invalidates their answer keys.
+# <feature library path>	<platform package>
+packages/crew/important-feature-3	http
+packages/navigation/important-feature-7	http
+packages/ticket-booking/important-feature-12	http
+packages/crew/important-feature-11	metrics
+packages/flight-simulator/important-feature-5	metrics
+packages/warp-drive-manager/important-feature-2	metrics
+packages/flight-simulator/important-feature-18	config
+packages/navigation/important-feature-4	config
+packages/ticket-booking/important-feature-0	logging
+packages/warp-drive-manager/important-feature-16	logging

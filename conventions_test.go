@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -247,7 +248,7 @@ var skillOutputGlob = regexp.MustCompile(`"(\.(?:claude|agents|opencode)/skills/
 // thing in its own words and rewording it should not fail a gate, but dropping
 // the CAPABILITY should.
 var guardAdviceSkillCoverage = map[string]string{
-	"relock":     "relock",
+	"update":     ":update",
 	"checkpoint": "magus vcs checkpoint",
 	"search":     "magus refs",
 	"cwd":        "magus where",
@@ -265,7 +266,7 @@ var guardAdviceSkillCoverage = map[string]string{
 // The installed skills ARE the common channel: plain files every host reads,
 // carrying no host conditionals. So anything the guard would advise has to be in
 // one, or three hosts out of four never learn it. That was not true when this was
-// written: relockGuardContext existed with `relock` appearing in no skill at all,
+// written: the charm advisory existed with the charm appearing in no skill at all,
 // while the OpenCode plugin's own comment claimed "the same guidance ships in the
 // installed skills, which is why the skills and the guard say the same things".
 //
@@ -358,9 +359,16 @@ var templatePage = map[string]string{
 	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
 	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
 	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":     "docs/guides/integrations/agents/guard-templates.md",
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
+	// The three session-load recipes share a page with the contract they emit and
+	// the coverage table that compares them, because choosing between hosts is
+	// exactly the question that page answers.
+	"magus-session-load-claude-code.sh": sessionGuideDoc,
+	"magus-session-load-codex.sh":       sessionGuideDoc,
+	"magus-session-load-opencode.sh":    sessionGuideDoc,
 }
 
 // hookTemplates are the artifacts a reader installs. The directory also holds
@@ -377,20 +385,184 @@ var hookTemplates = []string{
 	// at the top of each for why that absence is deliberate rather than a hole.
 	"magus-guard-observe.sh",
 	"magus-checkpoint.sh",
+	// The third of them: it reports where a checkout stands to a session that lost
+	// its history, and judges nothing either.
+	"magus-rehydrate.sh",
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",
+	// The session-load recipes are shipped artifacts too: version-stamped, embedded
+	// in their page, and registered here so a new one cannot arrive unnoticed. They
+	// carry no guard coverage, because they judge nothing, and answer the session
+	// parity gate below instead.
+	"magus-session-load-claude-code.sh",
+	"magus-session-load-codex.sh",
+	"magus-session-load-opencode.sh",
 }
 
-type hookSettings struct {
-	Hooks struct {
-		PreToolUse []struct {
-			Matcher string `json:"matcher"`
-			Hooks   []struct {
-				Command string `json:"command"`
-			} `json:"hooks"`
-		} `json:"PreToolUse"`
+// sessionRecipePrefix names a session-load recipe. Registration is by NAME rather
+// than by a hand-kept second list alone, so a fourth host's recipe dropped into
+// the directory is claimed by the gates below the moment it exists.
+const sessionRecipePrefix = "magus-session-load-"
+
+// sessionRecipes are the per-host extraction recipes. Every one of them must also
+// appear in hookTemplates, which is what gets it embedded and version-stamped;
+// this list is what the coverage and parity gates iterate.
+var sessionRecipes = []string{
+	"magus-session-load-claude-code.sh",
+	"magus-session-load-codex.sh",
+	"magus-session-load-opencode.sh",
+}
+
+// sessionGuideDoc is the page that embeds the recipes and carries the parity
+// table they are checked against.
+const sessionGuideDoc = "docs/guides/integrations/agents/session-load.md"
+
+// hookEntry is one wiring in a host's hook config: an optional matcher and the
+// commands it runs when the event fires.
+type hookEntry struct {
+	Matcher string `json:"matcher"`
+	Hooks   []struct {
+		Command string `json:"command"`
 	} `json:"hooks"`
+}
+
+// hookSettings is a host hook config keyed by EVENT NAME rather than by the one
+// event this file used to model. Every job magus does through a host is a hook on
+// some event, and a gate that reads only the pre-tool ones cannot tell a config
+// that records no checkpoint and rehydrates no compacted session from one that
+// does, which is exactly the parity question these files exist to answer.
+type hookSettings struct {
+	Hooks map[string][]hookEntry `json:"hooks"`
+}
+
+// shippedHookConfigs are the host hook configs this repository owns: the one it
+// dogfoods, and the one it ships for a reader to copy. Both are compared against
+// each other below, because "whatever magus does on one host it does on every host
+// that can express it" is a claim about these two files more than about any prose.
+var shippedHookConfigs = map[string]string{
+	"claude-code": dogfoodedHookConfig,
+	"codex":       hookTemplateDir + "/codex-hooks.json",
+}
+
+// hookConfigPage names the page each shipped config is documented on, so a wiring
+// present in the JSON and absent from the prose fails rather than shipping unread.
+var hookConfigPage = map[string]string{
+	"claude-code": hookTemplateDir + "/claude-code.md",
+	"codex":       hookTemplateDir + "/codex.md",
+}
+
+// hookConfigExemptions records a template one config deliberately does not run,
+// with the reason it does not. An exemption is the sanctioned way to differ; the
+// unsanctioned way is to differ silently, which is what the gate refuses.
+var hookConfigExemptions = map[string]map[string]string{
+	"codex": {
+		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
+			"so it earns one host's wiring rather than four; nothing in Codex prevents it",
+	},
+}
+
+// configTemplates returns the shipped templates a hook config's commands invoke.
+func configTemplates(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+	var cfg hookSettings
+	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+	require.NotEmpty(t, cfg.Hooks, "%s wires no events at all", path)
+
+	found := map[string]bool{}
+	for _, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			for _, h := range entry.Hooks {
+				for _, field := range strings.Fields(h.Command) {
+					if strings.HasPrefix(field, hookTemplateDir) {
+						found[filepath.Base(field)] = true
+					}
+				}
+			}
+		}
+	}
+	return found
+}
+
+// TestShippedHookConfigsWireTheSameJobs is the parity gate one level above the
+// coverage declarations: those say what a template CAN carry, this says whether a
+// host was actually wired to run it.
+//
+// The failure it prevents is the quiet one. A job added for one host, such as a
+// checkpoint or a post-compaction brief, is a one-line addition to that host's
+// config, and every other host keeps working, keeps passing, and silently does
+// less. Nothing surfaces the difference, because a hook that was never wired
+// produces no output to be missing.
+func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
+	wired := map[string]map[string]bool{}
+	for host, path := range shippedHookConfigs {
+		wired[host] = configTemplates(t, path)
+	}
+
+	for host, templates := range wired {
+		for other, otherTemplates := range wired {
+			if other == host {
+				continue
+			}
+			for name := range otherTemplates {
+				if templates[name] {
+					continue
+				}
+				why, exempt := hookConfigExemptions[host][name]
+				assert.True(t, exempt,
+					"%s runs %s and %s does not.\n"+
+						"Wire it there too, or record why that host does without it in hookConfigExemptions.\n"+
+						"A host doing less than another is a decision; a host doing less than another with\n"+
+						"nothing saying so is the gap this gate exists to refuse.",
+					shippedHookConfigs[other], name, shippedHookConfigs[host])
+				if exempt {
+					t.Logf("%s does not run %s: %s", host, name, why)
+				}
+			}
+		}
+	}
+
+	for host, exemptions := range hookConfigExemptions {
+		for name := range exemptions {
+			assert.False(t, wired[host][name],
+				"hookConfigExemptions says %s does not run %s, but %s invokes it. Drop the exemption.",
+				host, name, shippedHookConfigs[host])
+		}
+	}
+}
+
+// TestHostPagesDocumentTheWiringTheyShip closes the direction the embed gate
+// leaves open. TestHookTemplatesAreEmbeddedInTheGuide proves a template's SOURCE
+// is on a page; this proves the host's page names the event that runs it.
+//
+// A reader wires what the page tells them to. A config that grew an event the page
+// never mentions guards the repository and nobody else, which reads as the host
+// being incapable of that job rather than as documentation lagging behind.
+func TestHostPagesDocumentTheWiringTheyShip(t *testing.T) {
+	for host, path := range shippedHookConfigs {
+		raw, err := os.ReadFile(path)
+		require.NoError(t, err, "read %s", path)
+		var cfg hookSettings
+		require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", path)
+
+		page := hookConfigPage[host]
+		require.NotEmpty(t, page, "host %q has a shipped config but no page in hookConfigPage", host)
+		body, err := os.ReadFile(page)
+		require.NoError(t, err, "read %s", page)
+		doc := string(body)
+
+		for event := range cfg.Hooks {
+			assert.Contains(t, doc, event,
+				"%s wires the %s event and %s never names it, so a reader copying from the page\n"+
+					"gets a quieter integration than the one this repository runs.", path, event, page)
+		}
+		for name := range configTemplates(t, path) {
+			assert.Contains(t, doc, name,
+				"%s runs %s and %s never names it", path, name, page)
+		}
+	}
 }
 
 // TestDogfoodedHookInvokesTheTemplate keeps this repository honest: its own
@@ -410,21 +582,26 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 
 	var cfg hookSettings
 	require.NoError(t, json.Unmarshal(raw, &cfg), "parse %s", dogfoodedHookConfig)
-	require.NotEmpty(t, cfg.Hooks.PreToolUse, "%s declares no PreToolUse hooks", dogfoodedHookConfig)
+	require.NotEmpty(t, cfg.Hooks["PreToolUse"], "%s declares no PreToolUse hooks", dogfoodedHookConfig)
 
-	for _, entry := range cfg.Hooks.PreToolUse {
-		require.NotEmpty(t, entry.Hooks, "matcher %q has no hooks", entry.Matcher)
-		for _, h := range entry.Hooks {
-			assert.Contains(t, h.Command, hookTemplateDir,
-				"the %q hook must invoke a template under %s rather than inline its own copy, "+
-					"so dogfooding exercises the file readers download", entry.Matcher, hookTemplateDir)
+	// Every event, not only the pre-tool ones. A checkpoint or a rehydration hook
+	// inlining its own copy of a template drifts from the file a reader downloads
+	// exactly as a guard hook would, and used to do so unwatched.
+	for event, entries := range cfg.Hooks {
+		for _, entry := range entries {
+			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
+			for _, h := range entry.Hooks {
+				assert.Contains(t, h.Command, hookTemplateDir,
+					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
+						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
 
-			// The referenced file must exist: a hook pointing at a moved or
-			// renamed template fails open silently, which is the failure mode
-			// this whole arrangement exists to remove.
-			for _, field := range strings.Fields(h.Command) {
-				if strings.HasPrefix(field, hookTemplateDir) {
-					assert.FileExists(t, field, "%q hook references a template that does not exist", entry.Matcher)
+				// The referenced file must exist: a hook pointing at a moved or
+				// renamed template fails open silently, which is the failure mode
+				// this whole arrangement exists to remove.
+				for _, field := range strings.Fields(h.Command) {
+					if strings.HasPrefix(field, hookTemplateDir) {
+						assert.FileExists(t, field, "%s %q hook references a template that does not exist", event, entry.Matcher)
+					}
 				}
 			}
 		}
@@ -629,17 +806,43 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 	// Codex ships no script of its own: codex-hooks.json points at the two
 	// generic templates. Those templates claim the codex host, so this is what
 	// makes the claim checkable rather than aspirational.
+	//
+	// The claim is read off the GUARD declaration rather than off the file's text.
+	// A session-load recipe names the same host on a contract this config has
+	// nothing to do with, and matching that would demand a hook wiring for a file
+	// nobody wires to a hook.
 	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
 	require.NoError(t, err)
 	for _, name := range hookTemplates {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err)
-		if !strings.Contains(string(body), "host=codex") && !strings.Contains(string(body), ",codex") {
+		if !claimsGuardHost(string(body), "codex") {
 			continue
 		}
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
+}
+
+// claimsGuardHost reports whether a template names host in one of its guard
+// coverage declarations.
+func claimsGuardHost(body, host string) bool {
+	for _, line := range strings.Split(body, "\n") {
+		_, decl, found := strings.Cut(line, guardCoverageMarker)
+		if !found {
+			continue
+		}
+		for _, kv := range strings.Fields(decl) {
+			key, value, ok := strings.Cut(kv, "=")
+			if !ok || key != "host" {
+				continue
+			}
+			if slices.Contains(strings.Split(value, ","), host) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // failOpenArmRe matches the tests a shipped template makes before answering
@@ -775,6 +978,260 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
+}
+
+// TestEverySessionRecipeIsRegistered gives the session recipes the property the
+// guard templates already have: a fourth host arrives and nothing stays green by
+// accident.
+//
+// Two directions, because either one alone leaves a hole. A recipe in the
+// directory that no list names answers to no gate; a recipe listed here but
+// absent from hookTemplates is neither version-stamped nor embedded in its page,
+// so a reader browsing the docs site never sees it.
+func TestEverySessionRecipeIsRegistered(t *testing.T) {
+	registered := make(map[string]bool, len(sessionRecipes))
+	for _, name := range sessionRecipes {
+		registered[name] = true
+		assert.Contains(t, hookTemplates, name,
+			"%s is a session recipe but is not in hookTemplates, so it carries no version marker\n"+
+				"and the guide is not required to embed it.", name)
+	}
+
+	entries, err := os.ReadDir(hookTemplateDir)
+	require.NoError(t, err, "read %s", hookTemplateDir)
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasPrefix(name, sessionRecipePrefix) {
+			continue
+		}
+		assert.True(t, registered[name],
+			"%s ships %s, but sessionRecipes does not list it, so the parity gates skip it:\n"+
+				"no coverage declaration is demanded of it and the table in %s owes it no row.",
+			hookTemplateDir, name, sessionGuideDoc)
+	}
+}
+
+// sessionCoverage is host -> dimension -> stance.
+type sessionCoverage map[string]map[string]string
+
+// parseSessionCoverage reads every session-coverage declaration out of the
+// recipes, and is the sibling of parseGuardCoverage: same shape, different
+// contract. A recipe that names a dimension the contract does not have, or omits
+// one it does, fails here rather than in a report that quietly reads the gap as
+// a measured zero.
+func parseSessionCoverage(t *testing.T) sessionCoverage {
+	t.Helper()
+	stances := map[string]bool{}
+	for _, s := range agent.SessionStances() {
+		stances[s] = true
+	}
+
+	cov := sessionCoverage{}
+	for _, name := range sessionRecipes {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+
+		found := false
+		for _, line := range strings.Split(string(body), "\n") {
+			_, decl, ok := strings.Cut(line, agent.SessionCoverageMarker)
+			if !ok {
+				continue
+			}
+			found = true
+			fields := map[string]string{}
+			for _, kv := range strings.Fields(decl) {
+				key, value, split := strings.Cut(kv, "=")
+				require.True(t, split, "%s: coverage declaration field %q is not key=value", name, kv)
+				fields[key] = value
+			}
+			require.Equal(t, strconv.Itoa(agent.SessionSchemaVersion), fields["schema"],
+				"%s declares session schema %q; the contract is agent.SessionSchemaVersion=%d.\n"+
+					"A schema bump means every recipe must be updated and re-downloaded before it loads again.",
+				name, fields["schema"], agent.SessionSchemaVersion)
+			host := fields["host"]
+			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
+			require.Nil(t, cov[host],
+				"host %q has two session-coverage declarations; one recipe per host, or the gate cannot tell which is true", host)
+
+			declared := map[string]string{}
+			for _, dimension := range agent.SessionDimensions() {
+				stance, ok := fields[dimension]
+				require.True(t, ok,
+					"%s declares session coverage for host %q but says nothing about %q.\n"+
+						"Every dimension in agent.SessionDimensions needs an explicit stance (yes or none):\n"+
+						"an undeclared dimension is one nobody asked about, and a report reads that as a zero it never measured.",
+					name, host, dimension)
+				require.True(t, stances[stance], "%s: unknown stance %q for %q (want yes or none)", name, stance, dimension)
+				declared[dimension] = stance
+			}
+			cov[host] = declared
+		}
+		assert.True(t, found, "%s carries no %s line, so nothing states what its host can supply", name, agent.SessionCoverageMarker)
+	}
+	require.NotEmpty(t, cov, "no %s declarations found in any session recipe", agent.SessionCoverageMarker)
+	return cov
+}
+
+// TestSessionParityTableMatchesTheRecipeDeclarations keeps the guide's
+// hand-written "Session load across hosts" table honest against the recipes.
+//
+// The table is what a person reads before believing a report. A cell claiming a
+// dimension the recipe cannot supply turns "unobservable" into a silent zero,
+// which is the one reading this whole arrangement exists to prevent.
+func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
+	cov := parseSessionCoverage(t)
+	guide, err := os.ReadFile(sessionGuideDoc)
+	require.NoError(t, err, "read %s", sessionGuideDoc)
+
+	rows := sessionParityRows(t, string(guide))
+	for host, dimensions := range cov {
+		cells, ok := rows[normalizeHost(host)]
+		require.True(t, ok,
+			"host %q is declared by a recipe but has no row in the session parity table in %s.\n"+
+				"Every host with a recipe belongs in the table a reader uses to judge a report.", host, sessionGuideDoc)
+		for dimension, stance := range dimensions {
+			cell, ok := cells[dimension]
+			require.True(t, ok, "the session parity table has no %q column; the contract needs one", dimension)
+			got := "none"
+			if strings.HasPrefix(strings.ToLower(cell), "yes") {
+				got = "yes"
+			}
+			assert.Equal(t, stance, got,
+				"session parity table row %q, column %q reads %q, which disagrees with the recipe's declaration.\n"+
+					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
+				host, dimension, cell)
+		}
+	}
+
+	var declared []string
+	for host := range cov {
+		declared = append(declared, normalizeHost(host))
+	}
+	sort.Strings(declared)
+	for row := range rows {
+		assert.Contains(t, declared, row,
+			"the session parity table in %s promises host %q, which no recipe declares coverage for", sessionGuideDoc, row)
+	}
+}
+
+// sessionParityRows extracts the guide's session table as row label -> dimension
+// -> cell. Column headers are folded to the contract's dimension names, so a
+// header may read "hook output" while the contract says hook-output.
+func sessionParityRows(t *testing.T, guide string) map[string]map[string]string {
+	t.Helper()
+	_, section, found := strings.Cut(guide, "Session load across hosts")
+	require.True(t, found, "%s has no 'Session load across hosts' section; the table is the human half of this gate", sessionGuideDoc)
+
+	fold := strings.NewReplacer(" ", "-", "`", "")
+	var header []string
+	rows := map[string]map[string]string{}
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			if len(rows) > 0 || header != nil {
+				break
+			}
+			continue
+		}
+		cells := splitTableRow(line)
+		switch {
+		case header == nil:
+			for _, cell := range cells {
+				header = append(header, fold.Replace(strings.ToLower(cell)))
+			}
+		case strings.HasPrefix(cells[0], "---"):
+		default:
+			row := map[string]string{}
+			for i, cell := range cells {
+				if i < len(header) && i > 0 {
+					row[header[i]] = cell
+				}
+			}
+			rows[normalizeHost(cells[0])] = row
+		}
+	}
+	require.NotEmpty(t, rows, "parsed no rows out of the session parity table in %s", sessionGuideDoc)
+	return rows
+}
+
+// sessionExitArmRe matches a recipe giving up: a bare `exit 0` inside a
+// conditional block, which is how every one of these arms ends.
+var sessionExitArmRe = regexp.MustCompile(`^exit 0$`)
+
+// TestSessionRecipeFailOpenArmsAnnounceThemselves is the session half of the
+// doctrine's enforcement point, and it exists for the same reason its guard
+// sibling does: a recipe that extracted nothing looks exactly like a host nobody
+// used, and that reading is the one the audit must never invite.
+//
+// Structural, so rewording a message costs nothing and DELETING one fails.
+func TestSessionRecipeFailOpenArmsAnnounceThemselves(t *testing.T) {
+	for _, name := range sessionRecipes {
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+
+		lines := strings.Split(string(body), "\n")
+		arms := 0
+		for i, line := range lines {
+			if !strings.HasPrefix(strings.TrimSpace(line), "if ") {
+				continue
+			}
+			block := lines[i:failOpenArmEnd(lines, i)]
+			if !sessionArmGivesUp(block) {
+				continue
+			}
+			arms++
+			assert.True(t, strings.Contains(strings.Join(block, "\n"), ">&2"),
+				"%s stops extracting at line %d and says nothing.\n"+
+					"A recipe that loaded no events looks exactly like a host nobody used, so every arm that\n"+
+					"gives up announces why on stderr.", name, i+1)
+		}
+		assert.NotZero(t, arms,
+			"%s has no arm that gives up, so either it now fails some other way - update sessionExitArmRe -\n"+
+				"or it aborts on a missing tool, which is a change this gate should have been told about.", name)
+	}
+}
+
+// sessionArmGivesUp reports whether a conditional block ends the run rather than
+// skipping one input.
+func sessionArmGivesUp(block []string) bool {
+	for _, l := range block {
+		if sessionExitArmRe.MatchString(strings.TrimSpace(l)) {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionRecipeCorpus is the testscript that executes a session recipe against a
+// synthetic transcript. Synthetic on purpose: a real one carries a person's own
+// commands and prompts, and a fixture is committed forever.
+const sessionRecipeCorpus = "cmd/magus/testdata/script/session_load_recipes.txtar"
+
+// TestSessionRecipeCorpusCoversEveryKind ties the executed cases to the contract
+// the declarations answer to.
+//
+// Coverage parity asks a recipe to DECLARE what its host supplies; this asks that
+// somebody ran it and looked at what came out. Without it, adding a kind would
+// demand new declarations while the corpus quietly kept asserting the old ones,
+// which is exactly how a shell artifact ships broken with a correct declaration
+// on top of it.
+//
+// A kind no recipe can currently produce is declared rather than skipped:
+// `# kind: file.read unreachable - <why>` satisfies this in the file where the
+// next person will look.
+func TestSessionRecipeCorpusCoversEveryKind(t *testing.T) {
+	body, err := os.ReadFile(sessionRecipeCorpus)
+	require.NoError(t, err, "read %s", sessionRecipeCorpus)
+	corpus := string(body)
+
+	for _, kind := range agent.SessionKinds() {
+		label := "# kind: " + kind
+		assert.Contains(t, corpus, label,
+			"%s has no case labeled %q.\n"+
+				"Every kind in the session contract needs one executed case, or an explicit\n"+
+				"`%s unreachable - <why>` line when no recipe can produce it.",
+			sessionRecipeCorpus, label, label)
+	}
 }
 
 // transportCorpus is the testscript that executes the sh templates against real
@@ -961,6 +1418,37 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 	}
 }
 
+// TestRehydrateTemplateIsWiredAfterCompaction gives the rehydration hook the one
+// property its siblings get from the guard parity table: an event it is wired to.
+//
+// A template is only worth shipping if a reader can tell WHEN it runs, and this one
+// runs at a moment no other hook covers: after a host replaces a session's history
+// with a summary. A page that embedded the file and never named that event would
+// leave every reader wiring it to session start alone, which fires when there is
+// nothing to rehydrate and never fires when there is.
+//
+// It asserts the wiring is documented, not that this repository has applied it:
+// what a checkout wires is the reader's, and .claude/settings.json is checked by
+// TestDogfoodedHookInvokesTheTemplate for the hooks it does carry.
+func TestRehydrateTemplateIsWiredAfterCompaction(t *testing.T) {
+	const template = "magus-rehydrate.sh"
+
+	body, err := os.ReadFile(filepath.Join(hookTemplateDir, template))
+	require.NoError(t, err, "read %s", template)
+	assert.Contains(t, string(body), "session --brief",
+		"%s must invoke the brief; it has no other reason to exist", template)
+
+	page, err := os.ReadFile("docs/guides/integrations/agents/claude-code.md")
+	require.NoError(t, err, "read the host page")
+	doc := string(page)
+	for _, want := range []string{template, "SessionStart", "compact"} {
+		assert.Contains(t, doc, want,
+			"the host page must wire %s to the post-compaction event by name; a reader who\n"+
+				"cannot see WHEN it runs wires it to session start, which is the one moment it\n"+
+				"has nothing to say.", template)
+	}
+}
+
 // rootOnlyMagusLookup matches resolving magus as `./magus`: the workspace root's copy,
 // and only when the process already stands in the root.
 var rootOnlyMagusLookup = regexp.MustCompile(`-x\s+\.?/?\./magus\b|-x\s+"\./magus"`)
@@ -1118,10 +1606,35 @@ func TestWholeTreeTargetsKeyOnTheGoTree(t *testing.T) {
 // else (prose, help text, printed setup instructions, a per-host branch), the
 // host-specific part belongs in documentation the reader owns.
 
-// hostNames are agent hosts magus must not encode behavior for. Deliberately
-// omits "cursor": magus uses it as an ordinary pagination term, so matching it
-// would be noise rather than signal.
+// hostNames are agent hosts magus must not encode behavior for. Cursor is a
+// supported host too and is deliberately absent here, because the bare word is a
+// terminal position in internal/interactive and a pagination token in the graph
+// query and MCP handlers: 209 lines in this tree use it innocently, against the one
+// that names the host. cursorHostUse carries it instead.
 var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)\b`)
+
+// cursorHostUse matches the shapes "cursor" takes when it means the HOST: the proper
+// noun in prose, a phrase naming the host's own machinery, and a comparison against
+// the host label. It flags nothing an editor cursor or a page cursor produces, so it
+// needs no exemption list at all, which an allowlist of the legitimate identifiers
+// would have needed and would have gone stale on the next paging field.
+//
+// The trade it makes: a bare `case "cursor":` is NOT matched, because two switches in
+// this tree already have one (a diff-session op and a memory op) and no line-level
+// pattern separates those from a host switch. A host branch written that way slips
+// through; every other shape does not.
+var cursorHostUse = regexp.MustCompile(`\(Cursor\)|(?i:\bcursor (hooks?|ide|editor|rules)\b|[!=]=\s*"cursor")`)
+
+// hostSpecificLine reports whether one line of Go source names an agent host outside
+// a filesystem path.
+func hostSpecificLine(text string) bool {
+	if cursorHostUse.MatchString(text) {
+		return true
+	}
+	// Strip every path-shaped use, then re-test: a line may legitimately carry both
+	// (an example destination plus surrounding prose).
+	return hostNames.MatchString(text) && hostNames.MatchString(hostPathUse.ReplaceAllString(text, ""))
+}
 
 // hostPathUse allows a host name that names something ON DISK: a path
 // (`.claude/skills`, `~/.config/opencode/skills`, `.codex/config.toml`) or a bare
@@ -1168,12 +1681,7 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for line := 1; sc.Scan(); line++ {
 			text := sc.Text()
-			if !hostNames.MatchString(text) {
-				continue
-			}
-			// Strip every path-shaped use, then re-test: a line may legitimately
-			// carry both (an example destination plus surrounding prose).
-			if !hostNames.MatchString(hostPathUse.ReplaceAllString(text, "")) {
+			if !hostSpecificLine(text) {
 				continue
 			}
 			violations = append(violations, fmt.Sprintf("%s:%d: %s", path, line, strings.TrimSpace(text)))
@@ -1191,6 +1699,33 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 			"instructions, help text, a per-host branch - belongs in docs the reader owns, or the next\n"+
 			"change to that host becomes a magus release.\n\nviolations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// TestHostSpecificLineMatcher grades the matcher against lines rather than against the
+// tree, because a tree scan that finds nothing is equally consistent with a matcher that
+// matches nothing. Cursor is the case that needs it: the name went unenforced for its
+// whole life as a supported host, and the reason it stays hard is right here in the
+// negative cases.
+func TestHostSpecificLineMatcher(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want bool
+	}{
+		{`if host == "cursor" {`, true},
+		{`return h.Host != "cursor"`, true},
+		{`// Cursor hooks fire after the write, not before it.`, true},
+		{`// on a host with no pre-write file hook (Cursor), the deny lands late`, true},
+		{`fmt.Println("paste this into your Claude settings")`, true},
+
+		{`cursor := paramString(req.Params, "cursor", "")`, false},
+		{`// Cursor reports where the cursor is, in 1-based terminal coordinates.`, false},
+		{"\tCursor DiffCursor `json:\"cursor\" yaml:\"cursor\"`", false},
+		{`"cursor-guard.sh",`, false},
+		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
+		{`filepath.Join(root, ".claude", "settings.json"),`, false},
+	} {
+		assert.Equal(t, tc.want, hostSpecificLine(tc.line), "hostSpecificLine(%q)", tc.line)
+	}
 }
 
 // The test above is one layer shallower than the rule it enforces. A branch keyed

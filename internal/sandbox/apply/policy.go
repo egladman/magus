@@ -1,5 +1,6 @@
-// Package apply builds per-workspace sandbox policies from config and owns the process-wide
-// landlock application state. It lives here (not in sandbox or config) to break the import cycle.
+// Package apply builds per-workspace sandbox policies from config and the acting lease's
+// ledger row, and owns the process-wide landlock application state. It lives here (not in
+// sandbox or config) to break the import cycle.
 package apply
 
 import (
@@ -7,11 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/env"
@@ -180,4 +188,206 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 		EnvGlob:  int64(len(policy.Env.Globs)),
 		Scope:    scope,
 	})
+}
+
+// NarrowToLease reduces policy's filesystem WRITE grant to the boundary the lease leaseID
+// names declared in the ledger at loc. It returns policy untouched when there is no
+// boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
+// (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
+// that declared no owned paths and is not read-only. A read-only row narrows the grant
+// to nothing but the cache dir and $TMPDIR, the same answer the guard gives its writes.
+//
+// The grant is DERIVED from the row rather than declared a second time in magus.yaml,
+// because a boundary written twice is a boundary that disagrees with itself. The agent
+// guard already grades a write against owned_paths, so a separate sandbox declaration
+// would let the kernel refuse something other than what the guard explains, and one of
+// the two would be teaching a rule nothing enforces.
+//
+// Reads are left exactly as the workspace policy granted them: the ledger declares a
+// write boundary only, and a worker has to read the tree it is changing.
+//
+// Beyond the owned paths it grants writes to the workspace cache directory and $TMPDIR,
+// which every target run needs to produce output at all.
+//
+// A forbidden path INSIDE an owned one costs the directory holding it, not the owned tree:
+// this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
+// is replaced by grants on its children (see splitAroundForbidden).
+//
+// An unreadable ledger fails OPEN with a warning, matching the guard: a lease id that
+// stops resolving must not brick the checkout a person is working in.
+func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Location, leaseID string) *sandbox.Policy {
+	if policy == nil || loc.Root == "" || leaseID == "" {
+		return policy
+	}
+	rows, err := ledger.NewStore(loc).List()
+	if err != nil {
+		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
+			"lease ledger unreadable; sandbox running with the workspace write grant"),
+			"lease", leaseID, "err", err.Error())
+		return policy
+	}
+	row, ok := workerLease(rows, leaseID)
+	if !ok {
+		return policy
+	}
+
+	var granted []string
+	if !row.ReadOnly {
+		granted = grantedPaths(loc.Root, row.OwnedPaths, row.ForbiddenPaths)
+	}
+	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
+	for _, r := range policy.FS.Rules {
+		r.Write = false
+		rules = append(rules, r)
+	}
+	for _, p := range granted {
+		rules = append(rules, filesystem.Rule{Path: p, Read: true, Write: true})
+	}
+	for _, p := range []string{loc.CacheDir, os.TempDir()} {
+		if p == "" {
+			continue
+		}
+		rules = append(rules, filesystem.Rule{Path: filesystem.ResolveRulePath(p), Read: true, Write: true})
+	}
+
+	narrowed := *policy
+	narrowed.FS = filesystem.Ruleset{Rules: rules}
+	narrowed.Lease = row.ID
+	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
+		"lease", row.ID, "parent", row.Parent, "owned_paths", len(row.OwnedPaths), "write_rules", len(granted))
+	return &narrowed
+}
+
+// workerLease returns the live row leaseID names when it states a boundary narrower than
+// the workspace: a read-only row of any tier, or a worker row with owned paths. A writable
+// root lease and a writable row with nothing declared report false. Liveness is
+// types.LeaseState.Live, the same test the guard applies, so a row the guard ignores is
+// one the sandbox ignores.
+func workerLease(rows []types.Lease, leaseID string) (types.Lease, bool) {
+	for _, l := range rows {
+		if l.ID != leaseID {
+			continue
+		}
+		if !l.State.Live() {
+			return types.Lease{}, false
+		}
+		// Read-only is a boundary whatever the row's place in the tree: a root row that
+		// declares it gets no writes either, rather than the whole checkout.
+		if l.ReadOnly {
+			return l, true
+		}
+		if l.Parent == "" || len(l.OwnedPaths) == 0 {
+			return types.Lease{}, false
+		}
+		return l, true
+	}
+	return types.Lease{}, false
+}
+
+// grantedPaths resolves owned (workspace-relative doublestar globs) against root and
+// returns the absolute paths to grant writes on, ancestors first and subsumed descendants
+// pruned so a whole-subtree glob costs one landlock rule rather than one per file.
+//
+// A glob that matches nothing contributes nothing, and so does one that will not parse: an
+// owned path is a claim about files that exist, and inventing a rule for a path that does
+// not would grant a subtree on the strength of a typo. A LITERAL path is the exception,
+// because a lease routinely owns a file it is spawned to create: it grants its nearest
+// existing ancestor, which is the directory the new file lands in. The guard already
+// admits that write, and a kernel that refused it would be the two tiers disagreeing.
+func grantedPaths(root string, owned, forbidden []string) []string {
+	forbiddenAbs := make([]string, 0, len(forbidden))
+	for _, f := range forbidden {
+		forbiddenAbs = append(forbiddenAbs, filesystem.ResolveRulePath(filepath.Join(root, filepath.FromSlash(path.Clean(f)))))
+	}
+
+	// Containment is checked on the RESOLVED path, after symlinks: a declared `..` or a
+	// symlink out of the checkout would otherwise turn an owned path into a grant on
+	// whatever it points at, and the root itself is never a grant, because a lease that
+	// owns the whole checkout is not a worker.
+	rootAbs := filesystem.ResolveRulePath(root)
+	matched := make([]string, 0, len(owned))
+	grant := func(abs string) {
+		abs = filesystem.ResolveRulePath(abs)
+		if abs == rootAbs || !filesystem.Under(abs, rootAbs) {
+			return
+		}
+		matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+	}
+	rootFS := os.DirFS(root)
+	for _, g := range owned {
+		pattern := strings.TrimPrefix(path.Clean(filepath.ToSlash(g)), "/")
+		if !strings.ContainsAny(pattern, "*?[{") {
+			if abs := nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))); abs != "" {
+				grant(abs)
+			}
+			continue
+		}
+		hits, err := doublestar.Glob(rootFS, pattern)
+		if err != nil {
+			continue
+		}
+		for _, h := range hits {
+			grant(filepath.Join(root, filepath.FromSlash(h)))
+		}
+	}
+
+	slices.Sort(matched)
+	matched = slices.Compact(matched)
+	out := make([]string, 0, len(matched))
+	for _, m := range matched {
+		if len(out) > 0 && filesystem.Under(m, out[len(out)-1]) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// nearestExisting walks up from abs to the first path that exists below root: the
+// directory a not-yet-created file will land in. It reports "" for a path outside root
+// and for one whose every ancestor below root is missing, because the only thing left to
+// grant then is the checkout itself.
+func nearestExisting(root, abs string) string {
+	if !filesystem.Under(abs, root) {
+		return ""
+	}
+	for abs != root {
+		if _, err := os.Lstat(abs); err == nil {
+			return abs
+		}
+		abs = filepath.Dir(abs)
+	}
+	return ""
+}
+
+// splitAroundForbidden returns what may be granted for abs: abs itself when no forbidden
+// path lies inside it, nothing when abs is inside one, and otherwise the same question
+// asked of each of its children.
+//
+// The descent is what keeps one forbidden leaf from costing a worker its whole owned tree.
+// What it cannot recover is write access to the directory HOLDING the forbidden path:
+// granting that would grant the forbidden entry with it, so creating a new file beside a
+// forbidden sibling is refused. An allowlist has no deny rule, and neither does landlock.
+func splitAroundForbidden(abs string, forbidden []string) []string {
+	holds := false
+	for _, f := range forbidden {
+		if filesystem.Under(abs, f) {
+			return nil
+		}
+		holds = holds || filesystem.Under(f, abs)
+	}
+	if !holds {
+		return []string{abs}
+	}
+	entries, err := os.ReadDir(abs)
+	if err != nil {
+		// A forbidden path claims to be inside abs and abs cannot be enumerated, so
+		// there is no subset that is safe to grant.
+		return nil
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, splitAroundForbidden(filepath.Join(abs, e.Name()), forbidden)...)
+	}
+	return out
 }

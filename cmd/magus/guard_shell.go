@@ -51,6 +51,7 @@ const (
 	denyRuleReadAck           denyRuleName = "read-ack"
 	denyRuleSedInPlace        denyRuleName = "sed-in-place"
 	denyRuleBusyWait          denyRuleName = "busy-wait"
+	denyRuleCaptureFilter     denyRuleName = "capture-filter"
 	denyRuleCIWatch           denyRuleName = "ci-watch"
 	denyRuleMergeSideCheckout denyRuleName = "merge-side-checkout"
 	denyRuleScriptedRewrite   denyRuleName = "scripted-rewrite"
@@ -182,6 +183,55 @@ func magusRedirected(command string) bool {
 		return true
 	})
 	return found
+}
+
+// guardCapturePathRe matches the files that hold magus console output verbatim:
+// the host's task capture for a backgrounded command (`<id>.output`, whatever
+// directory the host keeps it in) and a persisted run log.
+//
+// It is the same shape the busy-wait rule is pinned against, which polls a
+// capture by grepping it.
+var guardCapturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
+
+// captureFilterFires reports a text filter aimed at one of those files.
+//
+// The capture is magus output one step removed, so the pipe rule's reasoning
+// reaches it: the filter drops the output ref and the inspect line that sit two
+// lines under the `cause:` an agent greps for. Measured twice in one session,
+// with nothing on the line the pipe rule could recognize as magus.
+//
+// `cat <capture>` alone is not a filter and stays allowed, which is why the
+// pipeline arm asks what the SOURCE of the pipe named rather than only what each
+// command was pointed at.
+func captureFilterFires(cmds []guardCommand, command string) bool {
+	if slices.ContainsFunc(cmds, func(c guardCommand) bool {
+		return guardTextFilters[c.Name] && namesCapture(c)
+	}) {
+		return true
+	}
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		pipe, ok := n.(*syntax.BinaryCmd)
+		if !ok || pipe.Op != syntax.Pipe {
+			return true
+		}
+		if slices.ContainsFunc(lastOfPipeline(pipe.X), namesCapture) && isTextFilter(firstOfPipeline(pipe.Y)) {
+			found = true
+		}
+		return true
+	})
+	return found
+}
+
+// namesCapture reports whether a command was pointed at a capture. Every
+// argument is checked rather than the operands alone, because each filter spells
+// its value-taking flags differently and no flag value looks like this path.
+func namesCapture(c guardCommand) bool {
+	return slices.ContainsFunc(c.Args, guardCapturePathRe.MatchString)
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -602,6 +652,10 @@ var (
 	docSearchAdvice = "this workspace indexes every markdown heading as a doc section, so prose is queryable, not only greppable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the heading whose section covers your terms, as a `path#anchor` pointer you can read on its own instead of scanning the whole file; add `project=<p>` to scope it and `" + hint.Explain.With("<section>") + "` to see what it links to.\n" +
 		"Reading one specific file you already know the path of? Read it. This is for when you are LOOKING for where something is explained: the section query lands you on the passage instead of the page. Load the magus-query skill for the grammar."
 
+	// The placeholder repeat, kept for the read with no pattern to query with. A search
+	// gets its own terms spliced in instead: see proseSuggestion.
+	docSearchBrief = "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`"
+
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
 	// workspace vocabulary and routes through discovery.
@@ -633,6 +687,20 @@ var (
 		"This loop has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive - a run that failed early never prints the line being grepped for. Several have had to be killed by hand.\n" +
 		"Waiting on something OUTSIDE this machine (a remote queue, a deploy nobody here started) is what your host's monitor surface is for."
 
+	// LEADS with the replacement, like the pipe and redirect messages it extends,
+	// and spells out the block because the reader cannot lose what they can see.
+	denyCaptureFilter = "Read that file whole, or give the run an output contract to begin with:\n" +
+		"  -o jsonl --tee <file>        background the run this way and the capture IS a contract; `jq` over that file is fine\n" +
+		"  cat <file>, or your editor tool   the capture as written; under -s a failure is a bounded tail\n" +
+		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log, once the ref is in hand\n" +
+		"That file is the host's task capture, or a run log: magus console output one step removed, so filtering it loses exactly what the pipe rule exists to protect. A failure prints five lines together, and a filter keeps the one you matched:\n" +
+		"  [fail] <target>\n" +
+		"  cause: <what went wrong>\n" +
+		"  output: out<hex>\n" +
+		"  inspect: magus query output out<hex>\n" +
+		"  reproduce: <the command to run it again>\n" +
+		"`grep 'cause:'` keeps the symptom and drops the ref that reads the whole log, two lines below it. A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it.\n" +
+		"Reading the whole file is not a filter, and stays allowed."
 	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
 		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
 		"One call answers every open pull request, mergeability included, and costs one turn.\n" +
@@ -686,19 +754,19 @@ var (
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
 	// exact magus equivalent to route to, so the third deny trigger does not apply.
-	// It is here because relock is under-discoverable (a reserved charm nothing
+	// It is here because update is under-discoverable (a reserved charm nothing
 	// prompts for), and a lockfile refreshed outside magus is a write the cache and
 	// the affected set never saw.
 	//
-	// The covering TARGET is not named and cannot be: relock is magus vocabulary,
+	// The covering TARGET is not named and cannot be: update is magus vocabulary,
 	// but which target carries the dependency work is the workspace's.
 	//
 	// Shared with the raw-tool deny, which appends it when the denied command is
 	// also a re-resolution (`go mod tidy` is both), so the charm is named whichever
 	// rule answers first.
-	relockAdvice = "Run the covering target with the relock charm (`" + hint.Run.With("<target>:relock", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
-		"relock is the reserved charm for rewriting DEPENDENCY state, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry serves today is relock. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
-	relockGuardContext = "magus workspace: " + relockAdvice
+	updateAdvice = "Run the covering target with the update charm (`" + hint.Run.With("<target>:update", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
+		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
+	updateGuardContext = "magus workspace: " + updateAdvice
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status: it already says the command passed, and a message that prints only on success adds nothing."
@@ -898,6 +966,30 @@ func searchAdvisoryLead(cmds []guardCommand, hints *hint.Translator) string {
 	return renderAdvisoryLead(fallback)
 }
 
+// proseSuggestion is the doc-section query hint composes for the prose search on the
+// line, with the reader's own terms already in it, or nil when there is none.
+//
+// The doc rule is matched before the code-search rule, so this is the only path by
+// which a prose search meets a runnable command. searchAdvisoryLead records the
+// reasoning for the code case, and it holds harder here: a `<terms>` placeholder is a
+// command the reader still has to finish writing.
+//
+// It abstains for a plain read (`cat docs/x.md` carries no pattern) and for a line whose
+// only searchable command asks a code question, so a prose notice never leads with a
+// symbol lookup. The placeholder wording stands in both cases.
+func proseSuggestion(cmds []guardCommand, hints *hint.Translator) []hint.Suggestion {
+	for _, c := range cmds {
+		inv := hint.Invocation{Name: c.Name, Args: c.Args}
+		if hint.Classify(inv) != hint.ClassSearchProse {
+			continue
+		}
+		if s := hints.Suggest(inv); len(s) > 0 {
+			return s
+		}
+	}
+	return nil
+}
+
 func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 	var b strings.Builder
 	switch suggestions[0].Confidence {
@@ -989,6 +1081,13 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	if parsed && ciWatchFires(cmds) {
 		return bashGuardVerdict{Deny: denyCIWatch, Rule: denyRule{Name: denyRuleCIWatch}}
 	}
+	// Beside busy-wait for the other half of the same story: that rule refuses WAITING on
+	// a task capture, this one refuses trimming it once it arrives. It has to sit above
+	// the search advisories, which would otherwise answer for the grep and say nothing
+	// about what it was cutting away.
+	if parsed && captureFilterFires(cmds, command) {
+		return bashGuardVerdict{Deny: denyCaptureFilter, Rule: denyRule{Name: denyRuleCaptureFilter}}
+	}
 	if scriptedRewriteFires(command) {
 		return bashGuardVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}
 	}
@@ -1036,7 +1135,7 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 		// npm update` denies on the first half, and the reader was never told the
 		// second half rewrites a lockfile: the deny is the only text they get.
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
-			reason += "\n" + relockAdvice
+			reason += "\n" + updateAdvice
 		}
 		return bashGuardVerdict{
 			Deny: explainDeny(command, rawToolCmd, reason),
@@ -1049,15 +1148,16 @@ func evaluateBashGuardRules(command string, hints *hint.Translator) bashGuardVer
 	case magusRedirected(command):
 		return bashGuardVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
-		return bashGuardVerdict{Context: relockGuardContext}
+		return bashGuardVerdict{Context: updateGuardContext}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case fires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
-		return bashGuardVerdict{
-			Context: docSearchAdvice,
-			Kind:    advisoryDocSearch,
-			Brief:   "magus workspace: prose is queryable. `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "`",
+		v := bashGuardVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
+		if s := proseSuggestion(cmds, hints); s != nil {
+			v.Context = renderAdvisoryLead(s) + docSearchAdvice
+			v.Brief = "magus workspace: prose is queryable. `" + s[0].Run + "`"
 		}
+		return v
 	case precedentIdent(cmds) != "":
 		ident := precedentIdent(cmds)
 		return bashGuardVerdict{

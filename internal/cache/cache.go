@@ -29,7 +29,9 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/file"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	runPkg "github.com/egladman/magus/internal/proc/run"
@@ -233,6 +235,10 @@ type Result struct {
 	// an entry written before the manifest carried a duration: the same understatement
 	// SavedMs carries, for the same reason.
 	Saved time.Duration
+	// HintID is the stable id of the advisory line this step printed, "" when it
+	// printed none; today only [HintUnchangedFailure]. It rides the result the way Ref
+	// does so a consumer counting a hint's uptake never has to match on its wording.
+	HintID string
 }
 
 type runCtx struct {
@@ -379,6 +385,26 @@ func (c *Cache) Remote() RemoteBackend { return c.remote }
 // it, so those artifacts stay out of the working tree.
 func (c *Cache) Dir() string { return c.dir }
 
+// RunningTargets names what this process has in flight right now, as "project:target".
+//
+// The stall report is the caller that needs it: a wedged invocation's last transition
+// says which step was executing, and this says what else was still admitted alongside it,
+// which is the difference between "one target is slow" and "everything is parked".
+//
+// A nil receiver reports nothing, so the watchdog on an Inspect workspace needs no guard
+// of its own.
+func (c *Cache) RunningTargets() []string {
+	if c == nil {
+		return nil
+	}
+	running := c.inflight.Running()
+	out := make([]string, 0, len(running))
+	for _, t := range running {
+		out = append(out, t.Project+":"+t.Target)
+	}
+	return out
+}
+
 // IsCached reports whether step s would replay from cache rather than run: its inputs hash
 // to a manifest already present locally. It is Run's hash-and-lookup without the
 // execution or the remote fetch: a read-only "is this up to date?" probe (e.g. status
@@ -462,7 +488,12 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		ctx = withExportReadLockCache(ctx, c)
 	}
 
-	unlock, err := hashLocks.acquire(ctx, hash)
+	// Named, so a wait here says which step holds the key and so the slot watch can see
+	// that this step's seat is parked rather than working: this lock is one of the two
+	// ways a step blocks while holding its slots.
+	unlock, err := hashLocks.acquireNamed(ctx, hash, stepLabel(s), func(holder string) func() {
+		return BlockedOn(ctx, fmt.Sprintf("the cache lock for %s, held by %s", shortHash(hash), displayLockParty(holder)))
+	})
 	if err != nil {
 		return result, err
 	}
@@ -584,6 +615,8 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
+
+	result.HintID = c.emitUnchangedFailureHint(hash)
 
 	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
 	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
@@ -734,6 +767,43 @@ func exportReadLockCacheFrom(ctx context.Context) *Cache {
 	return c
 }
 
+// HintUnchangedFailure is the stable id of the line a step prints when its inputs are
+// unchanged since a recorded failure. Carried on [Result.HintID] so a consumer counts the
+// hint's uptake by id rather than by matching its wording, which is free to change.
+const HintUnchangedFailure = "unchanged-failure"
+
+// maxHintErrChars bounds the recorded failure message inside a hint that promises to be
+// one line. The full message is behind the ref the line names.
+const maxHintErrChars = 120
+
+// emitUnchangedFailureHint names the recorded failure this step's cache key already
+// holds, and returns [HintUnchangedFailure] when it said so. Nothing is replayed: a
+// failure is deliberately not a cacheable result (docs/concepts/cache/output-refs.md),
+// so the step runs either way and the line is context, never a verdict. Empty when the
+// key has no stored execution, when the newest one passed, or when hints are off.
+//
+// Once per key rather than per target, because the fact reported is about the KEY: a
+// re-run whose inputs moved hashes differently and deserves silence. The dedupe rides
+// interactive.Emit, which keys on the whole message; the ref inside it is derived from
+// the cache key, so one line per key per process falls out with no state of its own,
+// and one `magus run` invocation is one process.
+func (c *Cache) emitUnchangedFailureHint(hash string) string {
+	if c.outputs == nil || !interactive.HintsEnabled() {
+		return ""
+	}
+	d, err := c.outputs.newestDescriptor(hash)
+	if err != nil || !d.Failed || d.Ref == "" {
+		return ""
+	}
+	msg, _, _ := strings.Cut(d.ErrMsg, "\n")
+	if len(msg) > maxHintErrChars {
+		msg = msg[:maxHintErrChars] + "..."
+	}
+	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; read it with %s",
+		d.Ref, msg, hint.QueryOutput.With(d.Ref)))
+	return HintUnchangedFailure
+}
+
 // recordOutput persists a step's captured output events under a per-execution
 // reference id and returns that ref for the result log event. It builds the target's
 // `result` record (status/duration/error), persists the output events plus that
@@ -868,10 +938,10 @@ func stepSlots(s Step, lim *Limiter) int {
 // so a second claim queued behind it would wait forever. Measured 2026-09-08: `magus
 // affected ci` sat 27 minutes at 13s of CPU with no child process running.
 //
-// The cover is a floor. Step.MemoryMB folds a chain by MAXIMUM and one ctx.needs(a, b, c)
-// runs its members concurrently, so three 4 GB members are covered by a 4 GB claim; see
-// types.ChainMemoryMB for why the recorded chain cannot yet tell a concurrent needs from
-// a sequential one. Covering rather than yielding, because a machine claim's re-acquire
+// The cover is a floor: Step.MemoryMB folds a chain to the largest sum over one
+// ctx.needs call (types.ChainMemoryMB), and a member's own transitive fan-out inside
+// that call adds under the member's figure rather than beside it. Covering rather than
+// yielding, because a machine claim's re-acquire
 // is FALLIBLE: it re-queues behind strangers and can be refused, so a parent that
 // released and retook could fail after its children had already run. The limiter still
 // bounds how many run at once inside this process; the machine budget does not see them.
@@ -897,16 +967,23 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 // record every observer reads: the local limiter slots, the inflight set a killed run is
 // reported from, and the invocation heartbeat the stall watchdog compares against. A step
 // reaches here already holding its machine claim; claimMachine says why that one cannot
-// be taken under the isolation lease. It returns the clamped slot count and one release
-// that gives the seats back.
+// be taken under the isolation lease. It returns a context carrying the hold, the clamped
+// slot count, and one release that gives the seats back.
+//
+// The returned context is what a blocking wait inside the step marks itself on
+// ([BlockedOn]), so the slot watch can tell a seat doing work from one that cannot
+// proceed. A caller that ran the step under the context it passed IN would take every
+// wait as progress.
 //
 // Factored out of RunAll so work running OUTSIDE the batch is accounted the same way
 // rather than through a second, quietly divergent path; see [Cache.RunAside].
-func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), error) {
+func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (context.Context, int, func(), error) {
 	slots := stepSlots(s, lim)
-	if err := lim.AcquireN(ctx, slots); err != nil {
-		return 0, nil, err
+	hold, err := lim.acquireWatched(ctx, slots, stepLabel(s))
+	if err != nil {
+		return ctx, 0, nil, err
 	}
+	ctx = withSlotHold(ctx, hold)
 	// Report occupancy on both edges of the slot's life, so an interactive run can show a
 	// live pool counter. Handlers that render no status line ignore the event, so piped
 	// and CI output are unchanged.
@@ -918,13 +995,20 @@ func (c *Cache) admit(ctx context.Context, s Step, lim *Limiter) (int, func(), e
 	doneInflight := c.inflight.start(s.ProjectPath, s.Target)
 	prog := ProgressFromContext(ctx)
 	prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "running"})
-	return slots, func() {
+	return ctx, slots, func() {
 		doneInflight()
+		// Retire the hold before the slots go back, so a peer waking on them never reads
+		// a record that occupies nothing.
+		hold.done()
 		lim.ReleaseN(slots)
 		c.logPool(ctx, lim)
 		prog.Record(Mark{Project: s.ProjectPath, Target: reproTarget(s), What: "finished"})
 	}, nil
 }
+
+// stepLabel names a step for a human reading a wait: the project as `magus status` spells
+// it, then the target.
+func stepLabel(s Step) string { return displayProject(s.ProjectPath) + " " + s.Target }
 
 // runIsolation serializes Step.Exclusive steps against the rest of one invocation: an
 // exclusive step takes the write lock, every other step takes the read lock.
@@ -952,6 +1036,51 @@ func WithRunScope(ctx context.Context) context.Context {
 	}
 	return context.WithValue(ctx, runIsolationKey{}, &runIsolation{})
 }
+
+type sharedStepBaseKey struct{}
+
+// WithSharedStepBase marks ctx as the cancellation that work COMPOSED beneath this
+// scheduled target should run under. Set once per scheduled target, after its own ceiling
+// has been applied and before its body can narrow it further.
+func WithSharedStepBase(ctx context.Context) context.Context {
+	return context.WithValue(ctx, sharedStepBaseKey{}, ctx)
+}
+
+// SharedStepContext returns ctx's values under the scheduled target's cancellation
+// instead of the caller's: the context a step that several parents reach has to run on.
+//
+// A composed target is dispatched once and awaited by everyone who needs it (the Buzz
+// pool's TargetMemo), so whichever parent asks first supplies the context the work runs
+// under. When that parent declares a timeout, its ceiling silently becomes the ceiling of
+// a step its siblings also depend on: on 2026-09-10 `security` (15m) reached `generate`
+// first, and when it expired the whole codegen chain died with "context deadline exceeded"
+// under it, taking lint, build and test with it. A ceiling is a claim about the target
+// that declared it, never about a sibling that happens to share a dependency.
+//
+// What still rides is everything above the base: Ctrl-C, the stall watchdog, a failing
+// batch, and the ceiling of the unit the user actually scheduled (this repository's `ci`
+// declares 45m for exactly that reason). Outside a scheduled target this is a
+// pass-through, so a bare Cache.Run stays governed by its caller.
+func SharedStepContext(ctx context.Context) context.Context {
+	base, _ := ctx.Value(sharedStepBaseKey{}).(context.Context)
+	if base == nil {
+		return ctx
+	}
+	return sharedStepContext{values: ctx, cancel: base}
+}
+
+// sharedStepContext splices one context's values onto another's cancellation. No
+// goroutine and nothing to close: both halves outlive the step, so the merge is a pair of
+// pointers rather than a forwarded channel.
+type sharedStepContext struct {
+	values context.Context
+	cancel context.Context
+}
+
+func (c sharedStepContext) Deadline() (time.Time, bool) { return c.cancel.Deadline() }
+func (c sharedStepContext) Done() <-chan struct{}       { return c.cancel.Done() }
+func (c sharedStepContext) Err() error                  { return c.cancel.Err() }
+func (c sharedStepContext) Value(key any) any           { return c.values.Value(key) }
 
 func isolationFrom(ctx context.Context) *runIsolation {
 	isolation, _ := ctx.Value(runIsolationKey{}).(*runIsolation)
@@ -1049,7 +1178,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	defer releaseMachine()
 	ctx, releaseIsolation := acquireRunIsolation(ctx, s.Exclusive)
 	defer releaseIsolation()
-	slots, release, err := c.admit(ctx, s, lim)
+	ctx, slots, release, err := c.admit(ctx, s, lim)
 	if err != nil {
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
@@ -1205,10 +1334,13 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			if err := gctx.Err(); err != nil {
 				return fail(err)
 			}
-			// A slot-acquire failure is only ever this batch's own cancellation, which
-			// fail swallows regardless.
-			slots, release, admitErr := c.admit(stepCtx, s, lim)
+			// A slot-acquire failure is usually this batch's own cancellation, which fail
+			// swallows regardless. A deadlocked pool is the exception: nothing upstream
+			// failed and the batch was not cancelled, so it is an independent finding and
+			// has to count as one, or a run that did nothing reports success.
+			stepCtx, slots, release, admitErr := c.admit(stepCtx, s, lim)
 			if admitErr != nil {
+				ran = errors.Is(admitErr, types.BuildSlotsDeadlocked) && gctx.Err() == nil
 				return fail(admitErr)
 			}
 			defer release()

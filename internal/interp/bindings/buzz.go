@@ -50,7 +50,10 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// Cross-project handle registry for this session: project imports register
 	// each handle they bind, ctx.needs matches passed functions against it.
 	ext := &externalHandles{}
-	sess.SetGlobal("magus", buildMagusNS(ctx, sess, obs, parseMode, magusfileSurface))
+	// A native module, not a global: `magus` is reached by `import "magus"` like fs,
+	// vcs and every other host module, so its declarations attach the way theirs do
+	// and a file that never imports it fails to resolve the name.
+	sess.SetNativeModule("magus", buildMagusNS(ctx, sess, obs, parseMode, magusfileSurface))
 
 	// A target declares its dependencies and cache footprint through the magus.Context
 	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
@@ -126,7 +129,7 @@ const (
 // not have this one layered over it. The two are built by the same buildMagusNS, so
 // they cannot drift.
 func RegisterMagusNamespace(ctx context.Context, sess *buzz.Session) {
-	sess.SetGlobal("magus", buildMagusNS(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
+	sess.SetNativeModule("magus", buildMagusNS(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
 }
 
 // buildMagusNS assembles the magus.* namespace object for one surface. The

@@ -7,9 +7,9 @@
   </picture>
 </p>
 
-<!-- Coverage badges are regenerated in CI by `magus run coverage-badge` under the gha charm (Go toolchain only, no third-party service); the target is a no-op locally so a laptop never overwrites CI's number. -->
+<!-- The Go badge is refreshed on a developer machine by `magus run coverage-badge:rw .` and committed with coverage/, the per-platform record it renders from (Go toolchain only, no third-party service). CI only re-derives the badge from that record and fails when the two disagree; it never runs a platform suite to judge it. -->
 
-<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="textsearch coverage" src="./assets/textsearch-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
+<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="TypeScript coverage" src="./console/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
 A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
 
@@ -273,7 +273,7 @@ export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](c
 // code. Tidy resolves against the module proxy, so what it writes depends on what
 // upstream serves today; that is a second, deliberate ask:
 //   magus run format:rw          formatting only; go mod tidy still just reports
-//   magus run format:rw,relock   also let go mod tidy amend go.mod and go.sum
+//   magus run format:rw,update   also let go mod tidy amend go.mod and go.sum
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);

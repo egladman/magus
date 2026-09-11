@@ -13,6 +13,7 @@
 // repo never enabled.
 import "proc";
 import "advice";
+import "magus";
 import "std";
 
 final section = "generated-drift";

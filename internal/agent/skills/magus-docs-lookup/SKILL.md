@@ -9,10 +9,25 @@ truth for magus's own behavior{{end}}.
 
 Two places serve the same pages:
 
-- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): read `docs/<name>.md`
-  directly.{{if .Full}} This is where the skill is dogfooded, so prefer it here.{{end}}
+- In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section
+  (next), or read `docs/<name>.md` when you already know the page.{{if .Full}} This is where
+  the skill is dogfooded, so prefer it here.{{end}}
 - Published: the deployed site at `https://eli.gladman.cc/magus/`. Every page is
   also emitted as raw Markdown at `<page-url>index.md` for clean fetching.
+
+## In a magus workspace, ask the graph for the passage
+
+Every markdown heading in the workspace is a `docsection` node, so "where is this
+explained" is a query rather than a scan:
+
+```sh
+magus query kind=docsection "cache key"
+```
+
+Each result's id is `<path>#<anchor>`, a pointer to the one passage. Read that
+section, not the file it sits in.{{if .Full}} `project=<p>` scopes it, and `magus explain
+"docsection:<path>#<anchor>"` walks the page's outline from there.{{end}} The index route
+below is for the PUBLISHED site, where there is no graph to ask.
 
 ## FAST PATH: start from the index, do not guess URLs
 

@@ -90,10 +90,15 @@ var (
 	MemoryLs          = cmd("memory", "ls")
 	MemoryPut         = cmd("memory", "put")
 	MemoryVerify      = cmd("memory", "verify")
+	Ledger            = cmd("ledger")
+	LedgerBrief       = cmd("ledger", "brief")
 	NotesLs           = cmd("notes", "ls")
 	NotesGet          = cmd("notes", "get")
 	NotesEdit         = cmd("notes", "edit")
 	Session           = cmd("session")
+	SessionLoad       = cmd("session", "load")
+	SessionShow       = cmd("session", "show")
+	SessionLease      = cmd("session", "lease")
 	SessionAttention  = cmd("session", "attention")
 	SessionDispose    = cmd("session", "dispose")
 	SessionNotify     = cmd("session", "notify")
@@ -129,8 +134,8 @@ var AllCommands = []Command{
 	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
-	MemoryLs, MemoryPut, MemoryVerify, NotesLs, NotesGet, NotesEdit,
-	Session, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
+	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, NotesLs, NotesGet, NotesEdit,
+	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,

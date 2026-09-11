@@ -1,0 +1,11 @@
+{
+  "category": "catchup",
+  "budget_usd": 2,
+  "max_turns": 50,
+  "answer_key": [
+    "apps/crew",
+    "packages/platform/http",
+    "packages/platform/metrics",
+    "packages/warp-drive-manager/important-feature-2"
+  ]
+}

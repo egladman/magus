@@ -3,8 +3,8 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-skill_full_bytes: 8174
-skill_short_bytes: 6776
+skill_full_bytes: 8349
+skill_short_bytes: 6951
 ---
 
 # magus-buzz-write
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `55` |
-| `knowledge-schema-version` | `11` |
-| `skill-content` | `ed8f6112969a` |
+| `agent-skill-version` | `64` |
+| `knowledge-schema-version` | `12` |
+| `skill-content` | `d3a509f50f3e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -132,8 +132,10 @@ Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
 
 ### Calling magus from a script
 
-`import "magus"` works in a script. Ask magus about the workspace through it
-rather than shelling out to the binary:
+`magus` is a host module like `fs` or `vcs`, so `import "magus"` is what makes the
+namespace exist: without the import line, `magus\...` is `undefined: magus`. That
+holds in a magusfile too. With it, ask magus about the workspace through the
+namespace rather than shelling out to the binary:
 
 ```buzz
 import "std"; import "magus";
@@ -350,9 +352,11 @@ Available in `magus buzz`: the Buzz stdlib plus `archive`, `charm`, `crypto`,
 
 ### Calling magus from a script
 
-`import "magus"` works in a script. Ask magus about the workspace through it
-rather than shelling out to the binary - it is in-process, version-pinned, and
-has no arg-quoting to get wrong:
+`magus` is a host module like `fs` or `vcs`, so `import "magus"` is what makes the
+namespace exist: without the import line, `magus\...` is `undefined: magus`. That
+holds in a magusfile too. With it, ask magus about the workspace through the
+namespace rather than shelling out to the binary - it is in-process,
+version-pinned, and has no arg-quoting to get wrong:
 
 ```buzz
 import "std"; import "magus";

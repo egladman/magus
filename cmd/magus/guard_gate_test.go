@@ -1,12 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -172,4 +179,209 @@ func TestWorkspaceRunsDirDefaultsToTheWorkspaceCache(t *testing.T) {
 
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ".magus", "runs"), 0o755))
 	assert.Equal(t, filepath.Join(".magus", "runs"), workspaceRunsDir(""))
+}
+
+// narrowLease is a delegated worker assigned one package's tests: the shape the
+// multi-agent skill hands out, and the shape the gate deny is scoped to.
+func narrowLease() types.Lease {
+	return types.Lease{
+		ID:         "harness/lease-scoped-deny",
+		Goal:       "lease-scoped denies in the guard",
+		OwnedPaths: []string{"cmd/magus/**"},
+		Validation: "magus run go::go-test . -- ./internal/ledger/",
+		State:      types.StateRunning,
+		Registered: 1,
+	}
+}
+
+// TestDenyLeaseScopedGate pins the refusal and what it has to carry: the lease, the
+// command, and the row field that decided it, so a reader can repair the row instead
+// of routing around the guard.
+func TestDenyLeaseScopedGate(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	for _, command := range []string{
+		"./magus affected ci --no-default-charms",
+		"magus run ci .",
+		"mise exec -- ./magus affected ci",
+	} {
+		reason := denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, "harness/lease-scoped-deny", "the denial must name the lease")
+		assert.Contains(t, reason, command, "the denial must name what it refused")
+		assert.Contains(t, reason, "validation", "the denial must name the field that decided it")
+		assert.Contains(t, reason, "./internal/ledger/", "the denial must hand back the check to run instead")
+	}
+}
+
+// TestDenyLeaseScopedGateStaysQuiet covers every silence. The rule is a seatbelt for
+// harnesses that opt in: each of these is a case where nothing declared the gate to be
+// out of scope, and a guard that cannot evaluate a rule must not block a tool call.
+func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	t.Run("no lease", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "", "./magus affected ci"))
+	})
+
+	t.Run("a lease with no row", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/absent", "./magus affected ci"))
+	})
+
+	t.Run("a terminal row", func(t *testing.T) {
+		lease := narrowLease()
+		lease.State = types.StatePass
+		done, _ := fleetFixture(t, lease)
+		assert.Empty(t, denyLeaseScopedGate(done, lease.ID, "./magus affected ci"))
+	})
+
+	t.Run("a row that declared no validation", func(t *testing.T) {
+		lease := narrowLease()
+		lease.Validation = ""
+		undeclared, _ := fleetFixture(t, lease)
+		assert.Empty(t, denyLeaseScopedGate(undeclared, lease.ID, "./magus affected ci"))
+	})
+
+	t.Run("a row whose validation names the gate", func(t *testing.T) {
+		for _, validation := range []string{"ci", "magus affected ci", "magus run ci ."} {
+			lease := narrowLease()
+			lease.Validation = validation
+			owns, _ := fleetFixture(t, lease)
+			assert.Empty(t, denyLeaseScopedGate(owns, lease.ID, "./magus affected ci"), "%q", validation)
+		}
+	})
+
+	t.Run("a command that is not the gate", func(t *testing.T) {
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", "./magus run go-build ."))
+		assert.Empty(t, denyLeaseScopedGate(ctx, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
+	})
+
+	t.Run("no trail location", func(t *testing.T) {
+		// Pinned EMPTY rather than left unpinned, so the case cannot reach the developer's
+		// own ledger and grade against whatever plan they are really running.
+		nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+		assert.Empty(t, denyLeaseScopedGate(nowhere, "harness/lease-scoped-deny", "./magus affected ci"))
+	})
+}
+
+// TestHookCmdDeniesTheGateUnderANarrowLease proves the WIRING. The rule itself is covered
+// above; what this pins is that hookCmd reaches it, because a rule nothing calls never
+// fires however well it is tested.
+func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
+	global = globalFlags{}
+	// The hook falls back to the environment for the lease, so a developer or CI job that
+	// exported one would decide the control case below.
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _ := fleetFixture(t, narrowLease())
+	command := "./magus affected ci --no-default-charms"
+
+	var denied bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader(command), &denied,
+		[]string{"--lease", "harness/lease-scoped-deny", "-o", "name"})
+	require.Error(t, err, "a deny that exits 0 blocks nothing: the host runs the command anyway")
+	assert.Equal(t, "deny\n", denied.String())
+
+	var unleased bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(command), &unleased, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", unleased.String(), "a caller naming no lease is scoped by nobody's row")
+}
+
+// TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
+// hook through: a marker in the checkout's cache dir, honored only when it holds a lease
+// id, and read by the same ledger.ActingLease the sandbox resolves through.
+func TestActingLeaseFromMarker(t *testing.T) {
+	ctx, _ := fleetFixture(t, narrowLease())
+	base := hookActivityTrail(ctx).base
+
+	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
+
+	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	assert.Equal(t, "harness/lease-scoped-deny", ledger.ActingLease(base))
+
+	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	assert.Empty(t, ledger.ActingLease(base), "a malformed marker binds nothing rather than something")
+}
+
+// TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
+// version-control mutations the orchestrator owns, with the lease and its parent named.
+func TestDenyLeaseScopedVCS(t *testing.T) {
+	worker := narrowLease()
+	worker.Parent = "harness"
+	ctx, _ := fleetFixture(t, worker)
+
+	for _, command := range []string{
+		"git commit -q -m done",
+		"git -C /tmp/elsewhere commit -m done",
+		"git --work-tree /tmp/elsewhere commit -m done",
+		"git push origin main",
+		"git stash push -u -m wip",
+		"git reset --hard HEAD",
+		"git clean -fd",
+		"git worktree remove ../x",
+		"git checkout .",
+		"git restore .",
+		"git revert HEAD",
+		"git rebase main",
+		"git merge main",
+		"git cherry-pick abc123",
+		"cd sub && git commit -m done",
+	} {
+		reason := denyLeaseScopedVCS(ctx, worker.ID, command)
+		require.NotEmpty(t, reason, "%q", command)
+		assert.Contains(t, reason, worker.ID)
+		assert.Contains(t, reason, "harness", "the denial names the parent the worker belongs to")
+	}
+
+	for _, command := range []string{
+		"git status --short",
+		"git diff --stat",
+		"git checkout -- go.mod",
+		"git restore -- go.mod",
+		"git stash list",
+		"git stash show -p",
+		"git log --oneline -3",
+		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, worker.ID, command), "%q", command)
+	}
+}
+
+// TestDenyLeaseScopedVCSStaysQuiet covers the silences: no lease, a root lease with
+// no parent, and a lease nobody declared.
+func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
+	rootLease := narrowLease()
+	ctx, _ := fleetFixture(t, rootLease)
+	assert.Empty(t, denyLeaseScopedVCS(ctx, "", "git commit -m done"))
+	assert.Empty(t, denyLeaseScopedVCS(ctx, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
+	assert.Empty(t, denyLeaseScopedVCS(ctx, "harness/absent", "git commit -m done"))
+}
+
+// TestHookEnvelopeCwdLocatesTheWorkersCheckout pins the channel a host that runs its hooks
+// somewhere else reaches the worker's marker through: the envelope's cwd names the worker's
+// checkout, and the lease bound there scopes the verdict, whatever the hook process's own
+// directory is.
+func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("version: 1\n"), 0o644))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	worker := narrowLease()
+	worker.Parent = "harness"
+	_, err = ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).Put(t.Context(), worker)
+	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, worker.ID))
+
+	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s1","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
+	var out bytes.Buffer
+	err = hookCmd(context.Background(), strings.NewReader(envelope), &out, []string{"-o", "name"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent, "the worker lease bound in the envelope's checkout must deny the commit")
+	assert.Equal(t, "deny\n", out.String())
+
+	events, err := trail.ReadRecent(cacheDir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1, "the observation lands in the worker's trail, not the hook's cwd")
+	assert.Equal(t, worker.ID, events[0].Lease)
 }

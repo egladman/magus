@@ -213,11 +213,10 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 //     surface because a plain script needs none of these until it imports a spell
 //     module.
 //   - magus/charm: the pure-Buzz patch constructors.
-//   - the magus namespace's own return types (magusOwnedTypeSource above), declared
-//     directly rather than behind an importable path: "magus" is bound as a session
-//     global (see registerAllBuzz), not a lazily-imported module, so the normal
-//     import-triggered collection (SetModuleDecls) never runs for it; see
-//     DeclareModuleTypes's doc for why.
+//   - magus: the generated declarations for the magus namespace itself, plus the
+//     mirrors the generator cannot reach (magusUndeclaredTypeSource above). The
+//     namespace VALUE is a native module registered elsewhere (registerAllBuzz,
+//     RegisterMagusNamespace); only its types are declared here.
 //
 // It is layered on top of RegisterModuleSurface by the magusfile runtime and,
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
@@ -225,11 +224,17 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 func RegisterSpellSourceModules(sess *buzz.Session) {
 	sess.SetModuleDecls(spellruntime.SpellModulePath, spellruntime.SpellModuleSource)
 	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
-	// "magus" is bound as a session GLOBAL, not a lazily-imported module, so the
-	// import-triggered SetModuleDecls collection never runs for it (see
-	// DeclareModuleTypes). It gets the same generated source every other module gets
-	// (object mirrors plus an extern per method), which is what types magus\\affectedImpact
-	// and friends at a call site instead of leaving them Unknown.
+	// The same generated source every other module gets (object mirrors plus an extern
+	// per method), which is what types magus\\affectedImpact and friends at a call site
+	// instead of leaving them Unknown.
+	//
+	// Declared EAGERLY rather than registered with SetModuleDecls beside the native
+	// value, even though `import "magus"` is what binds that value. These 65 mirrors
+	// carry generic names (Node, Path, Module, Graph, Diff), and collection order is
+	// precedence order: collected at the import point, magus\Node outranked
+	// libs/diagram's own Node for every file the docs render imported after
+	// engine/page, and the diagram chain stopped compiling. Eager keeps them lowest,
+	// so a program's own type of that name still wins.
 	decls, ok := spellruntime.ModuleDecls("magus")
 	if !ok {
 		panic("bindings: generated magus declarations are missing; run `magus run generate`")
@@ -254,7 +259,18 @@ func buzzLogFn(level slog.Level) func(context.Context, []vm.Value) (vm.Value, er
 func MagusModuleKeys() []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	return sess.GetGlobal("magus").MapKeys()
+	return magusNativeModule(sess).MapKeys()
+}
+
+// magusNativeModule is the registered magus module value, and a missing one is a
+// panic rather than a zero value: both readers below exist to catch drift, and a zero
+// map would report an empty surface as agreement.
+func magusNativeModule(sess *buzz.Session) vm.Value {
+	mod, ok := sess.NativeModule("magus")
+	if !ok {
+		panic("bindings: the magus module is not registered; registerAllBuzz must run first")
+	}
+	return mod
 }
 
 // MagusNamespaceKeys returns the member names bound inside one of magus's nested
@@ -267,7 +283,7 @@ func MagusModuleKeys() []string {
 func MagusNamespaceKeys(name string) []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	ns, ok := sess.GetGlobal("magus").MapGet(name)
+	ns, ok := magusNativeModule(sess).MapGet(name)
 	if !ok || !ns.IsMap() {
 		return nil
 	}

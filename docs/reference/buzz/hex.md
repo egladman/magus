@@ -20,9 +20,9 @@ Encode data as lowercase hex.
 
 **Signature:** `hex\encode(data) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L46)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `data` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `data`    | `string` |          |             |
 
 **Returns:** string
 
@@ -32,9 +32,9 @@ Decode a hex string; errors on malformed input.
 
 **Signature:** `hex\decode(s) -> string` - [source](https://github.com/egladman/magus/blob/main/std/encoding/hex/hex.go#L51)
 
-| Parameter | Type | Optional | Description |
-|-----------|------|----------|-------------|
-| `s` | `string` |  | |
+| Parameter | Type     | Optional | Description |
+| --------- | -------- | -------- | ----------- |
+| `s`       | `string` |          |             |
 
 **Returns:** string
 

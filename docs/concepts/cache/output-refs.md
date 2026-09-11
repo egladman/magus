@@ -44,6 +44,35 @@ outcc49db1f
   open in browser: magus query output outcc49db1f --open
 ```
 
+## The next line
+
+The ref line answers "where is the output". A **next** answers "what would you run
+now". Every result that has an answer carries one: the graph verbs
+(`query`, `explain`, `describe file`, the affected listing) print theirs under a
+`next:` label, and a failing target's own result event carries the same suggestions as
+a `next` field, so a tool reading `-o json` gets the affordance a person sees.
+
+```text
+next:
+  magus explain spell:go  (explain names a node's edges, provenance and blast radius.)
+  magus path spell:go spell:gomod
+```
+
+Three rules keep it from becoming noise:
+
+- **At most three, one line each.** Each entry is a complete command with the real ids
+  filled in, never a placeholder to edit.
+- **The command prints every time; the reason prints once per session.** A reason is
+  advice and says nothing the second time; the command is navigation. `-s` keeps the
+  commands and drops the reasons.
+- **Nothing to suggest means no field at all.** A result never carries an empty list,
+  so a consumer can tell "magus had no suggestion" from "magus suggested and nobody
+  followed it".
+
+A next is a suggestion. magus informs and never decides, so ignoring one costs
+nothing, and each entry carries a stable id precisely so a suggestion nobody takes can
+be deleted from the data rather than reworded.
+
 ## Retrieval: `magus query output <ref>`
 
 `magus query` doubles as the retrieval verb through an explicit `output` subcommand.
@@ -133,8 +162,10 @@ Env values never reach the store: a key line's value is replaced by a short dige
 The digest still changes when the value does, so a drifted variable is named without
 its contents being shown.
 
-For the LATEST log of a project or target (rather than a specific past execution),
-[`magus tail`](../../guides/debugging.md) is a convenience, with `-f` to follow a running build.
+There is no separate verb for the latest log: `magus query output <ref>` reads any
+execution from the ref its run printed, and a failure also prints the path of its
+persisted run log, the route when there is no ref to query. See
+[acting on a failed run](../../guides/debugging.md#acting-on-a-failed-run).
 
 ### What the ref does not depend on
 
@@ -289,6 +320,24 @@ behind. A signature is also bound to the KIND of object it was made over and to 
 as a cache entry, and an entry can never file itself under a different key. Artifacts
 from an older magus still verify; magus simply ignores the extras their signature did
 not cover.
+
+## Re-running a target whose inputs have not moved
+
+A failure is not a cache entry, so re-running a failing target always executes it
+again. The descriptor is still stored under the step's cache key, though, so magus can
+tell you it has seen this exact tree fail before. When a miss lands on a key whose last
+recorded execution failed, the run prints one line before the target starts:
+
+```text
+hint: inputs unchanged since outcc49db1f, which failed: tsc exit 2; read it with magus query output outcc49db1f
+```
+
+Nothing is replayed and nothing is skipped: the target runs exactly as it would have,
+and the line is context rather than a verdict. It appears once per cache key, so an
+edit that moves the inputs mints a different ref and the hint speaks again; `-s` keeps
+it, and `MAGUS_HINTS_ENABLED=false` (`hints.enabled: false` in `magus.yaml`) drops it with
+every other hint. The target's result record carries `"hint_id": "unchanged-failure"` in
+`-o jsonl`, which is the stable id to count rather than the wording above.
 
 ## Tips and tricks
 

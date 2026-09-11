@@ -22,12 +22,31 @@ import (
 // own target plus its static chain closure) and derives writer-before-reader
 // ordering from them. The DerivedOrder's RunAfter entries are applied onto the
 // steps in place; unordered edges are left for settleDerivedOrder after the
-// batch. A single-step batch derives an empty order: nothing to cross-order.
-func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) *cache.DerivedOrder {
-	if len(steps) < 2 {
-		return &cache.DerivedOrder{}
+// batch.
+//
+// It returns an error for the overlaps inside one step that nothing sequences
+// (MGS4008). Those are not a schedule to improve: no step order can put one
+// chain member ahead of another in the same chain, and the run is refused here,
+// before any goroutine launches, rather than after the reader has either read
+// stale bytes or wedged the pool waiting for the writer.
+//
+// A one-step batch is derived too, where it used to return early. Cross-step
+// order is indeed vacuous there, but the same-step question is not: the shape
+// this refuses fits entirely inside one `ci` step's chain, which is the batch a
+// single-project gate runs.
+func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cache.DerivedOrder, error) {
+	if len(steps) == 0 {
+		return &cache.DerivedOrder{}, nil
 	}
-	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps))
+	order := cache.DeriveTargetOrder(steps, m.collectOrderNodes(steps), cache.WorkspaceOverlapWitness(m.Root()))
+	if err := order.SameStep.Refusal(); err != nil {
+		return nil, err
+	}
+	if advice := order.SameStep.Advice(); advice != "" {
+		// Cross-project pairs are reported, not refused: their sequencing may belong
+		// to another project's magusfile, and doctor lists every one.
+		slog.WarnContext(ctx, advice)
+	}
 	for i := range steps {
 		key := cache.DepKey(steps[i].ProjectPath, steps[i].Target)
 		for _, up := range order.RunAfter[key] {
@@ -50,7 +69,7 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) *cache
 	for _, e := range order.Dropped {
 		trace(e.DerivedEdge, e.Reason)
 	}
-	return order
+	return order, nil
 }
 
 // collectOrderNodes builds one TargetNode per distinct (project, target) the
@@ -72,42 +91,18 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 			// composer. Measured: format's modifiesExistingFiles("**/*.go") reached
 			// test's writes that way and closed a declared-footprint "cycle" between
 			// test and docs content-generate that neither target declares.
-			updates := make([]string, 0, len(p.TargetUpdates[target]))
-			for _, ref := range p.TargetUpdates[target] {
-				updates = append(updates, joinGlob(ref.Project, ref.Glob))
-			}
-			var reads []string
-			declaredReads := len(p.TargetInputs[target]) > 0
-			if declaredReads {
-				for _, ref := range p.TargetInputs[target] {
-					reads = append(reads, joinGlob(ref.Project, ref.Glob))
-				}
-				reads = append(reads, updates...)
-			}
-			var writes []string
-			declaredWrites := len(p.TargetOutputs[target]) > 0 || len(updates) > 0
-			for _, ref := range p.TargetOutputs[target] {
-				writes = append(writes, joinGlob(ref.Project, ref.Glob))
-			}
-			writes = append(writes, updates...)
+			node := cache.DeclaredNode(p, target, stepKey, m.ws.Get)
 			s := m.buildStep(p, target)
-			if !declaredReads {
-				reads = s.Sources
+			if !node.DeclaredReads {
+				node.Reads = s.Sources
 			}
 			if len(p.TargetOutputs[target]) == 0 {
 				// No ctx.writesFiles: the project/spell output baseline (dist/**, ...)
 				// is the only claim there is. Weak, like a fallback read.
-				writes = append(writes, s.Outputs...)
+				node.Writes = append(node.Writes, s.Outputs...)
 			}
-			n = &cache.TargetNode{
-				Project:        p.Path,
-				Target:         target,
-				Reads:          reads,
-				Writes:         writes,
-				DeclaredReads:  declaredReads,
-				DeclaredWrites: declaredWrites,
-				IgnoreDirs:     s.IgnoreDirs,
-			}
+			node.IgnoreDirs = s.IgnoreDirs
+			n = &node
 			byKey[key] = n
 			order = append(order, key)
 		}
@@ -117,31 +112,12 @@ func (m *Magus) collectOrderNodes(steps []cache.Step) []cache.TargetNode {
 		return n
 	}
 
-	var walk func(p *types.Project, target, stepKey string, seen map[string]bool)
-	walk = func(p *types.Project, target, stepKey string, seen map[string]bool) {
-		key := cache.DepKey(p.Path, target)
-		if seen[key] {
-			return
-		}
-		seen[key] = true
-		add(p, target, stepKey)
-		for _, cs := range p.TargetChains[target] {
-			owner := p
-			if cs.Project != "" && cs.Project != p.Path {
-				if owner = m.ws.Get(cs.Project); owner == nil {
-					continue
-				}
-			}
-			walk(owner, cs.Target, stepKey, seen)
-		}
-	}
-
 	for _, s := range steps {
-		p := m.ws.Get(s.ProjectPath)
-		if p == nil {
-			continue
-		}
-		walk(p, s.Target, cache.DepKey(s.ProjectPath, s.Target), map[string]bool{})
+		stepKey := cache.DepKey(s.ProjectPath, s.Target)
+		_ = types.WalkChain(m.ws.Get(s.ProjectPath), s.Target, m.ws.Get, func(v types.ChainVisit) error {
+			add(v.Project, v.Target, stepKey)
+			return nil
+		})
 	}
 
 	nodes := make([]cache.TargetNode, 0, len(order))

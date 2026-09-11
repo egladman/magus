@@ -199,9 +199,14 @@ diagnosed and has since been off, or the cause was something else and is still
 present. Do not delete the passthrough on the strength of this note - it becomes
 load-bearing the moment the sandbox is enabled - but do not credit it either.
 
-Flag placement matters when forwarding: magus flags go BEFORE `--`.
-`magus run go::go-test . --silent -- ./internal/foo/` works; putting `--silent`
-after `--` forwards it to the test binary, which rejects it.
+Flag placement matters when forwarding: magus flags go BEFORE `--`. Putting
+`--silent` after `--` forwards it to the test binary, which rejects it. And a
+package path after `--` does NOT scope the run: forwarded args are APPENDED to
+the op's default args, so `magus run go::go-test . -- ./internal/foo/` runs
+`go test ./... ./internal/foo/`, the whole tree plus the package (measured
+2026-09-09 with `--dry-run`). `-- -run 'TestName'` does narrow, because a test
+flag applies to every package. To run one package's tests, there is no CLI
+spelling today; a Buzz `{"args": [...]}` on the op is the only replacement.
 
 Seven workflows. The name says which, but the trigger does not follow from it -
 read the table, and `regenerate.yaml` in particular is the one that fires three

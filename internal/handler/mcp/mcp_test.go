@@ -302,7 +302,7 @@ func TestAdapt(t *testing.T) {
 }
 
 // TestUnregisteredDrivers reproduces the T-2 gap: registerTools's loop only checked
-// Registry -> driver, so a driver wired into allMCPTools but never given a Registry
+// Registry -> driver, so a driver wired into allToolDrivers but never given a Registry
 // entry mounted nowhere and nothing reported it. Pre-fix this function did not exist;
 // post-fix it is what registerTools panics on.
 func TestUnregisteredDrivers(t *testing.T) {

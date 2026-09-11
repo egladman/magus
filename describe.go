@@ -494,6 +494,26 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						}
 					}
 				}
+				if len(n.Spells) > 0 {
+					if p.TargetSpellOps == nil {
+						p.TargetSpellOps = map[string][]types.TargetSpellUse{}
+					}
+					// Merged by spell rather than appended, for the same reason the
+					// sibling loops dedup: a project can load several magusfile sources,
+					// and one target's ops can arrive split across them.
+					for _, u := range n.Spells {
+						i := slices.IndexFunc(p.TargetSpellOps[n.Name], func(e types.TargetSpellUse) bool { return e.Spell == u.Spell })
+						if i < 0 {
+							p.TargetSpellOps[n.Name] = append(p.TargetSpellOps[n.Name], u)
+							continue
+						}
+						for _, op := range u.Ops {
+							if !slices.Contains(p.TargetSpellOps[n.Name][i].Ops, op) {
+								p.TargetSpellOps[n.Name][i].Ops = append(p.TargetSpellOps[n.Name][i].Ops, op)
+							}
+						}
+					}
+				}
 				if len(n.ExecOverrides) > 0 {
 					if p.TargetExecOverrides == nil {
 						p.TargetExecOverrides = map[string][]string{}

@@ -17,10 +17,10 @@ The `podman` spell forks the `podman` CLI. It is separate from `docker` rather t
 
 Every op is invoked as `podman["<op>"](ctx, opts?)`. The first argument is the target's context, which is what carries the execution environment; the optional options map shapes the command itself:
 
-| Key | Type | Description | Source |
-|-----|------|-------------|--------|
-| `args` | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `podman["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
-| `stdin` | `str` | Data written to the command's standard input. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L172) |
+| Key     | Type    | Description                                                                                                                                                                                                                                                                                                                                                              | Source                                                                                              |
+| ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `args`  | `[str]` | Extra arguments appended to the resolved command, replacing any trailing defaults the op declares (go-test's `./...`), so passing args also states the scope. Omit it and a bare `podman["<op>"]()` keeps the defaults and forwards `magus run <target> -- <extra>` to the tool automatically; pass it to set the arguments explicitly, which replaces that passthrough. | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L168) |
+| `stdin` | `str`   | Data written to the command's standard input.                                                                                                                                                                                                                                                                                                                            | [source](https://github.com/egladman/magus/blob/main/internal/interp/bindings/spell_object.go#L172) |
 
 
 Working directory and environment are NOT options: they ride the context, as `podman["<op>"](ctx.withCwd("sub"))` and `podman["<op>"](ctx.withEnv({"CGO_ENABLED": "0"}))`. Only the context reaches the cache key, so an option-table cwd or env would change what the tool did while the key said otherwise; passing either as an option is an error.
@@ -39,7 +39,7 @@ Multi-platform images without buildx: build per-arch, then assemble and push a m
 
 ## podman-push
 
-podman push is its own verb; docker reaches the same place through `buildx --push`.
+podman push is its own verb; docker reaches the same place through `buildx --push`. mutates-external because the effect lands in a registry: a target that replayed this would report a delivery that never happened. docker-buildx is deliberately NOT marked, because it pushes only when the caller passes --push, and an op that reaches outward half the time cannot answer this question for the target composing it.
 
 **Command:** `podman push`
 

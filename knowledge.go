@@ -26,6 +26,8 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/repoid"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
@@ -210,6 +212,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
 		DeclaredSpells: declaredSpellSet(projects),
 		Coverage:       loadKnowledgeCoverage(root),
+		AgentContacts:  loadKnowledgeAgentContacts(root),
 		NotesPath:      cfg.Knowledge.Notes.Shared,
 		Notes:          loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Shared, notes.ScopeShared),
 		PrivateNotes:   loadKnowledgeNotesAt(root, cfg.Knowledge.Notes.Private, notes.ScopePrivate),
@@ -373,6 +376,59 @@ func loadKnowledgeCoverage(root string) []knowledge.FileCoverage {
 		return nil
 	}
 	return knowledge.ParseCoverage(profile, module)
+}
+
+// loadKnowledgeAgentContacts reads the per-repo session store for the agent events
+// `magus session load` folded into it, reduced to the path contacts the @session overlay
+// counts. It resolves the store through sessions.Dir, the same repo-identity keying
+// `magus session ls` uses, so every worktree of a repo sees one history.
+//
+// Best-effort throughout, and deliberately so: no store, an unreadable one, or zero
+// agent events all yield no contacts, so a workspace that has never loaded a transcript
+// builds exactly the graph it built before. A record whose payload this build cannot
+// decode is skipped rather than failing the graph, which is the same tolerance every
+// other reader of the store applies to a kind it does not know.
+func loadKnowledgeAgentContacts(root string) []knowledge.AgentContact {
+	if root == "" {
+		return nil
+	}
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return nil
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return nil
+	}
+	var out []knowledge.AgentContact
+	for _, rec := range fold.Records {
+		if rec.Kind != sessions.KindAgentEvent {
+			continue
+		}
+		var ev sessions.AgentEvent
+		if json.Unmarshal(rec.Payload, &ev) != nil {
+			continue
+		}
+		// A file event carries its path in Text; a shell command's Text is never
+		// stored, so it arrives path-less and the assembler counts it as dropped.
+		// Denied is the host's own record of a refusal, the only denial a file event
+		// carries: the re-judged Verdict exists on shell commands alone, which have
+		// no path to land on.
+		//
+		// compat(until: no session store holds an absolute file path, which `magus
+		// session show -o json` would list under files_read or files_written): loads
+		// store the checkout-relative path, and only events loaded before they did
+		// still need reducing here.
+		out = append(out, knowledge.AgentContact{
+			Session: rec.Session,
+			Path:    repoid.CheckoutRelative(ev.Text),
+			Read:    ev.Kind == sessions.EventFileRead,
+			Write:   ev.Kind == sessions.EventFileWrite,
+			AtMs:    ev.AtMs,
+			Denied:  ev.Denied,
+		})
+	}
+	return out
 }
 
 // declaredSpellSet is the union of every project's declared `spells:` list, the spells
