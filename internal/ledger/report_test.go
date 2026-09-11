@@ -268,6 +268,7 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 		_, err := Merge(map[string]any{field: value})
 		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
 	}
+	assert.ElementsMatch(t, jsonFields(Row{})[2:], mergeFields, "the two doors name one vocabulary")
 }
 
 // jsonFields is the wire name of every field a struct serializes, which is the set the

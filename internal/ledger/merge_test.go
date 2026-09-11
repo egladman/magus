@@ -61,6 +61,20 @@ func TestMergeReportsEveryMistypedFieldTogether(t *testing.T) {
 	assert.Contains(t, err.Error(), "read_only")
 }
 
+// A typo'd key read as a field that was taken into account, and the tool then reported
+// the row as written.
+func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
+	t.Parallel()
+
+	_, err := Merge(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "passsed")
+	assert.Contains(t, err.Error(), "owned_paths", "the message names what a put does carry")
+
+	_, err = Merge(map[string]any{"op": "put", "id": "u1", "state": "running"})
+	assert.NoError(t, err, "op and id name the call rather than a field")
+}
+
 func TestMergeRejectsAListElementOfTheWrongType(t *testing.T) {
 	t.Parallel()
 

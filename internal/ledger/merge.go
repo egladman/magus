@@ -3,6 +3,7 @@ package ledger
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/types"
@@ -22,12 +23,14 @@ import (
 // Every value is read and validated HERE rather than inside the returned merge, because
 // Store.Update runs it while holding the lock and has no way to report a failure. Errors
 // are joined rather than returned at the first one: a client that mistyped two params
-// should learn about both in one round trip.
+// should learn about both in one round trip, and a key outside [mergeFields] is one of
+// those mistakes rather than something to drop.
 func Merge(params map[string]any) (func(*types.Lease), error) {
 	var (
 		set []func(*types.Lease)
 		err error
 	)
+	err = unknownParams(params)
 	str := func(key string, apply func(*types.Lease, string)) {
 		v, ok, e := mergeString(params, key)
 		switch {
@@ -85,6 +88,31 @@ func Merge(params map[string]any) (func(*types.Lease), error) {
 			apply(u)
 		}
 	}, nil
+}
+
+// mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
+// because they are how a door names the call rather than fields of the row.
+var mergeFields = []string{
+	"parent", "goal", "checkpoint", "owned_paths", "forbidden_paths", "focus",
+	"depends_on", "tier", "validation", "state", "read_only",
+}
+
+// unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
+// like one that was taken into account, and the tool then reports the row as written.
+func unknownParams(params map[string]any) error {
+	var unknown []string
+	for key := range params {
+		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {
+			continue
+		}
+		unknown = append(unknown, key)
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	slices.Sort(unknown)
+	return fmt.Errorf("ledger: no field of a lease row is named %s; a put carries %s",
+		strings.Join(unknown, ", "), strings.Join(mergeFields, ", "))
 }
 
 // mergeString distinguishes an absent key from an empty value, which is what lets a put
