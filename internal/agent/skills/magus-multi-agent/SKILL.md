@@ -132,10 +132,10 @@ spends its budget on the discovery, once per worker, and its report then reads
 "done" with nothing executed - which the acceptance-evidence rule above already
 refuses to accept{{end}}.
 
-A worker may delegate again. What it may not do is delegate without shrinking the
-problem{{if .Full}} - that is the shape that does not terminate, and the cost people
-attribute to "multi-agent" is almost always this{{end}}. Three rules give it a
-definitive end:
+A worker may hand out part of its own lease. What it may not do is hand it out
+without shrinking the problem{{if .Full}} - that is the shape that does not terminate, and
+the cost people attribute to "multi-agent" is almost always this{{end}}. Three rules give
+it a definitive end:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
   worker that would hand on its whole lease should do the work instead.
@@ -477,8 +477,8 @@ As leases finish:
    ref's own recorded attempt from the output store and derives the outcome from
    it, never from what the worker claims{{end}}. A passing report records the row
    `pass`; a rejection exits 1 naming every violation, and a report that will not
-   decode at all exits 2. It refuses outright from a checkout still bound to the
-   lease it is grading - a worker does not accept its own row. Then reopen the
+   decode at all exits 2. It refuses outright from any checkout bound to a lease,
+   not only the row's own - a worker does not grade a sibling's row either. Then reopen the
    evidence yourself (`magus query output <ref>`): accept proves the ref names a
    passing run of this row's own check, never that the work satisfies the row's
    GOAL, and a worker's own prose about its criteria is not that evidence.

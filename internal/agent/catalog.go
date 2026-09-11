@@ -152,7 +152,11 @@ import (
 // verdict carries the lease it graded against, a served next is pre-authorized,
 // and `magus ledger register` and `magus session hints` are named as the
 // terminal doors they are.
-const SkillVersion = 67
+// 68: magus-multi-agent says a worker hands out part of its OWN lease rather than
+// delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
+// refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
+// not only one bound to the row being graded.
+const SkillVersion = 68
 
 const skillLicense = "GPL-3.0-or-later"
 
