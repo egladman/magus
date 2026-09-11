@@ -330,6 +330,18 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+	case "job":
+		// `job run` submits one of the daemon's OWN jobs and is called from a VCS hook,
+		// where it promises to be a silent no-op when no daemon answers. Loading the
+		// workspace to make that promise is work nobody asked for, and it breaks the
+		// promise out loud: a checkout carrying one unparsable local spell logs the load
+		// error on every hook. It resolves the daemon socket itself, exactly as
+		// `server job` did before this verb replaced it. Every other job verb reads the
+		// workspace and takes the default.
+		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
 	case "server":
 		// server subcommands manage the daemon directly and must never forward or host
 		// their own per-process proc server. start IS the daemon (special-cased in startup);
