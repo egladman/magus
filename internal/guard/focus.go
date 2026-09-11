@@ -95,7 +95,7 @@ type focusGrade struct {
 // workspace, no project holding the cwd, a command that does not parse, an operand
 // that resolves outside the workspace. A path magus cannot attribute has no lane it
 // could be outside of, and an advisory fired on a guess is one readers learn to skip.
-func gradeFocusRead(ctx context.Context, deps Deps, actingLease, command string) focusGrade {
+func gradeFocusRead(ctx context.Context, deps Dependencies, actingLease, command string) focusGrade {
 	if strings.TrimSpace(command) == "" {
 		return focusGrade{}
 	}

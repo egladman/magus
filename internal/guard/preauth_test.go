@@ -221,22 +221,22 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 	} {
 		for id, run := range templates {
 			t.Run(role.name+"/"+id, func(t *testing.T) {
-				if deny := Evaluate(testDeps(), run).Deny; deny != "" {
+				if deny := Evaluate(testDependencies(), run).Deny; deny != "" {
 					t.Errorf("the %q breadcrumb serves %q, which the guard denies for every role:\n%s", id, run, deny)
 				}
-				for _, rule := range []func(context.Context, Deps, string, string) string{
+				for _, rule := range []func(context.Context, Dependencies, string, string) string{
 					denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind,
 					// Pre-authorization stands the focus rule down too, so a template
 					// whose operands leave a reviewer's focus would clear with nothing
 					// having graded it.
-					func(ctx context.Context, deps Deps, lease, command string) string {
+					func(ctx context.Context, deps Dependencies, lease, command string) string {
 						if grade := gradeFocusRead(ctx, deps, lease, command); grade.Decision == "deny" {
 							return grade.Reason
 						}
 						return ""
 					},
 				} {
-					if reason := rule(ctx, Deps{}, role.lease, run); reason != "" {
+					if reason := rule(ctx, Dependencies{}, role.lease, run); reason != "" {
 						t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
 							"`next` has to be computed for the acting role, not filtered after the fact:\n%s",
 							id, run, role.name, reason)

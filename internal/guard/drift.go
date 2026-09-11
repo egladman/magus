@@ -49,7 +49,7 @@ type scopeDrift struct {
 // Silent on every uncertainty, the contract every guard rule here keeps: no workspace,
 // a workspace that is not the one the host reported, a path no project owns, or a
 // session with nothing recorded yet. A first write has no scope to have drifted from.
-func gradeScopeDrift(ctx context.Context, deps Deps, markers hint.Gate, actingLease, writePath string) scopeDrift {
+func gradeScopeDrift(ctx context.Context, deps Dependencies, markers hint.Gate, actingLease, writePath string) scopeDrift {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" || markers.CacheDir() == "" {
 		return scopeDrift{}

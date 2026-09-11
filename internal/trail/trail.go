@@ -188,10 +188,10 @@ type AgentCommand struct {
 	Reason     string
 	Context    string
 	Lease      string
-	// Preauth is the `next` template that had already served this exact command to this
-	// session, so the guard let it through without grading it against the caller's role.
-	// Empty for every other observation, which is nearly all of them.
-	Preauth string
+	// PreauthorizedBy is the `next` template that had already served this exact command to
+	// this session, so the guard let it through without grading it against the caller's
+	// role. Empty for every other observation, which is nearly all of them.
+	PreauthorizedBy string
 }
 
 const agentCommandSchemaVersion = 1
@@ -214,7 +214,7 @@ type agentCommandResponse struct {
 	Context       string `json:"context,omitempty"`
 	// No schema bump: an added optional field a reader can ignore leaves every existing
 	// blob readable and every existing reader correct.
-	Preauth string `json:"preauthorized_by,omitempty"`
+	PreauthorizedBy string `json:"preauthorized_by,omitempty"`
 }
 
 // AppendAgentCommand writes one normalized agent-hook observation into the existing activity
@@ -248,11 +248,11 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Path:          command.Path,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
-		SchemaVersion: agentCommandSchemaVersion,
-		Decision:      command.Decision,
-		Reason:        command.Reason,
-		Context:       command.Context,
-		Preauth:       command.Preauth,
+		SchemaVersion:   agentCommandSchemaVersion,
+		Decision:        command.Decision,
+		Reason:          command.Reason,
+		Context:         command.Context,
+		PreauthorizedBy: command.PreauthorizedBy,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)

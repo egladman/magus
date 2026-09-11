@@ -238,7 +238,7 @@ func gateRepeatBrief(runs int, spent time.Duration) string {
 // an empty field is an undeclared boundary, but a bound worker is a worker either way and
 // the gate is still the orchestrator's; the empty field says nobody wrote down what this
 // unit should run, which is a reason to ask rather than a licence to run everything.
-func denyLeaseScopedGate(ctx context.Context, deps Deps, actingLease, command string) string {
+func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" || !commandRunsGate(command) {
 		return ""
 	}
@@ -262,7 +262,7 @@ func denyLeaseScopedGate(ctx context.Context, deps Deps, actingLease, command st
 // ledger cannot answer. An unreadable ledger and an id nobody declared are one silence
 // here: both leave nothing to judge against, and a rule the guard cannot evaluate must
 // not block a tool call.
-func actingLiveLease(ctx context.Context, deps Deps, actingLease string) (types.Lease, bool) {
+func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string) (types.Lease, bool) {
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if !standing.declared || !standing.state.Live() {
 		return types.Lease{}, false
@@ -293,7 +293,7 @@ func (s leaseStanding) terminal() bool {
 // Terminal ones included, because "does this id mean anything here" is what separates a
 // typo from a plan that has already finished, and the two cases want opposite verdicts: a
 // dead id looked exactly like a guarded session.
-func actingLeaseStanding(ctx context.Context, deps Deps, actingLease string) leaseStanding {
+func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease string) leaseStanding {
 	if !types.ValidLeaseID(actingLease) {
 		return leaseStanding{}
 	}
@@ -379,7 +379,7 @@ func adviseTerminalLease(standing leaseStanding, actingLease string) string {
 // Unbound callers are untouched too, for the reason every lease rule here gives: an
 // orchestrator and a person at a terminal both name no lease, and they are the ones who
 // write rows.
-func denyLeaseScopedRebind(ctx context.Context, deps Deps, actingLease, command string) string {
+func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
 	}
@@ -570,7 +570,7 @@ func validationNamesGate(validation string) bool {
 //
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not git.
-func denyLeaseScopedVCS(ctx context.Context, deps Deps, actingLease, command string) string {
+func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, command string) string {
 	if actingLease == "" {
 		return ""
 	}

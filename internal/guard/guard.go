@@ -28,14 +28,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// Deps are the workspace facts the rules cannot resolve for themselves: they depend on the
+// Dependencies are the workspace facts the rules cannot resolve for themselves: they depend on the
 // caller's loaded config and on plumbing that belongs to the CLI. Passed rather than
 // discovered, so a rule can be graded against a fixture workspace and so the guard never
 // grows a second config read of its own.
 //
 // A nil member is a caller that cannot answer, and every rule that needs it falls silent
 // rather than guessing.
-type Deps struct {
+type Dependencies struct {
 	// Inspect opens the workspace at root. An empty root means the one the hook process
 	// runs in, which the caller may answer from a memoized load.
 	Inspect func(ctx context.Context, root string) (types.WorkspaceRepository, error)
@@ -58,32 +58,32 @@ type Deps struct {
 	Spells func() []*spells.Spell
 }
 
-// errNoDep is what an unset Deps member answers with, so a rule takes the same silent
+// errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
 // path it takes for a workspace it could not open.
-var errNoDep = errors.New("guard: the caller supplied no resolver for this fact")
+var errNoDependency = errors.New("guard: the caller supplied no resolver for this fact")
 
-func (d Deps) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
+func (d Dependencies) inspect(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 	if d.Inspect == nil {
-		return nil, errNoDep
+		return nil, errNoDependency
 	}
 	return d.Inspect(ctx, root)
 }
 
-func (d Deps) cacheDir(root string) (string, error) {
+func (d Dependencies) cacheDir(root string) (string, error) {
 	if d.CacheDir == nil {
-		return "", errNoDep
+		return "", errNoDependency
 	}
 	return d.CacheDir(root)
 }
 
-func (d Deps) graphStaleAdvice(ctx context.Context) string {
+func (d Dependencies) graphStaleAdvice(ctx context.Context) string {
 	if d.GraphStaleAdvice == nil {
 		return ""
 	}
 	return d.GraphStaleAdvice(ctx)
 }
 
-func (d Deps) spells() []*spells.Spell {
+func (d Dependencies) spells() []*spells.Spell {
 	if d.Spells == nil {
 		return nil
 	}
@@ -131,7 +131,7 @@ type Verdict struct {
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
 // nothing here saw it.
-func Judge(ctx context.Context, deps Deps, req Request) Verdict {
+func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Session: req.Session, Transcript: req.Transcript, Event: req.Event}
@@ -349,7 +349,7 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
 		// the tool disagreeing with itself.
-		for _, rule := range []func(context.Context, Deps, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind} {
+		for _, rule := range []func(context.Context, Dependencies, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
@@ -717,18 +717,18 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		return
 	}
 	command := trail.AgentCommand{
-		Actor:      "agent",
-		Workspace:  location.workspace,
-		Host:       who.Host,
-		Session:    who.Session,
-		Transcript: who.Transcript,
-		Event:      who.Event,
-		Tool:       tool,
-		Lease:      lease,
-		Preauth:    preauth,
-		Decision:   verdict.Decision,
-		Reason:     verdict.Reason,
-		Context:    verdict.Context,
+		Actor:           "agent",
+		Workspace:       location.workspace,
+		Host:            who.Host,
+		Session:         who.Session,
+		Transcript:      who.Transcript,
+		Event:           who.Event,
+		Tool:            tool,
+		Lease:           lease,
+		PreauthorizedBy: preauth,
+		Decision:        verdict.Decision,
+		Reason:          verdict.Reason,
+		Context:         verdict.Context,
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -742,7 +742,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 // activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
 // spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
 // there is no verdict to record, because a spawn is not a guard surface.
-func appendHookSpawn(ctx context.Context, deps Deps, req hookRequest, who hookAttribution) {
+func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, who hookAttribution) {
 	if req.Value == "" {
 		return
 	}
@@ -781,7 +781,7 @@ func hookSearchHints(cacheDir string) *hint.Translator {
 // client process, outside the daemon's memory. Tests can pin a temporary base through context so
 // a guard unit test never writes its checkout's real activity trail; hookContextAt pins the
 // checkout a host's envelope named the same way.
-func hookLocation(ctx context.Context, deps Deps) location {
+func hookLocation(ctx context.Context, deps Dependencies) location {
 	if location, ok := ctx.Value(locationKey{}).(location); ok {
 		return location
 	}
@@ -792,7 +792,7 @@ func hookLocation(ctx context.Context, deps Deps) location {
 // The process cwd's workspace is the one the caller's config was loaded for, so its
 // resolved config applies; another checkout reads its own magus.yaml, because a cache dir
 // configured in the orchestrator's tree says nothing about where a worker's cache lives.
-func hookLocationAt(deps Deps, dir string) location {
+func hookLocationAt(deps Dependencies, dir string) location {
 	root, err := magus.FindRoot(dir)
 	if err != nil {
 		return location{}
@@ -823,7 +823,7 @@ func hookLocationAt(deps Deps, dir string) location {
 // only thing that finds it. A location already pinned (a test's) wins, and a cwd magus
 // cannot resolve to a workspace changes nothing. A relative cwd is ignored rather than
 // resolved against the hook process, whose directory is the thing it must not stand for.
-func hookContextAt(ctx context.Context, deps Deps, cwd string) context.Context {
+func hookContextAt(ctx context.Context, deps Dependencies, cwd string) context.Context {
 	if !filepath.IsAbs(cwd) {
 		return ctx
 	}

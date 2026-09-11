@@ -103,7 +103,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	t.Run("inside another live lease's write paths", func(t *testing.T) {
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "lease-a", "the denial must name the owner")
 		assert.Contains(t, got.Reason, "own the ledger store", "the denial must carry the owner's goal")
@@ -116,7 +116,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("inside the acting lease's own deny paths", func(t *testing.T) {
 		// Also pins the precedence: cmd/magus/gen is inside lease-b's write tree AND on its
 		// deny list, and the more specific declaration is the one that decides.
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "DENIED")
 		assert.Contains(t, got.Reason, "lease-b")
@@ -126,7 +126,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 	t.Run("outside the acting lease's own write paths", func(t *testing.T) {
 		// Ground nobody else claims. The lane the orchestrator handed out is still the
 		// lane, and a worker that widens its own is what the declaration exists to catch.
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "README.md"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "README.md"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "lease-b")
 		assert.Contains(t, got.Reason, "README.md")
@@ -142,7 +142,7 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 			State:    types.StateRunning,
 		})
 		ctx, root := fleetFixture(t, leases...)
-		got := gradeLeasedWrite(ctx, Deps{}, "scout", filepath.Join(root, "README.md"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "scout", filepath.Join(root, "README.md"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "read_only", "the denial must name the field that decided it")
 		assert.Contains(t, got.Reason, "scout")
@@ -159,7 +159,7 @@ func TestGradeLeasedWritePasses(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	t.Run("inside the acting lease's own write paths", func(t *testing.T) {
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
 	})
 
 	t.Run("a lease that declared no write paths", func(t *testing.T) {
@@ -168,15 +168,15 @@ func TestGradeLeasedWritePasses(t *testing.T) {
 		leases := fleetLeases()
 		leases[1].WritePaths, leases[1].DenyPaths = nil, nil
 		ctx, root := fleetFixture(t, leases...)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "README.md")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "README.md")).Decision)
 	})
 
 	t.Run("outside the workspace", func(t *testing.T) {
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(t.TempDir(), "elsewhere.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(t.TempDir(), "elsewhere.go")).Decision)
 	})
 
 	t.Run("un-enrolled on ground no lease claims", func(t *testing.T) {
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "README.md")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "README.md")).Decision)
 	})
 }
 
@@ -185,7 +185,7 @@ func TestGradeLeasedWritePasses(t *testing.T) {
 func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 	t.Run("no ledger at all", func(t *testing.T) {
 		ctx, root := fleetFixture(t)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
 	t.Run("every lease terminal", func(t *testing.T) {
@@ -194,14 +194,14 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 		ctx, root := fleetFixture(t, leases...)
 		// A finished lease has stopped competing for its paths, which is the rule
 		// types.leaseOverlaps applies when it decides which pairs to report.
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
 	t.Run("no state recorded", func(t *testing.T) {
 		leases := fleetLeases()
 		leases[0].State, leases[1].State = "", ""
 		ctx, root := fleetFixture(t, leases...)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
 	t.Run("no trail location", func(t *testing.T) {
@@ -209,7 +209,7 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 		// hookLocation up from the CWD to this checkout's real cache dir, and the test
 		// would then grade against whatever plan the developer is actually running.
 		ctx := context.WithValue(t.Context(), locationKey{}, location{})
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", "internal/ledger/store.go").Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-b", "internal/ledger/store.go").Decision)
 	})
 }
 
@@ -223,7 +223,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		leases := fleetLeases()
 		leases[1].DenyPaths = []string{"cmd/magus/[gen/**"}
 		ctx, root := fleetFixture(t, leases...)
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "advise", got.Decision, "an unreadable pattern says nothing about the write, only that nothing graded it")
 		assert.Contains(t, got.Context, "cmd/magus/[gen/**", "the advisory must name the pattern to fix")
 		assert.Contains(t, got.Context, "lease-b")
@@ -234,7 +234,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		leases := fleetLeases()
 		leases[0].WritePaths = []string{"internal/[ledger/**"}
 		ctx, root := fleetFixture(t, leases...)
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a")
 	})
@@ -246,7 +246,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		leases := fleetLeases()
 		leases[1].DenyPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
 		ctx, root := fleetFixture(t, leases...)
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", got.Decision, "the valid deny pattern must deny even though an earlier entry could not be read")
 	})
 }
@@ -257,7 +257,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 // is the wrong way to be wrong.
 func TestGradeLeasedWriteUnenrolled(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
-	got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/ledger/store.go"))
+	got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/ledger/store.go"))
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "lease-a", "the advisory must name the lease already working there")
 	assert.Contains(t, got.Context, "own the ledger store")
@@ -281,20 +281,20 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	})
 
 	t.Run("on unclaimed ground the write rule has nothing to say", func(t *testing.T) {
-		got := gradeLeasedWrite(ctx, Deps{}, "lease b!", filepath.Join(root, "README.md"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease b!", filepath.Join(root, "README.md"))
 		assert.Empty(t, got.Decision)
 	})
 
 	t.Run("on owned ground it advises rather than denying", func(t *testing.T) {
 		// The id is unusable, so the write is graded as un-enrolled, and an un-enrolled
 		// write is never denied, even on another lease's ground.
-		got := gradeLeasedWrite(ctx, Deps{}, "lease b!", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease b!", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a")
 	})
 
 	t.Run("a valid id nobody declared is un-enrolled, not denied", func(t *testing.T) {
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-z", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-z", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a")
 		assert.NotContains(t, got.Context, "not a valid lease id")
@@ -311,7 +311,7 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 	assert.NotEqual(t, "deny", got.Decision, "a ledger magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
@@ -404,11 +404,11 @@ func TestDenyNotesWrite(t *testing.T) {
 
 	// Nothing declared: the feature is off, so nothing is judged and nothing is guessed.
 	for _, path := range []string{"notes/a.md", filepath.Join(root, "notes", "a.md"), "internal/foo.go"} {
-		assert.Empty(t, denyNotesWrite(Deps{}, path),
+		assert.Empty(t, denyNotesWrite(Dependencies{}, path),
 			"with no declared store, %q must pass - a deny fired on a guess blocks work in a workspace that never opted in", path)
 	}
 
-	deps := Deps{NotesShared: "notes"}
+	deps := Dependencies{NotesShared: "notes"}
 	// The store must exist to be defended; see TestDenyNotesWriteRequiresTheStoreToExist.
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", "nested"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "team", "notes"), 0o755))
@@ -428,7 +428,7 @@ func TestDenyNotesWrite(t *testing.T) {
 	}
 
 	// The exclusion follows the declaration, not the name.
-	wide := Deps{NotesShared: "team/notes"}
+	wide := Dependencies{NotesShared: "team/notes"}
 	assert.Empty(t, denyNotesWrite(wide, "notes/a.md"), "a different directory named notes is not the store")
 	assert.NotEmpty(t, denyNotesWrite(wide, "team/notes/a.md"))
 }
@@ -450,7 +450,7 @@ func TestDenyNotesWriteIgnoresAForeignDeclaration(t *testing.T) {
 	require.NoError(t, os.Chdir(root))
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	deps := Deps{NotesShared: "notes"}
+	deps := Dependencies{NotesShared: "notes"}
 
 	// No magus.yaml here, so the declaration can only have come from elsewhere on the
 	// machine. This repo never opted in.
@@ -481,7 +481,7 @@ func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
 	require.NoError(t, os.Chdir(root))
 	t.Cleanup(func() { _ = os.Chdir(cwd) })
 
-	deps := Deps{NotesShared: "notes"}
+	deps := Dependencies{NotesShared: "notes"}
 
 	require.NoDirExists(t, filepath.Join(root, "notes"), "the store has no files yet - that is the case under test")
 	assert.NotEmpty(t, denyNotesWrite(deps, "notes/first.md"),
@@ -518,16 +518,16 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 		"cd /tmp && ./magus notes promote foo",
 		"magus notes promote foo && (",
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Contains(t, v.Deny, "magus memory put", "the reason routes to the store an agent MAY write")
 		assert.Equal(t, denyRule{Name: denyRuleNotesAuthor}, v.Rule, "%q must deny as the notes rule", cmd)
 	}
 	// Tokens after `--` go to the spell's tool, not to magus.
-	assert.Empty(t, Evaluate(testDeps(), "magus run go::go-test . -- notes capture").Deny)
+	assert.Empty(t, Evaluate(testDependencies(), "magus run go::go-test . -- notes capture").Deny)
 	// Reading is untouched: the boundary is on authorship, not on access.
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "%q only reads", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads", cmd)
 	}
 }
 
@@ -535,7 +535,7 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 // resolves it, so these assertions read the same store the code under test wrote.
 func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
 	t.Helper()
-	loc := hookLocation(ctx, Deps{})
+	loc := hookLocation(ctx, Dependencies{})
 	return ledger.NewStore(ledger.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
@@ -562,7 +562,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(owned), 0o755))
 	require.NoError(t, os.WriteFile(owned, []byte("package ledger // edited by hand\n"), 0o644))
 
-	got := gradeLeasedWrite(ctx, Deps{}, "", owned)
+	got := gradeLeasedWrite(ctx, Dependencies{}, "", owned)
 	require.Equal(t, "advise", got.Decision)
 
 	store := fleetLedger(t, ctx)
@@ -582,7 +582,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(mine), 0o755))
 		require.NoError(t, os.WriteFile(mine, []byte("package ledger\n"), 0o644))
 
-		gradeLeasedWrite(ctx, Deps{}, "lease-a", mine)
+		gradeLeasedWrite(ctx, Dependencies{}, "lease-a", mine)
 
 		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "lease-a"))
 	})
@@ -592,7 +592,7 @@ func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
 		loose := filepath.Join(root, "README.md")
 		require.NoError(t, os.WriteFile(loose, []byte("# readme\n"), 0o644))
 
-		gradeLeasedWrite(ctx, Deps{}, "", loose)
+		gradeLeasedWrite(ctx, Dependencies{}, "", loose)
 
 		store := fleetLedger(t, ctx)
 		assert.Empty(t, unattributedOf(t, store, "lease-a"))
@@ -618,7 +618,7 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 	t.Run("an unregistered lease is denied even inside its own paths", func(t *testing.T) {
 		ctx, root := fleetFixture(t, unregistered()...)
 
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
 
 		require.Equal(t, "deny", got.Decision, "owning the path is not enough; the base has to be on record")
 		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the command")
@@ -630,7 +630,7 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 		// The positive control. Without it this would pass against a guard that denied everything.
 		ctx, root := fleetFixture(t, fleetLeases()...)
 
-		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
 
 		assert.Empty(t, got.Decision)
 	})
@@ -641,7 +641,7 @@ func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
 		// failure the guard must not have.
 		ctx, root := fleetFixture(t, unregistered()...)
 
-		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "cmd/magus/diff.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "cmd/magus/diff.go"))
 
 		assert.NotEqual(t, "deny", got.Decision)
 	})
@@ -656,7 +656,7 @@ func TestGradeLeasedWriteFlagsADivergedBase(t *testing.T) {
 	fleet[1].BaseVerdict = types.BaseDiverged
 	ctx, root := fleetFixture(t, fleet...)
 
-	got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
 
 	require.Equal(t, "advise", got.Decision, "a deliberate rebase must not be blocked")
 	assert.Contains(t, got.Context, "rev-somewhere-else")
@@ -674,7 +674,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	t.Run("spawn ancestry and no lease advises", func(t *testing.T) {
 		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t)
-		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go"))
 
 		require.Equal(t, "advise", got.Decision)
 		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
@@ -686,7 +686,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 	t.Run("no ancestry stays silent", func(t *testing.T) {
 		t.Setenv(trail.EnvTraceparent, "")
 		ctx, root := fleetFixture(t)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go")).Decision,
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"a run carrying no trace context IS a person, and a person editing their own checkout is owed silence")
 	})
 
@@ -695,13 +695,13 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		// does not parse claims nothing, so there is no worker here to teach.
 		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
 		ctx, root := fleetFixture(t)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go")).Decision)
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go")).Decision)
 	})
 
 	t.Run("an enrolled worker stays silent", func(t *testing.T) {
 		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t)
-		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
+		assert.Empty(t, gradeLeasedWrite(ctx, Dependencies{}, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
 			"naming a lease is the whole thing being asked for")
 	})
 
@@ -710,7 +710,7 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		// grading answers, and this advisory is not reached at all.
 		t.Setenv(trail.EnvTraceparent, spawned)
 		ctx, root := fleetFixture(t, fleetLeases()...)
-		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "lease-a", "the collision report is the more specific answer")
 	})

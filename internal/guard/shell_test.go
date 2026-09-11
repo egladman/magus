@@ -439,7 +439,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cat cmd/magus/main.go"},
 	}
 	for _, tt := range tests {
-		v := Evaluate(testDeps(), tt.command)
+		v := Evaluate(testDependencies(), tt.command)
 		if (tt.rule != denyRule{}) {
 			// assert rather than require: a require here stops the loop at the first
 			// wrong row, and a rule change that moves seven of them should name all
@@ -474,7 +474,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 // agree only when the pattern is a real symbol. The advisory hands back the exact command AND
 // hedges: an empty semantic result means the pattern was text, and grep was the right tool.
 func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
-	v := Evaluate(testDeps(), `grep -rn "funcName" .`)
+	v := Evaluate(testDependencies(), `grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
 	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
 }
@@ -485,7 +485,7 @@ func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 // find comes first on the line, and the piped grep counts as repo-wide, since
 // the find is what feeds it the tree.
 func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
-	v := Evaluate(testDeps(), `find . -name '*.go' | xargs grep -l HandleFoo`)
+	v := Evaluate(testDependencies(), `find . -name '*.go' | xargs grep -l HandleFoo`)
 	assert.Empty(t, v.Deny)
 	assert.Contains(t, v.Context, "magus refs HandleFoo", "the content question leads")
 	assert.NotContains(t, v.Context, "kind=file", "the file listing must not outrank it")
@@ -541,7 +541,7 @@ func TestRenderAdvisoryLead(t *testing.T) {
 // a `<terms>` placeholder passed the whole suite. The repeat arm is pinned too: it is
 // the text a session meets on every firing after the first.
 func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
-	v := Evaluate(testDeps(), `grep -rn "cache key" docs/concepts/cache.md`)
+	v := Evaluate(testDependencies(), `grep -rn "cache key" docs/concepts/cache.md`)
 	assert.Empty(t, v.Deny)
 	assert.Equal(t, advisoryDocSearch, v.Kind)
 	assert.Contains(t, v.Context, `magus query kind=docsection "cache key"`, "the lead is runnable as printed")
@@ -553,7 +553,7 @@ func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
 // wording is what is left to say. Naming a concrete query there would be inventing
 // terms the reader never typed.
 func TestDocReadKeepsThePlaceholderAdvice(t *testing.T) {
-	v := Evaluate(testDeps(), "cat docs/doctrine.md")
+	v := Evaluate(testDependencies(), "cat docs/doctrine.md")
 	assert.Equal(t, advisoryDocSearch, v.Kind)
 	assert.Equal(t, docSearchBrief, v.Brief)
 	assert.Equal(t, docSearchAdvice, v.Context)
@@ -597,7 +597,7 @@ func TestSearchAdvisoryLeadRanksSearchOverFileFind(t *testing.T) {
 // what it is handed, so this proves the scoping path with no hook, manifest, or
 // cache directory in the way.
 func TestEvaluateBashGuardWithScopedTranslator(t *testing.T) {
-	v := evaluateWith(testDeps(), "grep -rn Foo docs/", hint.NewTranslator(hint.WithProjects([]string{"docs"})))
+	v := evaluateWith(testDependencies(), "grep -rn Foo docs/", hint.NewTranslator(hint.WithProjects([]string{"docs"})))
 	require.Empty(t, v.Deny)
 	require.Equal(t, advisoryCodeSearch, v.Kind)
 	require.Contains(t, v.Context, `magus query Foo 'project=~^docs(/|$)'`)
@@ -676,7 +676,7 @@ func TestParseGuardCommands(t *testing.T) {
 func TestParseGuardCommandsUnparsable(t *testing.T) {
 	_, ok := ParseCommands("go test ./... && (")
 	assert.False(t, ok)
-	_, denied := firstRawToolDenied(testDeps(), "go test ./... && (")
+	_, denied := firstRawToolDenied(testDependencies(), "go test ./... && (")
 	assert.False(t, denied)
 }
 
@@ -694,10 +694,10 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 	))
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	match, ok := rawToolMatch(testDeps(), hint.Invocation{Name: "catalog-tool", Args: []string{"verify", "./..."}})
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"verify", "./..."}})
 	require.True(t, ok)
 	assert.Equal(t, toolMatch{spell: spellName, operation: "verify"}, match)
-	assert.False(t, rawToolDenied(testDeps(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
+	assert.False(t, rawToolDenied(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
 }
 
 // The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
@@ -706,7 +706,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 // arg-passthrough escape hatch, which is the one thing the target form does not
 // cover as directly.
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
-	verdict := Evaluate(testDeps(), "go test ./... -run TestFocused")
+	verdict := Evaluate(testDependencies(), "go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
 	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
 	assert.Contains(t, verdict.Deny, "magus describe targets")
@@ -739,7 +739,7 @@ func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
 		"cd /tmp/copy && magus run lint .", "cd libs/foo && magus run test",
 		`grep -rn "funcName" .`, "magus notes edit x", "sed -i 's/a/b/' f.go",
 	} {
-		v := Evaluate(testDeps(), command)
+		v := Evaluate(testDependencies(), command)
 		assert.NotRegexp(t, canonical, v.Deny, "%q names a canonical target in its deny reason", command)
 		assert.NotRegexp(t, canonical, v.Context, "%q names a canonical target in its advisory", command)
 	}
@@ -844,7 +844,7 @@ func TestGuardAdversarial(t *testing.T) {
 	for _, tt := range denied {
 		t.Run("deny/"+tt.name, func(t *testing.T) {
 			cmds, _ := ParseCommands(tt.command)
-			assert.NotEmpty(t, Evaluate(testDeps(), tt.command).Deny,
+			assert.NotEmpty(t, Evaluate(testDependencies(), tt.command).Deny,
 				"%q must deny (parsed: %+v)", tt.command, cmds)
 		})
 	}
@@ -909,7 +909,7 @@ func TestGuardAdversarial(t *testing.T) {
 	for _, tt := range allowed {
 		t.Run("allow/"+tt.name, func(t *testing.T) {
 			cmds, _ := ParseCommands(tt.command)
-			assert.Empty(t, Evaluate(testDeps(), tt.command).Deny,
+			assert.Empty(t, Evaluate(testDependencies(), tt.command).Deny,
 				"%q must not deny (parsed: %+v)", tt.command, cmds)
 		})
 	}
@@ -949,7 +949,7 @@ func TestGuardKnownHoles(t *testing.T) {
 	}
 	for _, tt := range holes {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Empty(t, Evaluate(testDeps(), tt.command).Deny,
+			assert.Empty(t, Evaluate(testDependencies(), tt.command).Deny,
 				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
 		})
 	}
@@ -973,13 +973,13 @@ func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
 	} {
 		_, parsed := ParseCommands(cmd)
 		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "%q must deny on the fallback path", cmd)
 	}
 
 	// Reading a stash is still safe, whether or not the line parses.
 	for _, cmd := range []string{"git stash list && (", "git stash show && ("} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "%q only reads", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads", cmd)
 	}
 }
 
@@ -991,18 +991,18 @@ func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
 func TestDenyOutranksHeldAdvisory(t *testing.T) {
 	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
 
-	require.NotEmpty(t, Evaluate(testDeps(), offending).Deny, "the line alone must deny")
+	require.NotEmpty(t, Evaluate(testDependencies(), offending).Deny, "the line alone must deny")
 	for _, suffix := range []string{
 		"; git commit -q -m x && git log --oneline -1",
 		"; git status --porcelain",
 		"; git add -- file.go",
 	} {
-		assert.NotEmpty(t, Evaluate(testDeps(), offending+suffix).Deny,
+		assert.NotEmpty(t, Evaluate(testDependencies(), offending+suffix).Deny,
 			"appending %q must not downgrade a deny to an advisory", suffix)
 	}
 
 	// The advisory still surfaces when nothing denies: holding it must not drop it.
-	plain := Evaluate(testDeps(), "git commit -q -m x")
+	plain := Evaluate(testDependencies(), "git commit -q -m x")
 	assert.Empty(t, plain.Deny)
 	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
 }
@@ -1014,13 +1014,13 @@ func TestDenyOutranksHeldAdvisory(t *testing.T) {
 // distinct messages, because the right replacement differs by shape: a filter
 // wanted one value, a redirect wanted a copy of the whole thing.
 func TestOutputGuardNamesTheReplacement(t *testing.T) {
-	piped := Evaluate(testDeps(), "magus describe targets | grep build").Deny
+	piped := Evaluate(testDependencies(), "magus describe targets | grep build").Deny
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
 	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
 
-	redirected := Evaluate(testDeps(), "magus affected ci --silent > /dev/null 2>&1").Deny
+	redirected := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
 	require.NotEmpty(t, redirected)
 	assert.Contains(t, redirected, "magus query output", "the captured log is already persisted; that is the replacement")
 	assert.Contains(t, redirected, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
@@ -1037,7 +1037,7 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 // wrapper, so the deny was talking an agent out of the command built to replace it.
 // `git add -- <paths>` stays named: a hand-picked subset is still fine.
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
-	verdict := Evaluate(testDeps(), "git add -A")
+	verdict := Evaluate(testDependencies(), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
 	assert.Contains(t, verdict.Deny, hint.VCSAdd.String())
 	assert.Contains(t, verdict.Deny, hint.VCSAdd.With("--dry-run"))
@@ -1063,7 +1063,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git stash create",
 		"cd libs/foo && git rev-parse HEAD",
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
@@ -1081,7 +1081,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git describe --tags --always",
 		"git describe --always",
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny)
 		assert.NotContains(t, v.Context, "magus vcs checkpoint",
 			"%q is not asking which revision this is", cmd)
@@ -1090,7 +1090,7 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 	// A destructive stash form is still a deny: adding `create` to the safe list
 	// must not have widened the arm.
 	for _, cmd := range []string{"git stash", "git stash push -u", "git stash pop"} {
-		assert.NotEmpty(t, Evaluate(testDeps(), cmd).Deny, "%q must still deny", cmd)
+		assert.NotEmpty(t, Evaluate(testDependencies(), cmd).Deny, "%q must still deny", cmd)
 	}
 }
 
@@ -1116,7 +1116,7 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		"pip-compile",
 		"cd libs/foo && pnpm add lodash",
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
@@ -1124,7 +1124,7 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
 	// the reader is sent to a target that would refuse the write.
-	tidy := Evaluate(testDeps(), "go mod tidy")
+	tidy := Evaluate(testDependencies(), "go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
 	assert.Contains(t, tidy.Deny, ":update")
 
@@ -1132,7 +1132,7 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	// dependency at all. Firing here would put an advisory on the most routine
 	// command in a JS repo.
 	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
-		assert.NotContains(t, Evaluate(testDeps(), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
+		assert.NotContains(t, Evaluate(testDependencies(), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
 	}
 }
 
@@ -1151,7 +1151,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		"cat x | sed -i s/a/b/ y",
 		"find . -name '*.go' -exec sed -i 's/a/b/' {} +",
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 	}
 	for _, cmd := range []string{
@@ -1160,7 +1160,7 @@ func TestGuardDeniesInPlaceSed(t *testing.T) {
 		"cat f | sed -e 's/a/b/'",
 		"echo x | sed s/x/y/",
 	} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
 	}
 }
 
@@ -1181,7 +1181,7 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 		`perl -i.bak -pe s/a/b/ f`,
 		`ruby -i -pe 'gsub(/a/,"b")' f.rb`,
 	} {
-		assert.NotEmpty(t, Evaluate(testDeps(), cmd).Deny, "expected a deny for %q", cmd)
+		assert.NotEmpty(t, Evaluate(testDependencies(), cmd).Deny, "expected a deny for %q", cmd)
 	}
 	for _, cmd := range []string{
 		// Authoring a file is not a rewrite: no substitution, nothing to mis-target.
@@ -1191,7 +1191,7 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 		`perl -ne 'print if /a/' f.go`,
 		`node -e "console.log(x.replace(/a/,'b'))"`,
 	} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
 	}
 }
 
@@ -1201,7 +1201,7 @@ func TestGuardDeniesScriptedRewrite(t *testing.T) {
 // which is exactly the fallback the advisory exists to prevent.
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()
-	v := Evaluate(testDeps(), `grep -rn "someFunc" .`)
+	v := Evaluate(testDependencies(), `grep -rn "someFunc" .`)
 	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
 	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
@@ -1227,7 +1227,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 		// A line the parser cannot read still falls back to the pattern.
 		`magus diff ` + "--ack" + ` && (`,
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
 		assert.Contains(t, v.Deny, "only a person can record one")
 	}
@@ -1243,7 +1243,7 @@ func TestGuardAllowsReadingTheReport(t *testing.T) {
 		`magus diff --impact`,
 		`magus diff -o json`,
 	} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "unexpected deny for %q", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "unexpected deny for %q", cmd)
 	}
 }
 
@@ -1264,7 +1264,7 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		"./magus run build console --silent; ./magus affected ci --no-default-charms",
 	}
 	for _, cmd := range chained {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "a chain is questionable, not forbidden: %s", cmd)
 		assert.Contains(t, v.Context, "compose through ctx.needs", cmd)
 	}
@@ -1275,7 +1275,7 @@ func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
 		"magus run build api web/studio",
 		"echo 'magus run format . ; magus run lint .'",
 	} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Context, "should not fire: %s", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Context, "should not fire: %s", cmd)
 	}
 }
 
@@ -1287,7 +1287,7 @@ func TestGuardAllowsAnExplicitSideChoice(t *testing.T) {
 		"git checkout --ours -- a.go",
 		"git checkout --theirs -- a.go",
 	} {
-		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
 	}
 }
 
@@ -1302,7 +1302,7 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		`while [ ! -f done.marker ]; do sleep 1; done`,
 		`until ./magus query output ref; do sleep 30; done`,
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
@@ -1332,7 +1332,7 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 		`bash -c 'grep cause: tasks/abc123.output'`,
 		`LC_ALL=C grep cause: tasks/abc123.output`,
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
 	}
@@ -1341,7 +1341,7 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 // The deny has to name what the filter was about to cut, or the reader corrects the
 // spelling instead of the mistake, and it has to route somewhere that works.
 func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
-	v := Evaluate(testDeps(), `grep -n "cause:" tasks/abc123.output | head -8`)
+	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Deny)
 	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
 		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
@@ -1365,7 +1365,7 @@ func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
 		`jq -r 'select(.level=="error")' gate.jsonl`,
 		`cat gate.jsonl | jq -r .target`,
 	} {
-		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDeps(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -1382,7 +1382,7 @@ func TestGuardDeniesWatchingCI(t *testing.T) {
 		// command, not the head of the line.
 		`GH_TOKEN=x gh run watch 123`,
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleCIWatch, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "GREEN CHANGES NOTHING", cmd)
@@ -1401,7 +1401,7 @@ func TestGuardAllowsReadingCIWithoutWaiting(t *testing.T) {
 		// Not gh at all.
 		`watch -n 5 free -m`,
 	} {
-		assert.NotEqual(t, denyRuleCIWatch, Evaluate(testDeps(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleCIWatch, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 
@@ -1416,7 +1416,7 @@ func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
 		`printf '%s\n' "replace the sed -i call with the editor tool"`,
 		`echo "run find . -name '*.go' by hand"`,
 	} {
-		v := Evaluate(testDeps(), cmd)
+		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "a mention is not an invocation: %s", cmd)
 		assert.Empty(t, v.Context, "a mention is not an invocation: %s", cmd)
 	}
@@ -1424,13 +1424,13 @@ func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
 
 // The conversion must not have blunted the rules: each still fires on the real thing.
 func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
-	assert.NotEmpty(t, Evaluate(testDeps(), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
-	assert.NotEmpty(t, Evaluate(testDeps(), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
-	assert.NotEmpty(t, Evaluate(testDeps(), `grep -rn "Foo" .`).Context, "a recursive grep")
-	assert.NotEmpty(t, Evaluate(testDeps(), `rg Foo`).Context, "ripgrep is repo-wide")
-	assert.NotEmpty(t, Evaluate(testDeps(), `find . -name "*.go"`).Context, "a name query")
-	assert.NotEmpty(t, Evaluate(testDeps(), `cat docs/guide.md`).Context, "reading prose")
-	assert.NotEmpty(t, Evaluate(testDeps(), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `grep -rn "Foo" .`).Context, "a recursive grep")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `rg Foo`).Context, "ripgrep is repo-wide")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `find . -name "*.go"`).Context, "a name query")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `cat docs/guide.md`).Context, "reading prose")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
 }
 
 // The rule is about polling, not about loops or about sleep. A loop that does real work
@@ -1447,6 +1447,6 @@ func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
 		// A loop that sleeps AND does work each pass is working, not polling.
 		`while true; do ./magus run lint .; sleep 60; done`,
 	} {
-		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDeps(), cmd).Rule.Name, "should not fire: %s", cmd)
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }

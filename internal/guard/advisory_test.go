@@ -47,7 +47,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	// The deny arm reads Deny, which no gate call touches; a Kind on a deny would be a
 	// contradiction, so this also asserts the verdict carries none.
 	for _, command := range []string{"git stash", "go build ./...", "magus ls | head -5"} {
-		v := Evaluate(testDeps(), command)
+		v := Evaluate(testDependencies(), command)
 		require.NotEmpty(t, v.Deny, "fixture %q must deny", command)
 		assert.Empty(t, v.Kind, "a deny carries no advisory kind, so nothing can hold it to one firing")
 		assert.Empty(t, v.Brief, "a deny has no degraded form: the caller cannot see past a refusal")

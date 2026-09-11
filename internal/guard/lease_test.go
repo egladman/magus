@@ -204,7 +204,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 		"magus run ci .",
 		"mise exec -- ./magus affected ci",
 	} {
-		reason := denyLeaseScopedGate(ctx, Deps{}, "harness/lease-scoped-deny", command)
+		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
 		assert.Contains(t, reason, "harness/lease-scoped-deny", "the denial must name the lease")
 		assert.Contains(t, reason, command, "the denial must name what it refused")
@@ -219,7 +219,7 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 		lease := narrowLease()
 		lease.Validation = ""
 		undeclared, _ := fleetFixture(t, lease)
-		reason := denyLeaseScopedGate(undeclared, Deps{}, lease.ID, "./magus affected ci")
+		reason := denyLeaseScopedGate(undeclared, Dependencies{}, lease.ID, "./magus affected ci")
 		require.NotEmpty(t, reason)
 		assert.Contains(t, reason, lease.ID, "the denial must name the lease")
 		assert.Contains(t, reason, "declares no check", "the denial must say why: nothing was recorded to run instead")
@@ -234,18 +234,18 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 
 	t.Run("no lease", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedGate(ctx, Deps{}, "", "./magus affected ci"))
+		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "", "./magus affected ci"))
 	})
 
 	t.Run("a lease with no row", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedGate(ctx, Deps{}, "harness/absent", "./magus affected ci"))
+		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "harness/absent", "./magus affected ci"))
 	})
 
 	t.Run("a terminal row", func(t *testing.T) {
 		lease := narrowLease()
 		lease.State = types.StatePass
 		done, _ := fleetFixture(t, lease)
-		assert.Empty(t, denyLeaseScopedGate(done, Deps{}, lease.ID, "./magus affected ci"))
+		assert.Empty(t, denyLeaseScopedGate(done, Dependencies{}, lease.ID, "./magus affected ci"))
 	})
 
 	t.Run("a row whose validation names the gate", func(t *testing.T) {
@@ -253,20 +253,20 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 			lease := narrowLease()
 			lease.Validation = validation
 			owns, _ := fleetFixture(t, lease)
-			assert.Empty(t, denyLeaseScopedGate(owns, Deps{}, lease.ID, "./magus affected ci"), "%q", validation)
+			assert.Empty(t, denyLeaseScopedGate(owns, Dependencies{}, lease.ID, "./magus affected ci"), "%q", validation)
 		}
 	})
 
 	t.Run("a command that is not the gate", func(t *testing.T) {
-		assert.Empty(t, denyLeaseScopedGate(ctx, Deps{}, "harness/lease-scoped-deny", "./magus run go-build ."))
-		assert.Empty(t, denyLeaseScopedGate(ctx, Deps{}, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
+		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go-build ."))
+		assert.Empty(t, denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", "./magus run go::go-test . -- -run Ci ./cmd/magus/"))
 	})
 
 	t.Run("no trail location", func(t *testing.T) {
 		// Pinned EMPTY rather than left unpinned, so the case cannot reach the developer's
 		// own ledger and grade against whatever plan they are really running.
 		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-		assert.Empty(t, denyLeaseScopedGate(nowhere, Deps{}, "harness/lease-scoped-deny", "./magus affected ci"))
+		assert.Empty(t, denyLeaseScopedGate(nowhere, Dependencies{}, "harness/lease-scoped-deny", "./magus affected ci"))
 	})
 }
 
@@ -275,7 +275,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 // id, and read by the same ledger.ActingLease the sandbox resolves through.
 func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
-	base := hookLocation(ctx, Deps{}).cacheDir
+	base := hookLocation(ctx, Dependencies{}).cacheDir
 
 	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
 
@@ -310,7 +310,7 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git cherry-pick abc123",
 		"cd sub && git commit -m done",
 	} {
-		reason := denyLeaseScopedVCS(ctx, Deps{}, worker.ID, command)
+		reason := denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
 		assert.Contains(t, reason, worker.ID)
 		assert.Contains(t, reason, "harness", "the denial names the parent the worker belongs to")
@@ -326,7 +326,7 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git log --oneline -3",
 		"./magus run go::go-test . -- -run Guard ./cmd/magus/",
 	} {
-		assert.Empty(t, denyLeaseScopedVCS(ctx, Deps{}, worker.ID, command), "%q", command)
+		assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, worker.ID, command), "%q", command)
 	}
 }
 
@@ -335,9 +335,9 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 func TestDenyLeaseScopedVCSStaysQuiet(t *testing.T) {
 	rootLease := narrowLease()
 	ctx, _ := fleetFixture(t, rootLease)
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Deps{}, "", "git commit -m done"))
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Deps{}, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
-	assert.Empty(t, denyLeaseScopedVCS(ctx, Deps{}, "harness/absent", "git commit -m done"))
+	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "", "git commit -m done"))
+	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, rootLease.ID, "git commit -m done"), "a lease with no parent is the orchestrator's own")
+	assert.Empty(t, denyLeaseScopedVCS(ctx, Dependencies{}, "harness/absent", "git commit -m done"))
 }
 
 // TestDenyLeaseScopedRebind pins the rebind rule: under a bound lease, the commands that
@@ -358,7 +358,7 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 		"magus_ledger op=put id=harness/lease-scoped-deny owned_paths=**":  "rewrite its own ledger row",
 		"magus_ledger op=put id=harness/lease-scoped-deny read_only=false": "rewrite its own ledger row",
 	} {
-		reason := denyLeaseScopedRebind(ctx, Deps{}, me, command)
+		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, command)
 		require.NotEmpty(t, reason, "%q", command)
 		assert.Contains(t, reason, what, "the denial must say what the command would do")
 		assert.Contains(t, reason, me, "the denial must name the bound lease")
@@ -386,10 +386,10 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 		// end in a verb, which is the safe direction; see magusSubcommandWords.
 		"a value-taking global flag": "magus --root /tmp/x session lease harness/other",
 	} {
-		assert.Empty(t, denyLeaseScopedRebind(ctx, Deps{}, me, command), name)
+		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), name)
 	}
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Deps{}, "", "magus session lease harness/other"),
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, "", "magus session lease harness/other"),
 		"an unbound caller is the orchestrator or the person, and they are who writes rows")
 }
 
@@ -401,27 +401,27 @@ func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
 	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _ := fleetFixture(t, wide)
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**"),
 		"dropping one of its own declarations cannot widen a role")
 
-	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
 		"adding a declaration is a widen however it is spelled")
 
-	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/**"),
 		"a pattern that happens to cover less is not a shrink this rule will try to prove")
 
-	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
 		"a shrink carrying another field is not a shrink")
 
-	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
 		"the checkpoint is the base this lease's work is graded against, and giving a lane back is not cover for moving it")
 
-	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Deps{}, wide.ID,
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
 		"both spellings at once leaves nothing saying which the store would apply")
 }
@@ -434,23 +434,23 @@ func TestActingLeaseStandingSeparatesTheThreeAnswers(t *testing.T) {
 	done.ID, done.State = "harness/finished", types.StatePass
 	ctx, _ := fleetFixture(t, narrowLease(), done)
 
-	live := actingLeaseStanding(ctx, Deps{}, narrowLease().ID)
+	live := actingLeaseStanding(ctx, Dependencies{}, narrowLease().ID)
 	assert.True(t, live.readable)
 	assert.True(t, live.declared)
 	assert.False(t, live.terminal(), "a running row is not terminal")
 
-	finished := actingLeaseStanding(ctx, Deps{}, done.ID)
+	finished := actingLeaseStanding(ctx, Dependencies{}, done.ID)
 	assert.True(t, finished.declared)
 	assert.True(t, finished.terminal())
 
-	absent := actingLeaseStanding(ctx, Deps{}, "harness/typo")
+	absent := actingLeaseStanding(ctx, Dependencies{}, "harness/typo")
 	assert.True(t, absent.readable, "the ledger answered; it just does not carry that id")
 	assert.False(t, absent.declared)
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-	assert.False(t, actingLeaseStanding(nowhere, Deps{}, narrowLease().ID).readable,
+	assert.False(t, actingLeaseStanding(nowhere, Dependencies{}, narrowLease().ID).readable,
 		"no workspace is a rule the guard cannot evaluate, not an undeclared id")
-	assert.False(t, actingLeaseStanding(ctx, Deps{}, "").readable, "no lease is nothing to look up")
+	assert.False(t, actingLeaseStanding(ctx, Dependencies{}, "").readable, "no lease is nothing to look up")
 }
 
 // TestIsGateCommandIgnoresTheReportingForms pins the carve-out the structural breadcrumb
@@ -479,11 +479,11 @@ func TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer(t *testing.T) {
 	done.State = types.StatePass
 	ctx, _ := fleetFixture(t, done)
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Deps{}, done.ID,
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, done.ID,
 		"magus_ledger op=put id="+done.ID+" write_paths=**"),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-	assert.Empty(t, denyLeaseScopedRebind(nowhere, Deps{}, done.ID, "magus_ledger op=put id="+done.ID),
+	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "magus_ledger op=put id="+done.ID),
 		"a ledger the guard cannot read leaves nothing to judge against")
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/egladman/magus"
 	// Blank-imported so its init installs the spell registry's ensure hook, exactly as
 	// cmd/magus/packs_interp.go does for the real binary: without it,
-	// project.DefaultSpellRegistry().All() in testDeps below runs against a registry
+	// project.DefaultSpellRegistry().All() in testDependencies below runs against a registry
 	// nothing ever populated, and every raw-tool test would match against an empty
 	// catalog. See internal/interp/bindings/spell.go's init.
 	_ "github.com/egladman/magus/internal/interp/bindings"
@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testDeps resolves the workspace the way the CLI's hookDeps does, so a rule graded
+// testDependencies resolves the workspace the way the CLI's hookDeps does, so a rule graded
 // here reads the same tree the hook would.
-func testDeps() Deps {
-	return Deps{
+func testDependencies() Dependencies {
+	return Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
 				found, err := magus.FindRoot("")

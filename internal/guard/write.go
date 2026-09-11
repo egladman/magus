@@ -32,7 +32,7 @@ import (
 // It teaches rather than blocks: a hand-edited generated file is wasteful, not
 // destructive. Silent on every uncertainty, because an advisory fired on a guess
 // trains the reader to ignore it.
-func adviseGeneratedWrite(ctx context.Context, deps Deps, path string) string {
+func adviseGeneratedWrite(ctx context.Context, deps Dependencies, path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return ""
@@ -123,7 +123,7 @@ func workspaceDeclaresNotes(root string) bool {
 //
 // Silent unless the store is DECLARED, and on a host with no pre-write file hook the deny
 // arrives after the write has landed, which its template records as deny=human.
-func denyNotesWrite(deps Deps, writePath string) string {
+func denyNotesWrite(deps Dependencies, writePath string) string {
 	path := strings.TrimSpace(writePath)
 	if path == "" {
 		return ""
@@ -235,7 +235,7 @@ type writeGrade struct {
 // Every uncertainty fails OPEN with at most an advisory: no ledger, no live leases, a file
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
-func gradeLeasedWrite(ctx context.Context, deps Deps, actingLease, writePath string) writeGrade {
+func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
 		return writeGrade{}

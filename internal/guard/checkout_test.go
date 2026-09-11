@@ -189,7 +189,7 @@ func TestRankSiblingCheckoutIsInertWithoutAReason(t *testing.T) {
 // The pure rules must only ADVISE on this shape, or the rule above is dead weight
 // and the tests around it prove nothing.
 func TestCdIntoACheckoutIsOnlyAdvisoryWithoutTheSiblingRule(t *testing.T) {
-	v := Evaluate(testDeps(), "cd /Users/someone/checkouts/other && ./magus run lint .")
+	v := Evaluate(testDependencies(), "cd /Users/someone/checkouts/other && ./magus run lint .")
 
 	assert.Empty(t, v.Deny)
 	assert.NotEmpty(t, v.Context)

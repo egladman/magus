@@ -128,7 +128,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 		return enforceVerdict(opts, verdict)
 	}
-	verdict := guard.Judge(ctx, hookDeps(), guard.Request{
+	verdict := guard.Judge(ctx, hookDependencies(), guard.Request{
 		Input:      input,
 		IsPath:     hf.Path,
 		Observe:    hf.Observe,
@@ -144,11 +144,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	return enforceVerdict(opts, verdict)
 }
 
-// hookDeps hands the guard the five workspace facts its rules cannot resolve for
+// hookDependencies hands the guard the five workspace facts its rules cannot resolve for
 // themselves: the memoized inspect, this process's loaded config, the index-staleness
 // advice, and the spell catalog, all of which live in the CLI rather than in the rules.
-func hookDeps() guard.Deps {
-	return guard.Deps{
+func hookDependencies() guard.Dependencies {
+	return guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
 				return inspectWorkspace(ctx, "")

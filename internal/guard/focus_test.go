@@ -167,7 +167,7 @@ func TestFocusGradeSaysNothingWithoutAWorkspace(t *testing.T) {
 	// A context pinned to an empty location is a hook that could not find a
 	// workspace, which is the uncertainty every guard rule answers with silence.
 	ctx := context.WithValue(t.Context(), locationKey{}, location{})
-	assert.Empty(t, gradeFocusRead(ctx, Deps{}, "", "cat libs/ui/theme.css").Decision)
-	assert.Empty(t, gradeFocusRead(ctx, Deps{}, "", "").Decision)
-	assert.Empty(t, gradeFocusRead(ctx, Deps{}, "", "cat 'unterminated").Decision)
+	assert.Empty(t, gradeFocusRead(ctx, Dependencies{}, "", "cat libs/ui/theme.css").Decision)
+	assert.Empty(t, gradeFocusRead(ctx, Dependencies{}, "", "").Decision)
+	assert.Empty(t, gradeFocusRead(ctx, Dependencies{}, "", "cat 'unterminated").Decision)
 }

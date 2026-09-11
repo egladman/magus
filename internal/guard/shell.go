@@ -357,7 +357,7 @@ func isTextFilter(cmds []hint.Invocation) bool {
 // It returns the command rather than a bool so the verdict can name it: told only
 // that `bash -c '...'` was denied, a reader has to work out which part offended,
 // and a denial becomes a wrapper hunt instead of a correction.
-func firstRawToolDenied(deps Deps, command string) (hint.Invocation, bool) {
+func firstRawToolDenied(deps Dependencies, command string) (hint.Invocation, bool) {
 	cmds, ok := ParseCommands(command)
 	if !ok {
 		return hint.Invocation{}, false
@@ -400,7 +400,7 @@ func explainDeny(typed string, c hint.Invocation, reason string) string {
 // rawToolDenied reports whether one resolved command has a registered spell-op
 // equivalent. It intentionally allows a tool that Magus does not expose; a
 // guard may funnel an available capability, never remove one.
-func rawToolDenied(deps Deps, c hint.Invocation) bool {
+func rawToolDenied(deps Dependencies, c hint.Invocation) bool {
 	_, ok := rawToolMatch(deps, c)
 	return ok
 }
@@ -419,7 +419,7 @@ func rawToolDenied(deps Deps, c hint.Invocation) bool {
 //
 // `--version` still passes. It asks the binary what it is rather than running it over the
 // tree, and a guard funnels a capability rather than removing one.
-func rawToolMatch(deps Deps, c hint.Invocation) (toolMatch, bool) {
+func rawToolMatch(deps Dependencies, c hint.Invocation) (toolMatch, bool) {
 	for _, a := range c.Args {
 		if a == "--version" || a == "-version" || a == "-V" {
 			return toolMatch{}, false
@@ -1040,14 +1040,14 @@ func renderAdvisoryLead(suggestions []hint.Suggestion) string {
 // A deny is only legitimate once the replacement it names actually works: the
 // reverted grep deny removed a capability magus had nothing to route to. Do not
 // add one without checking that path end to end.
-func Evaluate(deps Deps, command string) BashVerdict {
+func Evaluate(deps Dependencies, command string) BashVerdict {
 	return evaluateWith(deps, command, searchHints)
 }
 
 // evaluateWith is Evaluate with the caller's hint translator, so Judge can pass one
 // scoped from the knowledge manifest while the verdict stays a pure function of what
 // was handed in.
-func evaluateWith(deps Deps, command string, hints *hint.Translator) BashVerdict {
+func evaluateWith(deps Dependencies, command string, hints *hint.Translator) BashVerdict {
 	v := evaluateRules(deps, command, hints)
 	// A deny refuses the WHOLE line, and the reason only ever discusses the one construct
 	// that earned it. On a line holding several commands that reads as a partial refusal:
@@ -1064,7 +1064,7 @@ func evaluateWith(deps Deps, command string, hints *hint.Translator) BashVerdict
 	return v
 }
 
-func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdict {
+func evaluateRules(deps Dependencies, command string, hints *hint.Translator) BashVerdict {
 	// The program rules judge PARSED commands; the rest read the line as written,
 	// because they are about its SHAPE (a pipe, a redirect, a cd before a magus
 	// call) rather than which program runs.

@@ -716,10 +716,10 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 // argv, which is the content this whole path exists to keep out of the store.
 func rejudgeCommand(text string) (program, verdict, rule string) {
 	program = commandProgram(text)
-	// hookDeps() would also do, but it builds closures for facts this replay never
+	// hookDependencies() would also do, but it builds closures for facts this replay never
 	// touches (Inspect, CacheDir, graph staleness); the raw-tool rule needs only the
 	// catalog, so that is the only member set.
-	v := guard.Evaluate(guard.Deps{Spells: project.DefaultSpellRegistry().All}, text)
+	v := guard.Evaluate(guard.Dependencies{Spells: project.DefaultSpellRegistry().All}, text)
 	switch {
 	case v.Deny != "":
 		return program, sessions.VerdictDeny, v.RuleName()
