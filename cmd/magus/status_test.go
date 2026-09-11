@@ -28,10 +28,10 @@ func TestPrintStatusCompact(t *testing.T) {
 	now := time.Date(2026, 5, 22, 12, 0, 0, 0, time.UTC)
 	at := func(ago time.Duration) time.Time { return now.Add(-ago) }
 
-	assertCompact := func(name string, report types.StatusSnapshot, want string) {
+	assertCompact := func(name string, snapshot types.StatusSnapshot, want string) {
 		t.Run(name, func(t *testing.T) {
 			var buf bytes.Buffer
-			printStatusCompact(&buf, report, now)
+			printStatusCompact(&buf, snapshot, now)
 			assert.Equal(t, want, buf.String())
 			assert.Equal(t, 1, strings.Count(buf.String(), "\n"), "compact must emit exactly one line")
 		})
@@ -668,10 +668,10 @@ func TestPrintStatusTextRendersMCPEndpoint(t *testing.T) {
 	assert.Contains(t, out, "serving")
 }
 
-// TestPrintStatusTextFullReport exercises printStatusText's populated branches (telemetry
+// TestPrintStatusTextFullSnapshot exercises printStatusText's populated branches (telemetry
 // note, a running-pool with targets and workspaces, the mcp endpoint block) in one render,
 // confirming the mcp block coexists with the daemon block rather than replacing it.
-func TestPrintStatusTextFullReport(t *testing.T) {
+func TestPrintStatusTextFullSnapshot(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)
 	r := types.StatusSnapshot{
@@ -735,48 +735,48 @@ func TestApplyStatusPools(t *testing.T) {
 	}
 
 	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
-		report := types.StatusSnapshot{}
-		applyStatusPools(ctx, &report, []string{sockA}, fakeProcServers(servers))
-		require.NotNil(t, report.Pool)
-		assert.Equal(t, 111, report.Pool.ParentPID)
-		assert.Equal(t, sockA, report.Pool.Socket)
-		assert.Equal(t, 5, report.Pool.Available, "8 capacity less 3 running")
-		assert.Empty(t, report.Pools, "a single server is not repeated as a list")
-		assert.Empty(t, report.PoolError)
+		snapshot := types.StatusSnapshot{}
+		applyStatusPools(ctx, &snapshot, []string{sockA}, fakeProcServers(servers))
+		require.NotNil(t, snapshot.Pool)
+		assert.Equal(t, 111, snapshot.Pool.ParentPID)
+		assert.Equal(t, sockA, snapshot.Pool.Socket)
+		assert.Equal(t, 5, snapshot.Pool.Available, "8 capacity less 3 running")
+		assert.Empty(t, snapshot.Pools, "a single server is not repeated as a list")
+		assert.Empty(t, snapshot.PoolError)
 	})
 
 	t.Run("carries the shared services of the first server", func(t *testing.T) {
-		report := types.StatusSnapshot{}
-		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
-		assert.Equal(t, servers[sockA].Services, report.Services)
+		snapshot := types.StatusSnapshot{}
+		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, fakeProcServers(servers))
+		assert.Equal(t, servers[sockA].Services, snapshot.Services)
 	})
 
 	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
-		report := types.StatusSnapshot{}
-		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
-		assert.Empty(t, report.PoolError, "more than one server is reported, not refused")
-		require.Len(t, report.Pools, 2)
-		assert.Equal(t, []string{sockA, sockB}, []string{report.Pools[0].Socket, report.Pools[1].Socket})
-		assert.Equal(t, []int{111, 222}, []int{report.Pools[0].ParentPID, report.Pools[1].ParentPID})
-		assert.Equal(t, []int{5, 0}, []int{report.Pools[0].Available, report.Pools[1].Available})
-		require.NotNil(t, report.Pool)
-		assert.Equal(t, sockA, report.Pool.Socket, "the first server is still THE pool")
+		snapshot := types.StatusSnapshot{}
+		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, fakeProcServers(servers))
+		assert.Empty(t, snapshot.PoolError, "more than one server is reported, not refused")
+		require.Len(t, snapshot.Pools, 2)
+		assert.Equal(t, []string{sockA, sockB}, []string{snapshot.Pools[0].Socket, snapshot.Pools[1].Socket})
+		assert.Equal(t, []int{111, 222}, []int{snapshot.Pools[0].ParentPID, snapshot.Pools[1].ParentPID})
+		assert.Equal(t, []int{5, 0}, []int{snapshot.Pools[0].Available, snapshot.Pools[1].Available})
+		require.NotNil(t, snapshot.Pool)
+		assert.Equal(t, sockA, snapshot.Pool.Socket, "the first server is still THE pool")
 	})
 
 	t.Run("a server that died is dropped, the rest still report", func(t *testing.T) {
-		report := types.StatusSnapshot{}
-		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock", sockB}, fakeProcServers(servers))
-		assert.Empty(t, report.PoolError)
-		require.NotNil(t, report.Pool)
-		assert.Equal(t, sockB, report.Pool.Socket)
-		assert.Empty(t, report.Pools, "one survivor is the single-server case")
+		snapshot := types.StatusSnapshot{}
+		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock", sockB}, fakeProcServers(servers))
+		assert.Empty(t, snapshot.PoolError)
+		require.NotNil(t, snapshot.Pool)
+		assert.Equal(t, sockB, snapshot.Pool.Socket)
+		assert.Empty(t, snapshot.Pools, "one survivor is the single-server case")
 	})
 
 	t.Run("nothing answered reports why", func(t *testing.T) {
-		report := types.StatusSnapshot{}
-		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock"}, fakeProcServers(servers))
-		assert.Nil(t, report.Pool)
-		assert.Contains(t, report.PoolError, "magus-gone.sock")
+		snapshot := types.StatusSnapshot{}
+		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock"}, fakeProcServers(servers))
+		assert.Nil(t, snapshot.Pool)
+		assert.Contains(t, snapshot.PoolError, "magus-gone.sock")
 	})
 }
 
@@ -889,7 +889,7 @@ func TestCompactMCPToken(t *testing.T) {
 	assert.Equal(t, "mcp not-ready", compactMCPToken(&types.MCPEndpointStatus{State: "not-ready"}))
 }
 
-// statusFixture is one report carrying every optional section, so the renderers below are
+// statusFixture is one snapshot carrying every optional section, so the renderers below are
 // exercised against the same data instead of each against a fixture shaped to suit it.
 // now anchors the durations: every StartedAt is an offset from it, so the rendered clock
 // is the same on every run.
@@ -1129,7 +1129,7 @@ func TestPrintStatusCompactStaysOneLine(t *testing.T) {
 		assert.Equal(t, "daemon: off\n", buf.String())
 	})
 
-	t.Run("a full report", func(t *testing.T) {
+	t.Run("a full snapshot", func(t *testing.T) {
 		var buf bytes.Buffer
 		printStatusCompact(&buf, statusFixture(now), now)
 		out := buf.String()
@@ -1224,7 +1224,7 @@ func TestGridEnabledNeedsATerminalAndColor(t *testing.T) {
 }
 
 // TestWriteStatusStructuredFormats covers the dispatch: a machine-readable format bypasses
-// every text renderer above and emits the report itself.
+// every text renderer above and emits the snapshot itself.
 func TestWriteStatusStructuredFormats(t *testing.T) {
 	// --tee is process-global, so a leftover value from another test would send this
 	// render at a file that may no longer be writable.
