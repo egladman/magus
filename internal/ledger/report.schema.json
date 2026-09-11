@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://magus.invalid/ledger/report.schema.json",
+  "$comment": "OURS. The response format a delegated worker returns, read by `magus ledger accept`. Mirrors ledger.Report; TestReportSchemaMatchesTheStruct fails when either side grows a field the other lacks.",
+  "title": "magus lease worker report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["changed_paths", "validation", "unresolved_risks"],
+  "properties": {
+    "lease": {
+      "type": "string",
+      "description": "The lease id this report answers. Checked against the ledger row when present."
+    },
+    "changed_paths": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Workspace-relative paths this worker wrote. Every one must fall inside the lease's owned paths."
+    },
+    "validation": {"$ref": "#/definitions/validation"},
+    "descendants": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Lease ids this worker handed work on to. Empty unless it spawned any."
+    },
+    "unresolved_risks": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "What this worker could not settle. Required even when empty: an absent list and a considered-and-empty one must not look alike."
+    }
+  },
+  "definitions": {
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "output_ref", "passed"],
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The one check the lease was assigned, as it was run."
+        },
+        "output_ref": {
+          "type": "string",
+          "description": "The reference id magus stored that run's captured output under, so the root can reopen the bytes."
+        },
+        "passed": {
+          "type": "boolean",
+          "description": "The worker's verdict on its own run."
+        }
+      }
+    }
+  }
+}

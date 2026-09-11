@@ -241,6 +241,8 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// ledger accept: --schema
+	FlagLedgerAcceptSchema = "schema"
 	// man install: --dir
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
@@ -1208,6 +1210,18 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
 	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision, plan and elimination only")
 	fs.StringVar(&f.Excerpt, FlagMemoryPutExcerpt, "", "The evidence that ruled a hypothesis out, copied inline; elimination only and required there")
+	return &f
+}
+
+// LedgerAcceptFlags are the flags declared for `magus ledger accept`.
+type LedgerAcceptFlags struct {
+	Schema bool // --schema
+}
+
+// BindLedgerAccept registers `magus ledger accept`'s flags on fs and returns the destination.
+func BindLedgerAccept(fs *flag.FlagSet) *LedgerAcceptFlags {
+	var f LedgerAcceptFlags
+	fs.BoolVar(&f.Schema, FlagLedgerAcceptSchema, false, "Print the JSON schema a report must satisfy, and exit")
 	return &f
 }
 

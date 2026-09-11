@@ -358,7 +358,7 @@ func leaseOverlaps(leases []Lease) []LeaseOverlap {
 func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 	for _, pa := range a {
 		for _, pb := range b {
-			if !pathsIntersect(pa, pb) {
+			if !PathsIntersect(pa, pb) {
 				continue
 			}
 			if !slices.Contains(pathsA, pa) {
@@ -372,17 +372,20 @@ func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 	return pathsA, pathsB
 }
 
-// pathsIntersect decides whether two DECLARED paths cover common ground. Nothing else
-// in magus compares owned paths yet, so this is the definition rather than a copy of
-// one: containment on the cleaned paths, with a glob truncated to the literal prefix
-// it can be judged by.
+// PathsIntersect decides whether two DECLARED paths cover common ground: containment on
+// the cleaned paths, with a glob truncated to the literal prefix it can be judged by.
+//
+// THE definition, rather than a copy of one. The overlap report below asks it of two
+// leases; the worker brief asks it of a lease's owned paths against a project's declared
+// output globs, which is the same question about a different pair of declarations. A
+// second implementation would differ on the day the truncation rule changed.
 //
 // Truncating is deliberate over-reporting. "console/src/**/*.ts" and
 // "console/src/**/*.css" cover no common file, and this reports them anyway because
 // both reduce to "console/src"; deciding whether two arbitrary globs can ever match
 // one path is a solver, and a missed collision costs a reader far more than a pair
 // they look at and dismiss.
-func pathsIntersect(a, b string) bool {
+func PathsIntersect(a, b string) bool {
 	// An entry that names nothing claims nothing. It cleans to ".", which the whole-tree
 	// rule below would then read as a claim on everything, pairing a row that holds one
 	// stray blank with every other lease in the plan.

@@ -35,6 +35,22 @@ type Brief struct {
 	// GraphCold marks a brief rendered against no graph at all, so empty Evidence reads
 	// as "not asked" rather than "asked, and nothing depends on any of this".
 	GraphCold bool `json:"graph_cold,omitempty" yaml:"graph_cold,omitempty"`
+	// Projects are the workspace projects the owned paths reach, the same set
+	// `magus affected` computes from those paths. It is what makes the two derived
+	// lists below readable: a boundary without the projects it came from is a fence
+	// with no map.
+	Projects []string `json:"projects,omitempty" yaml:"projects,omitempty"`
+	// Derived is the boundary the WORKSPACE puts on this lease, kept apart from the
+	// row's own ForbiddenPaths. Those are what an orchestrator remembered to write
+	// down; these hold whether anybody wrote them down or not, which is why a brief
+	// that carried only the declared list handed workers a boundary its author's
+	// memory had bounded.
+	Derived []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
+	// Affinity is the co-change evidence for the lease's projects against projects it
+	// does NOT own. A WARNING and never a boundary: the skill reads strong hidden
+	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
+	// make and not a path this worker is refused.
+	Affinity []BriefAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
 	// Footer is the workspace template already rendered. Empty when the workspace ships
 	// none, which is a brief with no bootstrap, rules or skills blocks rather than an
 	// error: the footer is the workspace's to own, including owning nothing.
@@ -48,6 +64,31 @@ type BriefEvidence struct {
 	Path        string `json:"path"         yaml:"path"`
 	Node        string `json:"node"         yaml:"node"`
 	BlastRadius int    `json:"blast_radius" yaml:"blast_radius"`
+}
+
+// BriefBoundary is one path the workspace keeps out of a lease's reach, with the
+// declaration that keeps it there.
+//
+// The reason is the load-bearing half. A bare path reads as an arbitrary fence, and a
+// worker cannot tell a generated file it should REGENERATE from a file another live
+// lease is holding, which are opposite instructions.
+type BriefBoundary struct {
+	Path   string `json:"path"   yaml:"path"`
+	Reason string `json:"reason" yaml:"reason"`
+}
+
+// BriefAffinity is one project pair that changes together while the lease owns only one
+// side of it, and neither project declares a dependency on the other.
+//
+// HIDDEN coupling only. A pair that changes together and says so in its declarations is
+// the workspace working as designed, and the root project of a monorepo co-changes with
+// everything; reporting those turns a warning list into a census. What is worth a
+// worker's attention is coupling no declaration would have told it about, which is the
+// pair a partition is most likely to have split wrongly.
+type BriefAffinity struct {
+	Project string `json:"project" yaml:"project"`
+	With    string `json:"with"    yaml:"with"`
+	Commits int    `json:"commits" yaml:"commits"`
 }
 
 // NewBrief starts the brief for one row with the fields the row alone determines. The
@@ -96,6 +137,23 @@ func (b Brief) Text() string {
 	writeBlock(&s, "goal and acceptance criteria", b.Lease.Goal)
 	writeList(&s, "owned paths", b.Lease.OwnedPaths)
 	writeList(&s, "forbidden paths", b.Lease.ForbiddenPaths)
+	writeList(&s, "projects", b.Projects)
+
+	if len(b.Derived) > 0 {
+		lines := make([]string, len(b.Derived))
+		for i, d := range b.Derived {
+			lines[i] = fmt.Sprintf("%s: %s", d.Path, d.Reason)
+		}
+		writeList(&s, "forbidden paths the workspace declares", lines)
+	}
+
+	if len(b.Affinity) > 0 {
+		lines := make([]string, len(b.Affinity))
+		for i, a := range b.Affinity {
+			lines[i] = fmt.Sprintf("%s changes with %s in %d commits, and neither declares a dependency on the other", a.Project, a.With, a.Commits)
+		}
+		writeList(&s, "affinity warnings", lines)
+	}
 
 	switch {
 	case b.GraphCold:

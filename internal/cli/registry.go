@@ -1658,16 +1658,17 @@ either side learning a new format.`,
 
 var ledgerCommand = Command{
 	Name:        "ledger",
-	Short:       "Read the lease ledger a fan-out declared",
-	Description: "Read the per-repository lease ledger: the leases an orchestrating agent declared, as a tree, plus the worker brief for any one of them.",
+	Short:       "Read the lease ledger a fan-out declared, and grade what comes back",
+	Description: "Read the per-repository lease ledger: the leases an orchestrating agent declared, as a tree, plus the worker brief for any one of them and the acceptance check for a worker's report.",
 	Tags:        []string{"cli", "magus ledger", "ledger", "leases", "agents", "delegation"},
 	Long: `Read the lease ledger: one row per lease an orchestrating agent declared,
 rendered as a tree of parents and the leases they handed out.
 
-The ledger is written by AGENTS, through the magus_ledger MCP tool, and read by
+The plan is written by AGENTS, through the magus_ledger MCP tool, and read by
 PEOPLE here. put, register and clear are deliberately not on this verb: the plan
 has one author by definition of what it records, and a second write door invites
-two.
+two. accept is the exception, and it is not a declaration: it is the verdict on a
+finished worker, and it needs an exit status a tool call cannot hand a shell.
 
 The rows are kept per repository rather than per checkout, so an orchestrator
 declaring a plan in one worktree and a worker reading it in another see the same
@@ -1678,17 +1679,38 @@ criteria, its owned and forbidden paths, the knowledge graph's blast radius for
 each owned path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the fixed bootstrap, rules and skills
 blocks this workspace's docs/guides/integrations/agents/brief.md.tmpl carries. It
-is context and never a verdict, the same shape magus diff --prompt has: magus
-assembles what it holds, and you hand it to the worker.`,
-	Usage: "magus ledger [ls|brief <lease-id>] [flags]",
+also carries what the WORKSPACE knows and the row's author may not have written
+down: the projects the owned paths reach, the declared output globs that land
+inside them, the paths a sibling lease is holding, the build inputs and workspace
+config that have one owner, and the projects that change alongside the leased
+ones without declaring a dependency. It is context and never a verdict, the same
+shape magus diff --prompt has, with one refusal: a row whose validation is the ci
+gate, or a target that chains to it, is not briefed at all. The gate runs once,
+in the orchestrator's tree, after every unit lands.
+
+accept closes the loop. It reads a worker's report as JSON on stdin and checks
+what is mechanical: every changed path inside the declared owned paths, the
+validation passed, and its output ref still resolving in this workspace's store.
+A row that passes is recorded pass; a rejection names every rule that failed and
+exits non-zero. Whether the work is GOOD stays the orchestrator's reading.`,
+	Usage: "magus ledger [ls|brief <lease-id>|accept <lease-id>] [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Print the declared leases as a tree, with the overlapping pairs"},
 		{Name: "brief", Short: "Print one lease's worker brief"},
+		{
+			Name:  "accept",
+			Short: "Grade a worker's report, read as JSON on stdin, against its row",
+			Flags: []Flag{
+				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a report must satisfy, and exit"},
+			},
+		},
 	},
 	Examples: []Example{
 		{"Read the declared plan", "magus ledger"},
 		{"Read it as records", "magus ledger -o json"},
 		{"Brief one worker", "magus ledger brief session-load/core"},
+		{"Grade what it returned", "magus ledger accept session-load/core < report.json"},
+		{"Print the report schema", "magus ledger accept --schema"},
 	},
 }
 
