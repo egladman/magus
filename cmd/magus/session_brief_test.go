@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +58,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		}},
 		GuardWiring: []string{".claude/settings.json"},
 		Rules:       []string{"AGENTS.md", ".claude/skills"},
+		PromptCache: briefClock(),
 	}
 
 	text := b.Text()
@@ -70,6 +73,9 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		"magus query output abc123",
 		"guard wiring: .claude/settings.json",
 		"rules live in AGENTS.md, .claude/skills",
+		"prompt cache: last tool call here 7m ago",
+		"closed: Anthropic default",
+		"open: Anthropic 1h opt-in",
 	} {
 		assert.Contains(t, text, want, "the brief dropped a section a rehydrating session reads")
 	}
@@ -169,4 +175,12 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "running", brief.Leases[0].ID)
+}
+
+// briefClock is a session idle long enough that one window is behind it and the rest
+// are not, which is the only state where the two-group split says something.
+func briefClock() *sessions.PromptCacheClock {
+	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	clock := sessions.PromptCache(last, last.Add(7*time.Minute))
+	return &clock
 }

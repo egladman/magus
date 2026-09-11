@@ -57,6 +57,11 @@ type sessionBrief struct {
 	// Rules are the instruction files and skill directories that exist here, named
 	// so the model re-reads them instead of trusting a summary of them.
 	Rules []string `json:"rules,omitempty"`
+	// PromptCache is how long since a tool call last ran past the guard in this
+	// checkout, against every published cache window. A session reading this brief is
+	// deciding whether to resume, and a resume past a closed window re-pays the whole
+	// prompt. Absent when the trail here has seen nothing.
+	PromptCache *sessions.PromptCacheClock `json:"prompt_cache,omitempty"`
 }
 
 // briefUnpushed counts the commits this checkout carries that its base ref does not.
@@ -158,6 +163,9 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
 	brief.Rules = ruleLocations(root)
+	if _, clock, ok := promptCacheHere(root, time.Now()); ok {
+		brief.PromptCache = &clock
+	}
 	return brief
 }
 
@@ -327,6 +335,7 @@ func (b sessionBrief) Text() string {
 		briefLine(&s, "unpushed: %s%d commit(s) not on %s", at, u.Count, u.Base)
 	}
 	b.writeTree(&s)
+	b.writePromptCache(&s)
 	b.writeLeases(&s)
 	b.writeFailures(&s)
 
@@ -360,6 +369,34 @@ func (b sessionBrief) writeTree(s *strings.Builder) {
 	// the window this lands in on what the model can read for itself.
 	briefLine(s, "tree: %d changed file(s): %d source, %d output, %d unclaimed",
 		b.Tree.Dirty, len(b.Tree.Sources), len(b.Tree.Outputs), len(b.Tree.Unclaimed))
+}
+
+// writePromptCache splits the windows into the two groups a resuming session acts on,
+// rather than listing each one's closing instant the way the human listing does. The
+// question here is binary and the answer is three lines of context at most: this lands in
+// a model's window through a hook, and a five-row table of clock times would cost more
+// than the decision it informs.
+func (b sessionBrief) writePromptCache(s *strings.Builder) {
+	if b.PromptCache == nil {
+		return
+	}
+	var closed, open []string
+	for _, p := range b.PromptCache.Providers {
+		for _, w := range p.Windows {
+			if w.Closed {
+				closed = append(closed, p.Provider+" "+w.Window)
+			} else {
+				open = append(open, p.Provider+" "+w.Window)
+			}
+		}
+	}
+	briefLine(s, "prompt cache: last tool call here %s ago; a resume past a closed window re-pays the prompt", b.PromptCache.Since())
+	if len(closed) > 0 {
+		briefLine(s, "  closed: %s", strings.Join(closed, ", "))
+	}
+	if len(open) > 0 {
+		briefLine(s, "  open: %s", strings.Join(open, ", "))
+	}
 }
 
 func (b sessionBrief) writeLeases(s *strings.Builder) {

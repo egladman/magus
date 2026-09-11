@@ -162,12 +162,77 @@ func sessionList(ctx context.Context, root string, args []string) error {
 		}
 		return nil
 	}
-	return emitFormatted(opts, map[string]any{
+	out := map[string]any{
 		"sessions":    summaries,
 		"checkpoints": sessions.LatestCheckpoints(fold),
 		"skipped":     fold.Skipped,
 		"store":       dir,
-	})
+	}
+	if act, clock, ok := promptCacheHere(root, time.Now()); ok {
+		// The prose the text view prints around these numbers stays out of the
+		// structured shape: a caller parsing this wants the instants, and phrasing
+		// them is the renderer's job.
+		out["prompt_cache"] = clock
+		out["prompt_cache_session"] = act.Session
+	}
+	return emitFormatted(opts, out)
+}
+
+// promptCacheHere resolves the prompt-cache clock from the newest guard observation in
+// THIS checkout's trail, which is where a hook wired here wrote it.
+//
+// The checkout rather than the repository, unlike everything else this listing reads: a
+// session's tool calls land in the cache dir of the tree they ran against, and the
+// question this answers is about the agent sitting in front of you, not about a session
+// that ran in a sibling worktree an hour ago.
+//
+// False for a checkout whose trail holds nothing: no cache dir, no hook wired, or a tree
+// nobody has run an agent against. Nothing is printed then, because the alternative is a
+// clock counting up from an activity magus never saw.
+func promptCacheHere(root string, now time.Time) (trail.AgentActivity, sessions.PromptCacheClock, bool) {
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return trail.AgentActivity{}, sessions.PromptCacheClock{}, false
+	}
+	act, ok := trail.LastAgentActivity(cacheDir, sessionTrailEvents)
+	if !ok {
+		return trail.AgentActivity{}, sessions.PromptCacheClock{}, false
+	}
+	return act, sessions.PromptCache(act.At, now), true
+}
+
+// renderPromptCache prints how long since the last tool call ran past the guard here, and
+// when each published window closes for it.
+//
+// Every provider, never one: which provider a session is talking to and which window it
+// bought are both invisible from here, so picking a row for the reader would be a guess
+// stated as a fact. The closing line says that out loud, because a reader who takes the
+// first row for their own gets a number that is wrong by up to an hour.
+func renderPromptCache(w io.Writer, act trail.AgentActivity, clock sessions.PromptCacheClock, now time.Time) {
+	if len(clock.Providers) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nPrompt cache: last tool call here %s ago", clock.Since())
+	if act.Session != "" {
+		fmt.Fprintf(w, ", session %s", act.Session)
+	}
+	fmt.Fprintln(w)
+
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, p := range clock.Providers {
+		for _, win := range p.Windows {
+			fmt.Fprintf(tw, "  %s\t%s\t%s\n", p.Provider, win.Window, win.Phrase(now))
+		}
+	}
+	if err := tw.Flush(); err != nil {
+		return
+	}
+	for _, p := range clock.Providers {
+		if len(p.Windows) == 0 {
+			fmt.Fprintf(w, "  %s: %s\n", p.Provider, p.Note)
+		}
+	}
+	fmt.Fprintln(w, "  resuming past a closed window re-pays the prompt; which window a host bought is not visible here")
 }
 
 // filtered says a --since cutoff was applied, which is what separates an empty store
@@ -212,6 +277,11 @@ func renderSessionsText(ctx context.Context, root string, summaries []sessions.S
 	}
 	if err := tw.Flush(); err != nil {
 		return err
+	}
+
+	now := time.Now()
+	if act, clock, ok := promptCacheHere(root, now); ok {
+		renderPromptCache(os.Stdout, act, clock, now)
 	}
 
 	if open := len(sessions.AttentionQueue(fold)); open > 0 {

@@ -76,7 +76,7 @@ var PromptCacheProviders = []PromptCacheProvider{
 	{
 		Name:   "Google Gemini",
 		Source: "https://ai.google.dev/gemini-api/docs/caching",
-		Note:   "explicit caches expire at a TTL the caller sets; implicit caching publishes none",
+		Note:   "explicit caches live for a TTL the caller sets; implicit caching publishes no window",
 	},
 }
 
