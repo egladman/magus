@@ -18,11 +18,11 @@ var nextFixture = []hint.Next{
 // already declares.
 func TestMergeNextSplicesOneKey(t *testing.T) {
 	for name, tc := range map[string]struct{ raw, want string }{
-		"a record":        {`{"query":"kind=spell"}`, `{"query":"kind=spell","next":[{"id":"query-explain","run":"magus explain spell:go","argv":["magus","explain","spell:go"]}]}`},
-		"an empty object": {`{}`, `{"next":[{"id":"query-explain","run":"magus explain spell:go","argv":["magus","explain","spell:go"]}]}`},
-		"a list":          {`[1,2]`, `[1,2]`},
-		"a bare string":   {`"text"`, `"text"`},
-		"nothing at all":  {``, ``},
+		"a record":                            {`{"query":"kind=spell"}`, `{"query":"kind=spell","next":[{"id":"query-explain","run":"magus explain spell:go","argv":["magus","explain","spell:go"]}]}`},
+		"an empty object":                     {`{}`, `{"next":[{"id":"query-explain","run":"magus explain spell:go","argv":["magus","explain","spell:go"]}]}`},
+		"a list":                              {`[1,2]`, `[1,2]`},
+		"a bare string":                       {`"text"`, `"text"`},
+		"nothing at all":                      {``, ``},
 		"a payload that already carries next": {`{"next":[{"id":"mine"}]}`, `{"next":[{"id":"mine"}]}`},
 	} {
 		assert.Equal(t, tc.want, string(mergeNext([]byte(tc.raw), nextFixture)), name)

@@ -51,12 +51,10 @@ func ResolveBinaryNameFrom(argv0 string) {
 		// Resolved through PATH, so PATH is what a reader would type.
 		invokedAs.Store(defaultBinaryName)
 	case filepath.IsAbs(argv0):
-		// A hook template resolves the workspace's binary absolutely, and that is the
-		// case this whole rule exists for: the hook runs with the workspace as its
-		// working directory, so the binary it resolved is the `./magus` a reader would
-		// type there. An absolute path from ANYWHERE ELSE falls back to the bare name
-		// rather than rendering itself, because a full path in every hint costs more
-		// context than it buys and a magus installed outside the tree is on PATH.
+		// A hook template resolves the workspace's binary absolutely and runs with the
+		// workspace as its working directory, so that one is the `./magus` a reader
+		// would type there; an absolute path from anywhere else is an installed magus
+		// on PATH, and spelling it in full costs more context than it buys.
 		if wd, err := os.Getwd(); err == nil && wd == filepath.Dir(argv0) {
 			invokedAs.Store("." + string(filepath.Separator) + base)
 			return

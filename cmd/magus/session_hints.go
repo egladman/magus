@@ -120,7 +120,7 @@ func hintUptake(fold sessions.Fold) []hintUptakeRow {
 
 	for _, calls := range shellCallsBySession(fold) {
 		for i, call := range calls {
-			window := calls[i+1:min(i+1+nextLookahead, len(calls))]
+			window := calls[i+1 : min(i+1+nextLookahead, len(calls))]
 			for _, id := range call.NextServed {
 				r := row(id)
 				r.Served++

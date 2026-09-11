@@ -30,10 +30,9 @@ import (
 // command that still needs editing is prose. Why is one sentence: a caller that
 // repeats a result within a session shows Run every time and Why once.
 //
-// Argv is the same command as an argument vector, unquoted. Run is for a person to
-// paste and Argv for a caller to exec, and the two differ wherever an argument needs
-// shell quotes; a harness that offers the breadcrumb as an affordance needs the form
-// no shell has to parse.
+// Argv is the same command as an argument vector, unquoted: Run is for a person to
+// paste and Argv for a caller to exec, so the two differ wherever an argument needs
+// shell quotes.
 type Next struct {
 	ID   string   `json:"id"             yaml:"id"`
 	Run  string   `json:"run"            yaml:"run"`
@@ -245,7 +244,7 @@ func ServableTo(role Role, lane []string, next []Next) []Next {
 	}
 	kept := make([]Next, 0, len(next))
 	for _, n := range next {
-		if mutatesTree(n.Argv) && !(role == RoleWorker && withinLane(lane, n.Argv)) {
+		if mutatesTree(n.Argv) && (role != RoleWorker || !withinLane(lane, n.Argv)) {
 			continue
 		}
 		kept = append(kept, n)

@@ -48,16 +48,14 @@ func TestBinaryNameFollowsHowTheProcessWasInvoked(t *testing.T) {
 		"an absolute path from outside the working directory is an installed magus: a full path in every hint costs more than it buys")
 }
 
-// TestBinaryNameCollapsesTheWorkspaceBinary covers the case every hook template produces:
-// the template resolves the workspace's binary absolutely, and rendering that whole path
-// into every verdict would cost more than it explains.
+// Every hook template resolves the workspace's binary absolutely, and rendering that
+// whole path into every verdict would cost more than it explains.
 func TestBinaryNameCollapsesTheWorkspaceBinary(t *testing.T) {
 	keepBinaryName(t)
 	t.Chdir(t.TempDir())
 
 	// The directory the process REPORTS, not the one the test was handed: a temp dir is
-	// reached through a symlink on macOS, and the comparison in SetBinaryName is against
-	// what os.Getwd answers.
+	// reached through a symlink on macOS, and the comparison is against os.Getwd.
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 
@@ -65,9 +63,9 @@ func TestBinaryNameCollapsesTheWorkspaceBinary(t *testing.T) {
 	assert.Equal(t, "./magus", BinaryName())
 }
 
-// TestBinaryNameIgnoresEveryOtherProgram is what holds the rest of the tree steady. A test
-// binary is magus.test and the codegen tools are magus-docs and friends; a hint they
-// render is read by somebody whose own invocation is not this process's at all.
+// What holds the rest of the tree steady: a test binary is magus.test and the codegen
+// tools are magus-docs and friends, and a hint they render is read by somebody whose own
+// invocation is not this process's at all.
 func TestBinaryNameIgnoresEveryOtherProgram(t *testing.T) {
 	keepBinaryName(t)
 	ResolveBinaryNameFrom("magus")

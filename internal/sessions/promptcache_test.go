@@ -9,10 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestPromptCacheProvidersCiteASource is the gate on the table itself. Every figure
-// in it was read off a vendor page by a person, so the page is the only thing that
-// makes a row auditable later; a row without one is a number nobody can re-check
-// when the vendor changes it.
+// Every figure in the table was read off a vendor page by a person, so the page is the
+// only thing that makes a row re-checkable when the vendor changes it.
 func TestPromptCacheProvidersCiteASource(t *testing.T) {
 	for _, p := range PromptCacheProviders {
 		assert.NotEmpty(t, p.Name, "a provider row with no name")

@@ -58,9 +58,8 @@ type sessionBrief struct {
 	// so the model re-reads them instead of trusting a summary of them.
 	Rules []string `json:"rules,omitempty"`
 	// PromptCache is how long since a tool call last ran past the guard in this
-	// checkout, against every published cache window. A session reading this brief is
-	// deciding whether to resume, and a resume past a closed window re-pays the whole
-	// prompt. Empty Providers when the trail here has seen nothing.
+	// checkout, against every published cache window: a resume past a closed window
+	// re-pays the whole prompt. Empty Providers when the trail here has seen nothing.
 	PromptCache sessions.PromptCacheClock `json:"prompt_cache,omitzero"`
 }
 

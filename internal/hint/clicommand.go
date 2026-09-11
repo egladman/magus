@@ -15,9 +15,7 @@ package hint
 // a path nothing renders buys nothing though (it drifts just as quietly, with no
 // output depending on it), so declare one when an emitter starts using it.
 
-import (
-	"strings"
-)
+import "strings"
 
 // Command is a canonical magus command path (the tokens after "magus"). Values
 // are declared once below; call sites render them with String or With.
@@ -49,7 +47,8 @@ func (c Command) With(args ...string) string {
 
 // Argv renders the invocation as an argument vector, args unquoted: the form a caller
 // execs rather than pastes. String is the shell spelling of the same command, so an
-// argument needing quotes differs between the two.
+// argument needing quotes differs between the two. argv[0] is [BinaryName], so it
+// follows how this process was invoked.
 func (c Command) Argv(args ...string) []string {
 	argv := make([]string, 0, 1+len(c.tokens)+len(args))
 	argv = append(argv, BinaryName())

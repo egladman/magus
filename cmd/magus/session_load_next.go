@@ -62,7 +62,7 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 		if len(want) == 0 {
 			continue
 		}
-		for _, next := range order[i+1:min(i+1+nextLookahead, len(order))] {
+		for _, next := range order[i+1 : min(i+1+nextLookahead, len(order))] {
 			if events[next].Session != events[at].Session {
 				continue
 			}
