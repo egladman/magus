@@ -148,7 +148,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 		{name: "outside the workspace", lease: "unit-a", write: "/elsewhere/x.go"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, leaseCoversWrite(tc.lease, location, tc.write))
+			assert.Equal(t, tc.want, leaseCoversWrite(t.Context(), tc.lease, location, tc.write))
 		})
 	}
 }

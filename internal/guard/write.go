@@ -244,8 +244,7 @@ func gradeLeasedWrite(ctx context.Context, deps Deps, actingLease, writePath str
 	if location.cacheDir == "" {
 		return writeGrade{}
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
-	leases, err := store.List()
+	leases, err := leaseRows(ctx, location)
 	if err != nil {
 		// An ABSENT ledger is not this branch: the store reads it as an empty one, which
 		// falls through to the no-live-leases return below and costs a stat. Only a file
@@ -291,7 +290,8 @@ func gradeLeasedWrite(ctx context.Context, deps Deps, actingLease, writePath str
 		//
 		// Best-effort by construction: a failure here is swallowed, because this whole function
 		// fails open and a ledger that would not accept a note must not cost somebody a save.
-		_ = store.RecordUnattributedWrite(ctx, owner.ID, rel)
+		_ = ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace}).
+			RecordUnattributedWrite(ctx, owner.ID, rel)
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",

@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
 
@@ -302,7 +301,7 @@ func actingLeaseStanding(ctx context.Context, deps Deps, actingLease string) lea
 	if location.cacheDir == "" {
 		return leaseStanding{}
 	}
-	leases, err := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace}).List()
+	leases, err := leaseRows(ctx, location)
 	if err != nil {
 		return leaseStanding{}
 	}

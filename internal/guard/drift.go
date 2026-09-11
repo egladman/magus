@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -69,7 +68,7 @@ func gradeScopeDrift(ctx context.Context, deps Deps, markers hint.Gate, actingLe
 	}
 	drift := driftVerdict(ws, writePath, touchedProjects(markers))
 	drift.markers = markers
-	if drift.advice != "" && leaseCoversWrite(actingLease, location, writePath) {
+	if drift.advice != "" && leaseCoversWrite(ctx, actingLease, location, writePath) {
 		// A worker writing inside the paths its orchestrator leased it is in scope by
 		// declaration, whatever the graph says about the projects those paths span.
 		drift.advice = ""
@@ -190,7 +189,7 @@ func touchedProjects(g hint.Gate) []string {
 // leaseCoversWrite reports whether the acting lease's declared write paths cover this
 // write. A lease that declares none covers nothing: an orchestrator that named no lane
 // drew no boundary this rule could defer to.
-func leaseCoversWrite(actingLease string, location location, writePath string) bool {
+func leaseCoversWrite(ctx context.Context, actingLease string, location location, writePath string) bool {
 	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
 		return false
 	}
@@ -198,8 +197,7 @@ func leaseCoversWrite(actingLease string, location location, writePath string) b
 	if !inside {
 		return false
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
-	leases, err := store.List()
+	leases, err := leaseRows(ctx, location)
 	if err != nil {
 		return false
 	}

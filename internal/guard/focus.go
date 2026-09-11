@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 )
@@ -123,7 +122,7 @@ func gradeFocusRead(ctx context.Context, deps Deps, actingLease, command string)
 	// The lease's declared paths outrank the working directory, because a worker
 	// runs wherever its checkout is and the orchestrator's declaration is the thing
 	// that was actually decided. Only a lease gets a deny.
-	focus, leaseID, ok := focusForLease(ws, location, actingLease)
+	focus, leaseID, ok := focusForLease(ctx, ws, location, actingLease)
 	if !ok {
 		if focus, ok = project.FocusAt(ws, focusDir(location)); !ok {
 			return focusGrade{}
@@ -173,12 +172,11 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
-func focusForLease(ws types.WorkspaceReader, location location, actingLease string) (project.Focus, string, bool) {
+func focusForLease(ctx context.Context, ws types.WorkspaceReader, location location, actingLease string) (project.Focus, string, bool) {
 	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
 		return project.Focus{}, "", false
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
-	leases, err := store.List()
+	leases, err := leaseRows(ctx, location)
 	if err != nil {
 		return project.Focus{}, "", false
 	}

@@ -180,6 +180,7 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
 	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
+	ctx = withLedgerRows(ctx, location)
 	actingLease := req.Lease
 	if actingLease == "" {
 		actingLease = ledger.ActingLease(location.cacheDir)
@@ -655,6 +656,38 @@ type location struct {
 }
 
 type locationKey struct{}
+
+type ledgerRowsKey struct{}
+
+// ledgerRows is the lease ledger as one call read it, error included: an unreadable
+// ledger and a ledger with no rows are different facts, and only the first means a rule
+// could not be evaluated at all.
+type ledgerRows struct {
+	rows []types.Lease
+	err  error
+}
+
+// withLedgerRows reads the ledger once and pins it for the rules below.
+//
+// Four of them grade against it on one command arm, and each used to open and parse the
+// same file for itself. Nothing inside a hook call writes the ledger, so one snapshot is
+// what those four reads already agreed on.
+func withLedgerRows(ctx context.Context, at location) context.Context {
+	if at.cacheDir == "" {
+		return ctx
+	}
+	rows, err := ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	return context.WithValue(ctx, ledgerRowsKey{}, ledgerRows{rows: rows, err: err})
+}
+
+// leaseRows reports the pinned ledger, reading it when nothing pinned one. A test that
+// calls a single rule gets its own read, which is what every rule used to do.
+func leaseRows(ctx context.Context, at location) ([]types.Lease, error) {
+	if pinned, ok := ctx.Value(ledgerRowsKey{}).(ledgerRows); ok {
+		return pinned.rows, pinned.err
+	}
+	return ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+}
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook
 // call is graded against.
