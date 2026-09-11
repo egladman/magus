@@ -271,6 +271,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the answer with `magus ledger accept` before reading it, replacing the four facts it used
   to demand in prose. Skill version 65 grades every installed tree stale, so a reinstall
   restamps it.
+- **`magus doctor` says whether a checkout's bound lease is actually being enforced.** An
+  unknown id, a terminal row (`pass`, `fail`, `no_return`), and a live row with no
+  registered base all render as an ordinary advisory in the guard's own verdict,
+  indistinguishable from a session these rules genuinely bind. The **lease-enforcing**
+  check reads the same row the guard would and reports which of those this checkout is in:
+  no lease bound, bound to an id nothing declares, bound to a terminal row, bound to a live
+  row with no registered base, or live and enforcing.
+- **`magus session hints` reports how often magus's own suggestions are taken.** Every
+  `next` breadcrumb a result carries is served with a stable id, and a call that serves one
+  is journaled beside the guard's advisory markers; `magus session load` joins that journal
+  onto the loaded transcript and stamps each call with the ids its result served and the
+  ids its own command took up. The report counts served, followed, rejected and
+  reflex-repeated servings per id, against the sessions this repository has loaded, and
+  names the uptake floor below which a hint is spending context on advice nobody takes. It
+  reports and changes nothing; which hints to keep is a decision for a person.
+- **Claude Code's MCP tool calls reach the guard.** A fourth `PreToolUse` entry, matching
+  `mcp__magus__.*` and wired with `HOST_EVENT_RAW=1`, forwards the whole call envelope
+  instead of extracting `tool_input.command`, since an MCP call carries a tool name and a
+  params object rather than a shell command. The channel is transport-complete and
+  rule-empty today: every call passes, because no rule yet judges an MCP tool name, not
+  because the wiring is silent. The next rule this surface grows reaches the model with no
+  new host wiring.
 
 ### Fixed
 
@@ -519,6 +541,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   time; a wait for the per-key cache lock reads the same way. The stall watchdog still hears
   every beat, so a legitimate long wait is still not a stall and an aborted run still reads
   as one target waiting on another.
+- **A served `next` breadcrumb is filtered for who it is served to, carries an exec-ready
+  argv, and is journaled.** The role comes from the acting lease's row: unbound (a person or
+  the orchestrator) keeps every entry, a read-only or path-less row is a reviewer and keeps
+  none of the writes, anything else is a worker and keeps only what `next` can prove
+  read-only from the command alone (a bare `run`, a `:rw` charm, a non-dry `affected`, and a
+  VCS mutation all judge as writes). A dropped entry is dropped, never rewritten, so a
+  worker is never handed a narrowed command nobody wrote. Each entry now also carries
+  `argv`, the same command unquoted, so a caller execs it without a shell to parse; text
+  mode prints the command on its own line with the reason indented under it, so a reader
+  copying the line gets the parenthetical with it, and the reason fires once per session
+  while the command prints every time. A hint spells the binary the way this process was
+  actually invoked - `magus` through PATH, `./magus` for a checkout's own binary, an
+  absolute workspace path collapsed to `./magus` - and a binary renamed to something else
+  (a docs example's `magus-bin`) keeps the canonical `magus` spelling rather than rendering
+  a command nobody could run. `next` now rides MCP graph and affected replies the same way
+  it rides the CLI, filtered the same way, so uptake per id is not a fact about which door
+  the reader came through. What was served is journaled per session beside the guard's
+  advisory markers, which is what `magus session hints` reads.
+- **A bound lease cannot rewrite its own row, or read a row it has no boundary for, through
+  any channel.** The CLI, the `magus_ledger` MCP tool and `magus\ledger` all reach one store
+  and one rule (see the ledger entries above); the guard now denies the COMMANDS that would
+  reach it before they even run: `magus session lease <other-id>`, `magus ledger accept`,
+  `magus ledger register`, `op=clear`, and any `put` or `register` naming a row other than
+  the caller's own. A `put` on the caller's own row is denied too, with one exception: a put
+  that only drops entries from its own `owned_paths` passes through, since giving a lane
+  back cannot widen a role and the store already judges whether a particular shrink is
+  legitimate; `op=register` on the caller's own row passes, since recording the base a lease
+  landed on is a procedure the write surface demands. Reading (`op=list`, `magus session
+  lease` with no argument, `magus ledger ls`) is untouched. Every denial names the actor who
+  can move the boundary instead of pointing at the tool a worker might mistake for
+  permission.
+- **A write to the host's own guard wiring is denied under any bound lease, and every guard
+  verdict now carries the lease it was graded under.** `.claude/settings.json` and its
+  hooks, `.cursor/hooks.json`, `.codex/hooks.json` and `.opencode/plugins/` decide whether
+  the guard runs at all from the host's next session start, so an edit there is refused
+  regardless of the lane, even one that happens to contain the file; an unbound session gets
+  a once-per-session advisory instead. `lease` on the verdict names the row a write was
+  graded against: an id the ledger does not declare is now a deny rather than a silent
+  pass-through, and an id naming a terminal row (`pass`, `fail`, `no_return`) prints one
+  notice per session that its rules are inert. A `next` breadcrumb magus itself served is
+  pre-authorized for the exact command it names - no advisory fires and the role-scoped
+  rules stand down - though the workspace-wide denies (a raw language tool, a pipe or
+  redirect of magus's own output, a whole-tree VCS op, a relocated checkout) never yield to
+  it.
 
 ## [v0.4.3] - 2026-09-06
 
