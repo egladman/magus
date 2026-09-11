@@ -265,23 +265,24 @@ func TestGradeLeasedWriteUnenrolled(t *testing.T) {
 	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
 }
 
-// TestGradeLeasedWriteInvalidLeaseID pins the treated-as-absent contract. A typo'd id
-// must not silently buy un-enrolled treatment: erroring would block the tool call over
-// metadata, so the notice is the whole signal the writer gets.
+// TestGradeLeasedWriteInvalidLeaseID pins the treated-as-absent contract. A typo'd id must
+// not silently buy un-enrolled treatment: erroring would block the tool call over metadata,
+// so the write is graded as naming no lease and the notice saying so comes from
+// adviseInvalidLease, which hookCmd fires on BOTH surfaces.
 func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
-	t.Run("on unclaimed ground the notice stands alone", func(t *testing.T) {
-		got := gradeLeasedWrite(ctx, "lease b!", filepath.Join(root, "README.md"))
-		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid lease id")
-		assert.Contains(t, got.Context, "magus.lease")
+	t.Run("the notice itself is the id rule, not the write rule", func(t *testing.T) {
+		assert.Contains(t, adviseInvalidLease("lease b!"), "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease("lease b!"), "magus.lease")
+		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxLeaseIDLen+1)), "not a valid lease id")
+		assert.Empty(t, adviseInvalidLease("lease-a"))
+		assert.Empty(t, adviseInvalidLease(""), "naming no lease is not a typo")
 	})
 
-	t.Run("over-long ids are invalid too", func(t *testing.T) {
-		got := gradeLeasedWrite(ctx, strings.Repeat("u", types.MaxLeaseIDLen+1), filepath.Join(root, "README.md"))
-		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid lease id")
+	t.Run("on unclaimed ground the write rule has nothing to say", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, "lease b!", filepath.Join(root, "README.md"))
+		assert.Empty(t, got.Decision)
 	})
 
 	t.Run("on owned ground it advises rather than denying", func(t *testing.T) {
@@ -289,7 +290,6 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 		// write is never denied, even on another lease's ground.
 		got := gradeLeasedWrite(ctx, "lease b!", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid lease id")
 		assert.Contains(t, got.Context, "lease-a")
 	})
 

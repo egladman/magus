@@ -10,15 +10,10 @@ import (
 
 // The guard's own installation.
 //
-// Every rule in this package is enforced by a hook the HOST runs, and the file that
-// wires that hook up is an ordinary file in the repository. An agent that edits it
-// disarms every other rule here from the host's next session on, and nothing in any
-// later verdict says the guard stopped running: a disarmed guard and a clean session
-// look identical from the inside.
-//
-// So it is the one write that a declared boundary cannot make legitimate. A worker
-// whose lane happens to contain `.claude/` was handed a lane, not the guard's own
-// switch, and an orchestrator that meant to rewire its hosts does that unbound.
+// Every rule in this package is enforced by a hook the HOST runs, wired up by an ordinary
+// file in the repository: an agent that edits it disarms every other rule here from the
+// host's next session on, and a disarmed guard looks identical to a clean session from the
+// inside. So it is the one write a declared boundary cannot make legitimate.
 
 // hookWiringFiles are the paths a documented host reads its guard wiring from, taken from
 // the per-host guide pages under docs/guides/integrations/agents/ rather than guessed.

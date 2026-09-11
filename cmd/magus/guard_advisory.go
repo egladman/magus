@@ -44,6 +44,7 @@ const (
 	advisoryFocus         advisoryKind = "focus"
 	advisoryHookWiring    advisoryKind = "hook-wiring"
 	advisoryLeaseTerminal advisoryKind = "lease-terminal"
+	advisoryLeaseInvalid  advisoryKind = "lease-invalid"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session
@@ -123,19 +124,18 @@ func (g advisoryGate) onceOrBrief(kind advisoryKind, full, brief string) string 
 	if full == "" || kind == "" || g.base == "" {
 		return full
 	}
-	if g.fireOnce(kind) {
+	if g.markFired(kind) {
 		return brief
 	}
 	return full
 }
 
-// seen reports whether kind has already been reported for this session, WITHOUT marking
-// it.
+// alreadyFired reports whether kind has been reported for this session, WITHOUT marking it.
 //
 // It exists for the one rule whose TEXT costs a directory walk to produce: asking here
 // first keeps that walk off every later tool call of the session, instead of paying it
-// only to throw the answer away. Every other caller wants fireOnce, which marks.
-func (g advisoryGate) seen(kind advisoryKind) bool {
+// only to throw the answer away. Every other caller wants markFired, which marks.
+func (g advisoryGate) alreadyFired(kind advisoryKind) bool {
 	if kind == "" || g.base == "" {
 		return false
 	}
@@ -146,13 +146,13 @@ func (g advisoryGate) seen(kind advisoryKind) bool {
 	return g.session != "" || time.Since(info.ModTime()) < advisoryAnonWindow
 }
 
-// fireOnce reports whether kind was already reported this session, marking it reported
-// when it was not: a check-and-set, despite the bool return.
+// markFired marks kind reported for this session and returns whether it ALREADY was: a
+// check-and-set, and the return is the check half.
 //
 // Every failure returns false, which speaks. State magus cannot write is not a reason to
 // go quiet: a notice repeated is a smaller failure than a notice nobody ever gets.
-func (g advisoryGate) fireOnce(kind advisoryKind) bool {
-	if g.seen(kind) {
+func (g advisoryGate) markFired(kind advisoryKind) bool {
+	if g.alreadyFired(kind) {
 		return true
 	}
 	path := g.markerPath(kind)

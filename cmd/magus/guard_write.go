@@ -100,29 +100,6 @@ func regenerateAdvice(f types.FileEntry, owner string) string {
 	return "run `" + hint.Run.With(producers[0].Target, producer) + "`"
 }
 
-// denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
-// for every other path.
-//
-// This is the only DENY on the path surface, and it does not fit either of the guard's two
-// standing triggers, so it is worth saying plainly why it is here. It is not irreversible:
-// a note in git is recoverable. It does not have an exact equivalent either: `magus memory
-// put` is where an agent's thought belongs, but memory is user-local while notes are
-// shared, so the substitute is not equal for something meant for the team.
-//
-// The trigger is a third one: the artifact's value depends on a guarantee about WHO wrote
-// it, and undoing the write does not restore the guarantee. A note is the one thing in the
-// graph that is not derived from the workspace: nothing in the repo corroborates it, now or
-// in a year, so its only provenance is the person who wrote it. One agent-written note does
-// not damage that note, it damages a reader's ability to trust ANY note without checking
-// blame, and a note of uncertain authorship is not degraded, it is worthless.
-//
-// Two honest limits. The guard is not a security boundary (see TestGuardKnownHoles): this
-// is a habit rail, and the gate that holds is a check on the pull-request path. And on a
-// host with no pre-write file hook, the deny arrives after the write has landed,
-// which its template records as deny=human rather than papering over.
-//
-// Silent unless the store is DECLARED. A deny fired on a guessed location would block work
-// in a workspace that never opted in, which is far worse than an advisory fired on a guess.
 // workspaceDeclaresNotes reports whether THIS repository's own magus.yaml declares a shared
 // notes store. A read failure reports false, degrading to the on-disk check rather than
 // denying writes in a workspace whose intent cannot be read.
@@ -134,8 +111,20 @@ func workspaceDeclaresNotes(root string) bool {
 	return strings.TrimSpace(cfg.Knowledge.Notes.Shared) != ""
 }
 
-func denyNotesWrite(path string) string {
-	path = strings.TrimSpace(path)
+// denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
+// for every other path.
+//
+// The only DENY on the path surface, and it fits neither standing trigger: a note in git is
+// recoverable, and `magus memory put` is not an equal substitute, since memory is user-local
+// while notes are shared. The trigger is a third one: a note is the one thing in the graph
+// nothing in the repository corroborates, so its only provenance is the person who wrote it,
+// and one agent-written note costs a reader the ability to trust ANY note without checking
+// blame.
+//
+// Silent unless the store is DECLARED, and on a host with no pre-write file hook the deny
+// arrives after the write has landed, which its template records as deny=human.
+func denyNotesWrite(writePath string) string {
+	path := strings.TrimSpace(writePath)
 	if path == "" {
 		return ""
 	}
@@ -212,21 +201,6 @@ const (
 	envHookLease  = trail.EnvBaggage + "=" + trail.BaggageLease
 )
 
-// leaseActorClause is how every lease-scoped denial names WHO can move the boundary.
-//
-// The texts it replaces ended "widen owned_paths with the magus_ledger tool", meaning
-// "ask the orchestrator". Two personas reading the same sentence independently took it
-// as permission and reached for the tool (friction synthesis 2026-09-11, C2), which is
-// the re-roling the ledger exists to make visible: a worker that rewrites its own row
-// is graded against a boundary nobody handed it from the next call on.
-//
-// So the clause names the actor and ends the turn. It says nothing about how the
-// orchestrator does it, because that is not this reader's business and a command
-// spelled here is a command this reader would run.
-func leaseActorClause(what string) string {
-	return "Your orchestrator can " + what + "; you cannot. Report it as an unresolved risk and stop."
-}
-
 // writeGrade is what the lease ledger has to say about one write. Separate from
 // guardVerdict because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
@@ -293,15 +267,10 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 		return writeGrade{}
 	}
 
-	notice := ""
-	if actingLease != "" && !types.ValidLeaseID(actingLease) {
-		// Treated as absent rather than rejected: an id magus cannot parse is an id it
-		// cannot look up either, and erroring would block the tool call over metadata. The
-		// notice is what keeps a typo from silently buying un-enrolled treatment.
-		notice = fmt.Sprintf(
-			"magus workspace: fix the lease id and re-run, so the guard can grade this write against your lease's declared boundary.\n"+
-				"%s=%q is not a valid lease id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no lease.\n",
-			envHookLease, actingLease, types.MaxLeaseIDLen)
+	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
+	// The notice that says so is adviseInvalidLease, fired from hookCmd so both surfaces
+	// get it.
+	if !types.ValidLeaseID(actingLease) {
 		actingLease = ""
 	}
 
@@ -323,13 +292,10 @@ func gradeLeasedWrite(ctx context.Context, actingLease, writePath string) writeG
 		// Best-effort by construction: a failure here is swallowed, because this whole function
 		// fails open and a ledger that would not accept a note must not cost somebody a save.
 		_ = store.RecordUnattributedWrite(ctx, owner.ID, rel)
-		return writeGrade{Decision: "advise", Context: notice + fmt.Sprintf(
+		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths lease %s (%s) declared it owns, and that lease is %s. This is an advisory and not a deny: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
 			owner.ID, envHookLease, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
-	}
-	if notice != "" {
-		return writeGrade{Decision: "advise", Context: strings.TrimRight(notice, "\n")}
 	}
 	return writeGrade{}
 }

@@ -118,8 +118,8 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 	got := focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"web/server.go"})
 	assert.Equal(t, "deny", got.Decision)
 	assert.Contains(t, got.Reason, "read inside the focus lease lease-a was given (app)")
-	// The actor, not the tool. This used to demand "op put, focus", and two personas
-	// reading that sentence took it as permission and widened their own row with it.
+	// The actor, not the tool: naming the tool reads as permission, and two personas
+	// widened their own row on it.
 	assert.Contains(t, got.Reason, "Your orchestrator can widen this lane; you cannot.")
 	assert.NotContains(t, got.Reason, hint.ToolLedger.String())
 	assert.Contains(t, got.Reason, "not inventing a rule")
@@ -159,10 +159,10 @@ func TestAdvisoryFocusPathIsPerPath(t *testing.T) {
 	assert.NotEqual(t, advisoryFocus, a, "and neither spends the kind's own one firing")
 
 	base := t.TempDir()
-	gate := newAdvisoryGate(base, "session-1")
-	assert.False(t, gate.fireOnce(a), "first sighting of a path speaks")
-	assert.True(t, gate.fireOnce(a), "the second is the same fact")
-	assert.False(t, gate.fireOnce(b), "a second path is a second fact")
+	markers := newAdvisoryGate(base, "session-1")
+	assert.False(t, markers.markFired(a), "first sighting of a path speaks")
+	assert.True(t, markers.markFired(a), "the second is the same fact")
+	assert.False(t, markers.markFired(b), "a second path is a second fact")
 }
 
 // TestMarkFileFocusStampsEachEntry covers the `magus describe file` field: the same

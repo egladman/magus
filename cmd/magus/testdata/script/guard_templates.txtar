@@ -114,9 +114,9 @@ rm notes-ws/.magus/lease
 
 # case: mcp/advise unreachable - no rule ADVISES on an MCP call. Every rule that reads one
 # denies (the lease-scoped gate, VCS and rebind rules, and the cache-dir rule), and the
-# three advisory families a rendered call could reach - the gate-repeat count, the stale
-# symbol index, the stale binary - each need machine state a script cannot make
-# deterministic. A case here would pass for a reason that is not this transport.
+# three advisory families a rendered call could reach each need machine state a script
+# cannot make deterministic: the gate-repeat count, the stale symbol index, the stale
+# binary. A case here would pass for a reason that is not this transport.
 
 # --- magus-guard-path.sh: the same hosts, their file-writing tool -------------
 

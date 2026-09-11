@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -75,12 +74,10 @@ type guardVerdict struct {
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 	// Lease is the row this verdict was graded under, empty when the call named none.
 	//
-	// It answers a question every other field left open: which declaration decided this.
-	// A session bound to a typo'd id, a session bound to a row that has already finished,
-	// and a session nobody leased all produced identical verdicts before this field
-	// existed, and two of the three were running unguarded (friction synthesis
-	// 2026-09-11, C3). An added optional field is not a schema bump: a glue that does not
-	// read it is unaffected, which is the rule agent.GuardSchemaVersion states.
+	// A session bound to a typo'd id, a session bound to a finished row, and a session
+	// nobody leased are otherwise indistinguishable, and two of the three run unguarded.
+	// An added optional field is not a schema bump: a glue that does not read it is
+	// unaffected, which is the rule agent.GuardSchemaVersion states.
 	Lease string `json:"lease,omitempty"`
 }
 
@@ -207,7 +204,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if actingLease == "" {
 		actingLease = ledger.ActingLease(location.base)
 	}
-	gate := newAdvisoryGate(location.base, who.Session)
+	markers := newAdvisoryGate(location.base, who.Session)
 	tool := hookToolCommand
 	switch {
 	case hf.Observe:
@@ -217,20 +214,24 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease}
 	// Where the acting lease STANDS, read once and before any rule. An id the ledger does
-	// not carry is refused here rather than passed down, because every lease-scoped rule
-	// below reads that row and finding nothing is how they all fall silent at once: the
-	// call would be graded by nobody while looking exactly like a guarded one.
+	// not carry is refused, because every lease-scoped rule below reads that row and
+	// finding nothing is how they all fall silent at once: the call would be graded by
+	// nobody while looking exactly like a guarded one.
+	//
+	// Applied INSIDE each arm rather than returned from here, so the documented order
+	// holds: the cache-dir rule and the workspace-wide denies are true whoever runs the
+	// call, and the stale-binary notice at the tail reaches this verdict like any other.
+	// A pre-authorization does not stand it down either, since an id nobody declared means
+	// nothing graded the call at all.
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
 	standing := actingLeaseStanding(ctx, actingLease)
-	if !hf.Observe {
+	denyUndeclared := func() {
+		if hf.Observe || verdict.Decision == "deny" {
+			return
+		}
 		if reason := denyUndeclaredLease(standing, actingLease); reason != "" {
-			verdict.Decision, verdict.Reason = "deny", reason
-			appendHookActivity(ctx, location, input, who, tool, actingLease, "", verdict)
-			if err := writeGuardVerdict(out, opts, verdict); err != nil {
-				return err
-			}
-			return enforceVerdict(opts, verdict)
+			verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -238,7 +239,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// denies do not, and they are the ones whose reasons say why (see guard_preauth.go).
 	preauth := ""
 	if hasInput && !hf.Observe && !hf.Path {
-		preauth = servedNextPreauthorizes(gate, input)
+		preauth = servedNextPreauthorizes(markers, input)
 	}
 	switch {
 	case !hasInput:
@@ -248,15 +249,11 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// contribution. Running the write rules here would only ever manufacture a false
 		// advisory about editing a file the agent opened read-only.
 	case hf.Path:
-		// The lease ledger speaks first. It is the only path rule whose verdict is
-		// about a CONCURRENT AGENT rather than about the file itself, so nothing else can
-		// outrank it: the regeneration advice below is still true after a collision, and
-		// saying that instead would let two leases edit one path in silence.
 		advice := ""
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
 		// resolved inside a rung that a louder rule skips.
-		drift := gradeScopeDrift(ctx, gate, actingLease, input)
+		drift := gradeScopeDrift(ctx, markers, actingLease, input)
 		// spoken reports that a rule MATCHED, which is not the same as a rule that
 		// produced text. A once-per-session advisory that already fired this session
 		// matched and stayed quiet, and the rules below it must not step into the silence
@@ -270,27 +267,23 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
+		denyUndeclared()
 		if verdict.Decision != "deny" {
 			switch g := gradeLeasedWrite(ctx, actingLease, input); g.Decision {
 			case "deny":
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
 			case "advise":
-				advice, spoken = gate.once(g.Kind, g.Context), true
+				advice, spoken = markers.once(g.Kind, g.Context), true
 			}
 		}
-		// The guard's own installation, ranked directly under the collision report and
-		// above everything else. It is definitive the way the ledger rule is (a known
-		// list of files, not a heuristic on the name), and what it refuses is the switch
-		// every rule below it depends on. It cannot outrank the collision, because that
-		// one is about a concurrent agent and stays true whatever this file is.
 		if verdict.Decision != "deny" {
 			switch g := gradeHookWiringWrite(actingLease, input); g.Decision {
 			case "deny":
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":
 				if !spoken {
-					advice, spoken = gate.once(g.Kind, g.Context), true
+					advice, spoken = markers.once(g.Kind, g.Context), true
 				}
 			}
 		}
@@ -302,10 +295,8 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				advice, spoken = text, true
 			}
 		}
-		// The notes rule DENIES, so it is checked before the advisories: a verdict
-		// that blocks is not something to fall through to. It sits after the
-		// generated-output rule only because a path cannot honestly be both, and if
-		// it somehow were, the regeneration answer is the more actionable one.
+		// The notes rule DENIES, so it is checked before the advisories: a verdict that
+		// blocks is not something to fall through to.
 		if verdict.Decision == "pass" && !spoken {
 			if reason := denyNotesWrite(input); reason != "" {
 				verdict.Decision = "deny"
@@ -322,24 +313,19 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				advice, spoken = text, true
 			}
 		}
-		// Both of these name paths and a target belonging to magus's own checkout, and
-		// both are inert anywhere else; see magusOwnSourceTree. They sit above the
-		// new-directory rule because a new skill directory is both, and which method to
-		// load is the more useful of the two answers.
+		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseAgentSurfaceWrite(input); text != "" {
-				advice, spoken = gate.once(advisorySkillSource, text), true
+				advice, spoken = markers.once(advisorySkillSource, text), true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseDescriptorWrite(input); text != "" {
-				advice, spoken = gate.once(advisoryRegenSource, text), true
+				advice, spoken = markers.once(advisoryRegenSource, text), true
 			}
 		}
 		// Above the new-directory rule because it is the wider question: whether this
-		// write belongs in this session at all outranks how the unit it belongs to is
-		// laid out. Every rule above it says the write itself is wrong, which is more
-		// actionable than either.
+		// write belongs in this session at all outranks how its unit is laid out.
 		if verdict.Decision == "pass" && !spoken && drift.advice != "" {
 			advice, spoken = drift.advice, true
 		}
@@ -356,15 +342,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			drift.record()
 		}
 	default:
-		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
-		// but reads the filesystem, so it cannot live inside evaluateBashGuard's pure
-		// rule set. Ranking the two is pure, and is where the ordering is tested.
-		// The cache-dir rule is outermost for the same reason and one more: it reads the
-		// resolved cache location, and what it refuses outranks every other deny on the
-		// line (guard_cachedir.go).
-		//
-		// The hint graph is built here unconditionally: the manifest read behind it is
-		// one small file, and laziness would buy nothing on a hook this short-lived.
+		// The sibling-checkout and cache-dir rules read the FILESYSTEM, so neither can
+		// live inside evaluateBashGuard's pure rule set; ranking them is pure, and is
+		// where the ordering is tested. The cache dir is outermost: what it refuses
+		// outranks every other deny on the line (guard_cachedir.go).
 		switch v := rankCacheDirWrite(
 			rankSiblingCheckout(evaluateBashGuardWith(input, hookSearchHints(location.base)), denySiblingCheckout(input)),
 			denyCacheDirCommand(location, input)); {
@@ -376,19 +357,17 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 		case v.Context != "" && preauth == "":
-			if held := gate.onceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
+			if held := markers.onceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
 			}
 		}
-		// The lease ledger's half of the command surface. Ranked BELOW the rules above,
-		// unlike the write arm where it speaks first: those refuse a command whoever runs
-		// it, and a sibling checkout's gate is the wrong tree before it is the wrong scope.
-		//
-		// Every one of them is ROLE-scoped, which is what a pre-authorization stands
-		// down: the command came from magus, computed for this role, so refusing it here
-		// would be the tool disagreeing with itself in front of a reader who cannot tell
-		// which half to believe.
+		denyUndeclared()
+		// The lease ledger's half of the command surface, ranked BELOW the rules above
+		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
+		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
+		// command came from magus, computed for this role, so refusing it here would be
+		// the tool disagreeing with itself.
 		for _, rule := range []func(context.Context, string, string) string{denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind} {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
@@ -406,47 +385,53 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			switch {
 			case focus.Decision == "deny":
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
-			case verdict.Decision == "pass" && focus.Decision == "advise" && !gate.fireOnce(advisoryFocusPath(focus.Rel)):
-				if held := gate.onceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
+			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.markFired(advisoryFocusPath(focus.Rel)):
+				if held := markers.onceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
 					verdict.Decision, verdict.Context = "advise", held
 				}
 			}
 		}
 		// Gated on the command being the GATE, not on it merely spawning work: the
-		// advisory's own answer is to run a narrower target, and firing on that
-		// narrower target argues with the caller for doing what it asked. The narrow
-		// case is also the common one, so a rule that speaks there is a rule the
-		// reader learns to skip.
+		// advisory's answer is to run a narrower target, and firing on one argues with
+		// the caller for doing what it asked.
 		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input) {
 			full, brief := adviseRepeatGate(workspaceRunsDir(hookActivityTrail(ctx).base), time.Now())
-			if notice := gate.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
+			if notice := markers.onceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 			}
 		}
 		// The guard's half of the index-staleness fact; the load-bearing half rides the
-		// command's own output (staleindex.go). gate.seen is asked BEFORE the rule, not
+		// command's own output (staleindex.go). alreadyFired is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
-		if verdict.Decision == "pass" && preauth == "" && !gate.seen(advisoryGraphStale) && commandReadsGraph(input) {
-			if notice := gate.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
+		if verdict.Decision == "pass" && preauth == "" && !markers.alreadyFired(advisoryGraphStale) && commandReadsGraph(input) {
+			if notice := markers.once(advisoryGraphStale, staleGraphAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
 			}
 		}
 	}
-	// A row that has already finished still names a session, and every rule keyed on it
-	// has quietly stopped applying: liveLeases drops a terminal row, so the verdicts that
-	// follow are the un-enrolled ones. Said once per session, and never on a deny, which
-	// already explains itself and was reached by a rule that did not need the row.
-	if notice := noticeTerminalLease(standing, actingLease); notice != "" && !hf.Observe && verdict.Decision != "deny" {
-		if held := gate.once(advisoryLeaseTerminal, notice); held != "" {
-			if verdict.Decision == "advise" {
-				verdict.Context += "\n\n" + held
-			} else {
-				verdict.Decision, verdict.Context = "advise", held
-			}
+	// The two notices about the acting lease ITSELF: a row that has finished and an id
+	// magus cannot parse both leave every lease-scoped rule inert while the verdicts look
+	// identical to a session nobody leased. Once per session each, and never on a deny,
+	// which explains itself and was reached by a rule that did not need the row.
+	for kind, notice := range map[advisoryKind]string{
+		advisoryLeaseTerminal: adviseTerminalLease(standing, actingLease),
+		advisoryLeaseInvalid:  adviseInvalidLease(actingLease),
+	} {
+		if notice == "" || hf.Observe || verdict.Decision == "deny" {
+			continue
 		}
+		held := markers.once(kind, notice)
+		if held == "" {
+			continue
+		}
+		if verdict.Decision == "advise" {
+			verdict.Context += "\n\n" + held
+			continue
+		}
+		verdict.Decision, verdict.Context = "advise", held
 	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
@@ -463,7 +448,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if notice := staleGuardNotice(); notice != "" && !hf.Observe {
 		if verdict.Decision == "deny" {
 			verdict.Reason += "\n\n" + notice
-		} else if held := gate.once(advisoryStaleBinary, notice); held != "" {
+		} else if held := markers.once(advisoryStaleBinary, notice); held != "" {
 			if verdict.Decision == "advise" {
 				verdict.Context += "\n\n" + held
 			} else {
@@ -642,11 +627,9 @@ const (
 // file_path), so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
-// A payload carrying a PROMPT rather than either is a spawn handoff: it is RECORDED and
-// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one:
-// there is no command and no path to judge, only a context transfer to note. It is tested last on
-// purpose, so that adding this branch cannot change the verdict on any payload the guard already
-// judged.
+// A payload carrying a PROMPT rather than either is a spawn: it is RECORDED and EXEMPT from
+// judgment. There is no command and no path to judge, only a context transfer to note, and a
+// prompt that merely MENTIONS a denied command would otherwise block the spawn describing it.
 //
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is: the bare-command form keeps working exactly as before.
@@ -707,178 +690,6 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.NothingToJudge = true
 	}
 	return req, true
-}
-
-// mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
-//
-// Every field ledger.Merge applies, plus the two that name the call. A key this list omits
-// reaches the row with no rule having seen it, which is how a bound worker rewrote the
-// checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
-// the two sides together.
-var mcpJudgedParams = append([]string{
-	"op", "id", "owned_paths", "forbidden_paths", "focus", "depends_on",
-	"validation", "read_only", "parent", "state", "checkpoint", "tier", "goal",
-}, mcpRenamedParams...)
-
-// mcpRenamedParams are the row's parameters under their other spelling.
-//
-// compat(until: no ledger door accepts the spellings above any more; observe it by calling
-// ledger.Merge with each of those names and finding it rejected): both vocabularies are
-// judged for one cycle, so a put cannot dodge a rule by picking the word on whichever side
-// of the rename the guard has not learned yet.
-var mcpRenamedParams = []string{"write_paths", "read_paths", "deny_paths", "model", "check"}
-
-// The two spellings of the one list a bound caller may shrink. Both are named here rather
-// than spelled at each use so the rebind rule and the renderer cannot learn one of them.
-const (
-	ownedPathsParam        = "owned_paths"
-	ownedPathsRenamedParam = "write_paths"
-)
-
-// mcpElidedParams render as a presence marker instead of their value. No rule reads this
-// one, and a goal is free prose: the rendered line is recorded in the activity trail, so
-// copying it there would put a caller's sentences into an audit record shaped like a
-// command. Presence is all the rebind rule needs, since naming it at all is a rewrite.
-var mcpElidedParams = map[string]bool{"goal": true}
-
-// mcpElidedValue stands in for an elided value. A word rather than an empty string: an
-// empty value is how the merge spells an explicit clear, and the two must not render alike.
-const mcpElidedValue = "..."
-
-// mcpCLIEquivalent is the CLI command a magus MCP tool is the other door to.
-type mcpCLIEquivalent struct {
-	command hint.Command
-	// operands are the tool parameters that render as positional arguments, in order.
-	operands []string
-	// flags are the fixed flags that make the rendering the same work the tool does, so
-	// a REPORT about the gate does not render as a run of it.
-	flags []string
-}
-
-// mcpCLIEquivalents route each magus tool to the command line that does the same thing, so
-// the rules already written for the CLI judge the tool call rather than a second copy of
-// them being written for MCP.
-//
-// magus_insight and magus_ledger are absent for opposite reasons: nothing in internal/hint
-// spells `insight`, so there is no command to render; the ledger tool is judged on its
-// PARAMETERS by the rebind rule, which is the one rule that reads an MCP call directly.
-var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
-	hint.ToolRunTarget:       {command: hint.Run, operands: []string{"target", "projects"}},
-	hint.ToolRunAffected:     {command: hint.Affected, operands: []string{"target"}},
-	hint.ToolAffectedPlan:    {command: hint.Affected, operands: []string{"target"}, flags: []string{"--plan"}},
-	hint.ToolAffectedExplain: {command: hint.Affected, operands: []string{"project"}, flags: []string{"--explain"}},
-	hint.ToolVCSCheckpoint:   {command: hint.VCSCheckpoint},
-	hint.ToolQuery:           {command: hint.Query, operands: []string{"query"}},
-	hint.ToolExplain:         {command: hint.Explain, operands: []string{"node"}},
-	hint.ToolRefs:            {command: hint.Refs, operands: []string{"symbol"}},
-	hint.ToolPath:            {command: hint.Path, operands: []string{"from", "to"}},
-	hint.ToolDescribe:        {command: hint.Describe, operands: []string{"kind", "name"}},
-	hint.ToolDescribeFile:    {command: hint.DescribeFile, operands: []string{"paths"}},
-	hint.ToolWhere:           {command: hint.Where, operands: []string{"filter"}},
-	hint.ToolOutput:          {command: hint.QueryOutput, operands: []string{"ref"}},
-	hint.ToolStats:           {command: hint.GraphStats},
-	hint.ToolDiff:            {command: hint.Diff},
-	hint.ToolDoctor:          {command: hint.Doctor},
-	hint.ToolStatus:          {command: hint.Status},
-	hint.ToolConfigGet:       {command: hint.ConfigView},
-}
-
-// renderMCPCall normalizes an MCP call to a magus tool into a command line.
-//
-// Three shapes, in the order they are decided. The ledger tool renders `<tool> key=value`,
-// because its parameters ARE what the rebind rule judges. A tool with a CLI equivalent
-// renders that argv, so the command rules read it as the work it is. Anything else renders
-// its bare tool name: nothing judges it, and the activity trail still records that it
-// happened.
-//
-// Rendering and re-parsing rather than handing the rules a map keeps ONE judged value per
-// call: the string the rules read is the string the trail records, so what a person audits
-// later is what was graded. A value holding a space is quoted, which the shell parser the
-// rules already run unquotes.
-func renderMCPCall(name string, input map[string]any) string {
-	if name == hint.ToolLedger.String() {
-		out := []string{name}
-		for _, key := range mcpJudgedParams {
-			value, ok := input[key]
-			if !ok {
-				continue
-			}
-			if mcpElidedParams[key] {
-				out = append(out, key+"="+mcpElidedValue)
-				continue
-			}
-			out = append(out, key+"="+quoteMCPValue(mcpValueString(value)))
-		}
-		return strings.Join(out, " ")
-	}
-	cli, ok := mcpCLIEquivalents[hint.ToolName(name)]
-	if name == hint.ToolMemory.String() {
-		// The one tool whose op picks the verb: a put writes, everything else reads.
-		cli, ok = mcpCLIEquivalent{command: hint.MemoryLs}, true
-		if envelopeString(input, "op") == "put" {
-			cli = mcpCLIEquivalent{command: hint.MemoryPut, operands: []string{"name"}}
-		}
-	}
-	if !ok {
-		return name
-	}
-	out := append([]string{cli.command.String()}, cli.flags...)
-	for _, key := range cli.operands {
-		if value := mcpValueString(input[key]); value != "" {
-			out = append(out, quoteMCPValue(value))
-		}
-	}
-	return strings.Join(out, " ")
-}
-
-// mcpValueString flattens one parameter value. A list parameter arrives as either a
-// comma-separated string or an array (both are accepted by the tool), and it renders the
-// same way from both, so a rule cannot be dodged by picking a spelling.
-func mcpValueString(value any) string {
-	switch v := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	case []any:
-		parts := make([]string, 0, len(v))
-		for _, item := range v {
-			parts = append(parts, mcpValueString(item))
-		}
-		return strings.Join(parts, ",")
-	case bool:
-		return strconv.FormatBool(v)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		return fmt.Sprint(v)
-	}
-}
-
-// quoteMCPValue keeps a value with whitespace as one word on the rendered line.
-func quoteMCPValue(value string) string {
-	if strings.ContainsAny(value, " \t\"'\\") {
-		return strconv.Quote(value)
-	}
-	return value
-}
-
-// mcpMagusPrefix is how a host spells a call to magus's own MCP server. The prefix is the
-// host's, the name after it is magus's.
-const mcpMagusPrefix = "mcp__magus__"
-
-// magusToolCall returns the magus MCP tool a host's tool name refers to, or "" when it
-// refers to none.
-//
-// The bare name or magus's own prefix, and nothing else. A suffix match let any other
-// server's `whatever__magus_ledger` decode as a magus ledger call, be rendered into
-// magus's activity trail, and be judged by magus's rules.
-func magusToolCall(toolName string) string {
-	name := strings.TrimPrefix(toolName, mcpMagusPrefix)
-	if !slices.ContainsFunc(hint.AllToolNames, func(t hint.ToolName) bool { return t.String() == name }) {
-		return ""
-	}
-	return name
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
@@ -958,7 +769,7 @@ func appendHookActivity(ctx context.Context, location hookActivityLocation, inpu
 	trail.AppendAgentCommand(ctx, location.base, command)
 }
 
-// appendHookSpawn records a spawn handoff into the same trail, so a person auditing the
+// appendHookSpawn records a spawn into the same trail, so a person auditing the
 // activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
 // spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
 // there is no verdict to record, because a spawn is not a guard surface.

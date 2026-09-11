@@ -172,13 +172,16 @@ func TestAdviseRepeatGateIsSilentWithoutARunLog(t *testing.T) {
 	assert.Empty(t, missing)
 }
 
-func TestWorkspaceRunsDirDefaultsToTheWorkspaceCache(t *testing.T) {
+func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 	root := t.TempDir()
-	t.Chdir(root)
-	assert.Empty(t, workspaceRunsDir(""), "no cache dir yet is no run log")
+	assert.Empty(t, workspaceRunsDir(""),
+		"an unresolved cache dir is no run log: the literal name is relative, and this hook's own directory is the one thing it must not stand for")
 
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".magus", "runs"), 0o755))
-	assert.Equal(t, filepath.Join(".magus", "runs"), workspaceRunsDir(""))
+	cacheDir := filepath.Join(root, ".magus")
+	assert.Empty(t, workspaceRunsDir(cacheDir), "no runs dir yet is no run log")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(cacheDir, "runs"), 0o755))
+	assert.Equal(t, filepath.Join(cacheDir, "runs"), workspaceRunsDir(cacheDir))
 }
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
@@ -430,7 +433,7 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 		"a lease id in an argument": "magus query \"session lease\"",
 		// A flag's value is a bare word, so this reads as a subcommand token and matches
 		// nothing. The rule fails to fire rather than firing on a path that happened to
-		// end in a verb, which is the safe direction; see magusWords.
+		// end in a verb, which is the safe direction; see magusSubcommandWords.
 		"a value-taking global flag": "magus --root /tmp/x session lease harness/other",
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, me, command), name)
@@ -609,4 +612,59 @@ func TestIsGateCommandIgnoresTheReportingForms(t *testing.T) {
 	}
 	assert.True(t, isGateCommand([]string{"affected", "ci", "--no-default-charms"}),
 		"the gate itself still is the gate")
+}
+
+// TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer: the rule read the acting lease's
+// LIVE row, which is absent for a terminal row and for an unreadable ledger alike, so a
+// session writing its OWN finished row was refused with a reason naming somebody else's,
+// in the same verdict that says the lease-scoped denials are not running for it.
+func TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer(t *testing.T) {
+	done := narrowLease()
+	done.State = types.StatePass
+	ctx, _ := fleetFixture(t, done)
+
+	assert.Empty(t, denyLeaseScopedRebind(ctx, done.ID,
+		"magus_ledger op=put id="+done.ID+" owned_paths=**"),
+		"a terminal row has no boundary left, so naming another lease's row would be false")
+
+	nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+	assert.Empty(t, denyLeaseScopedRebind(nowhere, done.ID, "magus_ledger op=put id="+done.ID),
+		"a ledger the guard cannot read leaves nothing to judge against")
+}
+
+// TestHookCmdAdvisesAnInvalidLeaseOnEverySurface: the notice lived inside gradeLeasedWrite,
+// which runs on the path surface only, so a COMMAND under a typo'd id ran fully un-enrolled
+// with nothing said about it.
+func TestHookCmdAdvisesAnInvalidLeaseOnEverySurface(t *testing.T) {
+	for name, args := range map[string][]string{
+		"the command surface": {"--lease", "has spaces", "--session", "invalid-command", "-o", "json"},
+		"the path surface":    {"--path", "--lease", "has spaces", "--session", "invalid-path", "-o", "json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			global = globalFlags{}
+			t.Setenv(trail.EnvBaggage, "")
+			ctx, _ := fleetFixture(t, narrowLease())
+
+			var out bytes.Buffer
+			require.NoError(t, hookCmd(ctx, strings.NewReader("README.md"), &out, args))
+			assert.Contains(t, out.String(), "is not a valid lease id")
+		})
+	}
+}
+
+// TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease: the undeclared refusal used to return
+// from hookCmd before anything else ran, so it outranked the cache-dir rule against both
+// files' stated order and skipped the stale-binary notice at the tail.
+func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _ := fleetFixture(t, narrowLease())
+
+	var out bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader(".magus/lease"), &out,
+		[]string{"--path", "--lease", "harness/nobody-declared-this", "-o", "json"})
+	require.Error(t, err)
+	assert.Contains(t, out.String(), "magus cache dir")
+	assert.NotContains(t, out.String(), "is not declared",
+		"the cache dir is what the write is about; whose lane it is comes second")
 }

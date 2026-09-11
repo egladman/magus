@@ -4,12 +4,11 @@ package agent
 // the one package that both the CLI producing a verdict and the repo-root
 // dogfood tests can import.
 //
-// It lives here rather than beside the guard in cmd/magus for a mechanical
-// reason: package main cannot be imported, so a parity check living outside it
-// would have to RESTATE the contract, and a restated contract is exactly the
-// copy that goes stale. Keeping the lists here makes "every host handles every
-// decision on every surface" a comparison against the source of truth instead
-// of against a second opinion.
+// It lives here rather than beside the guard because package main cannot be
+// imported, so a parity check outside it would have to RESTATE the contract, and
+// a restated contract is the copy that goes stale. That reason expires the day
+// the rules move out of cmd/magus into a package of their own; the lists should
+// move with them then.
 
 // GuardSchemaVersion is the version of the verdict envelope every host glue
 // parses, carried on the wire as schema_version. Bump it only when an existing
@@ -52,6 +51,11 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // Bump it whenever a template's BEHAVIOR changes, not for a comment or a
 // rewording. TestShippedTemplatesCarryTheCurrentVersion makes the bump total:
 // every template must be re-stamped or the build fails.
+//
+// 1, 5 and 6 have no entry, and the gap is recorded rather than left to be
+// rediscovered: 1 is the marker's own starting value and predates this log, and
+// nothing in the tree or its history says what 5 and 6 changed. Read them as
+// versions nobody documented rather than as versions that mean something here.
 //
 // 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
