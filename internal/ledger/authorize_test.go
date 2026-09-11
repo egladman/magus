@@ -3,6 +3,7 @@ package ledger
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/trail"
@@ -158,6 +159,68 @@ func TestBoundWorkerCannotClearTheLedger(t *testing.T) {
 	rows, err := NewStore(loc).List()
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
+}
+
+// Spawning is not a way around the boundary: a child holds no lane its parent does not.
+func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
+	t.Parallel()
+
+	parent := types.Lease{
+		ID:             "adj/store",
+		OwnedPaths:     []string{"internal/ledger", "types/lease.go"},
+		ForbiddenPaths: []string{"MAGUS.md"},
+		Focus:          []string{"internal/ledger", "internal/hint"},
+		State:          types.StateRunning,
+	}
+	loc := declared(t, parent)
+
+	tests := []struct {
+		name  string
+		child types.Lease
+		want  string
+	}{
+		{
+			name:  "inside every lane",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md", "go.mod"}, Focus: []string{"internal/hint"}},
+		},
+		{
+			name:  "no focus of its own reads the paths it was handed",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md"}},
+		},
+		{
+			name:  "a wider read lane",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md"}, Focus: []string{"/"}},
+			want:  "may only read what its parent reads",
+		},
+		{
+			name:  "a shorter deny list",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}},
+			want:  "every forbidden_path its parent carries",
+		},
+		{
+			name:  "graded on the way out",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md"}, State: types.StatePass},
+			want:  "never pass",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			child := tt.child
+			child.Parent = "adj/store"
+			id := "adj/store/" + strings.ReplaceAll(tt.name, " ", "-")
+			_, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Lease) { *u = child })
+			if tt.want == "" {
+				assert.NoError(t, err)
+				return
+			}
+			var refused *RefusedError
+			require.ErrorAs(t, err, &refused)
+			assert.Contains(t, err.Error(), tt.want)
+		})
+	}
 }
 
 // The daemon builds one Store at startup and serves every MCP caller from it, so an actor

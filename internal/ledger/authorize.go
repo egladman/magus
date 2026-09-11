@@ -125,9 +125,13 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 // authorizeChild grades a bound worker's write to a row that is not its own: a new child
 // of its own lease, inside its own boundary, and nothing else.
 //
-// The subset rule is what keeps the tree from being a way around the boundary. A worker
-// that could hand a child paths it does not hold itself would have widened its lane by
-// spawning, and the ledger would record the wider claim as legitimate.
+// EVERY LANE THE GUARD READS IS SUBSETTED, not just the write one. A child's focus is the
+// READ boundary (cmd/magus/guard_focus.go) and its forbidden_paths are subtracted from the
+// write one, so a worker that could widen either by spawning has no boundary: it binds a
+// session to the child and reads or writes what its own row denies it.
+//
+// Validation is deliberately NOT constrained: the check a child runs is how the parent
+// partitions its own work, and it grades that child's report and nothing else.
 func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows []types.Lease) error {
 	if exists {
 		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
@@ -139,10 +143,29 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 	if own < 0 {
 		return refuse(actor, id, "its own row is not in the ledger, so there is no boundary to hand a child")
 	}
-	if !subset(next.OwnedPaths, rows[own].OwnedPaths) {
+	parent := rows[own]
+	switch {
+	case !subset(next.OwnedPaths, parent.OwnedPaths):
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
+	case !subset(readLane(next), readLane(parent)):
+		return refuse(actor, id, "a child may only read what its parent reads, and this one's focus reaches further")
+	case !subset(parent.ForbiddenPaths, next.ForbiddenPaths):
+		return refuse(actor, id, "a child carries every forbidden_path its parent carries, and this one drops some")
+	case next.State != "" && next.State != types.StateDeclared:
+		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
+			types.StateDeclared, next.State))
 	}
 	return nil
+}
+
+// readLane is the declarations a row may READ: its focus when it declares one, else its
+// own write lane, which is the fallback cmd/magus/guard_focus.go makes. A parent's write
+// lane rides along either way, since a child may already be handed it.
+func readLane(row types.Lease) []string {
+	if len(row.Focus) == 0 {
+		return row.OwnedPaths
+	}
+	return append(slices.Clone(row.Focus), row.OwnedPaths...)
 }
 
 // authorizeClear grades wiping the book. A worker never does: clear drops rows it did
