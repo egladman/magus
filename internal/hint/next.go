@@ -1,10 +1,17 @@
 package hint
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,10 +34,26 @@ import (
 // Run always has the real ids or refs filled in, never a placeholder, because a
 // command that still needs editing is prose. Why is one sentence: a caller that
 // repeats a result within a session shows Run every time and Why once.
+//
+// Argv is the same command as an argument vector, unquoted. Run is for a person to
+// paste and Argv for a caller to exec, and the two differ wherever an argument needs
+// shell quotes; a harness that offers the breadcrumb as an affordance needs the form
+// no shell has to parse.
 type Next struct {
-	ID  string `json:"id"            yaml:"id"`
-	Run string `json:"run"           yaml:"run"`
-	Why string `json:"why,omitempty" yaml:"why,omitempty"`
+	ID   string   `json:"id"             yaml:"id"`
+	Run  string   `json:"run"            yaml:"run"`
+	Argv []string `json:"argv,omitempty" yaml:"argv,omitempty"`
+	Why  string   `json:"why,omitempty"  yaml:"why,omitempty"`
+}
+
+// entry builds one breadcrumb from raw, unquoted args: Run gets them shell-quoted,
+// Argv gets them as they are.
+func entry(id string, c Command, why string, args ...string) Next {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = matcherArg(a)
+	}
+	return Next{ID: id, Run: c.With(quoted...), Argv: c.Argv(args...), Why: why}
 }
 
 // NextCap bounds how many breadcrumbs one result may carry. A next that fires every
@@ -47,33 +70,25 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 	if len(out.Matches) == 0 {
 		return nil
 	}
-	next := []Next{{
-		ID:  "query-explain",
-		Run: Explain.With(out.Matches[0].ID),
-		Why: "explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
-	}}
+	next := []Next{entry("query-explain", Explain,
+		"explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
+		out.Matches[0].ID)}
 	// Ranked above path and refs: a reader holding a page wants the passage, and
 	// nothing else in the result says the page is retrievable a heading at a time.
 	if page, ok := unsectionedDocPage(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-doc-sections",
-			Run: Query.With(matcherArg("kind="+types.KindDocSection), matcherArg("id="+page)),
-			Why: "every heading in that page is its own node, so the answer is one section to read instead of the whole file.",
-		})
+		next = append(next, entry("query-doc-sections", Query,
+			"every heading in that page is its own node, so the answer is one section to read instead of the whole file.",
+			"kind="+types.KindDocSection, "id="+page))
 	}
 	if a, b, ok := firstSharedKind(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-path",
-			Run: Path.With(a, b),
-			Why: "two matches of one kind usually connect, and path prints the chain instead of leaving you to walk it.",
-		})
+		next = append(next, entry("query-path", Path,
+			"two matches of one kind usually connect, and path prints the chain instead of leaving you to walk it.",
+			a, b))
 	}
 	if sym, ok := firstSymbol(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-refs",
-			Run: Refs.With(sym),
-			Why: "refs lists a symbol's definition and every use, generated and cross-language ones included.",
-		})
+		next = append(next, entry("query-refs", Refs,
+			"refs lists a symbol's definition and every use, generated and cross-language ones included.",
+			sym))
 	}
 	return capNext(next)
 }
@@ -84,25 +99,19 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 func NextForExplain(out types.KnowledgeExplainOutput) []Next {
 	var next []Next
 	if other, ok := heaviestNeighbor(out); ok {
-		next = append(next, Next{
-			ID:  "explain-path",
-			Run: Path.With(out.Node.ID, other),
-			Why: "path resolves the chain between two nodes, and this is the neighbor the card names most.",
-		})
+		next = append(next, entry("explain-path", Path,
+			"path resolves the chain between two nodes, and this is the neighbor the card names most.",
+			out.Node.ID, other))
 	}
 	if out.Node.Kind == types.KindSymbol {
-		next = append(next, Next{
-			ID:  "explain-refs",
-			Run: Refs.With(out.Node.Label),
-			Why: "the card holds the graph's edges; refs holds the call sites.",
-		})
+		next = append(next, entry("explain-refs", Refs,
+			"the card holds the graph's edges; refs holds the call sites.",
+			out.Node.Label))
 	}
 	if p := sourcePath(out.Node.Source); p != "" {
-		next = append(next, Next{
-			ID:  "explain-describe-file",
-			Run: DescribeFile.With(p),
-			Why: "describe file says whether that path is generated, a declared source, or claimed by nothing.",
-		})
+		next = append(next, entry("explain-describe-file", DescribeFile,
+			"describe file says whether that path is generated, a declared source, or claimed by nothing.",
+			p))
 	}
 	return capNext(next)
 }
@@ -117,21 +126,17 @@ func NextForFiles(files []types.FileEntry) []Next {
 	var next []Next
 	for _, f := range files {
 		if len(f.SourceOf) > 0 {
-			next = append(next, Next{
-				ID:  "file-impact",
-				Run: Affected.With("--impact"),
-				Why: "a declared source pulls its project into the affected set, and --impact is the set it pulls in.",
-			})
+			next = append(next, entry("file-impact", Affected,
+				"a declared source pulls its project into the affected set, and --impact is the set it pulls in.",
+				"--impact"))
 			break
 		}
 	}
 	for _, f := range files {
 		if project := regeneratingProject(f); project != "" {
-			next = append(next, Next{
-				ID:  "file-regenerate",
-				Run: Run.With("generate:rw", project),
-				Why: "a declared output is never hand-edited: change the source of truth and regenerate it into the same commit.",
-			})
+			next = append(next, entry("file-regenerate", Run,
+				"a declared output is never hand-edited: change the source of truth and regenerate it into the same commit.",
+				"generate:rw", project))
 			break
 		}
 	}
@@ -163,16 +168,12 @@ func NextForAffected(target string, projects []string) []Next {
 		return nil
 	}
 	return []Next{
-		{
-			ID:  "affected-plan",
-			Run: Affected.With(target, "--plan"),
-			Why: "the plan is the same set sharded, which is what CI runs and what says how long it will take.",
-		},
-		{
-			ID:  "affected-explain",
-			Run: Affected.With("--explain", projects[0]),
-			Why: "a project in the set for a reason you did not expect is a declaration to fix, not a run to sit through.",
-		},
+		entry("affected-plan", Affected,
+			"the plan is the same set sharded, which is what CI runs and what says how long it will take.",
+			target, "--plan"),
+		entry("affected-explain", Affected,
+			"a project in the set for a reason you did not expect is a declaration to fix, not a run to sit through.",
+			"--explain", projects[0]),
 	}
 }
 
@@ -185,20 +186,82 @@ func NextForAffected(target string, projects []string) []Next {
 func NextForFailure(project, target, ref string) []Next {
 	var next []Next
 	if ref != "" {
-		next = append(next, Next{
-			ID:  "run-output",
-			Run: QueryOutput.With(ref),
-			Why: "the ref holds the run's whole captured output, so nothing has to be reproduced to be read.",
-		})
+		next = append(next, entry("run-output", QueryOutput,
+			"the ref holds the run's whole captured output, so nothing has to be reproduced to be read.",
+			ref))
 	}
 	if project != "" && target != "" {
-		next = append(next, Next{
-			ID:  "run-explain-target",
-			Run: Explain.With("target:" + project + ":" + target),
-			Why: "a target that fails on its inputs is explained by what feeds it, which the node names.",
-		})
+		next = append(next, entry("run-explain-target", Explain,
+			"a target that fails on its inputs is explained by what feeds it, which the node names.",
+			"target:"+project+":"+target))
 	}
 	return capNext(next)
+}
+
+// Role is who a result is being served to. The caller derives it from the acting
+// lease's row: no acting lease is Unbound (a person, or the orchestrator), a row that
+// is read-only or owns no path is Reviewer, anything else is Worker.
+//
+// It exists so the obligation sits where the breadcrumb is MINTED. A suggestion magus
+// makes is one a reader may take on trust, so serving a worker a write outside its
+// lane and relying on the guard to refuse it afterwards spends a turn teaching the
+// reader that the tool's own advice does not apply to them.
+type Role string
+
+const (
+	RoleUnbound  Role = "unbound"
+	RoleWorker   Role = "worker"
+	RoleReviewer Role = "reviewer"
+)
+
+// ForRole drops the breadcrumbs role may not be served: every write for a reviewer,
+// and for a worker every write whose lane cannot be known here (a `magus run`, an
+// `affected` that is not a dry read, a `:rw` charm, a VCS mutation). Unbound keeps
+// the lot.
+//
+// Dropped, never rewritten. A template narrowed to fit a role would be a command
+// nobody wrote, and the cap is applied afterwards so a filtered list still fills up
+// to NextCap from what survives.
+func ForRole(role Role, next []Next) []Next {
+	if role == "" || role == RoleUnbound {
+		return capNext(next)
+	}
+	kept := make([]Next, 0, len(next))
+	for _, n := range next {
+		if Writes(n.Argv) {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return capNext(kept)
+}
+
+// Writes reports whether argv would change the tree, judged from the command alone.
+//
+// Deliberately blunt on `run`: magus.yaml may declare default charms, so a bare
+// `magus run generate <project>` writes exactly as `generate:rw` does, and reading
+// the charm off the token would call that one read-only. `affected` goes the other
+// way, since its dry forms are the ones breadcrumbs use.
+func Writes(argv []string) bool {
+	if len(argv) < 2 {
+		return false
+	}
+	for _, a := range argv[1:] {
+		if strings.Contains(a, ":rw") {
+			return true
+		}
+	}
+	switch argv[1] {
+	case Run.Head():
+		return true
+	case Affected.Head():
+		return !slices.ContainsFunc(argv[2:], func(a string) bool {
+			return a == "--plan" || a == "--impact" || a == "--explain" || a == "--dry-run"
+		})
+	case VCSAdd.Head():
+		return len(argv) > 2 && slices.Contains([]string{VCSAdd.Leaf(), VCSResolve.Leaf(), "merge-driver"}, argv[2])
+	}
+	return false
 }
 
 // capNext trims to NextCap and normalizes empty to nil.
@@ -307,4 +370,133 @@ func sourcePath(source string) string {
 		return ""
 	}
 	return source
+}
+
+// The served-next journal: one line per breadcrumb actually put in front of a
+// reader, written where the advisory markers already live.
+//
+// Two readers, one file. The guard treats a command it served within the last few
+// calls as already vetted, which needs recency rather than history; `session load`
+// joins the same lines onto a host's transcript so uptake per id becomes a query
+// instead of a guess at what a result carried. Nothing here is a decision, so a
+// write that fails is dropped rather than reported: a journal is not worth failing
+// a query over.
+const (
+	servedNextDir    = "advisories"
+	servedNextSuffix = ".served-next"
+
+	// servedNextKept bounds the file on rotate. It is a recency window for the
+	// guard, not an archive; the store is where a served id lives long enough to be
+	// counted.
+	servedNextKept = 200
+)
+
+// ServedNextEntry is one journal line: when a breadcrumb was served, which id, and
+// the exact argv the reader was handed.
+type ServedNextEntry struct {
+	Ts   int64    `json:"ts"`
+	ID   string   `json:"id"`
+	Argv []string `json:"argv"`
+}
+
+// ServedNextPath names the journal for session, under cacheDir. The session id is
+// hashed, and an empty one lands in the anonymous bucket, on the same key derivation
+// the advisory markers use: a host-chosen string may hold separators, and a path
+// assembled from one is a path the input picked.
+//
+// Empty when cacheDir is, which is the caller's signal that there is nowhere to
+// write.
+func ServedNextPath(cacheDir, session string) string {
+	if cacheDir == "" {
+		return ""
+	}
+	key := "anon"
+	if s := strings.TrimSpace(session); s != "" {
+		sum := sha256.Sum256([]byte(s))
+		key = hex.EncodeToString(sum[:6])
+	}
+	return filepath.Join(cacheDir, servedNextDir, key+servedNextSuffix)
+}
+
+// AppendServedNext records that next was served to session, one line each. Best
+// effort throughout: every failure returns silently, and an entry that will not
+// marshal is skipped rather than losing the rest of the batch.
+func AppendServedNext(cacheDir, session string, next []Next) {
+	path := ServedNextPath(cacheDir, session)
+	if path == "" || len(next) == 0 {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	ts := time.Now().UnixMilli()
+	var buf bytes.Buffer
+	for _, n := range next {
+		line, err := json.Marshal(ServedNextEntry{Ts: ts, ID: n.ID, Argv: n.Argv})
+		if err != nil {
+			continue
+		}
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	_, _ = f.Write(buf.Bytes())
+	if err := f.Close(); err != nil {
+		return
+	}
+	rotateServedNext(path)
+}
+
+// rotateServedNext trims the journal to its newest servedNextKept lines.
+func rotateServedNext(path string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	lines := bytes.Split(bytes.TrimRight(raw, "\n"), []byte("\n"))
+	if len(lines) <= servedNextKept {
+		return
+	}
+	kept := bytes.Join(lines[len(lines)-servedNextKept:], []byte("\n"))
+	_ = os.WriteFile(path, append(kept, '\n'), 0o644)
+}
+
+// ReadServedNext returns every journal entry under cacheDir, oldest first, across
+// all sessions that wrote one. A line that will not decode is skipped: the file is
+// append-only from several processes, so a torn tail is expected rather than
+// exceptional.
+func ReadServedNext(cacheDir string) []ServedNextEntry {
+	if cacheDir == "" {
+		return nil
+	}
+	dir := filepath.Join(cacheDir, servedNextDir)
+	names, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []ServedNextEntry
+	for _, e := range names {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), servedNextSuffix) {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, line := range bytes.Split(raw, []byte("\n")) {
+			if len(bytes.TrimSpace(line)) == 0 {
+				continue
+			}
+			var entry ServedNextEntry
+			if err := json.Unmarshal(line, &entry); err != nil || entry.ID == "" {
+				continue
+			}
+			out = append(out, entry)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b ServedNextEntry) int { return int(a.Ts - b.Ts) })
+	return out
 }

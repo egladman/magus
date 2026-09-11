@@ -1,8 +1,11 @@
 package hint
 
 import (
+	"os"
+	"strings"
 	"testing"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,4 +196,108 @@ func TestNextSourcePath(t *testing.T) {
 	assert.Empty(t, sourcePath(""))
 	assert.Empty(t, sourcePath("."), "a project directory is not a file to classify")
 	assert.Empty(t, sourcePath("libs/gopherbuzz"))
+}
+
+// Every template, graded per role. A worker is never handed a write whose lane this
+// package cannot check, and a reviewer is handed none at all; the regeneration is the
+// one template that writes today.
+func TestForRoleDropsWritesPerRole(t *testing.T) {
+	all := []Next{
+		entry("query-explain", Explain, "why", "spell:go"),
+		entry("file-impact", Affected, "why", "--impact"),
+		entry("file-regenerate", Run, "why", "generate:rw", "."),
+	}
+	for _, tc := range []struct {
+		role Role
+		want []string
+	}{
+		{RoleUnbound, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{RoleWorker, []string{"query-explain", "file-impact"}},
+		{RoleReviewer, []string{"query-explain", "file-impact"}},
+		{"", []string{"query-explain", "file-impact", "file-regenerate"}},
+	} {
+		var ids []string
+		for _, n := range ForRole(tc.role, all) {
+			ids = append(ids, n.ID)
+		}
+		assert.Equal(t, tc.want, ids, "role %q", tc.role)
+	}
+}
+
+// A bare `magus run` writes wherever the workspace declares default charms, so the
+// charm token is not what decides it; `affected` reads unless it is asked to run.
+func TestWritesJudgesTheCommand(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want bool
+	}{
+		{[]string{"magus", "run", "generate:rw", "."}, true},
+		{[]string{"magus", "run", "test", "."}, true},
+		{[]string{"magus", "affected", "ci"}, true},
+		{[]string{"magus", "affected", "ci", "--plan"}, false},
+		{[]string{"magus", "affected", "--impact"}, false},
+		{[]string{"magus", "affected", "--explain", "libs/textsearch"}, false},
+		{[]string{"magus", "vcs", "add", "."}, true},
+		{[]string{"magus", "vcs", "checkpoint"}, false},
+		{[]string{"magus", "explain", "spell:go"}, false},
+		{[]string{"magus", "query", "kind=target"}, false},
+		{[]string{"magus"}, false},
+		{nil, false},
+	} {
+		assert.Equal(t, tc.want, Writes(tc.argv), "%v", tc.argv)
+	}
+}
+
+// A breadcrumb renders twice: quoted for a shell, raw for an exec.
+func TestEntryRendersRunAndArgv(t *testing.T) {
+	n := entry("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
+	assert.Equal(t, `magus query kind=docsection "id=docs/a b.md"`, n.Run)
+	assert.Equal(t, []string{"magus", "query", "kind=docsection", "id=docs/a b.md"}, n.Argv)
+}
+
+// The journal is append-only and bounded: the guard reads it for recency, so the file
+// keeps the newest servedNextKept lines and drops the rest.
+func TestServedNextJournalAppendsAndRotates(t *testing.T) {
+	base := t.TempDir()
+	one := []Next{entry("query-explain", Explain, "why", "spell:go")}
+
+	for range servedNextKept + 5 {
+		AppendServedNext(base, "session-1", one)
+	}
+
+	raw, err := os.ReadFile(ServedNextPath(base, "session-1"))
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	assert.Len(t, lines, servedNextKept)
+
+	var got ServedNextEntry
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &got))
+	assert.Equal(t, "query-explain", got.ID)
+	assert.Equal(t, []string{"magus", "explain", "spell:go"}, got.Argv)
+	assert.NotZero(t, got.Ts)
+}
+
+// Nothing to write to, and nothing to write: both are silent no-ops, because a
+// journal is not worth failing a query over.
+func TestServedNextJournalIsBestEffort(t *testing.T) {
+	assert.Empty(t, ServedNextPath("", "session-1"))
+	AppendServedNext("", "session-1", []Next{entry("query-explain", Explain, "why", "spell:go")})
+
+	base := t.TempDir()
+	AppendServedNext(base, "session-1", nil)
+	assert.Empty(t, ReadServedNext(base))
+}
+
+// Every session's journal is read back together, oldest first: the join in
+// `session load` asks what this checkout served, not what one door served.
+func TestReadServedNextSpansSessions(t *testing.T) {
+	base := t.TempDir()
+	AppendServedNext(base, "session-1", []Next{entry("query-explain", Explain, "why", "spell:go")})
+	AppendServedNext(base, "", []Next{entry("file-impact", Affected, "why", "--impact")})
+
+	var ids []string
+	for _, e := range ReadServedNext(base) {
+		ids = append(ids, e.ID)
+	}
+	assert.ElementsMatch(t, []string{"query-explain", "file-impact"}, ids)
 }
