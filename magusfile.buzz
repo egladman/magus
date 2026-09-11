@@ -209,6 +209,12 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
+        // The badge renders from the per-platform records under coverage/, which a
+        // person refreshes on a developer machine, so any Go edit puts it out of date
+        // and no amount of work on the branch can settle it. It stayed in ci because
+        // the badge does have to be refreshed before a release; advisory is what stops
+        // a branch paying for that verdict three times over.
+        "coverage-badge": {"advisory": "renders from a hand-refreshed per-platform record, so a branch is stale by design"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
