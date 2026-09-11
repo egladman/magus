@@ -139,7 +139,20 @@ import (
 // allow, because a worker's fixed context load is paid whatever the diff's size.
 // 66: magus-multi-agent drops the word "handoff" and says delegate; the word is the
 // agent-industry idiom and this tool is written for a person first.
-const SkillVersion = 66
+// 67: magus-multi-agent follows the ledger's grading contract onto its new shape.
+// `magus ledger accept` now reads the report from --stdin only and exits 1 for a
+// rejection or 2 for one that will not decode; it derives pass or fail from the
+// stored attempt behind the report's output ref, since the report carries no
+// `passed` field for a worker to assert. A bound worker's own write door is four
+// things: register its base, shrink its own owned_paths, end its own row, or
+// declare a child inside its own lane; everything else belongs to the unbound
+// orchestrator, and the skill says so plainly instead of pointing a worker at the
+// magus_ledger tool as a way to widen. It also teaches the guard facts the lease
+// runtime gained alongside this: guard wiring is denied under any bound lease, a
+// verdict carries the lease it graded against, a served next is pre-authorized,
+// and `magus ledger register` and `magus session hints` are named as the
+// terminal doors they are.
+const SkillVersion = 67
 
 const skillLicense = "GPL-3.0-or-later"
 

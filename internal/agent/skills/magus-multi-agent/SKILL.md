@@ -244,7 +244,11 @@ warning. When evidence is incomplete, reduce parallelism.
 
 Before spawning, record one row per lease - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
-tree is not clean) - and keep descendants in the same table:
+tree is not clean) - and keep descendants in the same table. Declare each row with
+the `magus_ledger` tool (op=put) from the orchestrating agent, or `magus ledger
+register` from a person at a terminal{{if .Full}} - the same store and the same
+authorization rule either way, so a row written by hand and one an agent wrote are
+indistinguishable to everything that reads it{{end}}:
 {{if .Full}}
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
@@ -281,6 +285,16 @@ makes acceptance mechanical{{if .Full}}; the same four facts in prose can only b
 graded by reading, and a worker that ran a filtered subset writes the same
 paragraph as one that did not{{end}}. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
+
+Binding narrows what a worker may write on the ledger, never what it may see. Its
+own row accepts four writes: registering the base it landed on, shrinking its own
+owned_paths (how it releases a path), ending itself in fail or no_return, and
+declaring a child inside its own lane. Everything else, including any other field
+on its own row and any write to a row that is not its own or its child, is the
+orchestrator's alone{{if .Full}}, and the store refuses the rest before a worker
+gets far enough to try it a second way: the refusal names the actor directly -
+your orchestrator writes what a worker may not; report it as an unresolved risk
+and stop{{end}}.
 
 The checkpoint you recorded is what you HANDED the lease; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
@@ -352,6 +366,33 @@ dropping the lease id to buy advisory treatment, turns a denial you could have
 acted on into a collision nobody sees until integration{{end}}. Step 1 of Integrate
 and verify checks the same boundary against the checkpoint, and that is the half
 that does not depend on a worker cooperating.
+
+A bound lease is denied one class of write regardless of its lane: the host's own
+guard wiring - `.claude/settings.json` and its hooks, `.cursor/hooks.json`,
+`.codex/hooks.json`, `.opencode/plugins/`, and each host's equivalent{{if .Full}}.
+Those files switch the guard on for the host's next session start, so an edit
+inside them is never a lane question. An unbound session gets a once-per-session
+advisory instead, because rewiring the host is ordinarily the orchestrator's or a
+person's job{{end}}.
+
+Every guard verdict carries `lease`: the row it graded the write under, read from
+`--lease` or the `magus.lease` baggage member. An id the ledger does not declare
+is a DENY, not a silent pass-through{{if .Full}} - every lease-scoped rule reads
+that row, so a typo'd id would otherwise be graded by nothing while the worker
+believed itself bounded{{end}}. An id naming a row already in `pass`, `fail`, or
+`no_return` prints one notice per session that its rules are inert{{if .Full}},
+because those rules only ever read live rows{{end}}.
+
+A `next` breadcrumb magus itself served is PRE-AUTHORIZED for the call it names:
+no advisory fires and the role-scoped rules stand down for that exact
+command{{if .Full}}, matched argv for argv with only the binary's own spelling
+normalized{{end}}. The workspace-wide denies never yield to it - a raw language
+tool, a pipe or redirect of magus's own output, a whole-tree VCS op, a relocated
+checkout{{if .Full}}, because those protect everyone rather than one role{{end}}.
+`magus session hints` reports how often a served breadcrumb was actually taken
+up, per id, over the sessions this repository has loaded{{if .Full}}: served,
+followed, rejected and reflex-repeated counts, and the rate below which a hint is
+spending context on advice nobody takes{{end}}.
 
 A read-only lease carries an abbreviated row: no Owned paths, no Forbidden paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
@@ -427,13 +468,20 @@ As leases finish:
 1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Run `magus ledger accept <lease>` on each report BEFORE you read it. It checks
-   what is mechanical - every changed path inside the declared owned paths, the
-   validation passed, its output ref still resolving in the store - records a
-   passing row and exits non-zero naming each violation. Then reopen the evidence
-   yourself (`magus query output <ref>`): accept proves the ref RESOLVES, never
-   that the run did what the lease asked, and a worker reporting that its criteria
-   passed is not that evidence.
+2. Run `magus ledger accept <lease> --stdin < report.json` on each report BEFORE
+   you read it - the report is read only with `--stdin`, nothing decodes without
+   it. It checks what is mechanical: every changed path inside the declared owned
+   paths, a change set that is not empty on a row that writes, and the output ref
+   bound to a run of THAT ROW'S OWN VALIDATION which the store recorded as
+   PASSING{{if .Full}}. There is no `passed` field on the report: accept reads the
+   ref's own recorded attempt from the output store and derives the outcome from
+   it, never from what the worker claims{{end}}. A passing report records the row
+   `pass`; a rejection exits 1 naming every violation, and a report that will not
+   decode at all exits 2. It refuses outright from a checkout still bound to the
+   lease it is grading - a worker does not accept its own row. Then reopen the
+   evidence yourself (`magus query output <ref>`): accept proves the ref names a
+   passing run of this row's own check, never that the work satisfies the row's
+   GOAL, and a worker's own prose about its criteria is not that evidence.
 3. Resolve cross-lease API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
