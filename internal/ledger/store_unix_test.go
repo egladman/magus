@@ -37,12 +37,11 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Close())
 
 	s := tmpStore(t, root)
-	_, err = s.Put(ctx, types.Lease{
+	seed(t, s, types.Lease{
 		ID:         "u1",
 		WritePaths: []string{"escape.go", "pipe", "big.bin"},
 		State:      types.StateRunning,
 	})
-	require.NoError(t, err)
 
 	// Released off the test goroutine with a deadline, because the failure this is
 	// really about is a HANG: os.Open on a fifo blocks until somebody writes to it, and
@@ -87,8 +86,7 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := tmpStore(t, root)
-	_, err := s.Put(ctx, types.Lease{ID: "u1", WritePaths: []string{"link.go"}})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "u1", WritePaths: []string{"link.go"}})
 	stored, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)

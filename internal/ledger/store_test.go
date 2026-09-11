@@ -50,6 +50,15 @@ func lease(id string) types.Lease {
 	}
 }
 
+// seed writes a row whole, the way a fixture means it: every field this test declared and
+// nothing carried over from a previous one.
+func seed(t *testing.T, s *Store, row types.Lease) types.Lease {
+	t.Helper()
+	stored, err := s.Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
+	require.NoError(t, err)
+	return stored
+}
+
 func TestStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -98,11 +107,9 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := t.Context()
 			s := tmpStore(t, t.TempDir())
 			for _, u := range tt.puts {
-				stored, err := s.Put(ctx, u)
-				require.NoError(t, err)
+				stored := seed(t, s, u)
 				assert.NotZero(t, stored.Created, "the store stamps Created")
 				assert.NotZero(t, stored.Updated, "the store stamps Updated")
 			}
@@ -129,7 +136,8 @@ func TestStorePutRequiresAnID(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, types.Lease{Goal: "no id"})
+	row := types.Lease{Goal: "no id"}
+	_, err := s.Update(ctx, row.ID, func(cur *types.Lease) { *cur = row })
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
 	got, err := s.List()
@@ -140,34 +148,30 @@ func TestStorePutRequiresAnID(t *testing.T) {
 func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	first, err := s.Put(ctx, lease("a"))
-	require.NoError(t, err)
+	first := seed(t, s, lease("a"))
 
-	second, err := s.Put(ctx, types.Lease{ID: "a", State: types.StateFail})
-	require.NoError(t, err)
+	second := seed(t, s, types.Lease{ID: "a", State: types.StateFail})
 	assert.Equal(t, first.Created, second.Created, "an update keeps the row's original creation time")
 
 	// A caller-supplied timestamp is a fact about the caller's clock, so the store
 	// ignores it rather than recording a time the row was not written at.
-	third, err := s.Put(ctx, types.Lease{ID: "a", Created: 1, Updated: 1})
-	require.NoError(t, err)
+	third := seed(t, s, types.Lease{ID: "a", Created: 1, Updated: 1})
 	assert.Equal(t, first.Created, third.Created)
 	assert.NotEqual(t, int64(1), third.Updated)
 }
 
 // TestStoreUpdateMergesUnderOneLock is what Update exists for. Two writers advancing
 // different fields of one row (a state machine and a checkpoint recorder) each
-// read-modify-write the same file, and a merge that reads with List and writes with Put
-// releases the lock in between: the second write then reverts the first one's field.
+// read-modify-write the same file, and a merge that reads with List and writes back the
+// whole row releases the lock in between: the second write then reverts the first one's
+// field.
 func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, lease("a"))
-	require.NoError(t, err)
+	seed(t, s, lease("a"))
 
 	const rounds = 25
 	var wg sync.WaitGroup
@@ -226,7 +230,8 @@ func TestStoreUpdateSurvivesSeparateStores(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := range rounds {
-				_, err := s.Put(ctx, lease(fmt.Sprintf("w%d-%d", w, i)))
+				row := lease(fmt.Sprintf("w%d-%d", w, i))
+				_, err := s.Update(ctx, row.ID, func(cur *types.Lease) { *cur = row })
 				errs <- err
 			}
 		}()
@@ -275,29 +280,26 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "kept.go"), []byte("package kept\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "released.go"), []byte("package released\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
 
 	s := tmpStore(t, root)
-	_, err := s.Put(ctx, types.Lease{
+	seed(t, s, types.Lease{
 		ID:         "u1",
 		WritePaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
 		State:      types.StateRunning,
 	})
-	require.NoError(t, err)
 	before, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, before[0].Releases, "declaring a lease releases nothing")
 
-	stored, err := s.Put(ctx, types.Lease{
+	stored := seed(t, s, types.Lease{
 		ID:         "u1",
 		WritePaths: []string{"kept.go"},
 		State:      types.StateRunning,
 	})
-	require.NoError(t, err)
 
 	require.Len(t, stored.Releases, 3, "every path the put dropped is recorded, in the order it was owned")
 	assert.Equal(t, "released.go", stored.Releases[0].Path)
@@ -330,8 +332,7 @@ func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
 	s := tmpStore(t, root)
-	_, err := s.Put(ctx, types.Lease{ID: "u1", WritePaths: []string{"a.go"}})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "u1", WritePaths: []string{"a.go"}})
 
 	released, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 	require.NoError(t, err)
@@ -373,17 +374,15 @@ func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, lease("a"))
-	require.NoError(t, err)
-	_, err = s.Register(ctx, "a", "abc123")
+	seed(t, s, lease("a"))
+	_, err := s.Register(ctx, "a", "abc123")
 	require.NoError(t, err)
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "a", "internal/a/store.go"))
 
 	forged := lease("a")
 	forged.ReportedBase, forged.BaseVerdict, forged.Registered = "deadbeef", types.BaseDiverged, 1
 	forged.Unattributed = []types.LeaseUnattributedWrite{{Path: "docs/forged.md"}}
-	stored, err := s.Put(ctx, forged)
-	require.NoError(t, err)
+	stored := seed(t, s, forged)
 
 	assert.Equal(t, "abc123", stored.ReportedBase)
 	assert.Equal(t, types.BaseMatch, stored.BaseVerdict)
@@ -408,7 +407,8 @@ func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "schema_version 2 and this magus accepts version 1 only")
 
-	_, err = s.Put(t.Context(), lease("adj/other"))
+	row := lease("adj/other")
+	_, err = s.Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
 	assert.Error(t, err, "no write goes near a ledger this binary cannot read whole")
 }
 
@@ -444,10 +444,8 @@ func TestStoreClear(t *testing.T) {
 	require.NoError(t, err, "clearing a ledger that was never written is not an error")
 	assert.Zero(t, dropped)
 
-	_, err = s.Put(ctx, lease("a"))
-	require.NoError(t, err)
-	_, err = s.Put(ctx, lease("b"))
-	require.NoError(t, err)
+	seed(t, s, lease("a"))
+	seed(t, s, lease("b"))
 
 	dropped, err = s.Clear(ctx)
 	require.NoError(t, err)
@@ -458,8 +456,7 @@ func TestStoreClear(t *testing.T) {
 
 	// One plan per repository: the rows are archived, not kept, so a put after a clear is
 	// row one.
-	_, err = s.Put(ctx, lease("c"))
-	require.NoError(t, err)
+	seed(t, s, lease("c"))
 	got, err = s.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -472,8 +469,7 @@ func TestClearArchivesWhatItDropped(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(t.Context(), lease("adj/store"))
-	require.NoError(t, err)
+	seed(t, s, lease("adj/store"))
 	path, err := s.Path()
 	require.NoError(t, err)
 
@@ -492,11 +488,9 @@ func TestClearArchivesWhatItDropped(t *testing.T) {
 func TestStorePersistsAcrossStores(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	loc := tmpLoc(t, t.TempDir())
 	first := NewStore(loc)
-	_, err := first.Put(ctx, lease("a"))
-	require.NoError(t, err)
+	seed(t, first, lease("a"))
 
 	// The point of the store: a plan outlives the process that declared it.
 	second := NewStore(loc)
@@ -515,7 +509,6 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	repo := t.TempDir()
 	git := filepath.Join(repo, ".git")
 	require.NoError(t, os.MkdirAll(filepath.Join(git, "worktrees", "worker"), 0o755))
@@ -528,8 +521,7 @@ func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 
 	base := t.TempDir()
 	orchestrator := NewStore(Location{StateBase: base, CacheDir: t.TempDir(), Root: repo})
-	_, err := orchestrator.Put(ctx, lease("plan/unit"))
-	require.NoError(t, err)
+	seed(t, orchestrator, lease("plan/unit"))
 
 	// A separate cache dir, which is what a second worktree actually has.
 	got, err := NewStore(Location{StateBase: base, CacheDir: t.TempDir(), Root: worker}).List()
@@ -543,7 +535,6 @@ func TestLedgerIsSharedAcrossWorktreesOfOneRepository(t *testing.T) {
 func TestLedgerAdoptsTheLegacyCacheDirLocation(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	loc := tmpLoc(t, t.TempDir())
 	legacy := filepath.Join(loc.CacheDir, "ledger")
 	require.NoError(t, os.MkdirAll(legacy, 0o755))
@@ -561,8 +552,7 @@ func TestLedgerAdoptsTheLegacyCacheDirLocation(t *testing.T) {
 	require.NoError(t, os.MkdirAll(legacy, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, "leases.json"),
 		[]byte(`{"leases":[{"id":"stale","created":1,"updated":1}]}`), 0o644))
-	_, err = NewStore(loc).Put(ctx, lease("live"))
-	require.NoError(t, err)
+	seed(t, NewStore(loc), lease("live"))
 	again, err := NewStore(loc).List()
 	require.NoError(t, err)
 	ids := make([]string, len(again))
@@ -576,10 +566,8 @@ func TestLedgerAdoptsTheLegacyCacheDirLocation(t *testing.T) {
 func TestStoreListReturnsCopies(t *testing.T) {
 	t.Parallel()
 
-	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, lease("a"))
-	require.NoError(t, err)
+	seed(t, s, lease("a"))
 
 	got, err := s.List()
 	require.NoError(t, err)
@@ -610,8 +598,7 @@ func TestRecordUnattributedWrite(t *testing.T) {
 	s := tmpStore(t, root)
 	ctx := t.Context()
 
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
 
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
@@ -635,8 +622,7 @@ func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
 	s := tmpStore(t, root)
 	ctx := t.Context()
 
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
 	rows, err := s.List()
@@ -664,8 +650,7 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 	for i := range MaxUnattributedWrites + over {
 		owned = append(owned, fmt.Sprintf("f%d.go", i))
 	}
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: owned})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "worker-1", WritePaths: owned})
 	for _, p := range owned {
 		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))
 	}

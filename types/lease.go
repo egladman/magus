@@ -242,7 +242,7 @@ type Lease struct {
 	// SchemaVersion is the shape this row was written in, stamped by the store on every
 	// write and never taken from a client. See LeaseSchemaVersion.
 	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
-	// ID is the lease's identity within the plan, and the key Put upserts on. The
+	// ID is the lease's identity within the plan, and the key Update upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
 	// orchestrator should use the same id it puts in the worker's prompt.
 	ID string `json:"id" yaml:"id"`

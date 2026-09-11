@@ -27,9 +27,9 @@ var (
 // one case the record is for. The caller gets the verdict and [RegistrationAdvice]'s reading
 // of it, and decides.
 //
-// It is the ONE write here that does not create the row it names. Put and Update declare a
-// lease and advance one with the same call, which is right for an orchestrator writing its
-// own plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
+// It is the ONE write here that does not create the row it names. Update declares a lease
+// and advances one with the same call, which is right for an orchestrator writing its own
+// plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
 // invented for it would bury that under a plausible-looking ledger entry.
 func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Lease, error) {
 	base := strings.TrimSpace(reportedBase)

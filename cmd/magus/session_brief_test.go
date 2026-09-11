@@ -119,13 +119,14 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 
 	store, err := openLedger(root)
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{
+	guardRow := types.Lease{
 		ID:         "f2-guard",
 		State:      types.StateRunning,
 		Goal:       "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
 		WritePaths: []string{"internal/ledger"},
-	})
+	}
+	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Lease) { *cur = guardRow })
 	require.NoError(t, err)
 
 	// One session, one failing target: the run history the brief reads back.
@@ -167,9 +168,11 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 
 	store, err := openLedger(root)
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{ID: "landed", State: types.StatePass})
+	landed := types.Lease{ID: "landed", State: types.StatePass}
+	_, err = store.Update(ctx, landed.ID, func(cur *types.Lease) { *cur = landed })
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{ID: "running", State: types.StateRunning})
+	running := types.Lease{ID: "running", State: types.StateRunning}
+	_, err = store.Update(ctx, running.ID, func(cur *types.Lease) { *cur = running })
 	require.NoError(t, err)
 
 	brief := gatherSessionBrief(ctx, root, nil)

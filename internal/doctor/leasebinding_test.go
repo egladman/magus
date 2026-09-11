@@ -27,6 +27,15 @@ func tmpLedger(t *testing.T) (cacheDir, root string, store *ledger.Store) {
 	return cacheDir, root, ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 
+// seed writes a row whole, the way a fixture means it: every field this test declared and
+// nothing carried over from a previous one.
+func seed(t *testing.T, s *ledger.Store, row types.Lease) types.Lease {
+	t.Helper()
+	stored, err := s.Update(context.Background(), row.ID, func(cur *types.Lease) { *cur = row })
+	require.NoError(t, err)
+	return stored
+}
+
 // wireGuardHook plants the one host hook config shape guardHookConfigs looks for, so a
 // case can separate "bound and registered" from "bound, registered and judged".
 func wireGuardHook(t *testing.T, root string) {
@@ -101,8 +110,7 @@ func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 
 func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	_, err := store.Put(context.Background(), types.Lease{ID: "adj/done", State: types.StatePass})
-	require.NoError(t, err)
+	seed(t, store, types.Lease{ID: "adj/done", State: types.StatePass})
 	require.NoError(t, ledger.BindLease(cacheDir, "adj/done"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
@@ -117,8 +125,7 @@ func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 
 func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	_, err := store.Put(context.Background(), types.Lease{ID: "adj/stateless"})
-	require.NoError(t, err)
+	seed(t, store, types.Lease{ID: "adj/stateless"})
 	require.NoError(t, ledger.BindLease(cacheDir, "adj/stateless"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
@@ -133,8 +140,7 @@ func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 
 func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	_, err := store.Put(context.Background(), types.Lease{ID: "adj/live", State: types.StateRunning})
-	require.NoError(t, err)
+	seed(t, store, types.Lease{ID: "adj/live", State: types.StateRunning})
 	require.NoError(t, ledger.BindLease(cacheDir, "adj/live"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
@@ -179,9 +185,8 @@ func TestLeaseBindingPassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 func registeredLease(t *testing.T, id string) (cacheDir, root string) {
 	t.Helper()
 	cacheDir, root, store := tmpLedger(t)
-	_, err := store.Put(context.Background(), types.Lease{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
-	require.NoError(t, err)
-	_, err = store.Register(context.Background(), id, "abc123")
+	seed(t, store, types.Lease{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
+	_, err := store.Register(context.Background(), id, "abc123")
 	require.NoError(t, err)
 	require.NoError(t, ledger.BindLease(cacheDir, id))
 	return cacheDir, root

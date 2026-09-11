@@ -128,11 +128,12 @@ func TestLeaseCoversWrite(t *testing.T) {
 	base, root := t.TempDir(), t.TempDir()
 	location := location{cacheDir: base, workspace: root}
 	store := ledger.NewStore(ledger.Location{CacheDir: base, Root: root})
-	_, err := store.Put(t.Context(), types.Lease{
+	row := types.Lease{
 		ID:         "unit-a",
 		State:      types.StateRunning,
 		WritePaths: []string{"libs/ui", "app/api"},
-	})
+	}
+	_, err := store.Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
 	require.NoError(t, err)
 
 	for _, tc := range []struct {

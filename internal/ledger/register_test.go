@@ -71,8 +71,7 @@ func TestStoreRegister(t *testing.T) {
 
 			ctx := t.Context()
 			s := tmpStore(t, t.TempDir())
-			_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
-			require.NoError(t, err)
+			seed(t, s, types.Lease{ID: "u1", Checkpoint: tt.checkpoint, State: types.StateDeclared})
 
 			got, err := s.Register(ctx, "u1", tt.reported)
 			require.NoError(t, err, "the ledger records every verdict and refuses none of them")
@@ -110,10 +109,9 @@ func TestStoreRegisterRefusesAnUnknownLease(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, types.Lease{ID: "declared", Checkpoint: baseA})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "declared", Checkpoint: baseA})
 
-	_, err = s.Register(ctx, "typo", baseA)
+	_, err := s.Register(ctx, "typo", baseA)
 	require.ErrorIs(t, err, ErrUnknownLease)
 	assert.Contains(t, err.Error(), "magus_ledger list", "the message names where the declared ids are")
 	assert.Contains(t, err.Error(), "typo")
@@ -129,10 +127,9 @@ func TestStoreRegisterRequiresABase(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "u1", Checkpoint: baseA})
 
-	_, err = s.Register(ctx, "u1", "   ")
+	_, err := s.Register(ctx, "u1", "   ")
 	require.ErrorIs(t, err, errNoBase)
 	assert.Contains(t, err.Error(), "magus vcs checkpoint -o name", "the message names how to produce one")
 
@@ -149,8 +146,7 @@ func TestStoreRegisterIsIdempotentPerBase(t *testing.T) {
 
 	ctx := t.Context()
 	s := tmpStore(t, t.TempDir())
-	_, err := s.Put(ctx, types.Lease{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
-	require.NoError(t, err)
+	seed(t, s, types.Lease{ID: "u1", Checkpoint: baseA, Goal: "declared goal"})
 
 	diverged, err := s.Register(ctx, "u1", baseB)
 	require.NoError(t, err)

@@ -46,7 +46,7 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (ctx context.Context, roo
 	root, cacheDir = t.TempDir(), t.TempDir()
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
-		_, err := store.Put(t.Context(), u)
+		_, err := store.Update(t.Context(), u.ID, func(cur *types.Lease) { *cur = u })
 		require.NoError(t, err)
 	}
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
@@ -952,7 +952,8 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.NoError(t, err)
 	worker := narrowLease()
 	worker.Parent = "harness"
-	_, err = ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).Put(t.Context(), worker)
+	_, err = ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).
+		Update(t.Context(), worker.ID, func(cur *types.Lease) { *cur = worker })
 	require.NoError(t, err)
 	require.NoError(t, ledger.BindLease(cacheDir, worker.ID))
 

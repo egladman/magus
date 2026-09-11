@@ -20,8 +20,7 @@ func declared(t *testing.T, rows ...types.Lease) Location {
 	loc := tmpLoc(t, t.TempDir())
 	s := NewStore(loc)
 	for _, row := range rows {
-		_, err := s.Put(t.Context(), row)
-		require.NoError(t, err)
+		seed(t, s, row)
 	}
 	return loc
 }
@@ -255,12 +254,11 @@ func TestStoreGradesTheActorItHasAtEachWrite(t *testing.T) {
 
 	loc := Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: t.TempDir()}
 	s := NewStore(loc)
-	_, err := s.Put(t.Context(), workerRow())
-	require.NoError(t, err)
+	seed(t, s, workerRow())
 
 	require.NoError(t, BindLease(loc.CacheDir, "adj/other"))
 
-	_, err = s.Update(t.Context(), "adj/store", func(u *types.Lease) { u.Goal = "rewritten" })
+	_, err := s.Update(t.Context(), "adj/store", func(u *types.Lease) { u.Goal = "rewritten" })
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused, "the worker bound after construction writes no row but its own")
 	_, err = s.Clear(t.Context())
@@ -278,8 +276,7 @@ func TestRowRecordsTheSessionThatDeclaredIt(t *testing.T) {
 
 	loc := tmpLoc(t, t.TempDir())
 	loc.Actor = &Actor{Session: "orchestrator-1", Host: "claude-code"}
-	stored, err := NewStore(loc).Put(t.Context(), workerRow())
-	require.NoError(t, err)
+	stored := seed(t, NewStore(loc), workerRow())
 	assert.Equal(t, types.LeaseActor{Session: "orchestrator-1", Host: "claude-code"}, stored.RegisteredBy)
 
 	after, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Lease) {
@@ -317,8 +314,7 @@ func TestUnattributedWriteIsRecordedAcrossLeases(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "held.go"), []byte("package held\n"), 0o644))
 	loc := tmpLoc(t, root)
 	loc.Actor = &Actor{}
-	_, err := NewStore(loc).Put(t.Context(), types.Lease{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
-	require.NoError(t, err)
+	seed(t, NewStore(loc), types.Lease{ID: "adj/other", WritePaths: []string{"held.go"}, State: types.StateRunning})
 
 	require.NoError(t, boundStore(loc, "adj/store").RecordUnattributedWrite(t.Context(), "adj/other", "held.go"))
 

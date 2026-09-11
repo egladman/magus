@@ -56,7 +56,7 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string)
 	root, cacheDir := t.TempDir(), t.TempDir()
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
-		_, err := store.Put(t.Context(), u)
+		_, err := store.Update(t.Context(), u.ID, func(cur *types.Lease) { *cur = u })
 		require.NoError(t, err)
 	}
 	location := location{cacheDir: cacheDir, workspace: root}

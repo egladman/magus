@@ -35,7 +35,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrNoID reports a lease with no id. The id is what Put upserts on, so a row without
+// ErrNoID reports a lease with no id. The id is what Update upserts on, so a row without
 // one could never be updated or referred to again: it is unaddressable, not merely
 // incomplete.
 var ErrNoID = errors.New("ledger: a lease needs an id")
@@ -58,9 +58,9 @@ var ErrNoID = errors.New("ledger: a lease needs an id")
 //     read-modify-writes that interleave drop whichever row the loser had not read.
 //
 // Both are taken for the span of ONE call. A caller that merges fields by reading with
-// List and writing back with Put takes them twice, and two such merges on one id then
-// lose whichever field the second one read before the first wrote. [Store.Update] is that
-// merge done under a single acquisition, and it is what a field-at-a-time writer (the
+// List and writing back the whole row takes them twice, and two such merges on one id
+// then lose whichever field the second one read before the first wrote. [Store.Update] is
+// that merge done under a single acquisition, and it is what a field-at-a-time writer (the
 // magus_ledger MCP tool) has to use.
 //
 // READS take neither. write replaces the file by rename, so a reader either sees the
@@ -111,7 +111,7 @@ type Location struct {
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
-// location on the way past. The leases file itself is created by the first Put.
+// location on the way past. The leases file itself is created by the first Update.
 //
 // THE CACHE DIRECTORY IS NO LONGER THE HOME, and that is the whole point of this
 // resolution: a cache dir belongs to one CHECKOUT, so an orchestrator's rows in one
@@ -175,20 +175,14 @@ type ledgerFile struct {
 	Leases []types.Lease `json:"leases"`
 }
 
-// Put records one lease, replacing any row with the same id IN PLACE: the ledger is a
-// table a person reads top to bottom, and a row that jumped to the bottom on every state
-// change would reorder itself exactly while it is being watched.
-//
-// The timestamps and everything else the store computes are ignored on the way in and
-// returned on the way out; see [Store.Update], which this is a whole-row spelling of.
-func (s *Store) Put(ctx context.Context, row types.Lease) (types.Lease, error) {
-	return s.Update(ctx, row.ID, func(cur *types.Lease) { *cur = row })
-}
-
 // Update applies apply to the row with this id and writes the result back while holding
-// both of the Store's locks ONCE: a merge spread across List and Put releases them in
-// between, so two concurrent writers advancing different fields of one row each read it
-// before the other wrote, and the second write reverts the first.
+// both of the Store's locks ONCE: a merge spread across List and a whole-row write
+// releases them in between, so two concurrent writers advancing different fields of one
+// row each read it before the other wrote, and the second write reverts the first.
+//
+// A caller that wants to replace a row whole rather than merge fields passes an apply that
+// does `*cur = row`; the timestamps and everything else the store computes are ignored on
+// the way in and returned on the way out.
 //
 // The row is CREATED when absent, so declaring a lease and advancing one are the same
 // call, and the id is the key: whatever apply writes into ID is overwritten with it.

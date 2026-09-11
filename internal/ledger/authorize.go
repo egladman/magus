@@ -252,8 +252,8 @@ func changedFields(prev, next types.Lease) []string {
 // rewrite a glob into a wider one that still looks contained. The exact-string rule costs a
 // worker one round trip and cannot be argued with.
 //
-// Both sides are trimmed here because [Store.Put] writes a types.Lease the caller built,
-// which no door has trimmed.
+// Both sides are trimmed here because [Store.Update] writes a types.Lease the caller
+// built, which no door has trimmed.
 func subset(inner, outer []string) bool {
 	for _, p := range inner {
 		if !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) }) {

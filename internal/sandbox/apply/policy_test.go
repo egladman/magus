@@ -160,7 +160,8 @@ func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0o755))
 	}
 	if row.ID != "" {
-		_, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).Put(t.Context(), row)
+		_, err := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).
+			Update(t.Context(), row.ID, func(cur *types.Lease) { *cur = row })
 		require.NoError(t, err)
 	}
 	return root, cacheDir
