@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
@@ -16,22 +16,22 @@ import (
 // tmpLedger isolates the real user state directory behind XDG_STATE_HOME, the knob
 // internal/ledger's tests and this package's other tests use, and clears BAGGAGE so a
 // test run under a leased worker grades the row it planted rather than that worker's.
-func tmpLedger(t *testing.T) (cacheDir, root string, store *ledger.Store) {
+func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvBaggage, "")
 	cacheDir, root = t.TempDir(), t.TempDir()
 	// Pinned unbound: these rows are the orchestrator's, and resolving the actor from
 	// the environment would make every write depend on whether this run is leased.
-	actor := ledger.Actor{}
-	return cacheDir, root, ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
+	actor := job.Actor{}
+	return cacheDir, root, job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 
 // seed writes a row whole, the way a fixture means it: every field this test declared and
 // nothing carried over from a previous one.
-func seed(t *testing.T, s *ledger.Store, row types.Lease) types.Lease {
+func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
 	t.Helper()
-	stored, err := s.Update(context.Background(), row.ID, func(cur *types.Lease) { *cur = row })
+	stored, err := s.Update(context.Background(), row.ID, func(cur *types.Job) { *cur = row })
 	require.NoError(t, err)
 	return stored
 }
@@ -60,7 +60,7 @@ func TestLeaseBindingPassesWithNoLeaseBound(t *testing.T) {
 
 func TestLeaseBindingFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/marker"))
+	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
 	got := checkLeaseBinding(cacheDir, root, "")
@@ -78,7 +78,7 @@ func TestLeaseBindingFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 
 func TestLeaseBindingReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/live"))
+	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
 	path, err := store.Path()
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -88,12 +88,12 @@ func TestLeaseBindingReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 
 	require.Equal(t, types.DoctorFail, got.Status)
 	require.Equal(t, types.EvidenceUnknown, got.Evidence)
-	require.Contains(t, got.Message, "could not read the lease ledger")
+	require.Contains(t, got.Message, "could not read the job store")
 }
 
 func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/no-such-lease"))
+	require.NoError(t, job.BindLease(cacheDir, "adj/no-such-lease"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -103,15 +103,15 @@ func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
 			"the guard grades every write here as an unattributed edit: advisory, never denied",
-			"declare the row under this id: " + hint.LedgerRegister.With("adj/no-such-lease", "--goal", "<goal>"),
+			"declare the row under this id: " + hint.JobFork.With("adj/no-such-lease", "--goal", "<goal>"),
 		},
 	}, got)
 }
 
 func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	seed(t, store, types.Lease{ID: "adj/done", State: types.StatePass})
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/done"))
+	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
+	require.NoError(t, job.BindLease(cacheDir, "adj/done"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -125,8 +125,8 @@ func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 
 func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	seed(t, store, types.Lease{ID: "adj/stateless"})
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/stateless"))
+	seed(t, store, types.Job{ID: "adj/stateless"})
+	require.NoError(t, job.BindLease(cacheDir, "adj/stateless"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -140,8 +140,8 @@ func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 
 func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	seed(t, store, types.Lease{ID: "adj/live", State: types.StateRunning})
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/live"))
+	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
+	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -149,7 +149,7 @@ func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 		Name:    "lease-binding",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
-		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then register it on this lease"},
+		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 	}, got)
 }
 
@@ -185,9 +185,9 @@ func TestLeaseBindingPassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 func registeredLease(t *testing.T, id string) (cacheDir, root string) {
 	t.Helper()
 	cacheDir, root, store := tmpLedger(t)
-	seed(t, store, types.Lease{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
-	_, err := store.Register(context.Background(), id, "abc123")
+	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
+	_, err := store.Exec(context.Background(), id, "abc123")
 	require.NoError(t, err)
-	require.NoError(t, ledger.BindLease(cacheDir, id))
+	require.NoError(t, job.BindLease(cacheDir, id))
 	return cacheDir, root
 }

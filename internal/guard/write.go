@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -201,7 +201,7 @@ const (
 	envHookLease  = trail.EnvBaggage + "=" + trail.BaggageLease
 )
 
-// writeGrade is what the lease ledger has to say about one write. Separate from
+// writeGrade is what the job store has to say about one write. Separate from
 // Verdict because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
 // facts, and only the first may be overridden by a later rule.
@@ -210,15 +210,15 @@ type writeGrade struct {
 	Reason   string
 	Context  string
 	// Kind names an advisory held to one firing per session (internal/guard/advisory.go), and is
-	// empty for the ledger advisories that report a live collision: those describe THIS
+	// empty for the job-store advisories that report a live collision: those describe THIS
 	// write against a boundary that moves, so the second one is a second fact.
 	Kind hint.MarkerKind
 }
 
-// gradeLeasedWrite judges a file write against the lease ledger's declared write
+// gradeLeasedWrite judges a file write against the job store's declared write
 // boundaries, and says nothing at all when no fleet is running.
 //
-// The ledger RECORDS and the guard ENFORCES. That split is deliberate (internal/ledger's
+// The store RECORDS and the guard ENFORCES. That split is deliberate (internal/job's
 // package doc argues it): a store that quietly gated writes would become something agents
 // route around, while a guard denial is loud, names the owning lease, and teaches. This is
 // the reader that turns those declared facts into a verdict, and the only one.
@@ -232,7 +232,7 @@ type writeGrade struct {
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.
 //
-// Every uncertainty fails OPEN with at most an advisory: no ledger, no live leases, a file
+// Every uncertainty fails OPEN with at most an advisory: no job store, no live leases, a file
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
 func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, writePath string) writeGrade {
@@ -246,14 +246,14 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	}
 	leases, err := leaseRows(ctx, location)
 	if err != nil {
-		// An ABSENT ledger is not this branch: the store reads it as an empty one, which
+		// An ABSENT store is not this branch: it reads as an empty one, which
 		// falls through to the no-live-leases return below and costs a stat. Only a file
 		// that exists and will not parse arrives here, and it is worth a word, because a
 		// lease whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the "+hint.ToolLedger.String()+" tool if leased work is meant to be running.\n"+
-				"This workspace's lease ledger could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
+			"magus workspace: no lease boundary was checked for this write. Re-declare the plan with the "+hint.ToolJob.String()+" tool if leased work is meant to be running.\n"+
+				"This workspace's job store could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
 	live := liveLeases(leases)
 	if len(live) == 0 {
@@ -261,7 +261,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	}
 	rel, inside := workspaceRelative(location.workspace, writePath)
 	if !inside {
-		// The ledger's paths are workspace-relative, so a write outside the workspace has
+		// The store's paths are workspace-relative, so a write outside the workspace has
 		// nothing to be graded against.
 		return writeGrade{}
 	}
@@ -269,7 +269,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	// An id magus cannot parse is one it cannot look up either, so it is graded as absent.
 	// The notice that says so is adviseInvalidLease, fired from Judge so both surfaces
 	// get it.
-	if !types.ValidLeaseID(actingLease) {
+	if !types.ValidJobID(actingLease) {
 		actingLease = ""
 	}
 
@@ -278,19 +278,19 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
-	// one would block work whose ledger row is simply stale.
+	// one would block work whose row in the store is simply stale.
 	owner, owned, err := ownerOf(live, rel, "")
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
 	if owned {
 		// Recorded as well as reported, so the lease whose file just moved can find out by
-		// asking the ledger. Telling only the writer left the one party who needed it (the agent
+		// asking the store. Telling only the writer left the one party who needed it (the agent
 		// still holding a stale read of this path) as the only party never informed.
 		//
 		// Best-effort by construction: a failure here is swallowed, because this whole function
-		// fails open and a ledger that would not accept a note must not cost somebody a save.
-		_ = ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace}).
+		// fails open and a store that would not accept a note must not cost somebody a save.
+		_ = job.NewStore(job.Location{CacheDir: location.cacheDir, Root: location.workspace}).
 			RecordUnattributedWrite(ctx, owner.ID, rel)
 		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
 			"magus workspace: if you are lease %s, set %s=%s (or pass --lease %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
@@ -305,7 +305,7 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 //
 // The trigger is a process that carries SPAWN ANCESTRY (a parent span id in TRACEPARENT,
 // meaning some tool started it deliberately) writing a file while naming no lease, in a
-// workspace whose ledger holds no live row to grade it against. That is the fleet running
+// workspace whose job store holds no live row to grade it against. That is the fleet running
 // unrecorded: the orchestrator's plan exists nowhere, so no boundary can be checked, no
 // collision can be reported, and nothing says which base the work applies to.
 //
@@ -323,8 +323,8 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 		return writeGrade{}
 	}
 	return writeGrade{Decision: "advise", Kind: advisoryUnleasedWrite, Context: fmt.Sprintf(
-		"magus workspace: declare the plan with the "+hint.ToolLedger.String()+" tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
-			"This process reports a spawner but names no lease, and this workspace's ledger holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
+		"magus workspace: declare the plan with the "+hint.ToolJob.String()+" tool and export %s=<lease id> in each worker, so the guard can grade these writes against a declared boundary.\n"+
+			"This process reports a spawner but names no lease, and this workspace's job store holds no live one. Nothing records who owns which paths, so two workers editing one file is invisible until somebody reads the diff, and no checkpoint says which revision the work applies to.\n"+
 			"This is an advisory and never a block: the spawn chain is a claim the environment makes, so it may teach and may not judge. Load the magus-multi-agent skill for how a plan is partitioned.", envHookLease)}
 }
 
@@ -336,17 +336,17 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // the orchestrator handed out, and a worker that widens its own lane is the failure the
 // declaration exists to catch. An EMPTY write set is not a lane of size zero, it is a
 // boundary nobody declared, so it scopes nothing.
-func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeGrade {
-	// Ahead of the registration rule below: a read-only lease has no base to register for
+func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade {
+	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
 	if me.ReadOnly {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: put what you found in your report instead of writing it. "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
-				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
 			me.ID, goalLine(me), rel)}
 	}
-	// BEFORE the path checks, because an unregistered lease should not be writing anywhere,
+	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,
 	// not merely outside its lane. A checkpoint is what says which base the work applies to and
 	// what makes its diff locatable afterwards (it records a revision and a patch DIGEST, so it
 	// never makes the work recoverable), and both facts are worth nothing recorded afterwards.
@@ -358,8 +358,8 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and register what it prints with the "+hint.ToolLedger.String()+" tool (op register, lease %s), then retry this write.\n"+
-				"Lease %s (%s) has not registered the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
+			"magus workspace: run `"+hint.VCSCheckpoint.With("-o", "name")+"` in this tree and exec what it prints with the "+hint.ToolJob.String()+" tool (op exec, lease %s), then retry this write.\n"+
+				"Lease %s (%s) has not reported the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
 			me.ID, me.ID, goalLine(me))}
 	}
 	decl, denied, err := declarationCovering(me.DenyPaths, rel)
@@ -369,7 +369,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	if denied {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own write paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
-				"%s is covered by %q, which your lease %s (%s) declared DENIED. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+				"%s is covered by %q, which your lease %s (%s) declared DENIED. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
 			rel, decl, me.ID, goalLine(me))}
 	}
 	_, mine, err := declarationCovering(me.WritePaths, rel)
@@ -382,8 +382,8 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 		// the divergence stay silent until the merge finds it.
 		if me.BaseVerdict == types.BaseDiverged {
 			return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-				"magus workspace: re-checkpoint and re-register if you moved on purpose; otherwise reconcile with the orchestrator before writing more.\n"+
-					"Lease %s registered on %s, which is not the checkpoint it was handed (%s). You are working from a different base than the plan assumes, so your changes may not apply where it expects them.",
+				"magus workspace: re-checkpoint and re-exec if you moved on purpose; otherwise reconcile with the orchestrator before writing more.\n"+
+					"Lease %s reported landing on %s, which is not the checkpoint it was handed (%s). You are working from a different base than the plan assumes, so your changes may not apply where it expects them.",
 				me.ID, me.ReportedBase, me.Checkpoint)}
 		}
 		return writeGrade{}
@@ -395,7 +395,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
-				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the lease ledger exists to make visible; this guard is where the declaration gets read.",
+				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.",
 			rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
 	if len(me.WritePaths) == 0 {
@@ -403,7 +403,7 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen this lane")+"\n"+
-			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+			"%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
 		me.ID, strings.Join(me.WritePaths, ", "), rel, me.ID, goalLine(me))}
 }
 
@@ -411,8 +411,8 @@ func gradeAgainstOwnLease(me types.Lease, live []types.Lease, rel string) writeG
 // A terminal row has stopped competing for its paths, which is the same rule
 // types.leaseOverlaps applies when it decides which pairs to report. A row with no
 // state at all is not live either: it has not said it is.
-func liveLeases(leases []types.Lease) []types.Lease {
-	live := make([]types.Lease, 0, len(leases))
+func liveLeases(leases []types.Job) []types.Job {
+	live := make([]types.Job, 0, len(leases))
 	for _, u := range leases {
 		if u.State == types.StateDeclared || u.State == types.StateRunning {
 			live = append(live, u)
@@ -423,44 +423,44 @@ func liveLeases(leases []types.Lease) []types.Lease {
 
 // liveLease finds the acting lease's own row. An empty id matches nothing, so an
 // un-enrolled caller cannot collide with a row whose id was never written.
-func liveLease(live []types.Lease, id string) (types.Lease, bool) {
+func liveLease(live []types.Job, id string) (types.Job, bool) {
 	if id == "" {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
-	i := slices.IndexFunc(live, func(u types.Lease) bool { return u.ID == id })
+	i := slices.IndexFunc(live, func(u types.Job) bool { return u.ID == id })
 	if i < 0 {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
 	return live[i], true
 }
 
 // ownerOf finds the live lease whose write paths cover rel, skipping the id in exclude.
 //
-// Ledger order breaks ties. Two leases declaring one path is an overlap the ledger already
+// Store order breaks ties. Two leases declaring one path is an overlap the store already
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file: an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error) {
+func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
 	for _, u := range live {
 		if u.ID == exclude {
 			continue
 		}
 		_, ok, err := declarationCovering(u.WritePaths, rel)
 		if err != nil {
-			return types.Lease{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
+			return types.Job{}, false, fmt.Errorf("lease %s: %w", u.ID, err)
 		}
 		if ok {
 			return u, true, nil
 		}
 	}
-	return types.Lease{}, false, nil
+	return types.Job{}, false, nil
 }
 
 // declarationCovering reports which declaration covers rel, and whether any did. rel is
-// workspace-relative and slash-separated, as the ledger's declarations are.
+// workspace-relative and slash-separated, as the store's declarations are.
 //
 // A declaration covers the SUBTREE beneath what it names, which is what an orchestrator
-// means by writing "internal/ledger" into a plan. That is the second Match call: appending
+// means by writing "internal/job" into a plan. That is the second Match call: appending
 // "/**" is the same trick internal/file/watch uses to reach a glob's descendants.
 //
 // Deliberately NOT types.pathsIntersect. That one compares two DECLARATIONS and
@@ -468,7 +468,7 @@ func ownerOf(live []types.Lease, rel, exclude string) (types.Lease, bool, error)
 // and "console/src/**/*.css" read as overlapping. Over-reporting is right for a fact a
 // human reads and wrong here, where the answer denies a write: a guard that blocks
 // legitimate edits is one agents learn to route around, and routing around it is the
-// failure the whole ledger design is built to avoid.
+// failure the whole job-store design is built to avoid.
 // A declaration the matcher cannot read is surfaced only when nothing else matched, never
 // in place of a real match: a valid "src/**" that covers rel still denies even if an earlier
 // entry was a malformed pattern. Swallowing the error entirely let a deny path spelled
@@ -514,7 +514,7 @@ func declarationCovering(decls []string, rel string) (string, bool, error) {
 // nothing about whether this write is legitimate, only that nothing graded it.
 func adviseMalformedDeclaration(err error) writeGrade {
 	return writeGrade{Decision: "advise", Context: fmt.Sprintf(
-		"magus workspace: fix the path pattern with the "+hint.ToolLedger.String()+" tool, then retry this write.\n"+
+		"magus workspace: fix the path pattern with the "+hint.ToolJob.String()+" tool, then retry this write.\n"+
 			"A declared lease path could not be matched (%v), so that boundary was not checked. The guard fails open on a pattern it cannot read, which means a write or deny path spelled this way is not being enforced at all.", err)}
 }
 
@@ -542,9 +542,9 @@ func workspaceRelative(root, p string) (string, bool) {
 }
 
 // goalLine is the lease's goal reduced to its first line. Goal holds the goal AND its
-// acceptance criteria as one block (see types.Lease), and pasting all of that
+// acceptance criteria as one block (see types.Job), and pasting all of that
 // into a denial would bury the next step under it.
-func goalLine(u types.Lease) string {
+func goalLine(u types.Job) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(u.Goal), "\n")
 	if line == "" {
 		return "no goal recorded"

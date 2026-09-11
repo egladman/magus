@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
@@ -199,6 +200,8 @@ func buildStatusReport(ctx context.Context, socket string, symbols bool) types.S
 		// vice versa, so it is set before any early return on a proc-socket error.
 		MCPEndpoint: buildMCPEndpointStatus(ctx, globalCfg.MCP),
 	}
+	// After the literal, because it reads the MCP probe above rather than making its own.
+	report.Console = buildConsoleStatus(globalCfg.Console, report.MCPEndpoint)
 	if symbols {
 		// Symbol-index freshness hashes every symbol-capable project. Keep it opt-in so
 		// status remains a cheap operational snapshot rather than a second workspace scan.
@@ -415,9 +418,10 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 			if r.Pool.Mode == "daemon" {
 				label = "daemon"
 			}
-			fmt.Fprintf(w, "%s pid %d\n", label, r.Pool.ParentPID)
-			fmt.Fprintf(w, "capacity: %d   running: %d   available: %d   queued: %d\n",
-				r.Pool.Capacity, r.Pool.Running, r.Pool.Available, r.Pool.Queued)
+			printDaemonSummary(w, r.Pool, label)
+			if skew := daemonVersionSkew(r.Pool); skew != "" {
+				fmt.Fprint(w, skew)
+			}
 			if len(r.Pool.RunningTargets) == 0 {
 				if r.Pool.Running > 0 {
 					fmt.Fprintln(w, "local work active; detailed target data unavailable")
@@ -450,6 +454,7 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 
 	printPoolServers(w, r.Pools)
 	printMCPEndpointStatus(w, r.MCPEndpoint)
+	printConsoleStatus(w, r.Console)
 	printServiceStatus(w, r.Services)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
 	printMachineStatus(w, r.Machine)
@@ -560,6 +565,74 @@ func printMCPEndpointStatus(w io.Writer, m *types.MCPEndpointStatus) {
 	fmt.Fprintf(w, "  state  %s\n", m.State)
 	if m.Note != "" {
 		fmt.Fprintf(w, "  %s\n", m.Note)
+	}
+}
+
+// daemonVersionSkew reports that the daemon answering this workspace is a different build
+// from the binary asking, or "" when they match or the daemon did not say.
+//
+// THE PREDICATE HAS NO JUDGMENT IN IT: two version strings are equal or they are not. For
+// a normal install both sides are one binary and this is dormant forever; it fires for
+// somebody who upgraded magus while an old daemon kept running, and for anyone who
+// rebuilds constantly. That is why uptake is the wrong measure of it and it must not be
+// pruned with the advisories that are measured that way: the cost of missing it is a
+// store quietly rewritten by a binary that does not know half its fields, which is what
+// happened here on 2026-09-11.
+//
+// It names the workspaces the daemon has loaded because that is the only provenance a
+// client can see, and the daemon that ate rows here belonged to another worktree
+// entirely while looking exactly like this one's.
+func daemonVersionSkew(pool *types.StatusOutput) string {
+	if pool == nil || pool.DaemonVersion == "" || version == "" || pool.DaemonVersion == version {
+		return ""
+	}
+	var s strings.Builder
+	fmt.Fprintf(&s, "version skew: this magus is %s and the daemon serving it is %s (pid %d).\n",
+		version, pool.DaemonVersion, pool.ParentPID)
+	fmt.Fprintf(&s, "  every call through that daemon is answered by the older build, which decodes what it knows and writes back the rest without it.\n")
+	if len(pool.Workspaces) > 0 {
+		roots := make([]string, 0, len(pool.Workspaces))
+		for _, ws := range pool.Workspaces {
+			roots = append(roots, ws.Root)
+		}
+		fmt.Fprintf(&s, "  it was started from, and is serving: %s\n", strings.Join(roots, ", "))
+	}
+	fmt.Fprintf(&s, "  restart it to pick up this build: `%s` then `%s`. It may be serving other workspaces, which stop for them too.\n",
+		hint.ServerStop, hint.ServerStart)
+	return s.String()
+}
+
+// printDaemonSummary renders who the daemon is and what it is holding: the identity line
+// and the capacity line.
+//
+// ONE renderer for two verbs. `magus status` prints it inside its broader view and
+// `magus server status` prints it as the whole answer, and a second spelling of these two
+// lines is a second thing to keep true: the pair would first drift in wording and then in
+// which number they read.
+func printDaemonSummary(w io.Writer, p *types.StatusOutput, label string) {
+	fmt.Fprintf(w, "%s pid %d\n", label, p.ParentPID)
+	fmt.Fprintf(w, "capacity: %d   running: %d   available: %d   queued: %d\n",
+		p.Capacity, p.Running, p.Available, p.Queued)
+}
+
+// printConsoleStatus renders where a person opens the console. It is the answer to "where
+// do I look at this", which until now lived only in the daemon's log.
+func printConsoleStatus(w io.Writer, c *types.ConsoleStatus) {
+	if c == nil {
+		return
+	}
+	fmt.Fprintln(w, "\nconsole")
+	if !c.Enabled {
+		fmt.Fprintf(w, "  state  %s\n", c.State)
+		if c.Note != "" {
+			fmt.Fprintf(w, "  %s\n", c.Note)
+		}
+		return
+	}
+	fmt.Fprintf(w, "  url    %s\n", c.URL)
+	fmt.Fprintf(w, "  state  %s\n", c.State)
+	if c.Note != "" {
+		fmt.Fprintf(w, "  %s\n", c.Note)
 	}
 }
 

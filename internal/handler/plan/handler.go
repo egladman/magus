@@ -74,7 +74,7 @@ type planNode struct {
 }
 
 // planEdge runs in RUN ORDER: From is the dependency (upstream, drawn left), To is the
-// dependent. Same orientation as the plan ledger's parent edges, so the console renders an
+// dependent. Same orientation as the job store's parent edges, so the console renders an
 // agent-declared plan and a derived one with one layout pass.
 type planEdge struct {
 	From string `json:"from"`

@@ -497,12 +497,12 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "server",
 			print: serverUsage,
-			want:  []string{"magus server", "start", "stop", "reload", "job", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
+			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
 		},
 		{
-			name:  "server job",
-			print: serverJobUsage,
-			want:  []string{"magus server job <name>", "Jobs:"},
+			name:  "job run",
+			print: jobRunUsage,
+			want:  []string{"magus job run <name>", "Jobs:"},
 		},
 		{
 			name:  "vcs",

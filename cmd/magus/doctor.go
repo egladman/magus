@@ -229,7 +229,7 @@ func statusGlyph(status types.DoctorCheckStatus, color bool) string {
 // empty DaemonInfo so checks render a sensible "no daemon" message.
 func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 	sockDir := proc.SockDir()
-	di := doctor.DaemonInfo{SockDir: sockDir}
+	di := doctor.DaemonInfo{SockDir: sockDir, ClientVersion: version}
 
 	// Populate bridge fields from resolved config. BridgeEnabled is true unless
 	// explicitly set to false (mirrors how MCP.Enabled works).

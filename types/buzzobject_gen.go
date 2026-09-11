@@ -889,7 +889,7 @@ func (v StatusRun) BuzzObject() BuzzObject {
 	}
 }
 
-func (v LeaseRelease) BuzzObject() BuzzObject {
+func (v JobRelease) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":       v.Path,
 		"digest":     v.Digest,
@@ -897,7 +897,7 @@ func (v LeaseRelease) BuzzObject() BuzzObject {
 	}
 }
 
-func (v LeaseUnattributedWrite) BuzzObject() BuzzObject {
+func (v JobUnattributedWrite) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"path":   v.Path,
 		"digest": v.Digest,
@@ -905,7 +905,7 @@ func (v LeaseUnattributedWrite) BuzzObject() BuzzObject {
 	}
 }
 
-func (v LeaseActor) BuzzObject() BuzzObject {
+func (v JobActor) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"session": v.Session,
 		"host":    v.Host,
@@ -920,7 +920,36 @@ func (v LeaseCheck) BuzzObject() BuzzObject {
 	}
 }
 
-func (v Lease) BuzzObject() BuzzObject {
+func (v JobResult) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"schemaVersion":   v.SchemaVersion,
+		"job":             v.Job,
+		"changedPaths":    v.ChangedPaths,
+		"validation":      v.Validation.BuzzObject(),
+		"descendants":     v.Descendants,
+		"unresolvedRisks": v.UnresolvedRisks,
+	}
+}
+
+func (v JobResultValidation) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"command":   v.Command,
+		"outputRef": v.OutputRef,
+	}
+}
+
+func (v JobAttempt) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"found":   v.Found,
+		"ref":     v.Ref,
+		"project": v.Project,
+		"target":  v.Target,
+		"spell":   v.Spell,
+		"failed":  v.Failed,
+	}
+}
+
+func (v Job) BuzzObject() BuzzObject {
 	var optCheck any
 	if v.Check != nil {
 		optCheck = (*v.Check).BuzzObject()
@@ -932,6 +961,14 @@ func (v Lease) BuzzObject() BuzzObject {
 	itemsUnattributed := make([]any, len(v.Unattributed))
 	for indexUnattributed := range v.Unattributed {
 		itemsUnattributed[indexUnattributed] = v.Unattributed[indexUnattributed].BuzzObject()
+	}
+	var optResult any
+	if v.Result != nil {
+		optResult = (*v.Result).BuzzObject()
+	}
+	var optAttempt any
+	if v.Attempt != nil {
+		optAttempt = (*v.Attempt).BuzzObject()
 	}
 	return BuzzObject{
 		"schemaVersion": v.SchemaVersion,
@@ -956,29 +993,31 @@ func (v Lease) BuzzObject() BuzzObject {
 		"registered":    v.Registered,
 		"created":       v.Created,
 		"updated":       v.Updated,
+		"result":        optResult,
+		"attempt":       optAttempt,
 	}
 }
 
-func (v LeaseOverlap) BuzzObject() BuzzObject {
+func (v JobOverlap) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"leaseA": v.LeaseA,
-		"leaseB": v.LeaseB,
+		"jobA":   v.JobA,
+		"jobB":   v.JobB,
 		"pathsA": v.PathsA,
 		"pathsB": v.PathsB,
 	}
 }
 
-func (v LeaseReport) BuzzObject() BuzzObject {
-	itemsLeases := make([]any, len(v.Leases))
-	for indexLeases := range v.Leases {
-		itemsLeases[indexLeases] = v.Leases[indexLeases].BuzzObject()
+func (v JobList) BuzzObject() BuzzObject {
+	itemsJobs := make([]any, len(v.Jobs))
+	for indexJobs := range v.Jobs {
+		itemsJobs[indexJobs] = v.Jobs[indexJobs].BuzzObject()
 	}
 	itemsOverlaps := make([]any, len(v.Overlaps))
 	for indexOverlaps := range v.Overlaps {
 		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
 	}
 	return BuzzObject{
-		"leases":   itemsLeases,
+		"jobs":     itemsJobs,
 		"overlaps": itemsOverlaps,
 	}
 }

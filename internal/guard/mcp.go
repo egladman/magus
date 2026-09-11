@@ -15,25 +15,20 @@ import (
 
 // mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
 //
-// Every field ledger.Merge applies, plus the two that name the call. A key this list omits
+// Every field job.Merge applies, plus the two that name the call. A key this list omits
 // reaches the row with no rule having seen it, which is how a bound worker rewrote the
 // checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
 // the two sides together.
-var mcpJudgedParams = append([]string{
+var mcpJudgedParams = []string{
 	"op", "id", "write_paths", "deny_paths", "read_paths", "depends_on",
 	"validation", "read_only", "parent", "state", "checkpoint", "model", "goal", "check",
-}, mcpRenamedParams...)
+}
 
-// mcpRenamedParams are the row's lanes under the spelling they carried before the rename.
-//
-// compat(until: no ledger door accepts these spellings any more; observe it by calling
-// ledger.ParseMerge with each of them and finding it rejected): both vocabularies are
-// judged for one cycle, so a put cannot dodge a rule by picking the word on whichever side
-// of the rename the guard has not learned yet.
-var mcpRenamedParams = []string{"owned_paths", "forbidden_paths", "focus", "tier"}
-
-// The two spellings of the one list a bound caller may shrink. Both are named here rather
-// than spelled at each use so the rebind rule and the renderer cannot learn one of them.
+// writePathsParam is the one list a bound caller may shrink. writePathsLegacyParam is the
+// pre-rename spelling (owned_paths): job.ParseMerge (internal/job/merge.go) no longer
+// accepts it on a fork, so a call naming it is refused downstream regardless, but
+// shrinksWritePaths still names it here so such a call is not mis-classified as a rewrite
+// of something else while it is being judged.
 const (
 	writePathsParam       = "write_paths"
 	writePathsLegacyParam = "owned_paths"
@@ -63,8 +58,8 @@ type mcpCLIEquivalent struct {
 // the rules already written for the CLI judge the tool call rather than a second copy of
 // them being written for MCP.
 //
-// magus_insight and magus_ledger are absent for opposite reasons: nothing in internal/hint
-// spells `insight`, so there is no command to render; the ledger tool is judged on its
+// magus_insight and magus_job are absent for opposite reasons: nothing in internal/hint
+// spells `insight`, so there is no command to render; the job tool is judged on its
 // PARAMETERS by the rebind rule, which is the one rule that reads an MCP call directly.
 var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 	hint.ToolRunTarget:       {command: hint.Run, operands: []string{"target", "projects"}},
@@ -89,7 +84,7 @@ var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 
 // renderMCPCall normalizes an MCP call to a magus tool into a command line.
 //
-// Three shapes, in the order they are decided. The ledger tool renders `<tool> key=value`,
+// Three shapes, in the order they are decided. The job tool renders `<tool> key=value`,
 // because its parameters ARE what the rebind rule judges. A tool with a CLI equivalent
 // renders that argv, so the command rules read it as the work it is. Anything else renders
 // its bare tool name: nothing judges it, and the activity trail still records that it
@@ -100,7 +95,7 @@ var mcpCLIEquivalents = map[hint.ToolName]mcpCLIEquivalent{
 // later is what was graded. A value holding a space is quoted, which the shell parser the
 // rules already run unquotes.
 func renderMCPCall(name string, input map[string]any) string {
-	if name == hint.ToolLedger.String() {
+	if name == hint.ToolJob.String() {
 		out := []string{name}
 		for _, key := range mcpJudgedParams {
 			value, ok := input[key]
@@ -175,7 +170,7 @@ const mcpMagusPrefix = "mcp__magus__"
 // refers to none.
 //
 // The bare name or magus's own prefix, and nothing else. A suffix match let any other
-// server's `whatever__magus_ledger` decode as a magus ledger call, be rendered into
+// server's `whatever__magus_job` decode as a magus job call, be rendered into
 // magus's activity trail, and be judged by magus's rules.
 func magusToolCall(toolName string) string {
 	name := strings.TrimPrefix(toolName, mcpMagusPrefix)
@@ -186,7 +181,7 @@ func magusToolCall(toolName string) string {
 }
 
 // mcpParams reads back the parameters renderMCPCall wrote. The guard sees a call to the
-// ledger tool as `<tool name> <key>=<value>...`, normalized by the envelope decoder.
+// job tool as `<tool name> <key>=<value>...`, normalized by the envelope decoder.
 func mcpParams(args []string) map[string]string {
 	params := make(map[string]string, len(args))
 	for _, a := range args {

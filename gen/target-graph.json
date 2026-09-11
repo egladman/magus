@@ -321,9 +321,9 @@
           ]
         },
         {
-          "name": "ledger-generate",
-          "declared": "ledger_generate",
-          "doc": "Regenerates the published lease schemas (internal/ledger/gen/*.schema.json) from the structs that decode a row and a worker's report.",
+          "name": "job-generate",
+          "declared": "job_generate",
+          "doc": "Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.",
           "dependencies": [
             "types-generate"
           ],
@@ -335,7 +335,7 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "internal/ledger/gen/*.json"
+              "glob": "internal/job/gen/*.json"
             }
           ]
         },
@@ -590,8 +590,8 @@
             "config-generate",
             "graph-generate",
             "index-generate",
+            "job-generate",
             "langservice-generate",
-            "ledger-generate",
             "magusfile-api-generate",
             "man-generate",
             "mcp-tools-generate",
@@ -630,10 +630,10 @@
               "target": "index-generate"
             },
             {
-              "target": "langservice-generate"
+              "target": "job-generate"
             },
             {
-              "target": "ledger-generate"
+              "target": "langservice-generate"
             },
             {
               "target": "magusfile-api-generate"
@@ -810,8 +810,8 @@
             "config-generate",
             "graph-generate",
             "index-generate",
+            "job-generate",
             "langservice-generate",
-            "ledger-generate",
             "magusfile-api-generate",
             "man-generate",
             "mcp-tools-generate",
@@ -843,10 +843,10 @@
               "target": "index-generate"
             },
             {
-              "target": "langservice-generate"
+              "target": "job-generate"
             },
             {
-              "target": "ledger-generate"
+              "target": "langservice-generate"
             },
             {
               "target": "magusfile-api-generate"

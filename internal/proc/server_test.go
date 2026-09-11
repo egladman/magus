@@ -254,7 +254,7 @@ func TestRunDropsAnInvalidClientLease(t *testing.T) {
 	for name, id := range map[string]string{
 		"spaces":   "not a lease id",
 		"newlines": "fleet/f3\nsecret=hunter2",
-		"toolong":  strings.Repeat("a", types.MaxLeaseIDLen+1),
+		"toolong":  strings.Repeat("a", types.MaxJobIDLen+1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := make(chan string, 1)

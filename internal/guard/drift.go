@@ -190,7 +190,7 @@ func touchedProjects(g hint.Gate) []string {
 // write. A lease that declares none covers nothing: an orchestrator that named no lane
 // drew no boundary this rule could defer to.
 func leaseCoversWrite(ctx context.Context, actingLease string, location location, writePath string) bool {
-	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
+	if actingLease == "" || !types.ValidJobID(actingLease) || location.cacheDir == "" {
 		return false
 	}
 	rel, inside := workspaceRelative(location.workspace, writePath)

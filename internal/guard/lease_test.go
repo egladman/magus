@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,8 +182,8 @@ func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
 // multi-agent skill hands out, and the shape the gate deny is scoped to.
-func narrowLease() types.Lease {
-	return types.Lease{
+func narrowLease() types.Job {
+	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Goal:       "lease-scoped denies in the guard",
 		WritePaths: []string{"cmd/magus/**"},
@@ -264,7 +264,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 
 	t.Run("no trail location", func(t *testing.T) {
 		// Pinned EMPTY rather than left unpinned, so the case cannot reach the developer's
-		// own ledger and grade against whatever plan they are really running.
+		// own job store and grade against whatever plan they are really running.
 		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 		assert.Empty(t, denyLeaseScopedGate(nowhere, Dependencies{}, "harness/lease-scoped-deny", "./magus affected ci"))
 	})
@@ -272,18 +272,18 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 
 // TestActingLeaseFromMarker pins the channel a worker in its own worktree reaches the
 // hook through: a marker in the checkout's cache dir, honored only when it holds a lease
-// id, and read by the same ledger.ActingLease the sandbox resolves through.
+// id, and read by the same job.ActingLease the sandbox resolves through.
 func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	base := hookLocation(ctx, Dependencies{}).cacheDir
 
-	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
+	assert.Empty(t, job.ActingLease(base), "no marker, no lease")
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
-	assert.Equal(t, "harness/lease-scoped-deny", ledger.ActingLease(base))
+	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte(" harness/lease-scoped-deny \n"), 0o644))
+	assert.Equal(t, "harness/lease-scoped-deny", job.ActingLease(base))
 
-	require.NoError(t, os.WriteFile(filepath.Join(base, ledger.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
-	assert.Empty(t, ledger.ActingLease(base), "a malformed marker binds nothing rather than something")
+	require.NoError(t, os.WriteFile(filepath.Join(base, job.LeaseMarkerName), []byte("not a lease id!\n"), 0o644))
+	assert.Empty(t, job.ActingLease(base), "a malformed marker binds nothing rather than something")
 }
 
 // TestDenyLeaseScopedVCS pins that a WORKER lease, a row with a parent, is refused the
@@ -347,16 +347,16 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 	me := narrowLease().ID
 
 	for command, what := range map[string]string{
-		"magus session lease harness/other":                                "bind this checkout to another lease",
-		"./magus session lease harness/other":                              "bind this checkout to another lease",
-		"magus -s session lease harness/other":                             "bind this checkout to another lease",
-		"magus ledger accept harness/other":                                "grade a lease row",
-		"magus ledger register":                                            "write a lease row",
-		"magus_ledger op=clear":                                            "drop every ledger row",
-		"magus_ledger op=put id=harness/other owned_paths=**":              "write another lease's ledger row",
-		"magus_ledger op=register id=harness/other":                        "write another lease's ledger row",
-		"magus_ledger op=put id=harness/lease-scoped-deny owned_paths=**":  "rewrite its own ledger row",
-		"magus_ledger op=put id=harness/lease-scoped-deny read_only=false": "rewrite its own ledger row",
+		"magus job exec harness/other":                                   "take the lease on another job here",
+		"./magus job exec harness/other":                                 "take the lease on another job here",
+		"magus -s job exec harness/other":                                "take the lease on another job here",
+		"magus job wait harness/other":                                   "verify a job",
+		"magus job fork":                                                 "declare a job",
+		"magus_job op=clear":                                             "drop every job",
+		"magus_job op=fork id=harness/other write_paths=**":              "write another job",
+		"magus_job op=exec id=harness/other":                             "write another job",
+		"magus_job op=fork id=harness/lease-scoped-deny write_paths=**":  "rewrite the job it holds",
+		"magus_job op=fork id=harness/lease-scoped-deny read_only=false": "rewrite the job it holds",
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, command)
 		require.NotEmpty(t, reason, "%q", command)
@@ -367,62 +367,62 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 }
 
 // TestDenyLeaseScopedRebindStaysQuiet covers every silence. A read is not a rebind, an
-// unbound caller is the party that writes rows, and `op=register` is the worker's own
+// unbound caller is the party that writes rows, and `op=exec` is the worker's own
 // procedure, demanded by the checkpoint denial on the write surface.
 func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	me := narrowLease().ID
 
 	for name, command := range map[string]string{
-		"reading the binding":       "magus session lease",
-		"reading the plan":          "magus ledger ls",
-		"reading one row":           "magus ledger brief harness/lease-scoped-deny",
-		"recording its own base":    "magus_ledger op=register id=harness/lease-scoped-deny reported_base=abc123",
-		"listing rows over MCP":     "magus_ledger op=list",
+		"reading the binding":       "magus job exec",
+		"reading the plan":          "magus ls jobs",
+		"reading one row":           "magus describe job harness/lease-scoped-deny",
+		"recording its own base":    "magus_job op=exec id=harness/lease-scoped-deny reported_base=abc123",
+		"listing rows over MCP":     "magus_job op=list",
 		"an unrelated magus verb":   "magus run go-build .",
-		"a lease id in an argument": "magus query \"session lease\"",
+		"a lease id in an argument": "magus query \"job exec\"",
 		// A flag's value is a bare word, so this reads as a subcommand token and matches
 		// nothing. The rule fails to fire rather than firing on a path that happened to
 		// end in a verb, which is the safe direction; see magusSubcommandWords.
-		"a value-taking global flag": "magus --root /tmp/x session lease harness/other",
+		"a value-taking global flag": "magus --root /tmp/x job exec harness/other",
 	} {
 		assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), name)
 	}
 
-	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, "", "magus session lease harness/other"),
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, "", "magus job exec harness/other"),
 		"an unbound caller is the orchestrator or the person, and they are who writes rows")
 }
 
-// TestLedgerToolRebindLetsALaneBeGivenBack pins the one put a bound caller may make:
+// TestJobToolRebindLetsALaneBeGivenBack pins the one fork a bound caller may make:
 // giving a declaration back. The direction is what the guard judges; whether a particular
 // shrink is legitimate belongs to the store.
-func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
+func TestJobToolRebindLetsALaneBeGivenBack(t *testing.T) {
 	wide := narrowLease()
 	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _ := fleetFixture(t, wide)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/**"),
 		"dropping one of its own declarations cannot widen a role")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
 		"adding a declaration is a widen however it is spelled")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/**"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/**"),
 		"a pattern that happens to cover less is not a shrink this rule will try to prove")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
 		"a shrink carrying another field is not a shrink")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
 		"the checkpoint is the base this lease's work is graded against, and giving a lane back is not cover for moving it")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, Dependencies{}, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
+		"magus_job op=fork id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
 		"both spellings at once leaves nothing saying which the store would apply")
 }
 
@@ -444,7 +444,7 @@ func TestActingLeaseStandingSeparatesTheThreeAnswers(t *testing.T) {
 	assert.True(t, finished.terminal())
 
 	absent := actingLeaseStanding(ctx, Dependencies{}, "harness/typo")
-	assert.True(t, absent.readable, "the ledger answered; it just does not carry that id")
+	assert.True(t, absent.readable, "the store answered; it just does not carry that id")
 	assert.False(t, absent.declared)
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
@@ -470,20 +470,20 @@ func TestIsGateCommandIgnoresTheReportingForms(t *testing.T) {
 		"the gate itself still is the gate")
 }
 
-// TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer: the rule read the acting lease's
-// LIVE row, which is absent for a terminal row and for an unreadable ledger alike, so a
+// TestJobToolRebindIsSilentWhenTheStoreCannotAnswer: the rule read the acting lease's
+// LIVE row, which is absent for a terminal row and for an unreadable store alike, so a
 // session writing its OWN finished row was refused with a reason naming somebody else's,
 // in the same verdict that says the lease-scoped denials are not running for it.
-func TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer(t *testing.T) {
+func TestJobToolRebindIsSilentWhenTheStoreCannotAnswer(t *testing.T) {
 	done := narrowLease()
 	done.State = types.StatePass
 	ctx, _ := fleetFixture(t, done)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, done.ID,
-		"magus_ledger op=put id="+done.ID+" write_paths=**"),
+		"magus_job op=fork id="+done.ID+" write_paths=**"),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
 	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
-	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "magus_ledger op=put id="+done.ID),
-		"a ledger the guard cannot read leaves nothing to judge against")
+	assert.Empty(t, denyLeaseScopedRebind(nowhere, Dependencies{}, done.ID, "magus_job op=fork id="+done.ID),
+		"a store the guard cannot read leaves nothing to judge against")
 }

@@ -136,16 +136,19 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
-	// magus\ledger's bundle (put/list), leaf-first: Lease.releases and
-	// LeaseReport.overlaps are each a list of the other two, and Lease.registeredBy is
+	// magus\ledger's bundle (put/list), leaf-first: Job.releases and
+	// JobList.overlaps are each a list of the other two, and Job.registeredBy is
 	// one of the actor.
-	{Name: "LeaseRelease", Type: reflect.TypeFor[types.LeaseRelease](), RuntimeObject: true},
-	{Name: "LeaseUnattributedWrite", Type: reflect.TypeFor[types.LeaseUnattributedWrite](), RuntimeObject: true},
-	{Name: "LeaseActor", Type: reflect.TypeFor[types.LeaseActor](), RuntimeObject: true},
+	{Name: "JobRelease", Type: reflect.TypeFor[types.JobRelease](), RuntimeObject: true},
+	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
+	{Name: "JobActor", Type: reflect.TypeFor[types.JobActor](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
-	{Name: "Lease", Type: reflect.TypeFor[types.Lease](), RuntimeObject: true},
-	{Name: "LeaseOverlap", Type: reflect.TypeFor[types.LeaseOverlap](), RuntimeObject: true},
-	{Name: "LeaseReport", Type: reflect.TypeFor[types.LeaseReport](), RuntimeObject: true},
+	{Name: "JobResult", Type: reflect.TypeFor[types.JobResult](), RuntimeObject: true},
+	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},
+	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
+	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
+	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
+	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

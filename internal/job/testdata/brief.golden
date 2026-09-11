@@ -1,0 +1,22 @@
+job: harness/ledger-per-repo
+
+goal and acceptance criteria
+Move the lease ledger to the per-repository state dir.
+Done when a row put from one checkout is listed from a second worktree of the same repo.
+
+write paths
+  internal/ledger
+  cmd/magus/ledger.go
+
+deny paths
+  MAGUS.md
+  docs/gen
+
+graph evidence
+  internal/ledger -> dir:internal/ledger, blast radius 4
+
+the only check you run
+magus run test internal/ledger
+
+depends on
+  harness/session-load

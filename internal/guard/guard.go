@@ -21,8 +21,8 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -98,7 +98,7 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
-	// Lease is the ledger row this call acts as; empty falls back to the bound marker.
+	// Lease is the job row this call acts as; empty falls back to the bound marker.
 	Lease string
 	// The attribution the caller knows about itself. No verdict reads any of it.
 	Host       string
@@ -178,12 +178,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// session on that host would share the anonymous bucket. The acting lease is resolved
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
-	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
+	// two tiers cannot disagree about who is acting (see job.LeaseMarkerName).
 	location := hookLocation(ctx, deps)
-	ctx = withLedgerRows(ctx, location)
+	ctx = withJobStoreRows(ctx, location)
 	actingLease := req.Lease
 	if actingLease == "" {
-		actingLease = ledger.ActingLease(location.cacheDir)
+		actingLease = job.ActingLease(location.cacheDir)
 	}
 	markers := hint.NewGate(location.cacheDir, who.Session)
 	tool := hookToolCommand
@@ -194,7 +194,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		tool = hookToolWrite
 	}
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass", Lease: actingLease}
-	// Where the acting lease STANDS, read once and before any rule. An id the ledger does
+	// Where the acting lease STANDS, read once and before any rule. An id the job store does
 	// not carry is refused, because every lease-scoped rule below reads that row and
 	// finding nothing is how they all fall silent at once: the call would be graded by
 	// nobody while looking exactly like a guarded one.
@@ -207,11 +207,11 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	//
 	// --observe is exempt, as it is from every other verdict: it carries none.
 	standing := actingLeaseStanding(ctx, deps, actingLease)
-	denyUndeclared := func() {
+	denyUndeclared := func(command string) {
 		if req.Observe || verdict.Decision == "deny" {
 			return
 		}
-		if reason := denyUndeclaredLease(standing, actingLease); reason != "" {
+		if reason := denyUndeclaredLease(standing, actingLease, command); reason != "" {
 			verdict.Decision, verdict.Reason, verdict.Context = "deny", reason, ""
 		}
 	}
@@ -241,14 +241,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// it left: without this the second write to a skill source would draw the
 		// new-directory advisory instead of nothing.
 		spoken := false
-		// The checkout's own cache dir speaks before the ledger, and it is the only rule
+		// The checkout's own cache dir speaks before the job store, and it is the only rule
 		// that does. Every lease-scoped verdict below is computed from files in there, so
 		// a worker whose lane happens to cover the dir must not be told it owns the lane:
 		// what it is editing is whether the lane was checked.
 		if reason := denyCacheDirPath(location, input); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
-		denyUndeclared()
+		denyUndeclared("")
 		if verdict.Decision != "deny" {
 			switch g := gradeLeasedWrite(ctx, deps, actingLease, input); g.Decision {
 			case "deny":
@@ -343,8 +343,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Context = held
 			}
 		}
-		denyUndeclared()
-		// The lease ledger's half of the command surface, ranked BELOW the rules above
+		denyUndeclared(input)
+		// The job store's half of the command surface, ranked BELOW the rules above
 		// (a sibling checkout's gate is the wrong tree before it is the wrong scope).
 		// Every one is ROLE-scoped, which is what a pre-authorization stands down: the
 		// command came from magus, computed for this role, so refusing it here would be
@@ -657,36 +657,36 @@ type location struct {
 
 type locationKey struct{}
 
-type ledgerRowsKey struct{}
+type jobStoreRowsKey struct{}
 
-// ledgerRows is the lease ledger as one call read it, error included: an unreadable
-// ledger and a ledger with no rows are different facts, and only the first means a rule
+// jobStoreRows is the job store as one call read it, error included: an unreadable
+// store and a store with no rows are different facts, and only the first means a rule
 // could not be evaluated at all.
-type ledgerRows struct {
-	rows []types.Lease
+type jobStoreRows struct {
+	rows []types.Job
 	err  error
 }
 
-// withLedgerRows reads the ledger once and pins it for the rules below.
+// withJobStoreRows reads the job store once and pins it for the rules below.
 //
 // Four of them grade against it on one command arm, and each used to open and parse the
-// same file for itself. Nothing inside a hook call writes the ledger, so one snapshot is
+// same file for itself. Nothing inside a hook call writes the store, so one snapshot is
 // what those four reads already agreed on.
-func withLedgerRows(ctx context.Context, at location) context.Context {
+func withJobStoreRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
-	rows, err := ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
-	return context.WithValue(ctx, ledgerRowsKey{}, ledgerRows{rows: rows, err: err})
+	rows, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	return context.WithValue(ctx, jobStoreRowsKey{}, jobStoreRows{rows: rows, err: err})
 }
 
-// leaseRows reports the pinned ledger, reading it when nothing pinned one. A test that
+// leaseRows reports the pinned job store, reading it when nothing pinned one. A test that
 // calls a single rule gets its own read, which is what every rule used to do.
-func leaseRows(ctx context.Context, at location) ([]types.Lease, error) {
-	if pinned, ok := ctx.Value(ledgerRowsKey{}).(ledgerRows); ok {
+func leaseRows(ctx context.Context, at location) ([]types.Job, error) {
+	if pinned, ok := ctx.Value(jobStoreRowsKey{}).(jobStoreRows); ok {
 		return pinned.rows, pinned.err
 	}
-	return ledger.NewStore(ledger.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
+	return job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).List()
 }
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook

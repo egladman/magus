@@ -127,7 +127,7 @@ func TestDecodeHookEnvelopeReadsEveryWritePathSpelling(t *testing.T) {
 	// A field arriving with an unexpected type still reaches the MCP arm. Typed, it
 	// failed the unmarshal outright and the raw JSON was judged as a shell line, which is
 	// the one outcome the default arm of the decoder exists to prevent.
-	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__magus_ledger","tool_input":{"op":123,"id":"a/b"}}`)
+	req, ok := decodeHookEnvelope(`{"tool_name":"mcp__magus__magus_job","tool_input":{"op":123,"id":"a/b"}}`)
 	require.True(t, ok)
-	assert.Equal(t, "magus_ledger op=123 id=a/b", req.Value)
+	assert.Equal(t, "magus_job op=123 id=a/b", req.Value)
 }

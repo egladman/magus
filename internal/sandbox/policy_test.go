@@ -214,7 +214,7 @@ func TestAllowedAccessLeavesNoTrailEvent(t *testing.T) {
 }
 
 // TestDenialNamesTheLeaseThatNarrowedThePolicy keeps the boundary attributable. A worker's
-// run is refused by a grant derived from its ledger row, so a denial that does not carry
+// run is refused by a grant derived from its job row, so a denial that does not carry
 // the lease leaves a reader unable to say whose boundary was hit.
 func TestDenialNamesTheLeaseThatNarrowedThePolicy(t *testing.T) {
 	base := t.TempDir()

@@ -1070,15 +1070,15 @@ export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/handler/mcp"]);
 }
 
-// Regenerates the published lease schemas (internal/ledger/gen/*.schema.json) from the
-// structs that decode a row and a worker's report.
+// Regenerates the published job schemas (internal/job/gen/*.schema.json) from the
+// structs that decode a job declaration and a holder's result.
 //
 // The schemas were hand-written beside those structs, so every field was declared twice
 // and a test could only report that the two copies had already diverged.
-export fun ledger_generate(ctx: magus\Context, args: [str]) > void !> any {
+export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
-    ctx.writesFiles("internal/ledger/gen/*.json");
-    proc\exec("go", ["run", "./cmd/magus-utils", "ledgerschema", "-out", "internal/ledger/gen"]);
+    ctx.writesFiles("internal/job/gen/*.json");
+    proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
 
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),

@@ -21,8 +21,12 @@ type DaemonInfo struct {
 	SockAddr string
 	// ParentPID is the daemon's OS process ID.
 	ParentPID int
-	// DaemonVersion is the version string reported by the daemon.
+	// DaemonVersion is the version string reported by the daemon, and ClientVersion the
+	// version of the binary asking. They are compared rather than displayed: a daemon of
+	// another vintage answers every call with a decoder that does not know this build's
+	// fields, and writes back what it read.
 	DaemonVersion string
+	ClientVersion string
 	// Capacity / Running / Queued mirror the pool snapshot.
 	Capacity int
 	Running  int

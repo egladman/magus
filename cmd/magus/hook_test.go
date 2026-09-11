@@ -22,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -37,16 +37,16 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 // Mirrors internal/guard's own fleetFixture through the exported guard.WithLocation
 // seam, since this package cannot reach the unexported hookActivityLocationKey it
 // uses directly.
-func fleetFixture(t *testing.T, leases ...types.Lease) (ctx context.Context, root, cacheDir string) {
+func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
 	// The ledger now lives in the per-repository state directory, and the guard resolves
 	// it with no seam a test can reach, so the environment is what keeps this off the
 	// developer's own ledger.
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root, cacheDir = t.TempDir(), t.TempDir()
-	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
 	for _, u := range leases {
-		_, err := store.Update(t.Context(), u.ID, func(cur *types.Lease) { *cur = u })
+		_, err := store.Update(t.Context(), u.ID, func(cur *types.Job) { *cur = u })
 		require.NoError(t, err)
 	}
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
@@ -55,8 +55,8 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (ctx context.Context, roo
 // fleetLeases mirrors internal/guard's own fleetLeases, unexported there: two live
 // workers with disjoint write paths, one of them declaring a denied subtree inside its
 // own.
-func fleetLeases() []types.Lease {
-	return []types.Lease{
+func fleetLeases() []types.Job {
+	return []types.Job{
 		{
 			ID:           "lease-a",
 			Goal:         "own the ledger store\nacceptance: List stays cheap",
@@ -84,8 +84,8 @@ func fleetLeases() []types.Lease {
 // narrowLease is a delegated worker assigned one package's tests: the shape the
 // multi-agent skill hands out, and the shape the gate deny is scoped to. Mirrors
 // internal/guard's own narrowLease, unexported there.
-func narrowLease() types.Lease {
-	return types.Lease{
+func narrowLease() types.Job {
+	return types.Job{
 		ID:         "harness/lease-scoped-deny",
 		Goal:       "lease-scoped denies in the guard",
 		WritePaths: []string{"cmd/magus/**"},
@@ -952,10 +952,10 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 	require.NoError(t, err)
 	worker := narrowLease()
 	worker.Parent = "harness"
-	_, err = ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root}).
-		Update(t.Context(), worker.ID, func(cur *types.Lease) { *cur = worker })
+	_, err = job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).
+		Update(t.Context(), worker.ID, func(cur *types.Job) { *cur = worker })
 	require.NoError(t, err)
-	require.NoError(t, ledger.BindLease(cacheDir, worker.ID))
+	require.NoError(t, job.BindLease(cacheDir, worker.ID))
 
 	envelope := fmt.Sprintf(`{"hook_event_name":"PreToolUse","session_id":"s1","cwd":%q,"tool_input":{"command":"git commit -m done"}}`, root)
 	var out bytes.Buffer
@@ -983,20 +983,20 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"put on another row":    {`{"op":"put","id":"harness/other","write_paths":"**"}`, "deny\n"},
-		"put widening its own":  {`{"op":"put","id":"` + wide.ID + `","write_paths":["**"]}`, "deny\n"},
+		"fork on another row":   {`{"op":"fork","id":"harness/other","write_paths":"**"}`, "deny\n"},
+		"fork widening its own": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["**"]}`, "deny\n"},
 		"clearing the board":    {`{"op":"clear"}`, "deny\n"},
-		"register elsewhere":    {`{"op":"register","id":"harness/other"}`, "deny\n"},
-		"register its own base": {`{"op":"register","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
+		"exec elsewhere":        {`{"op":"exec","id":"harness/other"}`, "deny\n"},
+		"exec its own base":     {`{"op":"exec","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
 		"listing the plan":      {`{"op":"list"}`, "pass\n"},
-		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
+		"giving a lane back":    {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
 		// The rewrite the rendered line used to drop on the floor: judged only on the keys
 		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
-		"forging its own base": {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
-		"rewriting its goal":   {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
+		"forging its own base": {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
+		"rewriting its goal":   {`{"op":"fork","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
 	} {
 		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
-			`","tool_name":"mcp__magus__magus_ledger","tool_input":` + tc.toolInput + `}`
+			`","tool_name":"mcp__magus__magus_job","tool_input":` + tc.toolInput + `}`
 		var out bytes.Buffer
 		err := hookCmd(ctx, strings.NewReader(envelope), &out, []string{"--lease", wide.ID, "-o", "name"})
 		if tc.want == "deny\n" {
@@ -1017,13 +1017,40 @@ func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
-	err := hookCmd(ctx, strings.NewReader("ls"), &out, []string{"--lease", "harness/typo", "-o", "json"})
+	err := hookCmd(ctx, strings.NewReader("magus run test ."), &out, []string{"--lease", "harness/typo", "-o", "json"})
 	var silent errSilent
 	require.ErrorAs(t, err, &silent, "an assertion that does not resolve must not exit 0")
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 	assert.Contains(t, out.String(), `"decision": "deny"`)
 	assert.Contains(t, out.String(), "is not declared")
 	assert.Contains(t, out.String(), `"lease": "harness/typo"`, "the verdict names the row it graded against")
+}
+
+// The other half of C3, and the lockout it caused: the rule refused the line it printed, so
+// a checkout whose row had moved could not read the plan, print a schema, or bind again.
+func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
+	global = globalFlags{}
+	t.Setenv(trail.EnvBaggage, "")
+	ctx, _, _ := fleetFixture(t, narrowLease())
+
+	for _, command := range []string{
+		"magus ls jobs",
+		"magus job wait --schema",
+		"magus job exec harness/real",
+		"git status --short",
+		"ls internal/job",
+	} {
+		var out bytes.Buffer
+		err := hookCmd(ctx, strings.NewReader(command), &out, []string{"--lease", "harness/typo", "-o", "json"})
+		require.NoError(t, err, command)
+		assert.NotContains(t, out.String(), "is not declared", command)
+	}
+
+	// One reader in front of the work does not launder it.
+	var out bytes.Buffer
+	err := hookCmd(ctx, strings.NewReader("ls && magus run test ."), &out, []string{"--lease", "harness/typo", "-o", "json"})
+	require.Error(t, err)
+	assert.Contains(t, out.String(), "is not declared")
 }
 
 // TestHookCmdNoticesATerminalLease covers the other half: a row that has finished still

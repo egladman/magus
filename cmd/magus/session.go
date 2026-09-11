@@ -21,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -62,8 +61,6 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return sessionShow(root, rest)
 	case "hints":
 		return sessionHints(root, rest)
-	case "lease":
-		return sessionLease(root, rest)
 	case "attention":
 		return attentionList(root, rest)
 	case "dispose":
@@ -75,7 +72,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, lease, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 
@@ -85,7 +82,6 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
 	fmt.Fprintln(os.Stderr, "       magus session hints               # uptake per hint id, over the loaded sessions")
 	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
-	fmt.Fprintln(os.Stderr, "       magus session lease [<lease-id>]  # bind a lease to this checkout for the guard")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
 	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
 	fmt.Fprintln(os.Stderr, "       magus session checkpoint [--note <text>]")
@@ -759,54 +755,6 @@ func repoScope(dir string) func(string) bool {
 		seen[cwd] = match
 		return match
 	}
-}
-
-// sessionLease binds a lease to this checkout, or reports the one bound. The binding
-// is a marker in the checkout's cache dir that the guard hook reads when neither
-// --lease nor BAGGAGE names one: a host runs its hooks with its own environment, so
-// the file is the only channel a worker's shell and the host's hook both see. One
-// line in a worker's brief (`magus session lease <id>`) is then what puts every
-// lease-scoped rule in force for it, instead of a paragraph of prohibitions.
-//
-// The report reads the marker through ledger.LeaseFromMarker, so what it prints is what
-// the guard and the sandbox act on: a marker holding something other than a lease id
-// reports as no lease, because that is what it binds.
-func sessionLease(root string, args []string) error {
-	rest, err := cmdParse("session lease", args, func(fs *flag.FlagSet) {
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus session lease [<lease-id>]")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Bind a ledger lease to this checkout, or print the one bound. Every")
-			fmt.Fprintln(os.Stderr, "lease-scoped guard and sandbox rule then reads that lease's row here.")
-		}
-	})
-	if err != nil {
-		return err
-	}
-	if len(rest) > 1 {
-		return usagef("magus session lease: takes at most one lease id")
-	}
-	root = resolveRootOrEmpty(root)
-	if root == "" {
-		return fmt.Errorf("magus session lease: no workspace here: the marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
-	}
-	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return fmt.Errorf("magus session lease: %w", err)
-	}
-	if len(rest) == 0 {
-		if id := ledger.LeaseFromMarker(cacheDir); id != "" {
-			fmt.Println(id)
-		} else {
-			fmt.Println("no lease is bound to this checkout")
-		}
-		return nil
-	}
-	if err := ledger.BindLease(cacheDir, rest[0]); err != nil {
-		return fmt.Errorf("magus session lease: %w", err)
-	}
-	fmt.Printf("lease %s bound to %s; the guard now applies its ledger row to every hook here\n", rest[0], root)
-	return nil
 }
 
 func renderLoadSummary(w io.Writer, s sessionLoadSummary) {

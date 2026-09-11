@@ -37,7 +37,7 @@ func allowLabel(target string) string {
 func denyHint(lease, mode, target string) string {
 	if lease != "" {
 		return fmt.Sprintf("sandbox blocked access to %s: it is outside the paths lease %s was given. "+
-			"Report it to the orchestrator, which can widen the row's write_paths with the magus_ledger tool; do not edit sandbox.allow yourself.",
+			"Report it to the orchestrator, which can widen the row's write_paths with the magus_job tool; do not edit sandbox.allow yourself.",
 			target, lease)
 	}
 	label := allowLabel(target)

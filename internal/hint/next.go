@@ -215,7 +215,7 @@ const (
 // whose row is gone still grades as a worker with no lane: something claimed a lane,
 // and serving the full unbound set on the strength of a missing row is the wrong way
 // to be wrong.
-func RoleFor(rows []types.Lease, id string) (Role, []string) {
+func RoleFor(rows []types.Job, id string) (Role, []string) {
 	if id == "" {
 		return RoleUnbound, nil
 	}
@@ -263,9 +263,9 @@ var readCommands = []Command{
 	GraphExport, GraphStats, GraphDiff,
 	Status, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
 	DescribeGraph, DescribeMCPTools,
-	Explain, Path, Diff, Doctor, Where, X, Ls, LsTargets, Refs,
+	Explain, Path, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
 	MemoryLs, MemoryVerify,
-	Ledger, LedgerBrief,
+	DescribeJob,
 	NotesLs, NotesGet,
 	Session, SessionShow, SessionAttention,
 	VCSCheckpoint,

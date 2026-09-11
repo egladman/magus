@@ -262,10 +262,10 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 // ledger cannot answer. An unreadable ledger and an id nobody declared are one silence
 // here: both leave nothing to judge against, and a rule the guard cannot evaluate must
 // not block a tool call.
-func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string) (types.Lease, bool) {
+func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string) (types.Job, bool) {
 	standing := actingLeaseStanding(ctx, deps, actingLease)
 	if !standing.declared || !standing.state.Live() {
-		return types.Lease{}, false
+		return types.Job{}, false
 	}
 	return standing.row, true
 }
@@ -279,8 +279,8 @@ func actingLiveLease(ctx context.Context, deps Dependencies, actingLease string)
 type leaseStanding struct {
 	readable bool
 	declared bool
-	state    types.LeaseState
-	row      types.Lease
+	state    types.JobState
+	row      types.Job
 }
 
 // terminal reports a row that is declared and has stopped running, so its rules are inert.
@@ -294,7 +294,7 @@ func (s leaseStanding) terminal() bool {
 // typo from a plan that has already finished, and the two cases want opposite verdicts: a
 // dead id looked exactly like a guarded session.
 func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease string) leaseStanding {
-	if !types.ValidLeaseID(actingLease) {
+	if !types.ValidJobID(actingLease) {
 		return leaseStanding{}
 	}
 	location := hookLocation(ctx, deps)
@@ -324,14 +324,80 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // Not the INVALID-id case, which stays an advisory (adviseInvalidLease): an id magus cannot
 // parse is one it cannot look up either, and blocking a tool call over unparsable metadata
 // is the failure the fail-open contract is written against.
-func denyUndeclaredLease(standing leaseStanding, actingLease string) string {
+//
+// It refuses WORK and never the remedy. command is the shell line on the command surface
+// and "" on the write surface, where every call is work by definition. A rule that refused
+// the line it prints locked a checkout out of its own repair: the plan moved house once and
+// the bound worker could not read the plan, print a schema, or bind again, because each of
+// those is a command and every command was refused.
+func denyUndeclaredLease(standing leaseStanding, actingLease, command string) string {
 	if !standing.readable || standing.declared {
 		return ""
 	}
+	if command != "" && undeclaredLeaseRepairs(command) {
+		return ""
+	}
 	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
-		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.",
-		actingLease, hint.Ledger.String())
+		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+
+		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
+		actingLease, hint.LsJobs.String())
 }
+
+// undeclaredLeaseRepairs reports a shell line that only looks at this checkout or repairs
+// the binding, so an unenrolled session can find out what it is bound to and fix it.
+//
+// EVERY invocation on the line has to qualify. One reader chained onto a build is a build,
+// and the cheap way to get work past this rule would be to put `ls &&` in front of it.
+func undeclaredLeaseRepairs(command string) bool {
+	cmds, ok := ParseCommands(command)
+	if !ok || len(cmds) == 0 {
+		return false
+	}
+	for _, c := range cmds {
+		if !repairInvocation(c) {
+			return false
+		}
+	}
+	return true
+}
+
+// repairInvocation judges one invocation. magus answers for itself: a usage line or a
+// schema touches no store, and the verbs that read the plan or take a job are the remedy.
+// Everything else is the short reader set a person orients with, which is deliberately
+// narrower than cacheDirReaders (git and magus are wholesale readers there, and `git
+// commit` is not a way to find out what you are bound to).
+func repairInvocation(c hint.Invocation) bool {
+	if path.Base(c.Name) == "magus" {
+		if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
+			return true
+		}
+		words := magusSubcommandWords(c.Args)
+		return len(words) > 0 && undeclaredLeaseVerbs[words[0]]
+	}
+	if c.Name == "git" {
+		words := magusSubcommandWords(c.Args)
+		return len(words) > 0 && gitReadVerbs[words[0]]
+	}
+	return undeclaredLeaseReaders[path.Base(c.Name)]
+}
+
+// The three sets repairInvocation reads. The magus verbs are the ones that answer "what am
+// I bound to and what does this workspace hold"; the job verbs are in it because taking a
+// job is how a checkout stops being unenrolled.
+var (
+	undeclaredLeaseVerbs = map[string]bool{
+		"ledger": true, "job": true, "session": true, "ls": true, "describe": true,
+		"query": true, "explain": true, "path": true, "refs": true, "where": true,
+		"status": true, "doctor": true, "help": true, "version": true,
+	}
+	gitReadVerbs = map[string]bool{
+		"status": true, "log": true, "diff": true, "show": true, "branch": true, "remote": true,
+	}
+	undeclaredLeaseReaders = map[string]bool{
+		"cat": true, "head": true, "tail": true, "ls": true, "grep": true, "rg": true,
+		"find": true, "stat": true, "wc": true, "pwd": true, "echo": true,
+	}
+)
 
 // adviseInvalidLease says that an id magus cannot parse was treated as naming no lease.
 //
@@ -340,13 +406,13 @@ func denyUndeclaredLease(standing leaseStanding, actingLease string) string {
 // from Judge: it used to be produced inside gradeLeasedWrite, so a command-surface call
 // under a typo'd id ran fully un-enrolled with no notice at all.
 func adviseInvalidLease(actingLease string) string {
-	if actingLease == "" || types.ValidLeaseID(actingLease) {
+	if actingLease == "" || types.ValidJobID(actingLease) {
 		return ""
 	}
 	return fmt.Sprintf(
 		"magus workspace: fix the lease id and re-run, so the guard can grade this call against your lease's declared boundary.\n"+
 			"%s=%q is not a valid lease id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no lease.",
-		envHookLease, actingLease, types.MaxLeaseIDLen)
+		envHookLease, actingLease, types.MaxJobIDLen)
 }
 
 // adviseTerminalLease says that a declared row has stopped running, or "" for a live one.
@@ -393,7 +459,7 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 			continue
 		}
 		return fmt.Sprintf(
-			"magus workspace: leave your own row alone. "+leaseActorClause("change a lease row")+"\n"+
+			"magus workspace: leave your own job alone. "+leaseActorClause("change a job")+"\n"+
 				"`%s` would %s, and this checkout is bound to lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
 			command, what, actingLease)
 	}
@@ -408,10 +474,16 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 // a different transport, and a rule that held on one channel would move the traffic rather
 // than stop it.
 func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
-	if c.Name == hint.ToolLedger.String() {
-		return ledgerToolRebind(mcpParams(c.Args), me)
+	if c.Name == hint.ToolJob.String() {
+		return jobToolRebind(mcpParams(c.Args), me)
 	}
 	if path.Base(c.Name) != "magus" {
+		return ""
+	}
+	// A usage line and a schema are reads: neither reaches a store, and the rule below
+	// reads the subcommand without them, so `job wait --schema` was refused to the one
+	// caller who needs the shape of the result it has to file.
+	if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
 		return ""
 	}
 	words := magusSubcommandWords(c.Args)
@@ -419,15 +491,20 @@ func leaseRebind(c hint.Invocation, me func() leaseStanding) string {
 		return ""
 	}
 	switch {
-	// The read form prints the binding and takes no operand; only the form carrying one
-	// rebinds. Refusing the read would leave a worker unable to find out what it is bound
-	// to, which is the opposite of what this rule is for.
-	case words[0] == hint.SessionLease.Head() && words[1] == hint.SessionLease.Leaf() && len(words) > 2:
-		return "bind this checkout to another lease"
-	case words[0] == hint.LedgerAccept.Head() && words[1] == hint.LedgerAccept.Leaf():
-		return "grade a lease row"
-	case words[0] == hint.LedgerRegister.Head() && words[1] == hint.LedgerRegister.Leaf():
-		return "write a lease row"
+	// The read form prints the job this checkout holds and takes no operand; only the form
+	// carrying one takes a different job. Refusing the read would leave a holder unable to
+	// find out what it holds, which is the opposite of what this rule is for. A binding
+	// that names NO job is not a boundary either, so taking another one out of that state
+	// is the remedy rather than an escape.
+	case words[0] == hint.JobExec.Head() && words[1] == hint.JobExec.Leaf() && len(words) > 2:
+		if !me().declared {
+			return ""
+		}
+		return "take the lease on another job here"
+	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
+		return "verify a job"
+	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
+		return "declare a job"
 	}
 	return ""
 }
@@ -453,49 +530,49 @@ func magusSubcommandWords(args []string) []string {
 	return words
 }
 
-// ledgerToolRebind judges one call to the ledger tool against the row the caller is bound
-// to, naming what the call would do when it is something a bound caller may not.
+// jobToolRebind judges one call to the job tool against the job the caller holds, naming
+// what the call would do when it is something a holder may not.
 //
 // Three carve-outs, and each is somebody else's job rather than a hole:
 //
-//   - `op=register` on the caller's OWN row records the base it landed on. That is the
-//     worker's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
-//     and denying it here would leave a worker unable to write anywhere at all.
-//   - `op=put` on the caller's own row that only SHRINKS its write paths gives the lane
+//   - `op=exec` on the caller's OWN job records the base it landed on. That is the
+//     holder's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
+//     and denying it here would leave a holder unable to write anywhere at all.
+//   - `op=put` on the caller's own job that only SHRINKS its write paths gives the lane
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a lane cannot widen a role.
 //   - a read (`op=list`, and the default) is not a write.
 //
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
-// must already be one the row carries, and there must be fewer of them. A cleverer pattern
+// must already be one the job carries, and there must be fewer of them. A cleverer pattern
 // that happens to cover less is not something this rule will try to prove.
-func ledgerToolRebind(params map[string]string, me func() leaseStanding) string {
+func jobToolRebind(params map[string]string, me func() leaseStanding) string {
 	op, id := params["op"], params["id"]
 	if op == "clear" {
-		return "drop every ledger row"
+		return "drop every job"
 	}
-	if op != "put" && op != "register" {
+	if op != "fork" && op != "exec" {
 		return ""
 	}
 	standing := me()
 	if !standing.readable || standing.terminal() {
-		// The ledger could not answer, or the row has already finished and every rule
-		// keyed on it is inert. Naming somebody else's row here would be a reason the
+		// The store could not answer, or the job has already finished and every rule
+		// keyed on it is inert. Naming somebody else's job here would be a reason the
 		// caller can check and find false, in the same verdict that tells them these
 		// rules are not running.
 		return ""
 	}
 	if id == "" || id != standing.row.ID {
-		return "write another lease's ledger row"
+		return "write another job"
 	}
-	if op == "register" {
+	if op == "exec" {
 		return ""
 	}
 	row := standing.row
 	if shrinksWritePaths(params, row) {
 		return ""
 	}
-	return "rewrite its own ledger row"
+	return "rewrite the job it holds"
 }
 
 // shrinksWritePaths reports whether a put changes nothing but the row's write paths, and
@@ -505,7 +582,7 @@ func ledgerToolRebind(params map[string]string, me func() leaseStanding) string 
 // know: a key outside the three below is a rewrite of something else on the row whatever
 // it holds, and reading a list of known keys instead means every key added to the ledger's
 // merge is cleared here until somebody remembers to add it in two places.
-func shrinksWritePaths(params map[string]string, row types.Lease) bool {
+func shrinksWritePaths(params map[string]string, row types.Job) bool {
 	declared, present := "", false
 	for key, value := range params {
 		switch key {
@@ -538,7 +615,7 @@ func shrinksWritePaths(params map[string]string, row types.Lease) bool {
 //
 // The check RECORD decides it whenever the row carries one: a target field cannot be
 // confused by a stray word the way a rendered line can.
-func LeaseOwnsGate(row types.Lease) bool {
+func LeaseOwnsGate(row types.Job) bool {
 	if row.Check != nil {
 		t, err := types.ParseTarget(row.Check.Target)
 		return err == nil && t.Name == types.TargetCI

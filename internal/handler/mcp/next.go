@@ -9,8 +9,8 @@ import (
 	"bytes"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/ledger"
 )
 
 // nextFilter grades a result's breadcrumbs for the acting role and journals what
@@ -20,7 +20,7 @@ import (
 // without a workspace behind it should do.
 type nextFilter struct {
 	cacheDir string
-	rows     *ledger.Store
+	rows     *job.Store
 }
 
 // served filters next for the acting role and records what was handed over.
@@ -34,9 +34,9 @@ func (f nextFilter) served(next []hint.Next) []hint.Next {
 	return served
 }
 
-// role reads the acting lease's row off this checkout's ledger.
+// role reads the acting job's row off this checkout's job store.
 func (f nextFilter) role() (hint.Role, []string) {
-	id := ledger.ActingLease(f.cacheDir)
+	id := job.ActingLease(f.cacheDir)
 	if id == "" {
 		return hint.RoleUnbound, nil
 	}

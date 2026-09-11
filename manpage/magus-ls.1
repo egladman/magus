@@ -25,6 +25,12 @@ List what the selected projects can run, with the doc or spell ops behind each
 .TP
 \fBtarget\fR
 The same listing; the noun takes either spelling
+.TP
+\fBjobs\fR
+List every job this repository carries, whoever holds it, with the pairs that claim the same path
+.TP
+\fBjob\fR
+The same listing; the noun takes either spelling
 .RE
 .SH EXAMPLES
 \fIList all projects\fR
@@ -84,7 +90,7 @@ magus ls -o template='{{range .projects}}{{.path}}{{"\(rsn"}}{{end}}'
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-ledger\fR(1),
+\fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),

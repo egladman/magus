@@ -201,7 +201,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	got := []string{
 		hint.ServerStart.Leaf(),
 		hint.ServerStop.Leaf(),
-		hint.ServerJob.Leaf(),
+		hint.ServerStatus.Leaf(),
 		hint.ServerReload.Leaf(),
 	}
 	slices.Sort(got)

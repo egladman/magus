@@ -50,7 +50,7 @@ const (
 	ToolStats           ToolName = "magus_stats"
 	ToolDiff            ToolName = "magus_diff"
 	ToolVCSCheckpoint   ToolName = "magus_vcs_checkpoint"
-	ToolLedger          ToolName = "magus_ledger"
+	ToolJob             ToolName = "magus_job"
 )
 
 // AllToolNames is every declared tool-name constant, for the drift test to walk.
@@ -63,7 +63,7 @@ var AllToolNames = []ToolName{
 	ToolAffectedPlan, ToolConfigGet, ToolMemory,
 	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
 	ToolDiff,
-	ToolVCSCheckpoint, ToolLedger,
+	ToolVCSCheckpoint, ToolJob,
 }
 
 // errorHints maps a tool to the one-line recovery step returned ONLY when that
