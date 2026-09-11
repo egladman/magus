@@ -134,6 +134,11 @@ func Drift(policy types.DriftPolicy, reason string) TargetOption {
 // Exclusive runs the target alone — no other target runs concurrently while it does.
 func Exclusive() TargetOption { return workspace.Exclusive() }
 
+// Advisory keeps this target's failure from failing a composite that reaches it through
+// ctx.needs; the composite reports the failure and carries on, and running the target by
+// name still fails. reason states why a failure here does not mean the change is wrong.
+func Advisory(reason string) TargetOption { return workspace.Advisory(reason) }
+
 // IncludeOS and IncludeArch override cache.include.*.enabled for one target, for a
 // target whose artifact varies along one axis but not the other.
 func IncludeOS(v bool) TargetOption   { return workspace.IncludeOS(v) }

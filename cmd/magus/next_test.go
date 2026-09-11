@@ -19,7 +19,7 @@ var nextFixture = []hint.Next{
 }
 
 func gateAt(base, session string) nextGate {
-	return nextGate{gate: newAdvisoryGate(base, session), role: hint.RoleUnbound}
+	return nextGate{gate: hint.NewGate(base, session), role: hint.RoleUnbound}
 }
 
 // The Run line is navigation and prints every time; the Why is advice and says nothing
@@ -121,7 +121,7 @@ func TestServedFiltersWritesByRole(t *testing.T) {
 		{"worker out of its lane", hint.RoleWorker, []string{"cmd/magus/**"}, []string{"query-explain", "query-path"}},
 		{"reviewer", hint.RoleReviewer, nil, []string{"query-explain", "query-path"}},
 	} {
-		n := nextGate{gate: newAdvisoryGate(t.TempDir(), ""), role: tc.role, lane: tc.lane}
+		n := nextGate{gate: hint.NewGate(t.TempDir(), ""), role: tc.role, lane: tc.lane}
 		var ids []string
 		for _, entry := range n.served(full) {
 			ids = append(ids, entry.ID)

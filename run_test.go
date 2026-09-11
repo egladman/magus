@@ -20,7 +20,6 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -36,8 +35,8 @@ func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
 
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject(".", workspace.WithTarget("security",
-		workspace.Advisory("a vulnerability report is not a build failure")))
+	reg.RegisterProject(".", WithTarget("security",
+		Advisory("a vulnerability report is not a build failure")))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })

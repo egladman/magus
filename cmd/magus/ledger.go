@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
@@ -776,7 +777,7 @@ func briefRefusesTheGate(ctx context.Context, root string, row types.Lease) erro
 		" Give this row the narrowest target covering its paths (`%s` decomposes what the gate chains) with the %s tool, then ask for the brief again.",
 		hint.DescribeTarget.With(types.TargetCI+" <project>"), hint.ToolLedger)
 
-	if validationNamesGate(row.Validation) {
+	if guard.LeaseOwnsGate(row) {
 		return fmt.Errorf("magus ledger brief: lease %s is assigned %q, which names the `%s` gate.%s", row.ID, row.Validation, types.TargetCI, fix)
 	}
 	if chain := validationReachesGate(ctx, root, row.Validation); len(chain) > 0 {

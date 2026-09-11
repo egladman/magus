@@ -18,12 +18,14 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -714,12 +716,15 @@ func storedEvent(ev loadEvent) sessions.AgentEvent {
 // argv, which is the content this whole path exists to keep out of the store.
 func rejudgeCommand(text string) (program, verdict, rule string) {
 	program = commandProgram(text)
-	v := evaluateBashGuard(text)
+	// hookDeps() would also do, but it builds closures for facts this replay never
+	// touches (Inspect, CacheDir, graph staleness); the raw-tool rule needs only the
+	// catalog, so that is the only member set.
+	v := guard.Evaluate(guard.Deps{Spells: project.DefaultSpellRegistry().All}, text)
 	switch {
 	case v.Deny != "":
-		return program, sessions.VerdictDeny, string(v.Rule.Name)
+		return program, sessions.VerdictDeny, v.RuleName()
 	case v.Context != "":
-		return program, sessions.VerdictAdvise, string(v.Kind)
+		return program, sessions.VerdictAdvise, v.AdvisoryKind()
 	}
 	return program, sessions.VerdictPass, ""
 }
@@ -728,7 +733,7 @@ func rejudgeCommand(text string) (program, verdict, rule string) {
 // shell parser cannot read falls back to the trail's reducer, which skips the VAR=value
 // prefix a credential is likeliest to sit in rather than storing it as the program.
 func commandProgram(text string) string {
-	if cmds, parsed := parseGuardCommands(text); parsed && len(cmds) > 0 {
+	if cmds, parsed := guard.ParseCommands(text); parsed && len(cmds) > 0 {
 		return cmds[0].Name
 	}
 	return trail.CommandProgram(text)

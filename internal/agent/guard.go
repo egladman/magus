@@ -4,11 +4,9 @@ package agent
 // the one package that both the CLI producing a verdict and the repo-root
 // dogfood tests can import.
 //
-// It lives here rather than beside the guard because package main cannot be
-// imported, so a parity check outside it would have to RESTATE the contract, and
-// a restated contract is the copy that goes stale. That reason expires the day
-// the rules move out of cmd/magus into a package of their own; the lists should
-// move with them then.
+// It lived here because package main could not be imported. The rules are now
+// internal/guard, so that reason has expired: the lists could move beside the Verdict
+// they describe, and only the installed-artifact constants below still belong here.
 
 // GuardSchemaVersion is the version of the verdict envelope every host glue
 // parses, carried on the wire as schema_version. Bump it only when an existing

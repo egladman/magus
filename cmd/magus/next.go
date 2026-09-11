@@ -40,11 +40,11 @@ type filesWithNext struct {
 // for.
 //
 // A CLI run carries no host session id (only a hook envelope reports one), so the
-// markers land in the anonymous bucket, which expires on advisoryAnonWindow: one
+// markers land in the anonymous bucket, which expires on hint's anonWindow: one
 // firing per checkout for a working session's length. A workspace magus cannot locate
 // suppresses nothing and records nothing, which is the right direction to fail.
 type nextGate struct {
-	gate advisoryGate
+	gate hint.Gate
 	role hint.Role
 	lane []string
 }
@@ -56,7 +56,7 @@ func newNextGate(root string) nextGate {
 		return nextGate{role: hint.RoleUnbound}
 	}
 	role, lane := actingRole(dir, resolveRootOrEmpty(root))
-	return nextGate{gate: newAdvisoryGate(dir, ""), role: role, lane: lane}
+	return nextGate{gate: hint.NewGate(dir, ""), role: role, lane: lane}
 }
 
 // actingRole grades the acting lease against this checkout's ledger.
@@ -79,7 +79,7 @@ func actingRole(cacheDir, root string) (hint.Role, []string) {
 // as a field was given over exactly as one printed on a terminal was.
 func (n nextGate) served(next []hint.Next) []hint.Next {
 	served := hint.ServableTo(n.role, n.lane, next)
-	hint.AppendServedNext(n.gate.base, served)
+	hint.AppendServedNext(n.gate.CacheDir(), served)
 	return served
 }
 
@@ -95,6 +95,6 @@ func printNext(w io.Writer, n nextGate, next []hint.Next) {
 		if global.silent {
 			return ""
 		}
-		return n.gate.once(advisoryKind("next-"+entry.ID), entry.Why)
+		return n.gate.Once(hint.MarkerKind("next-"+entry.ID), entry.Why)
 	}))
 }

@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
 )
@@ -79,7 +80,7 @@ func joinServedNext(events []sessions.LoadEvent, commands []string, journal []hi
 // ranArgv renders every command a recorded shell line would run, normalized the way
 // the journal's own argv is, so the two are comparable.
 func ranArgv(command string) [][]string {
-	cmds, ok := parseGuardCommands(command)
+	cmds, ok := guard.ParseCommands(command)
 	if !ok {
 		return nil
 	}

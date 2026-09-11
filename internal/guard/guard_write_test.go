@@ -1,0 +1,794 @@
+package guard
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestAdviseInstalledSkillWrite pins the discriminator: the STAMP decides, not
+// the path. Both files below sit in the same directory under a magus-* name,
+// and only one of them is magus's to overwrite.
+func TestAdviseInstalledSkillWrite(t *testing.T) {
+	dir := t.TempDir()
+	write := func(rel, body string) string {
+		path := filepath.Join(dir, filepath.FromSlash(rel))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+		return path
+	}
+
+	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
+	got := adviseInstalledSkillWrite(installed)
+	assert.Contains(t, got, "INSTALLED skill")
+	assert.Contains(t, got, "magus-workspace-rules")
+
+	// A workspace's own skill lives in the same directory and must draw silence:
+	// telling an author their hand-written file is generated is worse than
+	// saying nothing.
+	local := write(".claude/skills/"+agent.LocalSkillName+"/SKILL.md", "---\nname: "+agent.LocalSkillName+"\nmetadata:\n  source: workspace\n---\n\n# Our rules\n")
+	assert.Empty(t, adviseInstalledSkillWrite(local))
+
+	// Not a skill file, not in a skill directory, and not there at all.
+	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
+	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
+}
+
+// fleetFixture stands up a workspace root and a lease ledger holding leases, and
+// returns the context pinning both plus the root. Everything lands in temporary
+// directories, so a guard test never reads or writes the checkout's real ledger.
+func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string) {
+	t.Helper()
+	// The ledger now lives in the per-repository state directory, and the guard resolves
+	// it with no seam a test can reach, so the environment is what keeps this off the
+	// developer's own ledger.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root, cacheDir := t.TempDir(), t.TempDir()
+	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
+	for _, u := range leases {
+		_, err := store.Put(t.Context(), u)
+		require.NoError(t, err)
+	}
+	location := hookActivityLocation{base: cacheDir, workspace: root}
+	return context.WithValue(t.Context(), hookActivityLocationKey{}, location), root
+}
+
+// fleetLeases is the two-lease plan most cases below grade against: two live workers with
+// disjoint write paths, one of them declaring a denied subtree inside its own.
+//
+// Both are REGISTERED, because these cases are about boundaries and an unregistered lease is
+// denied before any boundary is consulted. TestGradeLeasedWriteRequiresACheckpoint covers that
+// rule on its own.
+func fleetLeases() []types.Lease {
+	return []types.Lease{
+		{
+			ID:           "lease-a",
+			Goal:         "own the ledger store\nacceptance: List stays cheap",
+			WritePaths:   []string{"internal/ledger/**"},
+			State:        types.StateRunning,
+			Checkpoint:   "rev-a",
+			ReportedBase: "rev-a",
+			BaseVerdict:  types.BaseMatch,
+			Registered:   1,
+		},
+		{
+			ID:           "lease-b",
+			Goal:         "grade writes in the guard",
+			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
+			DenyPaths:    []string{"cmd/magus/gen/**"},
+			State:        types.StateDeclared,
+			Checkpoint:   "rev-a",
+			ReportedBase: "rev-a",
+			BaseVerdict:  types.BaseMatch,
+			Registered:   1,
+		},
+	}
+}
+
+// TestGradeLeasedWriteDenies pins the two denials and the fact each one must carry:
+// the owning lease's id, its goal's first line, and a next step. A denial that only says
+// no sends the agent around the guard, which is the failure the whole ledger design is
+// built to avoid.
+func TestGradeLeasedWriteDenies(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+
+	t.Run("inside another live lease's write paths", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "lease-a", "the denial must name the owner")
+		assert.Contains(t, got.Reason, "own the ledger store", "the denial must carry the owner's goal")
+		assert.NotContains(t, got.Reason, "acceptance:",
+			"only the goal's FIRST line belongs in a denial; the criteria block would bury the next step")
+		assert.Contains(t, got.Reason, "re-partition", "the denial must name a next step")
+		assert.Contains(t, got.Reason, "lease-b", "the denial must say who magus thinks is writing")
+	})
+
+	t.Run("inside the acting lease's own deny paths", func(t *testing.T) {
+		// Also pins the precedence: cmd/magus/gen is inside lease-b's write tree AND on its
+		// deny list, and the more specific declaration is the one that decides.
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "DENIED")
+		assert.Contains(t, got.Reason, "lease-b")
+		assert.Contains(t, got.Reason, "cmd/magus/gen/**", "the denial must quote the declaration it matched")
+	})
+
+	t.Run("outside the acting lease's own write paths", func(t *testing.T) {
+		// Ground nobody else claims. The lane the orchestrator handed out is still the
+		// lane, and a worker that widens its own is what the declaration exists to catch.
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "README.md"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "lease-b")
+		assert.Contains(t, got.Reason, "README.md")
+		assert.Contains(t, got.Reason, "write_paths", "the denial must name the field that decided it")
+		assert.Contains(t, got.Reason, "cmd/magus/**", "the denial must list the lane it was measured against")
+	})
+
+	t.Run("a read-only lease writing anywhere", func(t *testing.T) {
+		leases := append(fleetLeases(), types.Lease{
+			ID:       "scout",
+			Goal:     "inventory the guard rules",
+			ReadOnly: true,
+			State:    types.StateRunning,
+		})
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, Deps{}, "scout", filepath.Join(root, "README.md"))
+		require.Equal(t, "deny", got.Decision)
+		assert.Contains(t, got.Reason, "read_only", "the denial must name the field that decided it")
+		assert.Contains(t, got.Reason, "scout")
+		// Ahead of the registration rule: this row never registered, and being told to
+		// checkpoint first would be a second refusal for one mistake.
+		assert.NotContains(t, got.Reason, "checkpoint")
+	})
+}
+
+// TestGradeLeasedWritePasses covers the silences. Each is a case where the guard has
+// no opinion, which is different from clearing the write: a later rule still gets to
+// speak, and the empty Decision is what leaves room for it.
+func TestGradeLeasedWritePasses(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+
+	t.Run("inside the acting lease's own write paths", func(t *testing.T) {
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
+	})
+
+	t.Run("a lease that declared no write paths", func(t *testing.T) {
+		// An empty owned set is a boundary nobody wrote, not a lane of size zero, so it
+		// scopes nothing. read_only is what says a lease writes nothing on purpose.
+		leases := fleetLeases()
+		leases[1].WritePaths, leases[1].DenyPaths = nil, nil
+		ctx, root := fleetFixture(t, leases...)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "README.md")).Decision)
+	})
+
+	t.Run("outside the workspace", func(t *testing.T) {
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(t.TempDir(), "elsewhere.go")).Decision)
+	})
+
+	t.Run("un-enrolled on ground no lease claims", func(t *testing.T) {
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "README.md")).Decision)
+	})
+}
+
+// TestGradeLeasedWriteIdleFleet is the zero-cost contract: with nothing to grade
+// against, the guard reads the ledger and then says nothing, whatever the path.
+func TestGradeLeasedWriteIdleFleet(t *testing.T) {
+	t.Run("no ledger at all", func(t *testing.T) {
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+	})
+
+	t.Run("every lease terminal", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[0].State, leases[1].State = types.StatePass, types.StateNoReturn
+		ctx, root := fleetFixture(t, leases...)
+		// A finished lease has stopped competing for its paths, which is the rule
+		// types.leaseOverlaps applies when it decides which pairs to report.
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+	})
+
+	t.Run("no state recorded", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[0].State, leases[1].State = "", ""
+		ctx, root := fleetFixture(t, leases...)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+	})
+
+	t.Run("no trail location", func(t *testing.T) {
+		// Pinned to an EMPTY location rather than left unpinned: an unpinned context sends
+		// hookActivityTrail up from the CWD to this checkout's real cache dir, and the test
+		// would then grade against whatever plan the developer is actually running.
+		ctx := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", "internal/ledger/store.go").Decision)
+	})
+}
+
+// TestGradeLeasedWriteMalformedDeclaration pins the fail-open being made VISIBLE. The
+// matcher's error was discarded, so a declaration it could not read matched nothing: a
+// deny path spelled with a stray bracket stopped denying and said so nowhere, which
+// is the shape of failure this rule is least able to afford: a boundary that looks
+// enforced and is not.
+func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
+	t.Run("the acting lease's own deny list", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[1].DenyPaths = []string{"cmd/magus/[gen/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "advise", got.Decision, "an unreadable pattern says nothing about the write, only that nothing graded it")
+		assert.Contains(t, got.Context, "cmd/magus/[gen/**", "the advisory must name the pattern to fix")
+		assert.Contains(t, got.Context, "lease-b")
+		assert.Contains(t, got.Context, "not being enforced")
+	})
+
+	t.Run("another lease's write paths", func(t *testing.T) {
+		leases := fleetLeases()
+		leases[0].WritePaths = []string{"internal/[ledger/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a")
+	})
+
+	t.Run("a valid entry still denies through an earlier malformed one", func(t *testing.T) {
+		// The malformed pattern comes first, the valid glob that covers the write second.
+		// Short-circuiting on the bad pattern downgraded this deny to an advisory: a valid
+		// deny boundary must still hold when a sibling entry is unreadable.
+		leases := fleetLeases()
+		leases[1].DenyPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
+		ctx, root := fleetFixture(t, leases...)
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		require.Equal(t, "deny", got.Decision, "the valid deny pattern must deny even though an earlier entry could not be read")
+	})
+}
+
+// TestGradeLeasedWriteUnenrolled is the doctrine case: a writer magus cannot attribute
+// is told what it is walking into and is never stopped. magus cannot tell "not part of the
+// fleet" from "part of it and not saying so", and blocking a person in their own checkout
+// is the wrong way to be wrong.
+func TestGradeLeasedWriteUnenrolled(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/ledger/store.go"))
+	require.Equal(t, "advise", got.Decision)
+	assert.Contains(t, got.Context, "lease-a", "the advisory must name the lease already working there")
+	assert.Contains(t, got.Context, "own the ledger store")
+	assert.Contains(t, got.Context, "magus.lease", "the advisory must say how to enroll")
+	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
+}
+
+// TestGradeLeasedWriteInvalidLeaseID pins the treated-as-absent contract. A typo'd id must
+// not silently buy un-enrolled treatment: erroring would block the tool call over metadata,
+// so the write is graded as naming no lease and the notice saying so comes from
+// adviseInvalidLease, which hookCmd fires on BOTH surfaces.
+func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+
+	t.Run("the notice itself is the id rule, not the write rule", func(t *testing.T) {
+		assert.Contains(t, adviseInvalidLease("lease b!"), "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease("lease b!"), "magus.lease")
+		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxLeaseIDLen+1)), "not a valid lease id")
+		assert.Empty(t, adviseInvalidLease("lease-a"))
+		assert.Empty(t, adviseInvalidLease(""), "naming no lease is not a typo")
+	})
+
+	t.Run("on unclaimed ground the write rule has nothing to say", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, Deps{}, "lease b!", filepath.Join(root, "README.md"))
+		assert.Empty(t, got.Decision)
+	})
+
+	t.Run("on owned ground it advises rather than denying", func(t *testing.T) {
+		// The id is unusable, so the write is graded as un-enrolled, and an un-enrolled
+		// write is never denied, even on another lease's ground.
+		got := gradeLeasedWrite(ctx, Deps{}, "lease b!", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a")
+	})
+
+	t.Run("a valid id nobody declared is un-enrolled, not denied", func(t *testing.T) {
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-z", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a")
+		assert.NotContains(t, got.Context, "not a valid lease id")
+	})
+}
+
+// TestGradeLeasedWriteCorruptLedger is the fail-open case. A guard that blocked on a
+// file it cannot parse would take the whole fleet down with one bad write; it says so
+// instead, because a boundary that silently stopped being checked looks exactly like a
+// fleet nobody declared.
+func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	path, err := fleetLedger(t, ctx).Path()
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
+
+	got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
+	assert.NotEqual(t, "deny", got.Decision, "a ledger magus cannot read must never block an edit")
+	require.Equal(t, "advise", got.Decision)
+	assert.Contains(t, got.Context, "could not be read")
+	assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the surface that re-declares the plan")
+}
+
+// TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
+// more here than in types.pathsIntersect, which over-reports on purpose: this answer blocks
+// a write, and a guard that blocks legitimate edits is one agents learn to route around.
+func TestDeclarationCovering(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		decl, rel string
+		want      bool
+	}{
+		{"internal/ledger", "internal/ledger/store.go", true},
+		{"internal/ledger/**", "internal/ledger/sub/store.go", true},
+		{"internal/ledger/*.go", "internal/ledger/store.go", true},
+		{"internal/ledger/*.go", "internal/ledger/sub/store.go", false},
+		{"cmd/magus/agent.go", "cmd/magus/agent.go", true},
+		{"cmd/magus/agent.go", "cmd/magus/agent_test.go", false},
+		{"internal/ledger", "internal/ledgerkeeper/store.go", false},
+		{"console/src/**/*.ts", "console/src/a/b.ts", true},
+		// The case types.pathsIntersect deliberately gets "wrong": two leases splitting one
+		// directory by extension do NOT collide, and truncating both to "console/src" would
+		// deny an edit nobody is competing for.
+		{"console/src/**/*.css", "console/src/a/b.ts", false},
+		{"**/*.go", "internal/ledger/store.go", true},
+		{"", "internal/ledger/store.go", false},
+		{"   ", "internal/ledger/store.go", false},
+		{".", "internal/ledger/store.go", false},
+		{"/", "internal/ledger/store.go", false},
+	} {
+		t.Run(tt.decl+" vs "+tt.rel, func(t *testing.T) {
+			_, got, err := declarationCovering([]string{tt.decl}, tt.rel)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	t.Run("returns the declaration it matched, verbatim", func(t *testing.T) {
+		decl, ok, err := declarationCovering([]string{"docs/**", "internal/ledger/**"}, "internal/ledger/store.go")
+		require.NoError(t, err)
+		require.True(t, ok)
+		assert.Equal(t, "internal/ledger/**", decl, "a denial quotes the declaration as the orchestrator wrote it")
+	})
+
+	// A pattern the matcher rejects used to be swallowed and read as "no declaration
+	// covers this path", so a deny entry with a stray bracket silently stopped
+	// denying while the rule still looked enforced.
+	t.Run("a malformed pattern is reported, not silently unmatched", func(t *testing.T) {
+		_, ok, err := declarationCovering([]string{"internal/[ledger"}, "internal/ledger/store.go")
+		require.Error(t, err)
+		assert.False(t, ok)
+		assert.Contains(t, err.Error(), "internal/[ledger", "the advisory has to name the pattern to fix")
+	})
+}
+
+// The lease-id shape itself is pinned in internal/trail's TestValidLeaseID; the guard's
+// treated-as-absent behavior for a bad id is pinned by TestGradeLeasedWriteInvalidLeaseID.
+
+// TestAdviseMemoryWrite pins the nudge to the two cross-host instruction files
+// and to a capture-not-replication wording: it must name the journal WITHOUT
+// telling the reader not to write the file, since host instructions belong
+// exactly where they are being written.
+func TestAdviseMemoryWrite(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "claude.md", "/repo/nested/AGENTS.md", "  AGENTS.md  "} {
+		advice := adviseMemoryWrite(path)
+		require.NotEmpty(t, advice, "expected a memory advisory for %q", path)
+		assert.Contains(t, advice, "magus memory put", "the advisory must name the command it is routing to")
+	}
+	for _, path := range []string{"", "README.md", "MAGUS.md", "docs/agents.md.tmpl", "agents.mdx"} {
+		assert.Empty(t, adviseMemoryWrite(path), "no advisory belongs on %q", path)
+	}
+}
+
+// TestDenyNotesWrite covers the only deny on the path surface. The negative cases matter
+// more than the positive one: this rule blocks work, so it must be silent in every
+// workspace that did not opt in by DECLARING a store.
+func TestDenyNotesWrite(t *testing.T) {
+	root := t.TempDir()
+	// A workspace magus.FindRoot can resolve, so the rule reaches its real decision
+	// rather than bailing out on a missing workspace and passing for the wrong reason.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	// Nothing declared: the feature is off, so nothing is judged and nothing is guessed.
+	for _, path := range []string{"notes/a.md", filepath.Join(root, "notes", "a.md"), "internal/foo.go"} {
+		assert.Empty(t, denyNotesWrite(Deps{}, path),
+			"with no declared store, %q must pass - a deny fired on a guess blocks work in a workspace that never opted in", path)
+	}
+
+	deps := Deps{NotesShared: "notes"}
+	// The store must exist to be defended; see TestDenyNotesWriteRequiresTheStoreToExist.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", "nested"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "team", "notes"), 0o755))
+
+	for _, path := range []string{"notes/a.md", "./notes/a.md", filepath.Join(root, "notes", "a.md"), "  notes/nested/b.md  "} {
+		reason := denyNotesWrite(deps, path)
+		require.NotEmpty(t, reason, "expected a deny for %q", path)
+		assert.Contains(t, reason, "NOTES store", "the reason names what was blocked")
+		assert.Contains(t, reason, "magus memory put", "and routes the agent somewhere it MAY write")
+		assert.Contains(t, reason, "magus notes edit", "and says how a person writes it instead")
+	}
+
+	// A path outside the declared store is untouched, including one that merely looks
+	// like it (notes-archive shares the prefix but is a different directory).
+	for _, path := range []string{"internal/foo.go", "docs/notes.md", "notes-archive/a.md", "../outside/a.md"} {
+		assert.Empty(t, denyNotesWrite(deps, path), "%q is not in the declared store", path)
+	}
+
+	// The exclusion follows the declaration, not the name.
+	wide := Deps{NotesShared: "team/notes"}
+	assert.Empty(t, denyNotesWrite(wide, "notes/a.md"), "a different directory named notes is not the store")
+	assert.NotEmpty(t, denyNotesWrite(wide, "team/notes/a.md"))
+}
+
+// TestDenyNotesWriteRequiresTheStoreToExist closes the hole a user-global config opens.
+// magus reads config from an explicit --config path or $XDG_CONFIG_HOME before the
+// workspace, so one global `knowledge.notes.path` would declare a store in every
+// workspace. A declaration nobody acted on must defend nothing.
+// TestDenyNotesWriteIgnoresAForeignDeclaration: the merged config carries settings from
+// outside this repo (user-global, an explicit --config anywhere on disk), so a `notes.shared`
+// set once on a machine is "declared" in every workspace on it. Acting on that alone would
+// deny writes in repositories that never adopted the policy, so a declaration this repo did
+// not make is backed by the on-disk store or it defends nothing.
+func TestDenyNotesWriteIgnoresAForeignDeclaration(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	deps := Deps{NotesShared: "notes"}
+
+	// No magus.yaml here, so the declaration can only have come from elsewhere on the
+	// machine. This repo never opted in.
+	assert.Empty(t, denyNotesWrite(deps, "notes/a.md"),
+		"a declaration this repo did not make must not deny writes in it")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes"), 0o755))
+	assert.NotEmpty(t, denyNotesWrite(deps, "notes/a.md"),
+		"a store that exists on disk is defended whoever declared it")
+}
+
+// TestDenyNotesWriteDefendsAnEmptyDeclaredStore is the regression guard for the hole that
+// dogfooding found on 2026-08-13: with the key declared and no note yet written, a direct
+// file write to notes/<name>.md PASSED.
+//
+// The gate was "the directory exists", on the reasoning that a person creates the store by
+// writing the first note, so an agent could never bring it into being. The reverse held.
+// An agent could author the store's FIRST note (the single entry with nothing beside it to
+// look wrong against), and the deny would switch on immediately afterwards, defending the
+// forgery it had just let through. The opt-in is the committed key, not the directory.
+func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
+		[]byte("knowledge:\n  notes:\n    shared: notes\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	deps := Deps{NotesShared: "notes"}
+
+	require.NoDirExists(t, filepath.Join(root, "notes"), "the store has no files yet - that is the case under test")
+	assert.NotEmpty(t, denyNotesWrite(deps, "notes/first.md"),
+		"a repo that committed the key is defended before its first note exists, or an agent writes that first note")
+	assert.NotEmpty(t, denyNotesWrite(deps, filepath.Join(root, "notes", "nested", "deep.md")))
+
+	// Still scoped: declaring a notes store does not defend the rest of the repo.
+	assert.Empty(t, denyNotesWrite(deps, "internal/foo.go"))
+}
+
+// TestGuardDeniesAuthoringANote closes the surface the path rule cannot see: these verbs
+// author through a COMMAND, so denyNotesWrite's file-write surface never meets them.
+func TestGuardDeniesAuthoringANote(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"magus notes edit team-conventions",
+		"printf 'prose' | magus notes edit team-conventions --anchor project:.",
+		"cat body.md | ./magus notes edit foo",
+		// A GLOBAL FLAG between the program and the verb. magus accepts these ahead of
+		// the subcommand, so requiring `notes` immediately after `magus` left the rule
+		// with a one-word bypass.
+		"magus --root . notes edit team-conventions",
+		"magus -o json notes edit foo",
+		// A line the parser cannot read still falls back to the pattern.
+		"magus notes edit foo && (",
+		// `capture` defaults to the PRIVATE store, which denyNotesWrite never resolves.
+		"magus notes capture",
+		"magus notes capture --shared --title x",
+		"./magus --root . notes capture",
+		"magus notes capture && (",
+		// `promote` always writes the SHARED store.
+		"magus notes promote review-cache-keys",
+		"magus -o json notes promote foo --name bar",
+		"cd /tmp && ./magus notes promote foo",
+		"magus notes promote foo && (",
+	} {
+		v := Evaluate(testDeps(), cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "magus memory put", "the reason routes to the store an agent MAY write")
+		assert.Equal(t, denyRule{Name: denyRuleNotesAuthor}, v.Rule, "%q must deny as the notes rule", cmd)
+	}
+	// Tokens after `--` go to the spell's tool, not to magus.
+	assert.Empty(t, Evaluate(testDeps(), "magus run go::go-test . -- notes capture").Deny)
+	// Reading is untouched: the boundary is on authorship, not on access.
+	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
+		assert.Empty(t, Evaluate(testDeps(), cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// fleetLedger reopens the ledger the guard just graded against, resolved exactly the way the guard
+// resolves it, so these assertions read the same store the code under test wrote.
+func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
+	t.Helper()
+	loc := hookActivityTrail(ctx, Deps{})
+	return ledger.NewStore(ledger.Location{CacheDir: loc.base, Root: loc.workspace})
+}
+
+func unattributedOf(t *testing.T, store *ledger.Store, id string) []types.LeaseUnattributedWrite {
+	t.Helper()
+	rows, err := store.List()
+	require.NoError(t, err)
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Unattributed
+		}
+	}
+	return nil
+}
+
+// TestGradeLeasedWriteRecordsWhatItAdvisedAbout is the half the advisory was missing.
+//
+// Telling the WRITER to coordinate left the lease whose file moved as the only party never
+// informed, and it is the one holding a now-stale read. The record is what lets it find out by
+// asking rather than by being told.
+func TestGradeLeasedWriteRecordsWhatItAdvisedAbout(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()...)
+	owned := filepath.Join(root, "internal/ledger/store.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(owned), 0o755))
+	require.NoError(t, os.WriteFile(owned, []byte("package ledger // edited by hand\n"), 0o644))
+
+	got := gradeLeasedWrite(ctx, Deps{}, "", owned)
+	require.Equal(t, "advise", got.Decision)
+
+	store := fleetLedger(t, ctx)
+	recorded := unattributedOf(t, store, "lease-a")
+	require.Len(t, recorded, 1, "the owner is told what moved under it")
+	assert.Equal(t, "internal/ledger/store.go", recorded[0].Path)
+	assert.NotEmpty(t, recorded[0].Digest)
+	assert.NotEqual(t, types.DigestAbsent, recorded[0].Digest,
+		"a digest of nothing gives the owner nothing to compare against")
+	assert.NotZero(t, recorded[0].At)
+
+	// The controls. Without these the test would pass against a guard that recorded on every
+	// write, which would fill the ledger with a lease's own ordinary work.
+	t.Run("a lease writing its own owned path is not an intrusion", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetLeases()...)
+		mine := filepath.Join(root, "internal/ledger/store.go")
+		require.NoError(t, os.MkdirAll(filepath.Dir(mine), 0o755))
+		require.NoError(t, os.WriteFile(mine, []byte("package ledger\n"), 0o644))
+
+		gradeLeasedWrite(ctx, Deps{}, "lease-a", mine)
+
+		assert.Empty(t, unattributedOf(t, fleetLedger(t, ctx), "lease-a"))
+	})
+
+	t.Run("unclaimed ground records nothing", func(t *testing.T) {
+		ctx, root := fleetFixture(t, fleetLeases()...)
+		loose := filepath.Join(root, "README.md")
+		require.NoError(t, os.WriteFile(loose, []byte("# readme\n"), 0o644))
+
+		gradeLeasedWrite(ctx, Deps{}, "", loose)
+
+		store := fleetLedger(t, ctx)
+		assert.Empty(t, unattributedOf(t, store, "lease-a"))
+		assert.Empty(t, unattributedOf(t, store, "lease-b"))
+	})
+}
+
+// TestGradeLeasedWriteRequiresACheckpoint is the rule that turns a skill into a guarantee.
+//
+// The instruction to checkpoint before working lived only in a skill, which an agent can skip;
+// and the record it was meant to leave is missing exactly when somebody needs to recover from it.
+// This is the enforcement point, and it is a deny because an advisory is the same pinky promise
+// with better wording.
+func TestGradeLeasedWriteRequiresACheckpoint(t *testing.T) {
+	unregistered := func() []types.Lease {
+		fleet := fleetLeases()
+		fleet[1].Registered = 0
+		fleet[1].ReportedBase = ""
+		fleet[1].BaseVerdict = types.BaseUnknown
+		return fleet
+	}
+
+	t.Run("an unregistered lease is denied even inside its own paths", func(t *testing.T) {
+		ctx, root := fleetFixture(t, unregistered()...)
+
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+		require.Equal(t, "deny", got.Decision, "owning the path is not enough; the base has to be on record")
+		assert.Contains(t, got.Reason, "magus vcs checkpoint", "the denial must name the command")
+		assert.Contains(t, got.Reason, "magus_ledger", "and where to register what it prints")
+		assert.Contains(t, got.Reason, "lease-b")
+	})
+
+	t.Run("a registered lease writes its own paths freely", func(t *testing.T) {
+		// The positive control. Without it this would pass against a guard that denied everything.
+		ctx, root := fleetFixture(t, fleetLeases()...)
+
+		got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+		assert.Empty(t, got.Decision)
+	})
+
+	t.Run("a human is never subject to it", func(t *testing.T) {
+		// An un-enrolled writer never reaches this rule: magus cannot tell "not in the fleet" from
+		// "in it and not saying so", and blocking a person in their own checkout is the one
+		// failure the guard must not have.
+		ctx, root := fleetFixture(t, unregistered()...)
+
+		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "cmd/magus/diff.go"))
+
+		assert.NotEqual(t, "deny", got.Decision)
+	})
+}
+
+// A worker that registered on a base other than the one it was handed is ADVISED, not blocked: an
+// orchestrator may have rebased the plan deliberately, and magus cannot tell that from a worker
+// that wandered. What it refuses is letting the divergence stay silent until the merge finds it.
+func TestGradeLeasedWriteFlagsADivergedBase(t *testing.T) {
+	fleet := fleetLeases()
+	fleet[1].ReportedBase = "rev-somewhere-else"
+	fleet[1].BaseVerdict = types.BaseDiverged
+	ctx, root := fleetFixture(t, fleet...)
+
+	got := gradeLeasedWrite(ctx, Deps{}, "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+
+	require.Equal(t, "advise", got.Decision, "a deliberate rebase must not be blocked")
+	assert.Contains(t, got.Context, "rev-somewhere-else")
+	assert.Contains(t, got.Context, "rev-a", "the advisory names both bases so the reader can tell which moved")
+}
+
+// TestAdviseUnleasedWorker is the teaching case for a fleet running unrecorded: a process
+// that claims a spawner, names no lease, and writes into a workspace whose ledger holds no
+// live row to grade it against. Nothing records who owns which paths, so a collision is
+// invisible until somebody reads the diff.
+func TestAdviseUnleasedWorker(t *testing.T) {
+	// A well-formed W3C traceparent: version, trace id, parent span id, flags.
+	const spawned = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+
+	t.Run("spawn ancestry and no lease advises", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t)
+		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go"))
+
+		require.Equal(t, "advise", got.Decision)
+		assert.NotEqual(t, "deny", got.Decision, "the spawn chain is a claim, so it may teach and may never block")
+		assert.Equal(t, advisoryUnleasedWrite, got.Kind, "a standing fact, so it is held to one firing per session")
+		assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
+	})
+
+	t.Run("no ancestry stays silent", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, "")
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go")).Decision,
+			"a run carrying no trace context IS a person, and a person editing their own checkout is owed silence")
+	})
+
+	t.Run("a malformed claim stays silent", func(t *testing.T) {
+		// Dropped rather than salvaged, which is trail.SpawnFromEnv's contract. A value that
+		// does not parse claims nothing, so there is no worker here to teach.
+		t.Setenv(trail.EnvTraceparent, "not-a-traceparent")
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/thing/x.go")).Decision)
+	})
+
+	t.Run("an enrolled worker stays silent", func(t *testing.T) {
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t)
+		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-a", filepath.Join(root, "internal/thing/x.go")).Decision,
+			"naming a lease is the whole thing being asked for")
+	})
+
+	t.Run("a live ledger grades instead", func(t *testing.T) {
+		// The rule fills a silence and never competes: with live rows on record the existing
+		// grading answers, and this advisory is not reached at all.
+		t.Setenv(trail.EnvTraceparent, spawned)
+		ctx, root := fleetFixture(t, fleetLeases()...)
+		got := gradeLeasedWrite(ctx, Deps{}, "", filepath.Join(root, "internal/ledger/store.go"))
+		require.Equal(t, "advise", got.Decision)
+		assert.Contains(t, got.Context, "lease-a", "the collision report is the more specific answer")
+	})
+}
+
+// magusTreeFixture makes the working directory look like a checkout of magus's own
+// sources, which is the gate the two rules below are scoped by.
+func magusTreeFixture(t *testing.T) string {
+	t.Helper()
+	root := inWorkspace(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "agent"), 0o755))
+	return root
+}
+
+// TestAdviseAgentSurfaceWrite: an edit to what agents are TAUGHT routes through the method
+// that maintains it, because both ways to get it wrong here are silent.
+func TestAdviseAgentSurfaceWrite(t *testing.T) {
+	magusTreeFixture(t)
+
+	for _, rel := range []string{
+		"internal/agent/skills/magus-run/SKILL.md",
+		"internal/handler/mcp/registry.go",
+		"internal/hint/mcptool.go",
+		"internal/hint/clicommand.go",
+	} {
+		got := adviseAgentSurfaceWrite(rel)
+		assert.Contains(t, got, "magus-skill-authoring", rel)
+		assert.Contains(t, got, "SkillVersion", rel)
+	}
+
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/catalog.go"))
+	assert.Empty(t, adviseAgentSurfaceWrite("cmd/magus/agent.go"))
+}
+
+// TestAdviseDescriptorWrite: the generator INPUT, not the generated output. The first is
+// the omitted edit, the second is the wasted one, and adviseGeneratedWrite already has the
+// second.
+func TestAdviseDescriptorWrite(t *testing.T) {
+	magusTreeFixture(t)
+
+	for _, rel := range []string{"proto/magus/v1/run.proto", "std/fs.go"} {
+		got := adviseDescriptorWrite(rel)
+		assert.Contains(t, got, "SAME commit", rel)
+		assert.Contains(t, got, "magus run generate .", rel)
+	}
+
+	assert.Empty(t, adviseDescriptorWrite("std/fs_test.go"), "a test beside a descriptor feeds no generator")
+	assert.Empty(t, adviseDescriptorWrite("std/http/client.go"), "a subdirectory is a module's implementation, not its surface")
+	assert.Empty(t, adviseDescriptorWrite("proto/README.md"))
+	assert.Empty(t, adviseDescriptorWrite("internal/cache/cache.go"))
+}
+
+// Both rules name paths and a target belonging to magus's OWN checkout, which a shipped
+// verdict may not normally do. The gate is what makes that legitimate, so it is the part
+// worth pinning: in anybody else's workspace neither rule can fire at all.
+func TestMagusOwnSourceTreeGatesTheRepoScopedRules(t *testing.T) {
+	inWorkspace(t) // an ordinary workspace: no magusfile, no cmd/magus
+	assert.Empty(t, adviseAgentSurfaceWrite("internal/agent/skills/magus-run/SKILL.md"))
+	assert.Empty(t, adviseDescriptorWrite("std/fs.go"))
+	assert.Empty(t, adviseDescriptorWrite("proto/magus/v1/run.proto"))
+}
+
+// The host sends an ABSOLUTE path, and this repository is routinely checked out under
+// .claude/worktrees/<name>. Matching the absolute form is how adviseNewSourceDir once
+// shipped inert with a green suite; both rules here resolve relative first for that reason.
+func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
+	root := t.TempDir()
+	ws := filepath.Join(root, ".claude", "worktrees", "feature-x")
+	require.NoError(t, os.MkdirAll(ws, 0o755))
+	t.Chdir(ws)
+	require.NoError(t, os.WriteFile(filepath.Join(ws, "magusfile.buzz"), nil, 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
+
+	assert.Contains(t, adviseAgentSurfaceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")), "magus-skill-authoring")
+	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")), "SAME commit")
+	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
+}

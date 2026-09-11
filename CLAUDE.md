@@ -31,7 +31,7 @@ hand-edit it.
   named right here and skipped anyway while `./magus run ...` was typed dozens of
   times. A rule that lives only in prose is a rule with roughly even odds. If a
   convention matters, give it an enforcement point. The new-directory advisory in
-  `cmd/magus/guard_sourcedir.go` is the worked example.
+  `internal/guard/guard_sourcedir.go` is the worked example.
 
 ## Commands
 

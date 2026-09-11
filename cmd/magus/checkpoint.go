@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
-	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -64,12 +63,12 @@ func checkpointCmd(ctx context.Context, root string, in io.Reader, out io.Writer
 		return errors.New("magus session checkpoint: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 
-	env := readCheckpointEnvelope(in)
+	hostSession, transcript := readCheckpointEnvelope(in)
 	c := sessions.Checkpoint{
 		Workspace:   wsRoot,
 		Note:        cf.Note,
-		HostSession: cmp.Or(cf.Session, env.SessionID),
-		Transcript:  cmp.Or(cf.Transcript, env.TranscriptPath),
+		HostSession: cmp.Or(cf.Session, hostSession),
+		Transcript:  cmp.Or(cf.Transcript, transcript),
 		Host:        cf.AgentName,
 	}
 
@@ -143,9 +142,9 @@ const checkpointEnvelopeMax = 4 << 20
 // kept the pointers out of the record for any wrapper that passed a note, which is the
 // shape the docs invite, and it left the actual hazard open: a caller with no --note and
 // an idle inherited pipe still waited forever.
-func readCheckpointEnvelope(in io.Reader) hookEnvelope {
+func readCheckpointEnvelope(in io.Reader) (session, transcript string) {
 	if stdinIsTerminal() {
-		return hookEnvelope{}
+		return "", ""
 	}
 	type read struct {
 		body []byte
@@ -157,26 +156,15 @@ func readCheckpointEnvelope(in io.Reader) hookEnvelope {
 		done <- read{body: body, err: err}
 	}()
 
-	var body []byte
 	select {
 	case r := <-done:
 		if r.err != nil {
-			return hookEnvelope{}
+			return "", ""
 		}
-		body = r.body
+		return guard.HostAttribution(string(r.body))
 	case <-time.After(checkpointEnvelopeWait):
-		return hookEnvelope{}
+		return "", ""
 	}
-
-	trimmed := strings.TrimSpace(string(body))
-	if trimmed == "" || trimmed[0] != '{' {
-		return hookEnvelope{}
-	}
-	var env hookEnvelope
-	if json.Unmarshal([]byte(trimmed), &env) != nil {
-		return hookEnvelope{}
-	}
-	return env
 }
 
 // checkpointRecordedLine is the terminal reading of one write: where the work sits, and

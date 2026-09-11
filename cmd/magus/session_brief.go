@@ -230,16 +230,22 @@ func briefLeases(root string) []briefLease {
 	if err != nil {
 		return nil
 	}
-	live := liveLeases(rows)
-	out := make([]briefLease, 0, len(live))
-	for _, row := range live {
+	out := make([]briefLease, 0, len(rows))
+	for _, row := range rows {
+		if !row.State.Live() {
+			continue
+		}
+		goal, _, _ := strings.Cut(strings.TrimSpace(row.Goal), "\n")
+		if goal == "" {
+			goal = "no goal recorded"
+		}
 		// The bind line comes from the brief constructor rather than from a second
 		// spelling here, so `magus ledger brief` and this cannot drift.
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
 			Bind:       ledger.NewBrief(row, ledger.BriefFacts{}).Bind,
-			Goal:       goalLine(row),
+			Goal:       goal,
 			Validation: row.Validation,
 		})
 	}

@@ -1847,12 +1847,13 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 // scan would report hundreds of them and be turned off within the week. A per-host
 // branch that is not deciding a verdict is not the failure this exists to prevent.
 var hostToolVocabularyScope = []string{
-	filepath.Join("cmd", "magus", "guard*.go"),
+	filepath.Join("internal", "guard", "*.go"),
+	filepath.Join("cmd", "magus", "hook*.go"),
 	filepath.Join("internal", "agent", "*.go"),
 }
 
 // hostToolVocabulary is what agent hosts call their tools. magus's own labels
-// (hookToolCommand, hookToolWrite, hookToolRead in cmd/magus/guard.go) are
+// (hookToolCommand, hookToolWrite, hookToolRead in internal/guard/guard.go) are
 // deliberately none of these, and are the positive example: a wrapper maps its
 // host's name to magus's label by which flag it passes, so a host renaming a tool
 // costs its reader one config line instead of costing magus a release.
@@ -1926,11 +1927,47 @@ func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
 			"A switch or a lookup table over \"Read\"/\"Bash\" is a per-host branch with the host's name\n"+
 			"filed off: it passes TestNoHostSpecificBehaviorInCode, and the next time any host renames a\n"+
 			"tool it costs a magus release. Record magus's own label instead (hookToolCommand,\n"+
-			"hookToolWrite, hookToolRead in cmd/magus/guard.go) and let the wrapper in the reader's own\n"+
+			"hookToolWrite, hookToolRead in internal/guard/guard.go) and let the wrapper in the reader's own\n"+
 			"config do the mapping - which flag it passes IS the mapping. If a literal genuinely has to\n"+
 			"be here, add it to hostToolVocabularyByDesign with where that decision is written down.\n\n"+
 			"violations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// verdictTextPrefix opens every reason and every advisory the guard produces, so a
+// literal carrying it is a RULE wherever it sits.
+const verdictTextPrefix = "magus workspace:"
+
+// TestTheHookCommandCarriesNoRuleText keeps the rules on the importable side of the
+// split. A rule written into cmd/magus/hook.go would work, and would be invisible to
+// both the rule suite and the replay path that re-grades a recorded command, because
+// neither can reach package main. Nothing else marks which side a new rule belongs on,
+// and a boundary that lives only in prose is one with roughly even odds.
+func TestTheHookCommandCarriesNoRuleText(t *testing.T) {
+	fset := token.NewFileSet()
+	const path = "cmd/magus/hook.go"
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	require.NoErrorf(t, err, "parse %s: the guard's CLI half moved and this gate stopped looking", path)
+
+	var violations []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		value, uerr := strconv.Unquote(lit.Value)
+		if uerr != nil || !strings.HasPrefix(value, verdictTextPrefix) {
+			return true
+		}
+		violations = append(violations, fmt.Sprintf("%s: %s", fset.Position(lit.Pos()), lit.Value))
+		return true
+	})
+
+	assert.Empty(t, violations,
+		"a guard rule may not live in %s. Rules belong in internal/guard, where the rule suite\n"+
+			"and `magus session ls`'s replay path can both reach them; this file owns flags, stdin and\n"+
+			"rendering only.\n\nviolations:\n%s",
+		path, strings.Join(violations, "\n"))
 }
 
 // The landing headline rotates through N stacked spans on one shared keyframe
@@ -2042,8 +2079,8 @@ var asciiScanFiles = []string{
 	"internal/handler/mcp/output.go",
 	"internal/handler/mcp/where.go",
 	"cmd/magus/query.go",
-	"cmd/magus/guard_shell.go",
-	"cmd/magus/guard_write.go",
+	"internal/guard/guard_shell.go",
+	"internal/guard/guard_write.go",
 	"cmd/magus/config_console.go",
 	"internal/doctor/checks.go",
 	"cmd/magus/init.go",

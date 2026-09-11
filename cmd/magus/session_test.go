@@ -357,7 +357,9 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 
 	denied := loadedEvent(t, root, "s1", 0)
 	assert.Equal(t, "deny", denied.Verdict)
-	assert.Equal(t, string(denyRuleRawTool), denied.Rule)
+	// "raw-tool" is the wire value the guard reports; denyRuleRawTool is unexported to
+	// internal/guard now, so this package asserts the string.
+	assert.Equal(t, "raw-tool", denied.Rule)
 	assert.Equal(t, "go", denied.Program)
 
 	plain := loadedEvent(t, root, "s1", 1)
