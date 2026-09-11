@@ -28,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `65` |
+| `agent-skill-version` | `66` |
 | `knowledge-schema-version` | `12` |
 | `skill-content` | `6aa68b31eee9` |
 | `skill-variant` | `full` |

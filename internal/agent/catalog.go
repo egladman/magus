@@ -137,7 +137,9 @@ import (
 // the report with `magus ledger accept` instead of demanding four facts in prose, and
 // carries a coalescing rule: partition by write set, then merge what the write sets
 // allow, because a worker's fixed context load is paid whatever the diff's size.
-const SkillVersion = 65
+// 66: magus-multi-agent drops the word "handoff" and says delegate; the word is the
+// agent-industry idiom and this tool is written for a person first.
+const SkillVersion = 66
 
 const skillLicense = "GPL-3.0-or-later"
 

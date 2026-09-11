@@ -52,8 +52,8 @@ be worth a worker".
 Four rules, in the order they bite:
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn{{if .Full}}.
-  Two is two loads for one unit of work plus a handoff, and the second starts by
-  rediscovering what the first just learned{{end}}.
+  Two is two loads for one unit of work, and the second starts by rediscovering
+  what the first just learned{{end}}.
 - Merge small disjoint units inside one project. The wall-clock gain from
   splitting them is usually smaller than the load you pay twice{{if .Full}}, and
   they contend on the same validation anyway{{end}}.
@@ -132,7 +132,7 @@ spends its budget on the discovery, once per worker, and its report then reads
 "done" with nothing executed - which the acceptance-evidence rule above already
 refuses to accept{{end}}.
 
-A worker may hand work on again. What it may not do is hand it on without shrinking the
+A worker may delegate again. What it may not do is delegate without shrinking the
 problem{{if .Full}} - that is the shape that does not terminate, and the cost people
 attribute to "multi-agent" is almost always this{{end}}. Three rules give it a
 definitive end:

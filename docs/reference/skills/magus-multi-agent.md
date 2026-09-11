@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25603
-skill_short_bytes: 18586
+skill_full_bytes: 25582
+skill_short_bytes: 18580
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `65` |
+| `agent-skill-version` | `66` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `f79f2849cca1` |
+| `skill-content` | `2112c179c8d7` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -143,7 +143,7 @@ ledger before spawning: the worker writes the tests, stops at the static checks
 its environment does run, and says so; the root executes the lease's target
 centrally before accepting.
 
-A worker may hand work on again. What it may not do is hand it on without shrinking the
+A worker may delegate again. What it may not do is delegate without shrinking the
 problem. Three rules give it a
 definitive end:
 
@@ -463,8 +463,8 @@ be worth a worker".
 Four rules, in the order they bite:
 
 - A depends-on chain is ONE worker in sequence, not two workers in turn.
-  Two is two loads for one unit of work plus a handoff, and the second starts by
-  rediscovering what the first just learned.
+  Two is two loads for one unit of work, and the second starts by rediscovering
+  what the first just learned.
 - Merge small disjoint units inside one project. The wall-clock gain from
   splitting them is usually smaller than the load you pay twice, and
   they contend on the same validation anyway.
@@ -539,7 +539,7 @@ spends its budget on the discovery, once per worker, and its report then reads
 "done" with nothing executed - which the acceptance-evidence rule above already
 refuses to accept.
 
-A worker may hand work on again. What it may not do is hand it on without shrinking the
+A worker may delegate again. What it may not do is delegate without shrinking the
 problem - that is the shape that does not terminate, and the cost people
 attribute to "multi-agent" is almost always this. Three rules give it a
 definitive end:

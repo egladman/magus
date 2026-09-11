@@ -209,7 +209,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "blocks this workspace's "+ledger.BriefTemplatePath+" carries.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a verdict: magus assembles what it holds and")
-			fmt.Fprintln(os.Stderr, "you hand it to the worker, the way `magus diff --prompt` does.")
+			fmt.Fprintln(os.Stderr, "you give it to the worker, the way `magus diff --prompt` does.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()

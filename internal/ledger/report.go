@@ -9,8 +9,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ReportSchema is the JSON Schema for [Report], embedded so a harness can hand it to a
-// worker as a response format without magus having to render one.
+// ReportSchema is the JSON Schema for [Report], embedded so a harness can give a
+// worker a response format without magus having to render one.
 //
 // A file beside the struct rather than reflection over it: the schema is the CONTRACT a
 // host's typed-output mode compiles against, and one generated from Go tags would change
