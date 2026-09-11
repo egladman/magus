@@ -18,6 +18,7 @@ event.
 | guard wiring     | `.claude/settings.json`, `PreToolUse`  |
 | command surface  | deny and advise both reach the model   |
 | file surface     | deny and advise both reach the model   |
+| MCP call surface | deny and advise both reach the model   |
 | read observation | `PreToolUse` on the read tool          |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
@@ -84,6 +85,38 @@ What it trades away is the templates' handling of a magus that is missing or too
 old to judge: both of those render nothing, and Claude Code reads nothing as
 allow, so the session goes unguarded with no sign of it. Use the short form
 while you are experimenting; use the templates once you rely on the guard.
+
+## MCP tool calls
+
+Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
+`mcp__<server>__<tool>`. If you configured the `magus` daemon as `magus` (the
+name [MCP](../mcp.md) uses in its own examples), a fourth entry judges every
+call to it the same way the command surface is judged:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__magus__.*",
+        "hooks": [
+          { "type": "command", "command": "HOST_EVENT_RAW=1 sh ~/.claude/hooks/magus-guard-command.sh", "timeout": 10 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Same template, same reply shape - `HOST_EVENT_RAW` is the only difference. An
+MCP call carries no `tool_input.command` for `HOST_EVENT_PATH` to select, only
+a tool name and a params object, so this forwards the event whole instead of
+extracting one field. `magus session hook` already parses that whole envelope;
+today it recognizes the tool name and params only well enough to say there is
+nothing here it can judge, so this wiring passes every MCP call rather than
+denying or advising on one - which is the honest state to ship rather than
+silence. The next rule this surface grows reaches the model the moment it
+ships, with no new host wiring, because the transport is already here.
 
 ## Recording what was read
 
@@ -269,9 +302,12 @@ be handed.
 
 ## Coverage and limits
 
-No gaps in the guard contract: both surfaces are wired, `deny` arrives as a
-`permissionDecision`, and `advise` arrives as `additionalContext`, which puts the
-explanation in front of the model rather than the person.
+No transport gap in the guard contract: all three surfaces are wired, `deny`
+arrives as a `permissionDecision`, and `advise` arrives as `additionalContext`,
+which puts the explanation in front of the model rather than the person. The
+MCP surface is transport-complete but rule-empty today - the wiring passes
+every call because nothing yet judges an MCP tool name, not because the
+channel cannot carry a verdict.
 
 That is not the same as using everything this host offers. `SessionStart` with
 matcher `startup`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`,

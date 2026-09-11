@@ -69,6 +69,26 @@ stdin pass-command.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 ! stdout .
 
+# --- magus-guard-command.sh: MCP tool calls, via HOST_EVENT_RAW ---------------
+
+# case: mcp/pass
+# An MCP call carries no tool_input.command for HOST_EVENT_PATH to select, so
+# HOST_EVENT_RAW forwards the whole event instead. magus parses that envelope and
+# recognizes the tool name and params well enough to say there is nothing here it
+# judges, so every MCP call passes today: the transport is real, no rule reads it
+# yet.
+env HOST_EVENT_RAW=1
+stdin mcp-call.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+! stdout .
+env HOST_EVENT_RAW=
+
+# case: mcp/deny unreachable - no rule judges an MCP tool call yet; a tool_input
+# the envelope decoder does not recognize (no command, file_path or prompt) always
+# resolves to NothingToJudge, which magus renders as a pass, never a deny. Add a
+# real case here once a rule reads an MCP call's tool name.
+# case: mcp/advise unreachable - same gap: NothingToJudge never advises either.
+
 # --- magus-guard-path.sh: the same hosts, their file-writing tool -------------
 
 # case: path/advise
@@ -390,6 +410,8 @@ exit 2
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "git push"}}
 -- pass-command.json --
 {"session_id": "s1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- mcp-call.json --
+{"session_id": "s1", "tool_name": "mcp__magus__magus_ledger", "tool_input": {"op": "clear"}}
 -- advise-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- pass-path.json --

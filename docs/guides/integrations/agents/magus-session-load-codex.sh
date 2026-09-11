@@ -21,7 +21,7 @@
 # command. The coverage line says so, and a report reading it says unobservable
 # for those dimensions rather than zero. Declaring commands=yes on the strength
 # of what the other hosts supply is the failure this line exists to prevent.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.

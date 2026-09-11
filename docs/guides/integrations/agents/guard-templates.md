@@ -53,15 +53,16 @@ your host config points at, and fails when it is stale or missing.
 
 One implementation per guard surface. A host sets overrides and delegates:
 
-| variable                     | what it is                                                                                               |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `HOST_EVENT_PATH`            | dot-path to the command or file path inside your host's event JSON                                       |
-| `HOST_SESSION_PATH`          | dot-path to the session id inside your host's event JSON                                                 |
-| `HOST_RESPONSE`              | Go template rendering your host's reply from the verdict                                                 |
-| `GUARD_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                         |
-| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance          |
-| `GUARD_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence |
-| `GUARD_MAGUS_BIN`            | absolute path to magus when it is not on PATH                                                            |
+| variable                     | what it is                                                                                                                                                                             |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HOST_EVENT_PATH`            | dot-path to the command or file path inside your host's event JSON                                                                                                                     |
+| `HOST_EVENT_RAW`             | (`magus-guard-command.sh` only) hand the whole event instead of one `HOST_EVENT_PATH` field - for a surface like MCP whose payload is a tool name plus a params object, not one string |
+| `HOST_SESSION_PATH`          | dot-path to the session id inside your host's event JSON                                                                                                                               |
+| `HOST_RESPONSE`              | Go template rendering your host's reply from the verdict                                                                                                                               |
+| `GUARD_AGENT_NAME`           | the agent host name recorded on the activity event (`claude-code`, `codex`, ...)                                                                                                       |
+| `GUARD_UNAVAILABLE_RESPONSE` | what to print when magus is missing, so each host picks its own fail-open or fail-closed stance                                                                                        |
+| `GUARD_FAILED_RESPONSE`      | the same, for a magus that is found but cannot judge the input; unset, the notice is built from evidence                                                                               |
+| `GUARD_MAGUS_BIN`            | absolute path to magus when it is not on PATH                                                                                                                                          |
 
 `GUARD_AGENT_NAME` and `HOST_SESSION_PATH` feed `magus session hook --agent-name` and
 `--session`, which are pure attribution: they label the recorded observation and
@@ -90,6 +91,10 @@ overrides and execs it, so there is one implementation to reason about.
 # stdout and exits 0 either way. Override any of the variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_EVENT_RAW   when set, hand the WHOLE host event to magus session hook
+#                    instead of selecting HOST_EVENT_PATH out of it - for a
+#                    surface whose payload is not one string, such as an MCP
+#                    tool call (a tool name plus a params object)
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
@@ -125,9 +130,18 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none
+# claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
+# so HOST_EVENT_RAW forwards the whole event instead, and the same hookSpecificOutput reply this
+# file already renders for the command surface carries a deny or an advise on this one too.
+# magus-guard-coverage: schema=1 host=codex surface=mcp deny=none advise=none pass=none
+# codex declares NONE here, not model: OpenAI's vendored hooks schema documents PreToolUse
+# firing on Bash and the edit tools by name and says nothing about an MCP tool call. Wiring a
+# matcher this file cannot confirm fires would be a claim the evidence does not support; see
+# testdata/hostschemas/codex/hooks.schema.json and docs/guides/integrations/agents/codex.md.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -231,7 +245,11 @@ fi
 # before attribution existed. One extra process only on an older binary, and none once the flags are
 # in a release.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  if [ -n "$HOST_EVENT_RAW" ]; then
+    printf '%s' "$event" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  else
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  fi
 }
 
 # guard_failure_notice states WHICH binary went silent, what version it is, and what it
@@ -341,7 +359,7 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none
 
@@ -484,7 +502,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 12
+# magus-guard-template: 13
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -662,7 +680,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 12
+# magus-guard-template: 13
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
@@ -781,7 +799,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 12
+# magus-guard-template: 13
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.

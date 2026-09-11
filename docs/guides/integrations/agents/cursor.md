@@ -11,15 +11,16 @@ repository root, and it runs hooks as programs with the event on stdin. One
 self-contained script covers every event magus uses, so installing the whole
 integration is a single download.
 
-| what            | where                                                    |
-| --------------- | -------------------------------------------------------- |
-| always-on rules | `AGENTS.md` (you paste the block; magus never writes it) |
-| guard wiring    | `.cursor/hooks.json`                                     |
-| command surface | deny and advise both reach the model                     |
-| file surface    | deny and advise both reach the model                     |
-| checkpoint      | `sessionEnd`                                             |
-| lease           | `subagentStart` (unverified live, see below)             |
-| MCP             | [MCP](../mcp.md)                                         |
+| what             | where                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)                                      |
+| guard wiring     | `.cursor/hooks.json`                                                                          |
+| command surface  | deny and advise both reach the model                                                          |
+| file surface     | deny and advise both reach the model                                                          |
+| MCP call surface | not wired: `beforeMCPExecution`/`afterMCPExecution` exist, their payload does not (see below) |
+| checkpoint       | `sessionEnd`                                                                                  |
+| lease            | `subagentStart` (unverified live, see below)                                                  |
+| MCP              | [MCP](../mcp.md)                                                                              |
 
 ## Skills
 
@@ -135,9 +136,18 @@ postToolUse event with neither field returns `{}`.
 # note in magus-guard-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none
+# NOT because the transport is missing: testdata/hostschemas/cursor/hooks.schema.json DOES
+# declare beforeMCPExecution and afterMCPExecution, the MCP-call twins of beforeShellExecution
+# and preToolUse/postToolUse above. What is missing is the PAYLOAD: no vendored source (Cursor
+# ships no schema for it, only the config-shape validator the rows above are transcribed from)
+# says what field carries the tool name and params on those two events, and this script does
+# not guess at one - wiring a guard against an unverified field name is the exact silent-failure
+# class this whole contract exists to catch (see subagentStart's own "unverified live" note
+# below). Flip this the day Cursor documents, or this file verifies, that payload.
 
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
@@ -225,7 +235,7 @@ guard() {
 }
 
 # guard_failure_notice states WHICH binary went silent, what version it is, and what it
-# actually said - the three facts a reader otherwise spends a session collecting. It takes
+# actually said, the three facts a reader otherwise spends a session collecting. It takes
 # the same arguments the failed call did, and re-runs it to capture the stderr the verdict
 # path discards: one extra process, only on the path that is already broken. WARN lines are
 # dropped because a config the binary is too old to parse warns BEFORE it fails, and that
@@ -262,14 +272,14 @@ fi
 
 # Every verdict below is captured and printed rather than piped straight through,
 # because `magus session hook` exits non-zero on a deny and Cursor reads a non-zero
-# hook as a CRASH - which it fails open on, unless failClosed is set. Letting that
+# hook as a CRASH, which it fails open on unless failClosed is set. Letting that
 # status escape would turn every block into an allow, silently, which is the one
 # outcome worse than not installing the guard. Cursor's channel is the JSON on
 # stdout, and this exits 0 so that JSON is what it acts on.
 #
 # An empty verdict is a BROKEN guard, never a pass: the templates above render a
 # reply for every decision, so nothing but a magus that could not run leaves one
-# empty - too old for `session hook`, unable to load the workspace, half-written by
+# empty: too old for `session hook`, unable to load the workspace, half-written by
 # a concurrent build. Allowing is still right; announcing it is what was missing.
 case $event_name in
 sessionEnd)
@@ -391,6 +401,16 @@ never fires costs nothing and a missing one cannot be found; check
 `magus session` for `agent_spawn` events before relying on it.
 
 ## Coverage and limits
+
+**The MCP call surface is declared but not wired.** Cursor's hooks schema DOES
+name `beforeMCPExecution` and `afterMCPExecution` - the MCP-call twins of
+`beforeShellExecution` and `preToolUse`/`postToolUse` above - so this is not
+the "transport does not carry it" gap it is on Codex and OpenCode. What is
+missing is the payload: no schema, published or transcribed, says what field
+on those two events carries the tool name and params, and this script does not
+wire an event whose shape it cannot verify - the same caution `subagentStart`
+below already gets ("unverified live"). Confirm the payload against a real
+Cursor session before flipping this.
 
 **Both surfaces now reach the model on both decisions.** That is new, and it cost
 two events per judged call: the write gate moved from `afterFileEdit`, which

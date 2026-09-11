@@ -30,6 +30,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__magus__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "SessionStart": [

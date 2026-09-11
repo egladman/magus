@@ -26,7 +26,7 @@
 # OpenCode is the only host of the three that records a command's exit code, and
 # the only one with neither hook records nor a spawn part. The coverage line says
 # both; a report reading it says unobservable, never zero.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes
 
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.

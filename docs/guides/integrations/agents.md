@@ -115,14 +115,17 @@ nothing for the model, so there run the command yourself and read the same thing
 Every host gets the same RULES - they come from one binary, and none of them is
 per-host. What differs is how much of a verdict a host's hook surface can carry.
 
-|             | command rules  | declared-output rule                       | `deny` reaches the model               | `advise` reaches the model                 |
-| ----------- | -------------- | ------------------------------------------ | -------------------------------------- | ------------------------------------------ |
-| Claude Code | yes (verified) | yes (verified)                             | yes                                    | yes (`additionalContext`)                  |
-| Codex       | yes (verified) | yes, per OpenAI's docs (unverified here)   | yes                                    | yes (`additionalContext`, unverified here) |
-| Cursor      | yes (verified) | yes, blocked before the write (unverified) | yes (`user_message` + `agent_message`) | yes (`postToolUse`, after the call)        |
-| OpenCode    | yes (verified) | yes (verified)                             | yes (thrown)                           | yes (appended to the tool result)          |
+|             | command rules  | declared-output rule                       | MCP call rules                                    | `deny` reaches the model               | `advise` reaches the model                 |
+| ----------- | -------------- | ------------------------------------------ | ------------------------------------------------- | -------------------------------------- | ------------------------------------------ |
+| Claude Code | yes (verified) | yes (verified)                             | wired, rule-empty (see below)                     | yes                                    | yes (`additionalContext`)                  |
+| Codex       | yes (verified) | yes, per OpenAI's docs (unverified here)   | not wired: no vendored evidence the event fires   | yes                                    | yes (`additionalContext`, unverified here) |
+| Cursor      | yes (verified) | yes, blocked before the write (unverified) | not wired: the event exists, the payload does not | yes (`user_message` + `agent_message`) | yes (`postToolUse`, after the call)        |
+| OpenCode    | yes (verified) | yes (verified)                             | not wired: sees the call, tool name unconfirmed   | yes (thrown)                           | yes (appended to the tool result)          |
 
 "Verified" means executed against this binary with a real event on stdin.
+"Wired, rule-empty" means the transport carries a verdict end to end but the
+guard has no MCP-specific rule yet, so every call passes - not because the
+channel is silent, but because nothing has been asked of it.
 
 Both decisions now reach the model everywhere, which they did not until recently:
 one host was sent no advisory at all, one delivered it to the person on stderr,
@@ -136,18 +139,19 @@ twice, leaving two rows in the activity trail where the other hosts leave one.
 One row per job magus does through a host event. A cell names the event that
 carries it, or the reason nothing does.
 
-| job                         | Claude Code                        | Codex                                    | Cursor                                                    | OpenCode                          |
-| --------------------------- | ---------------------------------- | ---------------------------------------- | --------------------------------------------------------- | --------------------------------- |
-| command guard, deny         | `PreToolUse` `Bash`                | `PreToolUse` `Bash`                      | `beforeShellExecution`                                    | `tool.execute.before`             |
-| command guard, advise       | `additionalContext`                | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| write guard, deny           | `PreToolUse` on the edit tools     | `PreToolUse` on the edit tools           | `preToolUse`                                              | `tool.execute.before`             |
-| write guard, advise         | `additionalContext`                | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| post-compaction rehydration | `SessionStart` `compact`           | `SessionStart` `compact` (JSON envelope) | not expressible: `preCompact` returns `user_message` only | `experimental.session.compacting` |
-| checkpoint                  | `Stop`                             | `Stop`                                   | `sessionEnd`                                              | the `session.idle` bus event      |
-| lease provenance            | `PreToolUse` on the sub-agent tool | no event carries the handed prompt       | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
-| read observation            | `PreToolUse` `Read`                | not wired                                | not wired                                                 | not wired                         |
-| tool-failure hint           | not wired                          | not wired                                | not expressible: no response fields                       | not wired                         |
-| session-load recipe         | ships one                          | ships one                                | none written                                              | ships one                         |
+| job                         | Claude Code                                | Codex                                    | Cursor                                                    | OpenCode                          |
+| --------------------------- | ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------- | --------------------------------- |
+| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                      | `beforeShellExecution`                                    | `tool.execute.before`             |
+| command guard, advise       | `additionalContext`                        | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
+| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools           | `preToolUse`                                              | `tool.execute.before`             |
+| write guard, advise         | `additionalContext`                        | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | not wired: event unconfirmed             | not wired: payload unconfirmed                            | not wired: tool name unconfirmed  |
+| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope) | not expressible: `preCompact` returns `user_message` only | `experimental.session.compacting` |
+| checkpoint                  | `Stop`                                     | `Stop`                                   | `sessionEnd`                                              | the `session.idle` bus event      |
+| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt       | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
+| read observation            | `PreToolUse` `Read`                        | not wired                                | not wired                                                 | not wired                         |
+| tool-failure hint           | not wired                                  | not wired                                | not expressible: no response fields                       | not wired                         |
+| session-load recipe         | ships one                                  | ships one                                | none written                                              | ships one                         |
 
 Two kinds of blank belong in that table and they are not the same. **Not
 expressible** is a host contract magus cannot reach through, and it is named

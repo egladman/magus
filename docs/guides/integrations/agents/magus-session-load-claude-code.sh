@@ -43,7 +43,7 @@
 # by the session-parity gate, which fails the build when a recipe drops a
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a

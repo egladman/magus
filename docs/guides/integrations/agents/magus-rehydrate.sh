@@ -41,7 +41,7 @@
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 12
+# magus-guard-template: 13
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.

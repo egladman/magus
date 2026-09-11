@@ -12,15 +12,16 @@ a deny reaches the model as the tool error; an advise is appended to the tool's
 own result by `tool.execute.after`, which is the same call and the same context
 window. One file carries all of it.
 
-| what            | where                                                 |
-| --------------- | ----------------------------------------------------- |
-| skills          | `.opencode/skills/` (it also reads `.claude/skills/`) |
-| guard wiring    | `~/.config/opencode/plugins/` or `.opencode/plugins/` |
-| command surface | deny and advise both reach the model                  |
-| file surface    | deny and advise both reach the model                  |
-| checkpoint      | the `session.idle` bus event                          |
-| rehydration     | `experimental.session.compacting`                     |
-| MCP             | [MCP](../mcp.md)                                      |
+| what             | where                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| skills           | `.opencode/skills/` (it also reads `.claude/skills/`)                                         |
+| guard wiring     | `~/.config/opencode/plugins/` or `.opencode/plugins/`                                         |
+| command surface  | deny and advise both reach the model                                                          |
+| file surface     | deny and advise both reach the model                                                          |
+| MCP call surface | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
+| checkpoint       | the `session.idle` bus event                                                                  |
+| rehydration      | `experimental.session.compacting`                                                             |
+| MCP              | [MCP](../mcp.md)                                                                              |
 
 ## Skills
 
@@ -72,7 +73,7 @@ other templates.
 // deny throws and its reason arrives as the tool error, while an advise is
 // appended to the tool's own result by tool.execute.after, joined to the call it
 // belongs to by callID. That append is what replaced a console.warn, which reached
-// the person and never the model. The two declarations below record it, and they
+// the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
 // magus-guard-command.sh.
 //
@@ -80,9 +81,18 @@ other templates.
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 12
+// magus-guard-template: 13
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
+// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none
+// NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
+// intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
+// edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode
+// gives an MCP tool call at all; no vendored source documents its convention (SOURCES.md:
+// OpenCode ships no hook config schema, only the typed Plugin interface this file already
+// type-checks against), and a third `if (input.tool === ...)` branch keyed on a guessed string
+// risks silently misjudging an unrelated tool rather than catching magus's own calls. Flip this
+// once that naming convention is confirmed against a real OpenCode session.
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
@@ -407,7 +417,14 @@ If you would rather not have the plugin do it, running
   missing binary would block every tool call and make the session unusable.
 - Tool identifiers were confirmed against an installed OpenCode 1.18.5: `bash`,
   `edit`, `write`, `read`, `patch` and `glob` all appear in its binary, and
-  `filePath` is the field its edit tools carry.
+  `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
+  string was NOT among them (OpenCode has no hook config schema to check it
+  against either, per `testdata/hostschemas/SOURCES.md`), so the MCP call
+  surface is feasible - `tool.execute.before`/`.after` already see every call,
+  MCP included - but not wired: a branch keyed on a guessed name risks judging
+  an unrelated tool rather than magus's own calls. Confirm the string against a
+  live session, then add a third `if (input.tool === ...)` branch beside `bash`
+  and `edit`/`write`.
 - Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
   every tool and hands the plugin `input.tool` plus the call's arguments, so a
   branch alongside the `bash` and `edit`/`write` ones could pipe a sub-agent
