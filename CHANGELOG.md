@@ -259,6 +259,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A committed coverage record is no longer refused because the commit it names is not an
+  ancestor of the checkout.** Every record is measured on a branch, and a squash merge
+  rewrites that branch's commits, so the rule turned the badge red on every checkout of
+  main the moment a record landed through a pull request. The record's commit is kept as
+  provenance only. What keeps a record honest is the per-file digest beside it: a file
+  whose source differs from the tree is credited nothing, so a record from anywhere can
+  lower the figure and never raise it.
 - **One target's declared timeout no longer becomes the timeout of the work its siblings
   share.** A target reached through `ctx.needs` runs once and is awaited by every target
   that needs it, so whichever caller arrived first supplied the context the work ran under.
@@ -455,7 +462,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   rejected for the same reason, since the decoder reads the first and would drop the rest
   without a word, while an empty or comment-only file still declares nothing and loads. The
   old warning referred readers to `magus config validate`, which does not exist; `magus
-  doctor` is the check that grades the config files a workspace resolves.
+  doctor` is the check that grades the config files a workspace resolves. The error reads
+  as `magus.yaml:10: unknown key "enabledd"; did you mean "enabled"?`, one line per key,
+  with the nearest known key at that level offered by the same distance rule magusfile
+  options use, and it is printed plain on stderr rather than through the structured log,
+  which had been escaping every quote and newline into one line.
 - **A wait for an upstream target names both parties in a sentence and repeats less often the
   longer it runs.** The line was structured fields printed every fifteen seconds, so several
   readers waiting out one long writer each repeated it at every beat. It now reads as one
