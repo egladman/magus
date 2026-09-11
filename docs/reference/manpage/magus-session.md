@@ -134,6 +134,9 @@ session-start event and hand the model state instead of prose.
 **show**
 : Report one loaded session: what it ran, what the rules say, what it loaded
 
+**hints**
+: Report uptake per hint id: served, followed, rejected, repeated
+
 **attention**
 : List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty
 

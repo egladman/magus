@@ -583,6 +583,20 @@ type AgentEvent struct {
 	Exit        int  `json:"exit,omitempty"`
 	Denied      bool `json:"denied,omitempty"`
 	Interrupted bool `json:"interrupted,omitempty"`
+	// NextIDs are the hint ids this call's RESULT served, and NextFollowed the ids
+	// this call's COMMAND took up from a result served before it. Both are joined at
+	// load time from the served-next journal magus writes beside its advisory markers;
+	// nothing a host reports fills either.
+	//
+	// Two fields because one cannot answer both questions. Uptake per id is served
+	// against followed, and a single list could not say which end of that an event
+	// sits at: a call that runs a breadcrumb and earns new ones does both at once.
+	//
+	// This is the only record of what a result carried. A command's text never reaches
+	// the store, so a later reader cannot recover from an event that it served
+	// `query-explain`, and the denominator of every uptake rate would not exist.
+	NextIDs      []string `json:"next_ids,omitempty"`
+	NextFollowed []string `json:"next_followed,omitempty"`
 }
 
 // LoadEvent is one event with the session it belongs to, as [LoadEvents] takes it.

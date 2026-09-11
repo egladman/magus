@@ -58,6 +58,8 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return sessionLoad(root, rest)
 	case "show":
 		return sessionShow(root, rest)
+	case "hints":
+		return sessionHints(root, rest)
 	case "lease":
 		return sessionLease(root, rest)
 	case "attention":
@@ -71,7 +73,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, load, lease, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, lease, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
 	}
 }
 
@@ -79,6 +81,7 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
 	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
 	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
+	fmt.Fprintln(os.Stderr, "       magus session hints               # uptake per hint id, over the loaded sessions")
 	fmt.Fprintln(os.Stderr, "       magus session load [--file <path>]")
 	fmt.Fprintln(os.Stderr, "       magus session lease [<lease-id>]  # bind a lease to this checkout for the guard")
 	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
@@ -544,6 +547,10 @@ type sessionLoadSummary struct {
 	ByKind  map[string]int       `json:"by_kind,omitempty"`
 	Store   string               `json:"store"`
 	Events  []sessions.LoadEvent `json:"-"`
+	// commands holds each event's shell command text, positionally, for the served-next
+	// join and nothing else. Unexported and never stored: the text dies with this
+	// struct, which is the whole point of storedEvent dropping it.
+	commands []string
 }
 
 func sessionLoadUsage(fs *flag.FlagSet) func() {
@@ -602,6 +609,7 @@ func sessionLoad(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(nextFor(root).base))
 	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
 		Workspace: root,
 		Command:   "session load",
@@ -661,10 +669,11 @@ func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 			reject(line, "longer than any event (%d bytes)", loadMaxLineBytes)
 		case text == "":
 		default:
-			if ev, reason := decodeLoadEvent(text, sameRepo); reason != "" {
+			if ev, command, reason := decodeLoadEvent(text, sameRepo); reason != "" {
 				reject(line, "%s", reason)
 			} else if ev != nil {
 				summary.Events = append(summary.Events, *ev)
+				summary.commands = append(summary.commands, command)
 			} else {
 				summary.Dropped++
 			}
@@ -675,19 +684,20 @@ func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 	}
 }
 
-// decodeLoadEvent turns one line into the event to store. A line that fails validation
-// returns the reason; a well-formed line from another repository returns neither an
-// event nor a reason, which is the dropped case.
-func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEvent, string) {
+// decodeLoadEvent turns one line into the event to store, and returns the shell
+// command text beside it for the served-next join, "" for every other kind. A line
+// that fails validation returns the reason; a well-formed line from another
+// repository returns neither an event nor a reason, which is the dropped case.
+func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEvent, string, string) {
 	var ev loadEvent
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-		return nil, fmt.Sprintf("not a JSON object: %v", err)
+		return nil, "", fmt.Sprintf("not a JSON object: %v", err)
 	}
 	if reason := validateLoadEvent(ev); reason != "" {
-		return nil, reason
+		return nil, "", reason
 	}
 	if ev.Cwd != "" && !sameRepo(ev.Cwd) {
-		return nil, ""
+		return nil, "", ""
 	}
 	// A host names files by absolute path; graph file nodes are keyed by the path
 	// inside the checkout, and every worktree of one repository shares that layout.
@@ -696,7 +706,11 @@ func decodeLoadEvent(raw string, sameRepo func(string) bool) (*sessions.LoadEven
 	if ev.Kind == sessions.EventFileRead || ev.Kind == sessions.EventFileWrite {
 		ev.Text = repoid.CheckoutRelative(ev.Text)
 	}
-	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)}, ""
+	command := ""
+	if ev.Kind == sessions.EventShellCommand {
+		command = ev.Text
+	}
+	return &sessions.LoadEvent{Session: ev.Session, Event: storedEvent(ev)}, command, ""
 }
 
 func validateLoadEvent(ev loadEvent) string {

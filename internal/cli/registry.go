@@ -1425,6 +1425,28 @@ results rather than events and is read from the listing instead.`,
 			Usage: "magus session show <session-id>",
 		},
 		{
+			Name:        "hints",
+			Short:       "Report uptake per hint id: served, followed, rejected, repeated",
+			Description: "Count, per hint id, how often a breadcrumb magus served was followed within the next few calls of the same session.",
+			Long: `Report what sessions did with the suggestions magus made.
+
+Every ` + "`next`" + ` entry on a result carries a stable id, and magus records the
+ids a call served beside its own advisory markers. ` + "`session load`" + ` joins that
+record onto a host's transcript, so this reads back, per id: how often it was
+served, how often the command it named was run within the next few calls,
+how often another magus verb was run instead, and how often the same command
+was simply repeated.
+
+The point is pruning by the number. A suggestion nobody takes is context spent
+on advice, and the output names the floor under which one is not worth
+rewording. It is a note and not an action: what to delete is a decision, and
+this command reports.
+
+It counts only what this repository has LOADED. An empty store reports
+nothing, which is a fact about the store rather than about the hints.`,
+			Usage: "magus session hints",
+		},
+		{
 			Name:  "attention",
 			Short: "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
 			Long: `List the requests agents have raised in this repository.
