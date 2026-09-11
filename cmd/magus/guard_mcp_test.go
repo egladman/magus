@@ -17,10 +17,10 @@ import (
 )
 
 // TestMCPJudgedParamsCoverEveryMergedField holds the guard's view of a ledger put to the
-// ledger's own. A field ledger.Merge applies and the renderer drops reaches the row with no
+// ledger's own. A field ledger.ParseMerge applies and the renderer drops reaches the row with no
 // rule having read it, and the rebind rule then clears a rewrite of it as a plain shrink.
 //
-// The accepted set is PROBED rather than restated: ledger.Merge exports no key list, and a
+// The accepted set is PROBED rather than restated: ledger.ParseMerge exports no key list, and a
 // second hand-written one is forgotten in the same direction as the first.
 func TestMCPJudgedParamsCoverEveryMergedField(t *testing.T) {
 	merged := 0
@@ -30,7 +30,7 @@ func TestMCPJudgedParamsCoverEveryMergedField(t *testing.T) {
 		}
 		merged++
 		assert.Contains(t, mcpJudgedParams, field,
-			"ledger.Merge applies %q, so a call carrying it has to be judged", field)
+			"ledger.ParseMerge applies %q, so a call carrying it has to be judged", field)
 	}
 	require.NotZero(t, merged, "the probe found no merged field at all, so it is measuring nothing")
 
@@ -56,12 +56,12 @@ func leaseJSONFields() []string {
 }
 
 // ledgerMergeApplies reports whether a put naming key changes the row. Several values are
-// tried because the merge is typed: a list, a boolean and a string that is also a valid
-// state cover every shape it accepts, and a key it ignores leaves the row untouched under
-// all three.
+// tried because the merge is typed: a list, a boolean, a string that is also a valid
+// state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
+// the row untouched under all four.
 func ledgerMergeApplies(key string) bool {
-	for _, value := range []any{"declared", []any{"x"}, true} {
-		apply, err := ledger.Merge(map[string]any{key: value})
+	for _, value := range []any{"declared", "magus run test .", []any{"x"}, true} {
+		apply, err := ledger.ParseMerge(map[string]any{key: value})
 		if err != nil {
 			continue
 		}
