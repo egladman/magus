@@ -23,4 +23,6 @@ export object Target {
     drift_reason: str = "",
     retry_on_volatile: bool = false,
     retry_on_volatile_reason: str = "",
+    advisory: bool = false,
+    advisory_reason: str = "",
 }

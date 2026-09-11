@@ -295,6 +295,15 @@ func SkipCache(reason string) TargetOption {
 	return func(t *types.Target) { t.SkipCache = true; t.SkipCacheReason = reason }
 }
 
+// Advisory returns a TargetOption that keeps the target's failure from failing a
+// composite that reaches it through ctx.needs; the composite reports the failure and
+// carries on, and running the target by name still fails. reason states why a failure
+// here does not mean the change is wrong, and is required for the same reason
+// SkipCache's is.
+func Advisory(reason string) TargetOption {
+	return func(t *types.Target) { t.Advisory = true; t.AdvisoryReason = reason }
+}
+
 // Exclusive returns a TargetOption that runs the target alone — no other target
 // runs concurrently while it does.
 func Exclusive() TargetOption {

@@ -1105,6 +1105,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.RetryOnVolatile {
 					fmt.Printf("  retry_on_volatile")
 				}
+				if pol.Advisory {
+					fmt.Printf("  advisory=%q", pol.AdvisoryReason)
+				}
 				if pol.SkipCache {
 					fmt.Printf("  skip_cache")
 				}
@@ -1315,6 +1318,9 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			if e.Policy.RetryOnVolatile {
 				fmt.Printf("  retry_on_volatile")
+			}
+			if e.Policy.Advisory {
+				fmt.Printf("  advisory=%q", e.Policy.AdvisoryReason)
 			}
 			if e.Policy.SkipCache {
 				fmt.Printf("  skip_cache")
