@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28835
-skill_short_bytes: 20586
+skill_full_bytes: 28827
+skill_short_bytes: 20576
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `68` |
+| `agent-skill-version` | `69` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `8fc5e28abec9` |
+| `skill-content` | `27d88e30c5af` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -118,7 +118,7 @@ the top-level goal is complete.
 ## Set one topology boundary
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
-effort tier per lease, whether isolated worktrees are available, and how deep
+model per lease, whether isolated worktrees are available, and how deep
 leases may nest. Editing costs the workspace nothing; what contends is
 VALIDATION - the magus runs a lease triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
@@ -167,23 +167,23 @@ API boundary does not get the cheapest one because it looked like less work.
 
 Map work to provider capabilities without assuming model names:
 
-| Tier | Assign |
+| Model | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
 | standard | isolated implementation with a clear contract and bounded project surface |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
 If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis from tier: evidence gathering, scouting, and review get a
+is a separate axis from the model: evidence gathering, scouting, and review get a
 read-only tool surface where the host offers one. Never downgrade the root
 integration pass or final release gate.
 
 Nesting is allowed when the host supports it, but it does not create a
 new budget or a private ownership map. Before a child spawns descendants, it must
 report the proposed leases to its parent. The root ledger must then record those
-descendants, their parent, effort tier, criteria, and owned paths. Descendants
-inherit the ancestor's forbidden paths and may subdivide only the ancestor's
-owned paths. Apply worker and cost caps globally, not once per parent.
+descendants, their parent, model, criteria, and write paths. Descendants
+inherit the ancestor's deny paths and may subdivide only the ancestor's
+write paths. Apply worker and cost caps globally, not once per parent.
 
 Keep one integration owner at the root even when the lease tree is deep.
 A child coordinates its descendants but may not relax the root's criteria.
@@ -247,7 +247,7 @@ tree is not clean) - and keep descendants in the same table. Declare each row wi
 the `magus_ledger` tool (op=put) from the orchestrating agent, or `magus ledger
 register` from a person at a terminal:
 
-| Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
+| Lease | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Depends on | Model | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus ledger brief <lease>`
@@ -260,7 +260,7 @@ Every worker prompt must include its row, its LEASE ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
 `BAGGAGE=magus.lease=<its id>` before it works - the guard grades its writes only when that is
 set. Require it to preserve
-unrelated changes, stay inside owned paths, avoid generated outputs, run only its
+unrelated changes, stay inside write paths, avoid generated outputs, run only its
 assigned Magus target, and return its report in the schema `magus ledger accept
 --schema` prints: changed paths, the validation it ran with the output ref that
 proves it, descendants it created, and unresolved risks. A typed report is what
@@ -269,7 +269,7 @@ mis-scoped worker can say so instead of widening silently.
 
 Binding narrows what a worker may write on the ledger, never what it may see. Its
 own row accepts four writes: registering the base it landed on, shrinking its own
-owned_paths (how it releases a path), ending itself in fail or no_return, and
+write_paths (how it releases a path), ending itself in fail or no_return, and
 declaring a child inside its own lane. Everything else, including any other field
 on its own row and any write to a row that is not its own or its child, is the
 orchestrator's alone.
@@ -291,17 +291,17 @@ Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line.
 
-Owned paths are the WRITE lane. The guard reads them as a READ lane too, so a
+Write paths are the WRITE lane. The guard reads them as a READ lane too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
 once `magus session lease <its id>` binds the row to its checkout. When a worker must READ something it
-must not WRITE, put that path in the row's `focus` instead of widening
-`owned_paths`: one list cannot say both, and widening the write lane to open a
-read is how two workers end up owning one file. `focus` is the only widening
+must not WRITE, put that path in the row's `read_paths` instead of widening
+`write_paths`: one list cannot say both, and widening the write lane to open a
+read is how two workers end up owning one file. `read_paths` is the only widening
 there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-lease's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+lease's `write_paths` with another `magus_ledger` put, or message the orchestrator
 if the host supports it - and then carries on validating.
 
 That put records each dropped path with the digest it carried at that moment.
@@ -311,21 +311,21 @@ on a tree the releaser never saw.
 
 Re-put the row on every state change. `op=list` then answers two questions you
 would otherwise derive by hand: which live leases claim intersecting
-`owned_paths`, and how long since each row was touched. Both are facts, not
+`write_paths`, and how long since each row was touched. Both are facts, not
 verdicts - magus transitions nothing, so a row that has gone quiet is a lease YOU
 decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
 The ledger RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
-happens: inside its own owned paths passes; inside its forbidden paths, or inside
-another live lease's owned paths, is DENIED, and the denial names the owning
+happens: inside its own write paths passes; inside its deny paths, or inside
+another live lease's write paths, is DENIED, and the denial names the owning
 lease. A writer magus cannot attribute - a person in their own checkout, or a
 worker that never enrolled - is ADVISED and never blocked, and every uncertainty
 fails open the same way. It is a seatbelt for harnesses that opt in, not a
 sandbox. So a denied worker
 COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning lease release the path with the `owned_paths` put above once it has
+the owning lease release the path with the `write_paths` put above once it has
 finished editing, then retry. Step 1 of Integrate
 and verify checks the same boundary against the checkpoint, and that is the half
 that does not depend on a worker cooperating.
@@ -405,7 +405,7 @@ As leases finish:
    differing dirty digest means it saw a tree you are not diffing).
 2. Run `magus ledger accept <lease> --stdin < report.json` on each report BEFORE
    you read it - the report is read only with `--stdin`, nothing decodes without
-   it. It checks what is mechanical: every changed path inside the declared owned
+   it. It checks what is mechanical: every changed path inside the declared write
    paths, a change set that is not empty on a row that writes, and the output ref
    bound to a run of THAT ROW'S OWN VALIDATION which the store recorded as
    PASSING. A passing report records the row
@@ -470,7 +470,7 @@ several disjoint write sets you can name is another.
 
 Fan-out is not inherently expensive. What costs is unbounded fan-out:
 workers that hand work on without a shrinking scope, leases with no acceptance criteria
-so nobody can say when to stop, and a principal tier assigned to mechanical edits.
+so nobody can say when to stop, and a principal model assigned to mechanical edits.
 Each of those is a choice made below, not a property of fanning out. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
@@ -538,7 +538,7 @@ decides whether the top-level goal is complete.
 ## Set one topology boundary
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
-effort tier per lease, whether isolated worktrees are available, and how deep
+model per lease, whether isolated worktrees are available, and how deep
 leases may nest. Editing costs the workspace nothing; what contends is
 VALIDATION - the magus runs a lease triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
@@ -596,29 +596,29 @@ it a definitive end:
 Pick the model that FITS the lease. That is the whole rule, and it runs both ways:
 a mechanical rename does not need the strongest model available, and an ambiguous
 API boundary does not get the cheapest one because it looked like less work.
-Matching the tier to the work is the only cost decision worth making here - past
+Matching the model to the work is the only cost decision worth making here - past
 that, cost is not your call to agonize over, and a lease done badly by an
 under-powered worker costs more than the model it saved.
 
 Map work to provider capabilities without assuming model names:
 
-| Tier | Assign |
+| Model | Assign |
 |---|---|
 | principal | architecture, ambiguous ownership, public APIs, migrations, security, integration |
 | standard | isolated implementation with a clear contract and bounded project surface |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
 If the host cannot select models or reasoning effort, keep its default. Tool surface
-is a separate axis from tier: evidence gathering, scouting, and review get a
+is a separate axis from the model: evidence gathering, scouting, and review get a
 read-only tool surface where the host offers one. Never downgrade the root
 integration pass or final release gate.
 
 Nesting is allowed when the host supports it, but it does not create a
 new budget or a private ownership map. Before a child spawns descendants, it must
 report the proposed leases to its parent. The root ledger must then record those
-descendants, their parent, effort tier, criteria, and owned paths. Descendants
-inherit the ancestor's forbidden paths and may subdivide only the ancestor's
-owned paths. Apply worker and cost caps globally, not once per parent.
+descendants, their parent, model, criteria, and write paths. Descendants
+inherit the ancestor's deny paths and may subdivide only the ancestor's
+write paths. Apply worker and cost caps globally, not once per parent.
 
 Keep one integration owner at the root even when the lease tree is deep.
 A child may coordinate its descendants, but it may not accept changes
@@ -691,12 +691,12 @@ indistinguishable to everything that reads it:
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
 
-| Lease | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
+| Lease | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Depends on | Model | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 
 Render the prompt FROM the row rather than typing it: `magus ledger brief <lease>`
 prints the row's own goal, boundary and validation, plus what the workspace knows
-and nobody wrote down - the projects the owned paths reach, the declared
+and nobody wrote down - the projects the write paths reach, the declared
 output globs that land inside them, the paths a sibling lease is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency. Two renders
@@ -713,7 +713,7 @@ magus cannot attribute. Export `TRACEPARENT` too when your host has one, and add
 `magus.spawner=<your label>` to the baggage: magus records the trace, the parent span
 and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
 verdict is ever keyed on them. Require it to preserve
-unrelated changes, stay inside owned paths, avoid generated outputs, run only its
+unrelated changes, stay inside write paths, avoid generated outputs, run only its
 assigned Magus target, and return its report in the schema `magus ledger accept
 --schema` prints: changed paths, the validation it ran with the output ref that
 proves it, descendants it created, and unresolved risks. A typed report is what
@@ -724,7 +724,7 @@ mis-scoped worker can say so instead of widening silently.
 
 Binding narrows what a worker may write on the ledger, never what it may see. Its
 own row accepts four writes: registering the base it landed on, shrinking its own
-owned_paths (how it releases a path), ending itself in fail or no_return, and
+write_paths (how it releases a path), ending itself in fail or no_return, and
 declaring a child inside its own lane. Everything else, including any other field
 on its own row and any write to a row that is not its own or its child, is the
 orchestrator's alone, and the store refuses the rest before a worker
@@ -756,19 +756,19 @@ generic "expect drift" line, which only primes the worker to dismiss real
 anomalies: the specific fact is what keeps unexplained tree state from costing
 an investigation or a helpful revert of something correct.
 
-Owned paths are the WRITE lane. The guard reads them as a READ lane too, so a
+Write paths are the WRITE lane. The guard reads them as a READ lane too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
 once `magus session lease <its id>` binds the row to its checkout. The
-focus set is its projects plus what they declare `depends_on`, so a shared library
+read lane is its projects plus what they declare `depends_on`, so a shared library
 it legitimately builds on stays open. When a worker must READ something it
-must not WRITE, put that path in the row's `focus` instead of widening
-`owned_paths`: one list cannot say both, and widening the write lane to open a
-read is how two workers end up owning one file. `focus` is the only widening
+must not WRITE, put that path in the row's `read_paths` instead of widening
+`write_paths`: one list cannot say both, and widening the write lane to open a
+read is how two workers end up owning one file. `read_paths` is the only widening
 there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-lease's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+lease's `write_paths` with another `magus_ledger` put, or message the orchestrator
 if the host supports it - and then carries on validating. A waiting lease
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
@@ -781,22 +781,22 @@ on a tree the releaser never saw.
 
 Re-put the row on every state change. `op=list` then answers two questions you
 would otherwise derive by hand: which live leases claim intersecting
-`owned_paths`, and how long since each row was touched. Both are facts, not
+`write_paths`, and how long since each row was touched. Both are facts, not
 verdicts - magus transitions nothing, so a row that has gone quiet is a lease YOU
 decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
 The ledger RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
-happens: inside its own owned paths passes; inside its forbidden paths, or inside
-another live lease's owned paths, is DENIED, and the denial names the owning
+happens: inside its own write paths passes; inside its deny paths, or inside
+another live lease's write paths, is DENIED, and the denial names the owning
 lease. A writer magus cannot attribute - a person in their own checkout, or a
 worker that never enrolled - is ADVISED and never blocked, and every uncertainty
 fails open the same way: no ledger, no live leases, a ledger file
 that will not parse. It is a seatbelt for harnesses that opt in, not a
 sandbox. So a denied worker
 COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning lease release the path with the `owned_paths` put above once it has
+the owning lease release the path with the `write_paths` put above once it has
 finished editing, then retry. Editing anyway from an un-enrolled shell, or
 dropping the lease id to buy advisory treatment, turns a denial you could have
 acted on into a collision nobody sees until integration. Step 1 of Integrate
@@ -902,7 +902,7 @@ As leases finish:
    differing dirty digest means it saw a tree you are not diffing).
 2. Run `magus ledger accept <lease> --stdin < report.json` on each report BEFORE
    you read it - the report is read only with `--stdin`, nothing decodes without
-   it. It checks what is mechanical: every changed path inside the declared owned
+   it. It checks what is mechanical: every changed path inside the declared write
    paths, a change set that is not empty on a row that writes, and the output ref
    bound to a run of THAT ROW'S OWN VALIDATION which the store recorded as
    PASSING. There is no `passed` field on the report: accept reads the

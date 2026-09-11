@@ -157,7 +157,10 @@ import (
 // delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
 // refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
 // not only one bound to the row being graded.
-const SkillVersion = 68
+// 69: magus-multi-agent names a lease's lanes write_paths, read_paths and deny_paths and
+// its model `model`, which is what every magus surface now spells them; the old names are
+// accepted on input for one release and nowhere emitted.
+const SkillVersion = 69
 
 const skillLicense = "GPL-3.0-or-later"
 
