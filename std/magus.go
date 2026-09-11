@@ -1149,11 +1149,11 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
-		// which fork a nested magus and rediscover the root. `magus ledger` cannot stand in
-		// for those here, because it READS and this member may be a put or a clear. Same
-		// code, because the constraint is the same one.
+		// which fork a nested magus and rediscover the root. Neither stands in here, and
+		// nor does `magus ledger`, which needs a workspace for the same reason this does.
+		// Same code, because the constraint is the same one.
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. The `magus ledger` subcommand only reads, so it is no fallback for a write; run from inside the workspace instead",
+			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. Run from inside the workspace instead",
 			member)
 	}
 	cd, ok := ws.(workspaceCacheDir)

@@ -137,9 +137,11 @@ var boundaryTypes = []boundaryType{
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
 	// magus\ledger's bundle (put/list), leaf-first: Lease.releases and
-	// LeaseReport.overlaps are each a list of the other two.
+	// LeaseReport.overlaps are each a list of the other two, and Lease.registeredBy is
+	// one of the actor.
 	{Name: "LeaseRelease", Type: reflect.TypeFor[types.LeaseRelease](), RuntimeObject: true},
 	{Name: "LeaseUnattributedWrite", Type: reflect.TypeFor[types.LeaseUnattributedWrite](), RuntimeObject: true},
+	{Name: "LeaseActor", Type: reflect.TypeFor[types.LeaseActor](), RuntimeObject: true},
 	{Name: "Lease", Type: reflect.TypeFor[types.Lease](), RuntimeObject: true},
 	{Name: "LeaseOverlap", Type: reflect.TypeFor[types.LeaseOverlap](), RuntimeObject: true},
 	{Name: "LeaseReport", Type: reflect.TypeFor[types.LeaseReport](), RuntimeObject: true},

@@ -1,0 +1,198 @@
+package ledger
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+
+	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
+)
+
+// Actor is the party a ledger write is made by: the lease it is bound to, and the
+// session and host that identify it.
+//
+// BOUND OR UNBOUND is the whole of the vocabulary. An unbound actor is the orchestrator
+// or the person at a terminal and may write anything; a bound one is a worker acting
+// under one row, and the rules below are what it may do to the book from inside it.
+// Binding is the checkout's lease marker or the BAGGAGE channel, the same two the guard
+// reads, so a worker cannot be one party to the guard and another to the store.
+type Actor struct {
+	// Lease is the row this session acts under, empty when it acts under none.
+	Lease string
+	// Session and Host identify the actor on the rows it creates. Both are best-effort:
+	// a person at a terminal has neither, and no rule keys on them.
+	Session string
+	Host    string
+}
+
+// ActingActor is the party this process acts as for the checkout whose cache dir is
+// cacheDir: the bound lease from [ActingLease], and the identity the trace channel
+// carries. A process with no lease and no trace is the unbound actor, which is what a
+// person running `magus ledger register` is.
+func ActingActor(cacheDir string) Actor {
+	spawn := trail.SpawnFromEnv()
+	return Actor{Lease: ActingLease(cacheDir), Session: spawn.TraceID, Host: spawn.Spawner}
+}
+
+// Bound reports whether this actor is a worker acting under a lease.
+func (a Actor) Bound() bool { return a.Lease != "" }
+
+// record is what a row stores about the session that created it.
+func (a Actor) record() types.LeaseActor {
+	return types.LeaseActor{Session: a.Session, Host: a.Host}
+}
+
+// grading says whether a write carries a caller's declaration, and so whether the acting
+// party's boundary applies to it. A named pair rather than a bare bool because the two
+// call sites read as opposite rules and `mutate(ctx, id, false, ...)` names neither.
+type grading bool
+
+const (
+	graded   grading = true
+	ungraded grading = false
+)
+
+// RefusedError is a write the store would not apply, naming the rule, the actor it
+// applied to, and what the actor should do instead.
+//
+// A typed error rather than a string so a door can tell a refusal (the actor may not do
+// this) from a failure (the file would not open): the first is an answer about the
+// caller and the second is not.
+type RefusedError struct {
+	// Lease is the row the write targeted, and Actor the party that attempted it.
+	Lease string
+	Actor Actor
+	// Rule is the sentence naming what was refused and why.
+	Rule string
+}
+
+func (e *RefusedError) Error() string {
+	return fmt.Sprintf("ledger: lease %s is bound to this session; %s."+
+		" Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
+		e.Actor.Lease, e.Rule)
+}
+
+// refuse builds the refusal for actor's attempt on lease id.
+func refuse(actor Actor, id, rule string) error {
+	return &RefusedError{Lease: id, Actor: actor, Rule: rule}
+}
+
+// authorizeRow decides whether actor may turn prev into next on the row id, with rows
+// standing for the rest of the book (a child row's boundary is read from the parent's).
+//
+// THE ENFORCEMENT POINT, and it is here rather than in a shell rule because the three
+// write doors (the CLI, the magus_ledger MCP tool, magus\ledger) all reach the store and
+// only one of them can be graded by a command pattern. The guard's denial text sends a
+// worker to the tool; this is what makes that mean "ask the orchestrator".
+//
+// An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
+// it landed on, SHRINK its owned paths (which is how the skill has it release one), and
+// end itself in fail or no_return; on any other row it may only CREATE a child of itself
+// inside its own boundary. Widening a lane, changing the plan's shape, and grading a row
+// are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
+// can widen its own row has no boundary at all.
+func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, rows []types.Lease) error {
+	if !actor.Bound() {
+		return nil
+	}
+	if id != actor.Lease {
+		return authorizeChild(actor, id, next, exists, rows)
+	}
+	if !exists {
+		return refuse(actor, id, "nothing declares that row, and a worker does not declare its own lease")
+	}
+	for _, field := range changedFields(prev, next) {
+		switch field {
+		case "owned_paths":
+			if !subset(next.OwnedPaths, prev.OwnedPaths) {
+				return refuse(actor, id, "a worker may only SHRINK owned_paths, which is how it releases a path, and this write widens them")
+			}
+		case "state":
+			if next.State != types.StateFail && next.State != types.StateNoReturn {
+				return refuse(actor, id, fmt.Sprintf("a worker may only end its own row in %s or %s, never %s",
+					types.StateFail, types.StateNoReturn, next.State))
+			}
+		case "reported_base":
+			// The registration itself, which is the one field a worker is asked for.
+		default:
+			return refuse(actor, id, "a worker may not change "+field+" on its own row")
+		}
+	}
+	return nil
+}
+
+// authorizeChild grades a bound worker's write to a row that is not its own: a new child
+// of its own lease, inside its own boundary, and nothing else.
+//
+// The subset rule is what keeps the tree from being a way around the boundary. A worker
+// that could hand a child paths it does not hold itself would have widened its lane by
+// spawning, and the ledger would record the wider claim as legitimate.
+func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows []types.Lease) error {
+	if exists {
+		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
+	}
+	if next.Parent != actor.Lease {
+		return refuse(actor, id, fmt.Sprintf("a row a worker creates must name %s as its parent, and this one names %q", actor.Lease, next.Parent))
+	}
+	own := slices.IndexFunc(rows, func(r types.Lease) bool { return r.ID == actor.Lease })
+	if own < 0 {
+		return refuse(actor, id, "its own row is not in the ledger, so there is no boundary to hand a child")
+	}
+	if !subset(next.OwnedPaths, rows[own].OwnedPaths) {
+		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
+	}
+	return nil
+}
+
+// authorizeClear grades wiping the book. A worker never does: clear drops rows it did
+// not write, including the one grading it.
+func authorizeClear(actor Actor) error {
+	if !actor.Bound() {
+		return nil
+	}
+	return refuse(actor, actor.Lease, "clearing the ledger drops every other lease's row, so it belongs to whoever declared the plan")
+}
+
+// changedFields names the DECLARED fields that differ between two versions of a row, in
+// the wire spelling a refusal quotes. Store-computed fields (the timestamps, releases,
+// the registration verdict) are not here: nothing a caller sends decides them.
+func changedFields(prev, next types.Lease) []string {
+	var out []string
+	add := func(name string, differs bool) {
+		if differs {
+			out = append(out, name)
+		}
+	}
+	add("parent", prev.Parent != next.Parent)
+	add("goal", prev.Goal != next.Goal)
+	add("checkpoint", prev.Checkpoint != next.Checkpoint)
+	add("owned_paths", !slices.Equal(prev.OwnedPaths, next.OwnedPaths))
+	add("forbidden_paths", !slices.Equal(prev.ForbiddenPaths, next.ForbiddenPaths))
+	add("focus", !slices.Equal(prev.Focus, next.Focus))
+	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
+	add("tier", prev.Tier != next.Tier)
+	add("validation", prev.Validation != next.Validation)
+	add("state", prev.State != next.State)
+	add("read_only", prev.ReadOnly != next.ReadOnly)
+	add("reported_base", prev.ReportedBase != next.ReportedBase)
+	return out
+}
+
+// subset reports whether every declaration in inner is one outer also holds, compared as
+// the strings they were declared as.
+//
+// String equality rather than path containment, because this grades a DECLARATION against
+// a declaration: "internal/ledger/store.go" is inside "internal/ledger" as a path, and a
+// worker narrowing its row to the file is narrowing it, but a worker that may rewrite its
+// declarations into any covered form can also rewrite a glob into a wider one that still
+// looks contained. The exact-string rule costs a worker one round trip and cannot be
+// argued with.
+func subset(inner, outer []string) bool {
+	for _, p := range inner {
+		if !slices.ContainsFunc(outer, func(o string) bool { return strings.TrimSpace(o) == strings.TrimSpace(p) }) {
+			return false
+		}
+	}
+	return true
+}

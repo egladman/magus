@@ -1,21 +1,26 @@
 // Package ledger persists the lease ledger: the rows an orchestrating agent
 // declares about the plan it is running, kept where a human can read them.
 //
-// It RECORDS AND REFUSES NOTHING. Nothing here gates a run or blocks a write; the AGENT
-// GUARD is what consults these rows to grade one, and it is a separate thing that READS
-// this store. Register does compute a verdict (whether a worker's reported base is the
-// checkpoint its lease was handed), and that is a fact recorded on the row and handed back
-// to the caller, not a gate: the registration succeeds either way and what to do about a
-// divergence is the caller's and the orchestrator's call. Enforcement stays outside for
-// the reason types.Lease gives: a store that refused would make the ledger
-// something agents route around, and a ledger nobody keeps honestly grades nothing. The
-// store's whole job is that a plan an agent stated in a prompt stops being trapped in one
-// session's transcript.
+// IT GATES NO RUN AND BLOCKS NO WRITE. The AGENT GUARD is what consults these rows to
+// grade one, and it is a separate thing that READS this store. Register computes a verdict
+// (whether a worker's reported base is the checkpoint its lease was handed), and that is a
+// fact recorded on the row and handed back, not a gate: the registration succeeds either
+// way and what to do about a divergence is the orchestrator's call. The store's whole job
+// is that a plan an agent stated in a prompt stops being trapped in one session's
+// transcript.
 //
-// ONE PLAN PER REPOSITORY, and no history of past plans: Clear wipes the rows so the
-// next plan starts empty. A plan that ended is not archived anywhere, which is the v1
-// scope on purpose: keeping every past plan means deciding what identifies one, and
-// nothing in the vocabulary names a plan yet.
+// THE ONE THING IT DOES REFUSE IS A WRITE TO SOMEBODY ELSE'S ROW, and that is not the
+// same kind of rule. See [authorizeRow]: a worker acting under a lease may release paths
+// and end itself, and it is refused the writes that would widen its own boundary or
+// rewrite the plan. The reason it lives here rather than in a guard rule is that three
+// doors reach this store and a command pattern can only see one of them. Everything else
+// stays outside for the reason types.Lease gives: a store that refused what an
+// orchestrator declares would make the ledger something agents route around.
+//
+// ONE PLAN PER REPOSITORY. Clear wipes the rows so the next plan starts empty, after
+// copying them to a timestamped sibling file. Nothing reads those archives back: they
+// exist so a plan wiped by somebody else is still legible to a person, not as a history
+// this package models. Naming a plan is still outside the vocabulary.
 //
 // "LEDGER" NAMES THE RECONCILIATION, NOT THE DURABILITY, and the difference is worth
 // stating because the word oversells one of them. A financial ledger is append-only and
@@ -106,6 +111,11 @@ type Store struct {
 	// decides nothing is leased.
 	err  error
 	root string
+	// actor is who this process writes as, resolved once at construction. Held on the
+	// Store rather than passed per call so that no door can forget it: a write that
+	// reached the file without being graded would be exactly the escape [authorizeRow]
+	// exists to close.
+	actor Actor
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -128,6 +138,11 @@ type Location struct {
 	// StateBase overrides the user state directory the ledger resolves under. Empty
 	// means config.UserStateDir, which is what every caller outside a test wants.
 	StateBase string
+	// Actor is who the Store writes as. Nil resolves it from the environment and
+	// CacheDir through [ActingActor], which is what every door outside a test wants: the
+	// party acting is a property of the process, not something a caller should get to
+	// assert about itself.
+	Actor *Actor
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -143,9 +158,19 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root}
+	if loc.Actor != nil {
+		s.actor = *loc.Actor
+	} else {
+		s.actor = ActingActor(loc.CacheDir)
+	}
 	s.path, s.err = leasesPath(loc)
 	return s
 }
+
+// Actor is who this Store writes as, for a door that has to refuse before it computes
+// anything: `ledger accept` grades a report and must say a worker cannot grade its own
+// row before it reads one.
+func (s *Store) Actor() Actor { return s.actor }
 
 // leasesPath places the leases file: <XDG state>/magus/ledger/<repo>/leases.json, after
 // carrying forward whatever an older magus left at <CacheDir>/ledger.
@@ -222,7 +247,7 @@ func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
 func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
-	return s.mutate(ctx, id, func(cur *types.Lease, _ bool, _ int64) error {
+	return s.mutate(ctx, id, graded, func(cur *types.Lease, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -255,7 +280,11 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 	if path == "" {
 		return nil
 	}
-	_, err := s.mutate(ctx, id, func(cur *types.Lease, exists bool, now int64) error {
+	// UNGRADED, and it is the only write here that is: this records what the guard SAW,
+	// not what a caller declared, and the row it lands on is by definition somebody
+	// else's. Grading it would throw away the observation precisely when it matters,
+	// which is a worker writing a path another lease holds.
+	_, err := s.mutate(ctx, id, ungraded, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("ledger: no such lease %q: %w", id, errNoSuchRow)
 		}
@@ -296,7 +325,12 @@ var errNoSuchRow = errors.New("ledger: no such lease")
 //
 // apply may fail, which is what lets that refusal be decided where it has to be: under
 // the lock, after the row is known present or absent. Nothing is written when it does.
-func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
+//
+// grade says whether this write is one a CALLER declared, and so whether the acting
+// party's boundary applies to it. Both answers are spelled out at every call site rather
+// than defaulted, because a write that reaches the file ungraded is the escape the rules
+// exist to close and a silent default is how one gets added.
+func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.Lease{}, ErrNoID
 	}
@@ -322,13 +356,21 @@ func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Lea
 		}
 		u = u.Clone()
 		u.ID = id
+		if grade == graded {
+			if aerr := authorizeRow(s.actor, id, prev, u, i >= 0, f.Leases); aerr != nil {
+				return aerr
+			}
+		}
 		u.Updated = now
 		u.Created = now
+		u.SchemaVersion = types.LeaseSchemaVersion
 		u.Releases = s.releases(ctx, prev, u, now)
 		if i >= 0 {
 			u.Created = prev.Created
+			u.RegisteredBy = prev.RegisteredBy
 			f.Leases[i] = u
 		} else {
+			u.RegisteredBy = s.actor.record()
 			f.Leases = append(f.Leases, u)
 		}
 		if werr := s.write(f); werr != nil {
@@ -360,18 +402,50 @@ func (s *Store) List() ([]types.Lease, error) {
 	return out, nil
 }
 
-// Clear drops every row, which is how a fresh plan starts. Clearing an empty or absent
-// ledger is not an error: the caller asked for an empty ledger and got one.
+// Clear drops every row, which is how a fresh plan starts, ARCHIVING what it dropped to
+// a timestamped sibling file first. Clearing an empty or absent ledger is not an error
+// and archives nothing: the caller asked for an empty ledger and got one.
 //
-// It reads nothing, so no row can be lost to an interleaving; it takes the file lock
-// anyway, so that every rewrite of leases.json is under it and a reader of this package
-// never has to work out which writes are the exempt ones. ctx bounds the wait for the
-// lock and nothing else.
+// The archive is what makes this recoverable rather than merely reported. One clear wipes
+// rows the caller did not write, and the count the MCP tool prints back tells a caller it
+// destroyed somebody else's plan without giving them any way to read it again; the
+// sibling file is that way. Nothing reads these files back today, which is the point:
+// they are for the person who has to work out what the plan was.
+//
+// A bound worker is refused: see [authorizeClear]. ctx bounds the wait for the lock and
+// nothing else.
 func (s *Store) Clear(ctx context.Context) error {
+	if err := authorizeClear(s.actor); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.withFileLock(ctx, func() error { return s.write(ledgerFile{}) })
+	return s.withFileLock(ctx, func() error {
+		f, err := s.read()
+		if err != nil {
+			return err
+		}
+		if len(f.Leases) > 0 {
+			if err := s.archive(f); err != nil {
+				return err
+			}
+		}
+		return s.write(ledgerFile{})
+	})
+}
+
+// archive writes the rows a clear is about to drop beside the ledger, named for the
+// moment they were dropped. A second clear within the same second overwrites the first
+// archive rather than growing a suffix scheme: two plans wiped in one second is one
+// mistake being repeated, and the rows worth keeping are the ones there now.
+func (s *Store) archive(f ledgerFile) error {
+	raw, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return err
+	}
+	name := "leases-" + time.Now().UTC().Format("20060102T150405Z") + ".json"
+	return file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), name), append(raw, '\n'), 0o644)
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
@@ -594,9 +668,20 @@ func LeaseFromMarker(cacheDir string) string {
 // BindLease writes the marker binding lease id to the checkout whose cache dir is
 // cacheDir, creating the dir if needed. An id ValidLeaseID rejects is refused, so the
 // marker never holds a value LeaseFromMarker would read back as nothing.
+//
+// BINDING IS ONE-WAY for a worker. A session already acting under a lease cannot bind
+// itself to a different one, because that is the whole boundary: a worker that can name
+// the orchestrator's row is graded against the orchestrator's paths from its next command.
+// Re-binding the lease it already holds is allowed and does nothing, so a worker that
+// runs its bootstrap twice is not refused. Only an UNBOUND session, which is the
+// orchestrator or the person, binds a checkout.
 func BindLease(cacheDir, id string) error {
 	if !types.ValidLeaseID(id) {
 		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only)", id)
+	}
+	if bound := ActingLease(cacheDir); bound != "" && bound != id {
+		return refuse(Actor{Lease: bound}, id,
+			fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id))
 	}
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		return fmt.Errorf("ledger: bind lease: %w", err)

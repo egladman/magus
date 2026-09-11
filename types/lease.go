@@ -101,6 +101,27 @@ func ValidLeaseID(id string) bool {
 	return true
 }
 
+// LeaseSchemaVersion is the version of the row shape this magus writes and accepts. It
+// is stamped on every stored row and required on every row a client sends, so a decoder
+// meeting a shape it does not know says which versions it supports instead of rejecting
+// one field at a time.
+//
+// Bump it when a field changes meaning or a required one appears. An added optional
+// field does not: a reader that ignores it is still correct.
+const LeaseSchemaVersion = 1
+
+// LeaseActor identifies the session that wrote a row: the same pair the trail records
+// for an agent's actions, so a row and the actions that followed it join on one identity.
+//
+// Both halves are often empty, and that is a fact rather than a gap: a person writing a
+// row from a terminal carries no session id and no host.
+type LeaseActor struct {
+	// Session is the acting session's id, as the host or the W3C trace channel names it.
+	Session string `json:"session,omitempty" yaml:"session,omitempty"`
+	// Host is the agent host that produced the write, as its own wrapper named itself.
+	Host string `json:"host,omitempty" yaml:"host,omitempty"`
+}
+
 // Lease is one row of an orchestrating agent's lease ledger: what that
 // agent DECLARED about a piece of work it handed out, recorded so a human can see the
 // plan the agents are running.
@@ -132,6 +153,9 @@ func ValidLeaseID(id string) bool {
 // holds) stays unregistered: Checkpoint is a plain string here, the form an
 // orchestrator has at spawn time, so there is no struct to mirror yet.
 type Lease struct {
+	// SchemaVersion is the shape this row was written in, stamped by the store on every
+	// write and never taken from a client. See LeaseSchemaVersion.
+	SchemaVersion int `json:"schema_version" yaml:"schema_version"`
 	// ID is the lease's identity within the plan, and the key Put upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an
 	// orchestrator should use the same id it puts in the worker's prompt.
@@ -210,6 +234,13 @@ type Lease struct {
 	// why there is no vocabulary member for "never registered": an absent verdict is not
 	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
 	BaseVerdict LeaseBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
+	// RegisteredBy is the session that CREATED this row, stamped by the store on the
+	// first write and carried unchanged afterwards. It is the row's provenance, and the
+	// store names it when it refuses a mutation from somebody else's worker.
+	//
+	// Distinct from Registered below, which is when a WORKER reported the base it landed
+	// on: one says who declared the work, the other when somebody turned up to do it.
+	RegisteredBy LeaseActor `json:"registered_by,omitempty" yaml:"registered_by,omitempty"`
 	// Registered is unix seconds, stamped by the store on the write that recorded
 	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
 	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a

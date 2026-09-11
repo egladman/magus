@@ -17,9 +17,19 @@ import (
 // tmpLoc places a ledger entirely under temp directories, so no test resolves the real
 // user state directory. Two stores built from ONE returned value share a leases file;
 // two calls never do, whatever roots they are given.
+//
+// The actor is pinned UNBOUND rather than resolved, so that a developer running the suite
+// from a worktree bound to a lease, or under a BAGGAGE that names one, grades these
+// fixtures the same way CI does. The rules that turn on a bound actor pass their own.
 func tmpLoc(t *testing.T, root string) Location {
 	t.Helper()
-	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root}
+	return Location{StateBase: t.TempDir(), CacheDir: t.TempDir(), Root: root, Actor: &Actor{}}
+}
+
+// boundStore is a Store acting as the worker leased to id, sharing loc's ledger file.
+func boundStore(loc Location, id string) *Store {
+	loc.Actor = &Actor{Lease: id, Session: "s-" + id, Host: "test-host"}
+	return NewStore(loc)
 }
 
 func tmpStore(t *testing.T, root string) *Store {
@@ -100,9 +110,10 @@ func TestStoreRoundTrip(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, got, len(tt.want))
 			for i, w := range tt.want {
-				// Timestamps are the store's, not the fixture's; assert them separately
-				// above and compare the declared facts here.
-				w.Created, w.Updated = got[i].Created, got[i].Updated
+				// Timestamps and the schema stamp are the store's, not the fixture's;
+				// assert them separately and compare the declared facts here.
+				assert.Equal(t, types.LeaseSchemaVersion, got[i].SchemaVersion, "the store stamps the row shape")
+				w.Created, w.Updated, w.SchemaVersion = got[i].Created, got[i].Updated, got[i].SchemaVersion
 				require.Len(t, got[i].Releases, len(w.Releases))
 				for j := range w.Releases {
 					w.Releases[j].ReleasedAt = got[i].Releases[j].ReleasedAt
