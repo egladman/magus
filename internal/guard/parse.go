@@ -2,6 +2,7 @@ package guard
 
 import (
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -218,6 +219,166 @@ func shellPayload(words []string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// Which files a shell line would WRITE. Two rules ask it, the cache dir's and the lease
+// lane's, and a second extraction would drift from the first the moment either learned a
+// spelling, so the walk lives here with the rest of the tokenizing and each rule brings
+// only its own boundary.
+
+// writeReaders are the commands that only READ what they are pointed at. Everything else
+// is treated as a writer.
+//
+// A reader list rather than a writer list, which is the direction that fails safe: the
+// eight-verb writer list this replaced let `dd of=`, `ln -sf`, `install`, `rmdir`,
+// `chown`, `find -delete` and every inline interpreter through unseen. magus is a reader
+// by construction: every magus run writes, and the guard grades the agent's tool calls
+// rather than magus's own processes.
+var writeReaders = map[string]bool{
+	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
+	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
+	"jq": true, "wc": true, "ls": true, "stat": true, "file": true, "diff": true,
+	"cut": true, "basename": true, "dirname": true, "realpath": true, "readlink": true,
+	"du": true, "tree": true, "cd": true, "git": true,
+	"sort": true, "awk": true, "find": true, "sed": true,
+	"magus": true,
+}
+
+// onlyReads reports a command that only reads what it was pointed at. Four of the readers
+// carry one spelling that turns them into writers, and a list that ignored those would be
+// the writer allowlist again with the sides swapped.
+func onlyReads(name string, args []string) bool {
+	if !writeReaders[name] {
+		return false
+	}
+	switch name {
+	case "sed":
+		return !hasFlag(args, 'i', "in-place")
+	case "sort":
+		return !hasFlag(args, 'o', "output-file")
+	case "awk":
+		// awk's own language redirects, so the write is inside the program text rather
+		// than on the shell line the parser walked.
+		return !slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, ">") })
+	case "find":
+		return !slices.ContainsFunc(args, func(a string) bool {
+			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
+		})
+	}
+	return true
+}
+
+// writeScanDepth bounds how far a nested script is followed. A payload that parses to
+// another payload shrinks on every hop, so the bound is for a line built not to.
+const writeScanDepth = 4
+
+// writeTargetCandidates names every word the line's writes could be aimed at, in the order
+// the walk reaches them: each writing redirect's target, and the operands of every command
+// that is not a known reader.
+//
+// CANDIDATES rather than targets, because only a rule's own boundary can say which word is
+// a path it cares about: `chmod 600 f` writes f and not 600, and nothing structural
+// separates them. A rule that refused on any candidate at all would refuse `echo hi`.
+//
+// Any `sh -c` or `eval` payload is scanned on its own afterwards: peelWrappers hands back
+// the commands inside one, but a redirect there belongs to the inner parse tree and is
+// invisible to a walk of the outer one.
+func writeTargetCandidates(command string, depth int) []string {
+	if depth > writeScanDepth {
+		return nil
+	}
+	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	if err != nil {
+		return nil
+	}
+	var out, nested []string
+	syntax.Walk(f, func(n syntax.Node) bool {
+		stmt, ok := n.(*syntax.Stmt)
+		if !ok {
+			return true
+		}
+		for _, r := range stmt.Redirs {
+			if writesToFile(r.Op) {
+				out = append(out, literalWord(r.Word.Parts))
+			}
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if script, ok := shellPayload(literalWords(call.Args)); ok {
+				nested = append(nested, script)
+			}
+		}
+		for _, c := range stmtCommands(stmt) {
+			out = append(out, commandWriteCandidates(c)...)
+		}
+		return true
+	})
+	for _, script := range nested {
+		out = append(out, writeTargetCandidates(script, depth+1)...)
+	}
+	return out
+}
+
+// commandWriteCandidates names the words c could be pointed at when it writes.
+//
+// Every word is examined, not only the operands: a flag's value names a path too
+// (`dd of=x`), and an interpreter's script is one argument carrying the path inside it.
+func commandWriteCandidates(c hint.Invocation) []string {
+	name := path.Base(c.Name)
+	if onlyReads(name, c.Args) {
+		return nil
+	}
+	words := c.Args
+	if name == "cp" || name == "install" {
+		// Their operands are not uniform: only the destination is written, so copying a
+		// file OUT of a guarded tree is a read.
+		ops := operands(c.Args, "m")
+		if len(ops) < 2 {
+			return nil
+		}
+		words = ops[len(ops)-1:]
+	}
+	// An interpreter's whole program arrives as one argument, awk's included, so a path
+	// sits inside prose there: the program is offered whole for a boundary that can match
+	// inside it, and its quoted strings singly for one that has to resolve a path.
+	if scriptedRewriteInterpreters[name] || name == "awk" {
+		var out []string
+		for _, w := range words {
+			out = append(out, w)
+			out = append(out, quotedLiterals(w)...)
+		}
+		return out
+	}
+	var out []string
+	for _, w := range words {
+		// Everywhere else a word carrying whitespace is prose rather than a path, which is
+		// what keeps `echo "rm -rf .magus"` a quoted mention rather than a write.
+		if strings.ContainsAny(w, " \t\n") {
+			continue
+		}
+		out = append(out, w)
+		if _, value, ok := strings.Cut(w, "="); ok && value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+// quotedLiteralRe matches a single- or double-quoted string. The outer quoting is already
+// gone by the time a program word reaches it, so what is left is the interpreter's own.
+var quotedLiteralRe = regexp.MustCompile(`'([^']*)'|"([^"]*)"`)
+
+// quotedLiterals are the quoted strings inside an interpreter's program text, so the path
+// in `open('x/y.go','w')` is offered as a path and not only as the program holding it.
+func quotedLiterals(program string) []string {
+	var out []string
+	for _, m := range quotedLiteralRe.FindAllStringSubmatch(program, -1) {
+		for _, group := range m[1:] {
+			if group != "" {
+				out = append(out, group)
+			}
+		}
+	}
+	return out
 }
 
 // wrapperValueFlags are wrapper flags that consume the NEXT word, so the
