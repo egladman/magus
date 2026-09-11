@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"time"
@@ -510,9 +511,15 @@ func buildBuzzGlob(targets map[string]vm.Callable, exports map[string]vm.Value) 
 	}
 }
 
-// runBuzzDependencies awaits the named same-project targets: via the Buzz VM pool
-// when one is in ctx (parallel, TargetMemo-deduped), else inline sequential. It
-// returns unprefixed errors so each caller attaches its own verb name.
+// runBuzzDependencies awaits the named same-project targets and returns unprefixed
+// errors so each caller attaches its own verb name.
+//
+// Members the magusfile declared `advisory` run after the rest and their failures are
+// reported rather than returned. This is the one place that policy can be read: a
+// target reached HERE is composed, and the same target named on the command line runs
+// through the scheduler instead, where its failure is what the caller asked for.
+// Running them last costs an advisory member its concurrency with the gating ones and
+// buys the attribution the report line needs.
 func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
 	if len(names) == 0 {
 		return nil
@@ -533,6 +540,74 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 	// narrow a run unusable on any target with a ctx.needs, which is most of them.
 	callCtx = project.WithExtraArgs(callCtx, nil)
 	names = dedupStrings(names)
+	advisory := advisoryMembers(callCtx, names)
+	gating := names
+	if len(advisory) > 0 {
+		gating = make([]string, 0, len(names))
+		for _, name := range names {
+			if _, ok := advisory[name]; !ok {
+				gating = append(gating, name)
+			}
+		}
+	}
+	if err := dispatchBuzzTargets(callCtx, targets, gating); err != nil {
+		return err
+	}
+	for _, name := range names {
+		reason, ok := advisory[name]
+		if !ok {
+			continue
+		}
+		// One dispatch per advisory member: a fan-out returns its members' failures
+		// joined, and the line below has to name the one target that earned it.
+		if err := dispatchBuzzTargets(callCtx, targets, []string{name}); err != nil {
+			// The member's own failure is already on the console; this says why the
+			// composite is carrying on regardless, once, in a line an orchestrator
+			// reading the gate can act on.
+			slog.WarnContext(callCtx, "magus: advisory target failed; the composite carries on",
+				slog.String("target", name), slog.String("reason", reason))
+		}
+	}
+	return nil
+}
+
+// advisoryMembers maps those of names the calling project declared `advisory` to the
+// reason it gave. Nil when the caller's project cannot be resolved, which is the bare
+// `magus buzz` script case: no magusfile, no policy, every member gates.
+func advisoryMembers(ctx context.Context, names []string) map[string]string {
+	ws := types.WorkspaceFromContext(ctx)
+	src := interp.SourceFromContext(ctx)
+	if ws == nil || src == nil {
+		return nil
+	}
+	rel, err := filepath.Rel(ws.Root(), src.Dir)
+	if err != nil {
+		return nil
+	}
+	p := ws.Get(filepath.ToSlash(rel))
+	if p == nil {
+		return nil
+	}
+	var out map[string]string
+	for _, name := range names {
+		pol, ok := p.TargetPolicies[name]
+		if !ok || !pol.Advisory {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, 1)
+		}
+		out[name] = pol.AdvisoryReason
+	}
+	return out
+}
+
+// dispatchBuzzTargets awaits names: via the Buzz VM pool when one is in ctx (parallel,
+// TargetMemo-deduped), else inline sequential.
+func dispatchBuzzTargets(callCtx context.Context, targets map[string]vm.Callable, names []string) error {
+	if len(names) == 0 {
+		return nil
+	}
 	if src := interp.SourceFromContext(callCtx); src != nil {
 		if reg := buzz.PoolRegistryFromContext(callCtx); reg != nil {
 			key := src.Dir + "\x00buzz"
