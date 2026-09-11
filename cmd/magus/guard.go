@@ -263,7 +263,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// that does. Every lease-scoped verdict below is computed from files in there, so
 		// a worker whose lane happens to cover the dir must not be told it owns the lane:
 		// what it is editing is whether the lane was checked.
-		if reason := denyCacheDirWrite(location.workspace, location.base, input.Value); reason != "" {
+		if reason := denyCacheDirPath(location, input.Value); reason != "" {
 			verdict.Decision, verdict.Reason = "deny", reason
 		}
 		if verdict.Decision != "deny" {
@@ -363,7 +363,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// one small file, and laziness would buy nothing on a hook this short-lived.
 		switch v := rankCacheDirWrite(
 			rankSiblingCheckout(evaluateBashGuardWith(input.Value, hookSearchHints(location.base)), denySiblingCheckout(input.Value)),
-			denyCacheDirCommand(input.Value, location.workspace, location.base)); {
+			denyCacheDirCommand(location, input.Value)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw

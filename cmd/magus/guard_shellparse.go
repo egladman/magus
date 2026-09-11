@@ -166,7 +166,64 @@ func peelWrappers(words []string) []guardCommand {
 	return nil
 }
 
-var guardShells = map[string]bool{"sh": true, "bash": true, "zsh": true, "ksh": true, "dash": true}
+// guardShells are the wrappers whose -c argument is a script. Derived from guardWrappers
+// so the two cannot disagree about what a shell is.
+var guardShells = func() map[string]bool {
+	out := map[string]bool{}
+	for _, name := range []string{"sh", "bash", "zsh", "ksh", "dash"} {
+		if !guardWrappers[name] {
+			panic("guardShells: " + name + " is not a wrapper")
+		}
+		out[name] = true
+	}
+	return out
+}()
+
+// writesToFile reports a redirect operator that sends a command's output at a file, so a
+// rule about what a line WRITES reads all of them rather than the four everyone remembers.
+// `>|`, `>&` and `<>` are writes too, and each is one character from a spelling that is
+// caught. Pinned exhaustively by TestWritesToFileClassifiesEveryRedirectOperator.
+func writesToFile(op syntax.RedirOperator) bool {
+	switch op {
+	case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll,
+		syntax.RdrClob, syntax.AppClob, syntax.RdrAllClob, syntax.AppAllClob,
+		syntax.RdrInOut, syntax.DplOut:
+		return true
+	}
+	return false
+}
+
+// shellPayload returns the script a line hands to another shell to parse: a `-c` argument,
+// eval's joined words, or env's -S string, with any wrappers in front of it peeled.
+//
+// peelWrappers follows these to reach the COMMANDS inside. A rule that reads the parse
+// tree itself, as the cache-dir rule does for a redirect, needs the text so it can parse
+// the payload on its own; without it `sh -c 'echo x > .magus/lease'` shows a bare echo.
+func shellPayload(words []string) (string, bool) {
+	for len(words) > 0 {
+		name := path.Base(words[0])
+		switch {
+		case guardShells[name]:
+			return shellDashC(words[1:])
+		case name == "eval":
+			return strings.Join(words[1:], " "), true
+		case name == "env":
+			if script, ok := envSplitString(words[1:]); ok {
+				return script, true
+			}
+			fallthrough
+		case guardWrappers[name]:
+			rest := skipWrapperArgs(name, words[1:])
+			if len(rest) == 0 {
+				return "", false
+			}
+			words = rest
+		default:
+			return "", false
+		}
+	}
+	return "", false
+}
 
 // guardWrapperValueFlags are wrapper flags that consume the NEXT word, so the
 // scan does not mistake that word for the wrapped program. `env -u GOROOT go

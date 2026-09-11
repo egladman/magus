@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -14,19 +16,18 @@ import (
 
 // The checkout's own magus cache dir, on both surfaces.
 //
-// What lives in there is no longer a pile of regenerable artifacts. The `lease` marker
-// says which lease this checkout is bound to, and writing it directly is how the store's
-// one-way BindLease gets bypassed. The advisory markers decide which notices a session
-// has already been told, and the served-next journal beside them pre-authorizes the
-// commands magus suggested. Every one of those is an INPUT to the verdicts the agent is
-// graded by, so an agent that edits them rewrites its own evidence, and nothing in a later
-// verdict says it happened.
+// Every marker in here is an INPUT to the verdicts the agent is graded by, so an agent
+// that edits them rewrites its own evidence, and nothing in a later verdict says it
+// happened. The rule therefore holds for every role, unbound sessions included: the lease
+// rules protect a lane somebody handed out, this one protects the thing that decides
+// whether any lane was checked at all.
 //
-// So the rule holds for every role, unbound sessions included. The lease rules protect a
-// lane somebody handed out; this one protects the thing that decides whether any lane was
-// checked at all, which is nobody's lane to edit.
-//
-// Reads are untouched. A log in there is ordinary text and a person or an agent may cat it.
+// Reads are untouched, and the reader list below is what separates them. That list is
+// where the rule fires wrongly, in two shapes worth knowing before reading a verdict: a
+// command nobody listed as a reader is refused for merely NAMING a path in the dir
+// (`echo .magus/logs/x.log`), and a `.magus` segment is matched wherever it appears, so a
+// write into a DIFFERENT checkout's cache dir is refused here too. Both are the safe
+// direction, and the denial says reading is fine.
 
 // workspaceCacheDirName is the cache dir's default name, matched literally in addition to
 // the resolved location.
@@ -37,57 +38,55 @@ import (
 // locate. Matching only one of them leaves a deny that fails silently open.
 const workspaceCacheDirName = ".magus"
 
-// inWorkspaceCacheDir reports whether candidate lands inside the workspace's magus cache
-// dir. Relative paths are read against root, which is where the literal `.magus/` spelling
-// means what it says.
+// cacheDirSegmentRe matches the cache dir's name as a PATH SEGMENT anywhere in a word.
 //
-// A sibling name is not a match: `.magus-notes/x` is neither the dir nor under it, on
-// either half of the check.
-func inWorkspaceCacheDir(root, cacheDir, candidate string) bool {
+// Anywhere, not as a prefix, because the word is not always a path: an interpreter's
+// inline script carries the path inside a program (`python3 -c "open('.magus/lease','a')"`),
+// and a word whose value came from a parameter renders with the expansion dropped
+// (`"$REPO/.magus/lease"` renders `/.magus/lease`), which resolves against nothing. A
+// sibling name is still not a match: `.magus-notes` ends the segment with a character the
+// pattern refuses.
+var cacheDirSegmentRe = regexp.MustCompile(
+	`(?:^|[^A-Za-z0-9_.-])` + regexp.QuoteMeta(workspaceCacheDirName) + `(?:/|$|[^A-Za-z0-9_./-])`)
+
+// namesWorkspaceCacheDir reports whether a word points into the workspace's magus cache
+// dir, either by resolving inside the dir magus located or by carrying its name as a path
+// segment. A relative path is read against the directory the tool call RUNS in, which is
+// what the shell would do, falling back to the workspace root when the host reported none.
+func namesWorkspaceCacheDir(location hookActivityLocation, candidate string) bool {
 	p := strings.TrimSpace(candidate)
 	if p == "" {
 		return false
 	}
-	p = filepath.Clean(filepath.FromSlash(p))
-
-	rel := p
-	if filepath.IsAbs(p) {
-		rel = ""
-		if root != "" {
-			if r, err := filepath.Rel(root, p); err == nil {
-				rel = r
-			}
-		}
-	}
-	if rel == workspaceCacheDirName || strings.HasPrefix(rel, workspaceCacheDirName+string(filepath.Separator)) {
+	if cacheDirSegmentRe.MatchString(filepath.ToSlash(p)) {
 		return true
 	}
-
-	if cacheDir == "" {
+	if location.base == "" {
 		return false
 	}
-	abs := p
+	abs := filepath.Clean(filepath.FromSlash(p))
 	if !filepath.IsAbs(abs) {
-		if root == "" {
+		dir := cmp.Or(location.dir, location.workspace)
+		if dir == "" {
 			return false
 		}
-		abs = filepath.Join(root, abs)
+		abs = filepath.Join(dir, abs)
 	}
 	// Symlinks resolved on both sides, for the reason denyNotesWrite records: on macOS a
 	// tmpdir-rooted workspace yields the dir under one spelling and the incoming path
 	// under the other, and a deny that compares them literally looks enforced while
 	// passing everything.
-	r, err := filepath.Rel(resolveSymlinks(cacheDir), resolveSymlinks(abs))
+	rel, err := filepath.Rel(resolveSymlinks(location.base), resolveSymlinks(abs))
 	if err != nil {
 		return false
 	}
-	return r != ".." && !strings.HasPrefix(r, ".."+string(filepath.Separator))
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// cacheDirDeny is the single text both surfaces refuse with, naming what was aimed at the
+// cacheDirDenial is the single text both surfaces refuse with, naming what was aimed at the
 // dir. One text because the mistake is one mistake however it is spelled: a host's editor
 // tool and a shell redirect reach the same bytes.
-func cacheDirDeny(what string) string {
+func cacheDirDenial(what string) string {
 	return fmt.Sprintf("magus guard denied a write to %s, which is inside this checkout's magus cache dir. magus is the only writer of it.\n\n"+
 		"That directory is not a pile of build leftovers any more. `%s` records which lease this checkout is bound to, `%s/` holds the fire-once advisory markers, the touched-project set, and the served-next journal whose entries pre-authorize commands, and the activity trail, run logs, outputs and locks sit beside them. The guard's verdicts are computed FROM those files, so editing one rewrites the evidence you are being graded by and no later verdict says so.\n\n"+
 		"The verbs that do what you were probably after:\n"+
@@ -99,42 +98,94 @@ func cacheDirDeny(what string) string {
 		what, ledger.LeaseMarkerName, advisoryMarkerDir)
 }
 
-// denyCacheDirWrite is the path surface: the reason a file write into the cache dir is
+// denyCacheDirPath is the path surface: the reason a file write into the cache dir is
 // refused, or "" for every other path.
 //
 // Ranked above the lease rules in hookCmd, so a bound worker whose lane happens to cover
 // the dir reads this rather than a lane verdict about the same path.
-func denyCacheDirWrite(root, cacheDir, writePath string) string {
-	if !inWorkspaceCacheDir(root, cacheDir, writePath) {
+func denyCacheDirPath(location hookActivityLocation, writePath string) string {
+	if !namesWorkspaceCacheDir(location, writePath) {
 		return ""
 	}
-	return cacheDirDeny(strings.TrimSpace(writePath))
+	return cacheDirDenial(strings.TrimSpace(writePath))
 }
 
-// cacheDirWriters are the coreutils verbs whose OPERANDS are things they write. A magus
-// argv is deliberately absent and cannot be added: every magus run writes in there, and
-// the guard grades the agent's tool calls rather than magus's own processes.
+// cacheDirReaders are the commands that only READ what they are pointed at. Everything
+// else is treated as a writer.
 //
-// cp is the one whose operands are not uniform, so it is judged on its destination alone
-// below; copying a log OUT of the dir is a read.
-var cacheDirWriters = map[string]bool{
-	"rm": true, "mv": true, "tee": true, "truncate": true,
-	"chmod": true, "mkdir": true, "touch": true,
+// A reader list rather than a writer list, which is the direction that fails safe: the
+// eight-verb writer list this replaced let `dd of=`, `ln -sf`, `install`, `rmdir`,
+// `chown`, `find -delete` and every inline interpreter write the served-next journal, and
+// one line there stands down every role-scoped rule at once. magus is a reader by
+// construction: every magus run writes in there, and the guard grades the agent's tool
+// calls rather than magus's own processes.
+var cacheDirReaders = map[string]bool{
+	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
+	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
+	"jq": true, "wc": true, "ls": true, "stat": true, "file": true, "diff": true,
+	"cut": true, "basename": true, "dirname": true, "realpath": true, "readlink": true,
+	"du": true, "tree": true, "cd": true, "git": true,
+	"sort": true, "awk": true, "find": true, "sed": true,
+	"magus": true,
 }
+
+// cacheDirReads reports a command that only reads what it was pointed at. Four of the
+// readers carry one spelling that turns them into writers, and a list that ignored those
+// would be the writer allowlist again with the sides swapped.
+func cacheDirReads(name string, args []string) bool {
+	if !cacheDirReaders[name] {
+		return false
+	}
+	switch name {
+	case "sed":
+		return !hasFlag(args, 'i', "in-place")
+	case "sort":
+		return !hasFlag(args, 'o', "output-file")
+	case "awk":
+		// awk's own language redirects, so the write is inside the program text rather
+		// than on the shell line the parser walked.
+		return !slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, ">") })
+	case "find":
+		return !slices.ContainsFunc(args, func(a string) bool {
+			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
+		})
+	}
+	return true
+}
+
+// cacheDirScanDepth bounds how far a nested script is followed. A payload that parses to
+// another payload shrinks on every hop, so the bound is for a line built not to.
+const cacheDirScanDepth = 4
 
 // denyCacheDirCommand is the command surface: the reason a shell line writes into the
 // cache dir, or "" when it does not.
 //
-// Two shapes reach those bytes. A redirect names the file directly, and a coreutil takes
-// it as an operand. Both are read off the parsed line rather than matched as text, for the
+// Two shapes reach those bytes. A redirect names the file directly, and a command takes it
+// as an operand. Both are read off the parsed line rather than matched as text, for the
 // reason guard_shellparse.go's doc gives: a quoted string that merely NAMES the marker is
 // not a write to it.
-func denyCacheDirCommand(command, root, cacheDir string) string {
+func denyCacheDirCommand(location hookActivityLocation, command string) string {
+	hit := cacheDirCommandHit(location, command, 0)
+	if hit == "" {
+		return ""
+	}
+	return cacheDirDenial(hit)
+}
+
+// cacheDirCommandHit names the first path inside the cache dir the script would write, or
+// "". Any `sh -c` or `eval` payload is scanned on its own afterwards: peelWrappers hands
+// back the commands inside one, but a redirect there belongs to the inner parse tree and is
+// invisible to a walk of the outer one.
+func cacheDirCommandHit(location hookActivityLocation, command string, depth int) string {
+	if depth > cacheDirScanDepth {
+		return ""
+	}
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
 		return ""
 	}
 	hit := ""
+	var nested []string
 	syntax.Walk(f, func(n syntax.Node) bool {
 		if hit != "" {
 			return false
@@ -144,52 +195,73 @@ func denyCacheDirCommand(command, root, cacheDir string) string {
 			return true
 		}
 		for _, r := range stmt.Redirs {
-			switch r.Op {
-			case syntax.RdrOut, syntax.AppOut, syntax.RdrAll, syntax.AppAll:
-				if target := literalWord(r.Word.Parts); inWorkspaceCacheDir(root, cacheDir, target) {
-					hit = target
-					return false
-				}
+			if !writesToFile(r.Op) {
+				continue
+			}
+			if target := literalWord(r.Word.Parts); namesWorkspaceCacheDir(location, target) {
+				hit = target
+				return false
+			}
+		}
+		if call, ok := stmt.Cmd.(*syntax.CallExpr); ok {
+			if script, ok := shellPayload(literalWords(call.Args)); ok {
+				nested = append(nested, script)
 			}
 		}
 		for _, c := range stmtCommands(stmt) {
-			if target := cacheDirWriteTarget(c, root, cacheDir); target != "" {
+			if target := cacheDirWriteTarget(location, c); target != "" {
 				hit = target
 				return false
 			}
 		}
 		return true
 	})
-	if hit == "" {
-		return ""
+	if hit != "" {
+		return hit
 	}
-	return cacheDirDeny(hit)
+	for _, script := range nested {
+		if target := cacheDirCommandHit(location, script, depth+1); target != "" {
+			return target
+		}
+	}
+	return ""
 }
 
 // cacheDirWriteTarget names the path inside the cache dir that c would write, or "".
-func cacheDirWriteTarget(c guardCommand, root, cacheDir string) string {
+//
+// Every word is examined, not only the operands: a flag's value names a path too
+// (`dd of=.magus/lease`), and an interpreter's script is one argument carrying the path
+// inside it.
+func cacheDirWriteTarget(location hookActivityLocation, c guardCommand) string {
 	name := path.Base(c.Name)
-	// truncate -s, mkdir -m and chmod's reference form all consume the next word, and a
-	// size or a mode is not a path this would match anyway; -R and -f take none.
-	ops := operands(c.Args, "sm")
-	switch {
-	case name == "sed":
-		if !hasFlag(c.Args, 'i', "in-place") {
-			return ""
-		}
-	case name == "cp":
+	if cacheDirReads(name, c.Args) {
+		return ""
+	}
+	words := c.Args
+	if name == "cp" || name == "install" {
+		// Their operands are not uniform: only the destination is written, so copying a
+		// log OUT of the dir is a read.
+		ops := operands(c.Args, "m")
 		if len(ops) < 2 {
 			return ""
 		}
-		ops = ops[len(ops)-1:]
-	case !cacheDirWriters[name]:
-		return ""
+		words = ops[len(ops)-1:]
 	}
-	i := slices.IndexFunc(ops, func(op string) bool { return inWorkspaceCacheDir(root, cacheDir, op) })
+	// An interpreter's whole program arrives as one argument, awk's included, so a path
+	// sits inside prose there and has to count. Everywhere else a word carrying
+	// whitespace is prose rather than a path, which is what keeps `echo "rm -rf .magus"`
+	// a quoted mention rather than a write.
+	program := scriptedRewriteInterpreters[name] || name == "awk"
+	i := slices.IndexFunc(words, func(w string) bool {
+		if !program && strings.ContainsAny(w, " \t\n") {
+			return false
+		}
+		return namesWorkspaceCacheDir(location, w)
+	})
 	if i < 0 {
 		return ""
 	}
-	return ops[i]
+	return words[i]
 }
 
 // rankCacheDirWrite ranks the cache-dir reason against the verdict the other command rules
@@ -197,8 +269,7 @@ func cacheDirWriteTarget(c guardCommand, root, cacheDir string) string {
 //
 // It OUTRANKS an existing deny, which no other rule here does. `sed -i .magus/lease` earns
 // the in-place refusal too, and that text sends the reader to an editor tool, which is the
-// same write through the surface that would refuse it again. Saying so once is the whole
-// benefit of having two surfaces agree.
+// same write through the surface that would refuse it again.
 func rankCacheDirWrite(v bashGuardVerdict, reason string) bashGuardVerdict {
 	if reason == "" {
 		return v

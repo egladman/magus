@@ -10,13 +10,16 @@ import (
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 )
 
-// TestInWorkspaceCacheDirMatchesBothSpellings walks the two halves of the match: the
-// literal default name under the root, and a cache dir the config or the environment
-// relocated somewhere else entirely.
-func TestInWorkspaceCacheDirMatchesBothSpellings(t *testing.T) {
+// TestNamesWorkspaceCacheDirMatchesEverySpelling walks the three halves of the match: the
+// literal default name under the root, a cache dir the config or the environment relocated
+// somewhere else entirely, and the name as a segment inside a word that is not a path magus
+// can resolve.
+func TestNamesWorkspaceCacheDirMatchesEverySpelling(t *testing.T) {
 	root, moved := t.TempDir(), t.TempDir()
+	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root}
 
 	for _, p := range []string{
 		".magus",
@@ -24,21 +27,30 @@ func TestInWorkspaceCacheDirMatchesBothSpellings(t *testing.T) {
 		".magus/advisories/anon.served-next",
 		"./.magus/logs/abc.log",
 		filepath.Join(root, ".magus", "lease"),
+		// The renderings a word with a parameter expansion produces, and a relative path
+		// aimed above the root: neither resolves anywhere near a cache dir.
+		"/.magus/lease",
+		"../../.magus/lease",
+		`open('.magus/lease','a')`,
 	} {
-		assert.True(t, inWorkspaceCacheDir(root, filepath.Join(root, ".magus"), p), "%q is the cache dir", p)
+		assert.True(t, namesWorkspaceCacheDir(at, p), "%q names the cache dir", p)
 	}
 
-	assert.True(t, inWorkspaceCacheDir(root, moved, filepath.Join(moved, "lease")),
+	relocated := hookActivityLocation{base: moved, workspace: root}
+	assert.True(t, namesWorkspaceCacheDir(relocated, filepath.Join(moved, "lease")),
 		"a relocated cache dir is still the cache dir")
-	assert.True(t, inWorkspaceCacheDir(root, moved, ".magus/lease"),
+	assert.True(t, namesWorkspaceCacheDir(relocated, ".magus/lease"),
 		"the default name matches even when the resolved dir moved: a command that spells it means it")
+
+	assert.True(t, namesWorkspaceCacheDir(hookActivityLocation{}, "/repo/.magus/lease"),
+		"an absolute path is matched even where magus could not locate the workspace, which is what the literal name is for")
 }
 
-// TestInWorkspaceCacheDirIsSilentEverywhereElse pins the false positives. A sibling name
+// TestNamesWorkspaceCacheDirIsSilentEverywhereElse pins the false positives. A sibling name
 // matching would deny ordinary work under a rule that refuses every role.
-func TestInWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
+func TestNamesWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 	root := t.TempDir()
-	cacheDir := filepath.Join(root, ".magus")
+	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root}
 
 	for _, p := range []string{
 		"",
@@ -48,20 +60,21 @@ func TestInWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 		"cmd/magus/guard_cachedir.go",
 		"docs/guides/integrations/agents/guard.md",
 		filepath.Join(t.TempDir(), ".magus-notes", "a.md"),
+		"elsewhere/.magus-x",
 	} {
-		assert.False(t, inWorkspaceCacheDir(root, cacheDir, p), "%q is not the cache dir", p)
+		assert.False(t, namesWorkspaceCacheDir(at, p), "%q is not the cache dir", p)
 	}
-
-	assert.False(t, inWorkspaceCacheDir(root, filepath.Join(t.TempDir(), ".magus"), "elsewhere/.magus-x"),
-		"another checkout's cache dir is not this one")
 }
 
 // TestDenyCacheDirCommandReadsTheParsedLine covers the command surface on its own: what
 // WRITES in there, what merely reads, and the magus argv that must never match however
 // much it writes.
+//
+// The second half of the write table is the bypass list: every row there passed under the
+// four-operator redirect switch and the eight-verb writer allowlist this replaced.
 func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 	root := t.TempDir()
-	cacheDir := filepath.Join(root, ".magus")
+	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root, dir: root}
 
 	for _, command := range []string{
 		"echo x >> .magus/advisories/anon.served-next",
@@ -77,8 +90,30 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"chmod 600 .magus/lease",
 		"echo x | tee .magus/lease",
 		"cd /repo && rm .magus/lease",
+
+		// `>>|` and `&>|` are zsh-only spellings the default parser never produces, so
+		// they are classified by TestWritesToFileClassifiesEveryRedirectOperator and not
+		// executed here.
+		"echo x >| .magus/lease",
+		"echo x &> .magus/lease",
+		"echo x >& .magus/lease",
+		"exec 3<> .magus/lease",
+		"sh -c 'echo x > .magus/lease'",
+		"bash -c 'rm .magus/lease'",
+		"eval 'echo x > .magus/lease'",
+		"sudo sh -c 'echo x >| .magus/lease'",
+		"dd of=.magus/lease",
+		"ln -sf /dev/null .magus/lease",
+		"install -m 644 f .magus/lease",
+		"rmdir .magus/advisories",
+		"chown me .magus/lease",
+		"find .magus -delete",
+		`python3 -c "open('.magus/advisories/anon.served-next','a').write(line)"`,
+		"sort -o .magus/lease f",
+		"awk '{print > \".magus/lease\"}' f",
+		"cd sub && rm ../.magus/lease",
 	} {
-		assert.NotEmpty(t, denyCacheDirCommand(command, root, cacheDir), "%q writes into the cache dir", command)
+		assert.NotEmpty(t, denyCacheDirCommand(at, command), "%q writes into the cache dir", command)
 	}
 
 	for _, command := range []string{
@@ -93,9 +128,34 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"cp .magus/logs/x.log /tmp/x.log",
 		`echo "rm -rf .magus"`,
 		"git commit -m 'guard the cache dir'",
+		"sort .magus/logs/x.log",
+		"find .magus -name '*.log'",
+		"grep -r lease .magus",
+		"head -n 5 .magus/lease",
+		"jq . .magus/advisories/anon.served-next",
 	} {
-		assert.Empty(t, denyCacheDirCommand(command, root, cacheDir), "%q does not write into the cache dir", command)
+		assert.Empty(t, denyCacheDirCommand(at, command), "%q does not write into the cache dir", command)
 	}
+}
+
+// TestWritesToFileClassifiesEveryRedirectOperator is the exhaustiveness the two redirect
+// readers lacked: `>|` alone bypassed both the cache-dir deny and the magus-output deny,
+// and nothing said the switch had stopped covering the grammar.
+func TestWritesToFileClassifiesEveryRedirectOperator(t *testing.T) {
+	want := map[string]bool{
+		">": true, ">>": true, "<>": true, ">&": true, ">|": true, ">>|": true,
+		"&>": true, "&>|": true, "&>>": true, "&>>|": true,
+		"<": false, "<&": false, "<<": false, "<<-": false, "<<<": false,
+	}
+	seen := map[string]bool{}
+	for op := syntax.RdrOut; op <= syntax.AppAllClob; op++ {
+		spelling := op.String()
+		classified, ok := want[spelling]
+		require.True(t, ok, "the shell grammar grew the redirect operator %q and nothing classified it", spelling)
+		assert.Equal(t, classified, writesToFile(op), "%q", spelling)
+		seen[spelling] = true
+	}
+	assert.Len(t, seen, len(want), "every classified operator must still exist in the grammar")
 }
 
 // TestRankCacheDirWriteOutranksEveryOtherDeny is the one ranking inversion in the guard,
@@ -190,7 +250,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
 // TestCacheDirDenyNamesTheVerbs pins the half of the text that does the work. A refusal
 // that only says no leaves the reader to reach for the file again by another route.
 func TestCacheDirDenyNamesTheVerbs(t *testing.T) {
-	reason := cacheDirDeny(".magus/lease")
+	reason := cacheDirDenial(".magus/lease")
 
 	assert.Contains(t, reason, "session lease", "the deny must name the verb that binds")
 	assert.Contains(t, reason, "clean", "the deny must name the verb that clears outputs")

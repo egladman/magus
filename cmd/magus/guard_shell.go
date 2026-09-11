@@ -174,10 +174,9 @@ func magusRedirected(command string) bool {
 			return true
 		}
 		for _, r := range stmt.Redirs {
-			switch r.Op {
 			// Output redirects only. A HEREDOC or an input redirect feeds magus
 			// rather than hiding what it said, so neither is this rule's business.
-			case syntax.RdrOut, syntax.AppOut, syntax.DplOut, syntax.RdrAll, syntax.AppAll:
+			if writesToFile(r.Op) {
 				found = true
 			}
 		}
