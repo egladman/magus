@@ -48,6 +48,27 @@ func JobStates() []JobState {
 // for it themselves.
 func ValidJobState(s JobState) bool { return slices.Contains(JobStates(), s) }
 
+// JobHolder is who runs a job. One store holds both kinds, so a reader can tell the
+// daemon's own housekeeping from work a session was handed without asking a second door.
+type JobHolder string
+
+const (
+	// HolderDaemon is a job from the daemon's maintenance catalog: the daemon declares it,
+	// submits it, and runs it itself.
+	HolderDaemon JobHolder = "daemon"
+	// HolderSession is work an orchestrator declared for somebody else to hold.
+	HolderSession JobHolder = "session"
+)
+
+// OrSession reads an empty holder as HolderSession: every row written before the two kinds
+// shared a store was a session's, so absent means session rather than unknown.
+func (h JobHolder) OrSession() JobHolder {
+	if h == "" {
+		return HolderSession
+	}
+	return h
+}
+
 // LeaseCheck is the one check a lease runs, in the parts the output store records a run
 // by: the target (carrying a `spell::` filter when the row named one), the project it runs
 // in, and whatever is forwarded past `--`.
@@ -216,7 +237,7 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 3
+const JobSchemaVersion = 4
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -313,6 +334,8 @@ type Job struct {
 	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
 	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
+	// Holder is who runs this job. See [JobHolder]; empty reads as HolderSession.
+	Holder JobHolder `json:"holder,omitempty" yaml:"holder,omitempty"`
 	// ReadOnly marks the abbreviated row the skill describes: a lease that gathers
 	// evidence and writes nothing has no write set, so empty WritePaths and
 	// DenyPaths are correct rather than missing. Without this flag a reader
@@ -375,6 +398,34 @@ type Job struct {
 	// store's record rather than anything the holder asserts.
 	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
 	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	// LastRun is the job's most recent completed run, nil until one finishes.
+	//
+	// The SIZE of what the job maintains is deliberately not stored beside it: a trail, a
+	// run log and a cache all grow without the row being written, so a stored figure goes
+	// stale in silence. It is measured when the job is listed.
+	LastRun *JobRun `json:"last_run,omitempty" yaml:"last_run,omitempty"`
+}
+
+// JobRun is one completed run of a job: what it cost, whether it worked, and what it
+// reclaimed.
+type JobRun struct {
+	// Invocation is the run's invocation id, and it can only be recorded at SUBMIT: the
+	// completion callback carries argv, duration and error and no invocation, so a run
+	// recorded only at the end could never name the log it produced.
+	Invocation string `json:"invocation,omitempty" yaml:"invocation,omitempty"`
+	// Ended is unix milliseconds and DurationMs is the measured duration, so the run's
+	// start is their difference.
+	Ended      int64 `json:"ended,omitempty"       yaml:"ended,omitempty"`
+	DurationMs int64 `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
+	// OK is false when the run errored, and Error is its text. Never omitempty: a run that
+	// failed and a run nobody recorded must not read the same.
+	OK    bool   `json:"ok"              yaml:"ok"`
+	Error string `json:"error,omitempty" yaml:"error,omitempty"`
+	// ItemsRemoved and BytesReclaimed are the run's own delta, reported only by the jobs
+	// that measure one. Zero also means "this job does not count", so neither is evidence
+	// that a rotate found nothing to drop.
+	ItemsRemoved   int64 `json:"items_removed,omitempty"   yaml:"items_removed,omitempty"`
+	BytesReclaimed int64 `json:"bytes_reclaimed,omitempty" yaml:"bytes_reclaimed,omitempty"`
 }
 
 // Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
@@ -590,6 +641,10 @@ func (u Job) Clone() Job {
 	if u.Attempt != nil {
 		attempt := *u.Attempt
 		c.Attempt = &attempt
+	}
+	if u.LastRun != nil {
+		run := *u.LastRun
+		c.LastRun = &run
 	}
 	return c
 }
