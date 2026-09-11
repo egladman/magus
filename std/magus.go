@@ -56,9 +56,9 @@ var Magus = Module{
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
 		"register, clear): the lease ledger an orchestrating agent declares about work it handed " +
-		"out (see types.Lease). The `magus ledger` CLI subcommand READS the same rows and " +
-		"never writes them, so this namespace and the magus_ledger MCP tool remain the only " +
-		"write doors onto it. Only the members that DECLARE into " +
+		"out (see types.Lease). The `magus ledger` CLI subcommand is a third write door onto " +
+		"the same rows: ls and brief read, register declares a row, and accept grades a " +
+		"worker's report. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
@@ -447,11 +447,12 @@ var Magus = Module{
 			Name: "ledger",
 			Doc: "The declared lease ledger: what an orchestrating agent said about work it " +
 				"handed out, recorded so a human can see the plan the agents are running. Rows are " +
-				"DECLARATIONS - this store records them and refuses nothing; the agent guard is what " +
-				"reads them to grade a write, and register's verdict is a fact it hands back rather " +
-				"than a gate. See the field docs on " +
-				"types.Lease. This namespace and the magus_ledger MCP tool are the only " +
-				"WRITE doors onto it; `magus ledger` reads the rows for a person and writes none. Bound by " +
+				"DECLARATIONS - this store gates no run and blocks no write to the tree; the agent " +
+				"guard is what reads them to grade a write, and register's verdict is a fact it " +
+				"returns rather than a gate. The one thing the store DOES refuse is a write to a " +
+				"row the caller does not own. See the field docs on " +
+				"types.Lease. This namespace, the magus_ledger MCP tool and `magus ledger` " +
+				"(register, accept) are the three WRITE doors onto it. Bound by " +
 				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
 				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
@@ -733,7 +734,7 @@ var magusMCPTools = []MCPTool{
 	{
 		Name:   hint.ToolLedger.String(),
 		Member: "ledger",
-		Doc:    "Record the orchestrating agent's declared lease plan so humans can see it; the ledger itself refuses nothing. One row per lease, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the lease was handed, owned and forbidden paths, dependencies, tier, validation, and state. Owned/forbidden paths are a DECLARATION this store never acts on - the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning lease named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around the ledger. Every row should end in pass, fail, or no_return; a read-only lease carries an abbreviated row with no paths. One plan per workspace: clear starts a fresh one and keeps no history. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the lease as possibly dead - which is the READER's judgment, since nothing here transitions a row on its own.",
+		Doc:    "Record the orchestrating agent's declared lease plan so humans can see it; the ledger gates no run, and the one write it refuses is a write to a row the caller does not own. One row per lease, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the lease was handed, owned and forbidden paths, dependencies, tier, validation, and state. Owned/forbidden paths are a DECLARATION this store never acts on - the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning lease named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around the ledger. Every row should end in pass, fail, or no_return; a read-only lease carries an abbreviated row with no paths. One plan per REPOSITORY, so every worktree and clone reads the same rows: clear starts a fresh one and archives what it dropped beside the ledger. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the lease as possibly dead - which is the READER's judgment, since nothing here transitions a row on its own.",
 		Params: []MCPParam{
 			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row, plus overlaps - the pairs of live leases whose owned_paths intersect, reported as lease_a/lease_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), put (create or replace one row by id), register (record reported_base, the base a worker actually landed on, and get the divergence verdict back), clear (drop every row to start a fresh plan)."},
 			{Name: "reported_base", Type: TypeString, Doc: "register only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the lease was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
@@ -1153,7 +1154,7 @@ func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, 
 		// nor does `magus ledger`, which needs a workspace for the same reason this does.
 		// Same code, because the constraint is the same one.
 		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
-			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. Run from inside the workspace instead",
+			"magus\\%s: no workspace on the context: the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. Run from inside the workspace instead",
 			member)
 	}
 	cd, ok := ws.(workspaceCacheDir)

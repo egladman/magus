@@ -21,7 +21,7 @@ function __magus_subcommands
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         session    'what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
-        ledger     'read the lease ledger an orchestrating agent declared (ls, brief, accept)' \
+        ledger     'read and write the lease ledger (ls, brief, register, accept)' \
         notes      'human-authored notes committed to the repo (ls, get, edit, verify, capture, promote)' \
         watch      'emit changed file paths (pipe into affected --stdin)' \
         events     'stream workspace events as JSONL for an editor plugin or other integration' \

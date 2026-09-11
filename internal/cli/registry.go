@@ -1426,7 +1426,7 @@ results rather than events and is read from the listing instead.`,
 		},
 		{
 			Name:        "hints",
-			Short:       "Report uptake per hint id: served, followed, rejected, repeated",
+			Short:       "Report uptake per hint id: served, followed, rejected, reflex",
 			Description: "Count, per hint id, how often a breadcrumb magus served was followed within the next few calls of the same session.",
 			Long: `Report what sessions did with the suggestions magus made.
 
@@ -1440,7 +1440,7 @@ was simply repeated.
 The point is pruning by the number. A suggestion nobody takes is context spent
 on advice, and the output names the floor under which one is not worth
 rewording. It is a note and not an action: what to delete is a decision, and
-this command reports.
+this command only reports the counts.
 
 It counts only what this repository has LOADED. An empty store reports
 nothing, which is a fact about the store rather than about the hints.`,
@@ -1680,7 +1680,7 @@ either side learning a new format.`,
 
 var ledgerCommand = Command{
 	Name:        "ledger",
-	Short:       "Read the lease ledger a fan-out declared, declare a row, and grade what comes back",
+	Short:       "Read the lease ledger, declare a row, and grade a worker's report",
 	Description: "Read the per-repository lease ledger: the leases an orchestrating agent or a person declared, as a tree, plus the worker brief for any one of them, the row-declaring write, and the acceptance check for a worker's report.",
 	Tags:        []string{"cli", "magus ledger", "ledger", "leases", "agents", "delegation"},
 	Long: `Read and write the lease ledger: one row per lease, rendered as a tree of
@@ -1702,9 +1702,9 @@ criteria, its owned and forbidden paths, the knowledge graph's blast radius for
 each owned path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the bootstrap commands the worker starts
 with, each with the reason it is there. It carries no rules: the guard states
-those at the moment a command meets one. It
-also carries what the WORKSPACE knows and the row's author may not have written
-down: the projects the owned paths reach, the declared output globs that land
+those at the moment a command meets one. It also carries what the WORKSPACE knows
+and the row's author may not have written down: the projects the owned paths
+reach, the declared output globs that land
 inside them, the paths a sibling lease is holding, the build inputs and workspace
 config that have one owner, and the projects that change alongside the leased
 ones without declaring a dependency. It is context and never a verdict, the same
@@ -1717,13 +1717,15 @@ on --stdin. It replaces the row it names rather than merging into it, which is
 the difference between a person declaring what a lease IS and an agent advancing
 one field of a live row.
 
-accept closes the loop. It reads a worker's report as JSON on stdin and grades
-EVIDENCE, not claims: every changed path inside the declared owned paths, a change
-set that is not empty on a row that writes, and an output ref that resolves to a
-passing run of that row's own validation. There is no field for whether the worker
-thinks it passed. A row that passes is recorded pass; a rejection names every rule
-that failed and exits 1, and a report that could not be decoded exits 2. Whether
-the work is GOOD stays the orchestrator's reading.`,
+accept grades what comes back. It reads a worker's report as JSON on stdin and
+grades EVIDENCE, not claims: every changed path inside the declared owned paths
+and outside the forbidden ones, a change set that is not empty on a row that
+writes, descendants the plan carries, and an output ref that resolves to a passing
+run of that row's own validation. There is no field for whether the worker thinks
+it passed. A row that passes is recorded pass. Exit 1 is a verdict, naming every
+rule that failed; exit 2 is magus unable to answer, which is a report that would
+not decode, an output store that would not open, or a row that would not write.
+Whether the work is GOOD stays the orchestrator's reading.`,
 	Usage: "magus ledger [ls|brief <lease-id>|register <lease-id>|accept <lease-id>] [flags]",
 	Children: []Command{
 		{Name: "ls", Short: "Print the declared leases as a tree, with the overlapping pairs"},
