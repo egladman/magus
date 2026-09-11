@@ -318,10 +318,11 @@ const (
 	// gate is itself waiting, nothing has started, finished or printed a line for the
 	// grace, and what is queued for the gate cannot start until a holder finishes.
 	//
-	// The one code in this family that is NOT the workspace's doing. MGS3013 names a
-	// magusfile mistake the author can fix; this shape is magus queueing a step behind a
-	// gate its own ancestor holds, so it exits 70 (EX_SOFTWARE) and asks for the run's
-	// captured log rather than a change to the tree.
+	// It exits 70 (EX_SOFTWARE) rather than the 75 MGS3009/MGS3010/MGS3014 use: those say
+	// the same command is valid again once the tree settles, and this says magus queued a
+	// step behind a gate its own ancestor holds, so the run's captured log is what to read.
+	// "Wedged" and not "deadlocked" because it is observed from a grace with nothing
+	// moving, never from the proven wait cycle MGS3013 reports.
 	RunIsolationWedged        DiagnosticCode = "MGS3015"
 	RaceDetected              DiagnosticCode = "MGS4001"
 	OutputOverlapDetected     DiagnosticCode = "MGS4002"
