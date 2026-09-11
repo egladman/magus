@@ -13,14 +13,14 @@ import (
 // only thing that makes a row re-checkable when the vendor changes it.
 func TestPromptCacheProvidersCiteASource(t *testing.T) {
 	for _, p := range PromptCacheProviders {
-		assert.NotEmpty(t, p.Name, "a provider row with no name")
-		assert.Truef(t, strings.HasPrefix(p.Source, "https://"), "%s: source %q is not a URL", p.Name, p.Source)
+		assert.NotEmpty(t, p.Provider, "a provider row with no name")
+		assert.Truef(t, strings.HasPrefix(p.Source, "https://"), "%s: source %q is not a URL", p.Provider, p.Source)
 		assert.Truef(t, len(p.Windows) > 0 || p.Note != "",
-			"%s: a row with neither a window nor a note says nothing, and reads as a window of zero", p.Name)
+			"%s: a row with neither a window nor a note says nothing, and reads as a window of zero", p.Provider)
 		for _, w := range p.Windows {
-			assert.NotEmptyf(t, w.Name, "%s: an unnamed window", p.Name)
-			assert.Positivef(t, w.Min, "%s/%s: a window of zero", p.Name, w.Name)
-			assert.GreaterOrEqualf(t, w.Max, w.Min, "%s/%s: published bounds are inverted", p.Name, w.Name)
+			assert.NotEmptyf(t, w.Window, "%s: an unnamed window", p.Provider)
+			assert.Positivef(t, w.Min, "%s/%s: a window of zero", p.Provider, w.Window)
+			assert.GreaterOrEqualf(t, w.Max, w.Min, "%s/%s: published bounds are inverted", p.Provider, w.Window)
 		}
 	}
 }
@@ -53,8 +53,8 @@ func TestPromptCacheWithoutActivity(t *testing.T) {
 
 func TestPromptCacheWindowDescribe(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	exact := PromptCacheWindow{Name: "default", Min: 5 * time.Minute, Max: 5 * time.Minute}
-	span := PromptCacheWindow{Name: "in-memory retention", Min: 5 * time.Minute, Max: time.Hour}
+	exact := PromptCacheWindow{Window: "default", Min: 5 * time.Minute, Max: 5 * time.Minute}
+	span := PromptCacheWindow{Window: "in-memory retention", Min: 5 * time.Minute, Max: time.Hour}
 
 	for _, tc := range []struct {
 		name   string

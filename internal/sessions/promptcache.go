@@ -19,9 +19,9 @@ import (
 // A provider that publishes a range does so because the real window moves with load,
 // and collapsing it here would invent precision the provider refused to claim.
 type PromptCacheWindow struct {
-	Name string
-	Min  time.Duration
-	Max  time.Duration
+	Window string
+	Min    time.Duration
+	Max    time.Duration
 }
 
 // PromptCacheProvider is one provider's windows and the page they were read from.
@@ -30,38 +30,38 @@ type PromptCacheWindow struct {
 // neither windows nor a note would be a row that says nothing, which is worse than
 // an absent row: it reads as a window of zero.
 type PromptCacheProvider struct {
-	Name    string
-	Windows []PromptCacheWindow
-	Source  string
-	Note    string
+	Provider string
+	Windows  []PromptCacheWindow
+	Source   string
+	Note     string
 }
 
 // PromptCacheProviders is the table, read off each Source on 2026-09-10.
 var PromptCacheProviders = []PromptCacheProvider{
 	{
-		Name:   "Anthropic",
-		Source: "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
+		Provider: "Anthropic",
+		Source:   "https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching",
 		Windows: []PromptCacheWindow{
-			{Name: "default", Min: 5 * time.Minute, Max: 5 * time.Minute},
-			{Name: "1h opt-in", Min: time.Hour, Max: time.Hour},
+			{Window: "default", Min: 5 * time.Minute, Max: 5 * time.Minute},
+			{Window: "1h opt-in", Min: time.Hour, Max: time.Hour},
 		},
 	},
 	{
-		Name:   "OpenAI",
-		Source: "https://platform.openai.com/docs/guides/prompt-caching",
+		Provider: "OpenAI",
+		Source:   "https://platform.openai.com/docs/guides/prompt-caching",
 		Windows: []PromptCacheWindow{
 			// Published as ranges: around 5 to 10 minutes of inactivity and up to one
 			// hour for in-memory retention, around 30 minutes and up to 24 hours for
 			// extended retention. The wide bound is what lands in Max, because the
 			// narrow one is what the page calls typical rather than guaranteed.
-			{Name: "in-memory retention", Min: 5 * time.Minute, Max: time.Hour},
-			{Name: "extended retention", Min: 30 * time.Minute, Max: 24 * time.Hour},
+			{Window: "in-memory retention", Min: 5 * time.Minute, Max: time.Hour},
+			{Window: "extended retention", Min: 30 * time.Minute, Max: 24 * time.Hour},
 		},
 	},
 	{
-		Name:   "Google Gemini",
-		Source: "https://ai.google.dev/gemini-api/docs/caching",
-		Note:   "explicit caches live for a TTL the caller sets; implicit caching publishes no window",
+		Provider: "Google Gemini",
+		Source:   "https://ai.google.dev/gemini-api/docs/caching",
+		Note:     "explicit caches live for a TTL the caller sets; implicit caching publishes no window",
 	},
 }
 
@@ -120,7 +120,7 @@ func PromptCacheAt(session string, last, now time.Time) PromptCacheClock {
 		SinceMs: max(now.Sub(last).Milliseconds(), 0),
 	}
 	for _, p := range PromptCacheProviders {
-		status := PromptCacheProviderStatus{Provider: p.Name, Source: p.Source, Note: p.Note}
+		status := PromptCacheProviderStatus{Provider: p.Provider, Source: p.Source, Note: p.Note}
 		for _, w := range p.Windows {
 			status.Windows = append(status.Windows, w.statusAt(last, now))
 		}
@@ -132,7 +132,7 @@ func PromptCacheAt(session string, last, now time.Time) PromptCacheClock {
 func (w PromptCacheWindow) statusAt(last, now time.Time) PromptCacheWindowStatus {
 	by := last.Add(w.Max)
 	return PromptCacheWindowStatus{
-		Window:     w.Name,
+		Window:     w.Window,
 		ClosesAtMs: last.Add(w.Min).UnixMilli(),
 		ClosesByMs: by.UnixMilli(),
 		Closed:     !now.Before(by),
