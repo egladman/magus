@@ -23,19 +23,24 @@ func acceptRow() types.Lease {
 
 func passingReport() Report {
 	return Report{
-		Lease:        "harness/ledger-accept",
-		ChangedPaths: []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
+		SchemaVersion: ReportSchemaVersion,
+		Lease:         "harness/ledger-accept",
+		ChangedPaths:  []string{"internal/ledger/report.go", "cmd/magus/ledger.go"},
 		Validation: ReportValidation{
 			Command:   "magus run go::go-test . -- -run Ledger ./internal/ledger/",
 			OutputRef: "a1b2c3d4",
-			Passed:    true,
 		},
 		UnresolvedRisks: []string{},
 	}
 }
 
-func found(string) (bool, error)   { return true, nil }
-func missing(string) (bool, error) { return false, nil }
+// found is a store holding a passing run of acceptRow's own validation, which is what an
+// honest report cites.
+func found(string) (Attempt, error) {
+	return Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}, nil
+}
+
+func missing(string) (Attempt, error) { return Attempt{}, nil }
 
 func TestAcceptTakesAReportInsideTheBoundary(t *testing.T) {
 	t.Parallel()
@@ -54,14 +59,93 @@ func TestAcceptNamesEveryViolation(t *testing.T) {
 	rep := passingReport()
 	rep.Lease = "harness/other"
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
-	rep.Validation.Passed = false
 	rep.Validation.OutputRef = ""
 
 	v, err := Accept(acceptRow(), rep, found)
 	require.NoError(t, err)
 	assert.False(t, v.Accepted)
-	require.Len(t, v.Violations, 4)
+	require.Len(t, v.Violations, 3)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
+}
+
+// The report the coding-agent persona filed on 2026-09-11 and had ACCEPTED: nothing
+// changed, a ref from an unrelated codegen run, a self-asserted pass, and two fields
+// nobody asked for. Every one of them is now a named rejection, which is the whole of
+// what "grade evidence, not assertions" means.
+func TestAcceptRefusesTheFabricatedReport(t *testing.T) {
+	t.Parallel()
+
+	raw := `{"schema_version":1,"lease":"harness/ledger-accept","changed_paths":[],` +
+		`"validation":{"command":"magus run go::go-test .","output_ref":"deadbeef","passed":true},` +
+		`"unresolved_risks":[],"confidence":"high"}`
+
+	_, err := DecodeReport(strings.NewReader(raw))
+	require.Error(t, err, "the unknown members alone stop it at the door")
+	assert.Contains(t, err.Error(), "passed")
+
+	// Decoded by hand, as the fields it invented were never read anyway: the two rules
+	// that would have caught it even in a report shaped correctly.
+	rep := passingReport()
+	rep.ChangedPaths = nil
+	rep.Validation.OutputRef = "deadbeef"
+	v, err := Accept(acceptRow(), rep, func(string) (Attempt, error) {
+		return Attempt{Found: true, Project: ".", Target: "generate"}, nil
+	})
+	require.NoError(t, err)
+	assert.False(t, v.Accepted)
+	require.Len(t, v.Violations, 2)
+	assert.Contains(t, v.Violations[0], "no changed paths at all")
+	assert.Contains(t, v.Violations[1], "magus run generate .")
+	assert.Contains(t, v.Violations[1], "go::go-test")
+}
+
+// The stored run's own exit status is the verdict, which is the field a worker no longer
+// gets to assert.
+func TestAcceptReadsTheStoredRunsOutcome(t *testing.T) {
+	t.Parallel()
+
+	v, err := Accept(acceptRow(), passingReport(), func(string) (Attempt, error) {
+		return Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go", Failed: true}, nil
+	})
+	require.NoError(t, err)
+	assert.False(t, v.Accepted)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], "failed")
+}
+
+// A row with no check has nothing to bind evidence to, and accepting it anyway is how a
+// ref from any run at all passes for evidence.
+func TestAcceptRefusesARowWithNoCheckToBindTo(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	row.Validation = "make test"
+
+	v, err := Accept(row, passingReport(), found)
+	require.NoError(t, err)
+	assert.False(t, v.Accepted)
+	assert.Contains(t, v.Violations[0], "not a `magus run <target> <project>` line")
+}
+
+// A charm, a flag, the binary's spelling and the args after `--` are all ways of running
+// one target, so none of them may decide whether the evidence binds.
+func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
+	t.Parallel()
+
+	att := Attempt{Found: true, Project: "internal/ledger", Target: "test"}
+	for _, validation := range []string{
+		"magus run test internal/ledger",
+		"./magus run test:rw internal/ledger",
+		"magus run test internal/ledger -s -- -run Ledger",
+	} {
+		c, ok := parseCheck(validation)
+		require.True(t, ok, validation)
+		assert.True(t, c.matches(att), validation)
+	}
+
+	c, ok := parseCheck("magus run test cmd/magus")
+	require.True(t, ok)
+	assert.False(t, c.matches(att), "another project is another run")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.
@@ -109,8 +193,8 @@ func TestAcceptRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
 func TestAcceptSurfacesAStoreThatCannotAnswer(t *testing.T) {
 	t.Parallel()
 
-	_, err := Accept(acceptRow(), passingReport(), func(string) (bool, error) {
-		return false, errors.New("cache locked")
+	_, err := Accept(acceptRow(), passingReport(), func(string) (Attempt, error) {
+		return Attempt{}, errors.New("cache locked")
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cache locked")
@@ -148,6 +232,42 @@ func TestReportSchemaMatchesTheStruct(t *testing.T) {
 
 	assert.ElementsMatch(t, jsonFields(Report{}), keys(schema.Properties))
 	assert.ElementsMatch(t, jsonFields(ReportValidation{}), keys(schema.Definitions.Validation.Properties))
+}
+
+// The row schema is what a person reads before typing `register --stdin`, so the same
+// drift rule applies to it: a field on one side and not the other is a row that validates
+// and is not stored, or one that is stored and nobody was told to send.
+func TestRowSchemaMatchesTheStruct(t *testing.T) {
+	t.Parallel()
+
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(RowSchema), &schema))
+
+	assert.ElementsMatch(t, jsonFields(Row{}), keys(schema.Properties))
+}
+
+// The two write doors accept the same fields or a row declared on one is not the row the
+// other would have recorded. Merge is the MCP tool's decoder and Row is the CLI's; this
+// is what keeps the pair from drifting into two vocabularies.
+func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
+	t.Parallel()
+
+	for _, field := range jsonFields(Row{}) {
+		if field == "schema_version" || field == "id" {
+			continue // the envelope and the key, which Merge takes as arguments
+		}
+		var value any = "declared"
+		switch field {
+		case "owned_paths", "forbidden_paths", "focus", "depends_on":
+			value = []any{"internal/ledger"}
+		case "read_only":
+			value = true
+		}
+		_, err := Merge(map[string]any{field: value})
+		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
+	}
 }
 
 // jsonFields is the wire name of every field a struct serializes, which is the set the

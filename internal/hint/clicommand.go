@@ -154,6 +154,7 @@ var (
 	Ledger            = cmd("ledger")
 	LedgerBrief       = cmd("ledger", "brief")
 	LedgerAccept      = cmd("ledger", "accept")
+	LedgerRegister    = cmd("ledger", "register")
 	NotesLs           = cmd("notes", "ls")
 	NotesGet          = cmd("notes", "get")
 	NotesEdit         = cmd("notes", "edit")
@@ -196,7 +197,7 @@ var AllCommands = []Command{
 	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
 	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
-	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, LedgerAccept, NotesLs, NotesGet, NotesEdit,
+	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, LedgerAccept, LedgerRegister, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -100,35 +98,6 @@ func TestLeaseGraphEvidenceTakesOnlyAnExactNode(t *testing.T) {
 	assert.False(t, ok, "a fuzzy match is not evidence")
 }
 
-// The footer is the workspace's, including owning none: a workspace with no template
-// gets a brief without the fixed blocks rather than an error.
-func TestLeaseBriefFooterIsOptional(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	got, err := leaseBriefFooter(root, types.Lease{ID: "u1"})
-	require.NoError(t, err)
-	assert.Empty(t, got)
-
-	path := filepath.Join(root, filepath.FromSlash(ledger.BriefTemplatePath))
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte("bind {{.ID}}\n"), 0o644))
-
-	got, err = leaseBriefFooter(root, types.Lease{ID: "u1"})
-	require.NoError(t, err)
-	assert.Equal(t, "bind u1\n", got)
-}
-
-// This repository ships the template the guide documents, so a brief rendered here always
-// carries the fixed blocks.
-func TestMagusShipsABriefTemplate(t *testing.T) {
-	t.Parallel()
-
-	got, err := leaseBriefFooter(filepath.Join("..", ".."), types.Lease{ID: "u1"})
-	require.NoError(t, err)
-	assert.Contains(t, got, "skills to load")
-}
-
 // The gate reached indirectly buys the same seven concurrent pipelines as the gate named
 // outright, and it is the likelier mistake once the obvious spelling is refused.
 func TestChainToGateFollowsComposites(t *testing.T) {
@@ -154,4 +123,42 @@ func TestChainToGateTerminatesOnACycle(t *testing.T) {
 	t.Parallel()
 
 	assert.Nil(t, chainToGate("a", map[string][]string{"a": {"b"}, "b": {"a"}}))
+}
+
+// The person's two spellings are one declaration: a row typed as flags and the same row
+// piped in as a record reach the store identically, or the CLI has quietly grown a
+// second vocabulary.
+func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
+	t.Parallel()
+
+	flags := registerFlags{
+		goal:       "the store is the enforcement point",
+		parent:     "adjacency",
+		owned:      stringList{"internal/ledger", "types/lease.go"},
+		forbidden:  stringList{"MAGUS.md"},
+		focus:      stringList{"internal/trail"},
+		validation: "magus run test internal/ledger",
+		tier:       "principal",
+	}
+	piped, err := ledger.DecodeRow(strings.NewReader(`{
+	  "schema_version": 1,
+	  "id": "adj/store",
+	  "parent": "adjacency",
+	  "goal": "the store is the enforcement point",
+	  "owned_paths": ["internal/ledger", "types/lease.go"],
+	  "forbidden_paths": ["MAGUS.md"],
+	  "focus": ["internal/trail"],
+	  "validation": "magus run test internal/ledger",
+	  "tier": "principal",
+	  "state": "declared"
+	}`))
+	require.NoError(t, err)
+
+	fromFlags := flags.row("adj/store")
+	require.NoError(t, fromFlags.Validate())
+
+	var a, b types.Lease
+	fromFlags.Apply(&a)
+	piped.Apply(&b)
+	assert.Equal(t, a, b)
 }

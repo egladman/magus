@@ -3,14 +3,13 @@ package ledger
 import (
 	"fmt"
 	"strings"
-	"text/template"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
 // Brief is the worker brief for one lease: the declared row, the workspace facts magus
-// resolved against it, and the footer the workspace's own template carries.
+// resolved against it, and the commands the worker starts with.
 //
 // CONTEXT, NEVER A VERDICT, which is the shape `magus diff --prompt` already has. magus
 // assembles what it holds and a person or an orchestrator hands it on; nothing here calls
@@ -51,10 +50,21 @@ type Brief struct {
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
 	// make and not a path this worker is refused.
 	Affinity []BriefAffinity `json:"affinity,omitempty" yaml:"affinity,omitempty"`
-	// Footer is the workspace template already rendered. Empty when the workspace ships
-	// none, which is a brief with no bootstrap, rules or skills blocks rather than an
-	// error: the footer is the workspace's to own, including owning nothing.
-	Footer string `json:"footer,omitempty" yaml:"footer,omitempty"`
+	// Bootstrap is what the worker runs before it edits anything, one command with the
+	// reason it exists. Commands, not rules: the guard states every rule at the moment a
+	// command meets it, and a rules block in a brief is a paragraph a worker reads once
+	// and a denial is a sentence it reads when it matters.
+	Bootstrap []BriefStep `json:"bootstrap,omitempty" yaml:"bootstrap,omitempty"`
+}
+
+// BriefStep is one bootstrap command and why it is there.
+//
+// The pair rather than a rendered line, because the two halves have different readers: a
+// harness composes a prompt from Run, and a person reads Why to see what the step is for.
+// A line carrying both is one a skimmer copies with the parenthetical still in it.
+type BriefStep struct {
+	Run string `json:"run" yaml:"run"`
+	Why string `json:"why" yaml:"why"`
 }
 
 // BriefEvidence is what the knowledge graph knows about one owned path: the node it
@@ -91,35 +101,29 @@ type BriefAffinity struct {
 	Commits int    `json:"commits" yaml:"commits"`
 }
 
-// NewBrief starts the brief for one row with the fields the row alone determines. The
-// bind line is rendered here and nowhere else, so the brief, its golden test, and any
-// caller quoting the line cannot drift; evidence and the footer are the caller's to
-// add, since they need a graph and a workspace.
-func NewBrief(row types.Lease) Brief {
-	return Brief{Lease: row, Bind: hint.SessionLease.With(row.ID)}
-}
-
-// BriefTemplatePath is where a workspace keeps the brief footer, relative to its root.
-// It sits with the other agent-integration templates so the guide that documents it and
-// the file itself are one directory.
-const BriefTemplatePath = "docs/guides/integrations/agents/brief.md.tmpl"
-
-// RenderBriefFooter renders a workspace's footer template against the lease row. The
-// template is Go text/template with the row as its data, so a workspace can name the
-// lease it is briefing without magus deciding what the blocks say.
+// NewBrief starts the brief for one row with the fields the row alone determines: the
+// bind line, and the bootstrap steps that follow from the id. Both are rendered here and
+// nowhere else, so the brief, its golden test, and any caller quoting a line cannot
+// drift; evidence and the derived boundary are the caller's to add, since they need a
+// graph and a workspace.
 //
-// Errors carry the template path, because the reader who has to fix one is editing that
-// file and not this code.
-func RenderBriefFooter(tmpl string, row types.Lease) (string, error) {
-	t, err := template.New("brief").Parse(tmpl)
-	if err != nil {
-		return "", fmt.Errorf("ledger: parse %s: %w", BriefTemplatePath, err)
+// The steps are magus's OWN commands, which is why they are computed rather than read
+// from a workspace template: every one of them is a magus verb this binary defines, and a
+// per-workspace copy of them is a copy to keep true.
+func NewBrief(row types.Lease) Brief {
+	return Brief{
+		Lease: row,
+		Bind:  hint.SessionLease.With(row.ID),
+		Bootstrap: []BriefStep{
+			{Run: "git status --short", Why: "work in your own worktree and confirm it is clean before you edit"},
+			{Run: hint.SessionLease.With(row.ID), Why: "bind the lease so every lease-scoped rule grades your writes here"},
+			{
+				Run: hint.VCSCheckpoint.With("-o name"),
+				Why: "record the base you landed on, and register what it prints on lease " + row.ID +
+					" with the " + hint.ToolLedger.String() + " tool (op register); writes are denied until the lease has one",
+			},
+		},
 	}
-	var out strings.Builder
-	if err := t.Execute(&out, row); err != nil {
-		return "", fmt.Errorf("ledger: render %s: %w", BriefTemplatePath, err)
-	}
-	return out.String(), nil
 }
 
 // Text renders the brief. The order is fixed and nothing outside it is printed: a section
@@ -169,8 +173,11 @@ func (b Brief) Text() string {
 	writeBlock(&s, "validation, the only check you run", b.Lease.Validation)
 	writeList(&s, "depends on", b.Lease.DependsOn)
 
-	if strings.TrimSpace(b.Footer) != "" {
-		fmt.Fprintf(&s, "\n%s", strings.TrimRight(b.Footer, "\n")+"\n")
+	if len(b.Bootstrap) > 0 {
+		fmt.Fprint(&s, "\nbootstrap\n")
+		for _, step := range b.Bootstrap {
+			fmt.Fprintf(&s, "  %s\n    %s\n", step.Why, step.Run)
+		}
 	}
 	return s.String()
 }

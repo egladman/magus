@@ -5,8 +5,13 @@
   "title": "magus lease worker report",
   "type": "object",
   "additionalProperties": false,
-  "required": ["changed_paths", "validation", "unresolved_risks"],
+  "required": ["schema_version", "changed_paths", "validation", "unresolved_risks"],
   "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "The report shape this record is written in. Required: a version this magus does not know is rejected by name."
+    },
     "lease": {
       "type": "string",
       "description": "The lease id this report answers. Checked against the ledger row when present."
@@ -32,19 +37,15 @@
     "validation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["command", "output_ref", "passed"],
+      "required": ["command", "output_ref"],
       "properties": {
         "command": {
           "type": "string",
-          "description": "The one check the lease was assigned, as it was run."
+          "description": "The one check the lease was assigned, as it was run. Read by people; the ref is what is graded."
         },
         "output_ref": {
           "type": "string",
-          "description": "The reference id magus stored that run's captured output under, so the root can reopen the bytes."
-        },
-        "passed": {
-          "type": "boolean",
-          "description": "The worker's verdict on its own run."
+          "description": "The reference id magus stored that run's captured output under. Acceptance reads the stored run's own command and exit status from it, so there is no field here for whether it passed."
         }
       }
     }

@@ -131,10 +131,24 @@ type AmbiguousRefError struct {
 	Candidates []string
 }
 
+// Error names the count and the first few candidates, never all of them. A prefix that
+// matched 57 attempts printed 57 ids on one line, which is a wall a reader scrolls past
+// rather than a list they pick from; the count is the fact that decides what to do next,
+// and three examples show what a longer prefix has to distinguish.
 func (e *AmbiguousRefError) Error() string {
-	return fmt.Sprintf("output ref %q is ambiguous; matches %d attempts: %s",
-		e.Prefix, len(e.Candidates), strings.Join(e.Candidates, ", "))
+	shown := e.Candidates
+	suffix := ""
+	if len(shown) > ambiguousRefsShown {
+		shown = shown[:ambiguousRefsShown]
+		suffix = fmt.Sprintf(", and %d more", len(e.Candidates)-ambiguousRefsShown)
+	}
+	return fmt.Sprintf("output ref %q is ambiguous; it matches %d attempts, starting %s%s."+
+		" Give more of the ref, or name one of those in full (`magus query output <id>`)",
+		e.Prefix, len(e.Candidates), strings.Join(shown, ", "), suffix)
 }
+
+// ambiguousRefsShown bounds the examples one ambiguity error lists.
+const ambiguousRefsShown = 3
 
 // OutputStore is the cache's output-retrieval repository: it persists each execution's captured
 // output VERBATIM under <cacheDir>/outputs and resolves refs back to bytes/metadata. The

@@ -36,7 +36,7 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Le
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
 			" and register what it prints", ErrNoBase)
 	}
-	return s.mutate(ctx, id, func(cur *types.Lease, exists bool, now int64) error {
+	return s.mutate(ctx, id, graded, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to register against."+
 				" Check the declared ids with `magus_ledger list` and register under the id the"+
@@ -108,7 +108,7 @@ func RegistrationAdvice(u types.Lease) string {
 	default:
 		return fmt.Sprintf("registered lease %s on %s. It carries no checkpoint, so there is nothing to compare"+
 			" your base against and the verdict is unknown rather than a match."+
-			" Have the orchestrator put one on the lease (`magus vcs checkpoint -o name`) before the next handoff,"+
+			" Have the orchestrator put one on the lease (`magus vcs checkpoint -o name`) before the next lease is cut,"+
 			" so a later reader can tell whether a worker was on the base it was given.",
 			u.ID, u.ReportedBase)
 	}

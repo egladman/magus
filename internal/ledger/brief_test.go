@@ -28,21 +28,14 @@ func briefRow() types.Lease {
 }
 
 // The brief is only worth building if two renders of one row agree byte for byte, so the
-// golden IS the contract. It renders against the workspace's own shipped template, which
-// gates that file too: change the blocks and this fails until the golden is refreshed.
+// golden IS the contract.
 func TestBriefRendersTheGolden(t *testing.T) {
 	t.Parallel()
-
-	tmpl, err := os.ReadFile(filepath.Join("..", "..", BriefTemplatePath))
-	require.NoError(t, err)
-	footer, err := RenderBriefFooter(string(tmpl), briefRow())
-	require.NoError(t, err)
 
 	b := NewBrief(briefRow())
 	b.Evidence = []BriefEvidence{
 		{Path: "internal/ledger", Node: "dir:internal/ledger", BlastRadius: 4},
 	}
-	b.Footer = footer
 	want, err := os.ReadFile(filepath.Join("testdata", "brief.golden"))
 	require.NoError(t, err)
 	assert.Equal(t, string(want), b.Text())
@@ -75,10 +68,21 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 	assert.Contains(t, got, row.Validation)
 }
 
-func TestRenderBriefFooterReportsABrokenTemplate(t *testing.T) {
+// The bootstrap is commands and their reasons, and nothing else. A rules block here was
+// read once and ignored; the guard says the rules when a command meets one.
+func TestBriefBootstrapIsCommands(t *testing.T) {
 	t.Parallel()
 
-	_, err := RenderBriefFooter("{{.Nope}}", briefRow())
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), BriefTemplatePath, "the reader who fixes this is editing that file")
+	b := NewBrief(briefRow())
+	require.Len(t, b.Bootstrap, 3)
+	for _, step := range b.Bootstrap {
+		assert.NotEmpty(t, step.Run)
+		assert.NotEmpty(t, step.Why)
+	}
+	assert.Equal(t, "magus session lease harness/ledger-per-repo", b.Bootstrap[1].Run)
+	assert.Contains(t, b.Text(), "magus vcs checkpoint -o name")
+
+	for _, gone := range []string{"skills to load", "Do not commit", "Never `magus affected ci`"} {
+		assert.NotContains(t, b.Text(), gone, "the record carries no instruction blocks")
+	}
 }

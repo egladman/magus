@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A person declares a lease row from the terminal: `magus ledger register`.** The verb
+  takes the one-row case as flags (`--goal`, `--parent`, `--owned`, `--forbidden`,
+  `--focus`, `--validation`, `--tier`, `--read-only`) or a whole record on `--stdin`, and
+  `--schema` prints what that record must satisfy. It reverses a documented decision that
+  kept writing off the CLI on the ground that the ledger has a single author: one author
+  per ROW is the true version of that rule, the store now enforces it, and what the old
+  rule actually bought was a capability agents had and people did not. Both channels reach
+  one store and one set of rules.
+- **A lease row and a worker report carry a `schema_version`, and a version magus does not
+  know is rejected by name.** Strict decoding plus a closed field set had exactly one
+  compatible direction: a harness a release ahead would have had its work rejected field by
+  field, with nothing in the message saying why. The version is read before anything else,
+  so the answer is "this magus accepts version 1" rather than "unknown member". Rows record
+  `registered_by`, the session and host that declared them.
+
 - **A run that cannot be scheduled is refused before it starts, and a pool that cannot free
   a slot is refused within seconds.** Two targets inside one composed step, one declaring it
   writes files the other declares it reads, with no `ctx.needs` path between them, is a plan
@@ -308,6 +323,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus ledger accept` grades evidence, not what the report claims.** The `passed` field
+  is GONE from the report schema: the outcome is read from the stored run behind the
+  `output_ref`, and that ref must resolve to a run of the row's own `validation` (compared
+  as project, target and spell filter, so spelling does not decide it). An empty change set
+  on a row that is not `read_only` is rejected, unknown members are rejected, and a session
+  bound to a lease cannot grade any row, its own included. The report is read only with
+  `--stdin`, and the two failing statuses now separate: 2 for a report that could not be
+  decoded, 1 for one that was read and rejected. Behind it: on 2026-09-11 a report with no
+  changed paths, an output ref from an unrelated codegen run, `passed: true`, and two
+  invented fields was accepted and recorded `pass`.
+- **The lease store refuses a write to somebody else's row, and binding is one-way.** A
+  session acting under a lease may register the base it landed on, shrink its own owned
+  paths (which is how it releases one), end its own row in `fail` or `no_return`, and
+  declare a child of itself inside its own paths. Widening a lane, rewriting the plan,
+  clearing the book and accepting a row are refused by name, with the remedy and the actor
+  in the text. The rule lives in the store, so the CLI, the `magus_ledger` tool and
+  `magus\ledger` all carry it; the guard's own denial text used to read as an invitation to
+  widen owned paths with the tool, and nothing checked who was running it.
+  `magus session lease` on a checkout already bound to a different lease is refused for the
+  same reason, and `clear` now archives the rows it drops to a timestamped file beside the
+  ledger instead of forgetting them.
+- **`magus ledger brief` carries commands, not rules.** The rules and skills blocks are
+  gone, along with the workspace footer template that held them
+  (`docs/guides/integrations/agents/brief.md.tmpl`); the record's `footer` string is
+  replaced by `bootstrap`, a list of `{run, why}`. Measured over six workers: a brief that
+  said in so many words never to stash did not stop two attempts, and the guard's denial
+  did. What the guard can say at the moment a command meets it does not need saying twice.
+- **An ambiguous output ref names the count and three examples.** It listed every candidate
+  on one line, which was 57 ids in the case that prompted this.
 - **The Cursor hook schemas come from Cursor's own validator.** Cursor publishes no schema for
   `.cursor/hooks.json`, but its shipped hooks bundle validates the file and every event's stdout
   before a hook fires, so the vendored Cursor schemas are now transcribed from that code (read

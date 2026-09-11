@@ -15,23 +15,23 @@ import (
 	"text/tabwriter"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
 
-// ledgerCmd implements `magus ledger`, the door onto the lease ledger for the two
-// parties the MCP tool does not serve: the person orchestrating, and a shell script
-// grading a worker.
+// ledgerCmd implements `magus ledger`, the PERSON's door onto the lease ledger: reading
+// the plan (ls, brief), declaring a row (register), and grading a worker (accept).
 //
-// Declaring the plan stays on the magus_ledger MCP tool and magus\ledger, because an
-// orchestrating AGENT writes it. What lives here is reading (ls, brief) and the one
-// write that is a VERDICT rather than a declaration: accept grades a finished worker
-// and needs an exit status, which a tool call cannot hand a shell.
+// BOTH CHANNELS WRITE, and the store is what keeps the book honest. The magus_ledger MCP
+// tool is the agent's channel and this verb is the person's; they reach the same store
+// and the same rules, so a row still has one author (internal/ledger.authorizeRow
+// enforces it) without a capability existing for agents that a person does not have. That
+// is the reversal of an earlier decision, which kept writing off the CLI on the ground
+// that the plan has a single author: true of the ROW, and it turned out to be a property
+// the store can enforce rather than a reason to close a door on the human.
 // It takes the --root OVERRIDE and resolves it per verb rather than once here. brief and
 // accept both reach loadMagus, whose singleton panics when a second caller hands it a
 // different spelling of the same root, and every other command reaches it with the raw
@@ -46,13 +46,15 @@ func ledgerCmd(ctx context.Context, root string, args []string) error {
 			return ledgerBrief(ctx, root, args[1:])
 		case hint.LedgerAccept.Leaf():
 			return ledgerAccept(ctx, root, args[1:])
+		case hint.LedgerRegister.Leaf():
+			return ledgerRegister(ctx, root, args[1:])
 		case "ls":
 			args = args[1:]
 		default:
 			// A flag falls through to the default listing, which is what a bare
 			// `magus ledger -o json` has to reach.
 			if !strings.HasPrefix(args[0], "-") {
-				return usagef("magus ledger: unknown subcommand %q (want ls, brief or accept)", args[0])
+				return usagef("magus ledger: unknown subcommand %q (want ls, brief, register or accept)", args[0])
 			}
 		}
 	}
@@ -60,18 +62,21 @@ func ledgerCmd(ctx context.Context, root string, args []string) error {
 }
 
 func ledgerUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus ledger [ls|brief <lease-id>|accept <lease-id>] [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus ledger [ls|brief <lease-id>|register|accept <lease-id>] [flags]")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Read the lease ledger: what an orchestrating agent declared it would hand out,")
-	fmt.Fprintln(os.Stderr, "as a tree of parents and the leases they spawned. Kept per repository, so every")
-	fmt.Fprintln(os.Stderr, "worktree and clone reads one plan.")
+	fmt.Fprintln(os.Stderr, "Read and write the lease ledger: what an orchestrating agent or a person declared")
+	fmt.Fprintln(os.Stderr, "would be handed out, as a tree of parents and the leases they spawned. Kept per")
+	fmt.Fprintln(os.Stderr, "repository, so every worktree and clone reads one plan.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  ls       the rows and their overlaps (the default)")
-	fmt.Fprintln(os.Stderr, "  brief    print one lease's worker brief")
-	fmt.Fprintln(os.Stderr, "  accept   grade a worker's report (JSON on stdin) against its row")
+	fmt.Fprintln(os.Stderr, "  ls        the rows and their overlaps (the default)")
+	fmt.Fprintln(os.Stderr, "  brief     print one lease's worker brief")
+	fmt.Fprintln(os.Stderr, "  register  declare one row, from flags or a JSON record on stdin")
+	fmt.Fprintln(os.Stderr, "  accept    grade a worker's report (JSON on stdin) against its row")
 	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Declaring the plan is the "+hint.ToolLedger.String()+" MCP tool's job, not this verb's.")
+	fmt.Fprintln(os.Stderr, "One author per row, enforced by the store: a worker acting under a lease may")
+	fmt.Fprintln(os.Stderr, "release paths and end its own row, and nothing else. "+hint.ToolLedger.String()+" is the")
+	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
 
 func openLedger(root string) (*ledger.Store, error) {
@@ -205,8 +210,8 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus ledger brief <lease-id> [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Print one lease's worker brief: the row's own goal, boundary, validation and")
-			fmt.Fprintln(os.Stderr, "dependencies, the graph's blast radius for each owned path, and the fixed")
-			fmt.Fprintln(os.Stderr, "blocks this workspace's "+ledger.BriefTemplatePath+" carries.")
+			fmt.Fprintln(os.Stderr, "dependencies, the graph's blast radius for each owned path, and the commands")
+			fmt.Fprintln(os.Stderr, "the worker starts with.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a verdict: magus assembles what it holds and")
 			fmt.Fprintln(os.Stderr, "you give it to the worker, the way `magus diff --prompt` does.")
@@ -245,9 +250,6 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	if brief.Projects, brief.Derived, brief.Affinity, err = leaseBoundary(ctx, override, row, leases); err != nil {
 		return err
 	}
-	if brief.Footer, err = leaseBriefFooter(root, row); err != nil {
-		return err
-	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -264,27 +266,154 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	}
 }
 
+// registerFlags is the one-row case as flags, and row is the same record --stdin decodes.
+// One conversion rather than two paths into the store, so a row typed at a terminal and a
+// row piped in are the same declaration.
+type registerFlags struct {
+	goal, parent, validation, tier string
+	owned, forbidden, focus        stringList
+	readOnly                       bool
+}
+
+func (f registerFlags) row(id string) ledger.Row {
+	return ledger.Row{
+		SchemaVersion:  types.LeaseSchemaVersion,
+		ID:             id,
+		Parent:         f.parent,
+		Goal:           f.goal,
+		OwnedPaths:     f.owned,
+		ForbiddenPaths: f.forbidden,
+		Focus:          f.focus,
+		Validation:     f.validation,
+		Tier:           f.tier,
+		ReadOnly:       f.readOnly,
+		// A row a person declares is one nobody has picked up yet, which is what the
+		// state vocabulary already has a word for.
+		State: types.StateDeclared,
+	}
+}
+
+// ledgerRegister declares one row, from flags or from a JSON record on stdin.
+//
+// THE PERSON'S WRITE. An orchestrating agent declares its plan through the magus_ledger
+// tool; this is the same store and the same rules for somebody at a terminal, which is
+// what keeps the ledger from being a thing only agents can write. The flags cover the
+// one-row case so that declaring a lease does not require composing a JSON document, and
+// --stdin takes the record when a script already has one.
+//
+// It REPLACES the row it names rather than merging into it, unlike the tool's put: a
+// person typing a row is declaring what it is, while an agent advancing one field of a
+// live row must not erase the rest.
+func ledgerRegister(ctx context.Context, root string, args []string) error {
+	var (
+		row           ledger.Row
+		declared      registerFlags
+		schema, stdin bool
+	)
+	pos, err := cmdParse("ledger register", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a row must satisfy, and exit")
+		fs.BoolVar(&stdin, "stdin", false, "Read one row as JSON on stdin instead of taking it from flags")
+		fs.StringVar(&declared.goal, "goal", "", "The goal and its observable acceptance criteria")
+		fs.StringVar(&declared.parent, "parent", "", "The lease this one is handed out under")
+		fs.Var(&declared.owned, "owned", "A path this lease may write; repeat for more")
+		fs.Var(&declared.forbidden, "forbidden", "A path inside the lane this lease may not write; repeat for more")
+		fs.Var(&declared.focus, "focus", "A path whose projects this lease may read; repeat for more (additive: owned paths are readable already)")
+		fs.StringVar(&declared.validation, "validation", "", "The one check this lease runs, as a `magus run <target> <project>` line")
+		fs.StringVar(&declared.tier, "tier", "", "The effort tier the work was matched to")
+		fs.BoolVar(&declared.readOnly, "read-only", false, "A lease that gathers evidence and writes nothing")
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "Usage: magus ledger register <lease-id> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus ledger register --stdin < row.json")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Declare one lease row: what a worker is handed, where it may write, and the one")
+			fmt.Fprintln(os.Stderr, "check it runs. The row replaces any row with the same id.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A session bound to a lease may only declare a CHILD of its own row, inside its")
+			fmt.Fprintln(os.Stderr, "own paths; widening a lane is the orchestrator's.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+	})
+	if err != nil {
+		return err
+	}
+	if schema {
+		fmt.Print(ledger.RowSchema)
+		return nil
+	}
+
+	switch {
+	case stdin:
+		if len(pos) > 0 {
+			return usagef("magus ledger register: --stdin reads the id from the record, so %q is one id too many", pos[0])
+		}
+		if row, err = ledger.DecodeRow(os.Stdin); err != nil {
+			return usagef("magus ledger register: %s (`%s` prints the schema it must satisfy)", err, hint.LedgerRegister.With("--schema"))
+		}
+	case len(pos) != 1:
+		return usagef("magus ledger register: requires exactly one lease id, or --stdin with a row on it")
+	default:
+		row = declared.row(pos[0])
+		if err := row.Validate(); err != nil {
+			return usagef("magus ledger register: %s", err)
+		}
+	}
+
+	store, err := openLedger(resolveRootOrEmpty(root))
+	if err != nil {
+		return err
+	}
+	stored, err := store.Update(ctx, row.ID, row.Apply)
+	if err != nil {
+		return err
+	}
+
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputName:
+		return emitNames([]string{stored.ID})
+	case outputText:
+		fmt.Printf("registered lease %s, %s, with %d owned path(s). Brief its worker with `%s`\n",
+			stored.ID, orDash(string(stored.State)), len(stored.OwnedPaths), hint.LedgerBrief.With(stored.ID))
+		return nil
+	default:
+		return emitFormatted(opts, stored)
+	}
+}
+
 // ledgerAccept grades one worker's report against its row and records the verdict.
 //
 // THE ENFORCEMENT POINT. Everything else about a lease is a declaration: the ledger
 // records, the guard grades writes as they happen, and acceptance was the root agent
 // reading a paragraph. A report that ran a filtered subset, wrote outside its boundary, or
-// cited evidence that no longer resolves reads exactly like one that did the work, and
-// this is where that stops being true.
+// cited evidence from an unrelated run reads exactly like one that did the work, and this
+// is where that stops being true.
 //
-// Exits non-zero on a rejection, because the caller is a shell step in an integration
-// sequence and a verdict nothing can branch on is a verdict nobody acts on.
+// THE GRADER IS NEVER THE GRADED. A session bound to a lease is refused before anything is
+// read: a worker that can accept its own row is the loop's one remaining self-assessment,
+// and the store would refuse the resulting write anyway, so it is refused here where the
+// message can say why.
+//
+// Two failing statuses, because the caller is a shell step and the two failures send it
+// somewhere different: 2 for a report that could not be decoded (fix the report), 1 for
+// one that was decoded and rejected (the work is not accepted).
 func ledgerAccept(ctx context.Context, root string, args []string) error {
-	var af *gen.LedgerAcceptFlags
+	var schema, stdin bool
 	pos, err := cmdParse("ledger accept", args, func(fs *flag.FlagSet) {
-		af = gen.BindLedgerAccept(fs)
+		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a report must satisfy, and exit")
+		fs.BoolVar(&stdin, "stdin", false, "Read the worker's report from stdin (required: nothing is read without it)")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus ledger accept <lease-id> [flags]  < report.json")
+			fmt.Fprintln(os.Stderr, "Usage: magus ledger accept <lease-id> --stdin < report.json")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Grade a finished worker's report, read as JSON on stdin, against the lease it was")
-			fmt.Fprintln(os.Stderr, "handed: every changed path inside the declared owned paths, the validation passed,")
-			fmt.Fprintln(os.Stderr, "and its output ref still resolving in this workspace's store. A row that passes is")
-			fmt.Fprintln(os.Stderr, "recorded "+string(types.StatePass)+"; a rejection names every rule that failed and exits non-zero.")
+			fmt.Fprintln(os.Stderr, "Grade a finished worker's report against the lease it was handed: every changed")
+			fmt.Fprintln(os.Stderr, "path inside the declared owned paths, a change set that is not empty, and an")
+			fmt.Fprintln(os.Stderr, "output ref that resolves to a PASSING run of this row's own validation. A row")
+			fmt.Fprintln(os.Stderr, "that passes is recorded "+string(types.StatePass)+"; a rejection names every rule that failed and")
+			fmt.Fprintln(os.Stderr, "exits 1, while a report that could not be decoded exits 2.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It checks what is mechanical. Whether the work is GOOD, and whether the row's")
 			fmt.Fprintln(os.Stderr, "acceptance criteria are met, stay the orchestrator's reading.")
@@ -296,25 +425,34 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if af.Schema {
+	if schema {
 		fmt.Print(ledger.ReportSchema)
 		return nil
 	}
 	if len(pos) != 1 {
 		return usagef("magus ledger accept: requires exactly one lease id, with the worker's report on stdin")
 	}
+	if !stdin {
+		return usagef("magus ledger accept: the report is read from stdin and only with --stdin (`%s`)",
+			hint.LedgerAccept.With(pos[0]+" --stdin < report.json"))
+	}
 	override := root
 	root = resolveRootOrEmpty(root)
-
-	var report ledger.Report
-	if err := json.NewDecoder(os.Stdin).Decode(&report); err != nil {
-		return fmt.Errorf("magus ledger accept: read the report on stdin: %w (`%s` prints the schema it must satisfy)", err, hint.LedgerAccept.With("--schema"))
-	}
 
 	store, err := openLedger(root)
 	if err != nil {
 		return err
 	}
+	if actor := store.Actor(); actor.Bound() {
+		return fmt.Errorf("magus ledger accept: this checkout is bound to lease %s, and a worker does not grade its own work."+
+			" Report what you changed and what you verified, and let the orchestrator accept it", actor.Lease)
+	}
+
+	report, err := ledger.DecodeReport(os.Stdin)
+	if err != nil {
+		return usagef("magus ledger accept: %s (`%s` prints the schema it must satisfy)", err, hint.LedgerAccept.With("--schema"))
+	}
+
 	leases, err := store.List()
 	if err != nil {
 		return err
@@ -324,7 +462,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus ledger accept: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
 
-	verdict, err := ledger.Accept(leases[i], report, outputRefResolves(ctx, override))
+	verdict, err := ledger.Accept(leases[i], report, storedAttempt(ctx, override))
 	if err != nil {
 		return err
 	}
@@ -354,23 +492,28 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	return errSilent{exitCode: 1}
 }
 
-// outputRefResolves answers whether a run's captured output is still in this workspace's
-// store, through the lookup `magus query output` uses. A ref that aged out of the cache
-// is reported MISSING rather than as an error: the root cannot reopen it either way, and
-// that is the fact acceptance turns on.
-func outputRefResolves(ctx context.Context, root string) ledger.OutputLookup {
-	return func(ref string) (bool, error) {
+// storedAttempt resolves a ref to what the output store recorded about that run: which
+// command produced it and whether it failed. A ref that aged out of the cache is reported
+// MISSING rather than as an error: the root cannot reopen it either way, and that is the
+// fact acceptance turns on.
+//
+// The DESCRIPTOR, not the bytes. Acceptance reads the run's identity and its exit status,
+// both of which are metadata, and a captured log is as large as the target was noisy.
+func storedAttempt(ctx context.Context, root string) ledger.OutputLookup {
+	return func(ref string) (ledger.Attempt, error) {
 		m, err := loadMagus(ctx, root)
 		if err != nil {
-			return false, err
+			return ledger.Attempt{}, err
 		}
-		switch _, _, err := m.OutputByRef(ref); {
+		switch d, err := m.OutputDescriptorByRef(ref); {
 		case err == nil:
-			return true, nil
+			return ledger.Attempt{
+				Found: true, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
+			}, nil
 		case errors.Is(err, fs.ErrNotExist):
-			return false, nil
+			return ledger.Attempt{}, nil
 		default:
-			return false, err
+			return ledger.Attempt{}, err
 		}
 	}
 }
@@ -684,22 +827,4 @@ func pathEvidence(g *knowledge.Graph, declared string) (ledger.BriefEvidence, bo
 		return ledger.BriefEvidence{Path: declared, Node: out.Node.ID, BlastRadius: out.BlastRadius}, true
 	}
 	return ledger.BriefEvidence{}, false
-}
-
-// leaseBriefFooter renders the workspace's footer template, or nothing when the workspace
-// ships none.
-//
-// An ABSENT template is not an error: the fixed blocks are the workspace's to own, and
-// owning none is a legitimate answer for a workspace that has not written one yet. A
-// template that exists and will not render IS an error, because the person who put it
-// there meant it to appear.
-func leaseBriefFooter(root string, row types.Lease) (string, error) {
-	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(ledger.BriefTemplatePath)))
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return ledger.RenderBriefFooter(string(raw), row)
 }

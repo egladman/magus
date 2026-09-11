@@ -107,18 +107,37 @@ A row carries `id` and optionally `parent` (the lease that handed out this one),
 `goal` with its observable acceptance criteria, `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `owned_paths` and `forbidden_paths`,
 `focus`, `depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
-`created`, `updated`, `releases`, and `unattributed` (paths this lease owns that
-somebody outside it wrote, noticed by the guard), all output-only: a timestamp a
-client sent would be a fact about that client's clock. `register` adds three more
+`schema_version` (the row shape, currently 1, required on anything you send and
+rejected by name when it is a version magus does not know), `registered_by` (the
+session and host that created the row), `created`, `updated`, `releases`, and
+`unattributed` (paths this lease owns that somebody outside it wrote, noticed by
+the guard), all output-only: a timestamp a client sent would be a fact about that
+client's clock. `register` adds three more
 the same way - `reported_base`, the checkpoint token the worker found in its OWN
 tree; `base_verdict`, the store's comparison of that against the row's
 `checkpoint`; and `registered`, when that comparison was recorded.
 
-Three properties are worth stating plainly.
+Five properties are worth stating plainly.
 
-**A declared boundary is enforced elsewhere.** This store gates nothing: it
-records the text an orchestrator put in a worker's prompt, where a human can read
-it. The [agent guard](guard.md) is the one reader that turns it into a verdict;
+**One author per row, enforced by the store.** A session acting under a lease may
+register the base it landed on, SHRINK its own `owned_paths` (which is how it
+releases a path), end its own row in `fail` or `no_return`, and declare a child of
+itself inside its own paths. Every other write is refused, by name and with the
+remedy: widening a lane, changing the plan's shape, clearing the book, and
+accepting a row are the orchestrator's. The rule lives in the store rather than in
+a guard pattern because the CLI, the MCP tool and `magus\ledger` all reach the same
+file and only one of them is a command a pattern can read. A session that is bound
+to no lease - the orchestrator, or a person at a terminal - writes anything.
+
+**Binding is one-way.** `magus session lease <id>` on a checkout already bound to a
+different lease is refused. Rebinding is how a worker would be graded against
+another lease's paths, and it costs nothing to a worker that runs its bootstrap
+twice: binding the lease it already holds is allowed and does nothing.
+
+**A declared boundary is enforced elsewhere.** Beyond the row ownership above, this
+store gates nothing: it records the text an orchestrator put in a worker's prompt,
+where a human can read it. The [agent guard](guard.md) is the one reader that turns
+it into a verdict;
 what it refuses is listed under [what the guard enforces under a lease](#what-the-guard-enforces-under-a-lease) below. Every uncertainty there
 fails open with at most an advisory - no ledger, an unreadable one, a writer that
 named no lease - because this is a seatbelt for a harness that opted in and not a
@@ -130,10 +149,12 @@ failure. A lease that failed came back and said so; a lease that died, stalled, 
 was cancelled said nothing, and it is the only state on this surface that no
 other system will report. Silence is not a pass.
 
-**One plan per workspace, with no history.** `clear` starts a fresh one and keeps
-nothing. A read-only lease that gathers evidence and writes nothing carries an
-abbreviated row: `read_only` set, and empty owned and forbidden paths that then
-read as deliberate rather than forgotten.
+**One plan per workspace.** `clear` starts a fresh one, copying the rows it drops
+to a timestamped `leases-<when>.json` beside the ledger first. Nothing reads those
+back: they exist so that a plan somebody else wiped is still legible to a person.
+A read-only lease that gathers evidence and writes nothing carries an abbreviated
+row: `read_only` set, and empty owned and forbidden paths that then read as
+deliberate rather than forgotten.
 
 ### Three answers the ledger gives back
 
@@ -180,16 +201,24 @@ what lets an orchestrator declare a plan in its own checkout and a worker read
 its lease from another. A ledger an older magus left at `<cache-dir>/ledger` is
 carried forward the first time the new one opens it.
 
-`magus_ledger` is its write door, and the daemon's read-only
-`GET /api/v1/ledger` route and `magus ledger` are its read doors. Writing stays
-off the CLI because the ledger has a single author by definition of what it
-records - the one agent doing the orchestrating - while reading it is exactly
-what the person running that agent needs.
+Two channels write it and one reads it: `magus_ledger` is the agent's,
+`magus ledger` is the person's, and the daemon's `GET /api/v1/ledger` route is
+read-only. Both write channels reach one store and one set of rules, which is where
+the single-author property lives now. It used to live in the closed door: writing
+stayed off the CLI on the ground that the plan has one author, which left a person
+unable to declare a row without an agent to do it for them. One author per ROW is
+the true version of that rule, and the store enforces it.
 
 ```sh
-magus ledger                # the rows as a tree, parents above the leases they handed out
-magus ledger -o json        # the same records, overlaps included
-magus ledger brief <lease>  # one lease's worker brief
+magus ledger                      # the rows as a tree, parents above the leases they handed out
+magus ledger -o json              # the same records, overlaps included
+magus ledger brief <lease>        # one lease's worker brief
+magus ledger register <lease> \
+  --goal 'move the store' \
+  --owned internal/ledger \
+  --validation 'magus run test internal/ledger'
+magus ledger register --stdin < row.json   # the same row as a record
+magus ledger register --schema             # what that record must satisfy
 ```
 
 ## Wiring the lease into a worker
@@ -323,14 +352,41 @@ nothing renders it. When the graph is cold the evidence lines are replaced by on
 line saying so, so a missing blast radius never reads as "nothing depends on
 this".
 
-Below that sits a fixed footer your workspace owns: the bootstrap, rules, and
-skills blocks in `docs/guides/integrations/agents/brief.md.tmpl`, a Go
-`text/template` rendered against the lease row. A workspace with no such file
-gets a brief with no footer, which is a legitimate answer rather than an error.
+Below that sits `bootstrap`: the commands the worker runs before it edits
+anything, each with the reason it exists - confirm the worktree is clean, bind the
+lease, record and register the base. Commands, because the guard states every RULE
+at the moment a command meets it; a rules block in a brief is a paragraph read once
+and a denial is a sentence read when it matters. The brief carried one until
+2026-09-11, and measuring it settled the question: a worker whose brief said in so
+many words never to stash tried it twice anyway, and what stopped it was the deny.
 The command renders context and never a verdict, the same shape
 `magus diff --prompt` has: magus assembles what it holds and you hand it to the
-worker. `-o json` emits the same brief as a record, for an orchestrator that
-composes the prompt itself.
+worker. `-o json` emits the same brief as a record, `bootstrap` included as
+`{run, why}` pairs, for an orchestrator that composes the prompt itself.
+
+## Grading what comes back
+
+`magus ledger accept <lease-id> --stdin < report.json` grades a finished worker's
+report against its row, and it grades EVIDENCE rather than what the report claims:
+
+- every changed path inside the declared `owned_paths`, and a change set that is
+  not empty on a row that is not `read_only`;
+- an `output_ref` that still resolves, whose stored run is a run of THIS row's
+  `validation` (compared as project, target and spell filter, so spelling does not
+  decide it) and which the store recorded as passing.
+
+There is no `passed` field in the report. A worker's verdict on its own run is the
+assertion the ref exists to replace: on 2026-09-11 a report with no changed paths,
+an output ref from an unrelated codegen run, `passed: true`, and two invented
+fields was accepted and recorded `pass`. Unknown fields are now refused, the report
+carries a required `schema_version`, and a session bound to a lease cannot grade
+any row, its own included.
+
+Two failing statuses, because they send a caller somewhere different: 2 when the
+report could not be decoded (a bad shape, an unknown version), 1 when it was read
+and rejected, with one line per rule that failed. `--stdin` is required: without
+it the command says so rather than waiting on a terminal.
+`magus ledger accept --schema` prints the schema a report must satisfy.
 
 ## Watch it: Dashboard's Lease plan
 
