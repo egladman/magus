@@ -459,10 +459,24 @@ var hookConfigExemptions = map[string]map[string]string{
 	"codex": {
 		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
 			"so it earns one host's wiring rather than four; nothing in Codex prevents it",
+		"magus-guard-command.sh on " + mcpToolMatcherPrefix: "there is no vendored evidence Codex fires PreToolUse for an " +
+			"MCP tool call, so the wiring would claim a surface nobody has seen deliver a verdict; " +
+			"the mcp coverage every template declares for codex says none for the same reason",
 	},
 }
 
-// configTemplates returns the shipped templates a hook config's commands invoke.
+// mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
+// wired under it guards a different surface from the same template, so the name
+// below carries it and the parity gate can see the two apart.
+const mcpToolMatcherPrefix = "mcp__magus__"
+
+// configTemplates returns the JOBS a hook config's commands invoke, keyed by the
+// template and, where the matcher selects magus's MCP tools, by that surface too.
+//
+// Keyed by job rather than by file because a template wired twice under different
+// matchers is two jobs: claude-code runs magus-guard-command.sh on Bash AND on the
+// MCP tool call, and a gate collecting basenames alone reads the second as nothing
+// new, which is the whole absence it exists to report.
 func configTemplates(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -476,9 +490,14 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
 				for _, field := range strings.Fields(h.Command) {
-					if strings.HasPrefix(field, hookTemplateDir) {
-						found[filepath.Base(field)] = true
+					if !strings.HasPrefix(field, hookTemplateDir) {
+						continue
 					}
+					name := filepath.Base(field)
+					if strings.Contains(entry.Matcher, mcpToolMatcherPrefix) {
+						name += " on " + mcpToolMatcherPrefix
+					}
+					found[name] = true
 				}
 			}
 		}
@@ -1302,6 +1321,19 @@ func TestParityTableMatchesTheGlueDeclarations(t *testing.T) {
 			assertCell("deny", command["deny"] == "model")
 			assertCell("advise", command["advise"] == "model")
 		}
+		// Every host DECLARES the mcp surface, most of them with every stance at
+		// none, so presence says nothing here and delivery is the question: a cell
+		// reading "not wired" against a template that delivers a verdict, or the
+		// reverse, is a reader choosing a host on a promise magus does not keep.
+		if mcp := surfaces["mcp"]; mcp != nil {
+			cell, ok := cells["mcp rules"]
+			require.True(t, ok, "the parity table has no MCP call rules column; the contract needs one")
+			delivers := mcp["deny"] != "none" || mcp["advise"] != "none"
+			assert.Equal(t, delivers, !strings.HasPrefix(strings.ToLower(cell), "not wired"),
+				"parity table row %q, MCP call rules reads %q, which disagrees with the mcp stances the templates declare (deny=%s advise=%s).\n"+
+					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
+				host, cell, mcp["deny"], mcp["advise"])
+		}
 	}
 
 	var declared []string
@@ -1351,6 +1383,8 @@ func parityTableRows(t *testing.T, guide string) map[string]map[string]string {
 					header = append(header, "command rules")
 				case strings.Contains(cell, "declared-output"):
 					header = append(header, "declared-output rule")
+				case strings.Contains(cell, "MCP call"):
+					header = append(header, "mcp rules")
 				case strings.Contains(cell, "deny"):
 					header = append(header, "deny")
 				case strings.Contains(cell, "advise"):
