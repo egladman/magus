@@ -219,7 +219,8 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			for i, t := range targets {
 				paths[i] = t.Path
 			}
-			printNext(os.Stdout, nextGate(root), hint.NextForAffected(types.TargetCI, paths))
+			nx := nextFor(root)
+			printNext(os.Stdout, nx, nx.serve(hint.NextForAffected(types.TargetCI, paths)))
 		}
 		return nil
 	}

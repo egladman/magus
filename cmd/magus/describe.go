@@ -1531,7 +1531,8 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	focus, inFocus := markFileFocus(ws, files)
 	report := types.NewFileReport(files)
-	next := hint.NextForFiles(files)
+	nx := nextFor(root)
+	next := nx.serve(hint.NextForFiles(files))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -1596,7 +1597,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
 		}
 	}
-	printNext(os.Stdout, nextGate(root), next)
+	printNext(os.Stdout, nx, next)
 	return nil
 }
 
