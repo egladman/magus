@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -786,13 +787,23 @@ func TestWaitForUpstreamBeatsAndNamesTheWriter(t *testing.T) {
 	go func() {
 		done <- waitForUpstream(ctx, upstream, DepKey(".", "coverage-badge"), DepKey(".", "generate"))
 	}()
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	assert.Less(t, prog.Idle(), time.Minute)
 	close(upstream)
 	require.NoError(t, <-done)
 
-	assert.Contains(t, logs.lines(),
-		"magus: waiting for an upstream target to finish waiting=. coverage-badge upstream=. generate")
+	lines := logs.lines()
+	assert.Contains(t, lines,
+		"magus: (root) coverage-badge is waiting for (root) generate to finish (0s so far)")
+	// Ten beats fit in the sleep; a log per beat is the spam this test guards against.
+	var said int
+	for _, l := range lines {
+		if strings.Contains(l, "is waiting for") {
+			said++
+		}
+	}
+	assert.GreaterOrEqual(t, said, 2, "the wait must keep saying so as it doubles")
+	assert.LessOrEqual(t, said, 6, "the log must back off while the beat keeps its cadence")
 }
 
 func TestWaitForUpstreamEndsOnCancel(t *testing.T) {

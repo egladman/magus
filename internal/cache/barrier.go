@@ -133,29 +133,45 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 	return nil
 }
 
-// waitForUpstream blocks on done, beating the invocation heartbeat and naming the upstream
+// waitForUpstream blocks on done, beating the invocation heartbeat and naming both parties
 // on the way.
 //
 // This is where a reader waits for the writer the derived order put ahead of it, and that
 // wait can legitimately be as long as the writer's whole run. Silent, it was a stall to
 // the watchdog and unattributable to a reader; named, an aborted run reads as one target
-// waiting on another.
+// waiting on another. The watchdog hears every beat; the log hears the first, then one
+// per doubling of the elapsed time, because several readers waiting out one long writer
+// otherwise print the same line every beat each.
 func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstream string) error {
 	beat := time.NewTicker(upstreamWaitHeartbeat)
 	defer beat.Stop()
+	started := time.Now()
+	next := upstreamWaitHeartbeat
 	for {
 		select {
 		case <-done:
 			return nil
 		case <-beat.C:
 			ProgressFromContext(ctx).Beat()
-			slog.InfoContext(ctx, "magus: waiting for an upstream target to finish",
-				slog.String("waiting", DisplayNodeKey(waiting)),
-				slog.String("upstream", DisplayNodeKey(upstream)))
+			if elapsed := time.Since(started); elapsed >= next {
+				next *= 2
+				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for %s to finish (%s so far)",
+					displayNodeLabel(waiting), displayNodeLabel(upstream), elapsed.Round(time.Second)))
+			}
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+}
+
+// displayNodeLabel spells a node key the way stepLabel spells a step, so a wait names its
+// parties the way the lines around it name them.
+func displayNodeLabel(key string) string {
+	project, target, ok := strings.Cut(key, nodeKeySep)
+	if !ok {
+		return displayProject(key)
+	}
+	return displayProject(project) + " " + target
 }
 
 // upstreamWaitHeartbeat is how often a step waiting on its upstream says so. It matches
