@@ -134,20 +134,24 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	flags := registerFlags{
 		goal:       "the store is the enforcement point",
 		parent:     "adjacency",
-		owned:      stringList{"internal/ledger", "types/lease.go"},
-		forbidden:  stringList{"MAGUS.md"},
-		focus:      stringList{"internal/trail"},
-		validation: "magus run test internal/ledger",
-		tier:       "principal",
+		checkpoint: "cf5509d09",
+		writePaths: pathList{"internal/ledger", "types/lease.go"},
+		denyPaths:  pathList{"MAGUS.md"},
+		readPaths:  pathList{"internal/trail"},
+		dependsOn:  pathList{"adj/guard"},
+		check:      "test internal/ledger",
+		model:      "principal",
 	}
 	piped, err := ledger.DecodeRow(strings.NewReader(`{
 	  "schema_version": 1,
 	  "id": "adj/store",
 	  "parent": "adjacency",
 	  "goal": "the store is the enforcement point",
+	  "checkpoint": "cf5509d09",
 	  "owned_paths": ["internal/ledger", "types/lease.go"],
 	  "forbidden_paths": ["MAGUS.md"],
 	  "focus": ["internal/trail"],
+	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
 	  "tier": "principal",
 	  "state": "declared"
@@ -161,4 +165,20 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	fromFlags.Apply(&a)
 	piped.Apply(&b)
 	assert.Equal(t, a, b)
+}
+
+// A path flag takes both spellings, and refuses the empty segment a trailing comma
+// leaves: a lane that silently shrank is the failure --skip already refuses.
+func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
+	t.Parallel()
+
+	var repeated, combined pathList
+	require.NoError(t, repeated.Set("internal/ledger"))
+	require.NoError(t, repeated.Set("types/lease.go"))
+	require.NoError(t, combined.Set("internal/ledger, types/lease.go"))
+	assert.Equal(t, repeated, combined)
+
+	var refused pathList
+	require.Error(t, refused.Set("internal/ledger,"))
+	require.Error(t, refused.Set(""))
 }

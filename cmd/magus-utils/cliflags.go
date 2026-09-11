@@ -144,18 +144,27 @@ func writeBinder(b *bytes.Buffer, command, constCommand string, flags []cli.Flag
 	// itself; emitting a field and a second fs.Var for it would panic at parse
 	// time with "flag redefined". Its name constant still comes out, via constsFor.
 	bindable := make([]cli.Flag, 0, len(flags))
+	var custom []string
 	for _, f := range flags {
-		if f.Kind != cli.FlagCustom {
-			bindable = append(bindable, f)
+		if f.Kind == cli.FlagCustom {
+			custom = append(custom, "--"+f.Name)
+			continue
 		}
+		bindable = append(bindable, f)
 	}
 	if len(bindable) == 0 {
 		return
 	}
 	groups := groupAliases(command, bindable)
 
+	// The struct SAYS what it cannot carry, because a caller that binds it and stops
+	// there gets a command whose custom flags parse into nothing and still compiles.
+	partial := ""
+	if len(custom) > 0 {
+		partial = fmt.Sprintf("\n//\n// It does NOT carry %s: a custom-valued flag is bound by the command itself,\n// which must do so alongside this binder.", strings.Join(custom, ", "))
+	}
 	typeName := goIdent(command) + "Flags"
-	fmt.Fprintf(b, "\n// %sFlags are the flags declared for `magus %s`.\ntype %s struct {\n", goIdent(command), command, typeName)
+	fmt.Fprintf(b, "\n// %sFlags are the flags declared for `magus %s`.%s\ntype %s struct {\n", goIdent(command), command, partial, typeName)
 	for _, g := range groups {
 		fmt.Fprintf(b, "\t%s %s // %s\n", g.field, goType(g.primary.Kind), g.spellings())
 	}

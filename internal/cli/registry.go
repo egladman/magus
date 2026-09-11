@@ -1715,7 +1715,9 @@ in the orchestrator's tree, after every unit lands.
 register declares one row, from flags for the one-row case or from a JSON record
 on --stdin. It replaces the row it names rather than merging into it, which is
 the difference between a person declaring what a lease IS and an agent advancing
-one field of a live row.
+one field of a live row. Every path flag is repeatable or comma-separated, and an
+empty segment is refused rather than dropped. There is no --state: this declares a
+new row, and a row nobody has picked up is declared.
 
 accept grades what comes back. It reads a worker's report as JSON on stdin and
 grades EVIDENCE, not claims: every changed path inside the declared owned paths
@@ -1738,11 +1740,13 @@ Whether the work is GOOD stays the orchestrator's reading.`,
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one row as JSON on stdin instead of taking it from flags"},
 				{Name: "goal", Kind: FlagString, Doc: "The goal and its observable acceptance criteria"},
 				{Name: "parent", Kind: FlagString, Doc: "The lease this one is handed out under"},
-				{Name: "owned", Kind: FlagCustom, Doc: "A path this lease may write; repeat for more"},
-				{Name: "forbidden", Kind: FlagCustom, Doc: "A path inside the lane this lease may not write; repeat for more"},
-				{Name: "focus", Kind: FlagCustom, Doc: "A path whose projects this lease may read; repeat for more (additive: owned paths are readable already)"},
-				{Name: "validation", Kind: FlagString, Doc: "The one check this lease runs, as a `magus run <target> <project>` line"},
-				{Name: "tier", Kind: FlagString, Doc: "The effort tier the work was matched to"},
+				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this lease is handed, as `magus vcs checkpoint -o name` prints it"},
+				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this lease may write; repeatable or comma-separated"},
+				{Name: "deny-paths", Kind: FlagCustom, Doc: "A path inside the lane this lease may not write; repeatable or comma-separated"},
+				{Name: "read-paths", Kind: FlagCustom, Doc: "A path whose projects this lease may read; repeatable or comma-separated (additive: the written paths are readable already)"},
+				{Name: "depends-on", Kind: FlagCustom, Doc: "A lease this one waits on; repeatable or comma-separated"},
+				{Name: "check", Kind: FlagString, Doc: "The one check this lease runs, as `<target> <project> [-- args]` (the `magus run` is implied)"},
+				{Name: "model", Kind: FlagString, Doc: "The model the work was matched to"},
 				{Name: "read-only", Kind: FlagBool, Doc: "A lease that gathers evidence and writes nothing"},
 			},
 		},

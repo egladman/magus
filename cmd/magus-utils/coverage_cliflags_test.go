@@ -323,6 +323,21 @@ func TestWriteBinderEmitsNothingWithoutABindableFlag(t *testing.T) {
 	})
 }
 
+// A binder that silently omits a command's custom flags is how a later cleanup replaces a
+// hand-binding with it and produces a command that cannot declare a lane, compiling.
+func TestWriteBinderNamesTheFlagsItCannotCarry(t *testing.T) {
+	var b bytes.Buffer
+	writeBinder(&b, "demo", "demo", []cli.Flag{
+		{Name: "goal", Kind: cli.FlagString},
+		{Name: "write-paths", Kind: cli.FlagCustom},
+		{Name: "deny-paths", Kind: cli.FlagCustom},
+	})
+
+	got := b.String()
+	assert.Contains(t, got, "It does NOT carry --write-paths, --deny-paths")
+	assert.NotContains(t, got, "f.WritePaths", "a custom flag gets no field")
+}
+
 // TestWriteBinderEmitsParsableGo is the property `emit.Go` enforces at generate time,
 // asked of one command instead of the whole registry.
 func TestWriteBinderEmitsParsableGo(t *testing.T) {

@@ -261,13 +261,31 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	}
 }
 
+// pathList accumulates one repeatable, comma-separated flag, on the same rule --skip
+// follows (cmd/magus/run.go): an empty segment is refused rather than dropped, so a
+// trailing comma cannot silently shrink a lease's lane.
+type pathList []string
+
+func (l *pathList) String() string { return strings.Join(*l, ",") }
+
+func (l *pathList) Set(value string) error {
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			return errors.New("empty path")
+		}
+		*l = append(*l, part)
+	}
+	return nil
+}
+
 // registerFlags is the one-row case as flags, and row is the same record --stdin decodes.
 // One conversion rather than two paths into the store, so a row typed at a terminal and a
 // row piped in are the same declaration.
 type registerFlags struct {
-	goal, parent, validation, tier string
-	owned, forbidden, focus        stringList
-	readOnly                       bool
+	goal, parent, check, model, checkpoint string
+	writePaths, readPaths, denyPaths       pathList
+	dependsOn                              pathList
+	readOnly                               bool
 }
 
 func (f registerFlags) row(id string) ledger.Row {
@@ -276,16 +294,28 @@ func (f registerFlags) row(id string) ledger.Row {
 		ID:             id,
 		Parent:         f.parent,
 		Goal:           f.goal,
-		OwnedPaths:     f.owned,
-		ForbiddenPaths: f.forbidden,
-		Focus:          f.focus,
-		Validation:     f.validation,
-		Tier:           f.tier,
+		Checkpoint:     f.checkpoint,
+		OwnedPaths:     f.writePaths,
+		ForbiddenPaths: f.denyPaths,
+		Focus:          f.readPaths,
+		DependsOn:      f.dependsOn,
+		Validation:     renderCheckFlag(f.check),
+		Tier:           f.model,
 		ReadOnly:       f.readOnly,
 		// A row a person declares is one nobody has picked up yet, which is what the
 		// state vocabulary already has a word for.
 		State: types.StateDeclared,
 	}
+}
+
+// renderCheckFlag turns `--check "<target> <project> [-- args]"` into the `magus run` line
+// the row stores. The flag drops the prefix because every check is a magus run and typing
+// it twice is how the two spellings drift.
+func renderCheckFlag(check string) string {
+	if strings.TrimSpace(check) == "" {
+		return ""
+	}
+	return "magus run " + strings.TrimSpace(check)
 }
 
 // ledgerRegister declares one row, from flags or from a JSON record on stdin.
@@ -310,11 +340,13 @@ func ledgerRegister(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&stdin, "stdin", false, "Read one row as JSON on stdin instead of taking it from flags")
 		fs.StringVar(&declared.goal, "goal", "", "The goal and its observable acceptance criteria")
 		fs.StringVar(&declared.parent, "parent", "", "The lease this one is handed out under")
-		fs.Var(&declared.owned, "owned", "A path this lease may write; repeat for more")
-		fs.Var(&declared.forbidden, "forbidden", "A path inside the lane this lease may not write; repeat for more")
-		fs.Var(&declared.focus, "focus", "A path whose projects this lease may read; repeat for more (additive: owned paths are readable already)")
-		fs.StringVar(&declared.validation, "validation", "", "The one check this lease runs, as a `magus run <target> <project>` line")
-		fs.StringVar(&declared.tier, "tier", "", "The effort tier the work was matched to")
+		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this lease is handed, as `magus vcs checkpoint -o name` prints it")
+		fs.Var(&declared.writePaths, "write-paths", "A path this lease may write; repeatable or comma-separated")
+		fs.Var(&declared.denyPaths, "deny-paths", "A path inside the lane this lease may not write; repeatable or comma-separated")
+		fs.Var(&declared.readPaths, "read-paths", "A path whose projects this lease may read; repeatable or comma-separated (additive: the written paths are readable already)")
+		fs.Var(&declared.dependsOn, "depends-on", "A lease this one waits on; repeatable or comma-separated")
+		fs.StringVar(&declared.check, "check", "", "The one check this lease runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
+		fs.StringVar(&declared.model, "model", "", "The model the work was matched to")
 		fs.BoolVar(&declared.readOnly, "read-only", false, "A lease that gathers evidence and writes nothing")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ledger register <lease-id> [flags]")
@@ -325,6 +357,9 @@ func ledgerRegister(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session bound to a lease may only declare a CHILD of its own row, inside its")
 			fmt.Fprintln(os.Stderr, "own paths; widening a lane is the orchestrator's.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "There is no --state: this declares a NEW row, and a row nobody has picked up is")
+			fmt.Fprintln(os.Stderr, string(types.StateDeclared)+". A worker moves its own row with "+hint.ToolLedger.String()+" (op put).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()

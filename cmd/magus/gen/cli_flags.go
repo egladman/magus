@@ -245,26 +245,30 @@ const (
 	FlagLedgerAcceptSchema = "schema"
 	// ledger accept: --stdin
 	FlagLedgerAcceptStdin = "stdin"
-	// ledger register: --focus
-	FlagLedgerRegisterFocus = "focus"
-	// ledger register: --forbidden
-	FlagLedgerRegisterForbidden = "forbidden"
+	// ledger register: --check
+	FlagLedgerRegisterCheck = "check"
+	// ledger register: --checkpoint
+	FlagLedgerRegisterCheckpoint = "checkpoint"
+	// ledger register: --deny-paths
+	FlagLedgerRegisterDenyPaths = "deny-paths"
+	// ledger register: --depends-on
+	FlagLedgerRegisterDependsOn = "depends-on"
 	// ledger register: --goal
 	FlagLedgerRegisterGoal = "goal"
-	// ledger register: --owned
-	FlagLedgerRegisterOwned = "owned"
+	// ledger register: --model
+	FlagLedgerRegisterModel = "model"
 	// ledger register: --parent
 	FlagLedgerRegisterParent = "parent"
 	// ledger register: --read-only
 	FlagLedgerRegisterReadOnly = "read-only"
+	// ledger register: --read-paths
+	FlagLedgerRegisterReadPaths = "read-paths"
 	// ledger register: --schema
 	FlagLedgerRegisterSchema = "schema"
 	// ledger register: --stdin
 	FlagLedgerRegisterStdin = "stdin"
-	// ledger register: --tier
-	FlagLedgerRegisterTier = "tier"
-	// ledger register: --validation
-	FlagLedgerRegisterValidation = "validation"
+	// ledger register: --write-paths
+	FlagLedgerRegisterWritePaths = "write-paths"
 	// man install: --dir
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
@@ -516,6 +520,9 @@ func BindDescribeSpells(fs *flag.FlagSet) *DescribeSpellsFlags {
 }
 
 // RunFlags are the flags declared for `magus run`.
+//
+// It does NOT carry --skip: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type RunFlags struct {
 	Graph             bool          // --graph
 	Upstream          bool          // --upstream
@@ -577,6 +584,9 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 }
 
 // AffectedFlags are the flags declared for `magus affected`.
+//
+// It does NOT carry --explain, --plan: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type AffectedFlags struct {
 	Base              string        // --base, -b
 	Stdin             bool          // --stdin
@@ -864,6 +874,9 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 }
 
 // WatchFlags are the flags declared for `magus watch`.
+//
+// It does NOT carry --ignore: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type WatchFlags struct {
 	Debounce time.Duration // --debounce
 	Initial  bool          // --initial
@@ -1216,6 +1229,9 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 }
 
 // MemoryPutFlags are the flags declared for `magus memory put`.
+//
+// It does NOT carry --ref, --reference: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type MemoryPutFlags struct {
 	Amend   bool   // --amend
 	Type    string // --type
@@ -1236,13 +1252,17 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 }
 
 // LedgerRegisterFlags are the flags declared for `magus ledger register`.
+//
+// It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type LedgerRegisterFlags struct {
 	Schema     bool   // --schema
 	Stdin      bool   // --stdin
 	Goal       string // --goal
 	Parent     string // --parent
-	Validation string // --validation
-	Tier       string // --tier
+	Checkpoint string // --checkpoint
+	Check      string // --check
+	Model      string // --model
 	ReadOnly   bool   // --read-only
 }
 
@@ -1253,8 +1273,9 @@ func BindLedgerRegister(fs *flag.FlagSet) *LedgerRegisterFlags {
 	fs.BoolVar(&f.Stdin, FlagLedgerRegisterStdin, false, "Read one row as JSON on stdin instead of taking it from flags")
 	fs.StringVar(&f.Goal, FlagLedgerRegisterGoal, "", "The goal and its observable acceptance criteria")
 	fs.StringVar(&f.Parent, FlagLedgerRegisterParent, "", "The lease this one is handed out under")
-	fs.StringVar(&f.Validation, FlagLedgerRegisterValidation, "", "The one check this lease runs, as a `magus run <target> <project>` line")
-	fs.StringVar(&f.Tier, FlagLedgerRegisterTier, "", "The effort tier the work was matched to")
+	fs.StringVar(&f.Checkpoint, FlagLedgerRegisterCheckpoint, "", "The working state this lease is handed, as `magus vcs checkpoint -o name` prints it")
+	fs.StringVar(&f.Check, FlagLedgerRegisterCheck, "", "The one check this lease runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
+	fs.StringVar(&f.Model, FlagLedgerRegisterModel, "", "The model the work was matched to")
 	fs.BoolVar(&f.ReadOnly, FlagLedgerRegisterReadOnly, false, "A lease that gathers evidence and writes nothing")
 	return &f
 }
@@ -1274,6 +1295,9 @@ func BindLedgerAccept(fs *flag.FlagSet) *LedgerAcceptFlags {
 }
 
 // NotesCaptureFlags are the flags declared for `magus notes capture`.
+//
+// It does NOT carry --tag: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type NotesCaptureFlags struct {
 	Title   string // --title
 	Name    string // --name
