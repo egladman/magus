@@ -101,9 +101,9 @@ func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 
 func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/done"))
 	_, err := store.Put(context.Background(), types.Lease{ID: "adj/done", State: types.StatePass})
 	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, "adj/done"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -117,9 +117,9 @@ func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
 
 func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/stateless"))
 	_, err := store.Put(context.Background(), types.Lease{ID: "adj/stateless"})
 	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, "adj/stateless"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -133,9 +133,9 @@ func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
 
 func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, "adj/live"))
 	_, err := store.Put(context.Background(), types.Lease{ID: "adj/live", State: types.StateRunning})
 	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, "adj/live"))
 
 	got := checkLeaseBinding(cacheDir, root, "")
 
@@ -173,15 +173,16 @@ func TestLeaseBindingPassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	}, got)
 }
 
-// registeredLease binds id to a fresh checkout and registers a base on its row, which is
-// the state every leg past the ledger reads.
+// registeredLease seeds a live registered row and binds the checkout to it afterwards,
+// which is the state every leg past the ledger reads. Seeding first keeps the writes the
+// orchestrator's however the store resolves its actor.
 func registeredLease(t *testing.T, id string) (cacheDir, root string) {
 	t.Helper()
 	cacheDir, root, store := tmpLedger(t)
-	require.NoError(t, ledger.BindLease(cacheDir, id))
 	_, err := store.Put(context.Background(), types.Lease{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
 	require.NoError(t, err)
 	_, err = store.Register(context.Background(), id, "abc123")
 	require.NoError(t, err)
+	require.NoError(t, ledger.BindLease(cacheDir, id))
 	return cacheDir, root
 }
