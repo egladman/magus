@@ -208,6 +208,23 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 			child: types.Lease{WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"}, State: types.StatePass},
 			want:  "never pass",
 		},
+		{
+			// The guard reads a row whose check IS the gate as owning it, so a child
+			// declaring one would be minting a capability its parent does not hold.
+			name: "a check the parent's does not name",
+			child: types.Lease{
+				WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"},
+				Check: &types.LeaseCheck{Target: types.TargetCI, Project: "."},
+			},
+			want: "only a lease whose parent runs the gate runs the gate",
+		},
+		{
+			name: "a check of its own that is not the gate",
+			child: types.Lease{
+				WritePaths: []string{"internal/ledger"}, DenyPaths: []string{"MAGUS.md"},
+				Check: &types.LeaseCheck{Target: "test", Project: "internal/ledger"},
+			},
+		},
 	}
 
 	for _, tt := range tests {

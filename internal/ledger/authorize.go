@@ -153,8 +153,11 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 // write one, so a worker that could widen either by spawning has no boundary: it binds a
 // session to the child and reads or writes what its own row denies it.
 //
-// Validation is deliberately NOT constrained: the check a child runs is how the parent
-// partitions its own work, and it grades that child's report and nothing else.
+// The check is otherwise free: which check a child runs is how the parent partitions its
+// own work, and it grades that child's report and nothing else. The ONE exception is the
+// gate, which cmd/magus/guard_gate.go reads as a capability rather than as a declaration:
+// a row whose check names it may run it, so a worker declaring a child with a gate check
+// its own row lacks would be minting the capability it was refused.
 func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows []types.Lease) error {
 	if exists {
 		return refuse(actor, id, "a worker writes no row but its own and the children it hands out")
@@ -177,8 +180,24 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 	case next.State != "" && next.State != types.StateDeclared:
 		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
 			types.StateDeclared, next.State))
+	case runsTheGate(next) && !runsTheGate(parent):
+		return refuse(actor, id, "only a lease whose parent runs the gate runs the gate, and this parent runs "+checkLine(parent))
 	}
 	return nil
+}
+
+// runsTheGate reports whether a row's declared check IS the release gate, the one check
+// that carries a capability with it.
+func runsTheGate(row types.Lease) bool {
+	return row.Check != nil && row.Check.Target == types.TargetCI
+}
+
+// checkLine names a row's check as a refusal quotes it.
+func checkLine(row types.Lease) string {
+	if row.Check == nil {
+		return "no check at all"
+	}
+	return row.Check.String()
 }
 
 // readLane is the declarations a row may READ: its read paths when it declares any, else
