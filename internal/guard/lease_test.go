@@ -265,7 +265,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 	t.Run("no trail location", func(t *testing.T) {
 		// Pinned EMPTY rather than left unpinned, so the case cannot reach the developer's
 		// own ledger and grade against whatever plan they are really running.
-		nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+		nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 		assert.Empty(t, denyLeaseScopedGate(nowhere, Deps{}, "harness/lease-scoped-deny", "./magus affected ci"))
 	})
 }
@@ -275,7 +275,7 @@ func TestDenyLeaseScopedGateStaysQuiet(t *testing.T) {
 // id, and read by the same ledger.ActingLease the sandbox resolves through.
 func TestActingLeaseFromMarker(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
-	base := hookActivityTrail(ctx, Deps{}).base
+	base := hookLocation(ctx, Deps{}).cacheDir
 
 	assert.Empty(t, ledger.ActingLease(base), "no marker, no lease")
 
@@ -447,7 +447,7 @@ func TestActingLeaseStandingSeparatesTheThreeAnswers(t *testing.T) {
 	assert.True(t, absent.readable, "the ledger answered; it just does not carry that id")
 	assert.False(t, absent.declared)
 
-	nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 	assert.False(t, actingLeaseStanding(nowhere, Deps{}, narrowLease().ID).readable,
 		"no workspace is a rule the guard cannot evaluate, not an undeclared id")
 	assert.False(t, actingLeaseStanding(ctx, Deps{}, "").readable, "no lease is nothing to look up")
@@ -483,7 +483,7 @@ func TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer(t *testing.T) {
 		"magus_ledger op=put id="+done.ID+" write_paths=**"),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
-	nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+	nowhere := context.WithValue(t.Context(), locationKey{}, location{})
 	assert.Empty(t, denyLeaseScopedRebind(nowhere, Deps{}, done.ID, "magus_ledger op=put id="+done.ID),
 		"a ledger the guard cannot read leaves nothing to judge against")
 }

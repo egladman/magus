@@ -53,7 +53,7 @@ var cacheDirSegmentRe = regexp.MustCompile(
 // dir, either by resolving inside the dir magus located or by carrying its name as a path
 // segment. A relative path is read against the directory the tool call RUNS in, which is
 // what the shell would do, falling back to the workspace root when the host reported none.
-func namesWorkspaceCacheDir(location hookActivityLocation, candidate string) bool {
+func namesWorkspaceCacheDir(location location, candidate string) bool {
 	p := strings.TrimSpace(candidate)
 	if p == "" {
 		return false
@@ -61,7 +61,7 @@ func namesWorkspaceCacheDir(location hookActivityLocation, candidate string) boo
 	if cacheDirSegmentRe.MatchString(filepath.ToSlash(p)) {
 		return true
 	}
-	if location.base == "" {
+	if location.cacheDir == "" {
 		return false
 	}
 	abs := filepath.Clean(filepath.FromSlash(p))
@@ -76,7 +76,7 @@ func namesWorkspaceCacheDir(location hookActivityLocation, candidate string) boo
 	// tmpdir-rooted workspace yields the dir under one spelling and the incoming path
 	// under the other, and a deny that compares them literally looks enforced while
 	// passing everything.
-	rel, err := filepath.Rel(resolveSymlinks(location.base), resolveSymlinks(abs))
+	rel, err := filepath.Rel(resolveSymlinks(location.cacheDir), resolveSymlinks(abs))
 	if err != nil {
 		return false
 	}
@@ -107,7 +107,7 @@ func cacheDirDenial(what string) string {
 //
 // Ranked above the lease rules in Judge, so a bound worker whose lane happens to cover
 // the dir reads this rather than a lane verdict about the same path.
-func denyCacheDirPath(location hookActivityLocation, writePath string) string {
+func denyCacheDirPath(location location, writePath string) string {
 	if !namesWorkspaceCacheDir(location, writePath) {
 		return ""
 	}
@@ -166,9 +166,9 @@ const cacheDirScanDepth = 4
 //
 // Two shapes reach those bytes. A redirect names the file directly, and a command takes it
 // as an operand. Both are read off the parsed line rather than matched as text, for the
-// reason guard_shellparse.go's doc gives: a quoted string that merely NAMES the marker is
+// reason internal/guard/parse.go's doc gives: a quoted string that merely NAMES the marker is
 // not a write to it.
-func denyCacheDirCommand(location hookActivityLocation, command string) string {
+func denyCacheDirCommand(location location, command string) string {
 	hit := cacheDirCommandHit(location, command, 0)
 	if hit == "" {
 		return ""
@@ -180,7 +180,7 @@ func denyCacheDirCommand(location hookActivityLocation, command string) string {
 // "". Any `sh -c` or `eval` payload is scanned on its own afterwards: peelWrappers hands
 // back the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
-func cacheDirCommandHit(location hookActivityLocation, command string, depth int) string {
+func cacheDirCommandHit(location location, command string, depth int) string {
 	if depth > cacheDirScanDepth {
 		return ""
 	}
@@ -236,7 +236,7 @@ func cacheDirCommandHit(location hookActivityLocation, command string, depth int
 // Every word is examined, not only the operands: a flag's value names a path too
 // (`dd of=.magus/lease`), and an interpreter's script is one argument carrying the path
 // inside it.
-func cacheDirWriteTarget(location hookActivityLocation, c hint.Invocation) string {
+func cacheDirWriteTarget(location location, c hint.Invocation) string {
 	name := path.Base(c.Name)
 	if cacheDirReads(name, c.Args) {
 		return ""

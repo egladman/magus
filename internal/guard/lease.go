@@ -65,7 +65,7 @@ func adviseRepeatGate(runsDir string, now time.Time) (full, brief string) {
 //
 // An unresolved cache dir answers "" rather than falling back to the literal name: that
 // name is relative, and joining it against the hook PROCESS's directory is the
-// cross-checkout mistake hookActivityLocationAt exists to prevent. No runs dir means no
+// cross-checkout mistake hookLocationAt exists to prevent. No runs dir means no
 // count, which is the honest answer.
 func workspaceRunsDir(cacheDir string) string {
 	if cacheDir == "" {
@@ -298,11 +298,11 @@ func actingLeaseStanding(ctx context.Context, deps Deps, actingLease string) lea
 	if !types.ValidLeaseID(actingLease) {
 		return leaseStanding{}
 	}
-	location := hookActivityTrail(ctx, deps)
-	if location.base == "" {
+	location := hookLocation(ctx, deps)
+	if location.cacheDir == "" {
 		return leaseStanding{}
 	}
-	leases, err := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace}).List()
+	leases, err := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace}).List()
 	if err != nil {
 		return leaseStanding{}
 	}

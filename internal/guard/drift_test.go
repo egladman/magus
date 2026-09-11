@@ -126,7 +126,7 @@ func TestScopeDriftRecordsNothingWithoutABase(t *testing.T) {
 func TestLeaseCoversWrite(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	base, root := t.TempDir(), t.TempDir()
-	location := hookActivityLocation{base: base, workspace: root}
+	location := location{cacheDir: base, workspace: root}
 	store := ledger.NewStore(ledger.Location{CacheDir: base, Root: root})
 	_, err := store.Put(t.Context(), types.Lease{
 		ID:         "unit-a",

@@ -13,17 +13,17 @@ import (
 
 // The command surface of `magus session hook`: the rules that judge a shell line,
 // minus the two large pieces that earned their own files. Tokenizing is in
-// guard_shellparse.go and the git rules are in guard_git.go.
+// internal/guard/parse.go and the git rules are in internal/guard/vcs.go.
 //
 // Evaluate is a pure function of its inputs (the command line, plus the
 // hint translator the caller built), and is tested as one, so a rule that has to read
-// live workspace state lives beside its own reader instead (guard_gate.go). The
-// path surface is guard_write.go.
+// live workspace state lives beside its own reader instead (internal/guard/lease.go). The
+// path surface is internal/guard/write.go.
 
 // BashVerdict classifies one Bash command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
 //
-// Kind names an advisory that is held to one firing per session (guard_advisory.go).
+// Kind names an advisory that is held to one firing per session (internal/guard/advisory.go).
 // It is empty for the advisories that correct the command in front of the reader, where
 // a second firing reports a second mistake rather than repeating a standing fact, and it
 // is always empty on a deny: a refusal explains itself every time it refuses.
@@ -94,7 +94,7 @@ type denyRule struct {
 // case.
 const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 
-// guardChainedRunRe matches a second `magus run` on the same line.
+// chainedRunRe matches a second `magus run` on the same line.
 //
 // Targets COMPOSE through ctx.needs, so a chain is usually one invocation that already did
 // the whole thing: in this workspace `lint` needs `format` needs `generate`, which makes
@@ -107,14 +107,14 @@ const cmdPos = `(?:^|[^\\][;&|(]\s*|\s&&\s*|\s\|\|\s*|` + "`" + `)\s*`
 // reaches, so building a project immediately before it is asking for the same work twice. That
 // spelling slipped past the first version of this rule, which only looked for `run`, and the
 // author of the rule then made exactly that mistake within the hour.
-var guardChainedRunRe = regexp.MustCompile(
+var chainedRunRe = regexp.MustCompile(
 	cmdPos + `(?:\./)?magus\s+(?:run|affected)\s[^;&|]*[;&|]+\s*(?:\./)?magus\s+(?:run|affected)\s`)
 
-// guardToolMatch is one command spell operation Magus can run on the caller's
+// toolMatch is one command spell operation Magus can run on the caller's
 // behalf. It is derived from the registered spell catalog, never a hand-kept
 // list in the guard: adding a spell operation automatically teaches the hook
 // which raw command it replaces.
-type guardToolMatch struct {
+type toolMatch struct {
 	spell     string
 	operation string
 	// rewrites reports that the rendering matched was the rw one, so the verdict can
@@ -123,14 +123,14 @@ type guardToolMatch struct {
 	rewrites bool
 }
 
-// guardTextFilters are the shell commands whose purpose is to trim, slice, or
+// textFilters are the shell commands whose purpose is to trim, slice, or
 // search text. Piping magus into one is always a missing output flag.
 //
 // `jq` and `magus` are deliberately absent. Both consume a CONTRACT rather than
 // scraping a layout (`jq` over `-o json`, and magus-into-magus over `--stdin`),
 // which is composition, the opposite of the antipattern. `tee` is absent too: it
 // duplicates a stream without trimming it.
-var guardTextFilters = map[string]bool{
+var textFilters = map[string]bool{
 	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
 	"head": true, "tail": true, "awk": true, "sed": true,
 	"cut": true, "sort": true, "uniq": true, "wc": true, "column": true,
@@ -196,13 +196,13 @@ func magusRedirected(command string) bool {
 	return found
 }
 
-// guardCapturePathRe matches the files that hold magus console output verbatim:
+// capturePathRe matches the files that hold magus console output verbatim:
 // the host's task capture for a backgrounded command (`<id>.output`, whatever
 // directory the host keeps it in) and a persisted run log.
 //
 // It is the same shape the busy-wait rule is pinned against, which polls a
 // capture by grepping it.
-var guardCapturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
+var capturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/logs/[0-9a-f]+\.log)$`)
 
 // captureFilterFires reports a text filter aimed at one of those files.
 //
@@ -216,7 +216,7 @@ var guardCapturePathRe = regexp.MustCompile(`(?:^|/)(?:[^/]+\.output|\.magus/log
 // command was pointed at.
 func captureFilterFires(cmds []hint.Invocation, command string) bool {
 	if slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		return guardTextFilters[c.Name] && namesCapture(c)
+		return textFilters[c.Name] && namesCapture(c)
 	}) {
 		return true
 	}
@@ -242,7 +242,7 @@ func captureFilterFires(cmds []hint.Invocation, command string) bool {
 // argument is checked rather than the operands alone, because each filter spells
 // its value-taking flags differently and no flag value looks like this path.
 func namesCapture(c hint.Invocation) bool {
-	return slices.ContainsFunc(c.Args, guardCapturePathRe.MatchString)
+	return slices.ContainsFunc(c.Args, capturePathRe.MatchString)
 }
 
 // throwawayDirRe matches a path under a temp root, or any path with a scratchpad
@@ -307,7 +307,7 @@ func rawWord(command string, w *syntax.Word) string {
 //
 // A temp path announces itself by name, so this rule stays pure. The other
 // instance of the same mistake (a sibling checkout of this repository) can only
-// be recognized by reading the filesystem, so it lives in guard_checkout.go and
+// be recognized by reading the filesystem, so it lives in internal/guard/checkout.go and
 // shares magusCdTargets rather than growing a second cd scanner.
 func magusInThrowawayCopy(command string) bool {
 	return slices.ContainsFunc(magusCdTargets(command), throwawayDirRe.MatchString)
@@ -348,7 +348,7 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 }
 
 func isTextFilter(cmds []hint.Invocation) bool {
-	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return guardTextFilters[c.Name] })
+	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return textFilters[c.Name] })
 }
 
 // firstRawToolDenied parses the line and returns the FIRST command it would run
@@ -419,10 +419,10 @@ func rawToolDenied(deps Deps, c hint.Invocation) bool {
 //
 // `--version` still passes. It asks the binary what it is rather than running it over the
 // tree, and a guard funnels a capability rather than removing one.
-func rawToolMatch(deps Deps, c hint.Invocation) (guardToolMatch, bool) {
+func rawToolMatch(deps Deps, c hint.Invocation) (toolMatch, bool) {
 	for _, a := range c.Args {
 		if a == "--version" || a == "-version" || a == "-V" {
-			return guardToolMatch{}, false
+			return toolMatch{}, false
 		}
 	}
 	for _, spell := range deps.spells() {
@@ -436,11 +436,11 @@ func rawToolMatch(deps Deps, c hint.Invocation) (guardToolMatch, bool) {
 				if len(prefix) > 0 && (len(c.Args) < len(prefix) || !slices.Equal(c.Args[:len(prefix)], prefix)) {
 					continue
 				}
-				return guardToolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
+				return toolMatch{spell: spell.Name(), operation: operation, rewrites: len(charms) > 0}, true
 			}
 		}
 	}
-	return guardToolMatch{}, false
+	return toolMatch{}, false
 }
 
 // commandPrefix extracts the semantic subcommand from an operation's rendered argv,
@@ -451,20 +451,20 @@ func commandPrefix(args []string) []string {
 	for first < len(args) && strings.HasPrefix(args[first], "-") {
 		first++
 	}
-	if first == len(args) || !guardSubcommandWord(args[first]) {
+	if first == len(args) || !subcommandWord(args[first]) {
 		return nil
 	}
 	prefix := []string{args[first]}
-	if (args[first] == "mod" || args[first] == "tool") && first+1 < len(args) && guardSubcommandWord(args[first+1]) {
+	if (args[first] == "mod" || args[first] == "tool") && first+1 < len(args) && subcommandWord(args[first+1]) {
 		prefix = append(prefix, args[first+1])
 	}
 	return prefix
 }
 
-// guardSubcommandWord reports an argv word that names a subcommand rather than a path or a
+// subcommandWord reports an argv word that names a subcommand rather than a path or a
 // pattern: a bare word with no separator, glob or extension. `./...`, `.` and
 // `scripts/x.sh` are operands a rendering points the tool AT, not verbs it selects.
-func guardSubcommandWord(arg string) bool {
+func subcommandWord(arg string) bool {
 	return arg != "" && !strings.HasPrefix(arg, "-") && !strings.ContainsAny(arg, "/*?.")
 }
 
@@ -474,26 +474,26 @@ func guardSubcommandWord(arg string) bool {
 // These remain ONLY as the unparsable-line fallback: gitGuard above is the
 // primary path, and it reads an AST instead of the raw text.
 var (
-	guardStashRe = regexp.MustCompile(`\bgit\s+stash\b`)
+	stashRe = regexp.MustCompile(`\bgit\s+stash\b`)
 	// Reading a stash is safe; RESTORING one is not, and the parsed rule denies the bare
 	// restore forms. Listing pop/apply/drop/branch as safe here left the destructive
 	// spellings with no verdict at all on a line that does not parse, which is the one
 	// place an over-eager deny is the right answer.
-	guardStashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show)\b`)
-	guardResetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
-	guardCheckoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
-	guardRestoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
-	guardCleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
-	guardStageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
+	stashSafeRe = regexp.MustCompile(`\bgit\s+stash\s+(list|show)\b`)
+	resetRe     = regexp.MustCompile(`\bgit\s+reset\b[^&|;]*--hard`)
+	checkoutRe  = regexp.MustCompile(`\bgit\s+checkout\s+(--\s+)?\.(\s|$)`)
+	restoreRe   = regexp.MustCompile(`\bgit\s+restore\b[^&|;]*\s\.(\s|$)`)
+	cleanRe     = regexp.MustCompile(`\bgit\s+clean\b[^&|;]*\s-\w*[fdxX]`)
+	stageRe     = regexp.MustCompile(`\bgit\s+(commit|add)\b`)
 	// `git add -A` / `git add .` / `git add --all` / `git add -u`: stage-everything
-	// forms. Split out from guardStageRe because these DENY; see Evaluate.
-	guardStageAllRe = regexp.MustCompile(cmdPos + `git\s+add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))`)
+	// forms. Split out from stageRe because these DENY; see Evaluate.
+	stageAllRe = regexp.MustCompile(cmdPos + `git\s+add\s+(-A\b|--all\b|-u\b|--update\b|\.(\s|$))`)
 	// Push, NOT commit. Committing in a half-finished state is ordinary and
 	// sometimes necessary; a gate there would fire constantly and be tuned out.
 	// Publishing is where the work stops being yours alone, so that is where the
 	// reminder earns its place, and it stays an advise, because a push can
 	// legitimately carry a work-in-progress branch.
-	guardPushRe = regexp.MustCompile(`\bgit\s+push\b`)
+	pushRe = regexp.MustCompile(`\bgit\s+push\b`)
 	// A SCOPED revert: `git checkout -- <paths>` / `git restore <paths>`. The
 	// whole-tree forms above already deny; this one is legitimate often enough
 	// that it only advises, but it is the shape of the most common wrong reflex
@@ -502,24 +502,24 @@ var (
 	// all; without it the argument is a branch (`git checkout main`, `-b foo`),
 	// which is not this rule's business. `git restore` targets worktree files by
 	// definition, so its bare form counts.
-	guardScopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
+	scopedRevertRe = regexp.MustCompile(`\bgit\s+checkout\b[^&|;]*\s--\s|\bgit\s+restore\b`)
 	// `cd <dir> && magus ...`: magus is CWD-relative, so this is the shape of
 	// running the right command against the wrong project. Every magus command
 	// that acts on a project takes it as an explicit argument, so the cd is
 	// almost always avoidable, and when it is not (a DIFFERENT workspace), the
 	// answer is --root, not a cd.
-	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
+	cdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
 
-	// guardNotesWriteRe matches an invocation that would AUTHOR a note. It is the
+	// notesWriteRe matches an invocation that would AUTHOR a note. It is the
 	// unparsable-line fallback for notesWriteFires below, the way gitGuardFallback is for
 	// gitGuard: anchoring the verb to the program misses every global flag in between.
 	//
 	// The path rule refuses an agent write into a notes store, but it sees file writes
 	// only, and these verbs write through magus. It also resolves the SHARED store alone,
 	// so `capture`, which defaults to the private one, has no other rule that sees it.
-	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
+	notesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+(edit|capture|promote)\b`)
 
-	// guardReadAckRe matches an invocation that would mint a read receipt.
+	// readAckRe matches an invocation that would mint a read receipt.
 	//
 	// A receipt is a claim that a PERSON read something, and it is the only fact in a
 	// review no analysis can supply. An agent that can mint one turns the whole measure
@@ -530,7 +530,7 @@ var (
 	// agent hosts, so every command reaching it came from an agent by construction. A
 	// person at a terminal never meets this rule.
 	// The unparsable-line fallback for magusInvokes, as above.
-	guardReadAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
+	readAckRe = regexp.MustCompile(`\bmagus\s+diff\b[^&|;]*\s--ack\b`)
 
 	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
 	//
@@ -544,7 +544,7 @@ var (
 	// Every host driving this guard has a structured editor tool that reads the file,
 	// applies an exact replacement, and reports what changed, which is the same operation
 	// without the portability trap or the blind write.
-	guardSedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
+	sedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
 
 	// A scripted in-place rewrite: an inline interpreter that runs a REGEX SUBSTITUTION
 	// and writes the result back. It is the same edit `sed -i` is refused for, reached by
@@ -556,7 +556,7 @@ var (
 	// the shape that cannot tell a symbol from a word that looks like one. A rewrite of
 	// prose or a config value is caught too: the false positive costs one explanation,
 	// while the false negative silently rewrote a dependency's identifier.
-	guardScriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
+	scriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
 
 	// A repo-wide CONTENT search. This does NOT claim the agent asked the wrong
 	// question (a hook cannot know that), only that a whole-tree text search has
@@ -565,7 +565,7 @@ var (
 	// included, which internal/hint models as the same family), or a bare ripgrep
 	// or ag, both effectively always repo-wide. A plain `grep pattern file` is
 	// reading one file and is left alone.
-	guardCodeSearchRe = regexp.MustCompile(`\b[ef]?grep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s`)
+	codeSearchRe = regexp.MustCompile(`\b[ef]?grep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s`)
 
 	// The same advisory reached by a repo-wide search for a file by NAME. Split
 	// from the content arm because the narrowness rule differs: a content search
@@ -577,26 +577,26 @@ var (
 	// is missed, because telling that operand from the flag's own argument
 	// needs an argv parse this line-shaped rule does not do; erring toward
 	// silence keeps the gate honest. The leading class rejects `git clean -fd`.
-	guardFileFindRe = regexp.MustCompile(`\bfind\s+[^|&;]*-name\b|(^|[^-\w])fd\s+([^|&;]*(-[eg]|--(extension|glob))\b|[^-|&;\s])`)
-	// guardDocSearchRe fires when a read or search command names a markdown file: an agent
+	fileFindRe = regexp.MustCompile(`\bfind\s+[^|&;]*-name\b|(^|[^-\w])fd\s+([^|&;]*(-[eg]|--(extension|glob))\b|[^-|&;\s])`)
+	// docSearchRe fires when a read or search command names a markdown file: an agent
 	// looking for something IN prose. Markdown headings are indexed as doc-section nodes, so
 	// the answer is a section query, not a whole-file scan. Matches on ".md" so it fires in
 	// any repo, not just one that keeps docs under a magus convention.
-	guardDocSearchRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more|grep|egrep|fgrep|rg|ag)\b[^|&;]*\.md\b`)
+	docSearchRe = regexp.MustCompile(`\b(cat|bat|head|tail|less|more|grep|egrep|fgrep|rg|ag)\b[^|&;]*\.md\b`)
 
 	// `magus ... && echo "TESTS GREEN"`. The exit status already carries that, which
 	// is what an exit status is for; the echo adds a line that is true by
 	// construction and tells a reader nothing the command did not.
-	guardEchoOnSuccessRe = regexp.MustCompile(`(?:^|[;&|]\s*)(\S*/)?magus\s[^&|;]*&&\s*echo\b`)
+	echoOnSuccessRe = regexp.MustCompile(`(?:^|[;&|]\s*)(\S*/)?magus\s[^&|;]*&&\s*echo\b`)
 	// Read off the raw line, not the parsed command: the wrapper peeling that lets
 	// `time go test` be judged as `go test` would erase the very token this rule is
 	// about.
-	guardTimedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
+	timedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
 	// `timeout 300 magus run ci .`, read off the raw line for the same reason as the
 	// rule above: `timeout` is a peeled wrapper. Narrowed to run and affected, the
 	// only two subcommands carrying --timeout: naming it on `magus graph build`
 	// would advise a flag that does not exist there.
-	guardTimeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
+	timeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -890,7 +890,7 @@ var notesWriteVerbs = []string{"edit", "capture", "promote"}
 // magusInvokes requires every word it is handed and these verbs are alternatives.
 func notesWriteFires(cmds []hint.Invocation, parsed bool, command string) bool {
 	if !parsed {
-		return guardNotesWriteRe.MatchString(command)
+		return notesWriteRe.MatchString(command)
 	}
 	return slices.ContainsFunc(notesWriteVerbs, func(verb string) bool {
 		return magusInvokes(cmds, "notes", verb)
@@ -1081,10 +1081,10 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
-	if magusRuleFires(cmds, parsed, command, guardReadAckRe, "diff", "--ack") {
+	if magusRuleFires(cmds, parsed, command, readAckRe, "diff", "--ack") {
 		return BashVerdict{Deny: denyReadAck, Rule: denyRule{Name: denyRuleReadAck}}
 	}
-	if ruleFires(cmds, parsed, command, sedInPlaceFires, guardSedInPlaceRe) {
+	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) {
 		return BashVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	}
 	if busyWaitFires(command) {
@@ -1109,7 +1109,7 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 	var advisory BashVerdict
 	// Held rather than returned, like the git advisories below: a deny found later on the
 	// same line outranks it.
-	if guardChainedRunRe.MatchString(command) {
+	if chainedRunRe.MatchString(command) {
 		advisory = BashVerdict{Context: adviseChainedRun}
 	}
 	if parsed {
@@ -1164,9 +1164,9 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 		return BashVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return BashVerdict{Context: updateGuardContext}
-	case guardCdMagusRe.MatchString(command):
+	case cdMagusRe.MatchString(command):
 		return BashVerdict{Context: cwdGuardContext}
-	case ruleFires(cmds, parsed, command, docSearchFires, guardDocSearchRe):
+	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):
 		v := BashVerdict{Context: docSearchAdvice, Kind: advisoryDocSearch, Brief: docSearchBrief}
 		if s := proseSuggestion(cmds, hints); s != nil {
 			v.Context = renderAdvisoryLead(s) + docSearchAdvice
@@ -1180,8 +1180,8 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 			Kind:    advisoryPrecedent,
 			Brief:   "magus workspace: `" + hint.Refs.With(ident, "--occurrences") + "` finds every use.",
 		}
-	case ruleFires(cmds, parsed, command, codeSearchFires, guardCodeSearchRe),
-		ruleFires(cmds, parsed, command, fileFindFires, guardFileFindRe):
+	case ruleFires(cmds, parsed, command, codeSearchFires, codeSearchRe),
+		ruleFires(cmds, parsed, command, fileFindFires, fileFindRe):
 		return BashVerdict{
 			Context: searchAdvisoryLead(cmds, hints) + searchGuardReason,
 			Kind:    advisoryCodeSearch,
@@ -1190,11 +1190,11 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 			// how a reader concludes the graph is useless.
 			Brief: "magus workspace: `" + hint.Refs.With("<sym>") + "` for code, `" + hint.Query.String() + "` for entities.",
 		}
-	case guardEchoOnSuccessRe.MatchString(command):
+	case echoOnSuccessRe.MatchString(command):
 		return BashVerdict{Context: echoOnSuccessAdvice}
-	case guardTimedMagusRe.MatchString(command):
+	case timedMagusRe.MatchString(command):
 		return BashVerdict{Context: timedMagusAdvice}
-	case guardTimeoutMagusRe.MatchString(command):
+	case timeoutMagusRe.MatchString(command):
 		return BashVerdict{Context: timeoutMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
@@ -1208,17 +1208,17 @@ func evaluateRules(deps Deps, command string, hints *hint.Translator) BashVerdic
 // a workspace calls its targets whatever it likes, so a literal `magus run test`
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
-func runGuardContextFor(match guardToolMatch) string {
+func runGuardContextFor(match toolMatch) string {
 	return fmt.Sprintf("Run it through magus instead: `"+hint.Run.With("<target>", "<project>")+"`. `"+hint.DescribeTargets.String()+"` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
-		guardCharmClause(match)+
+		charmClause(match)+
 		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n\n%s", match.spell, match.operation, runGuardContext)
 }
 
-// guardCharmClause names the charm the caller's form needs, because the same target
+// charmClause names the charm the caller's form needs, because the same target
 // answers both and routing to the wrong one sends a rewrite at a target that would refuse
 // to do it. The charm is named rather than the target: a workspace calls its targets
 // whatever it likes, and `rw` is magus's own vocabulary.
-func guardCharmClause(match guardToolMatch) string {
+func charmClause(match toolMatch) string {
 	if match.rewrites {
 		return "That form REWRITES, so the target has to run with the `rw` charm; a workspace that sets default_charms already has it, and `--no-default-charms` is what takes it away.\n"
 	}

@@ -160,7 +160,7 @@ func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 	assert.NotEmpty(t, denySiblingCheckout("WT="+wt+"; cd $WT && ./magus run lint ."))
 }
 
-// The ordering the wiring exists for. An ADVISE must lose: guardCdMagusRe fires on
+// The ordering the wiring exists for. An ADVISE must lose: cdMagusRe fires on
 // every one of these lines and answers "name the project instead", which is true
 // and beside the point when the command is aimed at another tree.
 func TestRankSiblingCheckoutOutranksAnAdvise(t *testing.T) {

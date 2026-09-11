@@ -14,7 +14,7 @@ import (
 // here, which is the point of the seam: every wrong verdict this guard has produced
 // was a tokenizing mistake rather than a rule mistake, so the tokenizing is worth
 // reading, testing, and changing on its own. The rules that consume this are in
-// guard_shell.go and guard_git.go.
+// internal/guard/shell.go and internal/guard/vcs.go.
 
 // A pass-through wrapper runs ANOTHER command, with the environment or timeout
 // adjusted first. It is never itself the finding: the guard peels it off and
@@ -23,7 +23,7 @@ import (
 //
 // A launcher's declared task subcommand is deliberately absent: it runs a task,
 // not a smuggled command, and peeling it would misattribute the task's contents.
-var guardWrappers = map[string]bool{
+var wrappers = map[string]bool{
 	"env": true, "nohup": true, "command": true, "exec": true,
 	"time": true, "timeout": true, "nice": true, "stdbuf": true,
 	"xargs": true, "setsid": true, "sudo": true, "doas": true,
@@ -102,7 +102,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			// payload has to be judged on its own. Keep find itself too.
 			return append([]hint.Invocation{{Name: name, Args: words[1:]}}, findExecCommands(words[1:])...)
 
-		case !guardWrappers[name]:
+		case !wrappers[name]:
 			return []hint.Invocation{{Name: name, Args: words[1:]}}
 
 		case name == "env":
@@ -130,7 +130,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			}
 			return []hint.Invocation{{Name: name, Args: words[1:]}}
 
-		case guardShells[name]:
+		case shells[name]:
 			script, ok := shellDashC(words[1:])
 			if !ok {
 				return []hint.Invocation{{Name: name, Args: words[1:]}}
@@ -161,13 +161,13 @@ func peelWrappers(words []string) []hint.Invocation {
 	return nil
 }
 
-// guardShells are the wrappers whose -c argument is a script. Derived from guardWrappers
+// shells are the wrappers whose -c argument is a script. Derived from wrappers
 // so the two cannot disagree about what a shell is.
-var guardShells = func() map[string]bool {
+var shells = func() map[string]bool {
 	out := map[string]bool{}
 	for _, name := range []string{"sh", "bash", "zsh", "ksh", "dash"} {
-		if !guardWrappers[name] {
-			panic("guardShells: " + name + " is not a wrapper")
+		if !wrappers[name] {
+			panic("shells: " + name + " is not a wrapper")
 		}
 		out[name] = true
 	}
@@ -198,7 +198,7 @@ func shellPayload(words []string) (string, bool) {
 	for len(words) > 0 {
 		name := path.Base(words[0])
 		switch {
-		case guardShells[name]:
+		case shells[name]:
 			return shellDashC(words[1:])
 		case name == "eval":
 			return strings.Join(words[1:], " "), true
@@ -207,7 +207,7 @@ func shellPayload(words []string) (string, bool) {
 				return script, true
 			}
 			fallthrough
-		case guardWrappers[name]:
+		case wrappers[name]:
 			rest := skipWrapperArgs(name, words[1:])
 			if len(rest) == 0 {
 				return "", false
@@ -220,12 +220,12 @@ func shellPayload(words []string) (string, bool) {
 	return "", false
 }
 
-// guardWrapperValueFlags are wrapper flags that consume the NEXT word, so the
+// wrapperValueFlags are wrapper flags that consume the NEXT word, so the
 // scan does not mistake that word for the wrapped program. `env -u GOROOT go
 // test` is the case that matters here. env's -S/--split-string is deliberately
 // absent: its value is a command line, not an operand, so it is peeled as a
 // script (see the env case in peelWrappers) rather than skipped over.
-var guardWrapperValueFlags = map[string]bool{
+var wrapperValueFlags = map[string]bool{
 	"-u": true, "-C": true, "-n": true, "-I": true,
 	"-L": true, "-P": true, "-d": true, "-s": true, "-k": true,
 	"--signal": true, "--kill-after": true,
@@ -238,7 +238,7 @@ func skipWrapperArgs(wrapper string, words []string) []string {
 		w := words[0]
 		switch {
 		case strings.HasPrefix(w, "-"):
-			if guardWrapperValueFlags[w] && len(words) > 1 {
+			if wrapperValueFlags[w] && len(words) > 1 {
 				words = words[2:]
 				continue
 			}
@@ -477,7 +477,7 @@ var scriptedRewriteInterpreters = map[string]bool{
 func scriptedRewriteFires(command string) bool {
 	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
 	if err != nil {
-		return guardScriptedRewriteRe.MatchString(command)
+		return scriptedRewriteRe.MatchString(command)
 	}
 	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {

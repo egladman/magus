@@ -23,7 +23,7 @@ import (
 // The path surface of `magus session hook`: every rule that judges a file an edit is
 // about to write. The order they speak in is Judge's, not theirs, so each answers
 // only about the path it was handed and returns "" when it has nothing to say. The
-// command surface is guard_shell.go.
+// command surface is internal/guard/shell.go.
 
 // adviseGeneratedWrite explains why editing path is wasted effort, or "" when
 // there is nothing to say. Not a heuristic: magus knows every target's declared
@@ -209,7 +209,7 @@ type writeGrade struct {
 	Decision string // "", "deny", or "advise"
 	Reason   string
 	Context  string
-	// Kind names an advisory held to one firing per session (guard_advisory.go), and is
+	// Kind names an advisory held to one firing per session (internal/guard/advisory.go), and is
 	// empty for the ledger advisories that report a live collision: those describe THIS
 	// write against a boundary that moves, so the second one is a second fact.
 	Kind hint.MarkerKind
@@ -240,11 +240,11 @@ func gradeLeasedWrite(ctx context.Context, deps Deps, actingLease, writePath str
 	if writePath == "" {
 		return writeGrade{}
 	}
-	location := hookActivityTrail(ctx, deps)
-	if location.base == "" {
+	location := hookLocation(ctx, deps)
+	if location.cacheDir == "" {
 		return writeGrade{}
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace})
+	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
 	leases, err := store.List()
 	if err != nil {
 		// An ABSENT ledger is not this branch: the store reads it as an empty one, which

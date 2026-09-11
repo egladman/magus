@@ -696,7 +696,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 
 	match, ok := rawToolMatch(testDeps(), hint.Invocation{Name: "catalog-tool", Args: []string{"verify", "./..."}})
 	require.True(t, ok)
-	assert.Equal(t, guardToolMatch{spell: spellName, operation: "verify"}, match)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "verify"}, match)
 	assert.False(t, rawToolDenied(testDeps(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
 }
 

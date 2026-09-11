@@ -55,7 +55,7 @@ func gradeScopeDrift(ctx context.Context, deps Deps, markers hint.Gate, actingLe
 	if writePath == "" || markers.CacheDir() == "" {
 		return scopeDrift{}
 	}
-	location := hookActivityTrail(ctx, deps)
+	location := hookLocation(ctx, deps)
 	if location.workspace == "" {
 		return scopeDrift{}
 	}
@@ -190,15 +190,15 @@ func touchedProjects(g hint.Gate) []string {
 // leaseCoversWrite reports whether the acting lease's declared write paths cover this
 // write. A lease that declares none covers nothing: an orchestrator that named no lane
 // drew no boundary this rule could defer to.
-func leaseCoversWrite(actingLease string, location hookActivityLocation, writePath string) bool {
-	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.base == "" {
+func leaseCoversWrite(actingLease string, location location, writePath string) bool {
+	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
 		return false
 	}
 	rel, inside := workspaceRelative(location.workspace, writePath)
 	if !inside {
 		return false
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace})
+	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
 	leases, err := store.List()
 	if err != nil {
 		return false

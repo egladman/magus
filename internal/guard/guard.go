@@ -179,12 +179,12 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 	// here for the same reason: the envelope's cwd is what locates the worker's marker.
 	// An explicit --lease wins; otherwise the same resolution the sandbox applies, so the
 	// two tiers cannot disagree about who is acting (see ledger.LeaseMarkerName).
-	location := hookActivityTrail(ctx, deps)
+	location := hookLocation(ctx, deps)
 	actingLease := req.Lease
 	if actingLease == "" {
-		actingLease = ledger.ActingLease(location.base)
+		actingLease = ledger.ActingLease(location.cacheDir)
 	}
-	markers := hint.NewGate(location.base, who.Session)
+	markers := hint.NewGate(location.cacheDir, who.Session)
 	tool := hookToolCommand
 	switch {
 	case req.Observe:
@@ -216,7 +216,7 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
 	// advisory fires on it, and the role-scoped rules stand down. The workspace-wide
-	// denies do not, and they are the ones whose reasons say why (see guard_preauth.go).
+	// denies do not, and they are the ones whose reasons say why (see internal/guard/preauth.go).
 	preauth := ""
 	if hasInput && !req.Observe && !isPath {
 		preauth = servedNextPreauthorizes(markers, input)
@@ -325,9 +325,9 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 		// The sibling-checkout and cache-dir rules read the FILESYSTEM, so neither can
 		// live inside Evaluate's pure rule set; ranking them is pure, and is
 		// where the ordering is tested. The cache dir is outermost: what it refuses
-		// outranks every other deny on the line (guard_cachedir.go).
+		// outranks every other deny on the line (internal/guard/cachedir.go).
 		switch v := rankCacheDirWrite(
-			rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.base)), denySiblingCheckout(input)),
+			rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input)),
 			denyCacheDirCommand(location, input)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
@@ -375,7 +375,7 @@ func Judge(ctx context.Context, deps Deps, req Request) Verdict {
 		// advisory's answer is to run a narrower target, and firing on one argues with
 		// the caller for doing what it asked.
 		if verdict.Decision == "pass" && preauth == "" && commandRunsGate(input) {
-			full, brief := adviseRepeatGate(workspaceRunsDir(location.base), time.Now())
+			full, brief := adviseRepeatGate(workspaceRunsDir(location.cacheDir), time.Now())
 			if notice := markers.OnceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
@@ -645,8 +645,8 @@ type hookAttribution struct {
 	Event      string
 }
 
-type hookActivityLocation struct {
-	base      string
+type location struct {
+	cacheDir  string
 	workspace string
 	// dir is where the tool call runs, which the focus rule needs and the trail does
 	// not: a session opened in a subdirectory stands in a different project than the
@@ -654,7 +654,7 @@ type hookActivityLocation struct {
 	dir string
 }
 
-type hookActivityLocationKey struct{}
+type locationKey struct{}
 
 // WithLocation pins the cache directory, workspace root and calling directory this hook
 // call is graded against.
@@ -663,8 +663,8 @@ type hookActivityLocationKey struct{}
 // its checkout's real activity trail. It is exported because the command that renders a
 // verdict now lives in another package and its tests need the same pin.
 func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.Context {
-	return context.WithValue(ctx, hookActivityLocationKey{},
-		hookActivityLocation{base: cacheDir, workspace: workspace, dir: dir})
+	return context.WithValue(ctx, locationKey{},
+		location{cacheDir: cacheDir, workspace: workspace, dir: dir})
 }
 
 // appendHookActivity contributes a best-effort, normalized observation to the same durable
@@ -679,8 +679,8 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 // preauth is the `next` template that had already served this command, and it is recorded
 // because a clearance nobody counts is a clearance nobody can audit: uptake per template is
 // the number that decides whether a breadcrumb is reworded or deleted.
-func appendHookActivity(ctx context.Context, location hookActivityLocation, input string, who hookAttribution, tool, lease, preauth string, verdict Verdict) {
-	if input == "" || location.base == "" {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth string, verdict Verdict) {
+	if input == "" || location.cacheDir == "" {
 		return
 	}
 	command := trail.AgentCommand{
@@ -702,7 +702,7 @@ func appendHookActivity(ctx context.Context, location hookActivityLocation, inpu
 	} else {
 		command.Path = input
 	}
-	trail.AppendAgentCommand(ctx, location.base, command)
+	trail.AppendAgentCommand(ctx, location.cacheDir, command)
 }
 
 // appendHookSpawn records a spawn into the same trail, so a person auditing the
@@ -713,11 +713,11 @@ func appendHookSpawn(ctx context.Context, deps Deps, req hookRequest, who hookAt
 	if req.Value == "" {
 		return
 	}
-	location := hookActivityTrail(ctx, deps)
-	if location.base == "" {
+	location := hookLocation(ctx, deps)
+	if location.cacheDir == "" {
 		return
 	}
-	trail.AppendAgentSpawn(ctx, location.base, trail.AgentSpawn{
+	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
 		Actor:     "agent",
 		Workspace: location.workspace,
 		Host:      who.Host,
@@ -744,25 +744,25 @@ func hookSearchHints(cacheDir string) *hint.Translator {
 	return hint.NewTranslator(hint.WithProjects(paths))
 }
 
-// hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
+// hookLocation resolves the local workspace cache because a hook runs as a short-lived
 // client process, outside the daemon's memory. Tests can pin a temporary base through context so
 // a guard unit test never writes its checkout's real activity trail; hookContextAt pins the
 // checkout a host's envelope named the same way.
-func hookActivityTrail(ctx context.Context, deps Deps) hookActivityLocation {
-	if location, ok := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); ok {
+func hookLocation(ctx context.Context, deps Deps) location {
+	if location, ok := ctx.Value(locationKey{}).(location); ok {
 		return location
 	}
-	return hookActivityLocationAt(deps, "")
+	return hookLocationAt(deps, "")
 }
 
-// hookActivityLocationAt resolves the workspace holding dir, or the process cwd for "".
+// hookLocationAt resolves the workspace holding dir, or the process cwd for "".
 // The process cwd's workspace is the one the caller's config was loaded for, so its
 // resolved config applies; another checkout reads its own magus.yaml, because a cache dir
 // configured in the orchestrator's tree says nothing about where a worker's cache lives.
-func hookActivityLocationAt(deps Deps, dir string) hookActivityLocation {
+func hookLocationAt(deps Deps, dir string) location {
 	root, err := magus.FindRoot(dir)
 	if err != nil {
-		return hookActivityLocation{}
+		return location{}
 	}
 	ask := root
 	if dir == "" {
@@ -770,7 +770,7 @@ func hookActivityLocationAt(deps Deps, dir string) hookActivityLocation {
 	}
 	cacheDir, err := deps.cacheDir(ask)
 	if err != nil {
-		return hookActivityLocation{}
+		return location{}
 	}
 	if dir == "" {
 		// The process cwd, which for "" is what root was found from. Read rather than
@@ -780,7 +780,7 @@ func hookActivityLocationAt(deps Deps, dir string) hookActivityLocation {
 			dir = wd
 		}
 	}
-	return hookActivityLocation{base: cacheDir, workspace: root, dir: dir}
+	return location{cacheDir: cacheDir, workspace: root, dir: dir}
 }
 
 // hookContextAt pins the trail location to the checkout holding cwd, the directory the host
@@ -794,12 +794,12 @@ func hookContextAt(ctx context.Context, deps Deps, cwd string) context.Context {
 	if !filepath.IsAbs(cwd) {
 		return ctx
 	}
-	if _, pinned := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation); pinned {
+	if _, pinned := ctx.Value(locationKey{}).(location); pinned {
 		return ctx
 	}
-	location := hookActivityLocationAt(deps, cwd)
-	if location.base == "" {
+	location := hookLocationAt(deps, cwd)
+	if location.cacheDir == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, hookActivityLocationKey{}, location)
+	return context.WithValue(ctx, locationKey{}, location)
 }

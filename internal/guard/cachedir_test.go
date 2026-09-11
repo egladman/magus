@@ -15,7 +15,7 @@ import (
 // can resolve.
 func TestNamesWorkspaceCacheDirMatchesEverySpelling(t *testing.T) {
 	root, moved := t.TempDir(), t.TempDir()
-	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root}
+	at := location{cacheDir: filepath.Join(root, ".magus"), workspace: root}
 
 	for _, p := range []string{
 		".magus",
@@ -32,13 +32,13 @@ func TestNamesWorkspaceCacheDirMatchesEverySpelling(t *testing.T) {
 		assert.True(t, namesWorkspaceCacheDir(at, p), "%q names the cache dir", p)
 	}
 
-	relocated := hookActivityLocation{base: moved, workspace: root}
+	relocated := location{cacheDir: moved, workspace: root}
 	assert.True(t, namesWorkspaceCacheDir(relocated, filepath.Join(moved, "lease")),
 		"a relocated cache dir is still the cache dir")
 	assert.True(t, namesWorkspaceCacheDir(relocated, ".magus/lease"),
 		"the default name matches even when the resolved dir moved: a command that spells it means it")
 
-	assert.True(t, namesWorkspaceCacheDir(hookActivityLocation{}, "/repo/.magus/lease"),
+	assert.True(t, namesWorkspaceCacheDir(location{}, "/repo/.magus/lease"),
 		"an absolute path is matched even where magus could not locate the workspace, which is what the literal name is for")
 }
 
@@ -46,7 +46,7 @@ func TestNamesWorkspaceCacheDirMatchesEverySpelling(t *testing.T) {
 // matching would deny ordinary work under a rule that refuses every role.
 func TestNamesWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 	root := t.TempDir()
-	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root}
+	at := location{cacheDir: filepath.Join(root, ".magus"), workspace: root}
 
 	for _, p := range []string{
 		"",
@@ -70,7 +70,7 @@ func TestNamesWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 // four-operator redirect switch and the eight-verb writer allowlist this replaced.
 func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 	root := t.TempDir()
-	at := hookActivityLocation{base: filepath.Join(root, ".magus"), workspace: root, dir: root}
+	at := location{cacheDir: filepath.Join(root, ".magus"), workspace: root, dir: root}
 
 	for _, command := range []string{
 		"echo x >> .magus/advisories/anon.served-next",

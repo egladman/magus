@@ -11,7 +11,7 @@ import (
 // repository this session is in. It generalizes magusInThrowawayCopy, which denies
 // the same mistake when the copy announces itself by living under /tmp.
 //
-// Split from guard_shell.go because it reads the filesystem, and Evaluate
+// Split from internal/guard/shell.go because it reads the filesystem, and Evaluate
 // is a pure function of the command line that is tested as one.
 //
 // Nothing here is magus-specific: a linked worktree is a git concept, so a
@@ -21,7 +21,7 @@ import (
 // pure rules already reached.
 //
 // An existing deny wins: that line has a second thing wrong with it, and one block
-// is enough. An ADVISE does not: guardCdMagusRe fires on exactly these lines, and
+// is enough. An ADVISE does not: cdMagusRe fires on exactly these lines, and
 // "name the project instead" badly understates a command pointed at another tree.
 func rankSiblingCheckout(v BashVerdict, reason string) BashVerdict {
 	if reason == "" || v.Deny != "" {

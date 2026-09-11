@@ -30,7 +30,7 @@ func TestGuardSourceGlobsStillMatchThisTree(t *testing.T) {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	require.NoError(t, err)
 
-	for _, glob := range guardSourceGlobs {
+	for _, glob := range sourceGlobs {
 		matches, gerr := filepath.Glob(filepath.Join(root, filepath.FromSlash(glob)))
 		require.NoError(t, gerr, glob)
 		require.NotEmptyf(t, matches, "%s matched no files: the guard sources moved and the stale-binary notice stopped looking", glob)

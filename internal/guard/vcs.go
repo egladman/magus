@@ -9,10 +9,10 @@ import (
 
 // The git rules, which are the guard's largest single policy and the one with the
 // most to lose: these are the calls that destroy uncommitted work, and a concurrent
-// agent's along with it. Split out of guard_shell.go so the VCS reasoning can be
+// agent's along with it. Split out of internal/guard/shell.go so the VCS reasoning can be
 // read without the raw-tool and output-plumbing rules interleaved through it.
 
-// guardDependencyMutations are the argv prefixes that RE-RESOLVE dependencies and
+// dependencyMutations are the argv prefixes that RE-RESOLVE dependencies and
 // rewrite the lockfile, keyed by program. They are what types.CharmUpdate exists
 // for: `rw` grants rewriting DERIVED output, which is reproducible from a clean
 // checkout, while these read a registry and yield different bytes on different
@@ -33,7 +33,7 @@ import (
 // re-splitting on every call, and the bare-program case had to be encoded as an empty
 // string: a sentinel indistinguishable from a typo'd entry; here it is the empty prefix
 // {{}}, which is what it means.
-var guardDependencyMutations = map[string][][]string{
+var dependencyMutations = map[string][][]string{
 	"go":          {{"get"}, {"mod", "tidy"}},
 	"npm":         {{"update"}, {"up"}},
 	"pnpm":        {{"add"}, {"update"}, {"up"}},
@@ -48,7 +48,7 @@ var guardDependencyMutations = map[string][][]string{
 // isDependencyMutation reports whether one resolved command re-resolves dependency
 // state. The empty prefix matches the program on its own.
 func isDependencyMutation(c hint.Invocation) bool {
-	for _, want := range guardDependencyMutations[c.Name] {
+	for _, want := range dependencyMutations[c.Name] {
 		if len(want) == 0 {
 			return true
 		}
@@ -236,26 +236,26 @@ func isTreeIdentityQuery(args []string) bool {
 // that cannot be recovered.
 func gitGuardFallback(command string) (BashVerdict, bool) {
 	switch {
-	case guardStashRe.MatchString(command) && !guardStashSafeRe.MatchString(command):
+	case stashRe.MatchString(command) && !stashSafeRe.MatchString(command):
 		return denyWholeTree("git stash"), true
-	case guardResetRe.MatchString(command):
+	case resetRe.MatchString(command):
 		return denyWholeTree("git reset --hard"), true
-	case guardCheckoutRe.MatchString(command):
+	case checkoutRe.MatchString(command):
 		return denyWholeTree("git checkout ."), true
-	case guardRestoreRe.MatchString(command):
+	case restoreRe.MatchString(command):
 		return denyWholeTree("git restore ."), true
-	case guardCleanRe.MatchString(command):
+	case cleanRe.MatchString(command):
 		return denyWholeTree("git clean"), true
 	// Above the push ADVISORY, which used to answer first: `git add -A && git push` on an
 	// unparsable line got a reminder instead of the deny, in the one place the file's own
 	// invariant says an over-eager deny is the safe direction.
-	case guardStageAllRe.MatchString(command):
+	case stageAllRe.MatchString(command):
 		return BashVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
-	case guardPushRe.MatchString(command):
+	case pushRe.MatchString(command):
 		return BashVerdict{Context: pushGuardContext}, true
-	case guardStageRe.MatchString(command):
+	case stageRe.MatchString(command):
 		return BashVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
-	case guardScopedRevertRe.MatchString(command):
+	case scopedRevertRe.MatchString(command):
 		return BashVerdict{Context: revertGuardContext}, true
 	}
 	return BashVerdict{}, false

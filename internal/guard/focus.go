@@ -108,7 +108,7 @@ func gradeFocusRead(ctx context.Context, deps Deps, actingLease, command string)
 	if len(operands) == 0 {
 		return focusGrade{}
 	}
-	location := hookActivityTrail(ctx, deps)
+	location := hookLocation(ctx, deps)
 	if location.workspace == "" {
 		return focusGrade{}
 	}
@@ -173,11 +173,11 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
-func focusForLease(ws types.WorkspaceReader, location hookActivityLocation, actingLease string) (project.Focus, string, bool) {
-	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.base == "" {
+func focusForLease(ws types.WorkspaceReader, location location, actingLease string) (project.Focus, string, bool) {
+	if actingLease == "" || !types.ValidLeaseID(actingLease) || location.cacheDir == "" {
 		return project.Focus{}, "", false
 	}
-	store := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace})
+	store := ledger.NewStore(ledger.Location{CacheDir: location.cacheDir, Root: location.workspace})
 	leases, err := store.List()
 	if err != nil {
 		return project.Focus{}, "", false
@@ -234,7 +234,7 @@ func focusResolve(dir, op string) string {
 // focusDir is where the command runs: the directory the host's envelope named, or
 // the workspace root when it named none. Falling back to the root computes the ROOT
 // project's focus, which is wider than the truth and so fails open.
-func focusDir(location hookActivityLocation) string {
+func focusDir(location location) string {
 	if location.dir != "" {
 		return location.dir
 	}

@@ -9,13 +9,13 @@ import (
 	"github.com/egladman/magus/internal/hint"
 )
 
-// guardSourceGlobs are the files whose changes alter what the guard DECIDES: the
+// sourceGlobs are the files whose changes alter what the guard DECIDES: the
 // rules themselves, the verdict plumbing, and the skills compiled into the binary.
 //
 // Deliberately not every Go file. A stale binary is only lying when the rules it
 // carries have moved; editing an unrelated package leaves every verdict correct, and
 // a notice that fired on that would appear on every tool call of a normal session.
-var guardSourceGlobs = []string{
+var sourceGlobs = []string{
 	"internal/guard/*.go",
 	"cmd/magus/hook*.go",
 	"internal/agent/*.go",
@@ -72,7 +72,7 @@ func staleGuardNotice() string {
 func newestGuardSource(root string) (time.Time, string) {
 	var newest time.Time
 	var newestPath string
-	for _, glob := range guardSourceGlobs {
+	for _, glob := range sourceGlobs {
 		matches, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(glob)))
 		if err != nil {
 			continue

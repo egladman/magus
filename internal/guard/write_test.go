@@ -59,8 +59,8 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string)
 		_, err := store.Put(t.Context(), u)
 		require.NoError(t, err)
 	}
-	location := hookActivityLocation{base: cacheDir, workspace: root}
-	return context.WithValue(t.Context(), hookActivityLocationKey{}, location), root
+	location := location{cacheDir: cacheDir, workspace: root}
+	return context.WithValue(t.Context(), locationKey{}, location), root
 }
 
 // fleetLeases is the two-lease plan most cases below grade against: two live workers with
@@ -206,9 +206,9 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 
 	t.Run("no trail location", func(t *testing.T) {
 		// Pinned to an EMPTY location rather than left unpinned: an unpinned context sends
-		// hookActivityTrail up from the CWD to this checkout's real cache dir, and the test
+		// hookLocation up from the CWD to this checkout's real cache dir, and the test
 		// would then grade against whatever plan the developer is actually running.
-		ctx := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
+		ctx := context.WithValue(t.Context(), locationKey{}, location{})
 		assert.Empty(t, gradeLeasedWrite(ctx, Deps{}, "lease-b", "internal/ledger/store.go").Decision)
 	})
 }
@@ -535,8 +535,8 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 // resolves it, so these assertions read the same store the code under test wrote.
 func fleetLedger(t *testing.T, ctx context.Context) *ledger.Store {
 	t.Helper()
-	loc := hookActivityTrail(ctx, Deps{})
-	return ledger.NewStore(ledger.Location{CacheDir: loc.base, Root: loc.workspace})
+	loc := hookLocation(ctx, Deps{})
+	return ledger.NewStore(ledger.Location{CacheDir: loc.cacheDir, Root: loc.workspace})
 }
 
 func unattributedOf(t *testing.T, store *ledger.Store, id string) []types.LeaseUnattributedWrite {
