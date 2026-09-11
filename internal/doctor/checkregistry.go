@@ -253,11 +253,11 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkCheckpointWiring() },
 	},
 	{
-		Name:           "lease-enforcing",
-		Doc:            "whether the lease this checkout is bound to is a live, registered row the guard actually judges",
+		Name:           "lease-binding",
+		Doc:            "whether the lease this checkout is bound to is a live, registered row, and whether a host hook is wired to judge it",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseEnforcing() },
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseBinding() },
 	},
 	{
 		Name:           "agent-skills",

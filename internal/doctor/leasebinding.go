@@ -8,24 +8,16 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// checkLeaseEnforcing answers a question none of the guard checks beside it do:
-// not whether the guard is wired, but whether the lease THIS checkout is bound
-// to is actually judged. An unknown id, a terminal row and a live row with no
-// registered base all grade a write differently from a normal live lease, and
-// every one of them renders exactly like a guarded session in the verdict
-// itself (see leases.md#what-the-guard-enforces-under-a-lease). A typo'd
-// BAGGAGE export or an orchestrator that reused an id after its row went
-// terminal are both invisible without this.
-//
-// Read through ledger's existing doors only (ActingLease, Store.List): this
-// check records nothing and refuses nothing, matching the ledger package's own
-// rule that only the guard turns these rows into a verdict.
-func (r *runner) checkLeaseEnforcing() types.DoctorCheck {
-	return checkLeaseEnforcing(r.cacheDir(), r.ws.Root())
+func (r *runner) checkLeaseBinding() types.DoctorCheck {
+	return checkLeaseBinding(r.cacheDir(), r.ws.Root())
 }
 
-func checkLeaseEnforcing(cacheDir, root string) types.DoctorCheck {
-	const name = "lease-enforcing"
+// checkLeaseBinding grades the lease this checkout is bound to: an unknown id, a
+// row that is not live and a live row with no registered base each grade a write
+// differently from a normal lease, and all three render exactly like a guarded
+// session in the verdict itself (see leases.md#what-the-guard-enforces-under-a-lease).
+func checkLeaseBinding(cacheDir, root string) types.DoctorCheck {
+	const name = "lease-binding"
 
 	id := ledger.ActingLease(cacheDir)
 	if id == "" {
