@@ -410,10 +410,13 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus ledger accept <lease-id> --stdin < report.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Grade a finished worker's report against the lease it was handed: every changed")
-			fmt.Fprintln(os.Stderr, "path inside the declared owned paths, a change set that is not empty, and an")
-			fmt.Fprintln(os.Stderr, "output ref that resolves to a PASSING run of this row's own validation. A row")
-			fmt.Fprintln(os.Stderr, "that passes is recorded "+string(types.StatePass)+"; a rejection names every rule that failed and")
-			fmt.Fprintln(os.Stderr, "exits 1, while a report that could not be decoded exits 2.")
+			fmt.Fprintln(os.Stderr, "path inside the declared owned paths and outside the forbidden ones, a change set")
+			fmt.Fprintln(os.Stderr, "that is not empty, descendants the plan carries, and an output ref that resolves")
+			fmt.Fprintln(os.Stderr, "to a PASSING run of this row's own validation. A row that passes is recorded "+string(types.StatePass)+".")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Exit 1 is a verdict: the report was read and rejected, and every rule that failed")
+			fmt.Fprintln(os.Stderr, "is named. Exit 2 is magus unable to answer: the report would not decode, the")
+			fmt.Fprintln(os.Stderr, "output store would not open, or the row would not write.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It checks what is mechanical. Whether the work is GOOD, and whether the row's")
 			fmt.Fprintln(os.Stderr, "acceptance criteria are met, stay the orchestrator's reading.")
@@ -457,21 +460,27 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	i := slices.IndexFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] })
-	if i < 0 {
+	if !slices.ContainsFunc(leases, func(lease types.Lease) bool { return lease.ID == pos[0] }) {
 		return fmt.Errorf("magus ledger accept: no lease %q is declared (run `%s` to see the plan)", pos[0], hint.Ledger)
 	}
-
-	verdict, err := ledger.Accept(leases[i], report, storedAttempt(ctx, override))
+	att, err := storedAttempt(ctx, override, report.Validation.OutputRef)
 	if err != nil {
-		return err
+		// Exit 2, with the decode failures: magus could not answer, and that is not a
+		// verdict about the work. 1 is reserved for a report that was read and rejected.
+		return usagef("magus ledger accept: %s", err)
 	}
-	// Recorded before it is printed: a verdict the operator reads and the ledger does not
-	// carry is the split the row's state exists to close.
-	if verdict.Accepted {
-		if _, err := store.Update(ctx, verdict.Lease, func(u *types.Lease) { u.State = types.StatePass }); err != nil {
-			return err
+
+	// Graded and recorded under ONE lock: the row a two-step read-then-write graded is not
+	// the row it stamps, so a release or a clear landing in between grades a boundary that
+	// is gone. Only the state moves, so a rejection leaves every declared field alone.
+	var verdict ledger.Verdict
+	if _, err := store.Update(ctx, pos[0], func(u *types.Lease) {
+		verdict = ledger.Grade(*u, report, att, leases)
+		if verdict.Accepted {
+			u.State = types.StatePass
 		}
+	}); err != nil {
+		return usagef("magus ledger accept: %s", err)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -492,40 +501,50 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 	return errSilent{exitCode: 1}
 }
 
-// storedAttempt resolves a ref to what the output store recorded about that run: which
-// command produced it and whether it failed. A ref that aged out of the cache is reported
-// MISSING rather than as an error: the root cannot reopen it either way, and that is the
+// storedAttempt is what the output store recorded about the run behind ref: which command
+// produced it, and whether it failed. An empty ref, and one that aged out of the cache,
+// both report MISSING rather than an error: the root cannot reopen either, and that is the
 // fact acceptance turns on.
 //
 // The DESCRIPTOR, not the bytes. Acceptance reads the run's identity and its exit status,
 // both of which are metadata, and a captured log is as large as the target was noisy.
-func storedAttempt(ctx context.Context, root string) ledger.OutputLookup {
-	return func(ref string) (ledger.Attempt, error) {
-		m, err := loadMagus(ctx, root)
-		if err != nil {
-			return ledger.Attempt{}, err
-		}
-		switch d, err := m.OutputDescriptorByRef(ref); {
-		case err == nil:
-			return ledger.Attempt{
-				Found: true, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
-			}, nil
-		case errors.Is(err, fs.ErrNotExist):
-			return ledger.Attempt{}, nil
-		default:
-			return ledger.Attempt{}, err
-		}
+func storedAttempt(ctx context.Context, root, ref string) (ledger.Attempt, error) {
+	if strings.TrimSpace(ref) == "" {
+		return ledger.Attempt{}, nil
+	}
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return ledger.Attempt{}, err
+	}
+	switch d, err := m.OutputDescriptorByRef(ref); {
+	case err == nil:
+		return ledger.Attempt{
+			Found: true, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
+		}, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return ledger.Attempt{}, nil
+	default:
+		return ledger.Attempt{}, err
 	}
 }
 
 func printLeaseVerdict(out io.Writer, v ledger.Verdict) {
 	if v.Accepted {
 		fmt.Fprintf(out, "accepted %s, recorded %s\n", v.Lease, types.StatePass)
-		return
+	} else {
+		fmt.Fprintf(out, "rejected %s, and its state is unchanged\n", v.Lease)
+		for _, violation := range v.Violations {
+			fmt.Fprintf(out, "  %s\n", violation)
+		}
 	}
-	fmt.Fprintf(out, "rejected %s, and its row is unchanged\n", v.Lease)
-	for _, violation := range v.Violations {
-		fmt.Fprintf(out, "  %s\n", violation)
+	if v.Command != "" {
+		fmt.Fprintf(out, "the worker reports it ran %s\n", v.Command)
+	}
+	if len(v.Risks) > 0 {
+		fmt.Fprintln(out, "unresolved risks the worker reported")
+		for _, risk := range v.Risks {
+			fmt.Fprintf(out, "  %s\n", risk)
+		}
 	}
 }
 

@@ -53,11 +53,10 @@ const (
 	BaseUnknown LeaseBaseVerdict = "unknown"
 )
 
-// terminal reports whether the lease is done, however it ended. Nothing derives a
-// verdict from it: it is what keeps a finished lease out of the overlap report below.
-// Unexported because that is its only reader: a client decides what "done" means from
-// the state string itself, which is the value the wire carries.
-func (s LeaseState) terminal() bool {
+// Terminal reports whether the lease is done, however it ended. It keeps a finished lease
+// out of the overlap report below, and it is what `ledger accept` reads to refuse
+// re-grading a row somebody already graded.
+func (s LeaseState) Terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
@@ -369,11 +368,11 @@ func NewLeaseReport(leases []Lease) LeaseReport {
 func leaseOverlaps(leases []Lease) []LeaseOverlap {
 	var out []LeaseOverlap
 	for i, a := range leases {
-		if a.State.terminal() || len(a.OwnedPaths) == 0 {
+		if a.State.Terminal() || len(a.OwnedPaths) == 0 {
 			continue
 		}
 		for _, b := range leases[i+1:] {
-			if b.State.terminal() || len(b.OwnedPaths) == 0 {
+			if b.State.Terminal() || len(b.OwnedPaths) == 0 {
 				continue
 			}
 			if pa, pb := intersectingPaths(a.OwnedPaths, b.OwnedPaths); len(pa) > 0 {

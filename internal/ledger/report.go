@@ -94,6 +94,11 @@ type Verdict struct {
 	Lease      string   `json:"lease"                yaml:"lease"`
 	Accepted   bool     `json:"accepted"             yaml:"accepted"`
 	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
+	// Risks and Command are carried through from the report so the one reader who has to
+	// act on them sees them. A required field nobody renders teaches a worker that filling
+	// it in is theater.
+	Risks   []string `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
+	Command string   `json:"command,omitempty"          yaml:"command,omitempty"`
 }
 
 // Attempt is what the output store recorded for one captured run: which command produced
@@ -117,33 +122,28 @@ type Attempt struct {
 	Failed bool
 }
 
-// OutputLookup resolves an output ref against this workspace's store. The error arm is
-// for a store that could not be read at all, which must not read as a worker filing a bad
-// ref; an unknown ref answers with a zero Attempt and no error.
-type OutputLookup func(ref string) (Attempt, error)
-
-// Accept grades a worker's report against the lease it was handed: every changed path
-// inside the declared boundary, a change set that is not empty on a row that writes, and
-// an evidence ref that resolves to a run OF THAT ROW'S CHECK which the store recorded as
-// passing.
+// Grade grades a worker's report against the lease it was handed: every changed path
+// inside the declared boundary and outside the declared deny list, a change set that is
+// not empty on a row that writes, descendants the plan carries, and an evidence ref
+// recording a PASSING run of that row's own check.
 //
 // IT GRADES EVIDENCE, NOT ASSERTIONS, which is the difference between this and reading
-// the report. Every rule below turns on something magus already holds: the row's own
-// check, the ref's recorded identity, its exit status, the declared boundary. A report
-// with an empty change set, a ref from an unrelated run, and a cheerful summary was
-// accepted by the version that trusted the worker's own `passed` (measured 2026-09-11);
-// nothing a worker writes decides an outcome here now.
+// the report: every rule turns on something magus already holds. Whether the work is GOOD,
+// and whether the criteria in Goal were met, stay the orchestrator's reading.
 //
-// MECHANICAL, and that is the whole of its claim. Whether the work is GOOD, and whether
-// the criteria in Goal were met, stay the orchestrator's reading.
-//
-// It returns a verdict for a FAILING report rather than an error. A rejection is an answer
-// about the report; the error arm is reserved for a store that could not answer at all.
-func Accept(row types.Lease, rep Report, lookup OutputLookup) (Verdict, error) {
-	v := Verdict{Lease: row.ID}
+// att is what the output store recorded for the report's ref, and the zero Attempt when
+// the report names none; resolving it is the caller's, so no rule here reads a file while
+// the ledger's lock is held. declared is the rest of the plan, which is what the report's
+// descendant ids are checked against.
+func Grade(row types.Lease, rep Report, att Attempt, declared []types.Lease) Verdict {
+	v := Verdict{Lease: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
 
 	if rep.Lease != "" && rep.Lease != row.ID {
 		v.Violations = append(v.Violations, fmt.Sprintf("the report is filed under lease %q and this row is %q", rep.Lease, row.ID))
+	}
+	if row.State.Terminal() {
+		v.Violations = append(v.Violations, fmt.Sprintf("lease %s is already %s, and a row is graded once:"+
+			" clear the plan or declare a new row rather than re-grading a closed one", row.ID, row.State))
 	}
 
 	switch {
@@ -156,35 +156,36 @@ func Accept(row types.Lease, rep Report, lookup OutputLookup) (Verdict, error) {
 		v.Violations = append(v.Violations, fmt.Sprintf("lease %s is not read-only and the report claims no changed paths at all", row.ID))
 	default:
 		for _, p := range rep.ChangedPaths {
-			if !ownedBy(row.OwnedPaths, p) {
+			if _, ok := matching(row.OwnedPaths, p); !ok {
 				v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is outside the lease's owned paths (%s)", p, strings.Join(row.OwnedPaths, ", ")))
 			}
 		}
 	}
-
-	ev, err := evidence(row, rep, lookup)
-	if err != nil {
-		return Verdict{}, err
+	for _, p := range rep.ChangedPaths {
+		if d, ok := matching(row.ForbiddenPaths, p); ok {
+			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the lease is forbidden (%s)", p, d))
+		}
 	}
-	v.Violations = append(v.Violations, ev...)
+	for _, id := range rep.Descendants {
+		if !slices.ContainsFunc(declared, func(r types.Lease) bool { return r.ID == id }) {
+			v.Violations = append(v.Violations, fmt.Sprintf("the report names descendant %q and no row declares it,"+
+				" so that branch of the plan is one nobody is tracking", id))
+		}
+	}
 
+	v.Violations = append(v.Violations, evidence(row, rep, att)...)
 	v.Accepted = len(v.Violations) == 0
-	return v, nil
+	return v
 }
 
-// evidence grades the ref against the row's check, returning one violation per rule that
-// failed. The error arm is a store that could not answer.
-func evidence(row types.Lease, rep Report, lookup OutputLookup) ([]string, error) {
+// evidence grades the ref against the row's check, one violation per rule that failed.
+func evidence(row types.Lease, rep Report, att Attempt) []string {
 	ref := strings.TrimSpace(rep.Validation.OutputRef)
 	if ref == "" {
-		return []string{"the report carries no validation output_ref, so there is no run to reopen"}, nil
-	}
-	att, err := lookup(ref)
-	if err != nil {
-		return nil, fmt.Errorf("ledger: look up output %s: %w", ref, err)
+		return []string{"the report carries no validation output_ref, so there is no run to reopen"}
 	}
 	if !att.Found {
-		return []string{fmt.Sprintf("output ref %q is not in this workspace's output store", ref)}, nil
+		return []string{fmt.Sprintf("output ref %q is not in this workspace's output store", ref)}
 	}
 
 	var out []string
@@ -195,12 +196,12 @@ func evidence(row types.Lease, rep Report, lookup OutputLookup) ([]string, error
 			" so no stored run can be bound to it", row.ID, row.Validation))
 	case !check.matches(att):
 		out = append(out, fmt.Sprintf("output ref %q records %s and this lease's validation is %s,"+
-			" so the evidence is from a different run", ref, att.command(), check))
+			" so the evidence is from a different run", ref, att, check))
 	}
 	if att.Failed {
 		out = append(out, fmt.Sprintf("the run behind output ref %q failed, so its validation did not pass", ref))
 	}
-	return out, nil
+	return out
 }
 
 // check is the run one validation string names: what the output store records about a
@@ -256,11 +257,7 @@ func parseCheck(s string) (check, bool) {
 // selected two ways, and rejecting that pair would make the rule fire on spelling rather
 // than on identity. Target and project are compared always: those are what a run IS.
 func (c check) matches(a Attempt) bool {
-	project := path.Clean(a.Project)
-	if project == "" {
-		project = "."
-	}
-	if c.Target != a.Target || c.Project != project {
+	if c.Target != a.Target || c.Project != path.Clean(a.Project) {
 		return false
 	}
 	return c.Spell == "" || a.Spell == "" || c.Spell == a.Spell
@@ -268,9 +265,9 @@ func (c check) matches(a Attempt) bool {
 
 func (c check) String() string { return "`" + renderCheck(c.Spell, c.Target, c.Project) + "`" }
 
-// command renders what the store recorded, in the same spelling a check renders, so a
+// String renders what the store recorded, in the same spelling a check renders, so a
 // rejection puts the two side by side.
-func (a Attempt) command() string { return "`" + renderCheck(a.Spell, a.Target, a.Project) + "`" }
+func (a Attempt) String() string { return "`" + renderCheck(a.Spell, a.Target, a.Project) + "`" }
 
 func renderCheck(spell, target, project string) string {
 	if spell != "" {
@@ -282,14 +279,15 @@ func renderCheck(spell, target, project string) string {
 	return "magus run " + target + " " + project
 }
 
-// ownedBy reports whether any declaration covers p.
-func ownedBy(owned []string, p string) bool {
-	for _, d := range owned {
+// matching is the first declaration in decls that covers p. The declaration comes back
+// rather than a bool because a rejection has to name which one fired.
+func matching(decls []string, p string) (string, bool) {
+	for _, d := range decls {
 		if covers(d, p) {
-			return true
+			return d, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // covers decides whether one declared path covers a written one.
@@ -305,9 +303,20 @@ func ownedBy(owned []string, p string) bool {
 // declarations on purpose; here over-reporting means silently ACCEPTING a write the
 // declaration excludes, and the two directions of error are not symmetrical.
 func covers(declared, p string) bool {
-	declared, p = path.Clean(strings.TrimSpace(declared)), path.Clean(strings.TrimSpace(p))
-	if declared == "." || p == "." {
+	// A blank declaration claims nothing, on types.PathsIntersect's rule: it cleans to
+	// ".", which the whole-tree arm below would read as a claim on everything.
+	if strings.TrimSpace(declared) == "" || strings.TrimSpace(p) == "" {
 		return false
+	}
+	declared, p = path.Clean(strings.TrimSpace(declared)), path.Clean(strings.TrimSpace(p))
+	if p == "." {
+		return false
+	}
+	if declared == "." {
+		// The repository root covers every path under it. Refusing "." at declaration
+		// instead would leave a single-lease plan over the whole tree undeclarable, and
+		// the row would read as owning nothing rather than as owning everything.
+		return true
 	}
 	if types.LiteralPrefix(declared) != declared {
 		return types.MatchesAnyGlob([]string{declared}, p)

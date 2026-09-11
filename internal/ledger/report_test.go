@@ -1,7 +1,6 @@
 package ledger
 
 import (
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -34,26 +33,26 @@ func passingReport() Report {
 	}
 }
 
-// found is a store holding a passing run of acceptRow's own validation, which is what an
-// honest report cites.
-func found(string) (Attempt, error) {
-	return Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}, nil
-}
+// passingRun is what the output store recorded for a passing run of acceptRow's own
+// validation, which is what an honest report cites. The zero Attempt is a ref the store
+// does not hold.
+var passingRun = Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
 
-func missing(string) (Attempt, error) { return Attempt{}, nil }
-
-func TestAcceptTakesAReportInsideTheBoundary(t *testing.T) {
+func TestGradeTakesAReportInsideTheBoundary(t *testing.T) {
 	t.Parallel()
 
-	v, err := Accept(acceptRow(), passingReport(), found)
-	require.NoError(t, err)
-	assert.Equal(t, Verdict{Lease: "harness/ledger-accept", Accepted: true}, v)
+	assert.Equal(t, Verdict{
+		Lease:    "harness/ledger-accept",
+		Accepted: true,
+		Risks:    []string{},
+		Command:  "magus run go::go-test . -- -run Ledger ./internal/ledger/",
+	}, Grade(acceptRow(), passingReport(), passingRun, nil))
 }
 
 // Every rule reports independently: an orchestrator repartitions for one violation and
 // re-runs the check for another, so a verdict that stopped at the first would send it to
 // the wrong remedy half the time.
-func TestAcceptNamesEveryViolation(t *testing.T) {
+func TestGradeNamesEveryViolation(t *testing.T) {
 	t.Parallel()
 
 	rep := passingReport()
@@ -61,8 +60,7 @@ func TestAcceptNamesEveryViolation(t *testing.T) {
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
 	rep.Validation.OutputRef = ""
 
-	v, err := Accept(acceptRow(), rep, found)
-	require.NoError(t, err)
+	v := Grade(acceptRow(), rep, Attempt{}, nil)
 	assert.False(t, v.Accepted)
 	require.Len(t, v.Violations, 3)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
@@ -72,7 +70,7 @@ func TestAcceptNamesEveryViolation(t *testing.T) {
 // changed, a ref from an unrelated codegen run, a self-asserted pass, and two fields
 // nobody asked for. Every one of them is now a named rejection, which is the whole of
 // what "grade evidence, not assertions" means.
-func TestAcceptRefusesTheFabricatedReport(t *testing.T) {
+func TestGradeRefusesTheFabricatedReport(t *testing.T) {
 	t.Parallel()
 
 	raw := `{"schema_version":1,"lease":"harness/ledger-accept","changed_paths":[],` +
@@ -88,10 +86,7 @@ func TestAcceptRefusesTheFabricatedReport(t *testing.T) {
 	rep := passingReport()
 	rep.ChangedPaths = nil
 	rep.Validation.OutputRef = "deadbeef"
-	v, err := Accept(acceptRow(), rep, func(string) (Attempt, error) {
-		return Attempt{Found: true, Project: ".", Target: "generate"}, nil
-	})
-	require.NoError(t, err)
+	v := Grade(acceptRow(), rep, Attempt{Found: true, Project: ".", Target: "generate"}, nil)
 	assert.False(t, v.Accepted)
 	require.Len(t, v.Violations, 2)
 	assert.Contains(t, v.Violations[0], "no changed paths at all")
@@ -101,13 +96,12 @@ func TestAcceptRefusesTheFabricatedReport(t *testing.T) {
 
 // The stored run's own exit status is the verdict, which is the field a worker no longer
 // gets to assert.
-func TestAcceptReadsTheStoredRunsOutcome(t *testing.T) {
+func TestGradeReadsTheStoredRunsOutcome(t *testing.T) {
 	t.Parallel()
 
-	v, err := Accept(acceptRow(), passingReport(), func(string) (Attempt, error) {
-		return Attempt{Found: true, Project: ".", Target: "go-test", Spell: "go", Failed: true}, nil
-	})
-	require.NoError(t, err)
+	failed := passingRun
+	failed.Failed = true
+	v := Grade(acceptRow(), passingReport(), failed, nil)
 	assert.False(t, v.Accepted)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "failed")
@@ -115,14 +109,13 @@ func TestAcceptReadsTheStoredRunsOutcome(t *testing.T) {
 
 // A row with no check has nothing to bind evidence to, and accepting it anyway is how a
 // ref from any run at all passes for evidence.
-func TestAcceptRefusesARowWithNoCheckToBindTo(t *testing.T) {
+func TestGradeRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.Validation = "make test"
 
-	v, err := Accept(row, passingReport(), found)
-	require.NoError(t, err)
+	v := Grade(row, passingReport(), passingRun, nil)
 	assert.False(t, v.Accepted)
 	assert.Contains(t, v.Violations[0], "not a `magus run <target> <project>` line")
 }
@@ -151,7 +144,7 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 // A directory declaration covers what is under it and a glob covers only what it matches.
 // The second half is the one worth pinning: falling back to a glob's literal prefix would
 // accept exactly the writes the declaration excludes.
-func TestAcceptReadsDeclarationsAsWrittenIn(t *testing.T) {
+func TestGradeReadsDeclarationsAsWrittenIn(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
@@ -170,46 +163,89 @@ func TestAcceptReadsDeclarationsAsWrittenIn(t *testing.T) {
 
 			rep := passingReport()
 			rep.ChangedPaths = []string{tc.path}
-			v, err := Accept(acceptRow(), rep, found)
-			require.NoError(t, err)
+			v := Grade(acceptRow(), rep, passingRun, nil)
 			assert.Equal(t, tc.want, v.Accepted, v.Violations)
 		})
 	}
 }
 
-// The ref is the whole of the evidence, so a ref that no longer resolves is a rejection
-// rather than a detail: the root cannot reopen a run that is not there.
-func TestAcceptRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
+// A lease over the whole tree covers every path in it. The declaration cleans to ".", and
+// reading that as covering nothing made every reported path a violation.
+func TestGradeReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 	t.Parallel()
 
-	v, err := Accept(acceptRow(), passingReport(), missing)
-	require.NoError(t, err)
+	row := acceptRow()
+	row.OwnedPaths = []string{"."}
+	assert.True(t, Grade(row, passingReport(), passingRun, nil).Accepted)
+
+	row.OwnedPaths = []string{""}
+	assert.False(t, Grade(row, passingReport(), passingRun, nil).Accepted, "a blank declaration claims nothing")
+}
+
+// The deny list is read at acceptance too: a path can be inside the owned lane and still
+// be one the row was told to leave alone.
+func TestGradeRejectsAForbiddenPath(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	row.ForbiddenPaths = []string{"internal/ledger/store.go"}
+	rep := passingReport()
+	rep.ChangedPaths = []string{"internal/ledger/store.go"}
+
+	v := Grade(row, rep, passingRun, nil)
+	assert.False(t, v.Accepted)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], "forbidden")
+}
+
+// A descendant the ledger does not carry is a branch of the plan nobody is tracking,
+// which is the fact the field was added to surface.
+func TestGradeRejectsADescendantNoRowDeclares(t *testing.T) {
+	t.Parallel()
+
+	rep := passingReport()
+	rep.Descendants = []string{"harness/ledger-accept/child", "harness/ghost"}
+	declared := []types.Lease{{ID: "harness/ledger-accept/child"}}
+
+	v := Grade(acceptRow(), rep, passingRun, declared)
+	assert.False(t, v.Accepted)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], "harness/ghost")
+}
+
+// A row somebody already graded is not re-graded: the second verdict overwrites the first
+// without anybody being told the first existed.
+func TestGradeRefusesARowThatIsAlreadyClosed(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	row.State = types.StatePass
+
+	v := Grade(row, passingReport(), passingRun, nil)
+	assert.False(t, v.Accepted)
+	require.Len(t, v.Violations, 1)
+	assert.Contains(t, v.Violations[0], "already pass")
+}
+
+// The ref is the whole of the evidence, so a ref that no longer resolves is a rejection
+// rather than a detail: the root cannot reopen a run that is not there.
+func TestGradeRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
+	t.Parallel()
+
+	v := Grade(acceptRow(), passingReport(), Attempt{}, nil)
 	assert.False(t, v.Accepted)
 	assert.Contains(t, v.Violations[0], "a1b2c3d4")
 }
 
-// A store that cannot answer is not a worker filing a bad ref. Folding the two together
-// would reject an honest report whenever the cache was unreadable.
-func TestAcceptSurfacesAStoreThatCannotAnswer(t *testing.T) {
-	t.Parallel()
-
-	_, err := Accept(acceptRow(), passingReport(), func(string) (Attempt, error) {
-		return Attempt{}, errors.New("cache locked")
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "cache locked")
-}
-
 // A read-only lease has no write set, so any claimed write is a violation of a boundary
 // the row declared by being read-only rather than by listing paths.
-func TestAcceptRefusesWritesFromAReadOnlyLease(t *testing.T) {
+func TestGradeRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
 	row.ReadOnly, row.OwnedPaths = true, nil
 
-	v, err := Accept(row, passingReport(), found)
-	require.NoError(t, err)
+	v := Grade(row, passingReport(), passingRun, nil)
 	assert.False(t, v.Accepted)
 	assert.Contains(t, v.Violations[0], "read-only")
 }
