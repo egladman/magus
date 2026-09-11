@@ -52,9 +52,12 @@ func ValidLeaseState(s LeaseState) bool { return slices.Contains(LeaseStates(), 
 // can be compared with a stored run, and a parser that reads positions binds
 // `magus run -o json test .` to a target named json.
 type LeaseCheck struct {
-	Target  string   `json:"target"             yaml:"target"`
-	Project string   `json:"project,omitempty"  yaml:"project,omitempty"`
-	Args    []string `json:"args,omitempty"     yaml:"args,omitempty"`
+	// Target is the magus target the check runs, without the `magus run` in front of it.
+	Target string `json:"target"             yaml:"target"`
+	// Project is the project the target runs in, "." when the row names none.
+	Project string `json:"project,omitempty"  yaml:"project,omitempty"`
+	// Args are forwarded to the tool after `--`, never to magus.
+	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
 }
 
 // String renders the check as the command that runs it.

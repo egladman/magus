@@ -94,16 +94,19 @@
       "required": ["target"],
       "properties": {
         "target": {
-          "type": "string"
+          "type": "string",
+          "description": "Target is the magus target the check runs, without the `magus run` in front of it."
         },
         "project": {
-          "type": "string"
+          "type": "string",
+          "description": "Project is the project the target runs in, \".\" when the row names none."
         },
         "args": {
           "type": "array",
           "items": {
             "type": "string"
-          }
+          },
+          "description": "Args are forwarded to the tool after `--`, never to magus."
         }
       },
       "description": "Check is the one check this lease runs, and acceptance binds a worker's evidence to it."

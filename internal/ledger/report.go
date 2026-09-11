@@ -37,7 +37,7 @@ type Report struct {
 	// release ahead reads "this magus accepts version 1" instead of watching a field it
 	// was told to send be rejected as unknown. See [ReportSchemaVersion].
 	SchemaVersion int `json:"schema_version"`
-	// Lease is the id the worker believes it was handed. Optional, and checked against the
+	// Lease is the id the worker believes it is filing under. Optional, and checked against the
 	// row when present: a report filed under the wrong id happens when several workers
 	// share a prompt template, and it reads as success because every other field is
 	// plausible.
@@ -49,7 +49,7 @@ type Report struct {
 	ChangedPaths []string `json:"changed_paths"`
 	// Validation is the one check the lease was assigned, and how it ended.
 	Validation ReportValidation `json:"validation"`
-	// Descendants are the lease ids this worker handed work on to. One the ledger does not
+	// Descendants are the lease ids this worker spawned. One the ledger does not
 	// carry is a branch of the plan nobody is tracking, which [Grade] reports.
 	Descendants []string `json:"descendants,omitempty"`
 	// UnresolvedRisks is what the worker could not settle. Never omitempty: an absent list
@@ -109,7 +109,7 @@ type Attempt struct {
 	Failed bool
 }
 
-// Grade grades a worker's report against the lease it was handed: every changed path
+// Grade grades a worker's report against the row it was issued: every changed path
 // inside the declared boundary and outside the declared deny list, a change set that is
 // not empty on a row that writes, descendants the plan carries, and an evidence ref
 // recording a PASSING run of that row's own check.

@@ -15,7 +15,7 @@
     },
     "lease": {
       "type": "string",
-      "description": "Lease is the id the worker believes it was handed. Optional, and checked against the row when present: a report filed under the wrong id happens when several workers share a prompt template, and it reads as success because every other field is plausible."
+      "description": "Lease is the id the worker believes it is filing under. Optional, and checked against the row when present: a report filed under the wrong id happens when several workers share a prompt template, and it reads as success because every other field is plausible."
     },
     "changed_paths": {
       "type": "array",
@@ -45,7 +45,7 @@
       "items": {
         "type": "string"
       },
-      "description": "Descendants are the lease ids this worker handed work on to. One the ledger does not carry is a branch of the plan nobody is tracking, which [Grade] reports."
+      "description": "Descendants are the lease ids this worker spawned. One the ledger does not carry is a branch of the plan nobody is tracking, which [Grade] reports."
     },
     "unresolved_risks": {
       "type": "array",
