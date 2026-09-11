@@ -1,25 +1,19 @@
 package main
 
-// `magus session hints`: how often a breadcrumb magus printed was taken up.
-//
-// The measurement it replaces read raw host transcripts, because the store recorded
-// nothing about what a result carried. It now does, so this is a query over loaded
-// sessions rather than a script over somebody's home directory, and a PERSON reads
-// the same table to judge whether the tool's own suggestions are any good.
-//
-// It sits under `session` because that is the verb that owns the store it reads and
-// the verb that loads what it counts. The plan that asked for it named an `insight`
-// lens; the CLI has no insight verb, only the MCP tool and the console, and inventing
-// one to hold a single lens would put five documented lenses on one door and the
-// sixth on another.
+// `magus session hints`: how often a breadcrumb magus printed was taken up. A query
+// over loaded sessions rather than a script over somebody's home directory, because
+// the store records what a result carried.
 //
 // It reports and never acts. The floor below is named in the output as a note, not
 // applied: which hints go is a decision, and magus informs.
 
 import (
+	"cmp"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"slices"
 	"text/tabwriter"
@@ -59,7 +53,7 @@ func sessionHintsUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "Usage: magus session hints")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Per hint id: how many times it was served, how often the command was run")
-		fmt.Fprintln(os.Stderr, "within the next", nextLookahead, "calls, how often another magus verb was run instead, and")
+		fmt.Fprintf(os.Stderr, "within the next %d calls, how often another magus verb was run instead, and\n", nextLookahead)
 		fmt.Fprintln(os.Stderr, "how often the same command was repeated.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "It reads the sessions this repository has loaded, so a store with no")
@@ -84,7 +78,7 @@ func sessionHints(root string, args []string) error {
 
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return fmt.Errorf("magus session hints: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+		return errors.New("magus session hints: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 	dir, err := sessions.Dir(root)
 	if err != nil {
@@ -124,11 +118,10 @@ func hintUptake(fold sessions.Fold) []hintUptakeRow {
 		return r
 	}
 
-	for _, session := range sessionIDs(fold) {
-		calls := shellCalls(sessions.AgentEvents(fold, session))
+	for _, calls := range shellCallsBySession(fold) {
 		for i, call := range calls {
-			window := calls[i+1 : min(i+1+nextLookahead, len(calls))]
-			for _, id := range call.NextIDs {
+			window := calls[i+1:min(i+1+nextLookahead, len(calls))]
+			for _, id := range call.NextServed {
 				r := row(id)
 				r.Served++
 				switch {
@@ -162,49 +155,36 @@ func hintUptake(fold sessions.Fold) []hintUptakeRow {
 	}
 	slices.SortFunc(out, func(a, b hintUptakeRow) int {
 		if a.Rate != b.Rate {
-			return cmpDesc(a.Rate, b.Rate)
+			return cmp.Compare(b.Rate, a.Rate)
 		}
-		return cmpDesc(float64(a.Served), float64(b.Served))
+		return cmp.Compare(b.Served, a.Served)
 	})
 	return out
 }
 
-func cmpDesc(a, b float64) int {
-	switch {
-	case a > b:
-		return -1
-	case a < b:
-		return 1
-	}
-	return 0
-}
-
-// sessionIDs lists the fold's sessions in a stable order, so two runs over one store
-// report the same table.
-func sessionIDs(fold sessions.Fold) []string {
-	seen := map[string]bool{}
-	var ids []string
-	for session := range sessions.EachAgentEvent(fold) {
-		if !seen[session] {
-			seen[session] = true
-			ids = append(ids, session)
-		}
-	}
-	slices.Sort(ids)
-	return ids
-}
-
-// shellCalls keeps the shell commands, oldest first. The lookahead counts CALLS, so a
-// file read between two of them must not spend one.
-func shellCalls(events []sessions.AgentEvent) []sessions.AgentEvent {
-	var calls []sessions.AgentEvent
-	for _, e := range events {
+// shellCallsBySession buckets the fold's shell commands by session, oldest first
+// within each, sessions in a stable order so two runs over one store report the same
+// table.
+//
+// ONE pass over the records. Listing the sessions and then asking for each one's
+// events walks the whole fold once per session, and a store with 200 sessions over
+// 100k records decodes 20M payloads to answer one table.
+func shellCallsBySession(fold sessions.Fold) [][]sessions.AgentEvent {
+	bySession := map[string][]sessions.AgentEvent{}
+	for session, e := range sessions.EachAgentEvent(fold) {
+		// The lookahead counts CALLS, so a file read between two of them must not
+		// spend one.
 		if e.Kind == sessions.EventShellCommand {
-			calls = append(calls, e)
+			bySession[session] = append(bySession[session], e)
 		}
 	}
-	slices.SortStableFunc(calls, func(a, b sessions.AgentEvent) int { return int(a.AtMs - b.AtMs) })
-	return calls
+	out := make([][]sessions.AgentEvent, 0, len(bySession))
+	for _, session := range slices.Sorted(maps.Keys(bySession)) {
+		calls := bySession[session]
+		slices.SortStableFunc(calls, func(a, b sessions.AgentEvent) int { return cmp.Compare(a.AtMs, b.AtMs) })
+		out = append(out, calls)
+	}
+	return out
 }
 
 func renderHintUptake(w io.Writer, report hintUptakeReport) {

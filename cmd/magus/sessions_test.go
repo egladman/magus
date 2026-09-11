@@ -486,6 +486,8 @@ func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
 
 func TestPromptCacheHereReadsThisCheckoutsTrail(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	previous := global
+	t.Cleanup(func() { global = previous })
 	global = globalFlags{}
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
