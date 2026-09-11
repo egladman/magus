@@ -5,6 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCommandRender(t *testing.T) {
@@ -88,4 +90,28 @@ func declaredCommands(t *testing.T) []string {
 		t.Fatal("found no cmd() declarations; the test is reading the wrong file")
 	}
 	return out
+}
+
+// A hint has to name a binary the reader can run. A checkout's own `./magus` keeps its
+// relative spelling, an absolute path collapses to the name, and a renamed copy (the
+// docs' example generator builds one as magus-bin) leaves the canonical name standing.
+func TestInvokedSpelling(t *testing.T) {
+	for _, tc := range []struct {
+		argv0 string
+		want  string
+		ok    bool
+	}{
+		{"magus", "magus", true},
+		{"./magus", "./magus", true},
+		{"../adj-next/magus", "../adj-next/magus", true},
+		{"/usr/local/bin/magus", "magus", true},
+		{"  ./magus  ", "./magus", true},
+		{"", "", false},
+		{"magus-bin", "", false},
+		{"/tmp/go-build/cmd.test", "", false},
+	} {
+		got, ok := invokedSpelling(tc.argv0)
+		assert.Equal(t, tc.ok, ok, "%q", tc.argv0)
+		assert.Equal(t, tc.want, got, "%q", tc.argv0)
+	}
 }

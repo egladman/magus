@@ -32,18 +32,31 @@ var invokedName atomic.Pointer[string]
 
 // SetInvokedName records how this process was invoked, from os.Args[0]. A relative
 // spelling is kept whole, since `./magus` names a checkout's own binary and a base
-// name would not; anything else renders as its base name. An empty argv[0] is ignored.
+// name would not; anything else renders as its base name.
+//
+// A binary called something OTHER than magus is ignored, and the canonical name
+// stands. A renamed copy is usually a harness's own artifact rather than anything a
+// reader could type: the docs' example generator builds one as `magus-bin`, and a
+// hint spelling that is a hint nobody can run.
 //
 // Call it once before any hint renders: every Command reads it.
 func SetInvokedName(argv0 string) {
+	if name, ok := invokedSpelling(argv0); ok {
+		invokedName.Store(&name)
+	}
+}
+
+// invokedSpelling is SetInvokedName's decision, split out so it can be graded
+// without moving the package's global.
+func invokedSpelling(argv0 string) (string, bool) {
 	name := strings.TrimSpace(argv0)
-	if name == "" {
-		return
+	if name == "" || filepath.Base(name) != "magus" {
+		return "", false
 	}
-	if !strings.HasPrefix(name, ".") {
-		name = filepath.Base(name)
+	if strings.HasPrefix(name, ".") {
+		return name, true
 	}
-	invokedName.Store(&name)
+	return filepath.Base(name), true
 }
 
 // binary is the name Command renders with.
