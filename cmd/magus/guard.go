@@ -211,6 +211,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// outrank it: the regeneration advice below is still true after a collision, and
 		// saying that instead would let two leases edit one path in silence.
 		advice := ""
+		// Graded ahead of the rules, though it speaks near the end of them: the project
+		// this write lands in is recorded whatever verdict they reach, so it cannot be
+		// resolved inside a rung that a louder rule skips.
+		drift := gradeScopeDrift(ctx, gate, actingLease, input.Value)
 		// spoken reports that a rule MATCHED, which is not the same as a rule that
 		// produced text. A once-per-session advisory that already fired this session
 		// matched and stayed quiet, and the rules below it must not step into the silence
@@ -266,6 +270,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 				advice, spoken = gate.once(advisoryRegenSource, text), true
 			}
 		}
+		// Above the new-directory rule because it is the wider question: whether this
+		// write belongs in this session at all outranks how the unit it belongs to is
+		// laid out. Every rule above it says the write itself is wrong, which is more
+		// actionable than either.
+		if verdict.Decision == "pass" && !spoken && drift.advice != "" {
+			advice, spoken = drift.advice, true
+		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
 		if verdict.Decision == "pass" && !spoken {
 			advice = adviseNewSourceDir(input.Value)
@@ -273,6 +284,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"
 			verdict.Context = advice
+		}
+		// A denied write never happens, so it never touched anything.
+		if verdict.Decision != "deny" {
+			drift.record()
 		}
 	default:
 		// The sibling-checkout rule ranks with the throwaway-copy deny it generalizes,
