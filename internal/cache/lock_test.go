@@ -101,7 +101,9 @@ func TestKeyedLockWaitBeatsAndNamesTheHolder(t *testing.T) {
 
 	assert.Equal(t, ". generate", blockedOn, "the mark names the holder, not just the key")
 	assert.Contains(t, logs.lines(),
-		"magus: waiting for a cache lock held by another step waiting=. coverage-badge held_by=. generate")
+		"magus: . coverage-badge is waiting for a cache lock held by . generate")
+	assert.Contains(t, logs.lines(),
+		"magus: . coverage-badge is still waiting for a cache lock held by . generate (0s so far)")
 }
 
 func TestKeyedLockUncontendedNeitherBeatsNorLogs(t *testing.T) {
