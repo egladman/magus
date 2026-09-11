@@ -167,7 +167,7 @@ var _ spells.Driver = (*describeKindTool)(nil)
 // other describe tool: one file per feature, and this is describe's file noun.
 type describeFileTool struct {
 	ws   types.Inspector
-	next *nextServer
+	next nextFilter
 }
 
 func (t *describeFileTool) Name() string { return hint.ToolDescribeFile.String() }
@@ -182,7 +182,7 @@ func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: dataWithNext(types.NewFileReport(files), t.next.serve(hint.NextForFiles(files)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(types.NewFileReport(files), t.next.served(hint.NextForFiles(files)))}, nil
 }
 
 var _ spells.Driver = (*describeFileTool)(nil)

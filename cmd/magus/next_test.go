@@ -18,15 +18,15 @@ var nextFixture = []hint.Next{
 	{ID: "query-path", Run: "magus path spell:go spell:gomod", Argv: []string{"magus", "path", "spell:go", "spell:gomod"}, Why: "path prints the chain."},
 }
 
-func serverAt(base, session string) nextServer {
-	return nextServer{gate: newAdvisoryGate(base, session), base: base, role: hint.RoleUnbound}
+func gateAt(base, session string) nextGate {
+	return nextGate{gate: newAdvisoryGate(base, session), role: hint.RoleUnbound}
 }
 
 // The Run line is navigation and prints every time; the Why is advice and says nothing
 // the second time, so it fires once per session and the command survives it. The two
 // never share a line: a reader copies the command, and a parenthetical on it comes along.
 func TestPrintNextFiresEachWhyOnce(t *testing.T) {
-	s := serverAt(t.TempDir(), "session-1")
+	s := gateAt(t.TempDir(), "session-1")
 
 	var first, second bytes.Buffer
 	printNext(&first, s, nextFixture)
@@ -48,8 +48,8 @@ func TestPrintNextRepeatsWhyInANewSession(t *testing.T) {
 	base := t.TempDir()
 
 	var first, other bytes.Buffer
-	printNext(&first, serverAt(base, "session-1"), nextFixture)
-	printNext(&other, serverAt(base, "session-2"), nextFixture)
+	printNext(&first, gateAt(base, "session-1"), nextFixture)
+	printNext(&other, gateAt(base, "session-2"), nextFixture)
 
 	assert.Equal(t, first.String(), other.String())
 }
@@ -57,7 +57,7 @@ func TestPrintNextRepeatsWhyInANewSession(t *testing.T) {
 // -s drops the Why without spending its firing: a quiet run must not be what silences
 // the explanation for the next full one.
 func TestPrintNextUnderSilentKeepsRunAndSpendsNothing(t *testing.T) {
-	s := serverAt(t.TempDir(), "session-1")
+	s := gateAt(t.TempDir(), "session-1")
 	prev := global.silent
 	global.silent = true
 	defer func() { global.silent = prev }()
@@ -77,55 +77,56 @@ func TestPrintNextUnderSilentKeepsRunAndSpendsNothing(t *testing.T) {
 // Nothing to suggest prints nothing at all, label included.
 func TestPrintNextPrintsNothingWhenEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	printNext(&buf, serverAt(t.TempDir(), "session-1"), nil)
+	printNext(&buf, gateAt(t.TempDir(), "session-1"), nil)
 	assert.Empty(t, buf.String())
 }
 
-// The journal is the contract the guard reads: one line per entry actually served, at
-// the path advisoryGate keys its markers by, so the two cannot drift apart.
-func TestServeJournalsEveryEntryAtTheAdvisoryKey(t *testing.T) {
+// The journal is the contract the guard reads: one line per entry actually served,
+// in this checkout's cache dir.
+func TestServedJournalsEveryEntry(t *testing.T) {
 	base := t.TempDir()
-	s := serverAt(base, "")
 
-	served := s.serve(nextFixture)
+	served := gateAt(base, "").served(nextFixture)
 	require.Len(t, served, 2)
 
-	path := hint.ServedNextPath(base, "")
-	assert.Equal(t, newAdvisoryGate(base, "").markerPath("served-next"), path,
-		"the journal and the advisory markers share one key derivation")
-
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(hint.ServedNextPath(base))
 	require.NoError(t, err)
 	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	require.Len(t, lines, 2)
 
 	var entry hint.ServedNextEntry
 	require.NoError(t, json.Unmarshal([]byte(lines[0]), &entry))
-	assert.Equal(t, "query-explain", entry.ID)
-	assert.Equal(t, []string{"magus", "explain", "spell:go"}, entry.Argv)
-	assert.NotZero(t, entry.Ts)
+	assert.Equal(t, hint.ServedNextEntry{
+		AtMs: entry.AtMs,
+		ID:   "query-explain",
+		Argv: []string{"magus", "explain", "spell:go"},
+	}, entry)
+	assert.NotZero(t, entry.AtMs)
 }
 
-// A worker is never served a write it cannot place in its own lane, and a reviewer is
-// served no write at all. The regeneration is the one template that writes today.
-func TestServeFiltersWritesByRole(t *testing.T) {
-	regen := hint.Next{ID: "file-regenerate", Run: "magus run generate:rw .", Argv: []string{"magus", "run", "generate:rw", "."}}
+// A worker keeps a write inside its own lane and loses the rest; a reviewer is served
+// no write at all. The regeneration is the one template that writes today.
+func TestServedFiltersWritesByRole(t *testing.T) {
+	regen := hint.Next{ID: "file-regenerate", Run: "magus run generate:rw docs", Argv: []string{"magus", "run", "generate:rw", "docs"}}
 	full := append(append([]hint.Next{}, nextFixture...), regen)
 
 	for _, tc := range []struct {
+		name string
 		role hint.Role
+		lane []string
 		want []string
 	}{
-		{hint.RoleUnbound, []string{"query-explain", "query-path", "file-regenerate"}},
-		{hint.RoleWorker, []string{"query-explain", "query-path"}},
-		{hint.RoleReviewer, []string{"query-explain", "query-path"}},
+		{"unbound", hint.RoleUnbound, nil, []string{"query-explain", "query-path", "file-regenerate"}},
+		{"worker in its lane", hint.RoleWorker, []string{"docs/**"}, []string{"query-explain", "query-path", "file-regenerate"}},
+		{"worker out of its lane", hint.RoleWorker, []string{"cmd/magus/**"}, []string{"query-explain", "query-path"}},
+		{"reviewer", hint.RoleReviewer, nil, []string{"query-explain", "query-path"}},
 	} {
-		s := nextServer{base: t.TempDir(), role: tc.role}
+		n := nextGate{gate: newAdvisoryGate(t.TempDir(), ""), role: tc.role, lane: tc.lane}
 		var ids []string
-		for _, n := range s.serve(full) {
-			ids = append(ids, n.ID)
+		for _, entry := range n.served(full) {
+			ids = append(ids, entry.ID)
 		}
-		assert.Equal(t, tc.want, ids, "role %s", tc.role)
+		assert.Equal(t, tc.want, ids, tc.name)
 	}
 }
 

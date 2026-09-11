@@ -1537,8 +1537,8 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	focus, inFocus := markFileFocus(ws, files)
 	report := types.NewFileReport(files)
-	nx := nextFor(root)
-	next := nx.serve(hint.NextForFiles(files))
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForFiles(files))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

@@ -66,7 +66,7 @@ func knowledgeGraph(ctx context.Context, g graphResolver) (*knowledge.Graph, err
 
 type queryTool struct {
 	graph graphResolver
-	next  *nextServer
+	next  nextFilter
 }
 
 func (t *queryTool) Name() string { return hint.ToolQuery.String() }
@@ -107,7 +107,7 @@ func (t *queryTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spell
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: dataWithNext(resp, t.next.serve(hint.NextForQuery(resp.KnowledgeQueryOutput)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(resp, t.next.served(hint.NextForQuery(resp.KnowledgeQueryOutput)))}, nil
 }
 
 type refsTool struct{ graph graphResolver }
@@ -241,7 +241,7 @@ func pagedQuery(g *knowledge.Graph, terms string, budget, limit int, cursor stri
 
 type explainTool struct {
 	graph graphResolver
-	next  *nextServer
+	next  nextFilter
 }
 
 func (t *explainTool) Name() string { return hint.ToolExplain.String() }
@@ -274,8 +274,9 @@ func (t *explainTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spe
 	}
 	// Return the compact, natural-language rendering (not the verbose JSON struct):
 	// for a result an agent reads and reasons about, aligned text with full IDs is
-	// more token-efficient and less error-prone than repeated-key JSON.
-	return spells.InvokeResponse{Text: render.ExplainText(out) + renderNext(t.next.serve(hint.NextForExplain(out)))}, nil
+	// more token-efficient and less error-prone than repeated-key JSON. The
+	// breadcrumbs ride the same text.
+	return spells.InvokeResponse{Text: render.ExplainText(out) + renderNext(t.next.served(hint.NextForExplain(out)))}, nil
 }
 
 type pathTool struct{ graph graphResolver }

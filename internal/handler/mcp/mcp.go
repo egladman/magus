@@ -149,7 +149,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 	if ledgerStore == nil {
 		ledgerStore = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
-	next := newNextServer(opts.Magus.CacheDir(), ledgerStore)
+	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: ledgerStore}
 	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&describeFileTool{ws: opts.Magus, next: next},

@@ -205,8 +205,8 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	out := g.Query(input, qf.Budget)
 	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
 
-	nx := nextFor(root)
-	next := nx.serve(hint.NextForQuery(out))
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForQuery(out))
 
 	// The status is decided once, for every format: a rule that held only for text would
 	// leave the callers most likely to branch on it (`-o name` in a chain, `-o json` in a
@@ -757,8 +757,8 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return exitForVerdict(ans.Verdict)
 	}
 
-	nx := nextFor(root)
-	next := nx.serve(hint.NextForExplain(out))
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForExplain(out))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:

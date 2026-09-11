@@ -24,7 +24,7 @@ type affectedPlanResult struct {
 
 type affectedPlanTool struct {
 	opts Options
-	next *nextServer
+	next nextFilter
 }
 
 func (t *affectedPlanTool) Name() string { return hint.ToolAffectedPlan.String() }
@@ -64,7 +64,7 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		}
 		projects = append(projects, s.ProjectPaths...)
 	}
-	return spells.InvokeResponse{Data: dataWithNext(out, t.next.serve(hint.NextForAffected(target, projects)))}, nil
+	return spells.InvokeResponse{Data: dataWithNext(out, t.next.served(hint.NextForAffected(target, projects)))}, nil
 }
 
 var _ spells.Driver = (*affectedPlanTool)(nil)
