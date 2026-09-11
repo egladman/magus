@@ -65,11 +65,10 @@ func Merge(params map[string]any) (func(*types.Lease), error) {
 		err = errors.Join(err, e)
 	} else if ok {
 		s := types.LeaseState(strings.TrimSpace(v))
-		switch s {
-		case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
+		if !types.ValidLeaseState(s) {
+			err = errors.Join(err, fmt.Errorf("ledger: state must be one of %s", stateVocabulary()))
+		} else {
 			set = append(set, func(u *types.Lease) { u.State = s })
-		default:
-			err = errors.Join(err, errors.New("ledger: state must be one of declared, running, pass, fail, no_return"))
 		}
 	}
 	if v, present := params["read_only"]; present {

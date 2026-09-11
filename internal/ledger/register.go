@@ -9,12 +9,14 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnknownLease reports a registration against an id no row carries, and ErrNoBase one
+// ErrUnknownLease reports a registration against an id no row carries, and errNoBase one
 // that named no base. Sentinels rather than bare strings so a door can tell a worker's
 // mistake from a store failure; the wrapped messages carry the id and the next step.
+// ErrUnknownLease is exported because a door branches on it; nothing branches on the
+// other, so it stays inside.
 var (
 	ErrUnknownLease = errors.New("ledger: unknown lease")
-	ErrNoBase       = errors.New("ledger: a registration needs the base the worker landed on")
+	errNoBase       = errors.New("ledger: a registration needs the base the worker landed on")
 )
 
 // Register records the base a worker reports it actually landed on and returns the row
@@ -34,7 +36,7 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Le
 	if base == "" {
 		return types.Lease{}, fmt.Errorf("%w, in the form `magus vcs checkpoint -o name` prints"+
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
-			" and register what it prints", ErrNoBase)
+			" and register what it prints", errNoBase)
 	}
 	return s.mutate(ctx, id, asRegistration, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
@@ -43,21 +45,17 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Le
 				" orchestrator handed you", ErrUnknownLease, id)
 		}
 		cur.ReportedBase = base
-		cur.BaseVerdict = CompareBase(cur.Checkpoint, base)
+		cur.BaseVerdict = compareBase(cur.Checkpoint, base)
 		cur.Registered = now
 		return nil
 	})
 }
 
-// CompareBase compares the checkpoint a lease was handed with the base its worker
+// compareBase compares the checkpoint a lease was handed with the base its worker
 // reported, both as `magus vcs checkpoint -o name` prints them: `<rev>` for a clean tree,
-// `<rev>+<digest>` for a dirty one.
-//
-// Exported to keep "is this worker on its base" spelled once. Register is the only caller
-// today; a later reader that needs the same question answered (the agent guard, the
-// console) should call this rather than grow a second comparison that can drift from it.
-// See types.LeaseBaseVerdict for why the answer is not a boolean.
-func CompareBase(checkpoint, reported string) types.LeaseBaseVerdict {
+// `<rev>+<digest>` for a dirty one. See types.LeaseBaseVerdict for why the answer is not
+// a boolean.
+func compareBase(checkpoint, reported string) types.LeaseBaseVerdict {
 	checkpoint, reported = strings.TrimSpace(checkpoint), strings.TrimSpace(reported)
 	switch {
 	case checkpoint == "" || reported == "":

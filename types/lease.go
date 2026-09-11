@@ -29,6 +29,19 @@ const (
 	StateNoReturn LeaseState = "no_return"
 )
 
+// LeaseStates is the closed set, in lifecycle order. The vocabulary lives beside the
+// constants because four readers quote it (the row decoder, the put merge, the published
+// schema, and the error each of them raises) and a closed set that drifts is one a client
+// is rejected by for a value the schema told it to send.
+func LeaseStates() []LeaseState {
+	return []LeaseState{StateDeclared, StateRunning, StatePass, StateFail, StateNoReturn}
+}
+
+// ValidLeaseState reports whether s is one of [LeaseStates]. An empty state is NOT: a row
+// that has not said where it stands carries none, and the callers that allow that test
+// for it themselves.
+func ValidLeaseState(s LeaseState) bool { return slices.Contains(LeaseStates(), s) }
+
 // LeaseBaseVerdict says how the base a worker reported at registration compares
 // with the Checkpoint its lease was handed. A FACT computed at that moment, never a
 // refusal: a diverged worker is registered like any other and told what diverged.

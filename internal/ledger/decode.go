@@ -58,10 +58,20 @@ func (r Row) Validate() error {
 	if !types.ValidLeaseID(strings.TrimSpace(r.ID)) {
 		return fmt.Errorf("ledger: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, types.MaxLeaseIDLen)
 	}
-	if r.State != "" && !knownState(r.State) {
-		return fmt.Errorf("ledger: state must be one of %s", strings.Join(knownStates(), ", "))
+	if r.State != "" && !types.ValidLeaseState(r.State) {
+		return fmt.Errorf("ledger: state must be one of %s", stateVocabulary())
 	}
 	return nil
+}
+
+// stateVocabulary is the closed set as an error quotes it.
+func stateVocabulary() string {
+	states := types.LeaseStates()
+	names := make([]string, len(states))
+	for i, s := range states {
+		names[i] = string(s)
+	}
+	return strings.Join(names, ", ")
 }
 
 // Apply writes this declaration onto a row, for [Store.Update]. Store-computed fields are
@@ -88,21 +98,6 @@ func trimmed(in []string) []string {
 		}
 	}
 	return out
-}
-
-func knownState(s types.LeaseState) bool {
-	switch s {
-	case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
-		return true
-	}
-	return false
-}
-
-func knownStates() []string {
-	return []string{
-		string(types.StateDeclared), string(types.StateRunning),
-		string(types.StatePass), string(types.StateFail), string(types.StateNoReturn),
-	}
 }
 
 // maxInputBytes bounds one decoded record. A row and a report are both a few hundred

@@ -14,7 +14,9 @@
     },
     "id": {
       "type": "string",
-      "description": "The lease's identity within the plan, and the key a second register replaces on. Letters, digits and -_./: only."
+      "pattern": "^[A-Za-z0-9._/:-]+$",
+      "maxLength": 128,
+      "description": "The lease's identity within the plan, and the key a second register replaces on. Letters, digits and -_./: only, at most 128 characters."
     },
     "parent": {
       "type": "string",
@@ -58,8 +60,8 @@
     },
     "state": {
       "type": "string",
-      "enum": ["declared", "running", "pass", "fail", "no_return"],
-      "description": "The row's lifecycle position. no_return is a lease that never reported, which is not a failure."
+      "enum": ["", "declared", "running", "pass", "fail", "no_return"],
+      "description": "The row's lifecycle position, empty for a row that has not said where it stands. no_return is a lease that never reported, which is not a failure."
     },
     "read_only": {
       "type": "boolean",

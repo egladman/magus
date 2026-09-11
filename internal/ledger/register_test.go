@@ -133,7 +133,7 @@ func TestStoreRegisterRequiresABase(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = s.Register(ctx, "u1", "   ")
-	require.ErrorIs(t, err, ErrNoBase)
+	require.ErrorIs(t, err, errNoBase)
 	assert.Contains(t, err.Error(), "magus vcs checkpoint -o name", "the message names how to produce one")
 
 	got, err := s.List()
@@ -198,7 +198,7 @@ func TestCompareBase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, CompareBase(tt.checkpoint, tt.reported))
+			assert.Equal(t, tt.want, compareBase(tt.checkpoint, tt.reported))
 		})
 	}
 }
