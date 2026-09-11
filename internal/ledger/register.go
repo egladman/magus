@@ -36,7 +36,7 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Le
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
 			" and register what it prints", ErrNoBase)
 	}
-	return s.mutate(ctx, id, graded, func(cur *types.Lease, exists bool, now int64) error {
+	return s.mutate(ctx, id, asRegistration, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to register against."+
 				" Check the declared ids with `magus_ledger list` and register under the id the"+

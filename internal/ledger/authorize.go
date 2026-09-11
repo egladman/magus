@@ -43,15 +43,28 @@ func (a Actor) record() types.LeaseActor {
 	return types.LeaseActor{Session: a.Session, Host: a.Host}
 }
 
-// grading says whether a write carries a caller's declaration, and so whether the acting
-// party's boundary applies to it. A named pair rather than a bare bool because the two
-// call sites read as opposite rules and `mutate(ctx, id, false, ...)` names neither.
-type grading bool
+// grading is what KIND of write reaches [Store.mutate], which decides two things: whether
+// the acting party's boundary applies to it, and which store-owned fields it may set. Both
+// are spelled at every call site rather than defaulted, because a write that reaches the
+// file ungraded, or one that carries its own registration, is the escape the rules exist
+// to close and a silent default is how one gets added.
+type grading int
 
 const (
-	graded   grading = true
-	ungraded grading = false
+	// asDeclaration is a caller's row: the boundary applies and every store-owned field is
+	// carried forward from the stored row.
+	asDeclaration grading = iota
+	// asRegistration is a worker reporting the base it landed on: graded, and the one
+	// write that sets the registration fields.
+	asRegistration
+	// asObservation is the guard recording a write by somebody else: ungraded, since the
+	// row it lands on is by definition not the writer's, and the one write that sets
+	// Unattributed.
+	asObservation
 )
+
+// graded reports whether the acting party's boundary applies to this write.
+func (g grading) graded() bool { return g != asObservation }
 
 // RefusedError is a write the store would not apply, naming the rule, the actor it
 // applied to, and what the actor should do instead.

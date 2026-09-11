@@ -199,6 +199,10 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 			want:  "every forbidden_path its parent carries",
 		},
 		{
+			name:  "carrying a registration it never made",
+			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md"}, ReportedBase: "abc123", Registered: 42},
+		},
+		{
 			name:  "graded on the way out",
 			child: types.Lease{OwnedPaths: []string{"internal/ledger"}, ForbiddenPaths: []string{"MAGUS.md"}, State: types.StatePass},
 			want:  "never pass",
@@ -212,9 +216,11 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 			child := tt.child
 			child.Parent = "adj/store"
 			id := "adj/store/" + strings.ReplaceAll(tt.name, " ", "-")
-			_, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Lease) { *u = child })
+			stored, err := boundStore(loc, "adj/store").Update(t.Context(), id, func(u *types.Lease) { *u = child })
 			if tt.want == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
+				assert.Zero(t, stored.Registered, "a child registers for itself or not at all")
+				assert.Empty(t, stored.ReportedBase)
 				return
 			}
 			var refused *RefusedError

@@ -366,6 +366,32 @@ func hashOf(t *testing.T, path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// What the store OBSERVED is not a caller's to send. A whole-row write that carried these
+// would erase a registration nobody withdrew, or claim one that never happened.
+func TestStoreKeepsItsOwnRecordAcrossAWholeRowWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	s := tmpStore(t, t.TempDir())
+	_, err := s.Put(ctx, lease("a"))
+	require.NoError(t, err)
+	_, err = s.Register(ctx, "a", "abc123")
+	require.NoError(t, err)
+	require.NoError(t, s.RecordUnattributedWrite(ctx, "a", "internal/a/store.go"))
+
+	forged := lease("a")
+	forged.ReportedBase, forged.BaseVerdict, forged.Registered = "deadbeef", types.BaseDiverged, 1
+	forged.Unattributed = []types.LeaseUnattributedWrite{{Path: "docs/forged.md"}}
+	stored, err := s.Put(ctx, forged)
+	require.NoError(t, err)
+
+	assert.Equal(t, "abc123", stored.ReportedBase)
+	assert.Equal(t, types.BaseMatch, stored.BaseVerdict)
+	assert.NotZero(t, stored.Registered)
+	require.Len(t, stored.Unattributed, 1)
+	assert.Equal(t, "internal/a/store.go", stored.Unattributed[0].Path)
+}
+
 // A ledger a newer magus wrote is refused rather than read lossily. read drops what this
 // binary does not know and mutate rewrites EVERY row, so one unrelated put would destroy
 // the rest of the plan.

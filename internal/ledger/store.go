@@ -249,7 +249,7 @@ func (s *Store) Put(ctx context.Context, u types.Lease) (types.Lease, error) {
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
 func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease)) (types.Lease, error) {
-	return s.mutate(ctx, id, graded, func(cur *types.Lease, _ bool, _ int64) error {
+	return s.mutate(ctx, id, asDeclaration, func(cur *types.Lease, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -282,11 +282,10 @@ func (s *Store) RecordUnattributedWrite(ctx context.Context, id, path string) er
 	if path == "" {
 		return nil
 	}
-	// UNGRADED, and it is the only write here that is: this records what the guard SAW,
-	// not what a caller declared, and the row it lands on is by definition somebody
-	// else's. Grading it would throw away the observation precisely when it matters,
-	// which is a worker writing a path another lease holds.
-	_, err := s.mutate(ctx, id, ungraded, func(cur *types.Lease, exists bool, now int64) error {
+	// An OBSERVATION, and the only ungraded write here: the row it lands on is by
+	// definition somebody else's, so grading it would throw the notice away precisely when
+	// it matters, which is a worker writing a path another lease holds.
+	_, err := s.mutate(ctx, id, asObservation, func(cur *types.Lease, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("ledger: no such lease %q: %w", id, errNoSuchRow)
 		}
@@ -328,11 +327,8 @@ var errNoSuchRow = errors.New("ledger: no such lease")
 // apply may fail, which is what lets that refusal be decided where it has to be: under
 // the lock, after the row is known present or absent. Nothing is written when it does.
 //
-// grade says whether this write is one a CALLER declared, and so whether the acting
-// party's boundary applies to it. Both answers are spelled out at every call site rather
-// than defaulted, because a write that reaches the file ungraded is the escape the rules
-// exist to close and a silent default is how one gets added.
-func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
+// kind says what the write is; see [grading].
+func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(cur *types.Lease, exists bool, now int64) error) (types.Lease, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.Lease{}, ErrNoID
 	}
@@ -359,10 +355,25 @@ func (s *Store) mutate(ctx context.Context, id string, grade grading, apply func
 		}
 		u = u.Clone()
 		u.ID = id
-		if grade == graded {
+		if kind.graded() {
 			if aerr := authorizeRow(actor, id, prev, u, i >= 0, f.Leases); aerr != nil {
 				return aerr
 			}
+		}
+		// The store's own record of what HAPPENED is not a caller's to send. On an
+		// existing row it is carried forward, so a whole-row write neither forges nor
+		// erases a registration; a row a BOUND caller creates carries none, since a child
+		// handed a registration it never made writes without ever reporting its base.
+		switch {
+		case i >= 0:
+			if kind != asRegistration {
+				u.ReportedBase, u.BaseVerdict, u.Registered = prev.ReportedBase, prev.BaseVerdict, prev.Registered
+			}
+			if kind != asObservation {
+				u.Unattributed = prev.Unattributed
+			}
+		case actor.Bound():
+			u.ReportedBase, u.BaseVerdict, u.Registered, u.Unattributed = "", "", 0, nil
 		}
 		u.Updated = now
 		u.Created = now
