@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 5857,
-  "edge_count": 10428,
+  "edge_count": 10427,
   "relations": [
     {
       "id": "annotates",
@@ -8042,16 +8042,6 @@
       }
     },
     {
-      "id": "docsection:CLAUDE.md#commands",
-      "kind": "docsection",
-      "label": "Commands",
-      "source": "CLAUDE.md#commands",
-      "attrs": {
-        "anchor": "commands",
-        "level": "2"
-      }
-    },
-    {
       "id": "docsection:CLAUDE.md#layout",
       "kind": "docsection",
       "label": "Layout",
@@ -8082,12 +8072,12 @@
       }
     },
     {
-      "id": "docsection:CLAUDE.md#running-the-daemon-locally",
+      "id": "docsection:CLAUDE.md#the-gate",
       "kind": "docsection",
-      "label": "Running the daemon locally",
-      "source": "CLAUDE.md#running-the-daemon-locally",
+      "label": "The gate",
+      "source": "CLAUDE.md#the-gate",
       "attrs": {
-        "anchor": "running-the-daemon-locally",
+        "anchor": "the-gate",
         "level": "2"
       }
     },
@@ -8098,6 +8088,16 @@
       "source": "CLAUDE.md#which-magus-binary",
       "attrs": {
         "anchor": "which-magus-binary",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:CLAUDE.md#workflows",
+      "kind": "docsection",
+      "label": "Workflows",
+      "source": "CLAUDE.md#workflows",
+      "attrs": {
+        "anchor": "workflows",
         "level": "2"
       }
     },
@@ -63752,14 +63752,6 @@
     },
     {
       "source": "doc:CLAUDE.md",
-      "target": "diagnostic:MGS1021",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CLAUDE.md"
-    },
-    {
-      "source": "doc:CLAUDE.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
@@ -90720,14 +90712,6 @@
     },
     {
       "source": "docsection:CLAUDE.md#claudemd",
-      "target": "docsection:CLAUDE.md#commands",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CLAUDE.md"
-    },
-    {
-      "source": "docsection:CLAUDE.md#claudemd",
       "target": "docsection:CLAUDE.md#layout",
       "relation": "contains",
       "confidence": "extracted",
@@ -90752,7 +90736,7 @@
     },
     {
       "source": "docsection:CLAUDE.md#claudemd",
-      "target": "docsection:CLAUDE.md#running-the-daemon-locally",
+      "target": "docsection:CLAUDE.md#the-gate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -90761,6 +90745,14 @@
     {
       "source": "docsection:CLAUDE.md#claudemd",
       "target": "docsection:CLAUDE.md#which-magus-binary",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "CLAUDE.md"
+    },
+    {
+      "source": "docsection:CLAUDE.md#claudemd",
+      "target": "docsection:CLAUDE.md#workflows",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
