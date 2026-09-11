@@ -332,7 +332,7 @@ type agentSpawnRequest struct {
 	Context       string `json:"context"`
 }
 
-// AppendAgentSpawn records one lease handoff and stores the handed context as a blob.
+// AppendAgentSpawn records one spawn and stores the context it was given as a blob.
 //
 // Best-effort and error-free, like every other producer here: an audit write must never be able
 // to fail the lease it observes.
@@ -395,10 +395,9 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 // reads the rest of what that environment claimed.
 //
 // This is the second of the two lease channels, and the two say different things. The
-// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a handoff
-// it is making; the environment is the WORKER's own claim about itself. Where both are
-// available the marker wins: the party doing the partitioning is the one that knows the
-// partition.
+// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a spawn it
+// is making; the environment is the WORKER's own claim about itself. The ENVIRONMENT
+// wins where both are available, because this is what [ledger.ActingLease] reads first.
 func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
 // leaseScanBytes bounds the head of the handed context the marker may appear in. The marker
@@ -418,7 +417,7 @@ const leaseMarker = "lease:"
 // First line, not anywhere in the head: a lease prompt routinely quotes things (a
 // ledger listing, a file, another agent's transcript), and a marker line lifted from any
 // of them would stamp the event with a lease that has nothing to do with this
-// handoff. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
+// spawn. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
 // not; the position is the only thing that separates them. Leading blank lines are
 // formatting and are skipped.
 //
@@ -559,13 +558,13 @@ func LastRun(base, action string) (Event, bool) {
 // judge whether a rotate is worth running. Best-effort and read-only: a missing or empty trail
 // is (0, 0), and an unreadable directory is skipped rather than erroring: a size readout is
 // never a precondition for anything.
-func Stat(base string) (bytes int64, count int64) {
+func Stat(base string) (size int64, count int64) {
 	if base == "" {
 		return 0, 0
 	}
 	if f, err := os.Open(eventsPath(base)); err == nil {
 		if fi, err := f.Stat(); err == nil {
-			bytes += fi.Size()
+			size += fi.Size()
 		}
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -579,11 +578,11 @@ func Stat(base string) (bytes int64, count int64) {
 	if entries, err := os.ReadDir(blobsPath(base)); err == nil {
 		for _, ent := range entries {
 			if info, err := ent.Info(); err == nil && !ent.IsDir() {
-				bytes += info.Size()
+				size += info.Size()
 			}
 		}
 	}
-	return bytes, count
+	return size, count
 }
 
 // ReadRecent returns up to limit events from the tail of the trail, newest first. A missing or
