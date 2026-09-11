@@ -44,7 +44,7 @@ type Brief struct {
 	// down; these hold whether anybody wrote them down or not, which is why a brief
 	// that carried only the declared list handed workers a boundary its author's
 	// memory had bounded.
-	DerivedDenyPaths []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
+	DerivedDenyPaths []BriefBoundary `json:"derived_deny_paths,omitempty" yaml:"derived_deny_paths,omitempty"`
 	// WorkspaceCold marks a brief rendered without a loadable workspace, so an empty
 	// DerivedDenyPaths reads as "not asked". The row alone carries the goal, the boundary
 	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.

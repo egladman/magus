@@ -167,7 +167,7 @@ func leaseWorkspace(t *testing.T, row types.Lease) (root, cacheDir string) {
 }
 
 // TestNarrowToLeaseGrantsOnlyTheWritePaths is the boundary the whole tier rests on: a
-// worker's write grant is the ledger row's owned paths and nothing else in the checkout.
+// worker's write grant is the ledger row's write paths and nothing else in the checkout.
 // Reads stay wide, because the row declares a write boundary only.
 func TestNarrowToLeaseGrantsOnlyTheWritePaths(t *testing.T) {
 	root, cacheDir := leaseWorkspace(t, types.Lease{
@@ -286,7 +286,7 @@ func TestNarrowToLeaseLeavesEveryUnnarrowableCaseAlone(t *testing.T) {
 		{"root lease", types.Lease{ID: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, "fleet/root"},
 		{"no row", types.Lease{}, "fleet/w1"},
 		{"no lease claimed", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning, WritePaths: []string{"pkg/a/**"}}, ""},
-		{"empty owned paths", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
+		{"empty write paths", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StateRunning}, "fleet/w1"},
 		{"terminal row", types.Lease{ID: "fleet/w1", Parent: "fleet/root", State: types.StatePass, WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
 		{"no state", types.Lease{ID: "fleet/w1", Parent: "fleet/root", WritePaths: []string{"pkg/a/**"}}, "fleet/w1"},
 	} {

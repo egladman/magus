@@ -56,8 +56,8 @@ func TestLedgerTool(t *testing.T) {
 	t.Run("put records the declared row", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
 			"op": "put", "id": "lease-a", "goal": "ship the store; TestStoreRoundTrip passes",
-			"checkpoint": "60dc9151", "owned_paths": "internal/ledger types/lease.go",
-			"forbidden_paths": "MAGUS.md", "tier": "standard", "validation": "magus run test",
+			"checkpoint": "60dc9151", "write_paths": "internal/ledger types/lease.go",
+			"deny_paths": "MAGUS.md", "model": "standard", "validation": "magus run test",
 			"state": "running",
 		})
 		got, ok := resp.Data.(types.Lease)
@@ -98,7 +98,7 @@ func TestLedgerTool(t *testing.T) {
 	t.Run("a lifecycle put touches only the fields it names", func(t *testing.T) {
 		invoke(t, map[string]any{
 			"op": "put", "id": "lease-life", "goal": "the declared goal",
-			"checkpoint": "abc123", "owned_paths": "internal/ledger", "tier": "opus",
+			"checkpoint": "abc123", "write_paths": "internal/ledger", "model": "opus",
 		})
 		resp := invoke(t, map[string]any{"op": "put", "id": "lease-life", "state": "pass"})
 		got, ok := resp.Data.(types.Lease)
@@ -112,7 +112,7 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "put", "id": "lease-arr", "owned_paths": []any{"a/b", "c d"},
+			"op": "put", "id": "lease-arr", "write_paths": []any{"a/b", "c d"},
 		})
 		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok)
@@ -178,13 +178,13 @@ func TestLedgerTool(t *testing.T) {
 	// read_only error would tell a client sending goal=3 that its put succeeded and hand
 	// back a row without the field it thought it wrote.
 	for name, params := range map[string]map[string]any{
-		"a non-string goal":            {"op": "put", "id": "lease-typed", "goal": 3},
-		"a non-string tier":            {"op": "put", "id": "lease-typed", "tier": true},
-		"a non-list owned_paths":       {"op": "put", "id": "lease-typed", "owned_paths": 7},
-		"a list with a non-string":     {"op": "put", "id": "lease-typed", "depends_on": []any{"a", 2}},
-		"a non-string state":           {"op": "put", "id": "lease-typed", "state": 1},
-		"a non-boolean read_only":      {"op": "put", "id": "lease-typed", "read_only": "yes"},
-		"a non-string forbidden_paths": {"op": "put", "id": "lease-typed", "forbidden_paths": map[string]any{}},
+		"a non-string goal":        {"op": "put", "id": "lease-typed", "goal": 3},
+		"a non-string model":       {"op": "put", "id": "lease-typed", "model": true},
+		"a non-list write_paths":   {"op": "put", "id": "lease-typed", "write_paths": 7},
+		"a list with a non-string": {"op": "put", "id": "lease-typed", "depends_on": []any{"a", 2}},
+		"a non-string state":       {"op": "put", "id": "lease-typed", "state": 1},
+		"a non-boolean read_only":  {"op": "put", "id": "lease-typed", "read_only": "yes"},
+		"a non-string deny_paths":  {"op": "put", "id": "lease-typed", "deny_paths": map[string]any{}},
 	} {
 		t.Run(name+" is rejected, not dropped", func(t *testing.T) {
 			_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
@@ -223,8 +223,8 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 		require.NoError(t, err)
 		return resp
 	}
-	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "shared.go docs", "state": "running"})
-	invoke(map[string]any{"op": "put", "id": "u2", "owned_paths": "shared.go", "state": "declared"})
+	invoke(map[string]any{"op": "put", "id": "u1", "write_paths": "shared.go docs", "state": "running"})
+	invoke(map[string]any{"op": "put", "id": "u2", "write_paths": "shared.go", "state": "declared"})
 
 	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
 	require.True(t, ok)
@@ -236,7 +236,7 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 
 	// u1 finishes editing the contested file and announces it by shrinking the row. The
 	// digest is what tells u2 which version it is starting from.
-	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "docs"})
+	invoke(map[string]any{"op": "put", "id": "u1", "write_paths": "docs"})
 	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.LeaseReport)
 	require.True(t, ok)
 	assert.Empty(t, got.Overlaps, "the released path is no longer claimed twice")

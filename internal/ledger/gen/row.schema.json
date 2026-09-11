@@ -31,26 +31,26 @@
       "type": "string",
       "description": "Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o name` prints it."
     },
-    "owned_paths": {
+    "write_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "OwnedPaths is the declared write lane, empty on a read-only row by design."
+      "description": "WritePaths is the declared write lane, empty on a read-only row by design."
     },
-    "forbidden_paths": {
+    "deny_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "ForbiddenPaths are the paths inside that lane this lease may not write."
+      "description": "DenyPaths are the paths inside that lane this lease may not write."
     },
-    "focus": {
+    "read_paths": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Focus is the declared READ lane, widened to those projects' dependencies by the guard. Empty means owned_paths stands in."
+      "description": "ReadPaths is the declared READ lane, widened to those projects' dependencies by the guard. Empty means write_paths stands in."
     },
     "depends_on": {
       "type": "array",
@@ -59,9 +59,34 @@
       },
       "description": "DependsOn names the lease ids that must land before this one."
     },
+    "model": {
+      "type": "string",
+      "description": "Model is the model or effort tier the work was matched to, a free string because hosts name their models differently."
+    },
+    "owned_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "LegacyWritePaths is write_paths under the name it carried before the rename."
+    },
+    "forbidden_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "LegacyDenyPaths is deny_paths under its pre-rename name. compat: see LegacyWritePaths."
+    },
+    "focus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "LegacyReadPaths is read_paths under its pre-rename name. compat: see LegacyWritePaths."
+    },
     "tier": {
       "type": "string",
-      "description": "Tier is the effort tier the work was matched to, a free string because hosts name their tiers differently."
+      "description": "LegacyModel is model under its pre-rename name. compat: see LegacyWritePaths."
     },
     "check": {
       "type": "object",
@@ -90,7 +115,7 @@
     },
     "read_only": {
       "type": "boolean",
-      "description": "ReadOnly marks a lease that gathers evidence and writes nothing, so empty owned paths are correct rather than missing."
+      "description": "ReadOnly marks a lease that gathers evidence and writes nothing, so empty write paths are correct rather than missing."
     },
     "validation": {
       "type": "string",

@@ -44,17 +44,31 @@ type Row struct {
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
 	// WritePaths is the declared write lane, empty on a read-only row by design.
-	WritePaths []string `json:"owned_paths,omitempty"`
+	WritePaths []string `json:"write_paths,omitempty"`
 	// DenyPaths are the paths inside that lane this lease may not write.
-	DenyPaths []string `json:"forbidden_paths,omitempty"`
+	DenyPaths []string `json:"deny_paths,omitempty"`
 	// ReadPaths is the declared READ lane, widened to those projects' dependencies by the
 	// guard. Empty means write_paths stands in.
-	ReadPaths []string `json:"focus,omitempty"`
+	ReadPaths []string `json:"read_paths,omitempty"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty"`
 	// Model is the model or effort tier the work was matched to, a free string because
 	// hosts name their models differently.
-	Model string `json:"tier,omitempty"`
+	Model string `json:"model,omitempty"`
+	// LegacyWritePaths is write_paths under the name it carried before the rename.
+	//
+	// compat(until: no client or stored ledger still sends owned_paths/focus/
+	// forbidden_paths/tier; observe: grep the leases-*.json archives and the trail for the
+	// old keys): the decoder is strict, so an old client's row would be refused as an
+	// unknown member rather than understood. A row naming both spellings of one lane is
+	// refused, since nothing here can say which one its author meant.
+	LegacyWritePaths []string `json:"owned_paths,omitempty"`
+	// LegacyDenyPaths is deny_paths under its pre-rename name. compat: see LegacyWritePaths.
+	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
+	// LegacyReadPaths is read_paths under its pre-rename name. compat: see LegacyWritePaths.
+	LegacyReadPaths []string `json:"focus,omitempty"`
+	// LegacyModel is model under its pre-rename name. compat: see LegacyWritePaths.
+	LegacyModel string `json:"tier,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
 	Check *types.LeaseCheck `json:"check,omitempty"`
@@ -71,6 +85,84 @@ type Row struct {
 	// before the check record existed, so it is accepted and parsed into Check. Sending
 	// both is refused rather than merged, since nothing here can say which one meant it.
 	Validation string `json:"validation,omitempty"`
+}
+
+// foldLegacyLanes moves a lane declared under its old name onto the field that carries it,
+// refusing a row that names one lane twice.
+//
+// compat: see the legacy fields on [Row].
+func (r *Row) foldLegacyLanes() error {
+	var err error
+	fold := func(name string, into *[]string, from []string) {
+		switch {
+		case len(from) == 0:
+		case len(*into) > 0:
+			err = errors.Join(err, fmt.Errorf("ledger: a row declares %s or its renamed spelling, not both", name))
+		default:
+			*into = from
+		}
+	}
+	fold("owned_paths", &r.WritePaths, r.LegacyWritePaths)
+	fold("forbidden_paths", &r.DenyPaths, r.LegacyDenyPaths)
+	fold("focus", &r.ReadPaths, r.LegacyReadPaths)
+	switch {
+	case r.LegacyModel == "":
+	case r.Model != "":
+		err = errors.Join(err, errors.New("ledger: a row declares tier or its renamed spelling, not both"))
+	default:
+		r.Model = r.LegacyModel
+	}
+	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths, r.LegacyModel = nil, nil, nil, ""
+	return err
+}
+
+// foldStoredLanes reads the four lanes out of a ledger file a previous magus wrote and
+// puts them on the rows raw was decoded into, which carry only the current spelling.
+//
+// compat: see the legacy fields on [Row]. Without it a plan written before the rename
+// comes back with every boundary empty, and the next put stores that as the truth.
+func foldStoredLanes(raw []byte, rows []types.Lease) error {
+	var stored struct {
+		Leases []struct {
+			WritePaths []string `json:"owned_paths"`
+			DenyPaths  []string `json:"forbidden_paths"`
+			ReadPaths  []string `json:"focus"`
+			Model      string   `json:"tier"`
+		} `json:"leases"`
+	}
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return err
+	}
+	if len(stored.Leases) != len(rows) {
+		return nil
+	}
+	for i := range rows {
+		old := stored.Leases[i]
+		fold := func(name string, into *[]string, from []string) error {
+			if len(from) == 0 {
+				return nil
+			}
+			if len(*into) > 0 {
+				return fmt.Errorf("row %s carries %s and its renamed spelling, and nothing here can say which one it meant", rows[i].ID, name)
+			}
+			*into = from
+			return nil
+		}
+		if err := errors.Join(
+			fold("owned_paths", &rows[i].WritePaths, old.WritePaths),
+			fold("forbidden_paths", &rows[i].DenyPaths, old.DenyPaths),
+			fold("focus", &rows[i].ReadPaths, old.ReadPaths),
+		); err != nil {
+			return err
+		}
+		if old.Model != "" {
+			if rows[i].Model != "" {
+				return fmt.Errorf("row %s carries tier and its renamed spelling, and nothing here can say which one it meant", rows[i].ID)
+			}
+			rows[i].Model = old.Model
+		}
+	}
+	return nil
 }
 
 // Validate reports what is wrong with a declared row, or nil.
@@ -195,6 +287,9 @@ func DecodeRow(r io.Reader) (Row, error) {
 	var row Row
 	if err := json.UnmarshalStrict(raw, &row); err != nil {
 		return Row{}, fmt.Errorf("ledger: the input is not a version %d lease row: %w", types.LeaseSchemaVersion, err)
+	}
+	if err := row.foldLegacyLanes(); err != nil {
+		return Row{}, err
 	}
 	return row, row.Validate()
 }

@@ -53,10 +53,15 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 	str("parent", func(u *types.Lease, v string) { u.Parent = strings.TrimSpace(v) })
 	str("goal", func(u *types.Lease, v string) { u.Goal = v })
 	str("checkpoint", func(u *types.Lease, v string) { u.Checkpoint = strings.TrimSpace(v) })
+	err = errors.Join(err, bothSpellings(params))
+	list("write_paths", func(u *types.Lease, v []string) { u.WritePaths = v })
 	list("owned_paths", func(u *types.Lease, v []string) { u.WritePaths = v })
+	list("deny_paths", func(u *types.Lease, v []string) { u.DenyPaths = v })
 	list("forbidden_paths", func(u *types.Lease, v []string) { u.DenyPaths = v })
+	list("read_paths", func(u *types.Lease, v []string) { u.ReadPaths = v })
 	list("focus", func(u *types.Lease, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
+	str("model", func(u *types.Lease, v string) { u.Model = strings.TrimSpace(v) })
 	str("tier", func(u *types.Lease, v string) { u.Model = strings.TrimSpace(v) })
 
 	// check and validation are two spellings of one field, and the row stores both halves,
@@ -123,8 +128,33 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 // mergeFields are the row fields a put may carry. `op` and `id` ride alongside them
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
-	"parent", "goal", "checkpoint", "owned_paths", "forbidden_paths", "focus",
-	"depends_on", "tier", "check", "validation", "state", "read_only",
+	"parent", "goal", "checkpoint", "write_paths", "deny_paths", "read_paths",
+	"depends_on", "model", "check", "validation", "state", "read_only",
+}
+
+// renamedFields pairs each lane's old parameter name with the one it answers to now.
+//
+// compat(until: no client or stored ledger still sends owned_paths/focus/forbidden_paths/
+// tier; observe: grep the leases-*.json archives and the trail for the old keys): a put in
+// the old vocabulary still lands, and one naming both spellings of a lane is refused.
+var renamedFields = [][2]string{
+	{"owned_paths", "write_paths"},
+	{"forbidden_paths", "deny_paths"},
+	{"focus", "read_paths"},
+	{"tier", "model"},
+}
+
+// bothSpellings refuses a put that names one lane twice.
+func bothSpellings(params map[string]any) error {
+	var err error
+	for _, pair := range renamedFields {
+		_, hasOld := params[pair[0]]
+		_, hasCurrent := params[pair[1]]
+		if hasOld && hasCurrent {
+			err = errors.Join(err, fmt.Errorf("ledger: a put carries %s or %s, not both", pair[1], pair[0]))
+		}
+	}
+	return err
 }
 
 // unknownParams rejects a key outside that set. A dropped key reads to its sender exactly
@@ -132,7 +162,8 @@ var mergeFields = []string{
 func unknownParams(params map[string]any) error {
 	var unknown []string
 	for key := range params {
-		if key == "op" || key == "id" || slices.Contains(mergeFields, key) {
+		renamed := slices.ContainsFunc(renamedFields, func(p [2]string) bool { return p[0] == key })
+		if key == "op" || key == "id" || renamed || slices.Contains(mergeFields, key) {
 			continue
 		}
 		unknown = append(unknown, key)

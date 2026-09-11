@@ -148,12 +148,12 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 	  "parent": "adjacency",
 	  "goal": "the store is the enforcement point",
 	  "checkpoint": "cf5509d09",
-	  "owned_paths": ["internal/ledger", "types/lease.go"],
-	  "forbidden_paths": ["MAGUS.md"],
-	  "focus": ["internal/trail"],
+	  "write_paths": ["internal/ledger", "types/lease.go"],
+	  "deny_paths": ["MAGUS.md"],
+	  "read_paths": ["internal/trail"],
 	  "depends_on": ["adj/guard"],
 	  "validation": "magus run test internal/ledger",
-	  "tier": "principal",
+	  "model": "principal",
 	  "state": "declared"
 	}`))
 	require.NoError(t, err)

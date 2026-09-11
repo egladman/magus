@@ -1397,7 +1397,7 @@ A host runs its hooks with the host's own environment, so a worker that
 exports BAGGAGE for its shell is invisible to the guard judging its commands.
 A worker with its own worktree has one checkout, and a marker in it is the one
 channel both the worker's shell and the host's hook read. Once bound, every
-lease-scoped rule applies here: writes outside the row's owned_paths, the ci
+lease-scoped rule applies here: writes outside the row's write_paths, the ci
 gate under a narrower validation, and version-control mutation under a worker
 lease are all denied with the lease named.
 
@@ -1506,8 +1506,8 @@ cannot extract a session id must still be able to get a verdict.
 
 --lease is the exception: it IS policy. It names the lease the caller is
 acting as, and a write is then graded against that lease's declared write boundary
-in this workspace's lease ledger. Inside its owned paths passes; inside its
-forbidden paths, or inside another live lease's owned paths, is denied and the
+in this workspace's lease ledger. Inside its write paths passes; inside its
+deny paths, or inside another live lease's write paths, is denied and the
 reason names the owning lease. It defaults to the magus.lease member of $BAGGAGE -
 the W3C baggage list a spawning tool exports - and the flag wins when both are set.
 
@@ -1689,7 +1689,7 @@ parents and the leases they handed out.
 Two channels write it. The magus_ledger MCP tool is an agent's, this verb is a
 person's, and they reach the same store and the same rules. One author per ROW is
 the property that matters, and the store enforces it: a session acting under a
-lease may register the base it landed on, shrink its own owned paths, end its own
+lease may register the base it landed on, shrink its own write paths, end its own
 row in fail or no_return, and declare a child of itself inside its own paths.
 Everything else, widening a lane and accepting a row included, is refused by name.
 
@@ -1698,12 +1698,12 @@ declaring a plan in one worktree and a worker reading it in another see the same
 book.
 
 brief renders one lease's worker brief: the row's own goal and acceptance
-criteria, its owned and forbidden paths, the knowledge graph's blast radius for
-each owned path it can resolve, the single validation target that lease is
+criteria, its write and deny paths, the knowledge graph's blast radius for
+each write path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the bootstrap commands the worker starts
 with, each with the reason it is there. It carries no rules: the guard states
 those at the moment a command meets one. It also carries what the WORKSPACE knows
-and the row's author may not have written down: the projects the owned paths
+and the row's author may not have written down: the projects the write paths
 reach, the declared output globs that land
 inside them, the paths a sibling lease is holding, the build inputs and workspace
 config that have one owner, and the projects that change alongside the leased
@@ -1720,8 +1720,8 @@ empty segment is refused rather than dropped. There is no --state: this declares
 new row, and a row nobody has picked up is declared.
 
 accept grades what comes back. It reads a worker's report as JSON on stdin and
-grades EVIDENCE, not claims: every changed path inside the declared owned paths
-and outside the forbidden ones, a change set that is not empty on a row that
+grades EVIDENCE, not claims: every changed path inside the declared write paths
+and outside the denied ones, a change set that is not empty on a row that
 writes, descendants the plan carries, and an output ref that resolves to a passing
 run of that row's own validation. There is no field for whether the worker thinks
 it passed. A row that passes is recorded pass. Exit 1 is a verdict, naming every

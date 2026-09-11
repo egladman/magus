@@ -530,6 +530,9 @@ func (s *Store) read() (ledgerFile, error) {
 	if err := json.Unmarshal(raw, &f); err != nil {
 		return ledgerFile{}, err
 	}
+	if err := foldStoredLanes(raw, f.Leases); err != nil {
+		return ledgerFile{}, fmt.Errorf("ledger: %s: %w", s.path, err)
+	}
 	// A row this binary cannot read whole stops every operation, not just the read of that
 	// row: mutate rewrites EVERY row in the file, so one unrelated put would silently drop
 	// whatever a newer magus recorded across the whole plan.

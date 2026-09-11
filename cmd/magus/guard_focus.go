@@ -18,7 +18,7 @@ import (
 // The FOCUS rule: the blinders. A session works on one project; this is the rule
 // that notices when a read left it.
 //
-// Focus is a READ boundary, where the lease ledger's owned_paths is a WRITE one,
+// Focus is a READ boundary, where the lease ledger's write_paths is a WRITE one,
 // and the two catch different failures. A write outside your lane collides with
 // another agent, which the diff eventually reveals. A read outside it never
 // collides with anything and leaves no trace: it spends tokens on a tree nobody

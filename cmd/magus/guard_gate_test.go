@@ -452,27 +452,27 @@ func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
 	ctx, _ := fleetFixture(t, wide)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/**"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**"),
 		"dropping one of its own declarations cannot widen a role")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/**,internal/hint/**,docs/**"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/**,internal/hint/**,docs/**"),
 		"adding a declaration is a widen however it is spelled")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/**"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/**"),
 		"a pattern that happens to cover less is not a shrink this rule will try to prove")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** validation=magus affected ci"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** validation=magus affected ci"),
 		"a shrink carrying another field is not a shrink")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** checkpoint=deadbeef"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** checkpoint=deadbeef"),
 		"the checkpoint is the base this lease's work is graded against, and giving a lane back is not cover for moving it")
 
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
-		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** write_paths=cmd/magus/**"),
+		"magus_ledger op=put id="+wide.ID+" write_paths=cmd/magus/** owned_paths=cmd/magus/**"),
 		"both spellings at once leaves nothing saying which the store would apply")
 }
 
@@ -489,17 +489,17 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		toolInput string
 		want      string
 	}{
-		"put on another row":    {`{"op":"put","id":"harness/other","owned_paths":"**"}`, "deny\n"},
-		"put widening its own":  {`{"op":"put","id":"` + wide.ID + `","owned_paths":["**"]}`, "deny\n"},
+		"put on another row":    {`{"op":"put","id":"harness/other","write_paths":"**"}`, "deny\n"},
+		"put widening its own":  {`{"op":"put","id":"` + wide.ID + `","write_paths":["**"]}`, "deny\n"},
 		"clearing the board":    {`{"op":"clear"}`, "deny\n"},
 		"register elsewhere":    {`{"op":"register","id":"harness/other"}`, "deny\n"},
 		"register its own base": {`{"op":"register","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
 		"listing the plan":      {`{"op":"list"}`, "pass\n"},
-		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"]}`, "pass\n"},
+		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"]}`, "pass\n"},
 		// The rewrite the rendered line used to drop on the floor: judged only on the keys
 		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
-		"forging its own base": {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
-		"rewriting its goal":   {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
+		"forging its own base": {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
+		"rewriting its goal":   {`{"op":"put","id":"` + wide.ID + `","write_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
 	} {
 		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
 			`","tool_name":"mcp__magus__magus_ledger","tool_input":` + tc.toolInput + `}`
@@ -624,7 +624,7 @@ func TestLedgerToolRebindIsSilentWhenTheLedgerCannotAnswer(t *testing.T) {
 	ctx, _ := fleetFixture(t, done)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, done.ID,
-		"magus_ledger op=put id="+done.ID+" owned_paths=**"),
+		"magus_ledger op=put id="+done.ID+" write_paths=**"),
 		"a terminal row has no boundary left, so naming another lease's row would be false")
 
 	nowhere := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})

@@ -39,14 +39,14 @@ func tmpStore(t *testing.T, root string) *Store {
 
 func lease(id string) types.Lease {
 	return types.Lease{
-		ID:             id,
-		Goal:           "goal for " + id,
-		Checkpoint:     "abc123",
-		WritePaths:     []string{"internal/" + id},
-		DenyPaths: []string{"MAGUS.md"},
-		Model:          "standard",
-		Validation:     "magus run test",
-		State:          types.StateDeclared,
+		ID:         id,
+		Goal:       "goal for " + id,
+		Checkpoint: "abc123",
+		WritePaths: []string{"internal/" + id},
+		DenyPaths:  []string{"MAGUS.md"},
+		Model:      "standard",
+		Validation: "magus run test",
+		State:      types.StateDeclared,
 	}
 }
 
@@ -73,7 +73,7 @@ func TestStoreRoundTrip(t *testing.T) {
 				{ID: "a", Goal: "revised", State: types.StatePass},
 			},
 			want: []types.Lease{
-				// The replacement carries no owned paths, so the row's paths were
+				// The replacement carries no write paths, so the row's paths were
 				// released by it; see TestStorePutRecordsReleasedPaths.
 				{
 					ID: "a", Goal: "revised", State: types.StatePass,
@@ -270,7 +270,7 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 
 // TestStorePutRecordsReleasedPaths is the early-release rule the skill teaches, seen
 // from the store: a worker that has finished editing a contested path shrinks its
-// owned_paths, and the row then has to say WHICH version of that path the waiting lease
+// write_paths, and the row then has to say WHICH version of that path the waiting lease
 // inherits. A release with no digest would leave the waiter guessing.
 func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	t.Parallel()
@@ -320,9 +320,9 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 }
 
 // A release is the store's to say, not the caller's: a put that does not name
-// owned_paths releases nothing, and one that owns a path again stops claiming to have
+// write_paths releases nothing, and one that owns a path again stops claiming to have
 // released it.
-func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
+func TestStoreReleasesFollowTheWriteSet(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
@@ -410,6 +410,29 @@ func TestStoreRefusesARowFromANewerMagus(t *testing.T) {
 
 	_, err = s.Put(t.Context(), lease("adj/other"))
 	assert.Error(t, err, "no write goes near a ledger this binary cannot read whole")
+}
+
+// compat: see the legacy fields on Row. A plan written before the rename keeps its
+// boundaries; without the fold every lane would read empty and the next put would store
+// that as the truth.
+func TestStoreReadsAPlanWrittenBeforeTheRename(t *testing.T) {
+	t.Parallel()
+
+	s := tmpStore(t, t.TempDir())
+	path, err := s.Path()
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"leases":[{"id":"adj/store","schema_version":1,`+
+		`"owned_paths":["internal/ledger"],"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],`+
+		`"tier":"principal"}]}`+"\n"), 0o644))
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"internal/ledger"}, rows[0].WritePaths)
+	assert.Equal(t, []string{"MAGUS.md"}, rows[0].DenyPaths)
+	assert.Equal(t, []string{"internal/hint"}, rows[0].ReadPaths)
+	assert.Equal(t, "principal", rows[0].Model)
 }
 
 func TestStoreClear(t *testing.T) {

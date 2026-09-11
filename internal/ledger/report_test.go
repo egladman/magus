@@ -186,7 +186,7 @@ func TestGradeReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 
 // The deny list is read at acceptance too: a path can be inside the owned lane and still
 // be one the row was told to leave alone.
-func TestGradeRejectsAForbiddenPath(t *testing.T) {
+func TestGradeRejectsADeniedPath(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
@@ -197,7 +197,7 @@ func TestGradeRejectsAForbiddenPath(t *testing.T) {
 	v := Grade(row, rep, passingRun, nil)
 	assert.False(t, v.Accepted)
 	require.Len(t, v.Violations, 1)
-	assert.Contains(t, v.Violations[0], "forbidden")
+	assert.Contains(t, v.Violations[0], "denied")
 }
 
 // A descendant the ledger does not carry is a branch of the plan nobody is tracking,

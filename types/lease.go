@@ -266,8 +266,8 @@ type Lease struct {
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
 	// WritePaths and DenyPaths are the declared write boundary. Empty on a
 	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required.
-	WritePaths []string `json:"owned_paths,omitempty" yaml:"owned_paths,omitempty"`
-	DenyPaths  []string `json:"forbidden_paths,omitempty" yaml:"forbidden_paths,omitempty"`
+	WritePaths []string `json:"write_paths,omitempty" yaml:"write_paths,omitempty"`
+	DenyPaths  []string `json:"deny_paths,omitempty" yaml:"deny_paths,omitempty"`
 	// ReadPaths is the declared READ lane: the paths whose projects this lease may read,
 	// widened to those projects' own dependencies when the guard resolves it. Empty
 	// means WritePaths stands in, because a worker leased to edit a project is a
@@ -279,14 +279,14 @@ type Lease struct {
 	// boundary, which is deliberate. An environment variable that switched the rule
 	// off would be set once, in a wrapper, by the first worker it inconvenienced, and
 	// nothing afterwards would say the lane had stopped being checked.
-	ReadPaths []string `json:"focus,omitempty" yaml:"focus,omitempty"`
+	ReadPaths []string `json:"read_paths,omitempty" yaml:"read_paths,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	// Model is the model or effort tier the work was matched to (principal, standard,
 	// economy in the skill's table). A free string: hosts name their models differently
 	// and a closed set here would force a lie for the ones that do not fit.
-	Model string `json:"tier,omitempty" yaml:"tier,omitempty"`
+	Model string `json:"model,omitempty" yaml:"model,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -531,7 +531,7 @@ func PathsIntersect(a, b string) bool {
 // first segment that does when it holds one.
 //
 // Exported because the focus rule asks the same question of the same declarations:
-// which project a lease's owned_paths land in cannot be answered by a wildcard, and
+// which project a lease's write_paths land in cannot be answered by a wildcard, and
 // two packages deriving that prefix by their own rules would disagree about a
 // declaration on the day the rules drifted.
 func LiteralPrefix(p string) string {

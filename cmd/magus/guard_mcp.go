@@ -20,23 +20,23 @@ import (
 // checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
 // the two sides together.
 var mcpJudgedParams = append([]string{
-	"op", "id", "owned_paths", "forbidden_paths", "focus", "depends_on",
-	"validation", "read_only", "parent", "state", "checkpoint", "tier", "goal",
+	"op", "id", "write_paths", "deny_paths", "read_paths", "depends_on",
+	"validation", "read_only", "parent", "state", "checkpoint", "model", "goal", "check",
 }, mcpRenamedParams...)
 
-// mcpRenamedParams are the row's parameters under their other spelling.
+// mcpRenamedParams are the row's lanes under the spelling they carried before the rename.
 //
-// compat(until: no ledger door accepts the spellings above any more; observe it by calling
-// ledger.Merge with each of those names and finding it rejected): both vocabularies are
+// compat(until: no ledger door accepts these spellings any more; observe it by calling
+// ledger.ParseMerge with each of them and finding it rejected): both vocabularies are
 // judged for one cycle, so a put cannot dodge a rule by picking the word on whichever side
 // of the rename the guard has not learned yet.
-var mcpRenamedParams = []string{"write_paths", "read_paths", "deny_paths", "model", "check"}
+var mcpRenamedParams = []string{"owned_paths", "forbidden_paths", "focus", "tier"}
 
 // The two spellings of the one list a bound caller may shrink. Both are named here rather
 // than spelled at each use so the rebind rule and the renderer cannot learn one of them.
 const (
-	ownedPathsParam        = "owned_paths"
-	ownedPathsRenamedParam = "write_paths"
+	writePathsParam       = "write_paths"
+	writePathsLegacyParam = "owned_paths"
 )
 
 // mcpElidedParams render as a presence marker instead of their value. No rule reads this

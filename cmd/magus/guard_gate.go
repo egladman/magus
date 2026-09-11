@@ -501,7 +501,7 @@ func shrinksWritePaths(params map[string]string, row types.Lease) bool {
 	for key, value := range params {
 		switch key {
 		case "op", "id":
-		case ownedPathsParam, ownedPathsRenamedParam:
+		case writePathsParam, writePathsLegacyParam:
 			if present {
 				// Both spellings at once: nothing says which the store would apply, so
 				// this is not a shrink anyone can prove.

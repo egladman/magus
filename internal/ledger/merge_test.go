@@ -37,11 +37,34 @@ func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
 func TestMergeListAcceptsBothWireForms(t *testing.T) {
 	t.Parallel()
 
-	spaceForm := applyMerge(t, map[string]any{"owned_paths": "a/b c/d"}, types.Lease{})
+	spaceForm := applyMerge(t, map[string]any{"write_paths": "a/b c/d"}, types.Lease{})
 	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.WritePaths)
 
-	arrayForm := applyMerge(t, map[string]any{"owned_paths": []any{"a/b", "c/d"}}, types.Lease{})
+	arrayForm := applyMerge(t, map[string]any{"write_paths": []any{"a/b", "c/d"}}, types.Lease{})
 	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.WritePaths)
+}
+
+// compat: see the legacy fields on Row.
+func TestMergeAcceptsALaneUnderItsOldName(t *testing.T) {
+	t.Parallel()
+
+	got := applyMerge(t, map[string]any{
+		"owned_paths": "a/b", "forbidden_paths": "c/d", "focus": "e/f", "tier": "principal",
+	}, types.Lease{})
+	require.Equal(t, types.Lease{
+		WritePaths: []string{"a/b"},
+		DenyPaths:  []string{"c/d"},
+		ReadPaths:  []string{"e/f"},
+		Model:      "principal",
+	}, got)
+}
+
+func TestMergeRefusesALaneSpelledBothWays(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParseMerge(map[string]any{"owned_paths": "a/b", "write_paths": "c/d"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "write_paths or owned_paths, not both")
 }
 
 func TestMergeRejectsAnUnknownState(t *testing.T) {
@@ -69,7 +92,7 @@ func TestMergeRejectsAKeyNoRowCarries(t *testing.T) {
 	_, err := ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running", "passsed": true})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "passsed")
-	assert.Contains(t, err.Error(), "owned_paths", "the message names what a put does carry")
+	assert.Contains(t, err.Error(), "write_paths", "the message names what a put does carry")
 
 	_, err = ParseMerge(map[string]any{"op": "put", "id": "u1", "state": "running"})
 	assert.NoError(t, err, "op and id name the call rather than a field")

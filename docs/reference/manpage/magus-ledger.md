@@ -21,7 +21,7 @@ parents and the leases they handed out.
 Two channels write it. The magus_ledger MCP tool is an agent's, this verb is a
 person's, and they reach the same store and the same rules. One author per ROW is
 the property that matters, and the store enforces it: a session acting under a
-lease may register the base it landed on, shrink its own owned paths, end its own
+lease may register the base it landed on, shrink its own write paths, end its own
 row in fail or no_return, and declare a child of itself inside its own paths.
 Everything else, widening a lane and accepting a row included, is refused by name.
 
@@ -30,12 +30,12 @@ declaring a plan in one worktree and a worker reading it in another see the same
 book.
 
 brief renders one lease's worker brief: the row's own goal and acceptance
-criteria, its owned and forbidden paths, the knowledge graph's blast radius for
-each owned path it can resolve, the single validation target that lease is
+criteria, its write and deny paths, the knowledge graph's blast radius for
+each write path it can resolve, the single validation target that lease is
 allowed to run, its dependencies, and the bootstrap commands the worker starts
 with, each with the reason it is there. It carries no rules: the guard states
 those at the moment a command meets one. It also carries what the WORKSPACE knows
-and the row's author may not have written down: the projects the owned paths
+and the row's author may not have written down: the projects the write paths
 reach, the declared output globs that land
 inside them, the paths a sibling lease is holding, the build inputs and workspace
 config that have one owner, and the projects that change alongside the leased
@@ -52,8 +52,8 @@ empty segment is refused rather than dropped. There is no --state: this declares
 new row, and a row nobody has picked up is declared.
 
 accept grades what comes back. It reads a worker's report as JSON on stdin and
-grades EVIDENCE, not claims: every changed path inside the declared owned paths
-and outside the forbidden ones, a change set that is not empty on a row that
+grades EVIDENCE, not claims: every changed path inside the declared write paths
+and outside the denied ones, a change set that is not empty on a row that
 writes, descendants the plan carries, and an output ref that resolves to a passing
 run of that row's own validation. There is no field for whether the worker thinks
 it passed. A row that passes is recorded pass. Exit 1 is a verdict, naming every

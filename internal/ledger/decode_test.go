@@ -1,6 +1,7 @@
 package ledger
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -9,6 +10,34 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// compat: see the legacy fields on Row. A client one release behind still registers, and
+// one that names a lane twice is refused rather than silently taking either spelling.
+func TestDecodeRowReadsALaneUnderItsOldName(t *testing.T) {
+	t.Parallel()
+
+	row, err := DecodeRow(strings.NewReader(
+		`{"schema_version":1,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
+			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
+	require.NoError(t, err)
+	require.Equal(t, Row{
+		SchemaVersion: 1,
+		ID:            "adj/ledger",
+		WritePaths:    []string{"internal/ledger"},
+		DenyPaths:     []string{"MAGUS.md"},
+		ReadPaths:     []string{"internal/hint"},
+		Model:         "principal",
+	}, row)
+}
+
+func TestDecodeRowRefusesALaneSpelledBothWays(t *testing.T) {
+	t.Parallel()
+
+	_, err := DecodeRow(strings.NewReader(
+		`{"schema_version":1,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "owned_paths")
+}
 
 // A field the grader never reads looks to its author exactly like one that was taken into
 // account, which is how a report carrying `confidence: high` read as thorough.
@@ -79,7 +108,7 @@ func TestDecodeRowValidatesWhatItRead(t *testing.T) {
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := DecodeRow(strings.NewReader(
-		`{"schema_version":1,"id":"adj/store","owned_paths":["internal/ledger"],"state":"declared"}`))
+		`{"schema_version":1,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
@@ -137,7 +166,8 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 		}
 		var value any = "declared"
 		switch field {
-		case "owned_paths", "forbidden_paths", "focus", "depends_on":
+		case "write_paths", "deny_paths", "read_paths", "depends_on",
+			"owned_paths", "forbidden_paths", "focus":
 			value = []any{"internal/ledger"}
 		case "read_only":
 			value = true
@@ -149,5 +179,9 @@ func TestRowAndMergeAcceptTheSameFields(t *testing.T) {
 		_, err := ParseMerge(map[string]any{field: value})
 		assert.NoError(t, err, "magus_ledger put rejects %q, which `ledger register` accepts", field)
 	}
-	assert.ElementsMatch(t, jsonFields(Row{})[2:], mergeFields, "the two doors name one vocabulary")
+	accepted := slices.Clone(mergeFields)
+	for _, pair := range renamedFields {
+		accepted = append(accepted, pair[0])
+	}
+	assert.ElementsMatch(t, jsonFields(Row{})[2:], accepted, "the two doors name one vocabulary")
 }

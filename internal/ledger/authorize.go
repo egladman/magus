@@ -127,9 +127,9 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 	}
 	for _, field := range changedFields(prev, next) {
 		switch field {
-		case "owned_paths":
+		case "write_paths":
 			if !subset(next.WritePaths, prev.WritePaths) {
-				return refuse(actor, id, "a worker may only SHRINK owned_paths, which is how it releases a path, and this write widens them")
+				return refuse(actor, id, "a worker may only SHRINK write_paths, which is how it releases a path, and this write widens them")
 			}
 		case "state":
 			if next.State != types.StateFail && next.State != types.StateNoReturn {
@@ -173,7 +173,7 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 	case !subset(readLane(next), readLane(parent)):
 		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
 	case !subset(parent.DenyPaths, next.DenyPaths):
-		return refuse(actor, id, "a child carries every forbidden_path its parent carries, and this one drops some")
+		return refuse(actor, id, "a child carries every deny_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != types.StateDeclared:
 		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
 			types.StateDeclared, next.State))
@@ -213,11 +213,11 @@ func changedFields(prev, next types.Lease) []string {
 	add("parent", prev.Parent != next.Parent)
 	add("goal", prev.Goal != next.Goal)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
-	add("owned_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
-	add("forbidden_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
-	add("focus", !slices.Equal(prev.ReadPaths, next.ReadPaths))
+	add("write_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
+	add("deny_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
+	add("read_paths", !slices.Equal(prev.ReadPaths, next.ReadPaths))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
-	add("tier", prev.Model != next.Model)
+	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)

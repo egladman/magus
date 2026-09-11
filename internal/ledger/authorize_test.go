@@ -37,7 +37,7 @@ func workerRow() types.Lease {
 }
 
 // The escape the whole rule exists to close: the guard's own denial text told a worker to
-// widen its owned paths with the ledger tool, and nothing checked who was running it.
+// widen its write paths with the ledger tool, and nothing checked who was running it.
 func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +51,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	var refused *RefusedError
 	require.ErrorAs(t, err, &refused)
 	assert.Contains(t, err.Error(), "adj/store is bound to this session")
-	assert.Contains(t, err.Error(), "SHRINK owned_paths")
+	assert.Contains(t, err.Error(), "SHRINK write_paths")
 	assert.Contains(t, err.Error(), "row adj/store is what this targeted")
 	assert.Contains(t, err.Error(), "report it as an unresolved risk and stop")
 
@@ -102,9 +102,9 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 	loc := declared(t, workerRow())
 	cases := map[string]func(*types.Lease){
 		"validation": func(u *types.Lease) { u.Validation = "magus run ci ." },
-		"focus":      func(u *types.Lease) { u.ReadPaths = []string{"/"} },
+		"read_paths": func(u *types.Lease) { u.ReadPaths = []string{"/"} },
 		"parent":     func(u *types.Lease) { u.Parent = "adj/other" },
-		"tier":       func(u *types.Lease) { u.Model = "principal" },
+		"model":      func(u *types.Lease) { u.Model = "principal" },
 		"read_only":  func(u *types.Lease) { u.ReadOnly = true },
 	}
 	for field, apply := range cases {
@@ -168,11 +168,11 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 	t.Parallel()
 
 	parent := types.Lease{
-		ID:             "adj/store",
-		WritePaths:     []string{"internal/ledger", "types/lease.go"},
-		DenyPaths: []string{"MAGUS.md"},
-		ReadPaths:      []string{"internal/ledger", "internal/hint"},
-		State:          types.StateRunning,
+		ID:         "adj/store",
+		WritePaths: []string{"internal/ledger", "types/lease.go"},
+		DenyPaths:  []string{"MAGUS.md"},
+		ReadPaths:  []string{"internal/ledger", "internal/hint"},
+		State:      types.StateRunning,
 	}
 	loc := declared(t, parent)
 
@@ -197,7 +197,7 @@ func TestChildCarriesEveryLaneOfItsParent(t *testing.T) {
 		{
 			name:  "a shorter deny list",
 			child: types.Lease{WritePaths: []string{"internal/ledger"}},
-			want:  "every forbidden_path its parent carries",
+			want:  "every deny_path its parent carries",
 		},
 		{
 			name:  "carrying a registration it never made",

@@ -177,12 +177,12 @@ func TestLeaseCloneCopiesEverySliceField(t *testing.T) {
 	t.Parallel()
 
 	orig := Lease{
-		ID:             "a",
-		WritePaths:     append(make([]string, 0, 4), "types/"),
-		DenyPaths: append(make([]string, 0, 4), "gen/"),
-		DependsOn:      append(make([]string, 0, 4), "b"),
-		Releases:       append(make([]LeaseRelease, 0, 4), LeaseRelease{Path: "types/x.go"}),
-		Unattributed:   append(make([]LeaseUnattributedWrite, 0, 4), LeaseUnattributedWrite{Path: "types/y.go"}),
+		ID:           "a",
+		WritePaths:   append(make([]string, 0, 4), "types/"),
+		DenyPaths:    append(make([]string, 0, 4), "gen/"),
+		DependsOn:    append(make([]string, 0, 4), "b"),
+		Releases:     append(make([]LeaseRelease, 0, 4), LeaseRelease{Path: "types/x.go"}),
+		Unattributed: append(make([]LeaseUnattributedWrite, 0, 4), LeaseUnattributedWrite{Path: "types/y.go"}),
 	}
 
 	first, second := orig.Clone(), orig.Clone()

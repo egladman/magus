@@ -7,7 +7,7 @@ package main
 // leaseActorClause is how every lease-scoped denial names WHO can move the boundary.
 //
 // It names the ACTOR and ends the turn. A denial that names the tool instead reads as
-// permission: two personas independently took "widen owned_paths with the magus_ledger
+// permission: two personas independently took "widen write_paths with the magus_ledger
 // tool" for an instruction and rewrote their own rows, which is the re-roling the ledger
 // exists to make visible. A command spelled here is a command this reader would run.
 func leaseActorClause(what string) string {

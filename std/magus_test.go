@@ -343,7 +343,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
 
-	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "the declared goal", "owned_paths": "internal/ledger"})
+	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "the declared goal", "write_paths": "internal/ledger"})
 	require.NoError(t, err)
 
 	got, err := MagusPutLedger(ctx, "u1", map[string]any{"state": "pass"})
