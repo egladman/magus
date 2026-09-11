@@ -29,11 +29,12 @@ func TestPromptCacheProvidersCiteASource(t *testing.T) {
 
 func TestPromptCacheResolvesEveryWindow(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	clock := PromptCache(last, last.Add(6*time.Minute))
+	clock := PromptCacheAt("s1", last, last.Add(6*time.Minute))
 
 	require.Len(t, clock.Providers, len(PromptCacheProviders))
 	assert.Equal(t, last.UnixMilli(), clock.LastMs)
-	assert.Equal(t, "6m", clock.Since())
+	assert.Equal(t, "6m", clock.SinceText())
+	assert.Equal(t, "s1", clock.Session, "the clock is a fact about the session it was computed from")
 
 	anthropic := clock.Providers[0]
 	require.Len(t, anthropic.Windows, 2)
@@ -49,10 +50,10 @@ func TestPromptCacheResolvesEveryWindow(t *testing.T) {
 // A session nothing has observed has no age, and the clock says so by being empty
 // rather than by dating every window to the epoch.
 func TestPromptCacheWithoutActivity(t *testing.T) {
-	assert.Empty(t, PromptCache(time.Time{}, time.Now()).Providers)
+	assert.Empty(t, PromptCacheAt("s1", time.Time{}, time.Now()).Providers)
 }
 
-func TestPromptCacheWindowPhrase(t *testing.T) {
+func TestPromptCacheWindowDescribe(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	exact := PromptCacheWindow{Name: "default", Min: 5 * time.Minute, Max: 5 * time.Minute}
 	span := PromptCacheWindow{Name: "in-memory retention", Min: 5 * time.Minute, Max: time.Hour}
@@ -71,26 +72,26 @@ func TestPromptCacheWindowPhrase(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := last.Add(tc.at)
-			assert.Equal(t, tc.want, tc.window.statusAt(last, now).Phrase(now))
+			assert.Equal(t, tc.want, tc.window.statusAt(last, now).Describe(now))
 		})
 	}
 }
 
 // The vocabulary rule, pinned rather than trusted to review: magus sees a clock and
 // never the provider's cache, so no surface it feeds may call a window expired.
-func TestPromptCachePhrasesNeverSayExpired(t *testing.T) {
+func TestPromptCacheDescriptionsNeverSayExpired(t *testing.T) {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
 	for _, gap := range []time.Duration{0, time.Minute, 7 * time.Minute, 2 * time.Hour, 48 * time.Hour} {
 		now := last.Add(gap)
-		for _, p := range PromptCache(last, now).Providers {
+		for _, p := range PromptCacheAt("s1", last, now).Providers {
 			for _, w := range p.Windows {
-				assert.NotContains(t, w.Phrase(now), "expire", "%s/%s at %s", p.Provider, w.Window, gap)
+				assert.NotContains(t, w.Describe(now), "expire", "%s/%s at %s", p.Provider, w.Window, gap)
 			}
 		}
 	}
 }
 
-func TestShortDuration(t *testing.T) {
+func TestIdleFor(t *testing.T) {
 	for d, want := range map[time.Duration]string{
 		-time.Second:                  "0s",
 		500 * time.Millisecond:        "1s",
@@ -101,6 +102,6 @@ func TestShortDuration(t *testing.T) {
 		24*time.Hour + time.Hour:      "25h",
 		23*time.Hour + 59*time.Minute: "23h59m",
 	} {
-		assert.Equal(t, want, shortDuration(d), "shortDuration(%s)", d)
+		assert.Equal(t, want, idleFor(d), "idleFor(%s)", d)
 	}
 }

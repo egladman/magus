@@ -60,8 +60,8 @@ type sessionBrief struct {
 	// PromptCache is how long since a tool call last ran past the guard in this
 	// checkout, against every published cache window. A session reading this brief is
 	// deciding whether to resume, and a resume past a closed window re-pays the whole
-	// prompt. Absent when the trail here has seen nothing.
-	PromptCache *sessions.PromptCacheClock `json:"prompt_cache,omitempty"`
+	// prompt. Empty Providers when the trail here has seen nothing.
+	PromptCache sessions.PromptCacheClock `json:"prompt_cache,omitzero"`
 }
 
 // briefUnpushed counts the commits this checkout carries that its base ref does not.
@@ -163,9 +163,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
 	brief.Rules = ruleLocations(root)
-	if _, clock, ok := promptCacheHere(root, time.Now()); ok {
-		brief.PromptCache = &clock
-	}
+	brief.PromptCache = promptCacheForCheckout(root, time.Now())
 	return brief
 }
 
@@ -377,7 +375,7 @@ func (b sessionBrief) writeTree(s *strings.Builder) {
 // a model's window through a hook, and a five-row table of clock times would cost more
 // than the decision it informs.
 func (b sessionBrief) writePromptCache(s *strings.Builder) {
-	if b.PromptCache == nil {
+	if len(b.PromptCache.Providers) == 0 {
 		return
 	}
 	var closed, open []string
@@ -390,7 +388,7 @@ func (b sessionBrief) writePromptCache(s *strings.Builder) {
 			}
 		}
 	}
-	briefLine(s, "prompt cache: last tool call here %s ago; a resume past a closed window re-pays the prompt", b.PromptCache.Since())
+	briefLine(s, "prompt cache: last tool call here %s ago; a resume past a closed window re-pays the prompt", b.PromptCache.SinceText())
 	if len(closed) > 0 {
 		briefLine(s, "  closed: %s", strings.Join(closed, ", "))
 	}

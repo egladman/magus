@@ -179,8 +179,7 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 
 // briefClock is a session idle long enough that one window is behind it and the rest
 // are not, which is the only state where the two-group split says something.
-func briefClock() *sessions.PromptCacheClock {
+func briefClock() sessions.PromptCacheClock {
 	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
-	clock := sessions.PromptCache(last, last.Add(7*time.Minute))
-	return &clock
+	return sessions.PromptCacheAt("s1", last, last.Add(7*time.Minute))
 }
