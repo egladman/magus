@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 )
 
@@ -35,17 +36,10 @@ const servedNextJournal advisoryKind = "served-next"
 // to cover a result carrying the cap of three.
 const servedNextWindow = 20
 
-// servedNextEntry is one line of the journal: when it was served, which template served
-// it, and the argv the reader was handed.
-//
-// argv rather than a command STRING on purpose: the comparison below is against a parsed
-// command, and re-quoting one into a line only to parse it again is a second grammar to
-// disagree with the first.
-type servedNextEntry struct {
-	Ts   int64    `json:"ts"`
-	ID   string   `json:"id"`
-	Argv []string `json:"argv"`
-}
+// servedNextEntry is one line of the journal, the shape the serving side writes. The
+// reader here is deliberately narrower than hint.ReadServedNext: it wants this session's
+// file and the anonymous one, not every session's, and it skips a line naming no template.
+type servedNextEntry = hint.ServedNextEntry
 
 // servedNextPreauthorizes names the template that served command to this session, or ""
 // when nothing did.
