@@ -23,7 +23,7 @@ import (
 // sides of the contract are pinned by the same literal a reader can compare to the docs.
 func serveNext(t *testing.T, gate advisoryGate, id string, argv ...string) {
 	t.Helper()
-	path := gate.servedNextPath()
+	path := hint.ServedNextPath(gate.base)
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	quoted := make([]string, 0, len(argv))
 	for _, a := range argv {
@@ -60,21 +60,31 @@ func TestServedNextPreauthorizesNothingElse(t *testing.T) {
 	serveNext(t, gate, "query-explain", "magus", "explain", "target:.:ci")
 
 	for name, command := range map[string]string{
-		"a different argument":     "magus explain target:.:lint",
-		"an extra flag":            "magus explain target:.:ci -o json",
-		"a missing argument":       "magus explain",
-		"another command chained":  "magus explain target:.:ci && git stash",
-		"a pipe":                   "magus explain target:.:ci | head",
-		"a different program":      "notmagus explain target:.:ci",
-		"a line that does not run": "",
+		"a different argument":       "magus explain target:.:lint",
+		"an extra flag":              "magus explain target:.:ci -o json",
+		"a missing argument":         "magus explain",
+		"another command chained":    "magus explain target:.:ci && git stash",
+		"a pipe":                     "magus explain target:.:ci | head",
+		"a different program":        "notmagus explain target:.:ci",
+		"a line that does not run":   "",
+		"a redirect":                 "magus explain target:.:ci > /tmp/out",
+		"a clobbering redirect":      "magus explain target:.:ci >| /tmp/out",
+		"an appending redirect":      "magus explain target:.:ci >> /tmp/out",
+		"stderr folded in":           "magus explain target:.:ci 2>&1",
+		"sudo in front":              "sudo magus explain target:.:ci",
+		"an env prefix":              "env FOO=1 magus explain target:.:ci",
+		"a shell wrapper":            "sh -c 'magus explain target:.:ci'",
+		"an assignment prefix":       "FOO=1 magus explain target:.:ci",
+		"backgrounded":               "magus explain target:.:ci &",
+		"an argument from the shell": "magus explain $TARGET",
 	} {
 		assert.Empty(t, servedNextPreauthorizes(gate, command), name)
 	}
 
 	assert.Empty(t, servedNextPreauthorizes(advisoryGate{}, "magus explain target:.:ci"),
 		"no workspace, no journal, nothing pre-authorized")
-	assert.Empty(t, servedNextPreauthorizes(newAdvisoryGate(t.TempDir(), "other"), "magus explain target:.:ci"),
-		"the journal is per session: another session's servings clear nothing here")
+	assert.Empty(t, servedNextPreauthorizes(newAdvisoryGate(t.TempDir(), "session-1"), "magus explain target:.:ci"),
+		"the journal is per checkout: another tree's servings clear nothing here")
 }
 
 // TestReadServedNextIsRobustAndBounded covers the three things a journal appended to by a
@@ -91,7 +101,7 @@ func TestReadServedNextIsRobustAndBounded(t *testing.T) {
 		"an entry that has aged out of the window is no longer magus's current suggestion")
 	assert.Equal(t, "run-output", servedNextPreauthorizes(gate, "magus query output ref-24"))
 
-	f, err := os.OpenFile(gate.servedNextPath(), os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(hint.ServedNextPath(gate.base), os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
 	_, err = f.WriteString(`{"ts":1,"id":"","argv":["magus","doctor"]}` + "\n" + `{"ts":2,"id":"tor`)
 	require.NoError(t, err)
@@ -105,10 +115,10 @@ func TestReadServedNextIsRobustAndBounded(t *testing.T) {
 		"a missing journal pre-authorizes nothing")
 }
 
-// TestServedNextReadsTheAnonymousJournal covers the producer that has no session id at
-// all: `next` printed by a CLI run lands in the anonymous bucket, and reading only the
-// session-keyed file would pre-authorize nothing an agent actually saw.
-func TestServedNextReadsTheAnonymousJournal(t *testing.T) {
+// TestServedNextIsOneJournalPerCheckout covers the producer that reports no session at
+// all: `next` printed by a CLI run is what a hook call later meets, so the two doors
+// have to read the same file.
+func TestServedNextIsOneJournalPerCheckout(t *testing.T) {
 	base := t.TempDir()
 	cli := newAdvisoryGate(base, "")
 	serveNext(t, cli, "query-explain", "magus", "explain", "target:.:ci")
@@ -118,10 +128,9 @@ func TestServedNextReadsTheAnonymousJournal(t *testing.T) {
 		"the hook reports a session id; the CLI run that printed the breadcrumb did not")
 
 	serveNext(t, hook, "query-refs", "magus", "refs", "hookCmd")
-	assert.Equal(t, "query-refs", servedNextPreauthorizes(hook, "magus refs hookCmd"),
-		"the session's own journal still clears")
-	assert.Equal(t, "query-explain", servedNextPreauthorizes(hook, "magus explain target:.:ci"),
-		"and reading one does not shadow the other")
+	assert.Equal(t, "query-refs", servedNextPreauthorizes(hook, "magus refs hookCmd"))
+	assert.Equal(t, "query-explain", servedNextPreauthorizes(cli, "magus explain target:.:ci"),
+		"a command served to one session clears it for another in the same tree")
 }
 
 // TestHookCmdStandsDownOnAServedNext is the rule in place: the same command is denied by a
@@ -181,7 +190,7 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 // Read out of the SOURCE rather than compared against a list here, for the reason
 // TestAllDeclaredAreRegistered reads its own file: a list in the test is a second copy to
 // forget, and the failure it produces (a template nobody grades) is silent.
-var nextIDRe = regexp.MustCompile(`entry\("([a-z-]+)"`)
+var nextIDRe = regexp.MustCompile(`breadcrumb\("([a-z-]+)"`)
 
 // servedNextTemplates renders every breadcrumb the tree can serve, by driving the
 // functions that build them rather than by reconstructing their commands.
@@ -262,6 +271,15 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 				}
 				for _, rule := range []func(context.Context, string, string) string{
 					denyLeaseScopedGate, denyLeaseScopedVCS, denyLeaseScopedRebind,
+					// Pre-authorization stands the focus rule down too, so a template
+					// whose operands leave a reviewer's focus would clear with nothing
+					// having graded it.
+					func(ctx context.Context, lease, command string) string {
+						if grade := gradeFocusRead(ctx, lease, command); grade.Decision == "deny" {
+							return grade.Reason
+						}
+						return ""
+					},
 				} {
 					if reason := rule(ctx, role.lease, run); reason != "" {
 						t.Errorf("the %q breadcrumb serves %q, which the guard denies for a %s.\n"+
