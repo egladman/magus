@@ -609,7 +609,8 @@ func sessionLoad(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(nextFor(root).base))
+	cacheDir, _ := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	joinServedNext(summary.Events, summary.commands, hint.ReadServedNext(cacheDir))
 	result, err := sessions.LoadEvents(dir, summary.Events, sessions.SessionStart{
 		Workspace: root,
 		Command:   "session load",
