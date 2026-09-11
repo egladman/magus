@@ -463,6 +463,14 @@ func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
 	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
 		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** validation=magus affected ci"),
 		"a shrink carrying another field is not a shrink")
+
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** checkpoint=deadbeef"),
+		"the checkpoint is the base this lease's work is graded against, and giving a lane back is not cover for moving it")
+
+	assert.NotEmpty(t, denyLeaseScopedRebind(ctx, wide.ID,
+		"magus_ledger op=put id="+wide.ID+" owned_paths=cmd/magus/** write_paths=cmd/magus/**"),
+		"both spellings at once leaves nothing saying which the store would apply")
 }
 
 // TestHookCmdJudgesTheMCPLedgerSurface is the decision table for the transport the CLI
@@ -485,6 +493,10 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 		"register its own base": {`{"op":"register","id":"` + wide.ID + `","reported_base":"abc123"}`, "pass\n"},
 		"listing the plan":      {`{"op":"list"}`, "pass\n"},
 		"giving a lane back":    {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"]}`, "pass\n"},
+		// The rewrite the rendered line used to drop on the floor: judged only on the keys
+		// the renderer carried, a shrink beside a forged checkpoint read as a plain shrink.
+		"forging its own base": {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"],"checkpoint":"deadbeef"}`, "deny\n"},
+		"rewriting its goal":   {`{"op":"put","id":"` + wide.ID + `","owned_paths":["cmd/magus/**"],"goal":"something else"}`, "deny\n"},
 	} {
 		envelope := `{"hook_event_name":"PreToolUse","session_id":"mcp-` + name +
 			`","tool_name":"mcp__magus__magus_ledger","tool_input":` + tc.toolInput + `}`

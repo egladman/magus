@@ -478,18 +478,29 @@ func ledgerToolRebind(params map[string]string, me func() (types.Lease, bool)) s
 
 // shrinksOwnedPaths reports whether a put changes nothing but the row's owned paths, and
 // only by removing entries it already carries.
+//
+// An ALLOWLIST over what the call carried, not a scan of the keys the guard happens to
+// know: a key outside the three below is a rewrite of something else on the row whatever
+// it holds, and reading a list of known keys instead means every key added to the ledger's
+// merge is cleared here until somebody remembers to add it in two places.
 func shrinksOwnedPaths(params map[string]string, row types.Lease) bool {
-	for _, key := range mcpJudgedParams {
+	declared, present := "", false
+	for key, value := range params {
 		switch key {
-		case "op", "id", "owned_paths":
-		default:
-			if _, present := params[key]; present {
+		case "op", "id":
+		case ownedPathsParam, ownedPathsRenamedParam:
+			if present {
+				// Both spellings at once: nothing says which the store would apply, so
+				// this is not a shrink anyone can prove.
 				return false
 			}
+			declared, present = value, true
+		default:
+			return false
 		}
 	}
-	proposed := strings.Split(params["owned_paths"], ",")
-	if _, present := params["owned_paths"]; !present || len(proposed) >= len(row.OwnedPaths) {
+	proposed := strings.Split(declared, ",")
+	if !present || len(proposed) >= len(row.OwnedPaths) {
 		return false
 	}
 	for _, decl := range proposed {

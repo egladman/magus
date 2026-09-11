@@ -685,14 +685,39 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 
 // mcpJudgedParams are the tool parameters a guard rule reads, in the order they render.
 //
-// A closed list rather than everything the payload carried: the rendered line is recorded
-// in the activity trail, and a rule that swept in every key would put a goal's prose (and
-// whatever else a caller passed) into an audit record shaped like a command. These are
-// magus's own parameter names, from its own tool schema.
-var mcpJudgedParams = []string{
-	"op", "id", "owned_paths", "forbidden_paths", "focus",
-	"validation", "read_only", "parent", "state",
-}
+// Every field ledger.Merge applies, plus the two that name the call. A key this list omits
+// reaches the row with no rule having seen it, which is how a bound worker rewrote the
+// checkpoint its own work is graded against; TestMCPJudgedParamsCoverEveryMergedField holds
+// the two sides together.
+var mcpJudgedParams = append([]string{
+	"op", "id", "owned_paths", "forbidden_paths", "focus", "depends_on",
+	"validation", "read_only", "parent", "state", "checkpoint", "tier", "goal",
+}, mcpRenamedParams...)
+
+// mcpRenamedParams are the row's parameters under their other spelling.
+//
+// compat(until: no ledger door accepts the spellings above any more; observe it by calling
+// ledger.Merge with each of those names and finding it rejected): both vocabularies are
+// judged for one cycle, so a put cannot dodge a rule by picking the word on whichever side
+// of the rename the guard has not learned yet.
+var mcpRenamedParams = []string{"write_paths", "read_paths", "deny_paths", "model", "check"}
+
+// The two spellings of the one list a bound caller may shrink. Both are named here rather
+// than spelled at each use so the rebind rule and the renderer cannot learn one of them.
+const (
+	ownedPathsParam        = "owned_paths"
+	ownedPathsRenamedParam = "write_paths"
+)
+
+// mcpElidedParams render as a presence marker instead of their value. No rule reads this
+// one, and a goal is free prose: the rendered line is recorded in the activity trail, so
+// copying it there would put a caller's sentences into an audit record shaped like a
+// command. Presence is all the rebind rule needs, since naming it at all is a rewrite.
+var mcpElidedParams = map[string]bool{"goal": true}
+
+// mcpElidedValue stands in for an elided value. A word rather than an empty string: an
+// empty value is how the merge spells an explicit clear, and the two must not render alike.
+const mcpElidedValue = "..."
 
 // renderMCPCall normalizes an MCP call to a magus tool into a command line: the tool name,
 // then each judged parameter it carried as `key=value`.
@@ -712,6 +737,10 @@ func renderMCPCall(name, raw string) string {
 	for _, key := range mcpJudgedParams {
 		value, ok := payload.ToolInput[key]
 		if !ok {
+			continue
+		}
+		if mcpElidedParams[key] {
+			out = append(out, key+"="+mcpElidedValue)
 			continue
 		}
 		out = append(out, key+"="+quoteMCPValue(mcpValueString(value)))
