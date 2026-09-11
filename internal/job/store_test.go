@@ -563,6 +563,39 @@ func TestLedgerAdoptsTheLegacyCacheDirLocation(t *testing.T) {
 	assert.DirExists(t, legacy)
 }
 
+// The plan the previous vintage kept as <state>/magus/ledger/<repo>/leases.json is carried
+// into the job store once, with every member of every row intact, and the old file is LEFT
+// for the binaries still reading it.
+func TestStoreCarriesAPreRenamePlanForward(t *testing.T) {
+	t.Parallel()
+
+	loc := tmpLoc(t, t.TempDir())
+	path, err := NewStore(loc).Path()
+	require.NoError(t, err)
+	legacy := filepath.Join(loc.StateBase, "magus", "ledger", filepath.Base(filepath.Dir(path)), "leases.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(legacy), 0o755))
+	require.NoError(t, os.WriteFile(legacy, []byte(`{"leases":[{"id":"wave3/move","schema_version":1,`+
+		`"write_paths":["internal/guard"],"state":"running","created":1,"updated":1,"woolgathering":7}]}`+"\n"), 0o644))
+
+	got, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "wave3/move", got[0].ID)
+	assert.Equal(t, []string{"internal/guard"}, got[0].WritePaths)
+	assert.FileExists(t, legacy, "copied, not moved: an older binary elsewhere is still reading it")
+
+	carried, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(carried), `"woolgathering": 7`, "a member this magus does not know survives the carry")
+
+	// Once. Rows written to the old file afterwards do not reach a store that has its own.
+	require.NoError(t, os.WriteFile(legacy, []byte(`{"leases":[{"id":"later","created":1,"updated":1}]}`+"\n"), 0o644))
+	again, err := NewStore(loc).List()
+	require.NoError(t, err)
+	require.Len(t, again, 1)
+	assert.Equal(t, "wave3/move", again[0].ID)
+}
+
 func TestStoreListReturnsCopies(t *testing.T) {
 	t.Parallel()
 

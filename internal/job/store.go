@@ -160,7 +160,63 @@ func jobsPath(loc Location) (string, error) {
 			return "", fmt.Errorf("job: %w", err)
 		}
 	}
-	return filepath.Join(dir, "jobs.json"), nil
+	path := filepath.Join(dir, "jobs.json")
+	if err := adoptLedgerPlan(base, dir, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// The store's previous home, one rename ago: the kind directory and the file name the
+// plan was kept under while a job was called a lease.
+const (
+	legacyKind = "ledger"
+	legacyFile = "leases.json"
+)
+
+// adoptLedgerPlan copies a pre-rename plan into the job store, once, when the job store
+// has none of its own.
+//
+// A COPY rather than a move, which is the whole reason this is not repoid.Adopt: binaries
+// of the previous vintage are still reading leases.json from other checkouts of this
+// repository, and taking the file out from under them empties their plan mid-session. The
+// cost is that rows written to the old file after this runs are not seen here, which is
+// what a rename between two live binaries buys either way.
+//
+// The rows are carried as RAW JSON, so a member this magus does not know survives the
+// copy. Decoding into the row struct would drop exactly what the reader of an older file
+// most needs kept.
+//
+// compat(until: no store still holds a pre-rename leases.json; observe:
+// `find ~/.local/state/magus/ledger -name leases.json` returning nothing).
+func adoptLedgerPlan(base, dir, path string) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	legacy := filepath.Join(base, "magus", legacyKind, filepath.Base(dir), legacyFile)
+	raw, err := os.ReadFile(legacy)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("job: read the plan at %s to carry it into %s: %w", legacy, path, err)
+	}
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("job: the plan at %s is not readable, so it was not carried into %s: %w", legacy, path, err)
+	}
+	rows, ok := envelope["leases"]
+	if !ok {
+		return nil
+	}
+	carried, err := json.MarshalIndent(map[string]json.RawMessage{"jobs": rows}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("job: %w", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("job: %w", err)
+	}
+	return file.WriteFileAtomic(path, append(carried, '\n'), 0o644)
 }
 
 // Path is the leases file this Store reads and writes, for a reader that has to name it:
