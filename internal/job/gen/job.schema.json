@@ -1,9 +1,9 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://magus.invalid/ledger/row.schema.json",
-  "$comment": "Generated from ledger.Row by `magus-utils ledgerschema`. DO NOT EDIT; run `magus run ledger-generate .`.",
-  "title": "magus lease row",
-  "description": "Row is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
+  "$id": "https://magus.invalid/job/job.schema.json",
+  "$comment": "Generated from job.Declaration by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
+  "title": "magus job",
+  "description": "Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the store computes. A caller cannot say when its row was created or what it released, and the way to make that true is for the input type not to carry those fields rather than for the store to strip them afterwards.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "id"],
@@ -11,7 +11,7 @@
     "schema_version": {
       "type": "integer",
       "const": 1,
-      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See types.LeaseSchemaVersion."
+      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See types.JobSchemaVersion."
     },
     "id": {
       "type": "string",

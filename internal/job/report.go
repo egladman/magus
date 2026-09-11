@@ -19,7 +19,7 @@ const ReportSchemaVersion = 1
 // response format without magus having to render one. Generated from the struct itself;
 // see [DeclarationSchema].
 //
-//go:embed gen/report.schema.json
+//go:embed gen/result.schema.json
 var ReportSchema string
 
 // Report is what a worker returns when its lease is done: changed paths, validation

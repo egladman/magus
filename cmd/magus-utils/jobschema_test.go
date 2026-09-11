@@ -47,8 +47,8 @@ type Check struct {
 
 const wantFixtureSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://magus.invalid/ledger/fixture.schema.json",
-  "$comment": "Generated from job.Fixture by ` + "`magus-utils ledgerschema`" + `. DO NOT EDIT; run ` + "`magus run ledger-generate .`" + `.",
+  "$id": "https://magus.invalid/job/fixture.schema.json",
+  "$comment": "Generated from job.Fixture by ` + "`magus-utils jobschema`" + `. DO NOT EDIT; run ` + "`magus run job-generate .`" + `.",
   "title": "magus fixture",
   "description": "Fixture is a record a caller declares.",
   "type": "object",
@@ -112,7 +112,7 @@ func writeRecordFixture(t *testing.T, src string) string {
 	return path
 }
 
-var fixtureRecord = ledgerRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureSchemaVersion"}
+var fixtureRecord = jobRecord{Struct: "Fixture", Title: "magus fixture", File: "fixture.schema.json", Version: "FixtureSchemaVersion"}
 
 // One assertion over the whole rendered document rather than a probe per rule: the schema
 // is published byte for byte, so its layout and its ordering are part of what a reader
@@ -123,7 +123,7 @@ func TestRenderLedgerSchemaDerivesEveryRuleFromTheStruct(t *testing.T) {
 	decls, err := loadGoDecls(writeRecordFixture(t, recordFixture))
 	require.NoError(t, err)
 
-	body, err := renderLedgerSchema(fixtureRecord, decls)
+	body, err := renderJobSchema(fixtureRecord, decls)
 	require.NoError(t, err)
 	assert.Equal(t, wantFixtureSchema, string(body))
 }
@@ -164,28 +164,28 @@ func TestRenderLedgerSchemaNamesWhatItCannotPublish(t *testing.T) {
 			decls, err := loadGoDecls(writeRecordFixture(t, tc.src))
 			require.NoError(t, err)
 
-			_, err = renderLedgerSchema(fixtureRecord, decls)
+			_, err = renderJobSchema(fixtureRecord, decls)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
 }
 
-// The generator reads the ledger's own sources, so a rename there is a rename this
+// The generator reads the job store's own sources, so a rename there is a rename this
 // command has to be told about rather than one it silently renders around.
-func TestLedgerRecordsRenderFromTheirDeclaredSources(t *testing.T) {
+func TestJobRecordsRenderFromTheirDeclaredSources(t *testing.T) {
 	t.Parallel()
 
-	roots := make([]string, 0, len(ledgerSources))
-	for _, src := range ledgerSources {
+	roots := make([]string, 0, len(jobSources))
+	for _, src := range jobSources {
 		roots = append(roots, filepath.Join("..", "..", src))
 	}
 	decls, err := loadGoDecls(roots...)
 	require.NoError(t, err)
 
-	for _, rec := range ledgerRecords {
-		body, err := renderLedgerSchema(rec, decls)
+	for _, rec := range jobRecords {
+		body, err := renderJobSchema(rec, decls)
 		require.NoError(t, err, rec.File)
-		assert.Contains(t, string(body), `"$id": "https://magus.invalid/ledger/`+rec.File+`"`)
+		assert.Contains(t, string(body), `"$id": "https://magus.invalid/job/`+rec.File+`"`)
 	}
 }

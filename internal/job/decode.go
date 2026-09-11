@@ -15,7 +15,7 @@ import (
 // shape `magus ledger register --stdin` accepts without reading Go. Generated from the
 // struct itself, so a field cannot reach the wire undescribed.
 //
-//go:embed gen/row.schema.json
+//go:embed gen/job.schema.json
 var DeclarationSchema string
 
 // Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing the

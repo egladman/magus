@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://magus.invalid/ledger/report.schema.json",
-  "$comment": "Generated from ledger.Report by `magus-utils ledgerschema`. DO NOT EDIT; run `magus run ledger-generate .`.",
-  "title": "magus lease worker report",
+  "$id": "https://magus.invalid/job/result.schema.json",
+  "$comment": "Generated from job.Report by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
+  "title": "magus job result",
   "description": "Report is what a worker returns when its lease is done: changed paths, validation evidence, descendants created, unresolved risks.",
   "type": "object",
   "additionalProperties": false,

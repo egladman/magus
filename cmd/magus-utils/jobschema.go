@@ -1,6 +1,6 @@
-// Subcommand `ledgerschema` emits the published JSON Schema for each ledger record from
-// the Go struct that decodes it: internal/job/gen/row.schema.json from job.Declaration,
-// report.schema.json from job.Report.
+// Subcommand `jobschema` emits the published JSON Schema for each job record from
+// the Go struct that decodes it: internal/job/gen/job.schema.json from job.Declaration,
+// result.schema.json from job.Report.
 //
 // The schema and the struct were two hand-written copies of one contract, and the test
 // between them could only report that they had already diverged. Deriving the schema
@@ -32,26 +32,26 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ledgerRecord is one published record: the struct a caller's JSON decodes into, and the
+// jobRecord is one published record: the struct a caller's JSON decodes into, and the
 // file its schema is written to.
-type ledgerRecord struct {
+type jobRecord struct {
 	Struct  string
 	Title   string
 	File    string
 	Version string // the constant holding this record's schema_version
 }
 
-var ledgerRecords = []ledgerRecord{
-	{Struct: "Declaration", Title: "magus lease row", File: "row.schema.json", Version: "JobSchemaVersion"},
-	{Struct: "Report", Title: "magus lease worker report", File: "report.schema.json", Version: "ReportSchemaVersion"},
+var jobRecords = []jobRecord{
+	{Struct: "Declaration", Title: "magus job", File: "job.schema.json", Version: "JobSchemaVersion"},
+	{Struct: "Report", Title: "magus job result", File: "result.schema.json", Version: "ReportSchemaVersion"},
 }
 
-// ledgerSources are the files the records and every type they reach are declared in.
-var ledgerSources = []string{"internal/job/decode.go", "internal/job/report.go", "types/job.go"}
+// jobSources are the files the records and every type they reach are declared in.
+var jobSources = []string{"internal/job/decode.go", "internal/job/report.go", "types/job.go"}
 
 const (
 	schemaDraft = "http://json-schema.org/draft-07/schema#"
-	schemaIDs   = "https://magus.invalid/ledger/"
+	schemaIDs   = "https://magus.invalid/job/"
 	// versionProperty is the one property whose value is fixed rather than described.
 	versionProperty = "schema_version"
 	// leaseIDMarker is the `schema:"leaseid"` tag: this field holds a lease id, so the
@@ -64,21 +64,21 @@ const (
 // a state added there reaches the schema with nothing here to change.
 var closedSets = map[string][]string{"JobState": leaseStateNames()}
 
-func runLedgerSchema(args []string) error {
-	fs := flag.NewFlagSet("ledgerschema", flag.ExitOnError)
+func runJobSchema(args []string) error {
+	fs := flag.NewFlagSet("jobschema", flag.ExitOnError)
 	out := fs.String("out", "internal/job/gen", "directory the schema files are written into")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	decls, err := loadGoDecls(ledgerSources...)
+	decls, err := loadGoDecls(jobSources...)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(*out, 0o755); err != nil {
 		return err
 	}
-	for _, rec := range ledgerRecords {
-		body, err := renderLedgerSchema(rec, decls)
+	for _, rec := range jobRecords {
+		body, err := renderJobSchema(rec, decls)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func runLedgerSchema(args []string) error {
 	return nil
 }
 
-// renderLedgerSchema renders one record. Every rule it applies is derived:
+// renderJobSchema renders one record. Every rule it applies is derived:
 //
 //   - one property per json tag, in declaration order and named by the tag;
 //   - required is every field whose tag carries no omitempty, because that is the only
@@ -103,14 +103,14 @@ func runLedgerSchema(args []string) error {
 //     validator enforces;
 //   - a description is the doc comment's first paragraph, so the rationale a later
 //     paragraph carries stays in the source.
-func renderLedgerSchema(rec ledgerRecord, d *goDecls) ([]byte, error) {
+func renderJobSchema(rec jobRecord, d *goDecls) ([]byte, error) {
 	st, ok := d.structs[rec.Struct]
 	if !ok {
-		return nil, fmt.Errorf("no struct %s is declared in %s", rec.Struct, strings.Join(ledgerSources, ", "))
+		return nil, fmt.Errorf("no struct %s is declared in %s", rec.Struct, strings.Join(jobSources, ", "))
 	}
 	version, ok := d.consts[rec.Version]
 	if !ok {
-		return nil, fmt.Errorf("%s: no constant %s is declared in %s", rec.Struct, rec.Version, strings.Join(ledgerSources, ", "))
+		return nil, fmt.Errorf("%s: no constant %s is declared in %s", rec.Struct, rec.Version, strings.Join(jobSources, ", "))
 	}
 	props, required, err := properties(rec.Struct, st, d, version)
 	if err != nil {
@@ -120,8 +120,8 @@ func renderLedgerSchema(rec ledgerRecord, d *goDecls) ([]byte, error) {
 	root := node{
 		{"$schema", schemaDraft},
 		{"$id", schemaIDs + rec.File},
-		{"$comment", fmt.Sprintf("Generated from job.%s by `magus-utils ledgerschema`."+
-			" DO NOT EDIT; run `magus run ledger-generate .`.", rec.Struct)},
+		{"$comment", fmt.Sprintf("Generated from job.%s by `magus-utils jobschema`."+
+			" DO NOT EDIT; run `magus run job-generate .`.", rec.Struct)},
 		{"title", rec.Title},
 	}
 	if doc := d.docs[rec.Struct]; doc != "" {
