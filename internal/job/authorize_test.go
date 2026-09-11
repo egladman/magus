@@ -76,14 +76,14 @@ func TestBoundWorkerReleasesAPath(t *testing.T) {
 	assert.Equal(t, "types/lease.go", stored.Releases[0].Path)
 }
 
-// A worker ends itself in fail or no_return and nowhere else. pass is a verdict somebody
-// else reaches by grading evidence, and a row that could set it has no acceptance step.
-func TestBoundWorkerEndsItselfOnlyInFailure(t *testing.T) {
+// A worker ends itself in fail, no_return, or exited and nowhere else. pass is a verdict
+// somebody else reaches by grading evidence, and a row that could set it has no acceptance step.
+func TestBoundWorkerEndsItselfInFailureOrExit(t *testing.T) {
 	t.Parallel()
 
 	loc := declared(t, workerRow())
 
-	for _, state := range []types.JobState{types.StateFail, types.StateNoReturn} {
+	for _, state := range []types.JobState{types.StateFail, types.StateNoReturn, types.StateExited} {
 		_, err := boundStore(loc, "adj/store").Update(t.Context(), "adj/store", func(u *types.Job) { u.State = state })
 		assert.NoError(t, err, "a worker reports its own %s", state)
 	}

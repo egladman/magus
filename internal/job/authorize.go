@@ -111,7 +111,7 @@ func refuse(actor Actor, id, rule string) error {
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
 // it landed on, SHRINK its write paths (which is how the skill has it release one), and
-// end itself in fail or no_return; on any other row it may only CREATE a child of itself
+// end itself in fail, no_return, or exited; on any other row it may only CREATE a child of itself
 // inside its own boundary. Widening a lane, changing the plan's shape, and grading a row
 // are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
 // can widen its own row has no boundary at all.
@@ -132,9 +132,12 @@ func authorizeRow(actor Actor, id string, prev, next types.Job, exists bool, row
 				return refuse(actor, id, "a worker may only SHRINK write_paths, which is how it releases a path, and this write widens them")
 			}
 		case "state":
-			if next.State != types.StateFail && next.State != types.StateNoReturn {
-				return refuse(actor, id, fmt.Sprintf("a worker may only end its own row in %s or %s, never %s",
-					types.StateFail, types.StateNoReturn, next.State))
+			// StatePass stays refused here on purpose: pass is the claim that the work
+			// met its criteria, and that judgment belongs to whoever is waiting on the
+			// row, never to the holder announcing it is done.
+			if next.State != types.StateFail && next.State != types.StateNoReturn && next.State != types.StateExited {
+				return refuse(actor, id, fmt.Sprintf("a worker may only end its own row in %s, %s, or %s, never %s",
+					types.StateFail, types.StateNoReturn, types.StateExited, next.State))
 			}
 		case "reported_base":
 			// The registration, which is what a worker is asked for.
