@@ -42,9 +42,9 @@ func lease(id string) types.Lease {
 		ID:             id,
 		Goal:           "goal for " + id,
 		Checkpoint:     "abc123",
-		OwnedPaths:     []string{"internal/" + id},
-		ForbiddenPaths: []string{"MAGUS.md"},
-		Tier:           "standard",
+		WritePaths:     []string{"internal/" + id},
+		DenyPaths: []string{"MAGUS.md"},
+		Model:          "standard",
 		Validation:     "magus run test",
 		State:          types.StateDeclared,
 	}
@@ -284,7 +284,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	s := tmpStore(t, root)
 	_, err := s.Put(ctx, types.Lease{
 		ID:         "u1",
-		OwnedPaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
+		WritePaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
 		State:      types.StateRunning,
 	})
 	require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 
 	stored, err := s.Put(ctx, types.Lease{
 		ID:         "u1",
-		OwnedPaths: []string{"kept.go"},
+		WritePaths: []string{"kept.go"},
 		State:      types.StateRunning,
 	})
 	require.NoError(t, err)
@@ -330,10 +330,10 @@ func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
 	s := tmpStore(t, root)
-	_, err := s.Put(ctx, types.Lease{ID: "u1", OwnedPaths: []string{"a.go"}})
+	_, err := s.Put(ctx, types.Lease{ID: "u1", WritePaths: []string{"a.go"}})
 	require.NoError(t, err)
 
-	released, err := s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = nil })
+	released, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, released.Releases, 1)
 	first := released.Releases[0].Digest
@@ -344,14 +344,14 @@ func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
 
 	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
 	// the next agent actually inherits.
-	_, err = s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = []string{"a.go"} })
+	_, err = s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = []string{"a.go"} })
 	require.NoError(t, err)
 	reowned, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, reowned[0].Releases, "a path the lease owns again is not a path it released")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
-	again, err := s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = nil })
+	again, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, again.Releases, 1)
 	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
@@ -481,7 +481,7 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "a", got[0].ID)
-	assert.Equal(t, []string{"internal/a"}, got[0].OwnedPaths)
+	assert.Equal(t, []string{"internal/a"}, got[0].WritePaths)
 
 	assert.NoFileExists(t, filepath.Join(loc.CacheDir, "ledger", "leases.json"),
 		"the cache directory is no longer the ledger's home")
@@ -560,12 +560,12 @@ func TestStoreListReturnsCopies(t *testing.T) {
 
 	got, err := s.List()
 	require.NoError(t, err)
-	got[0].OwnedPaths[0] = "mutated"
+	got[0].WritePaths[0] = "mutated"
 	got[0].Goal = "mutated"
 
 	again, err := s.List()
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/a"}, again[0].OwnedPaths, "a caller mutating a returned row cannot reach the store")
+	assert.Equal(t, []string{"internal/a"}, again[0].WritePaths, "a caller mutating a returned row cannot reach the store")
 	assert.Equal(t, "goal for a", again[0].Goal)
 }
 
@@ -587,7 +587,7 @@ func TestRecordUnattributedWrite(t *testing.T) {
 	s := tmpStore(t, root)
 	ctx := t.Context()
 
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", OwnedPaths: []string{"a.go"}})
+	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
 	require.NoError(t, err)
 
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
@@ -612,7 +612,7 @@ func TestRecordUnattributedWriteKeepsOneRowPerPath(t *testing.T) {
 	s := tmpStore(t, root)
 	ctx := t.Context()
 
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", OwnedPaths: []string{"a.go"}})
+	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: []string{"a.go"}})
 	require.NoError(t, err)
 	require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", "a.go"))
 
@@ -641,7 +641,7 @@ func TestRecordUnattributedWriteIsBounded(t *testing.T) {
 	for i := range MaxUnattributedWrites + over {
 		owned = append(owned, fmt.Sprintf("f%d.go", i))
 	}
-	_, err := s.Put(ctx, types.Lease{ID: "worker-1", OwnedPaths: owned})
+	_, err := s.Put(ctx, types.Lease{ID: "worker-1", WritePaths: owned})
 	require.NoError(t, err)
 	for _, p := range owned {
 		require.NoError(t, s.RecordUnattributedWrite(ctx, "worker-1", p))

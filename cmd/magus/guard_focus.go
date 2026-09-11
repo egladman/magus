@@ -171,7 +171,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 // focusForLease resolves the focus the bound lease declares, reporting the row it
 // came from so the caller knows a deny is available.
 //
-// A lease that declares neither a focus nor owned paths (a read_only investigator)
+// A lease that declares neither read paths nor write paths (a read_only investigator)
 // yields none, and the caller falls back to the working directory, which advises.
 // That is the intended asymmetry: a hard read boundary needs somebody to have
 // declared one.
@@ -188,11 +188,11 @@ func focusForLease(ws types.WorkspaceReader, location hookActivityLocation, acti
 	if !enrolled {
 		return project.Focus{}, "", false
 	}
-	declared := me.Focus
+	declared := me.ReadPaths
 	if len(declared) == 0 {
 		// The write lane doubles as the read lane when nothing widened it: a worker
 		// leased to edit a project is a worker that was pointed at that project.
-		declared = me.OwnedPaths
+		declared = me.WritePaths
 	}
 	focus, ok := project.FocusForPaths(ws, declared)
 	if !ok {

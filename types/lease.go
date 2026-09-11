@@ -216,7 +216,7 @@ type LeaseActor struct {
 // plan the agents are running.
 //
 // FACTS ONLY, NEVER ENFORCEMENT, and the division is precise rather than a blanket "magus
-// does nothing with these". OwnedPaths and ForbiddenPaths are
+// does nothing with these". WritePaths and DenyPaths are
 // what an orchestrator said it intended, not a boundary this store checks: nothing here
 // blocks a write, gates a run, or refuses a call. The AGENT GUARD is what consults these
 // facts to grade a write, and it lives outside this package and READS this store; a guard
@@ -264,29 +264,29 @@ type Lease struct {
 	// because that is the form an orchestrator has at spawn time and the form a later
 	// reader feeds back to `magus graph diff --rev`.
 	Checkpoint string `json:"checkpoint,omitempty" yaml:"checkpoint,omitempty"`
-	// OwnedPaths and ForbiddenPaths are the declared write boundary. Empty on a
+	// WritePaths and DenyPaths are the declared write boundary. Empty on a
 	// read-only lease BY DESIGN (see ReadOnly), which is why neither is required.
-	OwnedPaths     []string `json:"owned_paths,omitempty" yaml:"owned_paths,omitempty"`
-	ForbiddenPaths []string `json:"forbidden_paths,omitempty" yaml:"forbidden_paths,omitempty"`
-	// Focus is the declared READ lane: the paths whose projects this lease may read,
+	WritePaths []string `json:"owned_paths,omitempty" yaml:"owned_paths,omitempty"`
+	DenyPaths  []string `json:"forbidden_paths,omitempty" yaml:"forbidden_paths,omitempty"`
+	// ReadPaths is the declared READ lane: the paths whose projects this lease may read,
 	// widened to those projects' own dependencies when the guard resolves it. Empty
-	// means OwnedPaths stands in, because a worker leased to edit a project is a
+	// means WritePaths stands in, because a worker leased to edit a project is a
 	// worker that was pointed at that project.
 	//
-	// A separate field rather than a wider OwnedPaths, and the separation is the
+	// A separate field rather than a wider WritePaths, and the separation is the
 	// point: a worker that has to READ a shared library must not be handed the right
 	// to WRITE it, and one list cannot say both. It is also the only way to widen the
 	// boundary, which is deliberate. An environment variable that switched the rule
 	// off would be set once, in a wrapper, by the first worker it inconvenienced, and
 	// nothing afterwards would say the lane had stopped being checked.
-	Focus []string `json:"focus,omitempty" yaml:"focus,omitempty"`
+	ReadPaths []string `json:"focus,omitempty" yaml:"focus,omitempty"`
 	// DependsOn are the ids of leases that must land before this one, so a reader can
 	// see the ordering the orchestrator committed to.
 	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	// Tier is the effort tier the work was matched to (principal, standard, economy in
-	// the skill's table). A free string: hosts name their tiers differently and a
-	// closed set here would force a lie for the ones that do not fit.
-	Tier string `json:"tier,omitempty" yaml:"tier,omitempty"`
+	// Model is the model or effort tier the work was matched to (principal, standard,
+	// economy in the skill's table). A free string: hosts name their models differently
+	// and a closed set here would force a lie for the ones that do not fit.
+	Model string `json:"tier,omitempty" yaml:"tier,omitempty"`
 	// Check is the one check this lease runs. See [LeaseCheck].
 	Check *LeaseCheck `json:"check,omitempty" yaml:"check,omitempty"`
 	// Validation is Check rendered as the command that runs it.
@@ -301,13 +301,13 @@ type Lease struct {
 	// its own value.
 	State LeaseState `json:"state,omitempty" yaml:"state,omitempty"`
 	// ReadOnly marks the abbreviated row the skill describes: a lease that gathers
-	// evidence and writes nothing has no write set, so empty OwnedPaths and
-	// ForbiddenPaths are correct rather than missing. Without this flag a reader
+	// evidence and writes nothing has no write set, so empty WritePaths and
+	// DenyPaths are correct rather than missing. Without this flag a reader
 	// cannot tell an abbreviated row from one whose author forgot the boundary.
 	ReadOnly bool `json:"read_only,omitempty" yaml:"read_only,omitempty"`
 	// Releases are the paths this lease gave up, each with the content digest the path
 	// carried at that moment. Store-computed and output-only, like the timestamps: a
-	// worker announces a release by shrinking OwnedPaths, and the digest is what the
+	// worker announces a release by shrinking WritePaths, and the digest is what the
 	// next agent needs to tell whether it inherited the file the releaser left.
 	Releases []LeaseRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
 	// Unattributed are paths this lease owns that somebody outside it wrote, newest last,
@@ -408,7 +408,7 @@ type LeaseUnattributedWrite struct {
 	At int64 `json:"at" yaml:"at"`
 }
 
-// LeaseOverlap is two leases whose declared OwnedPaths intersect. A FACT the
+// LeaseOverlap is two leases whose declared WritePaths intersect. A FACT the
 // reader is handed, never a verdict: two leases may share a path because their author
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
 // gates, or reorders anything.
@@ -454,24 +454,24 @@ func NewLeaseReport(leases []Lease) LeaseReport {
 	return LeaseReport{Leases: leases, Overlaps: leaseOverlaps(leases)}
 }
 
-// leaseOverlaps reports every pair of leases whose declared owned paths
+// leaseOverlaps reports every pair of leases whose declared write paths
 // intersect, in ledger order.
 //
 // A lease in a terminal state is not in any pair. A released or finished lease is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
-// where a worker shrinks its owned paths so a waiter can start), and reporting one
+// where a worker shrinks its write paths so a waiter can start), and reporting one
 // would make the surface noisiest exactly when the plan is winding down.
 func leaseOverlaps(leases []Lease) []LeaseOverlap {
 	var out []LeaseOverlap
 	for i, a := range leases {
-		if a.State.Terminal() || len(a.OwnedPaths) == 0 {
+		if a.State.Terminal() || len(a.WritePaths) == 0 {
 			continue
 		}
 		for _, b := range leases[i+1:] {
-			if b.State.Terminal() || len(b.OwnedPaths) == 0 {
+			if b.State.Terminal() || len(b.WritePaths) == 0 {
 				continue
 			}
-			if pa, pb := intersectingPaths(a.OwnedPaths, b.OwnedPaths); len(pa) > 0 {
+			if pa, pb := intersectingPaths(a.WritePaths, b.WritePaths); len(pa) > 0 {
 				out = append(out, LeaseOverlap{LeaseA: a.ID, LeaseB: b.ID, PathsA: pa, PathsB: pb})
 			}
 		}
@@ -502,7 +502,7 @@ func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 // the cleaned paths, with a glob truncated to the literal prefix it can be judged by.
 //
 // THE definition, rather than a copy of one. The overlap report below asks it of two
-// leases; the worker brief asks it of a lease's owned paths against a project's declared
+// leases; the worker brief asks it of a lease's write paths against a project's declared
 // output globs, which is the same question about a different pair of declarations. A
 // second implementation would differ on the day the truncation rule changed.
 //
@@ -553,9 +553,9 @@ func LiteralPrefix(p string) string {
 // preserves nil, so a row that stored null does not come back as [].
 func (u Lease) Clone() Lease {
 	c := u
-	c.OwnedPaths = slices.Clone(u.OwnedPaths)
-	c.ForbiddenPaths = slices.Clone(u.ForbiddenPaths)
-	c.Focus = slices.Clone(u.Focus)
+	c.WritePaths = slices.Clone(u.WritePaths)
+	c.DenyPaths = slices.Clone(u.DenyPaths)
+	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)

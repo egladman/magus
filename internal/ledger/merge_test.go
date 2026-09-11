@@ -19,11 +19,11 @@ func applyMerge(t *testing.T, params map[string]any, base types.Lease) types.Lea
 func TestMergeTouchesOnlyNamedFields(t *testing.T) {
 	t.Parallel()
 
-	base := types.Lease{ID: "u1", Goal: "original goal", Tier: "standard"}
+	base := types.Lease{ID: "u1", Goal: "original goal", Model: "standard"}
 	got := applyMerge(t, map[string]any{"state": "running"}, base)
 	assert.Equal(t, types.StateRunning, got.State)
 	assert.Equal(t, "original goal", got.Goal, "an absent key must not erase what an earlier put set")
-	assert.Equal(t, "standard", got.Tier)
+	assert.Equal(t, "standard", got.Model)
 }
 
 func TestMergeAnExplicitEmptyValueClears(t *testing.T) {
@@ -38,10 +38,10 @@ func TestMergeListAcceptsBothWireForms(t *testing.T) {
 	t.Parallel()
 
 	spaceForm := applyMerge(t, map[string]any{"owned_paths": "a/b c/d"}, types.Lease{})
-	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.OwnedPaths)
+	assert.Equal(t, []string{"a/b", "c/d"}, spaceForm.WritePaths)
 
 	arrayForm := applyMerge(t, map[string]any{"owned_paths": []any{"a/b", "c/d"}}, types.Lease{})
-	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.OwnedPaths)
+	assert.Equal(t, []string{"a/b", "c/d"}, arrayForm.WritePaths)
 }
 
 func TestMergeRejectsAnUnknownState(t *testing.T) {

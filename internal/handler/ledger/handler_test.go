@@ -22,7 +22,7 @@ func TestLedgerHandler_Returns200WithLeases(t *testing.T) {
 	src := fakeLedgerSource{leases: []types.Lease{
 		{
 			ID: "lease-a", Goal: "ship the store", Checkpoint: "60dc9151",
-			OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning,
+			WritePaths: []string{"internal/ledger"}, State: types.StateRunning,
 			Updated:  1755300000,
 			Releases: []types.LeaseRelease{{Path: "types/lease.go", Digest: "sha256:abc", ReleasedAt: 1755299000}},
 		},
@@ -66,11 +66,11 @@ func TestLedgerHandler_Returns200WithLeases(t *testing.T) {
 // The overlap is derived on the read and stored nowhere, so the route reports it
 // without either row saying anything about the other. A fact for the reader, not a
 // verdict: nothing is blocked, reordered, or failed on account of it.
-func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
+func TestLedgerHandler_ReportsOverlappingWritePaths(t *testing.T) {
 	src := fakeLedgerSource{leases: []types.Lease{
-		{ID: "lease-a", OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning},
-		{ID: "lease-b", OwnedPaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
-		{ID: "lease-done", OwnedPaths: []string{"internal/ledger"}, State: types.StatePass},
+		{ID: "lease-a", WritePaths: []string{"internal/ledger"}, State: types.StateRunning},
+		{ID: "lease-b", WritePaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
+		{ID: "lease-done", WritePaths: []string{"internal/ledger"}, State: types.StatePass},
 	}}
 	h := NewHandler(src, nil)
 	w := httptest.NewRecorder()

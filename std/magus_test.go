@@ -350,7 +350,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, types.StatePass, got.State)
 	assert.Equal(t, "the declared goal", got.Goal, "the state advance must not erase the row")
-	assert.Equal(t, []string{"internal/ledger"}, got.OwnedPaths)
+	assert.Equal(t, []string{"internal/ledger"}, got.WritePaths)
 }
 
 // TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not

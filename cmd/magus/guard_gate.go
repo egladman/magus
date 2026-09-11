@@ -452,7 +452,7 @@ func magusSubcommandWords(args []string) []string {
 //   - `op=register` on the caller's OWN row records the base it landed on. That is the
 //     worker's own procedure, demanded by the checkpoint denial in gradeAgainstOwnLease,
 //     and denying it here would leave a worker unable to write anywhere at all.
-//   - `op=put` on the caller's own row that only SHRINKS its owned paths gives the lane
+//   - `op=put` on the caller's own row that only SHRINKS its write paths gives the lane
 //     back. It passes to the store, which owns whether a given shrink is legitimate; the
 //     guard's job is the direction, and giving up a lane cannot widen a role.
 //   - a read (`op=list`, and the default) is not a write.
@@ -483,20 +483,20 @@ func ledgerToolRebind(params map[string]string, me func() leaseStanding) string 
 		return ""
 	}
 	row := standing.row
-	if shrinksOwnedPaths(params, row) {
+	if shrinksWritePaths(params, row) {
 		return ""
 	}
 	return "rewrite its own ledger row"
 }
 
-// shrinksOwnedPaths reports whether a put changes nothing but the row's owned paths, and
+// shrinksWritePaths reports whether a put changes nothing but the row's write paths, and
 // only by removing entries it already carries.
 //
 // An ALLOWLIST over what the call carried, not a scan of the keys the guard happens to
 // know: a key outside the three below is a rewrite of something else on the row whatever
 // it holds, and reading a list of known keys instead means every key added to the ledger's
 // merge is cleared here until somebody remembers to add it in two places.
-func shrinksOwnedPaths(params map[string]string, row types.Lease) bool {
+func shrinksWritePaths(params map[string]string, row types.Lease) bool {
 	declared, present := "", false
 	for key, value := range params {
 		switch key {
@@ -513,11 +513,11 @@ func shrinksOwnedPaths(params map[string]string, row types.Lease) bool {
 		}
 	}
 	proposed := strings.Split(declared, ",")
-	if !present || len(proposed) >= len(row.OwnedPaths) {
+	if !present || len(proposed) >= len(row.WritePaths) {
 		return false
 	}
 	for _, decl := range proposed {
-		if !slices.Contains(row.OwnedPaths, strings.TrimSpace(decl)) {
+		if !slices.Contains(row.WritePaths, strings.TrimSpace(decl)) {
 			return false
 		}
 	}

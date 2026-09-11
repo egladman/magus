@@ -110,7 +110,7 @@ func refuse(actor Actor, id, rule string) error {
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on, SHRINK its owned paths (which is how the skill has it release one), and
+// it landed on, SHRINK its write paths (which is how the skill has it release one), and
 // end itself in fail or no_return; on any other row it may only CREATE a child of itself
 // inside its own boundary. Widening a lane, changing the plan's shape, and grading a row
 // are the orchestrator's, which is the asymmetry the whole rule exists for: a worker that
@@ -128,7 +128,7 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 	for _, field := range changedFields(prev, next) {
 		switch field {
 		case "owned_paths":
-			if !subset(next.OwnedPaths, prev.OwnedPaths) {
+			if !subset(next.WritePaths, prev.WritePaths) {
 				return refuse(actor, id, "a worker may only SHRINK owned_paths, which is how it releases a path, and this write widens them")
 			}
 		case "state":
@@ -148,8 +148,8 @@ func authorizeRow(actor Actor, id string, prev, next types.Lease, exists bool, r
 // authorizeChild grades a bound worker's write to a row that is not its own: a new child
 // of its own lease, inside its own boundary, and nothing else.
 //
-// EVERY LANE THE GUARD READS IS SUBSETTED, not just the write one. A child's focus is the
-// READ boundary (cmd/magus/guard_focus.go) and its forbidden_paths are subtracted from the
+// EVERY LANE THE GUARD READS IS SUBSETTED, not just the write one. A child's read paths are
+// the READ boundary (cmd/magus/guard_focus.go) and its deny paths are subtracted from the
 // write one, so a worker that could widen either by spawning has no boundary: it binds a
 // session to the child and reads or writes what its own row denies it.
 //
@@ -168,11 +168,11 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 	}
 	parent := rows[own]
 	switch {
-	case !subset(next.OwnedPaths, parent.OwnedPaths):
+	case !subset(next.WritePaths, parent.WritePaths):
 		return refuse(actor, id, "a child may only be handed paths its parent owns, and this one claims more")
 	case !subset(readLane(next), readLane(parent)):
-		return refuse(actor, id, "a child may only read what its parent reads, and this one's focus reaches further")
-	case !subset(parent.ForbiddenPaths, next.ForbiddenPaths):
+		return refuse(actor, id, "a child may only read what its parent reads, and this one's read paths reach further")
+	case !subset(parent.DenyPaths, next.DenyPaths):
 		return refuse(actor, id, "a child carries every forbidden_path its parent carries, and this one drops some")
 	case next.State != "" && next.State != types.StateDeclared:
 		return refuse(actor, id, fmt.Sprintf("a child is handed out %s or with no state at all, never %s: grading a row is the orchestrator's",
@@ -181,14 +181,14 @@ func authorizeChild(actor Actor, id string, next types.Lease, exists bool, rows 
 	return nil
 }
 
-// readLane is the declarations a row may READ: its focus when it declares one, else its
-// own write lane, which is the fallback cmd/magus/guard_focus.go makes. A parent's write
-// lane rides along either way, since a child may already be handed it.
+// readLane is the declarations a row may READ: its read paths when it declares any, else
+// its own write lane, which is the fallback cmd/magus/guard_focus.go makes. A parent's
+// write lane rides along either way, since a child may already be handed it.
 func readLane(row types.Lease) []string {
-	if len(row.Focus) == 0 {
-		return row.OwnedPaths
+	if len(row.ReadPaths) == 0 {
+		return row.WritePaths
 	}
-	return append(slices.Clone(row.Focus), row.OwnedPaths...)
+	return append(slices.Clone(row.ReadPaths), row.WritePaths...)
 }
 
 // authorizeClear grades wiping the book. A worker never does: clear drops rows it did
@@ -213,11 +213,11 @@ func changedFields(prev, next types.Lease) []string {
 	add("parent", prev.Parent != next.Parent)
 	add("goal", prev.Goal != next.Goal)
 	add("checkpoint", prev.Checkpoint != next.Checkpoint)
-	add("owned_paths", !slices.Equal(prev.OwnedPaths, next.OwnedPaths))
-	add("forbidden_paths", !slices.Equal(prev.ForbiddenPaths, next.ForbiddenPaths))
-	add("focus", !slices.Equal(prev.Focus, next.Focus))
+	add("owned_paths", !slices.Equal(prev.WritePaths, next.WritePaths))
+	add("forbidden_paths", !slices.Equal(prev.DenyPaths, next.DenyPaths))
+	add("focus", !slices.Equal(prev.ReadPaths, next.ReadPaths))
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
-	add("tier", prev.Tier != next.Tier)
+	add("tier", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)

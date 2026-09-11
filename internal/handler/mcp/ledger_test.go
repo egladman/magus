@@ -63,8 +63,8 @@ func TestLedgerTool(t *testing.T) {
 		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok, "Data is the record itself, so the console and the tool cannot disagree")
 		assert.Equal(t, "lease-a", got.ID)
-		assert.Equal(t, []string{"internal/ledger", "types/lease.go"}, got.OwnedPaths)
-		assert.Equal(t, []string{"MAGUS.md"}, got.ForbiddenPaths)
+		assert.Equal(t, []string{"internal/ledger", "types/lease.go"}, got.WritePaths)
+		assert.Equal(t, []string{"MAGUS.md"}, got.DenyPaths)
 		assert.Equal(t, types.StateRunning, got.State)
 		assert.NotZero(t, got.Created)
 	})
@@ -84,7 +84,7 @@ func TestLedgerTool(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "put", "id": "scout", "read_only": true, "state": "no_return"})
 		got := resp.Data.(types.Lease)
 		assert.True(t, got.ReadOnly)
-		assert.Empty(t, got.OwnedPaths)
+		assert.Empty(t, got.WritePaths)
 		assert.Equal(t, types.StateNoReturn, got.State, "no_return is its own terminal state, not fail")
 	})
 
@@ -106,8 +106,8 @@ func TestLedgerTool(t *testing.T) {
 		assert.Equal(t, types.StatePass, got.State)
 		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
 		assert.Equal(t, "abc123", got.Checkpoint)
-		assert.Equal(t, []string{"internal/ledger"}, got.OwnedPaths)
-		assert.Equal(t, "opus", got.Tier)
+		assert.Equal(t, []string{"internal/ledger"}, got.WritePaths)
+		assert.Equal(t, "opus", got.Model)
 	})
 
 	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
@@ -116,7 +116,7 @@ func TestLedgerTool(t *testing.T) {
 		})
 		got, ok := resp.Data.(types.Lease)
 		require.True(t, ok)
-		assert.Equal(t, []string{"a/b", "c d"}, got.OwnedPaths, "array elements are paths verbatim; only the string form splits on spaces")
+		assert.Equal(t, []string{"a/b", "c d"}, got.WritePaths, "array elements are paths verbatim; only the string form splits on spaces")
 	})
 
 	t.Run("an unrecognized state is rejected, not stored", func(t *testing.T) {

@@ -87,7 +87,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
-	lease.OwnedPaths = []string{".claude/**", "cmd/magus/**"}
+	lease.WritePaths = []string{".claude/**", "cmd/magus/**"}
 	ctx, _ := fleetFixture(t, lease)
 
 	var denied bytes.Buffer

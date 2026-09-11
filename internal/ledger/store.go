@@ -194,7 +194,7 @@ func (s *Store) Put(ctx context.Context, row types.Lease) (types.Lease, error) {
 // call, and the id is the key: whatever apply writes into ID is overwritten with it.
 //
 // Releases are stamped here because they are the store's to say: a write that drops a path
-// from OwnedPaths IS the release announcement, and reading the previous owned set and
+// from WritePaths IS the release announcement, and reading the previous write set and
 // writing the next one has to be one step or a concurrent put decides which release
 // happened.
 //
@@ -219,7 +219,7 @@ func (s *Store) Update(ctx context.Context, id string, apply func(*types.Lease))
 // lease asking what moved is asking about the tree it faces now.
 const MaxUnattributedWrites = 32
 
-// RecordUnattributedWrite notes that somebody outside lease id wrote one of its owned paths,
+// RecordUnattributedWrite notes that somebody outside lease id wrote one of its write paths,
 // with the content they left behind.
 //
 // ONE ROW PER PATH, newest wins: a person saves a file a dozen times while an agent works,
@@ -425,10 +425,10 @@ func (s *Store) archive(f ledgerFile) error {
 // inherits is the one left behind last.
 func (s *Store) releases(ctx context.Context, prev, next types.Lease, now int64) []types.LeaseRelease {
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.LeaseRelease) bool {
-		return slices.Contains(next.OwnedPaths, r.Path)
+		return slices.Contains(next.WritePaths, r.Path)
 	})
-	for _, p := range prev.OwnedPaths {
-		if slices.Contains(next.OwnedPaths, p) {
+	for _, p := range prev.WritePaths {
+		if slices.Contains(next.WritePaths, p) {
 			continue
 		}
 		rel := types.LeaseRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}

@@ -15,7 +15,7 @@ func acceptRow() types.Lease {
 	check := types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Ledger"}}
 	return types.Lease{
 		ID:         "harness/ledger-accept",
-		OwnedPaths: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"},
+		WritePaths: []string{"internal/ledger", "cmd/magus/ledger.go", "docs/reference/*.md"},
 		Check:      &check,
 		Validation: check.String(),
 		State:      types.StateRunning,
@@ -177,10 +177,10 @@ func TestGradeReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.OwnedPaths = []string{"."}
+	row.WritePaths = []string{"."}
 	assert.True(t, Grade(row, passingReport(), passingRun, nil).Accepted)
 
-	row.OwnedPaths = []string{""}
+	row.WritePaths = []string{""}
 	assert.False(t, Grade(row, passingReport(), passingRun, nil).Accepted, "a blank declaration claims nothing")
 }
 
@@ -190,7 +190,7 @@ func TestGradeRejectsAForbiddenPath(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.ForbiddenPaths = []string{"internal/ledger/store.go"}
+	row.DenyPaths = []string{"internal/ledger/store.go"}
 	rep := passingReport()
 	rep.ChangedPaths = []string{"internal/ledger/store.go"}
 
@@ -245,7 +245,7 @@ func TestGradeRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	t.Parallel()
 
 	row := acceptRow()
-	row.ReadOnly, row.OwnedPaths = true, nil
+	row.ReadOnly, row.WritePaths = true, nil
 
 	v := Grade(row, passingReport(), passingRun, nil)
 	assert.False(t, v.Accepted)

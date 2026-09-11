@@ -190,7 +190,7 @@ func narrowLease() types.Lease {
 	return types.Lease{
 		ID:         "harness/lease-scoped-deny",
 		Goal:       "lease-scoped denies in the guard",
-		OwnedPaths: []string{"cmd/magus/**"},
+		WritePaths: []string{"cmd/magus/**"},
 		Validation: "magus run go::go-test . -- ./internal/ledger/",
 		State:      types.StateRunning,
 		Registered: 1,
@@ -448,7 +448,7 @@ func TestDenyLeaseScopedRebindStaysQuiet(t *testing.T) {
 // shrink is legitimate belongs to the store.
 func TestLedgerToolRebindLetsALaneBeGivenBack(t *testing.T) {
 	wide := narrowLease()
-	wide.OwnedPaths = []string{"cmd/magus/**", "internal/hint/**"}
+	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _ := fleetFixture(t, wide)
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, wide.ID,
@@ -482,7 +482,7 @@ func TestHookCmdJudgesTheMCPLedgerSurface(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	wide := narrowLease()
-	wide.OwnedPaths = []string{"cmd/magus/**", "internal/hint/**"}
+	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _ := fleetFixture(t, wide)
 
 	for name, tc := range map[string]struct {

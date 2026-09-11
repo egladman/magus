@@ -141,12 +141,12 @@ func printLedgerTree(out io.Writer, report types.LeaseReport) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "LEASE\tSTATE\tTIER\tPATHS\tVALIDATION")
+	fmt.Fprintln(w, "LEASE\tSTATE\tMODEL\tPATHS\tVALIDATION")
 	for _, row := range ledgerTreeOrder(report.Leases) {
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%d\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
-			orDash(string(row.lease.State)), orDash(row.lease.Tier),
-			len(row.lease.OwnedPaths), orDash(row.lease.Validation))
+			orDash(string(row.lease.State)), orDash(row.lease.Model),
+			len(row.lease.WritePaths), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
 
@@ -243,7 +243,7 @@ func ledgerBrief(ctx context.Context, root string, args []string) error {
 	}
 
 	facts := leaseBoundary(ctx, flagRoot, row, leases)
-	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.OwnedPaths)
+	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, flagRoot, row.WritePaths)
 	brief := ledger.NewBrief(row, facts)
 
 	opts, err := outputOptionsOrDefault()
@@ -290,18 +290,18 @@ type registerFlags struct {
 
 func (f registerFlags) row(id string) ledger.Row {
 	return ledger.Row{
-		SchemaVersion:  types.LeaseSchemaVersion,
-		ID:             id,
-		Parent:         f.parent,
-		Goal:           f.goal,
-		Checkpoint:     f.checkpoint,
-		OwnedPaths:     f.writePaths,
-		ForbiddenPaths: f.denyPaths,
-		Focus:          f.readPaths,
-		DependsOn:      f.dependsOn,
-		Check:          f.declaredCheck(),
-		Tier:           f.model,
-		ReadOnly:       f.readOnly,
+		SchemaVersion: types.LeaseSchemaVersion,
+		ID:            id,
+		Parent:        f.parent,
+		Goal:          f.goal,
+		Checkpoint:    f.checkpoint,
+		WritePaths:    f.writePaths,
+		DenyPaths:     f.denyPaths,
+		ReadPaths:     f.readPaths,
+		DependsOn:     f.dependsOn,
+		Check:         f.declaredCheck(),
+		Model:         f.model,
+		ReadOnly:      f.readOnly,
 		// A row a person declares is one nobody has picked up yet, which is what the
 		// state vocabulary already has a word for.
 		State: types.StateDeclared,
@@ -413,8 +413,8 @@ func ledgerRegister(ctx context.Context, root string, args []string) error {
 	case outputName:
 		return emitNames([]string{stored.ID})
 	case outputText:
-		fmt.Printf("registered lease %s, %s, with %d owned path(s). Brief its worker with `%s`\n",
-			stored.ID, orDash(string(stored.State)), len(stored.OwnedPaths), hint.LedgerBrief.With(stored.ID))
+		fmt.Printf("registered lease %s, %s, with %d write path(s). Brief its worker with `%s`\n",
+			stored.ID, orDash(string(stored.State)), len(stored.WritePaths), hint.LedgerBrief.With(stored.ID))
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -446,7 +446,7 @@ func ledgerAccept(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus ledger accept <lease-id> --stdin < report.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Grade a finished worker's report against the lease it was handed: every changed")
-			fmt.Fprintln(os.Stderr, "path inside the declared owned paths and outside the forbidden ones, a change set")
+			fmt.Fprintln(os.Stderr, "path inside the declared write paths and outside the denied ones, a change set")
 			fmt.Fprintln(os.Stderr, "that is not empty, descendants the plan carries, and an output ref that resolves")
 			fmt.Fprintln(os.Stderr, "to a PASSING run of this row's own validation. A row that passes is recorded "+string(types.StatePass)+".")
 			fmt.Fprintln(os.Stderr, "")
@@ -589,12 +589,12 @@ func printLeaseVerdict(out io.Writer, v ledger.Verdict) {
 // two owners ago does not warn about a partition nobody runs any more.
 const leaseAffinityCommits = 200
 
-// leaseBoundary derives what the WORKSPACE says about one lease: the projects its owned
+// leaseBoundary derives what the WORKSPACE says about one lease: the projects its write
 // paths reach, the paths its own declarations put out of reach, and the projects that
 // change alongside the leased ones.
 //
 // This is the half a hand-written ledger row cannot carry. An orchestrator writes down
-// the forbidden paths it REMEMBERED; the generated outputs of every project a lease
+// the deny paths it REMEMBERED; the generated outputs of every project a lease
 // invalidates, and the paths a sibling lease is holding right now, hold whether anybody
 // remembered them or not.
 //
@@ -605,34 +605,34 @@ const leaseAffinityCommits = 200
 // already does: the row alone carries the goal, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
 func leaseBoundary(ctx context.Context, root string, row types.Lease, leases []types.Lease) ledger.BriefFacts {
-	if len(row.OwnedPaths) == 0 {
+	if len(row.WritePaths) == 0 {
 		return ledger.BriefFacts{}
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
 		return ledger.BriefFacts{WorkspaceCold: true}
 	}
-	affected, err := m.AffectedFromPaths(ctx, row.OwnedPaths)
+	affected, err := m.AffectedFromPaths(ctx, row.WritePaths)
 	if err != nil {
 		return ledger.BriefFacts{WorkspaceCold: true}
 	}
-	derived := generatedBoundary(m, affected.Affected, row.OwnedPaths)
+	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	return ledger.BriefFacts{
 		Projects:         affected.Affected,
-		DerivedForbidden: derived,
+		DerivedDenyPaths: derived,
 		Affinity:         leaseAffinity(ctx, m, affected.Seed),
 	}
 }
 
 // generatedBoundary is the declared output globs, across every project the lease
-// invalidates, that land INSIDE its owned paths.
+// invalidates, that land INSIDE its write paths.
 //
 // The intersection is what makes this a boundary rather than an inventory. This
 // workspace declares around a hundred output globs; listing them all buries the two or
 // three a given worker could actually hand-edit, and the worker is already fenced out of
-// everything beyond its owned paths. What it cannot know without being told is that a
+// everything beyond its write paths. What it cannot know without being told is that a
 // file it legitimately owns the directory of is generated.
 //
 // The AFFECTED set rather than the seeds, because a project writes outputs into trees it
@@ -669,7 +669,7 @@ func leasedBoundary(row types.Lease, leases []types.Lease) []ledger.BriefBoundar
 		if other.ID == row.ID || !other.State.Live() {
 			continue
 		}
-		for _, p := range other.OwnedPaths {
+		for _, p := range other.WritePaths {
 			out = append(out, ledger.BriefBoundary{
 				Path:   p,
 				Reason: fmt.Sprintf("owned by live lease %s: coordinate, never work around", other.ID),
@@ -851,10 +851,10 @@ func chainToGate(start string, deps map[string][]string) []string {
 	return walk(start)
 }
 
-// leaseGraphEvidence resolves each owned path against the knowledge graph, one line per
+// leaseGraphEvidence resolves each write path against the knowledge graph, one line per
 // path the graph knows. cold reports a graph that would not load at all.
 //
-// A path the graph cannot resolve is skipped SILENTLY, because most owned paths are
+// A path the graph cannot resolve is skipped SILENTLY, because most write paths are
 // ordinary source directories the containment tree does not carry, and a "no node" line
 // per path would bury the ones that do resolve. A cold graph is different and is
 // reported once: "not asked" must not read as "nothing depends on this".

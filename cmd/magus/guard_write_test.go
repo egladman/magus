@@ -64,7 +64,7 @@ func fleetFixture(t *testing.T, leases ...types.Lease) (context.Context, string)
 }
 
 // fleetLeases is the two-lease plan most cases below grade against: two live workers with
-// disjoint owned paths, one of them declaring a forbidden subtree inside its own.
+// disjoint write paths, one of them declaring a denied subtree inside its own.
 //
 // Both are REGISTERED, because these cases are about boundaries and an unregistered lease is
 // denied before any boundary is consulted. TestGradeLeasedWriteRequiresACheckpoint covers that
@@ -74,7 +74,7 @@ func fleetLeases() []types.Lease {
 		{
 			ID:           "lease-a",
 			Goal:         "own the ledger store\nacceptance: List stays cheap",
-			OwnedPaths:   []string{"internal/ledger/**"},
+			WritePaths:   []string{"internal/ledger/**"},
 			State:        types.StateRunning,
 			Checkpoint:   "rev-a",
 			ReportedBase: "rev-a",
@@ -82,15 +82,15 @@ func fleetLeases() []types.Lease {
 			Registered:   1,
 		},
 		{
-			ID:             "lease-b",
-			Goal:           "grade writes in the guard",
-			OwnedPaths:     []string{"cmd/magus/**", "docs/guard.md"},
-			ForbiddenPaths: []string{"cmd/magus/gen/**"},
-			State:          types.StateDeclared,
-			Checkpoint:     "rev-a",
-			ReportedBase:   "rev-a",
-			BaseVerdict:    types.BaseMatch,
-			Registered:     1,
+			ID:           "lease-b",
+			Goal:         "grade writes in the guard",
+			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
+			DenyPaths:    []string{"cmd/magus/gen/**"},
+			State:        types.StateDeclared,
+			Checkpoint:   "rev-a",
+			ReportedBase: "rev-a",
+			BaseVerdict:  types.BaseMatch,
+			Registered:   1,
 		},
 	}
 }
@@ -102,7 +102,7 @@ func fleetLeases() []types.Lease {
 func TestGradeLeasedWriteDenies(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
-	t.Run("inside another live lease's owned paths", func(t *testing.T) {
+	t.Run("inside another live lease's write paths", func(t *testing.T) {
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "lease-a", "the denial must name the owner")
@@ -113,24 +113,24 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 		assert.Contains(t, got.Reason, "lease-b", "the denial must say who magus thinks is writing")
 	})
 
-	t.Run("inside the acting lease's own forbidden paths", func(t *testing.T) {
-		// Also pins the precedence: cmd/magus/gen is inside lease-b's owned tree AND on its
-		// forbidden list, and the more specific declaration is the one that decides.
+	t.Run("inside the acting lease's own deny paths", func(t *testing.T) {
+		// Also pins the precedence: cmd/magus/gen is inside lease-b's write tree AND on its
+		// deny list, and the more specific declaration is the one that decides.
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", got.Decision)
-		assert.Contains(t, got.Reason, "FORBIDDEN")
+		assert.Contains(t, got.Reason, "DENIED")
 		assert.Contains(t, got.Reason, "lease-b")
 		assert.Contains(t, got.Reason, "cmd/magus/gen/**", "the denial must quote the declaration it matched")
 	})
 
-	t.Run("outside the acting lease's own owned paths", func(t *testing.T) {
+	t.Run("outside the acting lease's own write paths", func(t *testing.T) {
 		// Ground nobody else claims. The lane the orchestrator handed out is still the
 		// lane, and a worker that widens its own is what the declaration exists to catch.
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "README.md"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "lease-b")
 		assert.Contains(t, got.Reason, "README.md")
-		assert.Contains(t, got.Reason, "owned_paths", "the denial must name the field that decided it")
+		assert.Contains(t, got.Reason, "write_paths", "the denial must name the field that decided it")
 		assert.Contains(t, got.Reason, "cmd/magus/**", "the denial must list the lane it was measured against")
 	})
 
@@ -158,15 +158,15 @@ func TestGradeLeasedWriteDenies(t *testing.T) {
 func TestGradeLeasedWritePasses(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
-	t.Run("inside the acting lease's own owned paths", func(t *testing.T) {
+	t.Run("inside the acting lease's own write paths", func(t *testing.T) {
 		assert.Empty(t, gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
 	})
 
-	t.Run("a lease that declared no owned paths", func(t *testing.T) {
+	t.Run("a lease that declared no write paths", func(t *testing.T) {
 		// An empty owned set is a boundary nobody wrote, not a lane of size zero, so it
 		// scopes nothing. read_only is what says a lease writes nothing on purpose.
 		leases := fleetLeases()
-		leases[1].OwnedPaths, leases[1].ForbiddenPaths = nil, nil
+		leases[1].WritePaths, leases[1].DenyPaths = nil, nil
 		ctx, root := fleetFixture(t, leases...)
 		assert.Empty(t, gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "README.md")).Decision)
 	})
@@ -215,13 +215,13 @@ func TestGradeLeasedWriteIdleFleet(t *testing.T) {
 
 // TestGradeLeasedWriteMalformedDeclaration pins the fail-open being made VISIBLE. The
 // matcher's error was discarded, so a declaration it could not read matched nothing: a
-// forbidden path spelled with a stray bracket stopped denying and said so nowhere, which
+// deny path spelled with a stray bracket stopped denying and said so nowhere, which
 // is the shape of failure this rule is least able to afford: a boundary that looks
 // enforced and is not.
 func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
-	t.Run("the acting lease's own forbidden list", func(t *testing.T) {
+	t.Run("the acting lease's own deny list", func(t *testing.T) {
 		leases := fleetLeases()
-		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**"}
+		leases[1].DenyPaths = []string{"cmd/magus/[gen/**"}
 		ctx, root := fleetFixture(t, leases...)
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "advise", got.Decision, "an unreadable pattern says nothing about the write, only that nothing graded it")
@@ -230,9 +230,9 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		assert.Contains(t, got.Context, "not being enforced")
 	})
 
-	t.Run("another lease's owned paths", func(t *testing.T) {
+	t.Run("another lease's write paths", func(t *testing.T) {
 		leases := fleetLeases()
-		leases[0].OwnedPaths = []string{"internal/[ledger/**"}
+		leases[0].WritePaths = []string{"internal/[ledger/**"}
 		ctx, root := fleetFixture(t, leases...)
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
@@ -242,12 +242,12 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 	t.Run("a valid entry still denies through an earlier malformed one", func(t *testing.T) {
 		// The malformed pattern comes first, the valid glob that covers the write second.
 		// Short-circuiting on the bad pattern downgraded this deny to an advisory: a valid
-		// forbidden boundary must still hold when a sibling entry is unreadable.
+		// deny boundary must still hold when a sibling entry is unreadable.
 		leases := fleetLeases()
-		leases[1].ForbiddenPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
+		leases[1].DenyPaths = []string{"cmd/magus/[gen/**", "cmd/magus/gen/**"}
 		ctx, root := fleetFixture(t, leases...)
 		got := gradeLeasedWrite(ctx, "lease-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
-		require.Equal(t, "deny", got.Decision, "the valid forbidden pattern must deny even though an earlier entry could not be read")
+		require.Equal(t, "deny", got.Decision, "the valid deny pattern must deny even though an earlier entry could not be read")
 	})
 }
 
@@ -360,7 +360,7 @@ func TestDeclarationCovering(t *testing.T) {
 	})
 
 	// A pattern the matcher rejects used to be swallowed and read as "no declaration
-	// covers this path", so a forbidden entry with a stray bracket silently stopped
+	// covers this path", so a deny entry with a stray bracket silently stopped
 	// denying while the rule still looked enforced.
 	t.Run("a malformed pattern is reported, not silently unmatched", func(t *testing.T) {
 		_, ok, err := declarationCovering([]string{"internal/[ledger"}, "internal/ledger/store.go")

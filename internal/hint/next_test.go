@@ -200,8 +200,8 @@ func TestNextSourcePath(t *testing.T) {
 // can place a write.
 func TestRoleForGradesTheActingRow(t *testing.T) {
 	rows := []types.Lease{
-		{ID: "harness/worker", OwnedPaths: []string{"internal/hint/**"}},
-		{ID: "harness/reviewer", ReadOnly: true, Focus: []string{"cmd/magus/**"}},
+		{ID: "harness/worker", WritePaths: []string{"internal/hint/**"}},
+		{ID: "harness/reviewer", ReadOnly: true, ReadPaths: []string{"cmd/magus/**"}},
 		{ID: "harness/watcher"},
 	}
 	for _, tc := range []struct {

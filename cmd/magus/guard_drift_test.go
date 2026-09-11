@@ -133,7 +133,7 @@ func TestLeaseCoversWrite(t *testing.T) {
 	_, err := store.Put(t.Context(), types.Lease{
 		ID:         "unit-a",
 		State:      types.StateRunning,
-		OwnedPaths: []string{"libs/ui", "app/api"},
+		WritePaths: []string{"libs/ui", "app/api"},
 	})
 	require.NoError(t, err)
 

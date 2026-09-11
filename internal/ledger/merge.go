@@ -53,11 +53,11 @@ func ParseMerge(params map[string]any) (func(*types.Lease), error) {
 	str("parent", func(u *types.Lease, v string) { u.Parent = strings.TrimSpace(v) })
 	str("goal", func(u *types.Lease, v string) { u.Goal = v })
 	str("checkpoint", func(u *types.Lease, v string) { u.Checkpoint = strings.TrimSpace(v) })
-	list("owned_paths", func(u *types.Lease, v []string) { u.OwnedPaths = v })
-	list("forbidden_paths", func(u *types.Lease, v []string) { u.ForbiddenPaths = v })
-	list("focus", func(u *types.Lease, v []string) { u.Focus = v })
+	list("owned_paths", func(u *types.Lease, v []string) { u.WritePaths = v })
+	list("forbidden_paths", func(u *types.Lease, v []string) { u.DenyPaths = v })
+	list("focus", func(u *types.Lease, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Lease, v []string) { u.DependsOn = v })
-	str("tier", func(u *types.Lease, v string) { u.Tier = strings.TrimSpace(v) })
+	str("tier", func(u *types.Lease, v string) { u.Model = strings.TrimSpace(v) })
 
 	// check and validation are two spellings of one field, and the row stores both halves,
 	// so a put naming each of them is a caller that does not know which one it meant.

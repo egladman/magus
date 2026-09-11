@@ -26,7 +26,7 @@ type Brief struct {
 	// the only instruction the brief gives that is not already a field of the row: every
 	// rule the worker owes rides on the lease, and the guard reads them from there.
 	Bind string `json:"bind" yaml:"bind"`
-	// Evidence is one line per owned path the knowledge graph resolved, in declaration
+	// Evidence is one line per write path the knowledge graph resolved, in declaration
 	// order. A path the graph does not know is ABSENT here rather than reported as zero:
 	// an unknown blast radius and a blast radius of zero are different facts, and the
 	// second one would read as permission to edit freely.
@@ -34,19 +34,19 @@ type Brief struct {
 	// GraphCold marks a brief rendered against no graph at all, so empty Evidence reads
 	// as "not asked" rather than "asked, and nothing depends on any of this".
 	GraphCold bool `json:"graph_cold,omitempty" yaml:"graph_cold,omitempty"`
-	// Projects are the workspace projects the owned paths reach, the same set
+	// Projects are the workspace projects the write paths reach, the same set
 	// `magus affected` computes from those paths. It is what makes the two derived
 	// lists below readable: a boundary without the projects it came from is a fence
 	// with no map.
 	Projects []string `json:"projects,omitempty" yaml:"projects,omitempty"`
-	// DerivedForbidden is the boundary the WORKSPACE puts on this lease, kept apart from
-	// the row's own ForbiddenPaths. Those are what an orchestrator remembered to write
+	// DerivedDenyPaths is the boundary the WORKSPACE puts on this lease, kept apart from
+	// the row's own DenyPaths. Those are what an orchestrator remembered to write
 	// down; these hold whether anybody wrote them down or not, which is why a brief
 	// that carried only the declared list handed workers a boundary its author's
 	// memory had bounded.
-	DerivedForbidden []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
+	DerivedDenyPaths []BriefBoundary `json:"derived_forbidden,omitempty" yaml:"derived_forbidden,omitempty"`
 	// WorkspaceCold marks a brief rendered without a loadable workspace, so an empty
-	// DerivedForbidden reads as "not asked". The row alone carries the goal, the boundary
+	// DerivedDenyPaths reads as "not asked". The row alone carries the goal, the boundary
 	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.
 	WorkspaceCold bool `json:"workspace_cold,omitempty" yaml:"workspace_cold,omitempty"`
 	// Affinity is the co-change evidence for the lease's projects against projects it
@@ -71,7 +71,7 @@ type BriefStep struct {
 	Why string `json:"why" yaml:"why"`
 }
 
-// BriefEvidence is what the knowledge graph knows about one owned path: the node it
+// BriefEvidence is what the knowledge graph knows about one write path: the node it
 // resolved to and how many nodes can transitively reach it, the same count
 // `magus explain` prints.
 type BriefEvidence struct {
@@ -113,7 +113,7 @@ type BriefFacts struct {
 	GraphCold        bool
 	WorkspaceCold    bool
 	Projects         []string
-	DerivedForbidden []BriefBoundary
+	DerivedDenyPaths []BriefBoundary
 	Affinity         []BriefAffinity
 }
 
@@ -132,7 +132,7 @@ func NewBrief(row types.Lease, facts BriefFacts) Brief {
 		GraphCold:        facts.GraphCold,
 		WorkspaceCold:    facts.WorkspaceCold,
 		Projects:         facts.Projects,
-		DerivedForbidden: facts.DerivedForbidden,
+		DerivedDenyPaths: facts.DerivedDenyPaths,
 		Affinity:         facts.Affinity,
 		Bootstrap: []BriefStep{
 			{Run: "git status --short", Why: "work in your own worktree and confirm it is clean before you edit"},
@@ -158,20 +158,20 @@ func (b Brief) String() string {
 	fmt.Fprintf(&s, "bind: %s\n", b.Bind)
 
 	writeBlock(&s, "goal and acceptance criteria", b.Lease.Goal)
-	writeList(&s, "owned paths", b.Lease.OwnedPaths)
-	writeList(&s, "forbidden paths", b.Lease.ForbiddenPaths)
+	writeList(&s, "write paths", b.Lease.WritePaths)
+	writeList(&s, "deny paths", b.Lease.DenyPaths)
 	writeList(&s, "projects", b.Projects)
 
 	switch {
 	case b.WorkspaceCold:
-		writeList(&s, "forbidden paths the workspace declares",
+		writeList(&s, "deny paths the workspace declares",
 			[]string{"none: this workspace would not load, so nothing was derived from it"})
-	case len(b.DerivedForbidden) > 0:
-		lines := make([]string, len(b.DerivedForbidden))
-		for i, d := range b.DerivedForbidden {
+	case len(b.DerivedDenyPaths) > 0:
+		lines := make([]string, len(b.DerivedDenyPaths))
+		for i, d := range b.DerivedDenyPaths {
 			lines[i] = fmt.Sprintf("%s: %s", d.Path, d.Reason)
 		}
-		writeList(&s, "forbidden paths the workspace declares", lines)
+		writeList(&s, "deny paths the workspace declares", lines)
 	}
 
 	if len(b.Affinity) > 0 {

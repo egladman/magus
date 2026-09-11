@@ -12,7 +12,7 @@ import (
 )
 
 func leaseRow(id, parent string) types.Lease {
-	return types.Lease{ID: id, Parent: parent, State: types.StateRunning, Tier: "standard"}
+	return types.Lease{ID: id, Parent: parent, State: types.StateRunning, Model: "standard"}
 }
 
 func TestLedgerTreeOrderNestsChildrenUnderTheirParent(t *testing.T) {
@@ -55,10 +55,10 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	t.Parallel()
 
 	parent := leaseRow("plan", "")
-	parent.OwnedPaths = []string{"internal/ledger"}
+	parent.WritePaths = []string{"internal/ledger"}
 	parent.Validation = "magus run test internal/ledger"
 	child := leaseRow("plan/cli", "plan")
-	child.OwnedPaths = []string{"internal/ledger/store.go"}
+	child.WritePaths = []string{"internal/ledger/store.go"}
 
 	var out strings.Builder
 	printLedgerTree(&out, types.NewLeaseReport([]types.Lease{parent, child}))

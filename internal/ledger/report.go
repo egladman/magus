@@ -143,14 +143,14 @@ func Grade(row types.Lease, rep Report, att Attempt, declared []types.Lease) Ver
 		v.Violations = append(v.Violations, fmt.Sprintf("lease %s is not read-only and the report claims no changed paths at all", row.ID))
 	default:
 		for _, p := range rep.ChangedPaths {
-			if _, ok := matching(row.OwnedPaths, p); !ok {
-				v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is outside the lease's owned paths (%s)", p, strings.Join(row.OwnedPaths, ", ")))
+			if _, ok := matching(row.WritePaths, p); !ok {
+				v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is outside the lease's write paths (%s)", p, strings.Join(row.WritePaths, ", ")))
 			}
 		}
 	}
 	for _, p := range rep.ChangedPaths {
-		if d, ok := matching(row.ForbiddenPaths, p); ok {
-			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the lease is forbidden (%s)", p, d))
+		if d, ok := matching(row.DenyPaths, p); ok {
+			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the lease is denied (%s)", p, d))
 		}
 	}
 	for _, id := range rep.Descendants {

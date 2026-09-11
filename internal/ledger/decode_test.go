@@ -100,15 +100,15 @@ func TestRowApplyDeclaresRatherThanMerges(t *testing.T) {
 	t.Parallel()
 
 	stored := types.Lease{
-		ID: "adj/store", Goal: "old", Tier: "principal",
-		OwnedPaths: []string{"internal/ledger"},
+		ID: "adj/store", Goal: "old", Model: "principal",
+		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}
 	Row{ID: "adj/store", Goal: "new"}.Apply(&stored)
 
 	assert.Equal(t, "new", stored.Goal)
-	assert.Empty(t, stored.Tier, "an omitted field is cleared")
-	assert.Empty(t, stored.OwnedPaths)
+	assert.Empty(t, stored.Model, "an omitted field is cleared")
+	assert.Empty(t, stored.WritePaths)
 	assert.Equal(t, int64(42), stored.Registered, "what the store computed is not the declaration's to drop")
 }
 

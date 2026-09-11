@@ -187,7 +187,7 @@ func (g advisoryGate) touchedProjects() []string {
 	return out
 }
 
-// leaseCoversWrite reports whether the acting lease's declared owned paths cover this
+// leaseCoversWrite reports whether the acting lease's declared write paths cover this
 // write. A lease that declares none covers nothing: an orchestrator that named no lane
 // drew no boundary this rule could defer to.
 func leaseCoversWrite(actingLease string, location hookActivityLocation, writePath string) bool {
@@ -207,6 +207,6 @@ func leaseCoversWrite(actingLease string, location hookActivityLocation, writePa
 	if !enrolled {
 		return false
 	}
-	_, mine, err := declarationCovering(me.OwnedPaths, rel)
+	_, mine, err := declarationCovering(me.WritePaths, rel)
 	return err == nil && mine
 }

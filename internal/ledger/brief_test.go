@@ -18,10 +18,10 @@ func briefRow() types.Lease {
 		Goal: "Move the lease ledger to the per-repository state dir.\n" +
 			"Done when a row put from one checkout is listed from a second worktree of the same repo.",
 		Checkpoint:     "cf5509d09",
-		OwnedPaths:     []string{"internal/ledger", "cmd/magus/ledger.go"},
-		ForbiddenPaths: []string{"MAGUS.md", "docs/gen"},
+		WritePaths:     []string{"internal/ledger", "cmd/magus/ledger.go"},
+		DenyPaths: []string{"MAGUS.md", "docs/gen"},
 		DependsOn:      []string{"harness/session-load"},
-		Tier:           "principal",
+		Model:          "principal",
 		Validation:     "magus run test internal/ledger",
 		State:          types.StateDeclared,
 	}
@@ -65,7 +65,7 @@ func TestBriefRendersOnlyTheRow(t *testing.T) {
 	t.Parallel()
 
 	row := briefRow()
-	row.Goal, row.DependsOn, row.ForbiddenPaths = "", nil, nil
+	row.Goal, row.DependsOn, row.DenyPaths = "", nil, nil
 	got := NewBrief(row, BriefFacts{}).String()
 
 	assert.NotContains(t, got, "goal")

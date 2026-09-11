@@ -124,7 +124,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 		State:      types.StateRunning,
 		Goal:       "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
-		OwnedPaths: []string{"internal/ledger"},
+		WritePaths: []string{"internal/ledger"},
 	})
 	require.NoError(t, err)
 

@@ -5,11 +5,11 @@ goal and acceptance criteria
 Move the lease ledger to the per-repository state dir.
 Done when a row put from one checkout is listed from a second worktree of the same repo.
 
-owned paths
+write paths
   internal/ledger
   cmd/magus/ledger.go
 
-forbidden paths
+deny paths
   MAGUS.md
   docs/gen
 

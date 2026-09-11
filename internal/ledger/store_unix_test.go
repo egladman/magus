@@ -39,7 +39,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	s := tmpStore(t, root)
 	_, err = s.Put(ctx, types.Lease{
 		ID:         "u1",
-		OwnedPaths: []string{"escape.go", "pipe", "big.bin"},
+		WritePaths: []string{"escape.go", "pipe", "big.bin"},
 		State:      types.StateRunning,
 	})
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		u, uerr := s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = nil })
+		u, uerr := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 		done <- result{lease: u, err: uerr}
 	}()
 
@@ -87,9 +87,9 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := tmpStore(t, root)
-	_, err := s.Put(ctx, types.Lease{ID: "u1", OwnedPaths: []string{"link.go"}})
+	_, err := s.Put(ctx, types.Lease{ID: "u1", WritePaths: []string{"link.go"}})
 	require.NoError(t, err)
-	stored, err := s.Update(ctx, "u1", func(u *types.Lease) { u.OwnedPaths = nil })
+	stored, err := s.Update(ctx, "u1", func(u *types.Lease) { u.WritePaths = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	assert.Equal(t, "sha256:"+hashOf(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)

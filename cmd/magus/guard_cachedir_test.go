@@ -231,7 +231,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheLaneItSitsIn(t *testing.T) {
 	global = globalFlags{}
 	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
-	lease.OwnedPaths = []string{"**"}
+	lease.WritePaths = []string{"**"}
 	// Unregistered, so the lane rule has a denial of its own to be outranked BY. A lane
 	// that covers the path and says nothing leaves the rank unobserved.
 	lease.Registered = 0

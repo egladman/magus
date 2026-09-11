@@ -43,25 +43,25 @@ type Row struct {
 	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
 	// name` prints it.
 	Checkpoint string `json:"checkpoint,omitempty"`
-	// OwnedPaths is the declared write lane, empty on a read-only row by design.
-	OwnedPaths []string `json:"owned_paths,omitempty"`
-	// ForbiddenPaths are the paths inside that lane this lease may not write.
-	ForbiddenPaths []string `json:"forbidden_paths,omitempty"`
-	// Focus is the declared READ lane, widened to those projects' dependencies by the
-	// guard. Empty means owned_paths stands in.
-	Focus []string `json:"focus,omitempty"`
+	// WritePaths is the declared write lane, empty on a read-only row by design.
+	WritePaths []string `json:"owned_paths,omitempty"`
+	// DenyPaths are the paths inside that lane this lease may not write.
+	DenyPaths []string `json:"forbidden_paths,omitempty"`
+	// ReadPaths is the declared READ lane, widened to those projects' dependencies by the
+	// guard. Empty means write_paths stands in.
+	ReadPaths []string `json:"focus,omitempty"`
 	// DependsOn names the lease ids that must land before this one.
 	DependsOn []string `json:"depends_on,omitempty"`
-	// Tier is the effort tier the work was matched to, a free string because hosts name
-	// their tiers differently.
-	Tier string `json:"tier,omitempty"`
+	// Model is the model or effort tier the work was matched to, a free string because
+	// hosts name their models differently.
+	Model string `json:"tier,omitempty"`
 	// Check is the one check this lease runs, and acceptance binds a worker's evidence
 	// to it.
 	Check *types.LeaseCheck `json:"check,omitempty"`
 	// State is the row's lifecycle position, empty for a row that has not said where it
 	// stands. no_return is a lease that never reported, which is not a failure.
 	State types.LeaseState `json:"state,omitempty"`
-	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty owned
+	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
 	// paths are correct rather than missing.
 	ReadOnly bool `json:"read_only,omitempty"`
 	// Validation is the check as a rendered `magus run` line.
@@ -126,11 +126,11 @@ func (r Row) Apply(u *types.Lease) {
 	u.Parent = strings.TrimSpace(r.Parent)
 	u.Goal = r.Goal
 	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
-	u.OwnedPaths = trimmed(r.OwnedPaths)
-	u.ForbiddenPaths = trimmed(r.ForbiddenPaths)
-	u.Focus = trimmed(r.Focus)
+	u.WritePaths = trimmed(r.WritePaths)
+	u.DenyPaths = trimmed(r.DenyPaths)
+	u.ReadPaths = trimmed(r.ReadPaths)
 	u.DependsOn = trimmed(r.DependsOn)
-	u.Tier = strings.TrimSpace(r.Tier)
+	u.Model = strings.TrimSpace(r.Model)
 	// Validate refused an unparsable check before the row reached a store, so the error
 	// here cannot fire; the rendered line is written from the record so the two agree.
 	check, declared, _ := r.check()

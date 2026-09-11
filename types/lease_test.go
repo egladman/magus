@@ -37,7 +37,7 @@ func TestValidLeaseID(t *testing.T) {
 }
 
 func owner(id string, state LeaseState, paths ...string) Lease {
-	return Lease{ID: id, State: state, OwnedPaths: paths}
+	return Lease{ID: id, State: state, WritePaths: paths}
 }
 
 func TestLeaseOverlaps(t *testing.T) {
@@ -178,35 +178,35 @@ func TestLeaseCloneCopiesEverySliceField(t *testing.T) {
 
 	orig := Lease{
 		ID:             "a",
-		OwnedPaths:     append(make([]string, 0, 4), "types/"),
-		ForbiddenPaths: append(make([]string, 0, 4), "gen/"),
+		WritePaths:     append(make([]string, 0, 4), "types/"),
+		DenyPaths: append(make([]string, 0, 4), "gen/"),
 		DependsOn:      append(make([]string, 0, 4), "b"),
 		Releases:       append(make([]LeaseRelease, 0, 4), LeaseRelease{Path: "types/x.go"}),
 		Unattributed:   append(make([]LeaseUnattributedWrite, 0, 4), LeaseUnattributedWrite{Path: "types/y.go"}),
 	}
 
 	first, second := orig.Clone(), orig.Clone()
-	first.OwnedPaths = append(first.OwnedPaths, "first/")
-	first.ForbiddenPaths = append(first.ForbiddenPaths, "first/")
+	first.WritePaths = append(first.WritePaths, "first/")
+	first.DenyPaths = append(first.DenyPaths, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
 	first.Releases = append(first.Releases, LeaseRelease{Path: "first/z.go"})
 	first.Unattributed = append(first.Unattributed, LeaseUnattributedWrite{Path: "first/z.go"})
 
-	second.OwnedPaths = append(second.OwnedPaths, "second/")
-	second.ForbiddenPaths = append(second.ForbiddenPaths, "second/")
+	second.WritePaths = append(second.WritePaths, "second/")
+	second.DenyPaths = append(second.DenyPaths, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
 	second.Releases = append(second.Releases, LeaseRelease{Path: "second/z.go"})
 	second.Unattributed = append(second.Unattributed, LeaseUnattributedWrite{Path: "second/z.go"})
 
-	assert.Equal(t, []string{"types/", "first/"}, first.OwnedPaths)
-	assert.Equal(t, []string{"gen/", "first/"}, first.ForbiddenPaths)
+	assert.Equal(t, []string{"types/", "first/"}, first.WritePaths)
+	assert.Equal(t, []string{"gen/", "first/"}, first.DenyPaths)
 	assert.Equal(t, []string{"b", "first"}, first.DependsOn)
 	assert.Equal(t, []LeaseRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
 	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
 
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
-	assert.Equal(t, []string{"types/"}, orig.OwnedPaths)
+	assert.Equal(t, []string{"types/"}, orig.WritePaths)
 	assert.Equal(t, []LeaseUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
 }
 

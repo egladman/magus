@@ -250,7 +250,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 
 	reviewer := types.Lease{
 		ID: "harness/reviewer", Goal: "read the guard surface",
-		ReadOnly: true, Focus: []string{"cmd/magus/**"},
+		ReadOnly: true, ReadPaths: []string{"cmd/magus/**"},
 		State: types.StateRunning, Registered: 1,
 	}
 	ctx, _ := fleetFixture(t, worker, reviewer)

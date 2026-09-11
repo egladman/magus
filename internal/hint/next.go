@@ -223,10 +223,10 @@ func RoleFor(rows []types.Lease, id string) (Role, []string) {
 		if row.ID != id {
 			continue
 		}
-		if row.ReadOnly || len(row.OwnedPaths) == 0 {
+		if row.ReadOnly || len(row.WritePaths) == 0 {
 			return RoleReviewer, nil
 		}
-		return RoleWorker, row.OwnedPaths
+		return RoleWorker, row.WritePaths
 	}
 	return RoleWorker, nil
 }
