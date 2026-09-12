@@ -1,6 +1,6 @@
 // Subcommand `jobschema` emits the published JSON Schema for each job record from
-// the Go struct that decodes it: internal/job/gen/job.schema.json from job.Declaration,
-// result.schema.json from job.Report.
+// the Go struct that decodes it: internal/job/gen/job.schema.json from types.Declaration,
+// result.schema.json from types.JobResult.
 //
 // The schema and the struct were two hand-written copies of one contract, and the test
 // between them could only report that they had already diverged. Deriving the schema
@@ -48,7 +48,7 @@ var jobRecords = []jobRecord{
 
 // jobSources are the files the records and every type they reach are declared in.
 var jobSources = []string{
-	"internal/job/decode.go", "internal/job/verify.go",
+	"internal/job/verify.go",
 	"types/job.go", "types/jobresult.go",
 }
 

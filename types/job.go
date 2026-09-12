@@ -408,6 +408,192 @@ type Job struct {
 	LastRun *JobRun `json:"last_run,omitempty" yaml:"last_run,omitempty"`
 }
 
+// Declaration is the typed INPUT for one lease row: the fields a caller DECLARES, and nothing
+// the store computes. A caller cannot say when its row was created or what it released, and
+// the way to make that true is for the input type not to carry those fields rather than for
+// the store to strip them afterwards.
+//
+// It is a DECLARATION and not a merge: every field it carries is written, so an omitted one
+// is cleared rather than kept. The magus_job tool's fork deliberately does the opposite,
+// since an agent advancing one field of a live row must not erase the rest (see
+// job.ParseMerge).
+//
+// JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
+//
+// Registered in cmd/magus-utils/boundary_types.go with no RuntimeObject: a magusfile can
+// construct one, but nothing hands one back out to Buzz - job.DecodeDeclaration is the only
+// decoder, and it reads JSON, not a Buzz value.
+type Declaration struct {
+	// SchemaVersion is the row shape this record is written in, and it is required: a
+	// version this magus does not know is rejected by name. See JobSchemaVersion.
+	SchemaVersion int `json:"schema_version"`
+	// ID is the lease's identity within the plan, the key a second register replaces on,
+	// and the only required field besides the version.
+	ID string `json:"id" schema:"leaseid"`
+	// Parent is the lease this one was spawned under, empty for a lease the root declared.
+	Parent string `json:"parent,omitempty"`
+	// Goal is the goal and its observable acceptance criteria, as one block of text.
+	Goal string `json:"goal,omitempty"`
+	// Checkpoint is the working state this lease starts from, as `magus vcs checkpoint -o
+	// name` prints it.
+	Checkpoint string `json:"checkpoint,omitempty"`
+	// WritePaths is the declared write lane, empty on a read-only row by design.
+	WritePaths []string `json:"write_paths,omitempty"`
+	// DenyPaths are the paths inside that lane this lease may not write.
+	DenyPaths []string `json:"deny_paths,omitempty"`
+	// ReadPaths is the declared READ lane, widened to those projects' dependencies by the
+	// guard. Empty means write_paths stands in.
+	ReadPaths []string `json:"read_paths,omitempty"`
+	// DependsOn names the lease ids that must land before this one.
+	DependsOn []string `json:"depends_on,omitempty"`
+	// Model is the model or effort tier the work was matched to, a free string because
+	// hosts name their models differently.
+	Model string `json:"model,omitempty"`
+	// LegacyWritePaths is the pre-rename spelling of write_paths, accepted on input and
+	// never emitted.
+	//
+	// compat(until: no client or stored ledger still sends owned_paths/focus/
+	// forbidden_paths/tier; observe: grep the leases-*.json archives and the trail for the
+	// old keys): the decoder is strict, so an old client's row would be refused as an
+	// unknown member rather than understood. A row naming both spellings of one lane is
+	// refused, since nothing here can say which one its author meant.
+	LegacyWritePaths []string `json:"owned_paths,omitempty"`
+	// LegacyDenyPaths is the pre-rename spelling of deny_paths. compat: see LegacyWritePaths.
+	LegacyDenyPaths []string `json:"forbidden_paths,omitempty"`
+	// LegacyReadPaths is the pre-rename spelling of read_paths. compat: see LegacyWritePaths.
+	LegacyReadPaths []string `json:"focus,omitempty"`
+	// LegacyModel is the pre-rename spelling of model. compat: see LegacyWritePaths.
+	LegacyModel string `json:"tier,omitempty"`
+	// Check is the one check this lease runs, and acceptance binds a worker's evidence
+	// to it.
+	Check *LeaseCheck `json:"check,omitempty"`
+	// State is the row's lifecycle position, empty for a row that has not said where it
+	// stands. no_return is a lease that never reported, which is not a failure.
+	State JobState `json:"state,omitempty"`
+	// ReadOnly marks a lease that gathers evidence and writes nothing, so empty write
+	// paths are correct rather than missing.
+	ReadOnly bool `json:"read_only,omitempty"`
+	// Validation is the check as a rendered `magus run` line.
+	//
+	// compat(until: no client still sends a rendered line; observe: a grep of the ledger
+	// archives for a row carrying `validation` and no `check`): it is what rows declared
+	// before the check record existed, so it is accepted and parsed into Check. Sending
+	// both is refused rather than merged, since nothing here can say which one meant it.
+	Validation string `json:"validation,omitempty"`
+}
+
+// FoldLegacyLanes moves a lane declared under its old name onto the field that carries it,
+// refusing a row that names one lane twice. Exported for job.DecodeDeclaration, the one
+// caller outside this package: it runs between the JSON decode and Validate.
+//
+// compat: see the legacy fields on [Declaration].
+func (r *Declaration) FoldLegacyLanes() error {
+	var err error
+	fold := func(name string, into *[]string, from []string) {
+		switch {
+		case len(from) == 0:
+		case len(*into) > 0:
+			err = errors.Join(err, fmt.Errorf("job: a row declares %s or its renamed spelling, not both", name))
+		default:
+			*into = from
+		}
+	}
+	fold("owned_paths", &r.WritePaths, r.LegacyWritePaths)
+	fold("forbidden_paths", &r.DenyPaths, r.LegacyDenyPaths)
+	fold("focus", &r.ReadPaths, r.LegacyReadPaths)
+	switch {
+	case r.LegacyModel == "":
+	case r.Model != "":
+		err = errors.Join(err, errors.New("job: a row declares tier or its renamed spelling, not both"))
+	default:
+		r.Model = r.LegacyModel
+	}
+	r.LegacyWritePaths, r.LegacyDenyPaths, r.LegacyReadPaths, r.LegacyModel = nil, nil, nil, ""
+	return err
+}
+
+// Validate reports what is wrong with a declared row, or nil.
+func (r Declaration) Validate() error {
+	if !ValidJobID(strings.TrimSpace(r.ID)) {
+		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, MaxJobIDLen)
+	}
+	if r.State != "" && !ValidJobState(r.State) {
+		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
+	}
+	_, _, err := r.check()
+	return err
+}
+
+// check is the row's declared check, from either spelling, and whether it declares one at
+// all. A line that does not parse is refused HERE, at the door, rather than at grading
+// time, where the row is already stored and the worker has already run something.
+func (r Declaration) check() (LeaseCheck, bool, error) {
+	line := strings.TrimSpace(r.Validation)
+	switch {
+	case r.Check != nil && line != "":
+		return LeaseCheck{}, false, errors.New("job: a row carries `check` or a rendered `validation` line, not both")
+	case r.Check != nil:
+		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
+		if err != nil {
+			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+		}
+		parsed.Args = r.Check.Args
+		return parsed, true, nil
+	case line != "":
+		parsed, err := ParseLeaseRunLine(line)
+		if err != nil {
+			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+		}
+		return parsed, true, nil
+	}
+	return LeaseCheck{}, false, nil
+}
+
+// JobStateVocabulary is the closed set of job states, as an error quotes it. Shared by
+// Declaration.Validate and job.ParseMerge, the two places a caller-supplied state is
+// checked against the set.
+func JobStateVocabulary() string {
+	states := JobStates()
+	names := make([]string, len(states))
+	for i, s := range states {
+		names[i] = string(s)
+	}
+	return strings.Join(names, ", ")
+}
+
+// Apply writes this declaration onto a row, for job.Store.Update. Store-computed fields are
+// untouched: a row that already carries releases or a registration keeps them.
+func (r Declaration) Apply(u *Job) {
+	u.Parent = strings.TrimSpace(r.Parent)
+	u.Goal = r.Goal
+	u.Checkpoint = strings.TrimSpace(r.Checkpoint)
+	u.WritePaths = trimmedNonEmpty(r.WritePaths)
+	u.DenyPaths = trimmedNonEmpty(r.DenyPaths)
+	u.ReadPaths = trimmedNonEmpty(r.ReadPaths)
+	u.DependsOn = trimmedNonEmpty(r.DependsOn)
+	u.Model = strings.TrimSpace(r.Model)
+	// Validate refused an unparsable check before the row reached a store, so the error
+	// here cannot fire; the rendered line is written from the record so the two agree.
+	check, declared, _ := r.check()
+	u.Check, u.Validation = nil, ""
+	if declared {
+		u.Check, u.Validation = &check, check.String()
+	}
+	u.State = r.State
+	u.ReadOnly = r.ReadOnly
+}
+
+// trimmedNonEmpty trims every element of in and drops the ones left empty.
+func trimmedNonEmpty(in []string) []string {
+	var out []string
+	for _, s := range in {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // JobRun is one completed run of a job: what it cost, whether it worked, and what it
 // reclaimed.
 type JobRun struct {

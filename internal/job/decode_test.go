@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// compat: see the legacy fields on Declaration. A client one release behind still registers, and
+// compat: see the legacy fields on types.Declaration. A client one release behind still registers, and
 // one that names a lane twice is refused rather than silently taking either spelling.
 func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
@@ -19,7 +19,7 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 		`{"schema_version":4,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
-	require.Equal(t, Declaration{
+	require.Equal(t, types.Declaration{
 		SchemaVersion: 4,
 		ID:            "adj/ledger",
 		WritePaths:    []string{"internal/ledger"},
@@ -141,7 +141,7 @@ func TestDeclarationApplyDeclaresRatherThanMerges(t *testing.T) {
 		WritePaths: []string{"internal/ledger"},
 		Registered: 42,
 	}
-	Declaration{ID: "adj/store", Goal: "new"}.Apply(&stored)
+	types.Declaration{ID: "adj/store", Goal: "new"}.Apply(&stored)
 
 	assert.Equal(t, "new", stored.Goal)
 	assert.Empty(t, stored.Model, "an omitted field is cleared")
@@ -160,20 +160,20 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(DeclarationSchema), &schema))
 
-	assert.ElementsMatch(t, jsonFields(Declaration{}), keys(schema.Properties))
+	assert.ElementsMatch(t, jsonFields(types.Declaration{}), keys(schema.Properties))
 }
 
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
-// row the other would have recorded. ParseMerge is the MCP tool's decoder and Declaration
-// is the CLI's. Declaration alone still carries the pre-rename spellings
-// (owned_paths/forbidden_paths/focus/tier; see foldLegacyLanes): that compat is decode.go's
-// own and was never mirrored into ParseMerge, so it is excluded from this comparison rather
-// than asserted as shared vocabulary.
+// row the other would have recorded. ParseMerge is the MCP tool's decoder and
+// types.Declaration is the CLI's. types.Declaration alone still carries the pre-rename
+// spellings (owned_paths/forbidden_paths/focus/tier; see types.Declaration.FoldLegacyLanes):
+// that compat is its own and was never mirrored into ParseMerge, so it is excluded from
+// this comparison rather than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 	t.Parallel()
 
 	legacy := map[string]bool{"owned_paths": true, "forbidden_paths": true, "focus": true, "tier": true}
-	for _, field := range jsonFields(Declaration{}) {
+	for _, field := range jsonFields(types.Declaration{}) {
 		if field == "schema_version" || field == "id" || legacy[field] {
 			continue // the envelope and the key (ParseMerge takes them as arguments), and decode.go's own legacy compat
 		}
@@ -192,7 +192,7 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 		assert.NoError(t, err, "magus_job fork rejects %q, which `magus job fork` accepts", field)
 	}
 	var current []string
-	for _, field := range jsonFields(Declaration{})[2:] {
+	for _, field := range jsonFields(types.Declaration{})[2:] {
 		if !legacy[field] {
 			current = append(current, field)
 		}

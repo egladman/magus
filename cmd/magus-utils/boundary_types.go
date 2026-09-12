@@ -148,6 +148,9 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
+	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
+	// back out, so it carries no RuntimeObject encoder.
+	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
 }

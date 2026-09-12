@@ -322,8 +322,8 @@ type forkFlags struct {
 	readOnly                               bool
 }
 
-func (f forkFlags) row(id string) job.Declaration {
-	return job.Declaration{
+func (f forkFlags) row(id string) types.Declaration {
+	return types.Declaration{
 		SchemaVersion: types.JobSchemaVersion,
 		ID:            id,
 		Parent:        f.parent,
@@ -343,7 +343,7 @@ func (f forkFlags) row(id string) job.Declaration {
 }
 
 // declaredCheck is --check as the record the row carries, or nil when the flag is absent.
-// A value that does not parse reaches job.Declaration.Validate, which is the one place a
+// A value that does not parse reaches types.Declaration.Validate, which is the one place a
 // declaration is refused.
 func (f forkFlags) declaredCheck() *types.LeaseCheck {
 	if strings.TrimSpace(f.check) == "" {
@@ -371,7 +371,7 @@ func (f forkFlags) declaredCheck() *types.LeaseCheck {
 // live job must not erase the rest.
 func jobFork(ctx context.Context, root string, args []string) error {
 	var (
-		row           job.Declaration
+		row           types.Declaration
 		declared      forkFlags
 		schema, stdin bool
 	)

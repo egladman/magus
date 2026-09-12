@@ -97,7 +97,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	} else if ok {
 		s := types.JobState(strings.TrimSpace(v))
 		if !types.ValidJobState(s) {
-			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", stateVocabulary()))
+			err = errors.Join(err, fmt.Errorf("job: state must be one of %s", types.JobStateVocabulary()))
 		} else {
 			set = append(set, func(u *types.Job) { u.State = s })
 		}
@@ -134,7 +134,7 @@ var mergeFields = []string{
 // shipped them. This table survives for a narrower, still-live reason: Store.mergeRowRaw
 // (store.go) strips an old key out of a row's raw bytes on every merge so it cannot ride
 // back out under both spellings after foldStoredLanes (decode.go) folds it onto the
-// current field on read. Declaration (decode.go) keeps its own legacy input fields
+// current field on read. types.Declaration keeps its own legacy input fields
 // separately, for a client still reading `magus job fork --stdin` in the old vocabulary.
 var renamedFields = [][2]string{
 	{"owned_paths", "write_paths"},

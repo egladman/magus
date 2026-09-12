@@ -11,7 +11,7 @@
     "schema_version": {
       "type": "integer",
       "const": 4,
-      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See types.JobSchemaVersion."
+      "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
       "type": "string",
