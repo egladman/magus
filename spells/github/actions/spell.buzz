@@ -43,6 +43,7 @@
 //   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
+import "crypto"
 import "encoding/url"
 import "http"
 import "magus"
@@ -82,9 +83,12 @@ export fun enabled(target: Target, cb: fun(any)) > bool {
 // uses). Track for follow-up; keep the two copies in sync.
 fun getenv(name: str) > str { return os\env(name) ?? ""; }
 
-// Version salt mixed into every entry's `version` field; bump to invalidate all
-// artifacts at once. Independent of the cache *service* version (v2).
-final CACHE_VERSION = "magus-remote-v1";
+// CACHE_SALT is what you bump to invalidate every artifact at once. The service
+// accepts nothing but a hex digest in `version` and answers a readable salt with a
+// 400, so the digest is what goes on the wire. Independent of the cache *service*
+// version (v2).
+final CACHE_SALT = "magus-remote-v1";
+final CACHE_VERSION = crypto\sha256Hex(CACHE_SALT);
 // Twirp service path; methods hang off this under ACTIONS_RESULTS_URL.
 final SERVICE = "twirp/github.actions.results.api.v1.CacheService/";
 
@@ -574,6 +578,15 @@ test "escapeProp encodes every separator, not just the first" {
     // escapeProp layers on escapeData, so a value carrying both a separator and a
     // newline must come back with all of them encoded and nothing raw.
     assert\equal(escapeProp("x:1\ny,2"), "x%3A1%0Ay%2C2", "separators and newlines together");
+}
+
+test "the cache service accepts nothing but a 64-character lowercase hex `version`" {
+    assert\equal(CACHE_VERSION.len(), 64, "a sha256 hex digest is 64 characters");
+    foreach (i in 0..CACHE_VERSION.len()) {
+        final ch = CACHE_VERSION.sub(i, len: 1);
+        final hex = (ch >= "0" and ch <= "9") or (ch >= "a" and ch <= "f");
+        assert\isTrue(hex, "character " + ch + " is not lowercase hex");
+    }
 }
 
 test "escapeData keeps a multi-line secret inside one add-mask command" {
