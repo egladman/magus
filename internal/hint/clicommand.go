@@ -125,7 +125,7 @@ var (
 	VCSResolve        = cmd("vcs", "resolve")
 	VCSCheckpoint     = cmd("vcs", "checkpoint")
 	AgentInstall      = cmd("agent", "install")
-	AgentSample       = cmd("agent", "sample")
+	AgentStarter      = cmd("agent", "starter")
 	ConfigView        = cmd("config", "view")
 	ConfigToken       = cmd("config", "token")
 	ConfigTokenPrint  = cmd("config", "token", "print")
@@ -154,7 +154,7 @@ var AllCommands = []Command{
 	DescribeMCPTools, DescribeJob, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
-	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
+	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,

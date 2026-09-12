@@ -2448,7 +2448,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: agent.AgentsFile + " carries an older managed block; magus does not write that file, so replace it yourself",
-			Details: append(details, "print the current block: "+hint.AgentSample.With("--section")),
+			Details: append(details, "print the current block: "+hint.AgentStarter.With("--section")),
 		}
 	}
 	return types.DoctorCheck{

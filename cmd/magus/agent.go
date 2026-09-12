@@ -35,26 +35,26 @@ func agentCmd(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
-	case "sample":
-		return agentSampleCmd()
+	case "starter":
+		return agentStarterCmd()
 	case "adoption":
 		return agentAdoptionCmd(args[1:])
 	case "-h", "--help", "help":
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, sample, or adoption)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, starter, or adoption)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|sample|adoption> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|starter|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	tty.ProseItem(w, tty.SystemProbe, "  install            ",
 		"render the embedded skills and write or stream them into named destinations",
 		"(.claude/skills, .agents/skills, .opencode/skills, ...)")
-	tty.ProseItem(w, tty.SystemProbe, "  sample             ",
+	tty.ProseItem(w, tty.SystemProbe, "  starter            ",
 		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
 	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",
 		"report how often agents used the graph versus grep, over shell commands",
@@ -255,7 +255,7 @@ func printAgentInstallNextSteps(dir string, written, stale []string, form agent.
 	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  "+hint.DescribeGraph.With("-o", "markdown")+"  (the skills send agents to the live verbs: "+hint.DescribeTargets.String()+", "+hint.Ls.String()+")")
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
-	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentSample.String())
+	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
 	printAgentsBlockToPaste(dir)
 }
 
@@ -280,14 +280,14 @@ func printAgentsBlockToPaste(dir string) {
 
 // vcsSafetyRule is the one always-on version-control rule worth carrying in a
 // repo's agent instruction file: it stops one agent's whole-tree revert from destroying
-// another's uncommitted work. Shared by the install hint and the sample doc.
+// another's uncommitted work. Shared by the install hint and the starter doc.
 const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself, never delegate it to a subagent, and never discard or revert uncommitted changes across the whole tree to verify a build - build in place. A whole-tree revert permanently destroys a concurrent agent's uncommitted work."
 
-// agentSampleDoc returns an AGENTS.md starter for a developer to paste and own.
+// agentStarterDoc returns an AGENTS.md starter for a developer to paste and own.
 //
 // The magus guidance arrives inside its begin/end markers (the same bytes
 // install prints), so `magus doctor` can grade it once pasted.
-func agentSampleDoc() string {
+func agentStarterDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
 		"     fill in the project-specific sections below. Everything outside the\n" +
@@ -303,9 +303,9 @@ func agentSampleDoc() string {
 		agentSkills.AgentsBlock()
 }
 
-// agentSampleCmd prints agentSampleDoc to stdout, never to a file.
-func agentSampleCmd() error {
-	fmt.Fprint(os.Stdout, agentSampleDoc())
+// agentStarterCmd prints agentStarterDoc to stdout, never to a file.
+func agentStarterCmd() error {
+	fmt.Fprint(os.Stdout, agentStarterDoc())
 	return nil
 }
 

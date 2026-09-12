@@ -226,7 +226,7 @@ reader can generalize for a ritual.
      go BEFORE the `--`, and everything after it forwards to the test binary.
   3. `./magus agent install .claude/skills --force` - reinstall the dogfooded
      copies, which are stamped and will otherwise read as drift.
-  4. Refresh the AGENTS.md managed block: `./magus agent sample` prints the
+  4. Refresh the AGENTS.md managed block: `./magus agent starter` prints the
      current block (so does `agent install`), and you replace everything
      between the `magus:skills:begin` and `magus:skills:end` markers with it,
      leaving the rest of the file alone. magus never writes AGENTS.md, so

@@ -927,7 +927,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 			// string has been wrong before (it once named a flag that does not
 			// parse), and a stale stamp whose one job is to hand you the command
 			// that fixes it is worth checking against `magus agent -h`.
-			out = append(out, c.gradeStamp(AgentsFile, "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
+			out = append(out, c.gradeStamp(AgentsFile, "magus agent starter (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })

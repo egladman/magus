@@ -2071,10 +2071,10 @@ shape: magus query for a diagnostic code or a Buzz op, which magus refs
 (compiled-language symbols only) would miss, and magus refs otherwise. The
 text report prints the same command after each pattern, and run is empty for
 a pattern no graph verb fits.`,
-	Usage: "magus agent <install|sample|adoption> [flags]",
+	Usage: "magus agent <install|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "sample", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
+		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
 			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it the corpus is read from stdin"},
 		}},
@@ -2094,7 +2094,7 @@ a pattern no graph verb fits.`,
 		{"Refresh, and drop skills this version no longer ships", "magus agent install .claude/skills --force --prune"},
 		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
-		{"Print a starter AGENTS.md", "magus agent sample"},
+		{"Print a starter AGENTS.md", "magus agent starter"},
 		{"Measure graph adoption over a corpus of shell commands", "magus agent adoption --commands commands.txt"},
 		{"Read the corpus from stdin instead", "magus agent adoption < commands.txt"},
 		{"The report as JSON, for a dashboard", "magus agent adoption --commands commands.txt -o json"},

@@ -11,7 +11,7 @@ Install the knowledge-graph agent skills into a repository
 
 ## Synopsis
 
-**magus** agent \<install|sample|adoption\> [flags]
+**magus** agent \<install|starter|adoption\> [flags]
 
 ## Description
 
@@ -75,7 +75,7 @@ a pattern no graph verb fits.
 **install**
 : Render the embedded skills and write or stream them into named destinations
 
-**sample**
+**starter**
 : Print a starter AGENTS.md to stdout; never writes a file
 
 **adoption**
@@ -116,7 +116,7 @@ magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 *Print a starter AGENTS.md*
 
 ```sh
-magus agent sample
+magus agent starter
 ```
 
 *Measure graph adoption over a corpus of shell commands*

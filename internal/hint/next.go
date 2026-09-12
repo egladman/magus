@@ -271,7 +271,7 @@ var readCommands = []Command{
 	VCSCheckpoint,
 	ConfigView, ConfigToken, ConfigTokenPrint,
 	ConfigConsoleToken, ConfigMCPConnectorLs,
-	AgentSample,
+	AgentStarter,
 }
 
 // mutatesTree reports whether argv would change the tree, judged from the command

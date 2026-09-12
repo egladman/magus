@@ -178,11 +178,11 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 	assert.Contains(t, out, "<!-- magus:skills:begin")
 }
 
-// TestAgentSamplePrintsAMarkedBlock keeps the two print paths on one set of
+// TestAgentStarterPrintsAMarkedBlock keeps the two print paths on one set of
 // bytes: a paste from `sample` must be gradeable by `magus doctor` exactly as a
 // paste from install's offer is.
-func TestAgentSamplePrintsAMarkedBlock(t *testing.T) {
-	out := captureStdout(t, func() { require.NoError(t, agentSampleCmd()) })
+func TestAgentStarterPrintsAMarkedBlock(t *testing.T) {
+	out := captureStdout(t, func() { require.NoError(t, agentStarterCmd()) })
 	assert.True(t, strings.HasPrefix(out, "# AGENTS.md\n"))
 	assert.Contains(t, out, "## Conventions")
 	assert.Contains(t, out, agentSkills.AgentsBlock())
@@ -417,8 +417,8 @@ func extractTar(t *testing.T, src, dst string) {
 	}
 }
 
-func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
-	doc := agentSampleDoc()
+func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
+	doc := agentStarterDoc()
 	assert.Contains(t, doc, "# AGENTS.md")
 	assert.Contains(t, doc, "## Project")  // a project placeholder to fill in
 	assert.Contains(t, doc, "## magus")    // the reproduced magus block

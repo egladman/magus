@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5863,
-  "edge_count": 10430,
+  "node_count": 5865,
+  "edge_count": 10433,
   "relations": [
     {
       "id": "annotates",
@@ -2226,7 +2226,7 @@
       "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
         "dir_files": "10",
-        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#integrate-and-verify,md#maintain-the-global-lease-ledger,md#observe-through-the-correct-control-plane,md#prove-that-leases-do-not-collide,md#run-the-graph-engineering-loop,md#seed-the-partition-with-magus,m"
+        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that-jobs-do-not-collide,md#run-the-graph-engineering-loop,md#seed-the-partition-with-magus,md#set"
       }
     },
     {
@@ -4216,8 +4216,8 @@
       "attrs": {
         "role": "doc",
         "section": "guides",
-        "tags": "agents,leases,checkpoint,ledger,plan,magus vcs checkpoint,magus_ledger,magus ledger,brief,console,activity",
-        "title": "Leases"
+        "tags": "agents,jobs,leases,checkpoint,magus vcs checkpoint,magus job,magus_job,console,activity",
+        "title": "Jobs and leases"
       }
     },
     {
@@ -17482,6 +17482,16 @@
       }
     },
     {
+      "id": "docsection:docs/glossary.md#job",
+      "kind": "docsection",
+      "label": "Job",
+      "source": "docs/glossary.md#job",
+      "attrs": {
+        "anchor": "job",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/glossary.md#knowledge-graph",
       "kind": "docsection",
       "label": "Knowledge graph",
@@ -18152,6 +18162,16 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents.md#handing-work-to-other-agents",
+      "kind": "docsection",
+      "label": "Handing work to other agents",
+      "source": "docs/guides/integrations/agents.md#handing-work-to-other-agents",
+      "attrs": {
+        "anchor": "handing-work-to-other-agents",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents.md#hosts-not-llm-providers",
       "kind": "docsection",
       "label": "Hosts, not LLM providers",
@@ -18168,16 +18188,6 @@
       "source": "docs/guides/integrations/agents.md#incremental-review",
       "attrs": {
         "anchor": "incremental-review",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/guides/integrations/agents.md#leasing-work-across-agents",
-      "kind": "docsection",
-      "label": "Leasing work across agents",
-      "source": "docs/guides/integrations/agents.md#leasing-work-across-agents",
-      "attrs": {
-        "anchor": "leasing-work-across-agents",
         "level": "2"
       }
     },
@@ -18902,42 +18912,32 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#briefing-a-worker",
+      "id": "docsection:docs/guides/integrations/agents/leases.md#declare-the-work",
       "kind": "docsection",
-      "label": "Briefing a worker",
-      "source": "docs/guides/integrations/agents/leases.md#briefing-a-worker",
+      "label": "Declare the work",
+      "source": "docs/guides/integrations/agents/leases.md#declare-the-work",
       "attrs": {
-        "anchor": "briefing-a-worker",
+        "anchor": "declare-the-work",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
+      "id": "docsection:docs/guides/integrations/agents/leases.md#give-the-holder-its-terms",
       "kind": "docsection",
-      "label": "Declare the plan in the ledger",
-      "source": "docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
+      "label": "Give the holder its terms",
+      "source": "docs/guides/integrations/agents/leases.md#give-the-holder-its-terms",
       "attrs": {
-        "anchor": "declare-the-plan-in-the-ledger",
+        "anchor": "give-the-holder-its-terms",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#grading-what-comes-back",
+      "id": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "kind": "docsection",
-      "label": "Grading what comes back",
-      "source": "docs/guides/integrations/agents/leases.md#grading-what-comes-back",
+      "label": "Jobs and leases",
+      "source": "docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "attrs": {
-        "anchor": "grading-what-comes-back",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#leases",
-      "kind": "docsection",
-      "label": "Leases",
-      "source": "docs/guides/integrations/agents/leases.md#leases",
-      "attrs": {
-        "anchor": "leases",
+        "anchor": "jobs-and-leases",
         "level": "1"
       }
     },
@@ -18952,6 +18952,26 @@
       }
     },
     {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#return-and-verify",
+      "kind": "docsection",
+      "label": "Return and verify",
+      "source": "docs/guides/integrations/agents/leases.md#return-and-verify",
+      "attrs": {
+        "anchor": "return-and-verify",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents/leases.md#take-the-lease",
+      "kind": "docsection",
+      "label": "Take the lease",
+      "source": "docs/guides/integrations/agents/leases.md#take-the-lease",
+      "attrs": {
+        "anchor": "take-the-lease",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/guides/integrations/agents/leases.md#the-spawn-is-recorded-never-judged",
       "kind": "docsection",
       "label": "The spawn is recorded, never judged",
@@ -18962,12 +18982,12 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#three-answers-the-ledger-gives-back",
+      "id": "docsection:docs/guides/integrations/agents/leases.md#two-answers-the-store-gives-back",
       "kind": "docsection",
-      "label": "Three answers the ledger gives back",
-      "source": "docs/guides/integrations/agents/leases.md#three-answers-the-ledger-gives-back",
+      "label": "Two answers the store gives back",
+      "source": "docs/guides/integrations/agents/leases.md#two-answers-the-store-gives-back",
       "attrs": {
-        "anchor": "three-answers-the-ledger-gives-back",
+        "anchor": "two-answers-the-store-gives-back",
         "level": "3"
       }
     },
@@ -18982,12 +19002,12 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/leases.md#watch-it-dashboards-lease-plan",
+      "id": "docsection:docs/guides/integrations/agents/leases.md#watch-it-the-console-jobs-view",
       "kind": "docsection",
-      "label": "Watch it: Dashboard's Lease plan",
-      "source": "docs/guides/integrations/agents/leases.md#watch-it-dashboards-lease-plan",
+      "label": "Watch it: the console Jobs view",
+      "source": "docs/guides/integrations/agents/leases.md#watch-it-the-console-jobs-view",
       "attrs": {
-        "anchor": "watch-it-dashboards-lease-plan",
+        "anchor": "watch-it-the-console-jobs-view",
         "level": "2"
       }
     },
@@ -36192,22 +36212,22 @@
       }
     },
     {
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
+      "kind": "docsection",
+      "label": "Fork one job per unit of work",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
+      "attrs": {
+        "anchor": "fork-one-job-per-unit-of-work",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#integrate-and-verify",
       "kind": "docsection",
       "label": "Integrate and verify",
       "source": "internal/agent/skills/magus-multi-agent/SKILL.md#integrate-and-verify",
       "attrs": {
         "anchor": "integrate-and-verify",
-        "level": "2"
-      }
-    },
-    {
-      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#maintain-the-global-lease-ledger",
-      "kind": "docsection",
-      "label": "Maintain the global lease ledger",
-      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#maintain-the-global-lease-ledger",
-      "attrs": {
-        "anchor": "maintain-the-global-lease-ledger",
         "level": "2"
       }
     },
@@ -36222,12 +36242,12 @@
       }
     },
     {
-      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-leases-do-not-collide",
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-jobs-do-not-collide",
       "kind": "docsection",
-      "label": "Prove that leases do not collide",
-      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-leases-do-not-collide",
+      "label": "Prove that jobs do not collide",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-jobs-do-not-collide",
       "attrs": {
-        "anchor": "prove-that-leases-do-not-collide",
+        "anchor": "prove-that-jobs-do-not-collide",
         "level": "2"
       }
     },
@@ -69060,6 +69080,14 @@
     },
     {
       "source": "doc:docs/doctrine.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/doctrine.md"
+    },
+    {
+      "source": "doc:docs/doctrine.md",
       "target": "doc:docs/scope.md",
       "relation": "references",
       "confidence": "extracted",
@@ -70868,6 +70896,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
+      "target": "doc:docs/reference/manpage/magus-job.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/leases.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "extracted",
@@ -70892,7 +70928,7 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/leases.md",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -78749,14 +78785,6 @@
     {
       "source": "doc:docs/reference/console.md",
       "target": "doc:docs/concepts/knowledge/insight.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/reference/console.md"
-    },
-    {
-      "source": "doc:docs/reference/console.md",
-      "target": "doc:docs/guides/integrations/agents/leases.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -97900,6 +97928,14 @@
     },
     {
       "source": "docsection:docs/glossary.md#sessions-and-leases",
+      "target": "docsection:docs/glossary.md#job",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "docsection:docs/glossary.md#sessions-and-leases",
       "target": "docsection:docs/glossary.md#lease",
       "relation": "contains",
       "confidence": "extracted",
@@ -98164,6 +98200,14 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents.md#agents",
+      "target": "docsection:docs/guides/integrations/agents.md#handing-work-to-other-agents",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents.md#agents",
       "target": "docsection:docs/guides/integrations/agents.md#hosts-not-llm-providers",
       "relation": "contains",
       "confidence": "extracted",
@@ -98173,14 +98217,6 @@
     {
       "source": "docsection:docs/guides/integrations/agents.md#agents",
       "target": "docsection:docs/guides/integrations/agents.md#incremental-review",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents.md"
-    },
-    {
-      "source": "docsection:docs/guides/integrations/agents.md#agents",
-      "target": "docsection:docs/guides/integrations/agents.md#leasing-work-across-agents",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -98715,39 +98751,31 @@
       "provenance": "docs/guides/integrations/agents/guard.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#three-answers-the-ledger-gives-back",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#declare-the-work",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#two-answers-the-store-gives-back",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#briefing-a-worker",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#declare-the-work",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#declare-the-plan-in-the-ledger",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#give-the-holder-its-terms",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#grading-what-comes-back",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/guides/integrations/agents/leases.md"
-    },
-    {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#record-the-working-state",
       "relation": "contains",
       "confidence": "extracted",
@@ -98755,7 +98783,23 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#return-and-verify",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#take-the-lease",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/leases.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#the-spawn-is-recorded-never-judged",
       "relation": "contains",
       "confidence": "extracted",
@@ -98763,7 +98807,7 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#verify-against-the-diff",
       "relation": "contains",
       "confidence": "extracted",
@@ -98771,15 +98815,15 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
-      "target": "docsection:docs/guides/integrations/agents/leases.md#watch-it-dashboards-lease-plan",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
+      "target": "docsection:docs/guides/integrations/agents/leases.md#watch-it-the-console-jobs-view",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#what-magus-never-does-here",
       "relation": "contains",
       "confidence": "extracted",
@@ -98787,7 +98831,7 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#what-the-guard-enforces-under-a-lease",
       "relation": "contains",
       "confidence": "extracted",
@@ -98795,7 +98839,7 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#what-the-sandbox-enforces-under-a-lease",
       "relation": "contains",
       "confidence": "extracted",
@@ -98803,7 +98847,7 @@
       "provenance": "docs/guides/integrations/agents/leases.md"
     },
     {
-      "source": "docsection:docs/guides/integrations/agents/leases.md#leases",
+      "source": "docsection:docs/guides/integrations/agents/leases.md#jobs-and-leases",
       "target": "docsection:docs/guides/integrations/agents/leases.md#wiring-the-lease-into-a-worker",
       "relation": "contains",
       "confidence": "extracted",
@@ -110612,7 +110656,7 @@
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
-      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#integrate-and-verify",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -110620,7 +110664,7 @@
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
-      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#maintain-the-global-lease-ledger",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#integrate-and-verify",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -110636,7 +110680,7 @@
     },
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
-      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-leases-do-not-collide",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#prove-that-jobs-do-not-collide",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
