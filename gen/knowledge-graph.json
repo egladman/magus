@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 5859,
-  "edge_count": 10426,
+  "node_count": 5863,
+  "edge_count": 10430,
   "relations": [
     {
       "id": "annotates",
@@ -1673,7 +1673,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1588",
+        "dir_files": "1592",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1683,7 +1683,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "266",
+        "dir_files": "269",
         "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#affected,md#affinityoutput,md#anchor,md#anchorkind,md#anchorstatus,md#answer,md#backfill,md#before-you-call-anything,md#buildinfo,md#buzz,md#cache,md#calling-a-method-without-a-generated-clie"
       }
     },
@@ -1753,8 +1753,8 @@
       "label": "docs/reference/api/job",
       "source": "docs/reference/api/job",
       "attrs": {
-        "dir_files": "16",
-        "dir_languages": "markdown,md#enums,md#job,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
+        "dir_files": "19",
+        "dir_languages": "markdown,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
       }
     },
     {
@@ -1763,8 +1763,8 @@
       "label": "docs/reference/api/job/v1alpha1",
       "source": "docs/reference/api/job/v1alpha1",
       "attrs": {
-        "dir_files": "15",
-        "dir_languages": "markdown,md#enums,md#job,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
+        "dir_files": "18",
+        "dir_languages": "markdown,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
       }
     },
     {
@@ -2043,7 +2043,7 @@
       "label": "docs/reference/manpage",
       "source": "docs/reference/manpage",
       "attrs": {
-        "dir_files": "278",
+        "dir_files": "279",
         "dir_languages": "markdown,md#agent-adoption-options,md#config-cache-export-options,md#config-cache-prune-options,md#config-console-token-create-options,md#config-history-import-options,md#config-history-passed-options,md#config-mcp-connector-create-options,md#config-set-op"
       }
     },
@@ -22112,6 +22112,36 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/job/v1alpha1/job.md#jobholder",
+      "kind": "docsection",
+      "label": "JobHolder",
+      "source": "docs/reference/api/job/v1alpha1/job.md#jobholder",
+      "attrs": {
+        "anchor": "jobholder",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/job/v1alpha1/job.md#joboverlap",
+      "kind": "docsection",
+      "label": "JobOverlap",
+      "source": "docs/reference/api/job/v1alpha1/job.md#joboverlap",
+      "attrs": {
+        "anchor": "joboverlap",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/job/v1alpha1/job.md#jobrelease",
+      "kind": "docsection",
+      "label": "JobRelease",
+      "source": "docs/reference/api/job/v1alpha1/job.md#jobrelease",
+      "attrs": {
+        "anchor": "jobrelease",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/job/v1alpha1/job.md#jobrun",
       "kind": "docsection",
       "label": "JobRun",
@@ -33798,6 +33828,16 @@
       "source": "docs/reference/manpage/magus-server.md#server-start-options",
       "attrs": {
         "anchor": "server-start-options",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/manpage/magus-server.md#server-status-options",
+      "kind": "docsection",
+      "label": "server status options",
+      "source": "docs/reference/manpage/magus-server.md#server-status-options",
+      "attrs": {
+        "anchor": "server-status-options",
         "level": "3"
       }
     },
@@ -101004,6 +101044,14 @@
     },
     {
       "source": "docsection:docs/reference/api/job/v1alpha1/job.md#enums",
+      "target": "docsection:docs/reference/api/job/v1alpha1/job.md#jobholder",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/job/v1alpha1/job.md#enums",
       "target": "docsection:docs/reference/api/job/v1alpha1/job.md#submitstate",
       "relation": "contains",
       "confidence": "extracted",
@@ -101037,6 +101085,22 @@
     {
       "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
       "target": "docsection:docs/reference/api/job/v1alpha1/job.md#job",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
+      "target": "docsection:docs/reference/api/job/v1alpha1/job.md#joboverlap",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
+      "target": "docsection:docs/reference/api/job/v1alpha1/job.md#jobrelease",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -108981,6 +109045,14 @@
     {
       "source": "docsection:docs/reference/manpage/magus-server.md#description",
       "target": "docsection:docs/reference/manpage/magus-server.md#server-start-options",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-server.md"
+    },
+    {
+      "source": "docsection:docs/reference/manpage/magus-server.md#description",
+      "target": "docsection:docs/reference/manpage/magus-server.md#server-status-options",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
