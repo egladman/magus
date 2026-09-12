@@ -16,8 +16,8 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/types"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
+	"github.com/egladman/magus/types"
 )
 
 // fakeWS is a workspace whose trail lives at dir and whose cache reports a fixed size.
