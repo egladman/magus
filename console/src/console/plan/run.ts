@@ -2,11 +2,10 @@
 // shape, the read, and the model the Plan surface draws. Everything here is pure and DOM-free, so
 // what a reader ends up seeing is decided by code a test can run without a browser (run.test.ts).
 //
-// This is the Plan surface's SECOND tenant, beside the declared lease ledger next door. Same
-// visual grammar, two sources; this is the human-first half. A ledger is a table an orchestrating
-// agent keeps while it fans work out. A run plan is what the engine itself resolves when a person
-// types `magus run ci` - nobody declared it, so nothing about it can be stale in the way a
-// hand-kept table can.
+// This is the Jobs view's SECOND tenant, beside the jobs next door. Same visual grammar, two
+// sources; this is the human-first half. A job is work somebody declared and somebody holds. A
+// target plan is what the engine itself resolves when a person types `magus run ci` - nobody
+// declared it, so nothing about it can be stale in the way a written-down job can.
 //
 // The decision that shapes the rest of this file: the view FOLLOWS THE LIVE RUN. Nobody browses a
 // hypothetical target's plan, so the default read names no target at all and lets the daemon pick
@@ -19,12 +18,12 @@
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
 import { authHeaders } from "../../lib/daemon";
-import { str } from "./ledger";
+import { str } from "./jobs";
 
 // ---- states ----------------------------------------------------------------
 
 // The four states a target in a resolved plan can be in. There is no no_return here and the surface
-// must not invent one: that state belongs to a leased worker that never came back, and an engine
+// must not invent one: that state belongs to a worker that never came back, and an engine
 // that resolved a DAG always knows what happened to every node in it.
 export const RUN_STATES = ["idle", "running", "pass", "fail"] as const;
 export type RunState = (typeof RUN_STATES)[number];
@@ -36,9 +35,9 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
   fail: "fail",
 };
 
-// The NON-COLOR channel on a node, the same call the ledger view makes for the same reason: color
+// The NON-COLOR channel on a node, the same call the job side makes for the same reason: color
 // alone fails WCAG 1.4.1 on a surface whose entire content is states told apart. The three shared
-// states keep the ledger's marks so a reader who has learned one view has learned both.
+// states keep the job marks so a reader who has learned one source has learned both.
 export const RUN_STATE_MARK: Record<RunState, string> = {
   idle: "IDLE",
   running: "R",
@@ -74,7 +73,7 @@ export function normalizeAnchor(v: unknown): PlanAnchor {
 // ---- the model -------------------------------------------------------------
 
 // One node of GET /api/v1/plan's JSON, normalized. Hand-written rather than generated because it
-// rides the plain /api routes, the same as the ledger and the outputs feed beside it. Every field
+// rides the plain /api routes, the same as the outputs feed beside it. Every field
 // is the type it claims here even where the route declares it required: this is parsed from the
 // network, and a missing project must render as a blank line rather than the string "undefined".
 export interface RunPlanNode {
@@ -95,7 +94,7 @@ export interface RunPlanNode {
 }
 
 // from is the DEPENDENCY (upstream, drawn left), to is the DEPENDENT - the same orientation the
-// ledger's PlanEdge already draws, so one stage renderer serves both sources.
+// job side's JobEdge already draws, so one stage renderer serves both sources.
 export interface RunPlanEdge {
   readonly from: string;
   readonly to: string;
@@ -111,7 +110,7 @@ export interface RunPlanModel {
 }
 
 // parseRunPlan normalizes the response body into a model every later pass can be TOTAL over. It is
-// one function rather than the ledger's parse-then-build pair because a resolved DAG needs none of
+// one function rather than the job side's build pass because a resolved DAG needs none of
 // that assembly: the daemon already did the resolving, so there is nothing here to infer.
 //
 // Anything that is not the documented shape yields an EMPTY plan, not a throw - a surface that
@@ -187,7 +186,7 @@ export function anchorPhrase(model: RunPlanModel): string {
 
 // runOverviewLine is the one sentence the polite live region announces: how the view is anchored,
 // how many targets, and the breakdown - with the FAIL count always, even at zero, the same
-// discipline the ledger's no-return call-out follows. A call-out that vanishes when it reads zero
+// discipline the jobs' no-return call-out follows. A call-out that vanishes when it reads zero
 // is a call-out a reader stops trusting, and "0 fail" is worth stating on a plan still running.
 //
 // The idle count is deliberately NOT in the line. On a plan nobody has started every node is idle,
@@ -237,9 +236,9 @@ async function unknownTargetDetail(res: Response): Promise<string> {
   }
 }
 
-// loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the ledger beside
-// it. 404 and 501 are "absent", not failures: on any daemon predating the run plan that is the
-// honest answer, and the surface says so by name.
+// loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the outputs feed.
+// 404 and 501 are "absent", not failures: on any daemon predating the target plan that is the
+// honest answer, and the view says so by name.
 //
 // A cross-origin console (a hosted page reaching a loopback daemon over #port=) cannot always TELL
 // the two apart - a 404 that carries no CORS headers surfaces to the browser as a network error

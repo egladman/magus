@@ -2235,20 +2235,20 @@ export function startConsole(
     mount(tab);
   }
 
-  // Dashboard owns the live lease plan. The ephemeral intent reaches a lazily loaded Dashboard
+  // Dashboard owns the live Jobs view. The ephemeral intent reaches a lazily loaded Dashboard
   // bundle even on its first mount; the event switches an already-mounted Dashboard immediately.
-  function openDashboardPlan(): void {
-    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
-      "plan";
+  function openJobs(): void {
+    (window as Window & { __magusConsoleDashboardView?: "jobs" }).__magusConsoleDashboardView =
+      "jobs";
     open("dashboard");
-    window.dispatchEvent(new CustomEvent("console:dashboard-view", { detail: { mode: "plan" } }));
+    window.dispatchEvent(new CustomEvent("console:dashboard-view", { detail: { mode: "jobs" } }));
   }
 
   // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
   // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
   window.addEventListener(surfaceNavigationEvent, (event) => {
     const detail = surfaceNavigation(event);
-    if (detail?.pageId === "dashboard" && detail.dashboardMode === "plan") openDashboardPlan();
+    if (detail?.pageId === "dashboard" && detail.dashboardMode === "jobs") openJobs();
     else if (detail?.pageId) open(detail.pageId);
   });
 

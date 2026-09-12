@@ -1,43 +1,47 @@
 import type { DashboardState } from "../state";
 import {
-  buildPlan,
-  loadLedger,
+  buildJobTree,
+  jobClient,
+  listJobs,
   overviewLine,
+  treeOrder,
+  HOLDER_LABEL,
   STATE_LABEL,
   STATE_MARK,
-  treeOrder,
-  type LedgerRead,
-} from "../../plan/ledger";
-import { demoOverlaps, demoLeases } from "../../plan/demo";
+  type JobClient,
+  type JobsRead,
+} from "../../plan/jobs";
+import { demoOverlaps, demoJobs } from "../../plan/demo";
 import { openSurface } from "../../surface-navigation";
 import { Card, h, type Tile } from "./card";
 
 const REFRESH_MS = 4_000;
 const REQUEST_TIMEOUT_MS = 10_000;
 
-export function leaseTile(): Tile {
-  const card = new Card("lease", "Work plan", {
-    note: "waiting for ledger",
+export function jobsTile(): Tile {
+  const card = new Card("jobs", "Jobs", {
+    note: "waiting for the daemon",
     why:
-      "Declared work and anything that needs intervention. The letter mark on each row: D" +
-      " declared, R running, OK pass, FAIL fail, NR no-return (nothing was ever reported back," +
-      " unlike fail, the one state that needs a human, since no one is coming to tell you" +
-      " about it).",
+      "Every job this daemon knows about, its own maintenance and the work sessions hold, with" +
+      " anything that needs intervention first. The letter mark on each row: D declared, R" +
+      " running, OK pass, FAIL fail, NR no-return (nothing was ever reported back, unlike fail," +
+      " the one state that needs a human, since no one is coming to tell you about it).",
   });
-  const summary = h("p", "console-dashboard-lease__summary", "No active leases.");
+  const summary = h("p", "console-dashboard-jobs__summary", "No jobs.");
   summary.setAttribute("aria-live", "polite");
-  const list = h("ul", "console-dashboard-lease__list");
-  const note = h("p", "console-dashboard-lease__note");
+  const list = h("ul", "console-dashboard-jobs__list");
+  const note = h("p", "console-dashboard-jobs__note");
   const detail = document.createElement("button");
   detail.type = "button";
   detail.className = "pf-v6-c-button pf-m-link pf-m-inline";
-  detail.append(h("span", "pf-v6-c-button__text", "Work details"));
+  detail.append(h("span", "pf-v6-c-button__text", "All jobs"));
   detail.addEventListener("click", () =>
-    openSurface({ pageId: "dashboard", dashboardMode: "plan" }),
+    openSurface({ pageId: "dashboard", dashboardMode: "jobs" }),
   );
   card.body.append(summary, list, note, detail);
 
   let host = "";
+  let client: JobClient | null = null;
   let lastRead = 0;
   let reading = false;
   let controller: AbortController | null = null;
@@ -45,54 +49,60 @@ export function leaseTile(): Tile {
   let disposed = false;
   let visible = true;
 
-  const render = (read: LedgerRead): void => {
-    if (read.kind === "absent") {
-      card.setNote("ledger unavailable");
-      summary.textContent = "This daemon does not provide a lease ledger.";
+  const render = (read: JobsRead): void => {
+    if (read.kind === "denied") {
+      card.setNote("jobs not served");
+      summary.textContent = "This daemon does not serve jobs.";
       list.replaceChildren();
       note.textContent = "";
       return;
     }
     if (read.kind === "unreadable") {
-      card.setNote("ledger unreadable");
-      summary.textContent = "The lease ledger could not be read.";
+      card.setNote("jobs unreadable");
+      summary.textContent = "The jobs could not be read.";
       list.replaceChildren();
       note.textContent = read.detail;
       return;
     }
 
-    const plan = buildPlan(read.leases, read.overlaps);
-    if (!plan.nodes.length) {
-      card.setNote("no active leases");
-      summary.textContent = "No active leases.";
+    const model = buildJobTree(read.jobs, read.overlaps);
+    if (!model.nodes.length) {
+      card.setNote("no jobs");
+      summary.textContent = "No jobs.";
       list.replaceChildren();
       note.textContent = "";
       return;
     }
-    card.setNote(plan.nodes.length ? `${plan.nodes.length} leases` : "no active leases");
-    summary.textContent = overviewLine(plan);
+    card.setNote(`${model.nodes.length} jobs`);
+    summary.textContent = overviewLine(model);
     const priority = { no_return: 0, fail: 1, running: 2, declared: 3, pass: 4 } as const;
-    const active = treeOrder(plan)
-      .map((id) => plan.byId.get(id))
+    const active = treeOrder(model)
+      .map((id) => model.byId.get(id))
       .filter((node): node is NonNullable<typeof node> => !!node)
       .filter((node) => node.state !== "pass")
       .sort((a, b) => priority[a.state] - priority[b.state])
       .slice(0, 4);
     list.replaceChildren(
       ...active.map((node) => {
-        const item = h("li", "console-dashboard-lease__item");
+        const item = h("li", "console-dashboard-jobs__item");
         item.dataset.state = node.state;
         item.append(
-          h("span", "console-dashboard-lease__mark", STATE_MARK[node.state]),
-          h("code", "console-dashboard-lease__id", node.id),
-          h("span", "console-dashboard-lease__state", STATE_LABEL[node.state]),
+          h("span", "console-dashboard-jobs__mark", STATE_MARK[node.state]),
+          h("code", "console-dashboard-jobs__id", node.id),
+          // Which kind of job this is, beside its state: the board is where the two are most
+          // easily confused, since a daemon job and a session's job read the same at a glance.
+          h(
+            "span",
+            "console-dashboard-jobs__state",
+            [HOLDER_LABEL[node.holder], STATE_LABEL[node.state]].filter(Boolean).join(", "),
+          ),
         );
         return item;
       }),
     );
     const warnings: string[] = [];
-    if (plan.overlaps.length) warnings.push(`${plan.overlaps.length} overlapping assignments`);
-    if (plan.dangling.length) warnings.push(`${plan.dangling.length} unresolved parents`);
+    if (model.overlaps.length) warnings.push(`${model.overlaps.length} overlapping claims`);
+    if (model.dangling.length) warnings.push(`${model.dangling.length} unresolved parents`);
     note.textContent = warnings.join(". ") + (warnings.length ? "." : "");
   };
 
@@ -102,10 +112,12 @@ export function leaseTile(): Tile {
     lastRead = Date.now();
     const current = ++request;
     controller = new AbortController();
+    const signal = controller.signal;
     const timeout = window.setTimeout(() => {
       if (current === request) controller?.abort();
     }, REQUEST_TIMEOUT_MS);
-    void loadLedger(host, controller.signal)
+    client ??= jobClient(host);
+    void listJobs(client, signal)
       .then((read) => {
         if (!disposed && current === request) render(read);
       })
@@ -121,17 +133,20 @@ export function leaseTile(): Tile {
     update(state: DashboardState) {
       if (state.conn.state === "demo") {
         host = "";
+        client = null;
         request++;
         reading = false;
         controller?.abort();
         if (visible) {
-          render({ kind: "ok", leases: demoLeases(Date.now()), overlaps: demoOverlaps() });
+          render({ kind: "ok", jobs: demoJobs(Date.now()), overlaps: demoOverlaps() });
         }
         return;
       }
       const nextHost = state.liveHost ?? "";
       if (nextHost !== host) {
         host = nextHost;
+        // A client carries the origin it was built for, so the next read has to open its own.
+        client = null;
         lastRead = 0;
         request++;
         reading = false;

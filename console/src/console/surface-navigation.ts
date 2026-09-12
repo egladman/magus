@@ -1,4 +1,4 @@
-export type DashboardMode = "plan";
+export type DashboardMode = "jobs";
 
 export type SurfaceNavigation = {
   pageId: string;
@@ -17,7 +17,7 @@ export function surfaceNavigation(event: Event): SurfaceNavigation | null {
   if (!detail || typeof detail !== "object") return null;
   const { pageId, dashboardMode } = detail as Partial<SurfaceNavigation>;
   if (typeof pageId !== "string") return null;
-  if (dashboardMode !== undefined && dashboardMode !== "plan") return null;
+  if (dashboardMode !== undefined && dashboardMode !== "jobs") return null;
   return { pageId, dashboardMode };
 }
 

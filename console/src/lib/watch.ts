@@ -130,11 +130,11 @@ async function pollDaemonStorage(host: string, store: NotificationStore): Promis
       humanBytes(size) +
       (capBytes > 0 ? " of a " + humanBytes(capBytes) + " cap" : "") +
       "). Run the clear-cache job (or rotate-logs) to reclaim space.",
-    // Activity carries the maintenance control that runs these jobs (activity/jobs.ts), so the link
-    // goes to the control that ACTS rather than to the dashboard tile that only watches the figure:
-    // a reader already inside the console should not need a terminal to carry out what this notice
-    // has decided. `magus server job clear-cache` is the same submission from the other door.
-    link: { label: "Open maintenance jobs", href: surfaceLink("activity", host) },
+    // The Jobs view is where a job is run, so the link goes to the thing that ACTS rather than to
+    // the dashboard tile that only watches the figure: a reader already inside the console should
+    // not need a terminal to carry out what this notice has decided. `magus server job clear-cache`
+    // is the same submission from the other door.
+    link: { label: "Open the jobs", href: surfaceLink("dashboard", host) },
   });
 }
 
