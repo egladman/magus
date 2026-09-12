@@ -463,7 +463,7 @@ var Magus = Module{
 						"they were declared; overlaps are derived on this read - every pair of live " +
 						"(non-terminal) jobs whose declared write_paths intersect: the same " +
 						"derivation the magus_job MCP tool's \"list\" op and the console's " +
-						"/api/v1/jobs route use, so the three cannot disagree about a collision. " +
+						"JobService.ListJobs use, so the three cannot disagree about a collision. " +
 						"Annotate the result `> JobList` for compile-checked field access. " +
 						"Read straight off the workspace already open on the context - no subprocess. " +
 						"Works from a magusfile target and from a `magus buzz` script run inside a " +
@@ -1170,7 +1170,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 // internal/interp/bindings/job_ns.go, since a Namespace method has no Impl for
 // codegen to reflect a trampoline from; see std.Namespace). It answers with one typed
 // report; types.NewJobList is the same constructor the magus_job MCP tool's
-// "list" op and the console's /api/v1/jobs route call, so the three doors cannot
+// "list" op and the console's JobService.ListJobs call, so the three doors cannot
 // disagree about the rows or the overlaps derived from them.
 func MagusListJob(ctx context.Context) (types.JobList, error) {
 	store, err := jobStoreFromContext(ctx, "job.list")

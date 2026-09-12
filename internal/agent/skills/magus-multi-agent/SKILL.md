@@ -27,15 +27,15 @@ You do not need to be asked{{if .Full}}. "Split this across agents" is one way i
 several disjoint write sets you can name is another{{end}}.
 
 Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
-workers that hand work on without a shrinking scope, leases with no acceptance criteria
+workers that hand work on without a shrinking scope, jobs with no acceptance criteria
 so nobody can say when to stop, and a principal model assigned to mechanical edits.
 Each of those is a choice made below, not a property of fanning out{{end}}. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
-Fan out only after the collision check below REPORTS the leases disjoint; write
+Fan out only after the collision check below REPORTS the jobs disjoint; write
 sets that look separate is not that check. If the graph supports only one
-coherent write set, keep the work local - fanning out one lease adds coordination
+coherent write set, keep the work local - fanning out one job adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never hands those out.
 
@@ -76,8 +76,8 @@ loop's partition and collision decisions; it does not replace the loop.
 Run this control loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
-2. Map the affected graph and propose collision-resistant edit leases.
-3. Give every lease its own goal, ownership boundary, and acceptance criteria.
+2. Map the affected graph and propose collision-resistant edit jobs.
+3. Give every job its own goal, ownership boundary, and acceptance criteria.
 4. Hand out work within one global cost and concurrency budget.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
@@ -89,77 +89,77 @@ never a worker's prose. A worker that ran a filtered subset, or quietly restated
 criteria into something it did pass, reports success either way{{if .Full}} - and a
 transcript cannot tell you which happened{{end}}.
 
-An agent may report that its edits are done, but no lease is complete until its
-acceptance criteria and assigned validation pass. The root agent, not a worker,
+An agent may report that its edits are done, but no job is complete until its
+acceptance criteria and assigned check pass. The root agent, not a worker,
 decides whether the top-level goal is complete.{{else}}Treat graph engineering as
-an acceptance-criteria loop with graph-derived leases: define, partition,
+an acceptance-criteria loop with graph-derived jobs: define, partition,
 hand out, observe, evaluate, course-correct, integrate. A worker is not complete
-until its criteria and assigned validation pass; the root agent decides whether
+until its criteria and assigned check pass; the root agent decides whether
 the top-level goal is complete.{{end}}
 
 ## Set one topology boundary
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
-model per lease, whether isolated worktrees are available, and how deep
-leases may nest. Editing costs the workspace nothing; what contends is
-VALIDATION - the magus runs a lease triggers - so size that cap from the live
+model per job, whether isolated worktrees are available, and how deep
+jobs may nest. Editing costs the workspace nothing; what contends is
+VALIDATION - the magus runs a job triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
 that share a worktree even when their write sets are disjoint. Ask before
 exceeding the budget.
 
-Assign validation from the pipeline the workspace composed, not from convention:
+Assign the check from the pipeline the workspace composed, not from convention:
 `magus describe target ci <project>` names what `ci` chains and in what order,
-so a lease gets the narrowest target from that decomposition and the integrator
+so a job gets the narrowest target from that decomposition and the integrator
 re-runs the described order, with `magus affected ci` re-proving the whole
 composition{{if .Full}}. A worker hand-sequencing lint, format, and test is re-deriving an
 order the magusfile already owns, and the step it forgets fails silently by
 omission{{end}}.
 
-A lease's validation is that narrow target and never the gate; the guard reads
-the row and denies `ci` to any worker whose validation names something else. The
+A job's check is that narrow target and never the gate; the guard reads
+the row and denies `ci` to any worker whose check names something else. The
 root gates ONCE, in its own tree, after every unit lands{{if .Full}}, which is
 what stops seven fanned-out workers from each running the whole pipeline
 concurrently on one machine{{end}}.
 
-Decide each lease's validation PLANE with its target. A worker environment that
+Decide each job's validation PLANE with its target. A worker environment that
 cannot execute magus at all - an isolated tree with no usable binary, or a
 guard that routes raw language tools back to targets it cannot run - cannot
-validate anything it writes. Mark that lease's validation ROOT-DEFERRED in the
-ledger before spawning: the worker writes the tests, stops at the static checks
-its environment does run, and says so; the root executes the lease's target
-centrally before accepting{{if .Full}}. Leaving each worker to discover the wall
+validate anything it writes. Mark that job's check ROOT-DEFERRED when you fork
+it: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the job's target
+centrally before verifying{{if .Full}}. Leaving each worker to discover the wall
 spends its budget on the discovery, once per worker, and its report then reads
 "done" with nothing executed - which the acceptance-evidence rule above already
 refuses to accept{{end}}.
 
-A worker may hand out part of its own lease. What it may not do is hand it out
+A worker may fork part of its own job. What it may not do is hand it out
 without shrinking the problem{{if .Full}} - that is the shape that does not terminate, and
 the cost people attribute to "multi-agent" is almost always this{{end}}. Three rules give
 it a definitive end:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
-  worker that would hand on its whole lease should do the work instead.
-- **Depth is capped.** Two levels below the root by default: the root hands out leases,
-  a lease may hand out parts of its own, and those parts do the work{{if .Full}}. Deeper than that
+  worker that would hand on its whole job should do the work instead.
+- **Depth is capped.** Two levels below the root by default: the root forks jobs,
+  a job may fork parts of its own, and those parts do the work{{if .Full}}. Deeper than that
   and the root can no longer say what is running or why{{end}}. Say so if you need more.
-- **Every lease carries acceptance criteria down with it.** A child inherits its
-  parent's criteria plus its own. A lease nobody can evaluate is a lease that cannot
+- **Every job carries acceptance criteria down with it.** A child inherits its
+  parent's criteria plus its own. A job nobody can evaluate is a job that cannot
   end, which is what makes depth dangerous rather than the nesting itself.
-- **A lease that fails its criteria twice is not re-issued.** The root does it
-  locally, or serializes it behind whatever keeps breaking it{{if .Full}}. Two leases
+- **A job that fails its criteria twice is not re-issued.** The root does it
+  locally, or serializes it behind whatever keeps breaking it{{if .Full}}. Two jobs
   with an undeclared dependency each break the other's criteria, and re-issuing
   the failing one satisfies every rule above while alternating forever; the budget
   is what ends it{{end}}.
 - **Whatever the parent does not hand out, the parent still owns.** A strict subset
-  leaks by construction: split "no caller of X remains" into per-project leases and
-  the callers in no project belong to nobody, so every lease passes and the goal is
+  leaks by construction: split "no caller of X remains" into per-project jobs and
+  the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the lease. That is the whole rule, and it runs both ways:
+Pick the model that FITS the job. That is the whole rule, and it runs both ways:
 a mechanical rename does not need the strongest model available, and an ambiguous
 API boundary does not get the cheapest one because it looked like less work{{if .Full}}.
 Matching the model to the work is the only cost decision worth making here - past
-that, cost is not your call to agonize over, and a lease done badly by an
+that, cost is not your call to agonize over, and a job done badly by an
 under-powered worker costs more than the model it saved{{end}}.
 
 Map work to provider capabilities without assuming model names:
@@ -177,14 +177,14 @@ integration pass or final release gate.
 
 Nesting is allowed when the host supports it, but it does not create a
 new budget or a private ownership map. Before a child spawns descendants, it must
-report the proposed leases to its parent. The root ledger must then record those
+report the proposed jobs to its parent. The store must then carry those
 descendants, their parent, model, criteria, and write paths. Descendants
 inherit the ancestor's deny paths and may subdivide only the ancestor's
 write paths. Apply worker and cost caps globally, not once per parent.
 
-Keep one integration owner at the root even when the lease tree is deep.
+Keep one integration owner at the root even when the job tree is deep.
 {{if .Full}}A child may coordinate its descendants, but it may not accept changes
-outside its own lease, relax top-level acceptance criteria, or hide additional
+outside its own job, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Prefer a shallow tree unless a child has a genuinely
 separable area and enough context to partition it better than the root.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
 
@@ -209,12 +209,12 @@ history-balanced execution group, not an edit assignment or proof of write
 isolation. Use it only as the first partition. If paths are not known, query the
 task's symbols, files, and projects before producing a stdin plan.
 
-## Prove that leases do not collide
+## Prove that jobs do not collide
 
-Classify the union of every lease's proposed paths in one call:
+Classify the union of every job's proposed paths in one call:
 
 ```sh
-magus describe file <both leases' paths>... -o json
+magus describe file <both jobs' paths>... -o json
 ```
 
 Read the facts: `overlaps` lists each declaration covering more than one
@@ -222,11 +222,11 @@ proposed path - a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
 Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
-when two leases may touch the same API{{if .Full}}; `magus path <a> <b>` settles
-a suspicious pair{{end}}. A read-only lease has no write set, so it is outside
+when two jobs may touch the same API{{if .Full}}; `magus path <a> <b>` settles
+a suspicious pair{{end}}. A read-only job has no write set, so it is outside
 this analysis entirely.
 
-Two leases may run together only when:
+Two jobs may run together only when:
 
 - The combined classification reports no overlaps - source write sets and
   declared outputs disjoint.
@@ -240,34 +240,34 @@ Project boundaries alone are insufficient. A declared dependency means group the
 work or serialize producer before consumer. Treat strong hidden affinity as a
 warning. When evidence is incomplete, reduce parallelism.
 
-## Maintain the global lease ledger
+## Fork one job per unit of work
 
-Before spawning, record one row per lease - including the checkpoint it was handed
+Before spawning, fork one job per unit - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
-tree is not clean) - and keep descendants in the same table. Declare each row with
-the `magus_ledger` tool (op=put) from the orchestrating agent, or `magus ledger
-register` from a person at a terminal{{if .Full}} - the same store and the same
-authorization rule either way, so a row written by hand and one an agent wrote are
-indistinguishable to everything that reads it{{end}}:
+tree is not clean) - and keep descendants in the same store. Fork each one with
+the `magus_job` tool from the orchestrating agent, or `magus job fork` from a
+person at a terminal{{if .Full}} - the same store and the same
+authorization rule either way, so a job forked by hand and one an agent forked are
+indistinguishable to everything that reads them{{end}}:
 {{if .Full}}
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and pickup time read the same object.
 {{end}}
 
-| Lease | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Depends on | Model | Validation | State |
-|---|---|---|---|---|---|---|---|---|---|
+| Job | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
+|---|---|---|---|---|---|---|---|---|---|---|
 
-Render the prompt FROM the row rather than typing it: `magus ledger brief <lease>`
-prints the row's own goal, boundary and validation, plus what the workspace knows
+Render the prompt FROM the row rather than typing it: `magus describe job <job>`
+prints the job's own goal, boundary and check, plus what the workspace knows
 and nobody wrote down{{if .Full}} - the projects the write paths reach, the declared
-output globs that land inside them, the paths a sibling lease is holding, the build
+output globs that land inside them, the paths a sibling job is holding, the build
 inputs and workspace configuration that have one owner, and the projects that
 change alongside the leased ones without declaring a dependency{{end}}. Two renders
-of one row are byte-identical, which hand-typed briefs are not{{if .Full}}: seven of
+of one row are byte-identical, which hand-typed prompts are not{{if .Full}}: seven of
 them disagreed about a dedup key and every one ended with the gate{{end}}. It
-REFUSES a row whose validation is the gate, or a target that chains to one.
+REFUSES a job whose check is the gate, or a target that chains to one.
 
-Every worker prompt must include its row, its LEASE ID, relevant graph
+Every worker prompt must include its row, its JOB ID, relevant graph
 evidence, and the global spawn rule. Require the worker to export
 `BAGGAGE=magus.lease=<its id>` before it works{{if .Full}} - that is the W3C
 Baggage channel, and the member is what tells the agent guard whose declared boundary
@@ -278,40 +278,40 @@ and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
 verdict is ever keyed on them{{else}} - the guard grades its writes only when that is
 set{{end}}. Require it to preserve
 unrelated changes, stay inside write paths, avoid generated outputs, run only its
-assigned Magus target, and return its report in the schema `magus ledger accept
---schema` prints: changed paths, the validation it ran with the output ref that
-proves it, descendants it created, and unresolved risks. A typed report is what
-makes acceptance mechanical{{if .Full}}; the same four facts in prose can only be
+assigned Magus target, and return its result with `magus job exit --stdin` in the
+schema `magus job exit --schema` prints: changed paths, the validation it ran with
+the output ref that proves it, descendants it forked, and unresolved risks. A typed
+result is what makes verification mechanical{{if .Full}}; the same four facts in prose can only be
 graded by reading, and a worker that ran a filtered subset writes the same
 paragraph as one that did not{{end}}. Keep unresolved risks mandatory, so a
 mis-scoped worker can say so instead of widening silently.
 
-Binding narrows what a worker may write on the ledger, never what it may see. Its
-own row accepts four writes: registering the base it landed on, shrinking its own
+Taking a lease narrows what a worker may write in the store, never what it may see. Its
+own row accepts four writes: recording the base it landed on, shrinking its own
 write_paths (how it releases a path), ending itself in fail or no_return, and
-declaring a child inside its own lane. Everything else, including any other field
+forking a child inside its own lane. Everything else, including any other field
 on its own row and any write to a row that is not its own or its child, is the
 orchestrator's alone{{if .Full}}, and the store refuses the rest before a worker
 gets far enough to try it a second way: the refusal names the actor directly -
 your orchestrator writes what a worker may not; report it as an unresolved risk
 and stop{{end}}.
 
-The checkpoint you recorded is what you HANDED the lease; the base it
+The checkpoint you recorded is what you HANDED the job; the base it
 actually LANDED ON is a separate fact, because hosts that isolate workers in
 per-worker trees routinely branch them from an older revision than the tree you
 partitioned{{if .Full}} - and every diff-since-checkpoint in Integrate and verify
 silently lies when the recorded base is not the real one{{end}}. A worker's first
-required act is registering it: run `magus vcs checkpoint -o name` in ITS OWN tree
-and call `magus_ledger op=register id=<its row> reported_base=<that token>`. The
-answer is a verdict recorded on the row - match, revision-match (same revision,
+required act is `magus job exec <its id>`, which takes the lease in that checkout
+and records the base it landed on. The
+answer is a status recorded on the row - match, revision-match (same revision,
 different uncommitted patch), diverged, or unknown - plus a reading of it that
-names both tokens and the next step. It is a FACT and not a gate: every verdict
-registers, diverged included{{if .Full}}, because refusing would leave the orchestrator
+names both tokens and the next step. It is a FACT and not a gate: every status
+records, diverged included{{if .Full}}, because refusing would leave the orchestrator
 with no record that a worker went to the wrong base, which is the one case the
 record exists for{{end}}. Acting on it is still yours: respawn from the right
 revision, or have the worker materialize the files it builds on from the intended
 one (`git show <rev>:<path> > <path>`, verifying each blob against
-`git rev-parse <rev>:<path>`) and re-put the row's checkpoint{{if .Full}}. A worker
+`git rev-parse <rev>:<path>`) and re-fork the job with the right checkpoint{{if .Full}}. A worker
 that edits stale content without noticing reports clean validation against a tree
 nobody will ever merge{{end}}.
 Also name any fact that will READ as drift to the worker's snapshot - a project
@@ -322,7 +322,7 @@ an investigation or a helpful revert of something correct{{end}}.
 
 Write paths are the WRITE lane. The guard reads them as a READ lane too, so a
 worker leased to `apps/web` is advised off `apps/admin` and denied it outright
-once `magus session lease <its id>` binds the row to its checkout.{{if .Full}} The
+once `magus job exec <its id>` takes the lease in its checkout.{{if .Full}} The
 read lane is its projects plus what they declare `depends_on`, so a shared library
 it legitimately builds on stays open.{{end}} When a worker must READ something it
 must not WRITE, put that path in the row's `read_paths` instead of widening
@@ -332,35 +332,35 @@ there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-lease's `write_paths` with another `magus_ledger` put, or message the orchestrator
-if the host supports it - and then carries on validating{{if .Full}}. A waiting lease
+job's `write_paths` with another `magus_job` write, or message the orchestrator
+if the host supports it - and then carries on validating{{if .Full}}. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
 time they spend not editing{{end}}.
 
-That put records each dropped path with the digest it carried at that moment.
-Hand the digest to the lease taking the path over: it names the version being
+That write records each dropped path with the digest it carried at that moment.
+Hand the digest to the job taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
 
-Re-put the row on every state change. `op=list` then answers two questions you
-would otherwise derive by hand: which live leases claim intersecting
+Advance the row on every state change. `magus ls jobs` then answers two questions you
+would otherwise derive by hand: which live jobs claim intersecting
 `write_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a lease YOU
+verdicts - magus transitions nothing, so a row that has gone quiet is a job YOU
 decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
-The ledger RECORDS and the agent guard GRADES. A worker that exported
+The store RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
 happens: inside its own write paths passes; inside its deny paths, or inside
-another live lease's write paths, is DENIED, and the denial names the owning
-lease. A writer magus cannot attribute - a person in their own checkout, or a
+another live job's write paths, is DENIED, and the denial names the owning
+job. A writer magus cannot attribute - a person in their own checkout, or a
 worker that never enrolled - is ADVISED and never blocked, and every uncertainty
-fails open the same way{{if .Full}}: no ledger, no live leases, a ledger file
+fails open the same way{{if .Full}}: no jobs declared, none live, a store
 that will not parse{{end}}. It is a seatbelt for harnesses that opt in, not a
 sandbox. So a denied worker
 COORDINATES and never works around: ask the orchestrator to re-partition, or have
-the owning lease release the path with the `write_paths` put above once it has
+the owning job release the path with the `write_paths` write above once it has
 finished editing, then retry{{if .Full}}. Editing anyway from an un-enrolled shell, or
 dropping the lease id to buy advisory treatment, turns a denial you could have
 acted on into a collision nobody sees until integration{{end}}. Step 1 of Integrate
@@ -375,8 +375,8 @@ inside them is never a lane question. An unbound session gets a once-per-session
 advisory instead, because rewiring the host is ordinarily the orchestrator's or a
 person's job{{end}}.
 
-Every guard verdict carries `lease`: the row it graded the write under, read from
-`--lease` or the `magus.lease` baggage member. An id the ledger does not declare
+Every guard verdict carries `lease`: the job it graded the write under, read from
+`--lease` or the `magus.lease` baggage member. An id the store does not carry
 is a DENY, not a silent pass-through{{if .Full}} - every lease-scoped rule reads
 that row, so a typo'd id would otherwise be graded by nothing while the worker
 believed itself bounded{{end}}. An id naming a row already in `pass`, `fail`, or
@@ -394,7 +394,7 @@ up, per id, over the sessions this repository has loaded{{if .Full}}: served,
 followed, rejected and reflex-repeated counts, and the rate below which a hint is
 spending context on advice nobody takes{{end}}.
 
-A read-only lease carries an abbreviated row: no Owned paths, no Forbidden paths. Every
+A read-only job carries an abbreviated row: no write paths, no deny paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state
 from one that failed its criteria{{else}}: silence is not a pass{{end}}.
@@ -409,12 +409,12 @@ evaluate its descendants before reporting upward.{{end}}
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the
-root already owns is not an edit lease and spends budget for nothing.
+root already owns is not an edit job and spends budget for nothing.
 
 ## Observe through the correct control plane
 
-Use the provider's agent or task view to track the lease tree, agent state,
-messages, and completion. Use this to keep the root ledger aware of descendants.
+Use the provider's agent or task view to track the job tree, agent state,
+messages, and completion. Use this to keep the store aware of descendants.
 
 Use Magus to watch processes and shared workspace resources:
 
@@ -439,8 +439,8 @@ itself: the orchestrator, or any human, disposes it with `magus session dispose
 request magus could answer on its own would not have needed a person{{end}}. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
-`magus session` is how the root audits what a lease actually RAN, as opposed
-to what it reported. Each session carries the lease it was launched under -
+`magus session` is how the root audits what a job actually RAN, as opposed
+to what it reported. Each session carries the job it was launched under -
 the same `magus.lease` channel - along with the spawner label and parent span it
 claimed, the targets it finished and how they ended, and the store is keyed by
 repository identity, so a worker in its own worktree is still listed here{{if .Full}}.
@@ -453,36 +453,36 @@ form that answers what the fleet has been doing.
 descendants, when a worker discovers a new API or generated-output dependency,
 when ownership drifts, when criteria repeatedly fail, and when status shows
 unexpected lock contention or service failure. Pause only the affected branch,
-update the ledger and ordering, then resume work that remains independent. Never
+update the jobs and ordering, then resume work that remains independent. Never
 guess a PID or signal from stale output; use current status and the host's normal
 process controls.{{else}}Re-plan when nesting, dependencies, ownership, failing
-criteria, locks, or services change. Update the ledger before resuming affected
+criteria, locks, or services change. Update the jobs before resuming affected
 work, and never act on a guessed or stale PID.{{end}} A running worker keeps the
 constraints it was handed: tightening them means cancel and respawn, not a message
 sent mid-flight.
 
 ## Integrate and verify
 
-As leases finish:
+As jobs finish:
 
-1. Compare the ledger against the ACTUAL diff since each lease's checkpoint, not
+1. Compare the store against the ACTUAL diff since each job's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Run `magus ledger accept <lease> --stdin < report.json` on each report BEFORE
-   you read it - the report is read only with `--stdin`, nothing decodes without
-   it. It checks what is mechanical: every changed path inside the declared write
-   paths, a change set that is not empty on a row that writes, and the output ref
-   bound to a run of THAT ROW'S OWN VALIDATION which the store recorded as
-   PASSING{{if .Full}}. There is no `passed` field on the report: accept reads the
+2. Run `magus job wait <job>` on each returned job BEFORE you read its result.
+   It checks what is mechanical: every changed path inside the declared write
+   paths and outside the denied ones, a change set that is not empty on a row that
+   writes, the descendants the store carries, and the output ref
+   bound to a run of THAT JOB'S OWN CHECK which the store recorded as
+   PASSING{{if .Full}}. There is no `passed` field on the result: wait reads the
    ref's own recorded attempt from the output store and derives the outcome from
-   it, never from what the worker claims{{end}}. A passing report records the row
-   `pass`; a rejection exits 1 naming every violation, and a report that will not
-   decode at all exits 2. It refuses outright from any checkout bound to a lease,
-   not only the row's own - a worker does not grade a sibling's row either. Then reopen the
-   evidence yourself (`magus query output <ref>`): accept proves the ref names a
-   passing run of this row's own check, never that the work satisfies the row's
+   it, never from what the worker claims{{end}}. A job that verifies is recorded
+   `pass`; a rejection exits 1 naming every violation, and a result that will not
+   decode at all exits 2. A holder does not verify its own job, or a sibling's.
+   Then reopen the
+   evidence yourself (`magus query output <ref>`): wait proves the ref names a
+   passing run of this job's own check, never that the work satisfies the job's
    GOAL, and a worker's own prose about its criteria is not that evidence.
-3. Resolve cross-lease API changes centrally; never assign the same seam twice.
+3. Resolve cross-job API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
@@ -496,7 +496,7 @@ As leases finish:
 7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
 
 {{if .Full}}Parallelism is an optimization, not the objective. Fewer
-well-isolated leases are usually cheaper than wide fan-out followed by conflict
+well-isolated jobs are usually cheaper than wide fan-out followed by conflict
 repair, and the graph is evidence for that judgment rather than permission to
-spawn every possible worker.{{else}}Prefer fewer proven-independent leases over
+spawn every possible worker.{{else}}Prefer fewer proven-independent jobs over
 wide fan-out and conflict repair.{{end}}

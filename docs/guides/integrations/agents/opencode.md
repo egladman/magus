@@ -433,7 +433,7 @@ If you would rather not have the plugin do it, running
   so the plugin above does not guess at one.
 - `shell.env` could export `BAGGAGE=magus.lease=<id>` into every shell the
   session runs, and deliberately does not. The only place the plugin could read
-  that id is the marker `magus session lease` writes into the checkout, and the
+  that id is the marker `magus job exec` writes into the checkout, and the
   guard and the sandbox already read that marker directly; it exists precisely
   because a host runs its hooks with its own environment. Exporting a copy of it
   would be a second source of truth that can go stale, for a lease the tools can

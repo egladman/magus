@@ -80,7 +80,7 @@ install surface, [The guard](agents/guard.md) for what is denied and why,
 and Codex run, [Session load recipes](agents/session-load.md) for reading a
 host's own session log back into magus,
 [Attention hooks](agents/notifications.md) for `magus session notify`,
-and [Leases](agents/leases.md) for the surface an agent uses when it
+and [Jobs and leases](agents/leases.md) for the surface an agent uses when it
 fans work out across several.
 
 ## When a session loses its history
@@ -229,14 +229,14 @@ at now" without re-reading the whole workspace:
    marks key off content digest, not position, so a hunk that has not
    changed stays marked reviewed and one that has resurfaces on its own.
 
-## Leasing work across agents
+## Handing work to other agents
 
 The same checkpoint identifies a piece of work handed to another agent, and it
-is one leg of a wider surface: a declared lease ledger, a console Plan
-surface that draws it, and a spawn recorded but never judged. magus records what
-an orchestrating agent says it intends and enforces none of it - ownership is
-settled by diffing against the checkpoint each lease was handed.
-[Leases](agents/leases.md) covers that loop.
+is one leg of a wider surface: a declared set of jobs, a console Jobs view that
+draws them, and a spawn recorded but never judged. magus records what an
+orchestrating agent says it intends and enforces none of it: ownership is
+settled by diffing against the checkpoint each job was handed.
+[Jobs and leases](agents/leases.md) covers that loop.
 
 ## MCP
 

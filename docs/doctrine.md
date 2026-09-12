@@ -101,10 +101,10 @@ designed for an agent first. The `agents` key in `affected ci --plan` is the
 one agent-specific field in an otherwise human-first surface - the
 skill-routing hint sits quarantined inside it, so everything around it reads
 as what it is, ordinary build metadata a person wanted first. The one
-deliberate exception is the lease ledger, an agent-to-agent declaration
+deliberate exception is the job store, an agent-to-agent declaration
 under [Agents propose, humans dispose](#agents-propose-humans-dispose): it is
-WRITTEN by agents through MCP and READ by people at `magus ledger`, so the
-asymmetry is in who authors it, not in who may see it. This prevents the
+written by agents through MCP and read by people at `magus ls jobs`, so the
+asymmetry is in who ordinarily authors it, not in who may see or write it. This prevents the
 bolted-on AI integration, papering over a tool
 people already struggle with, and the quiet inversion where a person becomes
 the secondary user of their own build tool.
@@ -242,11 +242,12 @@ authorship from the surface that performed the write, so a change made through
 the agent surface carries an agent's name no matter what the writer reports
 about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
-reaches anyone. The lease ledger has no CLI verb that WRITES, unlike the
+reaches anyone. The job store is ordinarily written by agents, unlike the
 attention events `notify` raises, because an attention event is addressed to a
-person while the ledger is an agent-to-agent declaration read back by the guard
-and the console. Reading it is a person's business, so `magus ledger` does that
-and nothing else.
+person while a job is an agent-to-agent declaration read back by the guard and
+the console. A person still has a full door onto it: `magus job` forks, takes
+and returns a job, and `magus ls jobs` reads the plan back. What keeps the book
+honest is one author per row, enforced by the store rather than by a closed CLI.
 
 Automated review is wrong at a steady rate, and wrong in a characteristic way:
 the confident finding that "fixes" behavior somebody chose on purpose. The

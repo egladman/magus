@@ -390,7 +390,7 @@ recognizes a spawn by a `tool_input` carrying a `prompt`, never by a tool name i
 would have to enumerate per host.
 
 It records; it does not judge. A lease prompt is prose, so the verdict is always
-a pass and the arm always allows. To join those events to a ledger, write the
+a pass and the arm always allows. To join those events to a job, write the
 marker line documented in [Any other host](any-host.md#lease-capture) at the top
 of the prompt you hand the sub-agent.
 

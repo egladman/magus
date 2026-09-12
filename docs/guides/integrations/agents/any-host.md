@@ -132,7 +132,7 @@ already select it.
 | `host`, `session` | the PARENT: the host you named, and its own session id              |
 | `actor`           | `agent`                                                             |
 | `action`          | the child's label, or `agent.spawn` when the payload named none     |
-| `lease`           | the ledger lease, when the context declared one (see below)         |
+| `lease`           | the job the context declared, when it declared one (see below)      |
 | `request_ref`     | the handed context, fetched with `GetPayload`                       |
 | `request_bytes`   | how much context was handed over                                    |
 | `outcome`         | `ok` means the handoff was OBSERVED, never that the child succeeded |
@@ -159,8 +159,8 @@ separators `-` `_` `.` `/` `:`, at most 128 characters, with nothing after it on
 the line. Leading blank lines are skipped; the head of the context is capped at
 4096 bytes, so a marker cannot hide behind a pathological first line.
 
-Leading the prompt is the contract, not a convention. A lease prompt
-routinely quotes a ledger listing, a file, or another agent's transcript, and a
+Leading the prompt is the contract, not a convention. A delegation prompt
+routinely quotes a job listing, a file, or another agent's transcript, and a
 `lease:` line lifted from any of them would stamp the event with a lease this
 handoff has nothing to do with. Position is what separates a marker you wrote
 from one you pasted.

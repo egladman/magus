@@ -187,12 +187,12 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   the locks. An agent that edits any of it rewrites the evidence it is graded by,
   and no later verdict says so, which is why this one is not scoped to a lane:
   what it protects is whether a lane was checked at all. It ranks above the
-  lease rules, so a worker whose `owned_paths` happen to cover the directory
+  lease rules, so a worker whose `write_paths` happen to cover the directory
   reads what the directory IS rather than a verdict about whose lane it is. The
   path surface catches an editor tool's write; the command surface catches a
   redirect (`>`, `>>`, `tee`) and the coreutils that take a path as an operand
   (`rm`, `mv`, `cp`, `mkdir`, `touch`, `truncate`, `chmod`, `sed -i`). The reason
-  names the verbs instead: `magus session lease <id>` to bind, `magus clean` for
+  names the verbs instead: `magus job exec <id>` to take a lease, `magus clean` for
   the outputs, `magus query output <ref>` for a captured log. Reading is
   untouched, so `cat` on a log passes. A cache dir relocated by
   `MAGUS_CACHE_DIR` or `cache.dir` is matched at its resolved location, and the
@@ -200,24 +200,24 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   refused even where the resolution is unavailable. magus's own commands are not
   judged here: every `magus run` writes in that directory, and the rule reads
   redirect targets and coreutil operands, never a `magus` argv.
-- **Rewriting your own lease row, under a bound lease**: `magus session lease
-  <other-id>`, `magus ledger accept`, `magus ledger register`, and the
-  `magus_ledger` tool's row writes, whichever channel they arrive on. Every
-  lease-scoped rule below reads that row, so an agent that can rewrite it grades
-  itself against a boundary nobody handed it from the next call on. An unbound
-  session is untouched entirely, whether that is an orchestrator or a person in
-  their own checkout, because those are the parties that write rows.
+- **Rewriting your own job row, while holding a lease**: taking another job's
+  lease with `magus job exec <other-id>`, verifying a result with `magus job
+  wait`, and the `magus_job` tool's row writes, whichever channel they arrive
+  on. Every lease-scoped rule below reads that row, so an agent that can rewrite
+  it grades itself against a boundary nobody handed it from the next call on. A
+  session holding no lease is untouched entirely, whether that is an
+  orchestrator or a person in their own checkout, because those are the parties
+  that write rows.
 
-  Over MCP the operations divide like this. `op=clear` is refused outright, and so
-  is any `put` or `register` naming a row other than the one bound here. A `put`
-  on the caller's own row is refused too, with one exception: a put that changes
-  nothing but `owned_paths`, and only by dropping declarations the row already
-  carries, passes through to the store. Giving a lane back cannot widen a role,
-  and whether a particular shrink is legitimate is the store's judgment rather
-  than the guard's. `op=register` on the caller's own row passes, because
-  recording the base a lease landed on is a procedure the write surface demands.
-  Reading is untouched everywhere: `op=list`, `magus session lease` with no
-  argument, `magus ledger ls`.
+  Over MCP the operations divide the same way. A write naming a row other than
+  the one this checkout holds is refused, and so is a write to the holder's own
+  row, with one exception: dropping declarations the row already carries, which
+  is how a holder releases a path, passes through to the store. Giving a lane
+  back cannot widen a role, and whether a particular shrink is legitimate is the
+  store's judgment rather than the guard's. Recording the base a lease landed on
+  passes, because it is a procedure the write surface demands. Reading is
+  untouched everywhere: the tool's list op, `magus job exec` with no argument,
+  and `magus ls jobs`.
 
   The MCP form is judged because it is the same write through a different
   transport; a rule holding on one channel would move the traffic rather than
@@ -311,7 +311,7 @@ projects that depend on it: `magus affected` runs that direction, from a change
 outward to what it could break, and focus runs the other one, from where you
 stand back to what you legitimately need.
 
-It is the read half of a boundary whose write half is a lease's `owned_paths`,
+It is the read half of a boundary whose write half is a job's `write_paths`,
 and the two catch different failures. A write outside your lane collides with
 another agent, and the diff eventually shows it. A read outside it collides with
 nothing and leaves no trace: it spends tokens on a tree nobody asked about, and
@@ -326,10 +326,10 @@ pattern is not a path, so `grep`'s first operand is skipped; an operand that
 resolves outside the workspace is a different rule's business; a path no project
 owns has no lane it could be outside of.
 
-It ADVISES by default and DENIES only under a bound lease
-(`magus session lease <id>`), because a hard read boundary needs somebody to have
-declared one. The lease's `focus` names the paths whose projects it may read; it
-falls back to `owned_paths`, since a worker leased to edit a project was pointed
+It ADVISES by default and DENIES only under a lease this checkout holds
+(`magus job exec <id>`), because a hard read boundary needs somebody to have
+declared one. The job's `read_paths` names the paths whose projects it may read; it
+falls back to `write_paths`, since a worker leased to edit a project was pointed
 at that project. Widening is that field and nothing else. There is no
 environment variable that turns the rule off, because a variable would be set
 once, in a wrapper, by the first worker it inconvenienced, and nothing afterwards
@@ -408,7 +408,7 @@ scopes nothing. Four cases the rule cannot decide that way advise instead:
 Every one of those denials names the ACTOR who can move the boundary, and it is
 never the reader: "your orchestrator can widen this lane; you cannot. Report it as
 an unresolved risk and stop." The texts they replace ended by naming the
-`magus_ledger` tool, meaning "ask the orchestrator", and two independent readers
+`magus_job` tool, meaning "ask the orchestrator", and two independent readers
 took it as permission and widened their own row with it.
 
 A fourth rule DENIES and is not about the lane at all: a write to the host's own

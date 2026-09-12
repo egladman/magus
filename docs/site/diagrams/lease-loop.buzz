@@ -7,8 +7,8 @@
 // under: every box on the ring is a thing magus RECORDS or ANSWERS, and none of them is a
 // thing it prevents. No connector reaches it because it constrains all of them.
 //
-// The release connector is the one accent. Releasing a path early - so owned_paths shrinks
-// while the lease is still running - is the move that makes the plan usable by a reader, and
+// The release connector is the one accent. Releasing a path early, so write_paths shrinks
+// while the lease is still held, is the move that makes the plan usable by a reader, and
 // it is the half people skip.
 namespace leaseLoop;
 
@@ -20,11 +20,11 @@ export fun leaseLoopDiagram() > Diagram {
         eyebrow = "lease",
         title = "A declared plan, released early, verified by diff",
         desc = "An orchestrator checkpoints the working state, partitions the work by write "
-            + "set using graph evidence, and declares one ledger row per lease: goal, "
-            + "checkpoint, owned paths. Workers release paths as soon as they are done with "
-            + "them, so the plan shrinks while it runs, and the Plan surface renders the "
+            + "set using graph evidence, and forks one job per unit: goal, "
+            + "checkpoint, write paths. Holders release paths as soon as they are done with "
+            + "them, so the plan shrinks while it runs, and the Jobs view renders the "
             + "rows, their overlaps and their staleness for whoever is watching. The "
-            + "orchestrator verifies each lease by diffing since that lease's checkpoint "
+            + "orchestrator verifies each job by diffing since that job's checkpoint "
             + "against what it claimed, then integrates and runs magus affected ci. magus "
             + "records and answers; it enforces none of it.",
         width = 960,

@@ -196,7 +196,7 @@ denied command describes it rather than runs it. Output is discarded and the exi
 status is forced to 0 for the same reason the notification hook does it: an audit
 step must not be able to break the session it observes.
 
-To join those events to a ledger, write the marker line documented in
+To join those events to a job, write the marker line documented in
 [Any other host](any-host.md#lease-capture) at the top of the prompt you
 hand the sub-agent.
 

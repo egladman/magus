@@ -86,7 +86,7 @@ Each entry is expanded (`~` for home, `$VAR` against the current environment), s
 
 ### A lease narrows it further
 
-A checkout that acts as a delegated worker gets a write grant NARROWER than the one above. When the sandbox is enabled and the acting lease resolves to a live [ledger](../guides/integrations/agents/leases.md) row with a parent and non-empty `owned_paths`, the write grant becomes those paths (globbed against the workspace root), the cache directory and `$TMPDIR`, and nothing else; reads are unchanged, and a refusal is recorded on the trail as a `sandbox_denial` naming the lease. It is DERIVED from the row rather than declared again here, because the agent guard already grades writes against the same field and two declarations would let the kernel refuse something other than what the guard explains. A root lease, an unknown lease, and a workspace with no ledger are all unchanged.
+A checkout that acts as a delegated worker gets a write grant NARROWER than the one above. When the sandbox is enabled and the acting lease resolves to a live [job](../guides/integrations/agents/leases.md) row with a parent and non-empty `write_paths`, the write grant becomes those paths (globbed against the workspace root), the cache directory and `$TMPDIR`, and nothing else; reads are unchanged, and a refusal is recorded on the trail as a `sandbox_denial` naming the job. It is DERIVED from the row rather than declared again here, because the agent guard already grades writes against the same field and two declarations would let the kernel refuse something other than what the guard explains. A root job, an unknown job, and a workspace with no declared jobs are all unchanged.
 
 ### Environment scrubbing
 
