@@ -17,7 +17,8 @@
 
 import assert from "node:assert/strict";
 import { spawn as nodeSpawn } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, mkdtempSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -27,6 +28,8 @@ import { MagusGuard } from "./opencode-plugin.ts";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // docs/guides/integrations/agents -> repo root.
 const WORKSPACE_ROOT = path.resolve(HERE, "../../../..");
+// One empty job store for every case in this file; see the env pin in the spawn shim.
+const stateHome = mkdtempSync(path.join(os.tmpdir(), "magus-guard-live-"));
 
 function isExecutable(candidate: string): boolean {
   try {
@@ -92,6 +95,11 @@ function stubBunWithRealChild(bin: string): SpawnCall[] {
     const child = nodeSpawn(spawned[0], spawned.slice(1), {
       cwd: WORKSPACE_ROOT,
       stdio: ["pipe", "pipe", "ignore"],
+      // An EMPTY job store, because the guard reads the real one otherwise. The lease
+      // advisory is appended to a PASS, so a developer holding any lease over the paths
+      // below turns these cases red on a tree that is fine; the store resolves from
+      // <XDG state>/magus/jobs and offers no other seam to redirect it.
+      env: { ...process.env, XDG_STATE_HOME: stateHome },
     });
     child.stdin.end(opts.stdin ?? new Uint8Array());
 
