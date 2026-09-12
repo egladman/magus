@@ -36,15 +36,15 @@ partition by write set rather than by affected project, prove the jobs cannot
 collide, bound the fan-out, match a model to each job. This page is the surface
 that skill writes to and reads from.
 
-| step                     | surface                                        |
-| ------------------------ | ---------------------------------------------- |
-| Record the working state | `magus vcs checkpoint`, `magus_vcs_checkpoint` |
-| Declare the work         | `magus job fork`, `magus_job`                  |
-| Hand out the jobs        | the host's own spawn, recorded but never judged |
-| Give the holder its terms | `magus describe job <job>`                    |
-| Take the lease           | `magus job exec <job>`                         |
-| Watch it                 | `magus ls jobs`, the console Jobs view         |
-| Return and verify        | `magus job exit`, `magus job wait`             |
+| step                      | surface                                         |
+| ------------------------- | ----------------------------------------------- |
+| Record the working state  | `magus vcs checkpoint`, `magus_vcs_checkpoint`  |
+| Declare the work          | `magus job fork`, `magus_job`                   |
+| Hand out the jobs         | the host's own spawn, recorded but never judged |
+| Give the holder its terms | `magus describe job <job>`                      |
+| Take the lease            | `magus job exec <job>`                          |
+| Watch it                  | `magus ls jobs`, the console Jobs view          |
+| Return and verify         | `magus job exit`, `magus job wait`              |
 
 Only one thing in that table enforces, and it is not the store. The job row is a
 declaration, the checkpoint is a reading, and the console renders both. The
@@ -263,15 +263,15 @@ instead; an explicit flag wins over the environment.
 Once a worker names a live job, the [guard](guard.md) reads that row on every
 file write and every command. It denies:
 
-| the guard refuses                                              | the row field that decided it |
-| -------------------------------------------------------------- | ----------------------------- |
-| any write, before the holder takes the lease here              | the recorded base             |
-| any write, by a job that gathers evidence and writes nothing   | `read_only`                   |
-| a write covered by this job's own deny list                    | `deny_paths`                  |
-| a write covered by another live job's write list               | `write_paths` (that job's)    |
-| a write outside every entry in this job's own write list       | `write_paths`                 |
-| a command running the `ci` gate                                | `check`                       |
-| a READ of a path outside the projects this job may read        | `read_paths`, else `write_paths` |
+| the guard refuses                                            | the row field that decided it    |
+| ------------------------------------------------------------ | -------------------------------- |
+| any write, before the holder takes the lease here            | the recorded base                |
+| any write, by a job that gathers evidence and writes nothing | `read_only`                      |
+| a write covered by this job's own deny list                  | `deny_paths`                     |
+| a write covered by another live job's write list             | `write_paths` (that job's)       |
+| a write outside every entry in this job's own write list     | `write_paths`                    |
+| a command running the `ci` gate                              | `check`                          |
+| a READ of a path outside the projects this job may read      | `read_paths`, else `write_paths` |
 
 It advises on one more: your own path, written from a base that diverges from
 the checkpoint you were handed.
