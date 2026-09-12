@@ -805,7 +805,7 @@ func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 
 	got := gradeLeasedWrite(ctx, Dependencies{}, "lease-b", filepath.Join(root, "internal/thing/new.go"))
 	require.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "magus_ledger op=put id=lease-b")
+	assert.Contains(t, got.Reason, "magus_job op=put id=lease-b")
 	assert.Contains(t, got.Reason, "cmd/magus/**", "the call must keep the paths the row already declared")
 	assert.Contains(t, got.Reason, "docs/guard.md", "every one of them, not just the first")
 	assert.Contains(t, got.Reason, "internal/thing/new.go", "and it must add the path that was refused")
