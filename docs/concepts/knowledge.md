@@ -147,7 +147,8 @@ View in Graph Explorer: http://127.0.0.1:7391/console/graph/#view=blast&node=too
 (start the magus daemon if the graph does not load)
 
 next:
-  magus path tool:go op:go:go-build  (path resolves the chain between two nodes, and this is the neighbor the card names most.)
+  magus path tool:go op:go:go-build
+      path resolves the chain between two nodes, and this is the neighbor the card names most.
 ```
 
 <!-- /example -->

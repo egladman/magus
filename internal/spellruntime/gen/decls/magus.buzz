@@ -442,50 +442,101 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
-export object LeaseRelease {
+export object LeaseCheck {
+    target: str = "",
+    project: str = "",
+    args: [str] = [],
+}
+
+export object JobRelease {
     path: str = "",
     digest: str = "",
     releasedAt: int = 0,
 }
 
-export object LeaseUnattributedWrite {
+export object JobUnattributedWrite {
     path: str = "",
     digest: str = "",
     at: int = 0,
 }
 
-export object Lease {
+export object JobActor {
+    session: str = "",
+    host: str = "",
+}
+
+export object JobResultValidation {
+    command: str = "",
+    outputRef: str = "",
+}
+
+export object JobResult {
+    schemaVersion: int = 0,
+    job: str = "",
+    changedPaths: [str] = [],
+    validation: JobResultValidation = JobResultValidation{},
+    descendants: [str] = [],
+    unresolvedRisks: [str] = [],
+}
+
+export object JobAttempt {
+    found: bool = false,
+    ref: str = "",
+    project: str = "",
+    target: str = "",
+    spell: str = "",
+    failed: bool = false,
+}
+
+export object JobRun {
+    invocation: str = "",
+    ended: int = 0,
+    durationMs: int = 0,
+    ok: bool = false,
+    error: str = "",
+    itemsRemoved: int = 0,
+    bytesReclaimed: int = 0,
+}
+
+export object Job {
+    schemaVersion: int = 0,
     id: str = "",
     parent: str = "",
     goal: str = "",
     checkpoint: str = "",
-    ownedPaths: [str] = [],
-    forbiddenPaths: [str] = [],
-    focus: [str] = [],
+    writePaths: [str] = [],
+    denyPaths: [str] = [],
+    readPaths: [str] = [],
     dependsOn: [str] = [],
-    tier: str = "",
+    model: str = "",
+    check: LeaseCheck? = null,
     validation: str = "",
     state: str = "",
+    holder: str = "",
     readOnly: bool = false,
-    releases: [LeaseRelease] = [],
-    unattributed: [LeaseUnattributedWrite] = [],
+    releases: [JobRelease] = [],
+    unattributed: [JobUnattributedWrite] = [],
     reportedBase: str = "",
     baseVerdict: str = "",
+    registeredBy: JobActor = JobActor{},
     registered: int = 0,
     created: int = 0,
     updated: int = 0,
+    result: JobResult? = null,
+    attempt: JobAttempt? = null,
+    lastRun: JobRun? = null,
 }
 
-export object LeaseOverlap {
-    leaseA: str = "",
-    leaseB: str = "",
+export object JobOverlap {
+    jobA: str = "",
+    jobB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
 }
 
-export object LeaseReport {
-    leases: [Lease] = [],
-    overlaps: [LeaseOverlap] = [],
+export object JobList {
+    jobs: [Job] = [],
+    overlaps: [JobOverlap] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
@@ -547,11 +598,11 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared lease ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS - this store records them and refuses nothing; the agent guard is what reads them to grade a write, and register's verdict is a fact it hands back rather than a gate. See the field docs on types.Lease. This namespace and the magus_ledger MCP tool are the only WRITE doors onto it; `magus ledger` reads the rows for a person and writes none. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
-export object ledger {
+// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+export object job {
     static extern fun clear() > int !> any;
-    static extern fun list() > LeaseReport !> any;
-    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Lease !> any;
+    static extern fun list() > JobList !> any;
+    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
 }
 

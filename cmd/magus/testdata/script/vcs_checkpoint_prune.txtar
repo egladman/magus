@@ -34,7 +34,7 @@ env GIT_AUTHOR_DATE=
 
 # The job is one a running binary carries, which is what a schedule can reach at all. The
 # listing goes to stderr, like the rest of `server job`'s usage.
-exec magus server job
+exec magus job run
 stderr 'prune-preserved'
 
 # The worker drops the aged capture. Nothing preserved anything here: that is the whole

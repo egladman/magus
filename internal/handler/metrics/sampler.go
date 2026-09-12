@@ -18,9 +18,9 @@ type collector interface {
 }
 
 // statusSource is the narrow live-pool read the sampler needs, satisfied by
-// *console.Service (the same StatusReport the StatusService uses).
+// *console.Service (the same StatusSnapshot the StatusService uses).
 type statusSource interface {
-	StatusReport(context.Context) types.StatusReport
+	StatusSnapshot(context.Context) types.StatusSnapshot
 }
 
 // startSampler runs the utilization sampler until ctx is cancelled: it appends one Sample
@@ -48,7 +48,7 @@ func (s *Service) startSampler(ctx context.Context) {
 func (s *Service) sampleOnce(ctx context.Context) {
 	smp := &metricsv1.Sample{SampleTime: timestamppb.New(s.now())}
 
-	rep := s.stat.StatusReport(ctx)
+	rep := s.stat.StatusSnapshot(ctx)
 	if rep.Pool != nil {
 		smp.Running = proto.Int32(int32(rep.Pool.Running))
 		smp.Capacity = proto.Int32(int32(rep.Pool.Capacity))

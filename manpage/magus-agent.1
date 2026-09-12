@@ -3,7 +3,7 @@
 magus\-agent \- Install the knowledge\-graph agent skills into a repository
 .SH SYNOPSIS
 .B magus
-.RI "agent <install|sample|adoption> [flags]"
+.RI "agent <install|starter|adoption> [flags]"
 .SH DESCRIPTION
 Render the agent skills embedded in this binary and write or stream them
 into named destinations (.claude/skills, .agents/skills, .opencode/skills,
@@ -67,7 +67,7 @@ File of shell commands, one per line; without it the corpus is read from stdin
 \fBinstall\fR
 Render the embedded skills and write or stream them into named destinations
 .TP
-\fBsample\fR
+\fBstarter\fR
 Print a starter AGENTS.md to stdout; never writes a file
 .TP
 \fBadoption\fR
@@ -107,7 +107,7 @@ magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 \fIPrint a starter AGENTS.md\fR
 .PP
 .EX
-magus agent sample
+magus agent starter
 .EE
 .PP
 \fIMeasure graph adoption over a corpus of shell commands\fR
@@ -150,7 +150,7 @@ magus agent adoption --commands commands.txt -o json
 \fBmagus\-config\fR(1),
 \fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-ledger\fR(1),
+\fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),

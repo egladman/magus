@@ -122,12 +122,12 @@ func childNames(t *testing.T, command string) []string {
 // they remain the exact set start/stop/job/reload, catching a stray edit that renames
 // one side only.
 func TestCLICommandServerLeavesAreRealSubcommands(t *testing.T) {
-	got := []string{hint.ServerStart.Leaf(), hint.ServerStop.Leaf(), hint.ServerJob.Leaf(), hint.ServerReload.Leaf()}
-	want := []string{"start", "stop", "job", "reload"}
+	got := []string{hint.ServerStart.Leaf(), hint.ServerStop.Leaf(), hint.ServerStatus.Leaf(), hint.ServerReload.Leaf()}
+	want := []string{"start", "stop", "status", "reload"}
 	if !slices.Equal(got, want) {
 		t.Errorf("server leaves = %v, want %v", got, want)
 	}
-	for _, c := range []hint.Command{hint.ServerStart, hint.ServerStop, hint.ServerJob, hint.ServerReload} {
+	for _, c := range []hint.Command{hint.ServerStart, hint.ServerStop, hint.ServerStatus, hint.ServerReload} {
 		if c.Head() != "server" {
 			t.Errorf("hint command %q is not a server-family command", c)
 		}

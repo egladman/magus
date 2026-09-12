@@ -53,7 +53,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | charm      |      10+ | `magus query kind=charm`      | `rw`, `cd`, `stable`                                                                                                        |
 | module     | built in | `magus query kind=module`     | `fs`, `magus`, `charm`                                                                                                      |
 | method     | built in | `magus query kind=method`     | `archive.compress`, `archive.list`, `archive.read_file`                                                                     |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3010`, `MGS1002`, `MGS1028`                                                                                             |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3010`, `MGS3012`, `MGS1002`                                                                                             |
 | doc        |     300+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir        |     200+ | `magus query kind=dir`        | `docs/reference/buzz`, `docs/reference/codes/magusfile`, `docs/reference/manpage`                                           |
 | file       |     200+ | `magus query kind=file`       | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz`                                                           |
@@ -65,7 +65,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project                         | Targets | Scope a query                                         | Key targets                                              |
 | ------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| .                               |      49 | `magus query project=.`                               | `generate`, `buzz-test`, `release-index`                 |
+| .                               |      50 | `magus query project=.`                               | `generate`, `buzz-test`, `release-index`                 |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents |       5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint`                                   |

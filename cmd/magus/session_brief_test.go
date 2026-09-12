@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,7 +47,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		Leases: []briefLease{{
 			ID:    "f2-guard",
 			State: string(types.StateRunning),
-			Bind:  "magus session lease f2-guard",
+			Exec:  hint.JobExec.With("f2-guard"),
 			// Longer than a line on purpose: the clip is part of the contract.
 			Goal:       strings.Repeat("hold the boundary ", 20),
 			Validation: "magus run test internal/ledger",
@@ -56,6 +58,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		}},
 		GuardWiring: []string{".claude/settings.json"},
 		Rules:       []string{"AGENTS.md", ".claude/skills"},
+		PromptCache: briefClock(),
 	}
 
 	text := b.Text()
@@ -64,12 +67,15 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		"unpushed: 3 commit(s) not on origin/main",
 		"tree: 3 changed file(s): 1 source, 1 output, 1 unclaimed",
 		"leases live here:",
-		"bind: magus session lease f2-guard",
+		"exec: " + hint.JobExec.With("f2-guard"),
 		"validation: magus run test internal/ledger",
 		"the last recorded run failed:",
 		"magus query output abc123",
 		"guard wiring: .claude/settings.json",
 		"rules live in AGENTS.md, .claude/skills",
+		"prompt cache: last tool call here 7m ago",
+		"closed: Anthropic default",
+		"open: Anthropic 1h opt-in",
 	} {
 		assert.Contains(t, text, want, "the brief dropped a section a rehydrating session reads")
 	}
@@ -111,15 +117,16 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, ".claude", "settings.json"),
 		[]byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"magus session hook"}]}]}}`), 0o644))
 
-	store, err := openLedger(root)
+	store, err := openJobs(root)
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{
+	guardRow := types.Job{
 		ID:         "f2-guard",
 		State:      types.StateRunning,
 		Goal:       "hold the boundary\nsecond line nobody reads here",
 		Validation: "magus run test internal/ledger",
-		OwnedPaths: []string{"internal/ledger"},
-	})
+		WritePaths: []string{"internal/ledger"},
+	}
+	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })
 	require.NoError(t, err)
 
 	// One session, one failing target: the run history the brief reads back.
@@ -135,8 +142,8 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Equal(t, root, brief.Workspace)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "f2-guard", brief.Leases[0].ID)
-	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus ledger brief`")
-	assert.Equal(t, ledger.NewBrief(types.Lease{ID: "f2-guard"}).Bind, brief.Leases[0].Bind)
+	assert.Equal(t, "hold the boundary", brief.Leases[0].Goal, "a lease's goal reads as one line here; the rest is `magus describe job`")
+	assert.Equal(t, hint.JobExec.With("f2-guard"), brief.Leases[0].Exec)
 
 	require.Len(t, brief.Failures, 1)
 	assert.Equal(t, "ref-1", brief.Failures[0].Ref)
@@ -147,7 +154,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 
 	text := brief.Text()
 	assert.Contains(t, text, "magus query output ref-1")
-	assert.Contains(t, text, "magus session lease f2-guard")
+	assert.Contains(t, text, hint.JobExec.With("f2-guard"))
 	assertBriefIsContextSafe(t, text)
 }
 
@@ -159,14 +166,23 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
-	store, err := openLedger(root)
+	store, err := openJobs(root)
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{ID: "landed", State: types.StatePass})
+	landed := types.Job{ID: "landed", State: types.StatePass}
+	_, err = store.Update(ctx, landed.ID, func(cur *types.Job) { *cur = landed })
 	require.NoError(t, err)
-	_, err = store.Put(ctx, types.Lease{ID: "running", State: types.StateRunning})
+	running := types.Job{ID: "running", State: types.StateRunning}
+	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "running", brief.Leases[0].ID)
+}
+
+// briefClock is a session idle long enough that one window is behind it and the rest
+// are not, which is the only state where the two-group split says something.
+func briefClock() sessions.PromptCacheClock {
+	last := time.Date(2026, 9, 10, 12, 0, 0, 0, time.UTC)
+	return sessions.PromptCacheAt("s1", last, last.Add(7*time.Minute))
 }

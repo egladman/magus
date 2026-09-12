@@ -397,10 +397,10 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 	var buf bytes.Buffer
 	agentUsage(&buf)
-	want := "Usage: magus agent <install|sample|adoption> [flags] Subcommands: " +
+	want := "Usage: magus agent <install|starter|adoption> [flags] Subcommands: " +
 		"install render the embedded skills and write or stream them into named destinations " +
 		"(.claude/skills, .agents/skills, .opencode/skills, ...) " +
-		"sample print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
+		"starter print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
 		"adoption report how often agents used the graph versus grep, over shell commands piped in (stdin or --commands) " +
 		"magus never writes your AGENTS.md. That file is yours, and an installer that edits a file you own " +
 		"leaves bytes you did not write and cannot audit. So `install` PRINTS the managed magus block for you " +
@@ -497,12 +497,12 @@ func TestUsagePrintersNameTheirSurface(t *testing.T) {
 		{
 			name:  "server",
 			print: serverUsage,
-			want:  []string{"magus server", "start", "stop", "reload", "job", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
+			want:  []string{"magus server", "start", "stop", "status", "reload", "MAGUS_DAEMON_ADDRESS", daemonDefaultAddr()},
 		},
 		{
-			name:  "server job",
-			print: serverJobUsage,
-			want:  []string{"magus server job <name>", "Jobs:"},
+			name:  "job run",
+			print: jobRunUsage,
+			want:  []string{"magus job run <name>", "Jobs:"},
 		},
 		{
 			name:  "vcs",

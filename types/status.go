@@ -2,10 +2,10 @@ package types
 
 import "time"
 
-// StatusBase holds the static portions of a StatusReport: telemetry, cache, and
+// StatusBase holds the static portions of a StatusSnapshot: telemetry, cache, and
 // build-flag fields. It is populated by cmd/magus (which has access to the
 // selfUpdateCompiled build-tag constant) and injected into
-// console.NewService so the bridge can assemble a full StatusReport without
+// console.NewService so the bridge can assemble a full StatusSnapshot without
 // importing cmd/magus.
 type StatusBase struct {
 	Telemetry TelemetryStatus
@@ -26,11 +26,11 @@ func (b BuildInfo) Fingerprint() string {
 	return "magus " + b.Version + " (" + b.Commit + ") built " + b.Date
 }
 
-// StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
+// StatusSnapshot is the canonical JSON/YAML shape returned by `magus status -o json`.
 // The daemon serves the same data to the console over the typed StatusService (its live
 // fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
-type StatusReport struct {
+type StatusSnapshot struct {
 	Telemetry TelemetryStatus `json:"telemetry" yaml:"telemetry"`
 	Cache     CacheStatus     `json:"cache" yaml:"cache"`
 	Build     BuildStatus     `json:"build" yaml:"build"`
@@ -95,6 +95,28 @@ type StatusReport struct {
 	// fine), so a "daemon is up" reading does not by itself prove the tools are reachable.
 	// Nil when reported by a process that does not probe it (e.g. the daemon's own report).
 	MCPEndpoint *MCPEndpointStatus `json:"mcp_endpoint,omitempty" yaml:"mcp_endpoint,omitempty"`
+	// Console is where a person opens the console this daemon serves, in the same shape
+	// as MCPEndpoint because it answers the same question about a different listener.
+	//
+	// It is reported because the address existed only in the daemon's log, on a line
+	// nobody reads ("static console mounted"), so the one surface built for a person to
+	// look at was the one surface nothing told them how to reach.
+	Console *ConsoleStatus `json:"console,omitempty" yaml:"console,omitempty"`
+}
+
+// ConsoleStatus is where the console is served and whether it is really there.
+//
+// Its own type rather than a second MCPEndpointStatus, because the two disagree about
+// what absent MEANS: an MCP endpoint is configured or not, while a console can be
+// configured, mounted, and still have nothing behind it when no console build was found,
+// which is the case a person hits and the one worth a distinct state.
+type ConsoleStatus struct {
+	Enabled   bool   `json:"enabled" yaml:"enabled"`
+	Address   string `json:"address,omitempty" yaml:"address,omitempty"`
+	URL       string `json:"url,omitempty" yaml:"url,omitempty"`
+	Reachable bool   `json:"reachable" yaml:"reachable"`
+	State     string `json:"state" yaml:"state"`
+	Note      string `json:"note,omitempty" yaml:"note,omitempty"`
 }
 
 // ReadinessReport is the JSON body of GET /readyz: Ready mirrors the pass/fail gate a

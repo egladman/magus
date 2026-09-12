@@ -1,34 +1,37 @@
-// main.ts - the console's Plan surface: a plan drawn as the DAG it is, from either of the two
-// places a plan comes from.
+// main.ts - the console's Jobs view: the work this daemon knows about, drawn as the DAG it is.
 //
-// TWO SOURCES, ONE GRAMMAR. Both tenants answer "what is the shape of this work, and where did it
-// get to", and a reader should not have to learn the picture twice, so they share the stage, the
+// ONE KIND OF THING CALLED A JOB. The daemon's own maintenance routines and the work an
+// orchestrator hands out are the same shape - a job with a HOLDER - so they are ONE list here
+// (JobService.ListJobs returns both), told apart by the holder on the row rather than by living on
+// two different screens. A catalog job carries a description and the size of what it maintains and
+// can be RUN from its row; a session job carries the goal, the lanes and the check it was given.
+// Neither is a different view.
+//
+// TWO SOURCES, ONE GRAMMAR. The second tenant is not a job at all, and shares the stage, the
 // accessible twin list, the detail sheet, the state colors and the state marks:
 //
-//  - DECLARED (ledger.ts) - the table an orchestrating agent keeps while it fans work out: one row
-//    per lease, with its parent, its owned and forbidden paths, what it depends on, and the state it
-//    reached. A GRAPH pretending to be a list, joined here to the live activity feeds.
-//  - RUN (run.ts) - the target DAG the engine resolves for plain human work. Nobody declared it, so
-//    nothing about it can be stale the way a hand-kept table can, and it FOLLOWS the live run: the
-//    daemon picks the anchor and the overview line says which way it picked.
+//  - JOBS (jobs.ts) - what the daemon holds and what sessions hold, joined here to the live
+//    activity feeds.
+//  - TARGETS (run.ts) - the target DAG the engine resolves for plain human work. Nobody declared
+//    it, so nothing about it can be stale the way a written-down job can, and it FOLLOWS the live
+//    run: the daemon picks the anchor and the overview line says which way it picked.
 //
-// Which one opens is decided by the data, not by a preference: a ledger with rows in it means an
-// orchestration is in flight, which is the more specific answer. Anything else - no rows, no route,
-// no answer - hands the surface to Run, which is what a person doing plain work came for.
+// Which one opens is decided by the data, not by a preference: jobs in hand means there is work to
+// look at, which is the more specific answer. Anything else - no jobs, no service, no answer -
+// hands the view to Targets, which is what a person doing plain work came for.
 //
 // Three decisions worth stating:
 //
-//  1. no_return IS ITS OWN COLOR, and it belongs to the ledger ALONE. A lease that failed came back
-//     and said so; a lease that never returned said nothing, and is the only state on this surface
-//     that no one else will report. It is never drawn, counted, or worded as a failure - and the
-//     run plan never invents one, because an engine that resolved a DAG knows what happened to
-//     every node in it.
+//  1. no_return IS ITS OWN COLOR, and it belongs to jobs ALONE. A job that failed came back and
+//     said so; one that never returned said nothing, and is the only state here that no one else
+//     will report. It is never drawn, counted, or worded as a failure - and the target plan never
+//     invents one, because an engine that resolved a DAG knows what happened to every node in it.
 //  2. THE PICTURE IS NOT THE ACCESSIBLE SURFACE. The SVG stage is aria-hidden and the node list
 //     beside it is the accessible twin - the same split the graph explorer makes between its canvas
 //     and its node cloud, for the same reason: a laid-out drawing has no reading order.
 //  3. IT POLLS ONLY WHILE IT IS ON SCREEN, and it refreshes the instant it comes back, so a pane
-//     that was hidden never shows a stale plan on its first frame. On screen is a PER-PANE fact, so
-//     the switch that carries it hangs off the mount rather than off the module.
+//     that was hidden never shows a stale picture on its first frame. On screen is a PER-PANE fact,
+//     so the switch that carries it hangs off the mount rather than off the module.
 //
 // Like the activity trail and notes it has no standalone page: activate(host) builds into a console
 // host and returns the controller for that mount.
@@ -36,9 +39,9 @@
 import { createClient } from "@connectrpc/connect";
 import { ViewerService } from "@wire/viewer/v1alpha1/viewer_pb";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
+import { JobHolder, type JobRelease } from "@wire/job/v1alpha1/job_pb";
 import {
   adoptDaemonOrigin,
-  authHeaders,
   createDaemonTransport,
   getLiveToken,
   logsLink,
@@ -46,13 +49,13 @@ import {
   resolveDaemonHost,
   wantsDemo,
 } from "../../lib/daemon";
-import { demoLeases, demoOverlaps } from "./demo";
+import { demoJobs, demoOverlaps } from "./demo";
 import { persisted } from "../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { registerCommand, unregisterCommand } from "../commands";
 import { h } from "../view";
 // The drawer OWNS the activity row model and the projections onto it (a pool slot, a lock holder, a
-// finished run, all as one shape). Imported rather than re-derived so this surface joins against the
+// finished run, all as one shape). Imported rather than re-derived so this view joins against the
 // same rows the drawer shows - a second projection would be a second answer to "what is running".
 // The protobuf its Status read pulls in is a cost this bundle pays anyway for its own live read.
 import {
@@ -64,22 +67,27 @@ import {
 } from "../activityDrawer";
 import {
   ageLabel,
-  buildPlan,
+  buildJobTree,
   isStale,
   isTerminal,
+  jobClient,
   joinRuns,
-  layoutPlan,
-  loadLedger,
+  lastRunLine,
+  layoutNodes,
+  listJobs,
   overviewLine,
+  sizeLine,
+  submitJob,
   treeOrder,
+  HOLDER_LABEL,
   NODE_H,
   NODE_W,
   STATE_LABEL,
   STATE_MARK,
-  type PlanModel,
+  type JobClient,
+  type JobTree,
   type RunJoin,
-  type LeaseRelease,
-} from "./ledger";
+} from "./jobs";
 import {
   emptyRunPlan,
   loadRunPlan,
@@ -90,12 +98,12 @@ import {
   type RunPlanModel,
 } from "./run";
 
-// The refresh cadence and the deadline one read gets, both matching the activity drawer's. A plan
-// is watched while work moves under it, so the operator's configured dashboard refresh (20s by
-// default) is far too slow to answer "did that lease come back".
+// The refresh cadence and the deadline one read gets, both matching the activity drawer's. Work is
+// watched while it moves, so the operator's configured dashboard refresh (20s by default) is far
+// too slow to answer "did that job come back".
 const POLL_MS = 4000;
 
-// The lease index collapses to a rail, as the diff's file index and the activity trail's event index
+// The job index collapses to a rail, as the diff's file index and the activity trail's event index
 // do. Persisted, because a reader working in a narrow tile should not re-close it every visit.
 const treeCell = persisted<boolean>("plan-tree-collapsed", false);
 const FETCH_TIMEOUT_MS = 4000;
@@ -109,9 +117,9 @@ let instanceSeq = 0;
 
 // ---- the shared commands ---------------------------------------------------
 
-// PlanCommands is what a command DOES to one mount. Named rather than closed over so the shared
+// JobsCommands is what a command DOES to one mount. Named rather than closed over so the shared
 // registration below has something to dispatch AT.
-interface PlanCommands {
+interface JobsCommands {
   next(): void;
   prev(): void;
   reload(): void;
@@ -121,39 +129,39 @@ interface PlanCommands {
   zoomReset(): void;
 }
 
-// The Plan commands are ONE set of ids however many panes are open: the console's registry is keyed
+// The Jobs commands are ONE set of ids however many panes are open: the console's registry is keyed
 // by id, so a second mount's registration REPLACES the first's rather than adding to it. They are
 // therefore registered once, for as long as at least one mount is live, and dispatch to whichever
 // mount the console last made visible - the focused pane. Registering per instance is the shape that
-// looks right and is not: with two Plan panes open, closing EITHER unregistered the ids for both,
-// and the command bar then offered no Plan commands at all while a Plan pane was still on screen.
+// looks right and is not: with two Jobs panes open, closing EITHER unregistered the ids for both,
+// and the command bar then offered no Jobs commands at all while a Jobs pane was still on screen.
 const COMMANDS: readonly {
   readonly id: string;
   readonly label: string;
   readonly keys: readonly string[];
-  readonly run: (c: PlanCommands) => void;
+  readonly run: (c: JobsCommands) => void;
 }[] = [
   {
-    id: "plan.lease.next",
-    label: "Plan: next lease",
+    id: "jobs.next",
+    label: "Jobs: next job",
     keys: ["j", "ArrowDown"],
     run: (c) => c.next(),
   },
   {
-    id: "plan.lease.prev",
-    label: "Plan: previous lease",
+    id: "jobs.prev",
+    label: "Jobs: previous job",
     keys: ["k", "ArrowUp"],
     run: (c) => c.prev(),
   },
   {
-    id: "plan.refresh",
-    label: "Plan: reload",
+    id: "jobs.refresh",
+    label: "Jobs: reload",
     keys: ["r"],
     run: (c) => c.reload(),
   },
   {
-    id: "plan.select.clear",
-    label: "Plan: clear the selected lease",
+    id: "jobs.select.clear",
+    label: "Jobs: clear the selection",
     keys: ["Escape"],
     run: (c) => c.clearSelection(),
   },
@@ -162,39 +170,39 @@ const COMMANDS: readonly {
   // Zoom is reachable without a pointer, and without a modifier gesture nobody discovers. The
   // console is keyboard-first, so ctrl/cmd + wheel is the convenience, not the interface.
   {
-    id: "plan.zoom.in",
-    label: "Plan: zoom in",
+    id: "jobs.zoom.in",
+    label: "Jobs: zoom in",
     keys: ["+", "="],
     run: (c) => c.zoomBy(1.25),
   },
   {
-    id: "plan.zoom.out",
-    label: "Plan: zoom out",
+    id: "jobs.zoom.out",
+    label: "Jobs: zoom out",
     keys: ["-"],
     run: (c) => c.zoomBy(1 / 1.25),
   },
   {
-    id: "plan.zoom.reset",
-    label: "Plan: fit the plan to the pane",
+    id: "jobs.zoom.reset",
+    label: "Jobs: fit the drawing to the pane",
     keys: ["0"],
     run: (c) => c.zoomReset(),
   },
   {
-    id: "plan.source.toggle",
-    label: "Plan: switch between the declared and run plans",
+    id: "jobs.source.toggle",
+    label: "Jobs: switch between jobs and targets",
     keys: [],
     run: (c) => c.toggleSource(),
   },
 ];
 
 // Every live mount, and the one a shared command is addressed to.
-const live = new Set<PlanCommands>();
-let focusedMount: PlanCommands | null = null;
+const live = new Set<JobsCommands>();
+let focusedMount: JobsCommands | null = null;
 
 // attachCommands registers the shared ids on the FIRST mount and returns the detach that
 // unregisters them on the LAST, so one pane closing while another is open leaves the commands where
 // they are.
-function attachCommands(c: PlanCommands): () => void {
+function attachCommands(c: JobsCommands): () => void {
   live.add(c);
   focusedMount ??= c;
   if (live.size === 1) {
@@ -202,7 +210,7 @@ function attachCommands(c: PlanCommands): () => void {
       registerCommand({
         id: cmd.id,
         label: cmd.label,
-        group: "Plan",
+        group: "Jobs",
         run: () => {
           if (focusedMount) cmd.run(focusedMount);
         },
@@ -236,9 +244,9 @@ function trunc(s: string, max: number): string {
 
 // ---- the drawn model -------------------------------------------------------
 
-export type PlanSource = "declared" | "run";
+export type Source = "jobs" | "targets";
 
-const SOURCE_LABEL: Record<PlanSource, string> = { declared: "Declared", run: "Run" };
+const SOURCE_LABEL: Record<Source, string> = { jobs: "Jobs", targets: "Targets" };
 
 // DrawnNode is the least a node needs to be placed, marked, and told apart - whatever produced it.
 // Both sources project into this so there is ONE stage renderer and ONE list renderer: two would be
@@ -255,7 +263,7 @@ interface DrawnNode {
   readonly text: string;
   readonly meta: readonly string[];
   // The warnings drawn beside the state, in words. Both sources project into this even though only
-  // the ledger has anything to say today: a run plan the engine resolved cannot have two owners.
+  // a job has anything to say today: a target plan the engine resolved cannot have two owners.
   readonly warn: readonly string[];
   readonly readOnly: boolean;
   readonly depth: number;
@@ -264,9 +272,12 @@ interface DrawnNode {
   // recomputed every tick would change the signature and rebuild the list under the reader.
   readonly updated: number;
   readonly terminal: boolean;
+  // The resource name to submit, "" on anything that cannot be run from here. Only the daemon's own
+  // catalog can: a session's job is held by that session, and magus never starts it.
+  readonly runName: string;
 }
 
-// Field named `nodes` rather than `rows` so a Drawn IS a ledger.Placeable: layoutPlan takes it
+// Field named `nodes` rather than `rows` so a Drawn IS a jobs.Placeable: layoutNodes takes it
 // directly, which is what makes the reuse literal rather than a claim in a comment.
 interface Drawn {
   readonly nodes: readonly DrawnNode[];
@@ -275,16 +286,27 @@ interface Drawn {
 
 const NOTHING_DRAWN: Drawn = { nodes: [], edges: [] };
 
-// declaredDrawn projects the lease ledger. Reading order is the tree walk, so the list reads
-// parents before children; the stage places by the layout and does not care about the order.
-function declaredDrawn(model: PlanModel): Drawn {
+// jobsDrawn projects the job tree. Reading order is the tree walk, so the list reads parents before
+// children; the stage places by the layout and does not care about the order.
+//
+// The meta line leads with the HOLDER, because it is what tells a reader which kind of job they are
+// looking at before they read anything else about it.
+function jobsDrawn(model: JobTree, nowMs: number): Drawn {
   const nodes: DrawnNode[] = [];
   for (const id of treeOrder(model)) {
     const n = model.byId.get(id);
     if (!n) continue;
-    const meta = [STATE_LABEL[n.state]];
+    const daemon = n.holder === JobHolder.DAEMON;
+    const meta = [HOLDER_LABEL[n.holder], STATE_LABEL[n.state]].filter(Boolean);
     if (n.readOnly) meta.push("read only");
-    if (n.lease.tier) meta.push(n.lease.tier);
+    if (daemon) {
+      const size = sizeLine(n.job);
+      if (size) meta.push(size);
+      const last = lastRunLine(n.job, nowMs);
+      if (last) meta.push(last);
+    } else if (n.job.model) {
+      meta.push(n.job.model);
+    }
     nodes.push({
       id: n.id,
       state: n.state,
@@ -292,23 +314,24 @@ function declaredDrawn(model: PlanModel): Drawn {
       label: STATE_LABEL[n.state],
       text: n.id,
       meta,
-      // Both leases of a reported pair carry the warning, because either row is where a reader
-      // might be standing when they need to know the other one exists.
+      // Both jobs of a reported pair carry the warning, because either row is where a reader might
+      // be standing when they need to know the other one exists.
       warn: n.overlaps.length ? ["overlap"] : [],
       readOnly: n.readOnly,
-      // Capped so a deeply nested plan does not indent itself off the panel.
+      // Capped so deeply nested work does not indent itself off the panel.
       depth: Math.min(n.depth, 6),
-      updated: n.lease.updated ?? 0,
+      updated: Number(n.job.updated),
       terminal: isTerminal(n.state),
+      runName: daemon ? n.job.name : "",
     });
   }
   return { nodes, edges: model.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })) };
 }
 
-// runDrawn projects the resolved run plan. Served order is reading order - the daemon resolved the
-// DAG and the console has no better claim about which target to read first - and there is no depth
-// to indent by, because a run plan is a dependency graph rather than a tree of leases.
-function runDrawn(model: RunPlanModel): Drawn {
+// targetsDrawn projects the resolved target plan. Served order is reading order - the daemon
+// resolved the DAG and the console has no better claim about which target to read first - and there
+// is no depth to indent by, because it is a dependency graph rather than a tree of jobs.
+function targetsDrawn(model: RunPlanModel): Drawn {
   return {
     nodes: model.nodes.map((n) => ({
       id: n.id,
@@ -320,14 +343,18 @@ function runDrawn(model: RunPlanModel): Drawn {
       warn: [],
       readOnly: false,
       depth: 0,
-      // A resolved run plan has no declared row to go stale: the engine knows what happened to
-      // every node in it, so there is no timestamp to watch and nothing to call possibly dead.
+      // A resolved target plan has nothing written down to go stale: the engine knows what happened
+      // to every node in it, so there is no timestamp to watch and nothing to call possibly dead.
       updated: 0,
       terminal: false,
+      // A target is not a job: what starts one is `magus run`, and a control here would be offering
+      // a build from a view that reports on them.
+      runName: "",
     })),
-    // Every edge in a run plan is a dependency, so there is nothing to tell it apart FROM. It still
-    // carries the depends_on kind - that is what it is - and plan.css drops the dashed accent under
-    // data-source="run", where the distinction it exists to draw has nothing to distinguish.
+    // Every edge in a target plan is a dependency, so there is nothing to tell it apart FROM. It
+    // still carries the depends_on kind - that is what it is - and plan.css drops the dashed accent
+    // under data-source="targets", where the distinction it exists to draw has nothing to
+    // distinguish.
     edges: model.edges.map((e) => ({ from: e.from, to: e.to, kind: "depends_on" })),
   };
 }
@@ -349,17 +376,17 @@ function why(e: unknown): string {
 
 // Feeds is one tick of both activity feeds: the rows, and why they are short when a read failed.
 // The reason is carried rather than folded into an empty list because the detail sheet has to tell
-// "nothing is attributed to this lease" apart from "the feeds it would be attributed FROM did not
-// answer" - the first is a fact about the plan, the second is a fact about the daemon.
+// "nothing is attributed to this job" apart from "the feeds it would be attributed FROM did not
+// answer" - the first is a fact about the work, the second is a fact about the daemon.
 interface Feeds {
   readonly rows: ActivityRow[];
   readonly unread: string; // "" when both feeds answered
 }
 
 // fetchStatus reads one Status frame for the running half of the join (pool slots and lock holders).
-// Never throws, so a blip leaves the plan standing with no runs on it rather than throwing into the
-// poll timer - but it says what went wrong, because an unread feed and an empty one look identical
-// on screen otherwise.
+// Never throws, so a blip leaves the picture standing with no runs on it rather than throwing into
+// the poll timer - but it says what went wrong, because an unread feed and an empty one look
+// identical on screen otherwise.
 async function fetchStatus(
   host: string,
   signal: AbortSignal,
@@ -420,15 +447,15 @@ interface Refs {
   treeHead: HTMLElement;
   treeHide: HTMLButtonElement;
   treeReopen: HTMLButtonElement;
-  sourceBtns: [PlanSource, HTMLButtonElement][];
+  sourceBtns: [Source, HTMLButtonElement][];
   targetWrap: HTMLElement;
   targetInput: HTMLInputElement;
   targetList: HTMLElement;
 }
 
-// buildScaffold assembles the surface on PatternFly plus the console-plan-* classes the formula
-// allows for what PF has no component for (the stage, the node list, the detail sheet). Three
-// columns: the accessible twin list, the drawn plan, and the selected node's detail.
+// buildScaffold assembles the view on PatternFly plus the console-plan-* classes the formula allows
+// for what PF has no component for (the stage, the node list, the detail sheet). Three columns: the
+// accessible twin list, the drawing, and the selected node's detail.
 function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const root = h("div", "console-plan-layout");
   root.dataset.phase = "loading";
@@ -443,17 +470,17 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // decides what every other control in it is talking about.
   const sourceGroup = h("div", "pf-v6-c-toggle-group console-plan-source");
   sourceGroup.setAttribute("role", "group");
-  sourceGroup.setAttribute("aria-label", "Plan source");
-  const sourceBtns: [PlanSource, HTMLButtonElement][] = [];
-  for (const s of ["declared", "run"] as const) {
+  sourceGroup.setAttribute("aria-label", "What to draw");
+  const sourceBtns: [Source, HTMLButtonElement][] = [];
+  for (const s of ["jobs", "targets"] as const) {
     const item = h("div", "pf-v6-c-toggle-group__item");
     const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
     btn.type = "button";
     btn.dataset.source = s;
     btn.title =
-      s === "declared"
-        ? "The lease ledger: the leases an orchestrating agent declared"
-        : "The run plan: the target DAG magus resolves, following the live run";
+      s === "jobs"
+        ? "Every job this daemon knows about, its own and the ones sessions hold"
+        : "The target DAG magus resolves, following the live run";
     btn.append(h("span", "pf-v6-c-toggle-group__text", SOURCE_LABEL[s]));
     item.append(btn);
     sourceGroup.append(item);
@@ -463,14 +490,14 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // The polite live region, exactly as the activity drawer does it: the SUMMARY is live, the lists
   // are not. A list rebuilt on a four-second timer inside a live region re-announces every row on
   // every tick, which is how a considerate feature becomes an unusable one.
-  const summary = h("p", "console-plan-summary", "Reading the plan.");
+  const summary = h("p", "console-plan-summary", "Reading the jobs.");
   summary.setAttribute("aria-live", "polite");
   const note = h("p", "console-plan-note");
   note.hidden = true;
 
-  // The target override. NOT the entry point and deliberately small: the run view follows the live
-  // run, so naming a target is the exception - what to do when you want the plan for something that
-  // is not what just ran. Emptying it hands the anchor back to the daemon.
+  // The target override. NOT the entry point and deliberately small: the target view follows the
+  // live run, so naming a target is the exception - what to do when you want the plan for something
+  // that is not what just ran. Emptying it hands the anchor back to the daemon.
   const targetWrap = h("div", "console-plan-target");
   const targetLabel = h("label", "console-plan-target__label", "Target");
   const targetControl = h("span", "pf-v6-c-form-control");
@@ -480,7 +507,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   targetInput.placeholder = "follow";
   targetInput.spellcheck = false;
   targetInput.autocomplete = "off";
-  targetInput.setAttribute("aria-label", "Anchor the run plan at a named target");
+  targetInput.setAttribute("aria-label", "Anchor the target plan at a named target");
   const targetList = h("datalist");
   targetList.id = "console-plan-targets-" + markerBase;
   targetInput.setAttribute("list", targetList.id);
@@ -488,33 +515,33 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   targetControl.append(targetInput);
   targetWrap.append(targetLabel, targetControl, targetList);
 
-  // No Reload control. The surface polls every POLL_MS and pauses while the tab is hidden, so the
-  // plan on screen is already the plan the daemon has; a button that re-asks is chrome implying
-  // the view might be stale when it is not. `plan.refresh` stays registered for the command bar
-  // and its keybinding, which is where a deliberate re-read belongs.
+  // No Reload control. The view polls every POLL_MS and pauses while the tab is hidden, so what is
+  // on screen is already what the daemon has; a button that re-asks is chrome implying the view
+  // might be stale when it is not. `jobs.refresh` stays registered for the command bar and its
+  // keybinding, which is where a deliberate re-read belongs.
   toolbar.append(sourceGroup, summary, note, targetWrap);
 
   const tree = h("nav", "console-plan-tree");
   const treeHead = h("div", "console-plan-tree__head");
-  const treeTitle = h("span", "console-plan-tree__heading", "Leases");
+  const treeTitle = h("span", "console-plan-tree__heading", "Jobs");
   const treeHide = h("button", "console-plan-tree__toggle") as HTMLButtonElement;
   treeHide.type = "button";
-  treeHide.title = "Hide the lease index";
-  treeHide.setAttribute("aria-label", "Hide the lease index");
-  treeHide.textContent = "\u2039";
+  treeHide.title = "Hide the index";
+  treeHide.setAttribute("aria-label", "Hide the index");
+  treeHide.textContent = "‹";
   treeHead.append(treeTitle, treeHide);
   const treeReopen = h("button", "console-plan-reopen") as HTMLButtonElement;
   treeReopen.type = "button";
-  treeReopen.title = "Show the lease index";
-  treeReopen.setAttribute("aria-label", "Show the lease index");
-  treeReopen.textContent = "\u203a";
+  treeReopen.title = "Show the index";
+  treeReopen.setAttribute("aria-label", "Show the index");
+  treeReopen.textContent = "›";
   const list = h("ul", "console-plan-list");
   list.setAttribute("role", "list");
   tree.append(treeHead, list);
 
   const stageBox = h("div", "console-plan-stage");
   const stage = svgEl("svg", "console-plan-stage__svg");
-  // The drawing is decoration over the list next door, which carries the same leases in reading
+  // The drawing is decoration over the list next door, which carries the same nodes in reading
   // order with the same states in words. Announcing a laid-out graph twice, once with no reading
   // order, is worse than announcing it once.
   stage.setAttribute("aria-hidden", "true");
@@ -545,14 +572,10 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 
   const empty = h("div", "pf-v6-c-empty-state console-plan-empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Reading the plan");
+  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Reading the jobs");
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
   const emptyBody = h("p", undefined, "");
   emptyBodyWrap.append(emptyBody);
-  // The showcase offer, as the diff surface makes it: someone with no daemon running meets this
-  // first, and a dead end is a worse first impression than a fabricated plan clearly labeled as
-  // one. Hidden unless the caller offers it - "no leases declared" is a real answer about a real
-  // workspace, and burying it under a demo button would be answering a different question.
   // No demo button, on any page - see the diff surface for the reasoning. showEmpty names where a
   // populated version lives instead.
   emptyContent.append(emptyTitle, emptyBodyWrap);
@@ -584,8 +607,8 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
 }
 
 // field renders one labeled row of the detail sheet. An absent value renders NOTHING rather than
-// an empty row: a plan that declares no checkpoint and a plan whose checkpoint is blank look the
-// same on screen otherwise, and only one of them is a gap worth noticing.
+// an empty row: a job that declares no checkpoint and one whose checkpoint is blank look the same
+// on screen otherwise, and only one of them is a gap worth noticing.
 function field(dl: HTMLElement, label: string, value: string): void {
   if (!value) return;
   dl.append(h("dt", "console-plan-detail__label", label));
@@ -593,8 +616,8 @@ function field(dl: HTMLElement, label: string, value: string): void {
 }
 
 // pathField renders a path list as PF Labels, so a long owned-paths set wraps as chips instead of
-// one unreadable line. Each path goes through textContent (h never sets innerHTML) - a ledger is
-// written by an agent, so nothing in it is trusted markup.
+// one unreadable line. Each path goes through textContent (h never sets innerHTML) - these are
+// written by an agent, so nothing in them is trusted markup.
 function pathField(dl: HTMLElement, label: string, paths: readonly string[]): void {
   if (!paths.length) return;
   dl.append(h("dt", "console-plan-detail__label", label));
@@ -613,13 +636,13 @@ function pathField(dl: HTMLElement, label: string, paths: readonly string[]): vo
   dl.append(dd);
 }
 
-// releaseField renders what the lease gave up: the path, and the version of it the next lease
-// inherits. Compact by design - a short digest is enough to COMPARE, which is the only thing a
-// reader does with it, and the full one would push the path off the sheet.
+// releaseField renders what the job gave up: the path, and the version of it the next one inherits.
+// Compact by design - a short digest is enough to COMPARE, which is the only thing a reader does
+// with it, and the full one would push the path off the sheet.
 //
 // A digest that is not a hash arrives as a word ("absent" for a path with nothing on disk, "dir"
 // for a directory) and is shown as it came: shortening it would produce a hash-shaped lie.
-function releaseField(dl: HTMLElement, releases: readonly LeaseRelease[]): void {
+function releaseField(dl: HTMLElement, releases: readonly JobRelease[]): void {
   if (!releases.length) return;
   dl.append(h("dt", "console-plan-detail__label", "Released"));
   const dd = h("dd", "console-plan-detail__value");
@@ -640,28 +663,28 @@ function shortDigest(digest: string): string {
   return hex ? "sha256:" + hex.slice(0, 12) : digest;
 }
 
-// stamp renders a unix-second timestamp for the detail sheet, "" when the row carries none. The
+// stamp renders a unix-second timestamp for the detail sheet, "" when nothing carries one. The
 // reader's own locale: this is a local daemon's clock being read on the same machine.
 function stamp(seconds: number): string {
   return seconds > 0 ? new Date(seconds * 1000).toLocaleString() : "";
 }
 
-// PlanInstance is what ONE mount hands back: its teardown, and its own visibility switch. Visibility
+// JobsInstance is what ONE mount hands back: its teardown, and its own visibility switch. Visibility
 // belongs to the instance and not to the module because the console drives it per PANE (tileView's
 // applyVisibility calls each pane's controller). A module-level export cannot tell two mounts of
 // this bundle apart, so backgrounding one pane silenced the poll in a pane that was still on screen,
 // and unhiding either restarted both.
-export interface PlanInstance {
+export interface JobsInstance {
   deactivate(): void;
   setVisible(visible: boolean): void;
 }
 
-export function activate(host: HTMLElement): PlanInstance {
+export function activate(host: HTMLElement): JobsInstance {
   // Per-bundle, not per-page: lib/daemon's origin-adoption flag is module state, so the shell having
-  // adopted this origin does not make it adopted in here. Without it the surface works only after
-  // some other surface has persisted a host, which is the shape of bug that looks fine on the
-  // developer's machine. Called ONCE per mount, per its own contract - it consumes the token out of
-  // the hash, so a call per refresh would be asking a question that has already been answered.
+  // adopted this origin does not make it adopted in here. Without it the view works only after some
+  // other surface has persisted a host, which is the shape of bug that looks fine on the developer's
+  // machine. Called ONCE per mount, per its own contract - it consumes the token out of the hash, so
+  // a call per refresh would be asking a question that has already been answered.
   adoptDaemonOrigin();
 
   const markerBase = "console-plan-arrow-" + ++instanceSeq;
@@ -671,15 +694,15 @@ export function activate(host: HTMLElement): PlanInstance {
   let visible = true;
   let timer: ReturnType<typeof setInterval> | null = null;
 
-  let source: PlanSource = "declared";
-  // The auto rule fires ONCE, on the first ledger read that completes, and an explicit pick retires
-  // it for good. Without that latch a reader who chose Declared over an empty ledger would be moved
-  // back to Run four seconds later, and again on every tick after that.
+  let source: Source = "jobs";
+  // The auto rule fires ONCE, on the first job read that completes, and an explicit pick retires it
+  // for good. Without that latch a reader who chose Jobs over an empty listing would be moved back
+  // to Targets four seconds later, and again on every tick after that.
   let sourceDecided = false;
   // The shared #demo fragment, read once at mount. Polling is never started in the demo: there is
   // no daemon to poll and the fixture does not move.
   const demo = wantsDemo(parseHash());
-  let model: PlanModel = buildPlan([]);
+  let model: JobTree = buildJobTree([]);
   let join: RunJoin = joinRuns(model, []);
   let runModel: RunPlanModel = emptyRunPlan();
   let drawn: Drawn = NOTHING_DRAWN;
@@ -687,21 +710,33 @@ export function activate(host: HTMLElement): PlanInstance {
   // the reader's override, and the only thing that puts ?target= on the wire.
   let targetOverride = "";
   // The host the last read resolved, kept so the detail can build a log-viewer deep link without
-  // re-resolving it mid-render.
+  // re-resolving it mid-render, and so a submit knows where to send.
   let lastHost: string | null = null;
+  // One connection per host, reused by every read and every submit. Rebuilt when the daemon changes,
+  // because a client carries the origin it was built for.
+  let client: JobClient | null = null;
+  let clientHost = "";
   // Why the last activity read came up short, "" when both feeds answered. The detail sheet reads it
-  // so an unread feed cannot masquerade as a lease nothing has been attributed to.
+  // so an unread feed cannot masquerade as a job nothing has been attributed to.
   let feedsUnread = "";
   let selected: string | null = null;
-  let painted = ""; // the signature of the plan currently on screen
+  let painted = ""; // the signature of what is currently on screen
   let paintedDetail = ""; // and of the detail sheet beside it
+
+  const clientFor = (daemonHost: string): JobClient => {
+    if (!client || clientHost !== daemonHost) {
+      clientHost = daemonHost;
+      client = jobClient(daemonHost);
+    }
+    return client;
+  };
 
   // --- painting -------------------------------------------------------------
 
   // paintSource reflects the active source on the chrome: which toggle button is pressed, what the
-  // list and the Reload button are called, and whether the target override is offered at all. It
-  // owns every string that differs between the two tenants, so adding a third would not mean
-  // hunting for source checks scattered through the render path.
+  // list is called, and whether the target override is offered at all. It owns every string that
+  // differs between the two tenants, so adding a third would not mean hunting for source checks
+  // scattered through the render path.
   const paintSource = (): void => {
     refs.root.dataset.source = source;
     for (const [s, btn] of refs.sourceBtns) {
@@ -709,9 +744,9 @@ export function activate(host: HTMLElement): PlanInstance {
       btn.classList.toggle("pf-m-selected", on);
       btn.setAttribute("aria-pressed", on ? "true" : "false");
     }
-    const declared = source === "declared";
-    refs.tree.setAttribute("aria-label", declared ? "Leases" : "Plan targets");
-    refs.targetWrap.hidden = declared;
+    const jobs = source === "jobs";
+    refs.tree.setAttribute("aria-label", jobs ? "Jobs" : "Targets");
+    refs.targetWrap.hidden = jobs;
   };
 
   // renderTargetOptions offers the targets THIS plan mentions as completions for the override. They
@@ -747,21 +782,23 @@ export function activate(host: HTMLElement): PlanInstance {
     // A real <code> element, as every other surface writes a command.
     if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
     if (offerDemo) {
-      refs.emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated plan.");
+      refs.emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated one.");
     }
   };
 
-  // signature is what decides whether the plan on screen still matches the plan in hand. The list is
-  // rebuilt only when it changes, so a poll that returns the same plan cannot destroy the button a
-  // reader has focused - the surface repaints around them, not under them.
+  // signature is what decides whether what is on screen still matches what is in hand. The list is
+  // rebuilt only when it changes, so a poll that returns the same answer cannot destroy the button a
+  // reader has focused - the view repaints around them, not under them.
   //
   // It covers everything the list ROW draws, meta included. Leaving meta out made the signature a
-  // near-match rather than a match: a lease whose tier changed under an unchanged state drew the same
-  // signature, and the row went on reading the old tier until something else moved.
+  // near-match rather than a match: a job whose model changed under an unchanged state drew the same
+  // signature, and the row went on reading the old model until something else moved.
   const signature = (d: Drawn): string =>
     d.nodes
       .map((n) =>
-        [n.id, n.state, n.depth, n.readOnly, n.meta.join("/"), n.warn.join("/")].join(":"),
+        [n.id, n.state, n.depth, n.readOnly, n.meta.join("/"), n.warn.join("/"), n.runName].join(
+          ":",
+        ),
       )
       .join("|") +
     "#" +
@@ -769,43 +806,59 @@ export function activate(host: HTMLElement): PlanInstance {
 
   // detailSignature is the same guard for the sheet on the right, and it needs its own because the
   // sheet draws from the SELECTED node rather than from the drawn list: everything in it can change
-  // while the plan's own signature holds still, and it holds the surface's only link. A repaint that
-  // rebuilds an unchanged sheet takes the focus off "Open the last log" with it, so the sheet is
-  // rebuilt only when what it says has actually changed.
+  // while the drawing's own signature holds still, and it holds this view's only link. A repaint
+  // that rebuilds an unchanged sheet takes the focus off "Open the last log" with it, so the sheet
+  // is rebuilt only when what it says has actually changed.
   const detailSignature = (): string => {
     if (!selected) return source + ":none";
-    if (source === "run") {
+    if (source === "targets") {
       const n = runModel.byId.get(selected);
       return n
-        ? "run:" + JSON.stringify([n.id, n.state, n.rawState, n.project, n.target, n.ref, lastHost])
-        : "run:gone";
+        ? "targets:" +
+            JSON.stringify([n.id, n.state, n.rawState, n.project, n.target, n.ref, lastHost])
+        : "targets:gone";
     }
     const n = model.byId.get(selected);
-    if (!n) return "declared:gone";
-    const runs = (join.byLease.get(n.id) ?? []).map((r) => [r.id, r.title, r.detail, r.outcome]);
+    if (!n) return "jobs:gone";
+    const runs = (join.byJob.get(n.id) ?? []).map((r) => [r.id, r.title, r.detail, r.outcome]);
+    // The job is stringified through its own fields rather than whole: a protobuf message carries
+    // bigints, which JSON.stringify throws on.
     return (
-      "declared:" +
+      "jobs:" +
       JSON.stringify([
         n.id,
         n.state,
         n.rawState,
         n.parent,
         n.danglingParent,
-        n.lease,
-        n.overlaps,
+        n.holder,
+        n.job.goal,
+        n.job.description,
+        n.job.checkpoint,
+        n.job.model,
+        n.job.check,
+        n.job.writePaths,
+        n.job.denyPaths,
+        n.job.readPaths,
+        n.job.dependsOn,
+        n.job.releases.map((r) => [r.path, r.digest]),
+        String(n.job.created),
+        String(n.job.updated),
+        sizeLine(n.job),
+        n.overlaps.map((o) => [o.jobA, o.jobB, o.pathsA, o.pathsB]),
         runs,
         feedsUnread,
       ])
     );
   };
 
-  // syncAges writes the heartbeat onto rows that already exist: how long since the lease's row was
-  // last touched, and the stale mark once that gap passes the surface's threshold. It runs on every
-  // paint and touches only text and one attribute, so a plan that has not changed is never rebuilt
-  // just because time passed - which is what keeps a clock from taking the focus off the row a
-  // reader is standing on.
+  // syncAges writes the heartbeat onto rows that already exist: how long since the job was last
+  // touched, and the stale mark once that gap passes the view's threshold. It runs on every paint
+  // and touches only text and one attribute, so a picture that has not changed is never rebuilt just
+  // because time passed - which is what keeps a clock from taking the focus off the row a reader is
+  // standing on.
   //
-  // Terminal rows carry no age. A lease that finished is not going to be touched again, and an
+  // Terminal rows carry no age. A job that finished is not going to be touched again, and an
   // ever-growing "2h" beside a pass reads as a problem where there is none.
   const syncAges = (): void => {
     const now = Date.now();
@@ -816,7 +869,7 @@ export function activate(host: HTMLElement): PlanInstance {
       if (!n || !el) continue;
       const age = n.terminal ? "" : ageLabel(n.updated, now);
       const stale = isStale(n.terminal, n.updated, now);
-      // The word rides along with the number: color alone cannot carry a state on this surface.
+      // The word rides along with the number: color alone cannot carry a state on this view.
       const label = age && stale ? age + " stale" : age;
       if (el.textContent !== label) el.textContent = label;
       el.toggleAttribute("data-stale", stale);
@@ -826,6 +879,33 @@ export function activate(host: HTMLElement): PlanInstance {
       if (n && isStale(n.terminal, n.updated, now)) g.dataset.stale = "";
       else delete g.dataset.stale;
     }
+  };
+
+  // run submits one job and reports what happened on its row. The listing is deliberately NOT
+  // re-read here: a submit is fire-and-forget, so a re-list this soon races the worker it just
+  // started. The poll picks the job up as running within a tick, and the rebuild that follows
+  // replaces this text with the state itself.
+  const run = async (
+    node: DrawnNode,
+    btn: HTMLButtonElement,
+    state: HTMLElement,
+  ): Promise<void> => {
+    if (btn.disabled) return;
+    const daemonHost = lastHost;
+    if (!daemonHost) return;
+    btn.disabled = true;
+    state.textContent = "starting...";
+    const outcome = await submitJob(clientFor(daemonHost), node.runName, controller.signal);
+    if (disposed) return;
+    if (outcome.kind === "refused") {
+      // Only a real refusal lands here - an unknown name, no socket to submit to, a rejected token.
+      // The button goes back to pressable, because the reader can retry and a dead button says
+      // nothing.
+      state.textContent = "could not run " + node.id + ": " + outcome.detail;
+      btn.disabled = false;
+      return;
+    }
+    state.textContent = outcome.kind === "already-running" ? "already running" : "started";
   };
 
   const renderList = (): void => {
@@ -857,19 +937,33 @@ export function activate(host: HTMLElement): PlanInstance {
       btn.append(h("span", "console-plan-list__age"));
       btn.title = `${n.id}: ${n.label}`;
       li.append(btn);
+      // The Run control is a SIBLING of the selecting button, not a child of it: a button inside a
+      // button is not markup a browser will honor. Only what the daemon holds gets one.
+      if (n.runName) {
+        const runBtn = h(
+          "button",
+          "pf-v6-c-button pf-m-secondary pf-m-small console-plan-list__run",
+        ) as HTMLButtonElement;
+        runBtn.type = "button";
+        runBtn.append(h("span", "pf-v6-c-button__text", "Run"));
+        runBtn.setAttribute("aria-label", "Run " + n.id);
+        const runState = h("span", "console-plan-list__runstate");
+        runBtn.addEventListener("click", () => void run(n, runBtn, runState));
+        li.append(runBtn, runState);
+      }
       return li;
     });
     refs.list.replaceChildren(...items);
   };
 
   const renderStage = (): void => {
-    const layout = layoutPlan(drawn);
+    const layout = layoutNodes(drawn);
     refs.stage.setAttribute("viewBox", layout.viewBox);
 
-    // Attach points are FANNED along an edge rather than shared. Every connector leaving
-    // claims-audience used to start at the same pixel, so five lines left as one stroke and only
-    // separated somewhere out in the middle - which is what made the drawing unreadable however
-    // the curves were shaped. Counting them first is what lets each one own a point.
+    // Attach points are FANNED along an edge rather than shared. Every connector leaving one node
+    // used to start at the same pixel, so five lines left as one stroke and only separated somewhere
+    // out in the middle - which is what made the drawing unreadable however the curves were shaped.
+    // Counting them first is what lets each one own a point.
     const outOf = new Map<string, number>();
     const intoOf = new Map<string, number>();
     for (const e of drawn.edges) {
@@ -975,13 +1069,13 @@ export function activate(host: HTMLElement): PlanInstance {
     refs.nodeLayer.replaceChildren(...nodes);
   };
 
-  const renderDeclaredDetail = (): void => {
+  const renderJobDetail = (): void => {
     const n = selected ? model.byId.get(selected) : undefined;
     if (!n) {
       const hint = h(
         "p",
         "console-plan-detail__hint",
-        "Select a lease to read its goal, its checkpoint, and the runs attributed to it.",
+        "Select a job to read what it is for, what it owns, and the runs attributed to it.",
       );
       refs.detail.replaceChildren(hint);
       return;
@@ -991,48 +1085,58 @@ export function activate(host: HTMLElement): PlanInstance {
     const state = h("span", "console-plan-detail__state", STATE_LABEL[n.state]);
     state.dataset.state = n.state;
     head.append(state);
+    if (HOLDER_LABEL[n.holder]) {
+      head.append(h("span", "console-plan-detail__holder", HOLDER_LABEL[n.holder] + " job"));
+    }
     if (n.readOnly) head.append(h("span", "console-plan-detail__ro", "read only"));
 
     const dl = h("dl", "console-plan-detail__fields");
-    field(dl, "Goal", n.lease.goal ?? "");
-    field(dl, "Checkpoint", n.lease.checkpoint ?? "");
-    field(dl, "Tier", n.lease.tier ?? "");
-    field(dl, "Validation", n.lease.validation ?? "");
-    pathField(dl, "Owned paths", n.lease.owned_paths ?? []);
-    pathField(dl, "Forbidden paths", n.lease.forbidden_paths ?? []);
-    pathField(dl, "Depends on", n.lease.depends_on ?? []);
+    // What the daemon's own catalog carries, and what a session's job carries, in that order. A job
+    // fills one set or the other and the empty fields render nothing, which is what lets one sheet
+    // serve both without asking which it has.
+    field(dl, "What it does", n.job.description);
+    field(dl, "Size", sizeLine(n.job));
+    field(dl, "Last run", lastRunLine(n.job, Date.now()));
+    field(dl, "Goal", n.job.goal);
+    field(dl, "Checkpoint", n.job.checkpoint);
+    field(dl, "Model", n.job.model);
+    field(dl, "Check", n.job.check);
+    pathField(dl, "Write paths", n.job.writePaths);
+    pathField(dl, "Deny paths", n.job.denyPaths);
+    pathField(dl, "Read paths", n.job.readPaths);
+    pathField(dl, "Depends on", n.job.dependsOn);
     field(dl, "Parent", n.parent ?? "");
     if (n.danglingParent) {
-      field(dl, "Parent", n.danglingParent + " (not in this ledger)");
+      field(dl, "Parent", n.danglingParent + " (not in this listing)");
     }
-    // Only when the ledger said something this console does not know. A state it DOES know is
+    // Only when the daemon said something this console does not know. A state it DOES know is
     // already the word in the header, and repeating it would just be noise.
     if (n.rawState && n.rawState !== n.state) {
-      field(dl, "Ledger state", n.rawState + " (unrecognized, shown as declared)");
+      field(dl, "Served state", n.rawState + " (unrecognized, shown as declared)");
     }
-    // Every pair this lease is in, naming the OTHER lease and the paths THAT lease declared. Its
-    // declarations rather than this one's: the reader is already looking at their own owned
-    // paths a few rows up, and what they cannot see is what the other agent claimed. A fact,
-    // and worded as one - magus derived it from two rows an agent wrote, and it blocks nothing.
+    // Every pair this job is in, naming the OTHER job and the paths THAT job declared. Its
+    // declarations rather than this one's: the reader is already looking at their own owned paths a
+    // few rows up, and what they cannot see is what the other agent claimed. A fact, and worded as
+    // one - magus derived it from two jobs an agent wrote, and it blocks nothing.
     for (const o of n.overlaps) {
-      const mine = o.lease_a === n.id;
-      const other = mine ? o.lease_b : o.lease_a;
-      field(dl, "Overlaps", other + ": " + (mine ? o.paths_b : o.paths_a).join(", "));
+      const mine = o.jobA === n.id;
+      const other = mine ? o.jobB : o.jobA;
+      field(dl, "Overlaps", other + ": " + (mine ? o.pathsB : o.pathsA).join(", "));
     }
-    releaseField(dl, n.lease.releases ?? []);
-    // An absolute time rather than an age: the row list carries the age, which moves, and a sheet
-    // that changed every second would rebuild itself out from under the link it holds.
-    field(dl, "Created", stamp(n.lease.created ?? 0));
-    field(dl, "Updated", stamp(n.lease.updated ?? 0));
+    releaseField(dl, n.job.releases);
+    // An absolute time rather than an age: the list carries the age, which moves, and a sheet that
+    // changed every second would rebuild itself out from under the link it holds.
+    field(dl, "Created", stamp(Number(n.job.created)));
+    field(dl, "Updated", stamp(Number(n.job.updated)));
 
-    const runs = join.byLease.get(n.id) ?? [];
+    const runs = join.byJob.get(n.id) ?? [];
     const runsBox = h("div", "console-plan-detail__runs");
     runsBox.append(h("h3", "console-plan-detail__runshead", "Runs"));
     if (!runs.length) {
-      // Two different facts, and only one of them is about the plan. The feeds not answering means
-      // nothing can be attributed to ANY lease right now; the feeds answering with nothing means the
+      // Two different facts, and only one of them is about the work. The feeds not answering means
+      // nothing can be attributed to ANY job right now; the feeds answering with nothing means the
       // attribution itself does not exist yet. Reporting the first as the second would blame the
-      // ledger for a daemon that is not talking.
+      // job for a daemon that is not talking.
       runsBox.append(
         h(
           "p",
@@ -1040,8 +1144,8 @@ export function activate(host: HTMLElement): PlanInstance {
           feedsUnread
             ? "The activity feeds could not be read (" +
                 feedsUnread +
-                "), so nothing can be attributed to this lease right now."
-            : "No runs are attributed to this lease. Nothing stamps a lease onto the activity feeds yet, so this stays empty until something does.",
+                "), so nothing can be attributed to this job right now."
+            : "No runs are attributed to this job. Nothing stamps a job onto the activity feeds yet, so this stays empty until something does.",
         ),
       );
     } else {
@@ -1059,10 +1163,10 @@ export function activate(host: HTMLElement): PlanInstance {
     refs.detail.replaceChildren(head, dl, runsBox);
   };
 
-  // renderRunDetail is the run plan's half: what this node IS (project, target, state) and the one
-  // place a reader goes next when it has already run. There is no runs list here - the ref IS the
-  // run, and it is the log viewer's job to show it.
-  const renderRunDetail = (): void => {
+  // renderTargetDetail is the second tenant's half: what this node IS (project, target, state) and
+  // the one place a reader goes next when it has already run. There is no runs list here - the ref
+  // IS the run, and it is the log viewer's job to show it.
+  const renderTargetDetail = (): void => {
     const n = selected ? runModel.byId.get(selected) : undefined;
     if (!n) {
       const hint = h(
@@ -1118,12 +1222,12 @@ export function activate(host: HTMLElement): PlanInstance {
   };
 
   const renderDetail = (): void => {
-    if (source === "run") renderRunDetail();
-    else renderDeclaredDetail();
+    if (source === "targets") renderTargetDetail();
+    else renderJobDetail();
   };
 
   // syncSelection repaints only what the selection changed - the aria-current on one list row and
-  // the data-selected on one node - so choosing a lease never rebuilds the list under the caret. The
+  // the data-selected on one node - so choosing a job never rebuilds the list under the caret. The
   // detail sheet goes through its signature for the same reason.
   const syncSelection = (): void => {
     for (const b of refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")) {
@@ -1156,9 +1260,9 @@ export function activate(host: HTMLElement): PlanInstance {
   const selectRow = (id: string | null): void => {
     select(id);
     if (!selected) return;
-    // Matched by walking the rows rather than by an attribute selector: a lease id is an agent's
-    // free text, so building a selector out of it is a quoting bug waiting for the first id with a
-    // quote in it.
+    // Matched by walking the rows rather than by an attribute selector: a job id is an agent's free
+    // text, so building a selector out of it is a quoting bug waiting for the first id with a quote
+    // in it.
     const btn = [...refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")].find(
       (b) => b.dataset.id === selected,
     );
@@ -1186,22 +1290,22 @@ export function activate(host: HTMLElement): PlanInstance {
       renderList();
       renderStage();
     }
-    // Always, whether or not the plan changed: the rows may be identical and the heartbeat still
-    // advances, and it is the one thing a poll returning the same plan has to move.
+    // Always, whether or not the drawing changed: the rows may be identical and the heartbeat still
+    // advances, and it is the one thing a poll returning the same answer has to move.
     syncAges();
     setSummary(overview);
     setNote(noteLine);
     syncSelection();
   };
 
-  // The ledger's stale-plan note. A run naming a lease the ledger does not carry means the plan on
-  // screen is older than the work, which is exactly when a reader should stop trusting the picture.
+  // The stale-picture note. A run naming a job this listing does not carry means what is on screen
+  // is older than the work, which is exactly when a reader should stop trusting it.
   const staleNote = (): string => {
     const stale = join.unmatched.length;
     return stale
       ? stale +
-          (stale === 1 ? " run names a lease" : " runs name leases") +
-          " this ledger does not carry, so the plan on screen is older than the work."
+          (stale === 1 ? " run names a job" : " runs name jobs") +
+          " this daemon did not list, so what is on screen is older than the work."
       : "";
   };
 
@@ -1211,11 +1315,11 @@ export function activate(host: HTMLElement): PlanInstance {
   // may paint only while BOTH still hold. The pair is the guard: the generation catches a poll that
   // has been overtaken - a four-second cadence over a slow daemon answers out of order - and the
   // source catches a reader who switched tenants while a read was in flight. Without the second, a
-  // ledger that answers after the switch to Run repaints the run view with declared nodes, which is
-  // exactly how a no_return, the one state a run plan can never have, would arrive on one.
+  // job listing that answers after the switch to Targets repaints the target view with jobs, which
+  // is exactly how a no_return, the one state a target plan can never have, would arrive on one.
   interface Read {
     readonly gen: number;
-    readonly source: PlanSource;
+    readonly source: Source;
     readonly signal: AbortSignal;
   }
 
@@ -1233,7 +1337,7 @@ export function activate(host: HTMLElement): PlanInstance {
   };
 
   // beginRead retires whatever is in flight and opens the next one.
-  const beginRead = (forSource: PlanSource): Read => {
+  const beginRead = (forSource: Source): Read => {
     stopReading();
     const ac = new AbortController();
     reading = ac;
@@ -1247,9 +1351,9 @@ export function activate(host: HTMLElement): PlanInstance {
   // fresh reports whether a read's answer may still be painted.
   const fresh = (r: Read): boolean => !disposed && r.gen === generation && r.source === source;
 
-  // blank clears what is drawn before an empty state replaces it, so a plan that WAS on screen does
-  // not survive underneath a sentence saying there is none - and so switching source cannot leave
-  // the other tenant's nodes selectable behind the empty panel.
+  // blank clears what is drawn before an empty state replaces it, so a picture that WAS on screen
+  // does not survive underneath a sentence saying there is none - and so switching source cannot
+  // leave the other tenant's nodes selectable behind the empty panel.
   const blank = (): void => {
     drawn = NOTHING_DRAWN;
     painted = "";
@@ -1260,82 +1364,77 @@ export function activate(host: HTMLElement): PlanInstance {
     setNote("");
   };
 
-  // settleSource is the auto rule, and it runs at most once. A ledger with rows means an
-  // orchestration is in flight, which is the more specific answer, so Declared opens. Anything
-  // else - no rows, no route, no answer - hands the surface to Run: the human-first half is what a
-  // person doing plain work came for, and a secondary endpoint that is missing or broken has no
-  // business taking the surface over. Returns true when it moved, so the caller can read the other
-  // source instead of painting an empty state nobody is going to look at.
-  const settleSource = (ledgerHasRows: boolean): boolean => {
+  // settleSource is the auto rule, and it runs at most once. Jobs in hand means there is work to
+  // look at, which is the more specific answer, so Jobs opens. Anything else - no jobs, no service,
+  // no answer - hands the view to Targets: the human-first half is what a person doing plain work
+  // came for, and a service that is missing or refusing has no business taking the view over.
+  // Returns true when it moved, so the caller can read the other source instead of painting an empty
+  // state nobody is going to look at.
+  const settleSource = (hasJobs: boolean): boolean => {
     if (sourceDecided) return false;
     sourceDecided = true;
-    if (ledgerHasRows) return false;
-    source = "run";
+    if (hasJobs) return false;
+    source = "targets";
     paintSource();
     blank();
     return true;
   };
 
-  const refreshDeclared = async (daemonHost: string): Promise<void> => {
-    const token = beginRead("declared");
+  const refreshJobs = async (daemonHost: string): Promise<void> => {
+    const token = beginRead("jobs");
     const [read, feeds] = await Promise.all([
-      loadLedger(daemonHost, deadline(token.signal)),
+      listJobs(clientFor(daemonHost), deadline(token.signal)),
       activityRows(daemonHost, token.signal),
     ]);
     if (!fresh(token)) return;
     feedsUnread = feeds.unread;
-    if (read.kind === "absent") {
-      if (settleSource(false)) return refreshRun(daemonHost);
+    if (read.kind === "denied") {
+      if (settleSource(false)) return refreshTargets(daemonHost);
       blank();
       showEmpty(
-        "No lease ledger endpoint",
-        "No lease ledger endpoint; the plan view lights up when the daemon serves /api/v1/ledger.",
+        "Jobs are not served here",
+        "This daemon declined the job service (" +
+          read.detail +
+          "). That is the service saying no, not a daemon that is missing: every other console surface still reads this one.",
       );
-      setSummary("No lease ledger endpoint.");
+      setSummary("Jobs are not served here.");
       return;
     }
     if (read.kind === "unreadable") {
-      if (settleSource(false)) return refreshRun(daemonHost);
+      if (settleSource(false)) return refreshTargets(daemonHost);
       blank();
-      showEmpty(
-        "Could not read the lease ledger",
-        "GET http://" +
-          daemonHost +
-          "/api/v1/ledger did not answer (" +
-          read.detail +
-          "). If this daemon predates the lease ledger the route is not there yet; the plan view lights up when the daemon serves /api/v1/ledger.",
-      );
-      setSummary("Could not read the lease ledger.");
+      showEmpty("Could not read the jobs", "The job service did not answer (" + read.detail + ").");
+      setSummary("Could not read the jobs.");
       return;
     }
-    if (settleSource(read.leases.length > 0)) return refreshRun(daemonHost);
-    model = buildPlan(read.leases, read.overlaps);
+    if (settleSource(read.jobs.length > 0)) return refreshTargets(daemonHost);
+    model = buildJobTree(read.jobs, read.overlaps);
     join = joinRuns(model, feeds.rows);
     if (!model.nodes.length) {
       blank();
       showEmpty(
-        "No leases declared",
-        "The daemon serves the lease ledger and it is empty: no lease has been declared in this workspace yet.",
+        "No jobs",
+        "The daemon serves jobs and has none: nothing is running here, and nothing has been handed out.",
       );
       setSummary(overviewLine(model));
       return;
     }
-    drawn = declaredDrawn(model);
+    drawn = jobsDrawn(model, Date.now());
     if (selected && !model.byId.has(selected)) selected = null;
     render(overviewLine(model), staleNote());
   };
 
-  const refreshRun = async (daemonHost: string): Promise<void> => {
-    const token = beginRead("run");
+  const refreshTargets = async (daemonHost: string): Promise<void> => {
+    const token = beginRead("targets");
     const read = await loadRunPlan(daemonHost, targetOverride, deadline(token.signal));
     if (!fresh(token)) return;
     if (read.kind === "absent") {
       blank();
       showEmpty(
-        "No run plan endpoint",
-        "No run plan endpoint; this view lights up when the daemon serves /api/v1/plan.",
+        "No target plan endpoint",
+        "No target plan endpoint; this view lights up when the daemon serves /api/v1/plan.",
       );
-      setSummary("No run plan endpoint.");
+      setSummary("No target plan endpoint.");
       return;
     }
     // The daemon knows the workspace's targets and this console does not, so its sentence is the
@@ -1352,14 +1451,14 @@ export function activate(host: HTMLElement): PlanInstance {
     if (read.kind === "unreadable") {
       blank();
       showEmpty(
-        "Could not read the run plan",
+        "Could not read the target plan",
         "GET " +
           runPlanUrl(daemonHost, targetOverride) +
           " did not answer (" +
           read.detail +
-          "). If this daemon predates the run plan the route is not there yet; this view lights up when the daemon serves /api/v1/plan.",
+          "). If this daemon predates the target plan the route is not there yet; this view lights up when the daemon serves /api/v1/plan.",
       );
-      setSummary("Could not read the run plan.");
+      setSummary("Could not read the target plan.");
       return;
     }
     runModel = read.plan;
@@ -1374,29 +1473,29 @@ export function activate(host: HTMLElement): PlanInstance {
       } else {
         showEmpty(
           "Nothing has run here yet",
-          "Nothing has run here yet. The run plan follows the live run, so it fills in the moment a target starts.",
+          "Nothing has run here yet. The target plan follows the live run, so it fills in the moment a target starts.",
         );
         setSummary("Nothing has run here yet.");
       }
       return;
     }
-    drawn = runDrawn(runModel);
+    drawn = targetsDrawn(runModel);
     if (selected && !runModel.byId.has(selected)) selected = null;
     render(runOverviewLine(runModel), "");
   };
 
-  // The showcase joins the pipeline one step in, with the ledger the daemon would have returned.
-  // Everything below buildPlan() is the production path, so what it shows off is the surface itself
-  // rather than a rendering of it. No fetch is issued at all, which is what makes
-  // /console/plan/#demo work with no daemon, no workspace and offline.
+  // The showcase joins the pipeline one step in, with the listing the daemon would have returned.
+  // Everything below buildJobTree() is the production path, so what it shows off is the view itself
+  // rather than a rendering of it. No request is issued at all, which is what makes #demo work with
+  // no daemon, no workspace and offline.
   const showDemo = (): void => {
     stopReading();
-    source = "declared";
+    source = "jobs";
     sourceDecided = true;
     paintSource();
-    model = buildPlan(demoLeases(Date.now()), demoOverlaps());
+    model = buildJobTree(demoJobs(Date.now()), demoOverlaps());
     join = joinRuns(model, []);
-    drawn = declaredDrawn(model);
+    drawn = jobsDrawn(model, Date.now());
     if (selected && !model.byId.has(selected)) selected = null;
     render(overviewLine(model), "");
   };
@@ -1410,22 +1509,22 @@ export function activate(host: HTMLElement): PlanInstance {
     lastHost = daemonHost;
     if (!daemonHost) {
       // No read to start, and any read still out belongs to the daemon that just went away: retiring
-      // it here is what stops it painting a plan over "not connected".
+      // it here is what stops it painting over "not connected".
       stopReading();
       blank();
       showEmpty(
         "No daemon connected",
-        source === "declared"
-          ? "The plan view reads the lease ledger from a local daemon. Start one with:"
-          : "The run plan comes from a local daemon. Start one with:",
+        source === "jobs"
+          ? "Jobs come from a local daemon. Start one with:"
+          : "The target plan comes from a local daemon. Start one with:",
         "magus server start",
         true,
       );
       setSummary("Not connected to a daemon.");
       return;
     }
-    if (source === "run") return refreshRun(daemonHost);
-    return refreshDeclared(daemonHost);
+    if (source === "targets") return refreshTargets(daemonHost);
+    return refreshJobs(daemonHost);
   };
 
   const startPolling = (): void => {
@@ -1455,7 +1554,7 @@ export function activate(host: HTMLElement): PlanInstance {
     if (!w || !h) return;
     if (zoom === 1) {
       // Back to fitting the pane: drop the inline sizes and let the stylesheet's 100% govern
-      // again, rather than freezing the graph at whatever the pane happened to be.
+      // again, rather than freezing the drawing at whatever the pane happened to be.
       refs.stage.style.removeProperty("width");
       refs.stage.style.removeProperty("height");
       return;
@@ -1495,7 +1594,7 @@ export function activate(host: HTMLElement): PlanInstance {
   // bar straight back.
   mountZoom();
   // ctrl/cmd + wheel, the gesture every map and canvas already uses - and it leaves a PLAIN wheel
-  // scrolling the pane, which is what a reader with a long plan actually wants most of the time.
+  // scrolling the pane, which is what a reader with a long list actually wants most of the time.
   refs.stageBox.addEventListener(
     "wheel",
     (e) => {
@@ -1617,7 +1716,7 @@ export function activate(host: HTMLElement): PlanInstance {
     { signal: controller.signal },
   );
 
-  const chooseSource = (next: PlanSource): void => {
+  const chooseSource = (next: Source): void => {
     if (next === source) return;
     // An explicit pick retires the auto rule for good - the reader has answered the question it
     // exists to answer, and a poll four seconds later must not overrule them.
@@ -1626,7 +1725,7 @@ export function activate(host: HTMLElement): PlanInstance {
     paintSource();
     blank();
     refs.root.dataset.phase = "loading";
-    setSummary("Reading the plan.");
+    setSummary(source === "jobs" ? "Reading the jobs." : "Reading the target plan.");
     void refresh();
   };
 
@@ -1649,20 +1748,20 @@ export function activate(host: HTMLElement): PlanInstance {
   );
 
   // What a shared command does to THIS mount. Registration is module-wide (see attachCommands) so
-  // that two Plan panes share one set of ids, but the work is always addressed to one mount.
-  const commands: PlanCommands = {
+  // that two Jobs panes share one set of ids, but the work is always addressed to one mount.
+  const commands: JobsCommands = {
     next: () => step(1),
     prev: () => step(-1),
     reload: () => void refresh(),
     clearSelection: () => select(null),
-    toggleSource: () => chooseSource(source === "declared" ? "run" : "declared"),
+    toggleSource: () => chooseSource(source === "jobs" ? "targets" : "jobs"),
     zoomBy: (factor) => setZoom(zoom * factor),
     zoomReset: () => setZoom(1),
   };
   // Commands, so every action appears in the command bar and the Actions surface and can be
   // rebound - a private keydown table would give none of that. The single-letter keys are bound on
-  // THIS surface's root rather than as global chords (the diff surface's refinement of the graph
-  // explorer's global GRAPH_KEYMAP): a bare "j" must not step through a plan while someone is
+  // THIS view's root rather than as global chords (the diff surface's refinement of the graph
+  // explorer's global GRAPH_KEYMAP): a bare "j" must not step through a list while someone is
   // typing in another surface. The keydown goes to the mount it happened IN, not to the focused
   // one - a keystroke belongs to the pane it was typed into.
   const detachCommands = attachCommands(commands);
@@ -1675,7 +1774,7 @@ export function activate(host: HTMLElement): PlanInstance {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
       // Never eat a keystroke meant for a field: the target override is one, and "r" typed into it
-      // would otherwise reload the plan instead of naming a target.
+      // would otherwise reload instead of naming a target.
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
       const run = byKey.get(e.key);
       if (!run) return;
@@ -1693,7 +1792,7 @@ export function activate(host: HTMLElement): PlanInstance {
 
   return {
     // setVisible is the console's own contract (page.ts): true when THIS pane is the focused one in
-    // the active tab, false when it is backgrounded. A backgrounded plan stops polling - a plan
+    // the active tab, false when it is backgrounded. A backgrounded view stops polling - work
     // nobody is looking at is not a reason to talk to the daemon - and refreshes immediately when it
     // comes back, so what returns to the screen is never the picture from before it was hidden.
     setVisible(v: boolean): void {
@@ -1716,7 +1815,7 @@ export function activate(host: HTMLElement): PlanInstance {
       stopPolling();
       detachCommands();
       controller.abort();
-      // The status bar outlives this surface, so the stepper has to be taken down by hand -
+      // The status bar outlives this view, so the stepper has to be taken down by hand -
       // host.replaceChildren() below cannot reach it.
       unmountZoom();
       host.replaceChildren();

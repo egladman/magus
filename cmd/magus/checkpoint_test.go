@@ -15,11 +15,10 @@ func TestReadCheckpointEnvelopeTakesOnlyThePointers(t *testing.T) {
 	body := `{"hook_event_name":"Stop","session_id":"01a07dab","transcript_path":"/tmp/rollout.jsonl",` +
 		`"last_assistant_message":"the model's closing words"}`
 
-	env := readCheckpointEnvelope(strings.NewReader(body))
+	session, transcript := readCheckpointEnvelope(strings.NewReader(body))
 
-	assert.Equal(t, "01a07dab", env.SessionID)
-	assert.Equal(t, "/tmp/rollout.jsonl", env.TranscriptPath)
-	assert.Equal(t, "Stop", env.HookEventName)
+	assert.Equal(t, "01a07dab", session)
+	assert.Equal(t, "/tmp/rollout.jsonl", transcript)
 }
 
 // Anything that is not a host envelope contributes nothing, and is never an error: this
@@ -33,7 +32,9 @@ func TestReadCheckpointEnvelopeIgnoresWhatItCannotUse(t *testing.T) {
 	}
 	for name, body := range bodies {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, hookEnvelope{}, readCheckpointEnvelope(strings.NewReader(body)))
+			session, transcript := readCheckpointEnvelope(strings.NewReader(body))
+			assert.Empty(t, session)
+			assert.Empty(t, transcript)
 		})
 	}
 }
@@ -41,12 +42,17 @@ func TestReadCheckpointEnvelopeIgnoresWhatItCannotUse(t *testing.T) {
 // The hazard this bound exists for: a caller holding an idle pipe. Waiting on it forever
 // trades two optional pointers for the record the command was invoked to write.
 func TestReadCheckpointEnvelopeGivesUpOnAReaderThatNeverEnds(t *testing.T) {
-	done := make(chan hookEnvelope, 1)
-	go func() { done <- readCheckpointEnvelope(neverEOF{}) }()
+	type pointers struct{ session, transcript string }
+	done := make(chan pointers, 1)
+	go func() {
+		session, transcript := readCheckpointEnvelope(neverEOF{})
+		done <- pointers{session, transcript}
+	}()
 
 	select {
-	case env := <-done:
-		assert.Equal(t, hookEnvelope{}, env)
+	case got := <-done:
+		assert.Empty(t, got.session)
+		assert.Empty(t, got.transcript)
 	case <-time.After(checkpointEnvelopeWait + 5*time.Second):
 		t.Fatal("readCheckpointEnvelope blocked on a reader that never closes")
 	}

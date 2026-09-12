@@ -122,10 +122,10 @@ Review:
 
 Memory and scratch:
 
-| Tool           | Purpose                                                                                                                      |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `magus_memory` | User-owned per-repo memory: list/get/put/delete/verify named entries shared across worktrees                                 |
-| `magus_ledger` | The orchestrating agent's declared lease plan (list/put/register/clear), recorded for humans to see; magus never enforces it |
+| Tool           | Purpose                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `magus_memory` | User-owned per-repo memory: list/get/put/delete/verify named entries shared across worktrees                              |
+| `magus_job`    | The orchestrating agent's declared jobs (list/fork/exec/exit/wait), recorded for humans to see; magus never enforces them |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

@@ -3,6 +3,7 @@ package trail
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
@@ -256,4 +257,42 @@ func TestForSessionFoldsOneHostSessionsTrail(t *testing.T) {
 
 	assert.Zero(t, ForSession(base, "", 100).Commands, "no session id joins nothing")
 	assert.Zero(t, ForSession(t.TempDir(), "s1", 100).Commands, "an absent trail is empty, not an error")
+}
+
+func TestLastAgentActivityReadsTheNewestObservation(t *testing.T) {
+	base := t.TempDir()
+	_, ok := LastAgentActivity(base)
+	assert.False(t, ok, "an empty trail has no activity to report")
+
+	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
+	record(t, base, AgentCommand{Session: "s2", Host: "opencode", Tool: toolRead, Path: "magus.go"})
+
+	got, ok := LastAgentActivity(base)
+	require.True(t, ok)
+	assert.Equal(t, "s2", got.Session)
+	assert.Equal(t, "opencode", got.Host)
+	assert.WithinDuration(t, time.Now(), got.At, time.Minute)
+
+	_, ok = LastAgentActivity(t.TempDir())
+	assert.False(t, ok, "an absent trail is no activity, not an error")
+}
+
+// The observation is found however many other events sit on top of it, and a line
+// carrying no timestamp is not one: clocking it would date the answer to 1970 rather
+// than report that nothing has been observed.
+func TestLastAgentActivityIsNotBoundedByAWindow(t *testing.T) {
+	base := t.TempDir()
+	record(t, base, AgentCommand{Session: "s1", Host: "opencode", Tool: toolShell, Command: "ls"})
+	for range 200 {
+		Append(t.Context(), base, Event{Kind: KindJob, Ts: time.Now().UnixMilli()})
+	}
+
+	got, ok := LastAgentActivity(base)
+	require.True(t, ok, "an observation does not age out because other events were recorded after it")
+	assert.Equal(t, "s1", got.Session)
+
+	stamped := t.TempDir()
+	Append(t.Context(), stamped, Event{Kind: KindAgentCommand, Session: "s1"})
+	_, ok = LastAgentActivity(stamped)
+	assert.False(t, ok, "an observation with no timestamp has no age to report")
 }

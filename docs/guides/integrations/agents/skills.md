@@ -39,7 +39,7 @@ magus agent install .claude/skills          # write to a repo-relative dir; refu
 magus agent install .claude/skills --force  # overwrite after a magus upgrade
 magus agent install .claude/skills --prune  # also remove skills this binary no longer ships
 magus agent install --tar                   # stream a tar of every skill to stdout
-magus agent sample                          # print a whole starter AGENTS.md
+magus agent starter                         # print a whole starter AGENTS.md
 magus doctor                                # are the installed skills current? (per location)
 magus doctor --fix                          # reinstall whatever it reports stale
 ```
@@ -157,7 +157,7 @@ compares the block's stamp against the running binary, and:
 
 So a `--force` reinstall does not dump 80 lines of Markdown at you every time.
 It is a hint, so `MAGUS_HINTS_ENABLED=false` silences it along with the others.
-`magus agent sample` prints the same block inside a whole starter file and is
+`magus agent starter` prints the same block inside a whole starter file and is
 never gated.
 
 There is no `--tar` for the block. Piping it into `tar -xf -` would overwrite

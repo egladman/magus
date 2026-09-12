@@ -25,9 +25,9 @@ func (f fakeCollector) Collect(context.Context) (metricdata.ResourceMetrics, err
 	return f.rm, f.err
 }
 
-type fakeStatus struct{ rep types.StatusReport }
+type fakeStatus struct{ rep types.StatusSnapshot }
 
-func (f fakeStatus) StatusReport(context.Context) types.StatusReport { return f.rep }
+func (f fakeStatus) StatusSnapshot(context.Context) types.StatusSnapshot { return f.rep }
 
 func fixtureRM() metricdata.ResourceMetrics {
 	return metricdata.ResourceMetrics{
@@ -56,7 +56,7 @@ func TestGetMetrics(t *testing.T) {
 
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	stat := fakeStatus{rep: types.StatusReport{Pool: &types.StatusOutput{
+	stat := fakeStatus{rep: types.StatusSnapshot{Pool: &types.StatusOutput{
 		Running: 3, Capacity: 8, Queued: 2,
 	}}}
 	svc := NewService(fakeCollector{rm: fixtureRM()}, stat,

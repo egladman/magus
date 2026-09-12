@@ -143,7 +143,7 @@ magus\project({
         // NOT exclusive, and it never actually was. The engine released an exclusive
         // step's lease for the whole of its ctx.needs fan-out, and this target's body IS
         // that fan-out, so the flag bought nothing for as long as it has been here. Once
-        // the engine started honouring it (see YieldRunIsolation), the cost arrived
+        // the engine started honouring it (see cache.runIsolation), the cost arrived
         // without the benefit: every other ci member reaches generate, so all of them
         // serialized behind its entire codegen chain with nothing of their own to report,
         // the built-in 15m stall window ran out, and the watchdog took the invocation.
@@ -209,6 +209,12 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
+        // The badge renders from the per-platform records under coverage/, which a
+        // person refreshes on a developer machine, so any Go edit puts it out of date
+        // and no amount of work on the branch can settle it. It stayed in ci because
+        // the badge does have to be refreshed before a release; advisory is what stops
+        // a branch paying for that verdict three times over.
+        "coverage-badge": {"advisory": "renders from a hand-refreshed per-platform record, so a branch is stale by design"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -1064,6 +1070,17 @@ export fun mcp_tools_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/handler/mcp"]);
 }
 
+// Regenerates the published job schemas (internal/job/gen/*.schema.json) from the
+// structs that decode a job declaration and a holder's result.
+//
+// The schemas were hand-written beside those structs, so every field was declared twice
+// and a test could only report that the two copies had already diverged.
+export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(types_generate);
+    ctx.writesFiles("internal/job/gen/*.json");
+    proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
+}
+
 // Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
 // the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module
 // host declarations (internal/spellruntime/gen/decls), all driven by the
@@ -1103,7 +1120,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // AGENTS.md is absent here because magus does not write that file at all. It is
 // hand-authored prose, the magus block inside it is pasted by a human from
-// `magus agent sample --section`, and `magus doctor` grades that block's
+// `magus agent starter --section`, and `magus doctor` grades that block's
 // stamp without touching it. An install call here would rewrite the block on
 // every generate, making AGENTS.md a hybrid file at odds with the Markdown
 // formatter.
@@ -2522,21 +2539,15 @@ fun coverage_native_record(tables: {str: [str]}) > void !> any {
                    "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]);
 }
 
-// coverage_summaries reads every committed record, refusing one that names a commit this
-// checkout does not contain: a summary carried in from a branch nobody merged measures a
-// tree that exists nowhere.
+// coverage_summaries reads every committed record. A record's commit is provenance, not
+// a gate: this repo squash-merges, so a record measured on a branch names a commit main
+// never contains, and refusing it turned every darwin checkout of main red (#196). What
+// keeps a foreign record honest is the per-file digest in mergeSummaries, which credits
+// nothing to a file whose source differs from this tree.
 fun coverage_summaries() > [any] !> any {
     var records = mut [<any>];
     foreach (p in fs\glob(COVERAGE_DIR + "/*.json")) {
-        final rec = cov\decodeSummary(p.value, text: fs\readFile(p.value));
-        try {
-            vcs\cmd(["merge-base", "--is-ancestor", "{rec["commit"]}", "HEAD"], {"quiet": true});
-        } catch (e) {
-            throw "coverage-badge: " + p.value + " was measured at {rec["commit"]}, which this "
-                + "checkout does not contain. Re-measure that platform here with "
-                + "`magus run coverage-badge:rw .`, or drop the record.";
-        }
-        records.append(rec);
+        records.append(cov\decodeSummary(p.value, text: fs\readFile(p.value)));
     }
     return records;
 }

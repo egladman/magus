@@ -61,7 +61,6 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `GET /api/v1/diff/branches`        | Other branches changing the same files                                                                                             |
 | `POST /api/v1/diff/run`            | Run a target against the working tree; the one MUTATING route in this table, bounded to what the magusfile declares                |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
-| `GET /api/v1/ledger`               | The lease plan an agent [declared](../guides/integrations/agents/leases.md); magus enforces none of it                             |
 | `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
 | `POST /api/v1/attention`           | Dispose one request (`{"id","reason"}`). Nothing else closes one                                                                   |
 
@@ -102,7 +101,7 @@ the same override `magus query output --open --url` takes as a flag
 (`cmd/magus/live.go`, `cmd/magus/query.go`). The tool Connect service is deliberately
 excluded even though it is read-only: it execs the argv a workspace's spells
 declare, which is not something a link handed to a phone should reach. `graph`,
-`diff`, `diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job
+`diff`, `diff/patch`, `diff/session`, `plan`, `/mcp` and the job
 service are deliberately loopback-only too: a working diff is unreviewed
 source, a plan names every target in the workspace, and a share link is a URL
 handed to a phone. A leaked share link reaches the small set and nothing else.
@@ -149,16 +148,17 @@ started twice) and returns a metadata snapshot - the job's last run and the
 current size of what it maintains. The service is mounted behind the same loopback
 bind and bearer token as everything else here; it is never served unauthenticated.
 
-Two doors reach it. In the console, the **Activity** surface carries a
-maintenance control above the trail: it lists every registered job with its
-running state, last run and target size (`ListJobs`), and each row runs that job
-(`RunJob`). It sits on Activity because a job's result is a trail entry - what a
-job did is read on that surface, so what starts it belongs there. From a
-terminal, `magus server job <name>` submits the same jobs down the same path. The
-control exists because the console is where the prompt to run one already fires:
-the daemon-storage notification watches the cache figure from inside the console,
-and used to end by naming a shell command, so the surface that noticed the
-problem could not act on it.
+Two doors reach it. In the console, the **Jobs** view lists them, because a job
+is one kind of thing however it was created: the daemon's own maintenance jobs
+and the ones a session was handed appear in one list, separated by a holder
+column reading `daemon` or `session`. A maintenance row carries its running
+state, last run and target size (`ListJobs`) and runs that job (`RunJob`). From
+a terminal, `magus server job <name>` submits the same jobs down the same path,
+and `magus ls jobs` prints the same two sets. The view exists because the
+console is where the prompt to run one already fires: the daemon-storage
+notification watches the cache figure from inside the console, and used to end
+by naming a shell command, so the surface that noticed the problem could not act
+on it.
 
 ## How it is secured
 

@@ -583,6 +583,12 @@ type AgentEvent struct {
 	Exit        int  `json:"exit,omitempty"`
 	Denied      bool `json:"denied,omitempty"`
 	Interrupted bool `json:"interrupted,omitempty"`
+	// NextServed are the hint ids this call's RESULT served, and NextFollowed the ids
+	// this call's COMMAND took up from a result served before it. Both are joined at
+	// load time from the served-next journal; nothing a host reports fills either, and
+	// no other record of what a result carried exists.
+	NextServed   []string `json:"next_served,omitempty"`
+	NextFollowed []string `json:"next_followed,omitempty"`
 }
 
 // LoadEvent is one event with the session it belongs to, as [LoadEvents] takes it.
@@ -623,7 +629,7 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 	writers := map[string]*Writer{}
 	for _, ev := range events {
 		key := eventKey(ev.Session, ev.Event)
-		if seen[key] {
+		if stored, ok := seen[key]; ok && !addsNext(stored, ev.Event) {
 			result.Deduped++
 			continue
 		}
@@ -639,20 +645,40 @@ func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult,
 		if err := w.Append(KindAgentEvent, ev.Event); err != nil {
 			return result, err
 		}
-		seen[key] = true
+		seen[key] = ev.Event
 		result.Loaded++
 		result.ByKind[ev.Event.Kind]++
 	}
 	return result, nil
 }
 
-// loadedKeys is the dedup set: the eventKey of every event the store already holds.
-func loadedKeys(fold Fold) map[string]bool {
-	seen := make(map[string]bool)
+// loadedKeys is the dedup set: every event the store already holds, by eventKey.
+func loadedKeys(fold Fold) map[string]AgentEvent {
+	seen := make(map[string]AgentEvent)
 	for session, ev := range EachAgentEvent(fold) {
-		seen[eventKey(session, ev)] = true
+		seen[eventKey(session, ev)] = ev
 	}
 	return seen
+}
+
+// addsNext reports whether next carries a hint id stored does not, which is the one
+// reason to re-append an event the store already holds.
+//
+// A transcript loaded before its journal lines existed stores the call with no ids on
+// it, and the ids are the only record of what a result served. Without this the stamp
+// is one-shot and unrecoverable: every later journal line about that call would be
+// permanently uncountable.
+func addsNext(stored, next AgentEvent) bool {
+	return !subsetOf(next.NextServed, stored.NextServed) || !subsetOf(next.NextFollowed, stored.NextFollowed)
+}
+
+func subsetOf(ids, of []string) bool {
+	for _, id := range ids {
+		if !slices.Contains(of, id) {
+			return false
+		}
+	}
+	return true
 }
 
 // eventKey is the identity a load dedups on: (session, host, kind, ref).
@@ -663,8 +689,15 @@ func eventKey(session string, ev AgentEvent) string {
 // EachAgentEvent yields every loaded event in the fold with its session, in fold order.
 // A payload this build cannot decode is skipped, the tolerance every reader of the
 // store applies to a record it does not understand.
+//
+// One yield per eventKey, at its FIRST position, carrying the hint ids every record of
+// it names. The store is append-only, so a re-load that recovered ids a transcript was
+// loaded too early to carry writes a second record of the same call; folding them here
+// is what keeps a repaired store from counting that call twice.
 func EachAgentEvent(fold Fold) iter.Seq2[string, AgentEvent] {
 	return func(yield func(string, AgentEvent) bool) {
+		merged := map[string]LoadEvent{}
+		var order []string
 		for _, rec := range fold.Records {
 			if rec.Kind != KindAgentEvent {
 				continue
@@ -673,11 +706,32 @@ func EachAgentEvent(fold Fold) iter.Seq2[string, AgentEvent] {
 			if json.Unmarshal(rec.Payload, &ev) != nil {
 				continue
 			}
-			if !yield(rec.Session, ev) {
+			key := eventKey(rec.Session, ev)
+			prev, dup := merged[key]
+			if !dup {
+				merged[key], order = LoadEvent{Session: rec.Session, Event: ev}, append(order, key)
+				continue
+			}
+			prev.Event.NextServed = mergeIDs(prev.Event.NextServed, ev.NextServed)
+			prev.Event.NextFollowed = mergeIDs(prev.Event.NextFollowed, ev.NextFollowed)
+			merged[key] = prev
+		}
+		for _, key := range order {
+			if !yield(merged[key].Session, merged[key].Event) {
 				return
 			}
 		}
 	}
+}
+
+// mergeIDs is the union of two hint id lists, order preserved.
+func mergeIDs(into, from []string) []string {
+	for _, id := range from {
+		if !slices.Contains(into, id) {
+			into = append(into, id)
+		}
+	}
+	return into
 }
 
 // AgentEvents returns the loaded events for one session, in the order the fold

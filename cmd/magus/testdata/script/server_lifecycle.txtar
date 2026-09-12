@@ -21,23 +21,23 @@
 # -h, asserted further down, is the way to ask "what can I do here" and exits 0.
 ! exec magus server
 stderr 'target required'
-stderr 'usage: magus server <start\|stop\|reload\|job> \[flags\]'
+stderr 'usage: magus server <start\|stop\|status\|reload> \[flags\]'
 stderr 'start   start a persistent daemon'
 stderr 'stop    send a graceful shutdown request'
 stderr 'reload  re-read configuration without restarting'
-stderr 'job     submit a background maintenance job'
-stderr 'Use `magus status` to inspect daemon pool state'
+stderr 'status  is the daemon up, and where do I reach it'
+stderr '`magus status` is this workspace and this machine'
 
 exec magus server -h
-stderr 'usage: magus server <start\|stop\|reload\|job> \[flags\]'
+stderr 'usage: magus server <start\|stop\|status\|reload> \[flags\]'
 
-# `status` looks like a plausible target - it is not one, it is a top-level
-# command. The error is unusually good: it names the three real targets AND
-# redirects to the command the user probably meant. Both halves are the
-# contract worth pinning; a plain "unknown target" would still be correct
-# but would send the user hunting for `magus status` on their own.
+# `status` IS a target, and with no daemon it fails loudly rather than printing
+# an empty report: a script chaining on it and a person who meant `magus status`
+# both need that said out loud. The pointer to the other verb is the second half
+# of the contract, because the two are the pair people confuse.
 ! exec magus server status
-stderr 'unknown target "status" \(want start, stop, reload, or job\); use `magus status` to inspect daemon state'
+stderr 'no daemon is running'
+stderr 'still reports this workspace and this machine'
 
 # `server stop` with no daemon running must fail loudly rather than
 # silently succeed - a silent success would hide that the developer's
@@ -60,25 +60,25 @@ stderr 'usage: magus server start \[--foreground\] \[flags\]'
 stderr 'auto-backgrounds'
 stderr '\-foreground'
 
-# `server job` lists the known jobs when called bare - this doubles as its
-# own help text, and as the listing the "unknown job" error below points
+# `job run` lists the daemon's own jobs when called bare - this doubles as its
+# own help text, and as the listing the "no job named" error below points
 # back to.
-exec magus server job
-stderr 'usage: magus server job <name>'
+exec magus job run
+stderr 'usage: magus job run <name>'
 stderr 'sync-graph'
 stderr 'rotate-logs'
 stderr 'clear-cache'
 
-! exec magus server job badname
-stderr 'unknown job "badname"; run `magus server job` to list jobs'
+! exec magus job run badname
+stderr 'no job named "badname"; run `magus job run` to list them'
 
 # A real job name against no daemon is a documented no-op (so a VCS hook
 # can call it unconditionally) rather than an error - it exits 0 with no
 # output at all.
-exec magus server job sync-graph
+exec magus job run sync-graph
 ! stdout .
 ! stderr .
-exec magus server job clear-cache
+exec magus job run clear-cache
 ! stdout .
 ! stderr .
 

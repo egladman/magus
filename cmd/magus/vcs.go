@@ -559,7 +559,7 @@ func vcsCheckpointUsage(w io.Writer) {
 	fmt.Fprintln(w, "captures the uncommitted work, tracked edits and untracked files alike, and")
 	fmt.Fprintln(w, "prints a handle that restores it. The working copy is untouched either way.")
 	fmt.Fprintln(w, "On git and Mercurial a capture is dropped at 30 days, by the next preserve")
-	fmt.Fprintln(w, "and by the daemon's `"+hint.ServerJob.With("prune-preserved")+"`. Without a daemon")
+	fmt.Fprintln(w, "and by the daemon's `"+hint.JobRun.With("prune-preserved")+"`. Without a daemon")
 	fmt.Fprintln(w, "that job is a no-op; run `magus server prune-preserved` instead. On Sapling a")
 	fmt.Fprintln(w, "capture is a hidden commit no Sapling command can drop, so it stays until you")
 	fmt.Fprintln(w, "remove it. Jujutsu mints nothing, so nothing accumulates.")

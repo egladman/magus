@@ -31,16 +31,38 @@ type Command struct {
 
 func cmd(tokens ...string) Command { return Command{tokens: tokens} }
 
-// String renders the bare invocation, e.g. "magus query output".
-func (c Command) String() string { return "magus " + strings.Join(c.tokens, " ") }
+// String renders the bare invocation, e.g. "magus query output". The binary is
+// spelled as this process was invoked (see BinaryName), so a hint copied out of a
+// worktree runs the binary that printed it.
+func (c Command) String() string { return c.StringAs(BinaryName()) }
 
 // With renders the invocation followed by trailing args, e.g.
 // QueryOutput.With(ref, "--open") => "magus query output <ref> --open".
-func (c Command) With(args ...string) string {
+func (c Command) With(args ...string) string { return c.WithAs(BinaryName(), args...) }
+
+// StringAs renders the bare invocation spelled with bin instead of this process's
+// own invocation. For a renderer whose reader is not this process (a doc committed
+// to the repo, generated once and read by whoever checks it out), the live
+// BinaryName would make the file's content depend on how it happened to be built.
+func (c Command) StringAs(bin string) string { return bin + " " + strings.Join(c.tokens, " ") }
+
+// WithAs is StringAs followed by trailing args.
+func (c Command) WithAs(bin string, args ...string) string {
 	if len(args) == 0 {
-		return c.String()
+		return c.StringAs(bin)
 	}
-	return c.String() + " " + strings.Join(args, " ")
+	return c.StringAs(bin) + " " + strings.Join(args, " ")
+}
+
+// Argv renders the invocation as an argument vector, args unquoted: the form a caller
+// execs rather than pastes. String is the shell spelling of the same command, so an
+// argument needing quotes differs between the two. argv[0] is [BinaryName], so it
+// follows how this process was invoked.
+func (c Command) Argv(args ...string) []string {
+	argv := make([]string, 0, 1+len(c.tokens)+len(args))
+	argv = append(argv, BinaryName())
+	argv = append(argv, c.tokens...)
+	return append(argv, args...)
 }
 
 // Head is the top-level subcommand token (e.g. "query" for "query output"), the
@@ -65,7 +87,7 @@ var (
 	GraphDiff         = cmd("graph", "diff")
 	ServerStart       = cmd("server", "start")
 	ServerStop        = cmd("server", "stop")
-	ServerJob         = cmd("server", "job")
+	ServerStatus      = cmd("server", "status")
 	ServerReload      = cmd("server", "reload")
 	Status            = cmd("status")
 	Watch             = cmd("watch")
@@ -81,6 +103,7 @@ var (
 	Path              = cmd("path")
 	Diff              = cmd("diff")
 	Init              = cmd("init")
+	Clean             = cmd("clean")
 	Doctor            = cmd("doctor")
 	Where             = cmd("where")
 	X                 = cmd("x")
@@ -90,15 +113,19 @@ var (
 	MemoryLs          = cmd("memory", "ls")
 	MemoryPut         = cmd("memory", "put")
 	MemoryVerify      = cmd("memory", "verify")
-	Ledger            = cmd("ledger")
-	LedgerBrief       = cmd("ledger", "brief")
+	LsJobs            = cmd("ls", "jobs")
+	DescribeJob       = cmd("describe", "job")
+	JobFork           = cmd("job", "fork")
+	JobExec           = cmd("job", "exec")
+	JobExit           = cmd("job", "exit")
+	JobWait           = cmd("job", "wait")
+	JobRun            = cmd("job", "run")
 	NotesLs           = cmd("notes", "ls")
 	NotesGet          = cmd("notes", "get")
 	NotesEdit         = cmd("notes", "edit")
 	Session           = cmd("session")
 	SessionLoad       = cmd("session", "load")
 	SessionShow       = cmd("session", "show")
-	SessionLease      = cmd("session", "lease")
 	SessionAttention  = cmd("session", "attention")
 	SessionDispose    = cmd("session", "dispose")
 	SessionNotify     = cmd("session", "notify")
@@ -107,7 +134,7 @@ var (
 	VCSResolve        = cmd("vcs", "resolve")
 	VCSCheckpoint     = cmd("vcs", "checkpoint")
 	AgentInstall      = cmd("agent", "install")
-	AgentSample       = cmd("agent", "sample")
+	AgentStarter      = cmd("agent", "starter")
 	ConfigView        = cmd("config", "view")
 	ConfigToken       = cmd("config", "token")
 	ConfigTokenPrint  = cmd("config", "token", "print")
@@ -131,12 +158,12 @@ var (
 // routed on it.
 var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
-	GraphDiff, ServerStart, ServerStop, ServerJob, ServerReload, Status, Watch, Affected,
+	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, Explain, Path, Diff, Init, Doctor, Where, X, Ls, LsTargets, Refs,
-	MemoryLs, MemoryPut, MemoryVerify, Ledger, LedgerBrief, NotesLs, NotesGet, NotesEdit,
-	Session, SessionLoad, SessionShow, SessionLease, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
-	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentSample,
+	DescribeMCPTools, DescribeJob, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
+	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, NotesLs, NotesGet, NotesEdit,
+	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
+	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,
 	ConfigView, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,

@@ -11,16 +11,17 @@ workflows it loads on demand, and `AGENTS.md` for guidance that is always on.
 Its hook events and replies match Claude Code's, so nothing here needs a script of
 its own: one wiring file points at the same shipped templates.
 
-| what            | where                                                    |
-| --------------- | -------------------------------------------------------- |
-| skills          | `.agents/skills/`                                        |
-| always-on rules | `AGENTS.md` (you paste the block; magus never writes it) |
-| guard wiring    | `~/.codex/hooks.json`, `PreToolUse`                      |
-| command surface | deny and advise both reach the model                     |
-| file surface    | deny and advise both reach the model                     |
-| checkpoint      | `Stop`                                                   |
-| rehydration     | `SessionStart` (`compact`)                               |
-| MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)             |
+| what             | where                                                                 |
+| ---------------- | --------------------------------------------------------------------- |
+| skills           | `.agents/skills/`                                                     |
+| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)              |
+| guard wiring     | `~/.codex/hooks.json`, `PreToolUse`                                   |
+| command surface  | deny and advise both reach the model                                  |
+| file surface     | deny and advise both reach the model                                  |
+| MCP call surface | not wired: no vendored evidence `PreToolUse` fires on one (see below) |
+| checkpoint       | `Stop`                                                                |
+| rehydration      | `SessionStart` (`compact`)                                            |
+| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                          |
 
 ## Skills
 
@@ -107,7 +108,7 @@ pointing at wherever you put your copies of the templates:
           {
             "type": "command",
             "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
-            "statusMessage": "magus: handing this checkout back"
+            "statusMessage": "magus: restating this checkout's rules"
           }
         ]
       }
@@ -179,6 +180,13 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do - 
 
 ## Coverage and limits
 
+- **The MCP call surface is not wired.** OpenAI's vendored hooks schema documents
+  `PreToolUse` firing on `Bash` and the edit tools by name; it says nothing about
+  an MCP tool call, unlike Claude Code's event stream, which carries one directly
+  and is what [`magus-guard-command.sh`](claude-code.md#mcp-tool-calls) now
+  forwards under `HOST_EVENT_RAW`. Wiring a third matcher here on evidence this
+  thin would compound the uncertainty already open for `apply_patch`/`Edit`/`Write`
+  below, not resolve it.
 - Hooks are not available on Windows, and `[features] hooks = false` turns the
   whole surface off. A repo-local `.codex/hooks.json` is also inert until you
   trust the project layer, and every non-managed hook wants a per-hash review

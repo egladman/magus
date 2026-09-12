@@ -127,7 +127,7 @@ magus block for you to paste in. magus does not write that file - it is yours,
 and it stays quiet once your copy is current. For a whole starter file to own:
 
 ```sh
-magus agent sample                      # prints an AGENTS.md to adapt; never writes
+magus agent starter                     # prints an AGENTS.md to adapt; never writes
 ```
 
 Any destination your shell can reach works via the tar form, which is also how

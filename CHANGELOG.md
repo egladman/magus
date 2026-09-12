@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A person declares a lease row from the terminal: `magus ledger register`.** The verb
+  takes the one-row case as flags (`--goal`, `--parent`, `--owned`, `--forbidden`,
+  `--focus`, `--validation`, `--tier`, `--read-only`) or a whole record on `--stdin`, and
+  `--schema` prints what that record must satisfy. It reverses a documented decision that
+  kept writing off the CLI on the ground that the ledger has a single author: one author
+  per ROW is the true version of that rule, the store now enforces it, and what the old
+  rule actually bought was a capability agents had and people did not. Both channels reach
+  one store and one set of rules.
+- **A lease row and a worker report carry a `schema_version`, and a version magus does not
+  know is rejected by name.** Strict decoding plus a closed field set had exactly one
+  compatible direction: a harness a release ahead would have had its work rejected field by
+  field, with nothing in the message saying why. The version is read before anything else,
+  so the answer is "this magus accepts version 1" rather than "unknown member". Rows record
+  `registered_by`, the session and host that declared them.
+
 - **A run that cannot be scheduled is refused before it starts, and a pool that cannot free
   a slot is refused within seconds.** Two targets inside one composed step, one declaring it
   writes files the other declares it reads, with no `ctx.needs` path between them, is a plan
@@ -207,9 +222,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   time, the same rate as no hint at all, while re-running the same failing target won 84%.
   Each id exists so a suggestion nobody takes is deleted from the data rather than
   reworded.
+- **A write that opens a second unit of work now draws an advisory.** When an agent's write
+  lands in a project that neither depends on, nor is depended on by, any project the session
+  has already written to, the guard names both sides and suggests handing the new project to
+  its own subagent or session, pointing at the magus-multi-agent skill, which partitions work
+  by write set, and at the `magus path` that says whether the two connect at all. The fact it
+  reports is a graph fact read in both directions, so a project the session's work already
+  reaches stays quiet, and it advises rather than denies because nobody declared this
+  boundary: a write inside the paths a lease owns is in scope by declaration and is skipped
+  outright. A project joins the session's set the first time it is written whatever the
+  verdict, so the advisory speaks once per unrelated project rather than once per write.
+- **`magus session ls` and `magus session --brief` clock the published prompt-cache windows.**
+  Both now print how long it has been since a tool call last ran past the guard in this
+  checkout, and when each provider's published window closes for it: Anthropic's 5 minute
+  default and 1 hour opt-in, OpenAI's in-memory retention of 5 minutes to 1 hour and extended
+  retention of 30 minutes to 24 hours, each refreshed whenever the cache is hit, and Google
+  Gemini, which publishes a caller-set TTL for explicit caches and no window at all for
+  implicit ones, so the row says so instead of showing a clock. Every provider is listed
+  because which one a host called, and which window it bought, are invisible from this side,
+  and a range is shown as a range because that is what the provider claims. Nothing is ever
+  reported as expired: magus sees hook timestamps, never the provider's cache, so the brief
+  says only that a resume past a closed window re-pays the prompt. `-o json` carries the same
+  answer as a `prompt_cache` field.
+- **`magus ledger brief` derives the boundary from the workspace, and `magus ledger accept`
+  grades what a worker returns.** A brief used to carry only what the row's author
+  remembered to write down. It now adds the projects the owned paths reach, the declared
+  output globs that land inside them, the paths a sibling lease is holding, the build inputs
+  and workspace configuration that have a single owner, and the projects that change
+  alongside the leased ones without declaring a dependency, which is a warning about hidden
+  coupling rather than a path the worker is refused. It also refuses to brief a row whose
+  validation is the `ci` gate, or a target that chains to one, because the gate runs once in
+  the orchestrator's tree after every unit lands. `magus ledger accept <lease-id>` reads the
+  worker's report as JSON on stdin and checks what is mechanical: every changed path inside
+  the declared owned paths, no changed paths at all for a read-only lease, a validation the
+  report claims passed, and an output ref that still resolves in this workspace's store. A
+  row that passes is recorded `pass`; a rejection names every rule that failed and exits
+  non-zero, so a shell step in an integration sequence can branch on it. `magus ledger accept
+  --schema` prints the JSON schema a report must satisfy, which a host can hand a worker as
+  its response format. Whether the work is good stays the orchestrator's reading.
+- **The magus-multi-agent skill carries a coalescing rule and the typed brief and report.**
+  Disjoint write sets license parallelism without requiring it, and every worker pays a fixed
+  context load before it reads a line of the diff, so the skill now says to partition by
+  write set and then merge what the write sets allow: a depends-on chain is one worker in
+  sequence, small disjoint units inside one project merge, a spawn is warranted only when
+  more than one independent unit survives that merge, and idle root time is filled from the
+  merged pool rather than by cutting a unit finer. It renders a worker prompt with `magus
+  ledger brief` instead of typing one, so two renders of a row are byte-identical, and grades
+  the answer with `magus ledger accept` before reading it, replacing the four facts it used
+  to demand in prose. Skill version 65 grades every installed tree stale, so a reinstall
+  restamps it.
+- **`magus doctor` says whether a checkout's bound lease is actually being enforced.** An
+  unknown id, a terminal row (`pass`, `fail`, `no_return`), and a live row with no
+  registered base all render as an ordinary advisory in the guard's own verdict,
+  indistinguishable from a session these rules genuinely bind. The **lease-enforcing**
+  check reads the same row the guard would and reports which of those this checkout is in:
+  no lease bound, bound to an id nothing declares, bound to a terminal row, bound to a live
+  row with no registered base, or live and enforcing.
+- **`magus session hints` reports how often magus's own suggestions are taken.** Every
+  `next` breadcrumb a result carries is served with a stable id, and a call that serves one
+  is journaled beside the guard's advisory markers; `magus session load` joins that journal
+  onto the loaded transcript and stamps each call with the ids its result served and the
+  ids its own command took up. The report counts served, followed, rejected and
+  reflex-repeated servings per id, against the sessions this repository has loaded, and
+  names the uptake floor below which a hint is spending context on advice nobody takes. It
+  reports and changes nothing; which hints to keep is a decision for a person.
+- **Claude Code's MCP tool calls reach the guard.** A fourth `PreToolUse` entry, matching
+  `mcp__magus__.*` and wired with `HOST_EVENT_RAW=1`, forwards the whole call envelope
+  instead of extracting `tool_input.command`, since an MCP call carries a tool name and a
+  params object rather than a shell command. The channel is transport-complete and
+  rule-empty today: every call passes, because no rule yet judges an MCP tool name, not
+  because the wiring is silent. The next rule this surface grows reaches the model with no
+  new host wiring.
 
 ### Fixed
 
+- **A target dispatched through `ctx.needs` no longer waits for the run-isolation gate its
+  own ancestor holds.** One invocation shares that gate: an `exclusive` step takes all of
+  it, every other step takes a seat. Work admitted beneath a step now inherits whatever
+  lease that step holds instead of asking for one of its own, in both directions: an
+  exclusive request under a shared ancestor included, which is the case that wedged. A
+  composed target's skip-cache gate reached it first: dispatched from inside a step holding
+  the shared side, it asked for the exclusive side, waited for a release that could only
+  come once it returned, and parked every later shared request behind it. The run then held
+  every project lock with no step executing, no child process alive and `magus status`
+  reporting nothing running, twice on the same tree for nineteen and twenty-one minutes.
+  What inheriting gives up is nothing the policy promised: `exclusive` excludes BATCH peers,
+  and the ancestor's admission already excludes every one of them. Where a wedge is reached
+  anyway the gate is now refused rather than waited out, naming every holder, what each was
+  parked on, and everything queued behind them (MGS3015); the wait is cancellable, so
+  Ctrl-C, a failing sibling and the stall watchdog all reach a parked step. Waiting for an
+  upstream target in the same run no longer beats the invocation heartbeat, because a step
+  that is moving beats for itself and a batch where every goroutine is parked in that wait
+  was telling the watchdog it was fine.
+- **A committed coverage record is no longer refused because the commit it names is not an
+  ancestor of the checkout.** Every record is measured on a branch, and a squash merge
+  rewrites that branch's commits, so the rule turned the badge red on every checkout of
+  main the moment a record landed through a pull request. The record's commit is kept as
+  provenance only. What keeps a record honest is the per-file digest beside it: a file
+  whose source differs from the tree is credited nothing, so a record from anywhere can
+  lower the figure and never raise it.
 - **One target's declared timeout no longer becomes the timeout of the work its siblings
   share.** A target reached through `ctx.needs` runs once and is awaited by every target
   that needs it, so whichever caller arrived first supplied the context the work ran under.
@@ -252,6 +363,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`magus ledger accept` grades evidence, not what the report claims.** The `passed` field
+  is GONE from the report schema: the outcome is read from the stored run behind the
+  `output_ref`, and that ref must resolve to a run of the row's own `validation` (compared
+  as project, target and spell filter, so spelling does not decide it). An empty change set
+  on a row that is not `read_only` is rejected, unknown members are rejected, and a session
+  bound to a lease cannot grade any row, its own included. The report is read only with
+  `--stdin`, and the two failing statuses now separate: 2 for a report that could not be
+  decoded, 1 for one that was read and rejected. Behind it: on 2026-09-11 a report with no
+  changed paths, an output ref from an unrelated codegen run, `passed: true`, and two
+  invented fields was accepted and recorded `pass`.
+- **The lease store refuses a write to somebody else's row, and binding is one-way.** A
+  session acting under a lease may register the base it landed on, shrink its own owned
+  paths (which is how it releases one), end its own row in `fail` or `no_return`, and
+  declare a child of itself inside its own paths. Widening a lane, rewriting the plan,
+  clearing the book and accepting a row are refused by name, with the remedy and the actor
+  in the text. The rule lives in the store, so the CLI, the `magus_ledger` tool and
+  `magus\ledger` all carry it; the guard's own denial text used to read as an invitation to
+  widen owned paths with the tool, and nothing checked who was running it.
+  `magus session lease` on a checkout already bound to a different lease is refused for the
+  same reason, and `clear` now archives the rows it drops to a timestamped file beside the
+  ledger instead of forgetting them.
+- **`magus ledger brief` carries commands, not rules.** The rules and skills blocks are
+  gone, along with the workspace footer template that held them
+  (`docs/guides/integrations/agents/brief.md.tmpl`); the record's `footer` string is
+  replaced by `bootstrap`, a list of `{run, why}`. Measured over six workers: a brief that
+  said in so many words never to stash did not stop two attempts, and the guard's denial
+  did. What the guard can say at the moment a command meets it does not need saying twice.
+- **An ambiguous output ref names the count and three examples.** It listed every candidate
+  on one line, which was 57 ids in the case that prompted this.
 - **The Cursor hook schemas come from Cursor's own validator.** Cursor publishes no schema for
   `.cursor/hooks.json`, but its shipped hooks bundle validates the file and every event's stdout
   before a hook fires, so the vendored Cursor schemas are now transcribed from that code (read
@@ -396,6 +536,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   every open pull request at once. Watching costs a wake-up per completion and buys
   nothing: green changes nothing, because the human merges. Reading a result that already
   exists is untouched.
+- **An unknown key in `magus.yaml` fails the load and names the file it is in.** It used to
+  be a warning that left the command at exit 0, and `-q`/`--quiet` and `-s`/`--silent`
+  dropped it entirely, so a setting magus would never honor looked exactly like one it had
+  applied. Every tier decodes the same way now, user-global, workspace and cwd alike, which
+  means a user-global config carrying a stale key stops every magus command on that machine
+  until the key is moved or removed. That is the point: the alternative is a machine running
+  under settings its owner believes are in force. A second YAML document in one file is
+  rejected for the same reason, since the decoder reads the first and would drop the rest
+  without a word, while an empty or comment-only file still declares nothing and loads. The
+  old warning referred readers to `magus config validate`, which does not exist; `magus
+  doctor` is the check that grades the config files a workspace resolves. The error reads
+  as `magus.yaml:10: unknown key "enabledd"; did you mean "enabled"?`, one line per key,
+  with the nearest known key at that level offered by the same distance rule magusfile
+  options use, and it is printed plain on stderr rather than through the structured log,
+  which had been escaping every quote and newline into one line.
+- **A wait for an upstream target names both parties in a sentence and repeats less often the
+  longer it runs.** The line was structured fields printed every fifteen seconds, so several
+  readers waiting out one long writer each repeated it at every beat. It now reads as one
+  sentence naming the waiting target and the target it waits for, spelled the way the lines
+  around it spell a step, and it prints at 15s, 30s, 1m, 2m, 4m and so on with the elapsed
+  time; a wait for the per-key cache lock reads the same way. The stall watchdog still hears
+  every beat, so a legitimate long wait is still not a stall and an aborted run still reads
+  as one target waiting on another.
+- **A served `next` breadcrumb is filtered for who it is served to, carries an exec-ready
+  argv, and is journaled.** The role comes from the acting lease's row: unbound (a person or
+  the orchestrator) keeps every entry, a read-only or path-less row is a reviewer and keeps
+  none of the writes, anything else is a worker and keeps only what `next` can prove
+  read-only from the command alone (a bare `run`, a `:rw` charm, a non-dry `affected`, and a
+  VCS mutation all judge as writes). A dropped entry is dropped, never rewritten, so a
+  worker is never handed a narrowed command nobody wrote. Each entry now also carries
+  `argv`, the same command unquoted, so a caller execs it without a shell to parse; text
+  mode prints the command on its own line with the reason indented under it, so a reader
+  copying the line gets the parenthetical with it, and the reason fires once per session
+  while the command prints every time. A hint spells the binary the way this process was
+  actually invoked - `magus` through PATH, `./magus` for a checkout's own binary, an
+  absolute workspace path collapsed to `./magus` - and a binary renamed to something else
+  (a docs example's `magus-bin`) keeps the canonical `magus` spelling rather than rendering
+  a command nobody could run. `next` now rides MCP graph and affected replies the same way
+  it rides the CLI, filtered the same way, so uptake per id is not a fact about which door
+  the reader came through. What was served is journaled per session beside the guard's
+  advisory markers, which is what `magus session hints` reads.
+- **A bound lease cannot rewrite its own row, or read a row it has no boundary for, through
+  any channel.** The CLI, the `magus_ledger` MCP tool and `magus\ledger` all reach one store
+  and one rule (see the ledger entries above); the guard now denies the COMMANDS that would
+  reach it before they even run: `magus session lease <other-id>`, `magus ledger accept`,
+  `magus ledger register`, `op=clear`, and any `put` or `register` naming a row other than
+  the caller's own. A `put` on the caller's own row is denied too, with one exception: a put
+  that only drops entries from its own `owned_paths` passes through, since giving a lane
+  back cannot widen a role and the store already judges whether a particular shrink is
+  legitimate; `op=register` on the caller's own row passes, since recording the base a lease
+  landed on is a procedure the write surface demands. Reading (`op=list`, `magus session
+  lease` with no argument, `magus ledger ls`) is untouched. Every denial names the actor who
+  can move the boundary instead of pointing at the tool a worker might mistake for
+  permission.
+- **A write to the host's own guard wiring is denied under any bound lease, and every guard
+  verdict now carries the lease it was graded under.** `.claude/settings.json` and its
+  hooks, `.cursor/hooks.json`, `.codex/hooks.json` and `.opencode/plugins/` decide whether
+  the guard runs at all from the host's next session start, so an edit there is refused
+  regardless of the lane, even one that happens to contain the file; an unbound session gets
+  a once-per-session advisory instead. `lease` on the verdict names the row a write was
+  graded against: an id the ledger does not declare is now a deny rather than a silent
+  pass-through, and an id naming a terminal row (`pass`, `fail`, `no_return`) prints one
+  notice per session that its rules are inert. A `next` breadcrumb magus itself served is
+  pre-authorized for the exact command it names - no advisory fires and the role-scoped
+  rules stand down - though the workspace-wide denies (a raw language tool, a pipe or
+  redirect of magus's own output, a whole-tree VCS op, a relocated checkout) never yield to
+  it.
 
 ## [v0.4.3] - 2026-09-06
 

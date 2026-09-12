@@ -1,0 +1,216 @@
+.TH MAGUS-JOB 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-job \- Fork a job, take it, return it with its result, and verify that result
+.SH SYNOPSIS
+.B magus
+.RI "job <fork|exec|exit|wait|run> [flags]"
+.SH DESCRIPTION
+Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
+is the grant one holder has on it: its write and read lanes, plus the one check
+it runs.
+.PP
+Two channels write the job store. The magus_job MCP tool is an agent's, this verb
+is a person's, and they reach the same store and the same rules. One author per
+JOB is the property that matters, and the store enforces it: a session holding a
+lease may record the base it landed on, shrink its own write paths, end its own
+job in fail or no_return, and fork a child of itself inside its own paths.
+Everything else, widening a lane and verifying a job included, is refused by name.
+.PP
+Jobs are kept per repository rather than per checkout, so a session forking in one
+worktree and a holder working in another see the same set.
+.PP
+fork declares one job, from flags for the one\-job case or from a JSON record on
+\-\-stdin. It replaces the job it names rather than merging into it, which is the
+difference between a person declaring what a job IS and an agent advancing one
+field of a live one. Every path flag is repeatable or comma\-separated, and an
+empty segment is refused rather than dropped. There is no \-\-state: this declares a
+new job, and one nobody has taken is declared.
+.PP
+exec takes the lease on a job in this checkout. It writes the marker every
+lease\-scoped rule reads, and records the base this tree actually landed on beside
+the checkpoint the job was handed, with the divergence between them as a fact
+rather than a refusal. Two acts under one verb, because splitting them left the
+base unrecorded on every job anybody took by hand.
+.PP
+exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
+reads the same record from any checkout. The run behind the result's output ref is
+resolved in the holder's own checkout and its record filed alongside, because an
+output store belongs to a cache dir and nobody else can reopen it. Do the work
+first, then file the result: it is a record of what happened, not a form to fill
+in while you are still deciding what to do. With no \-\-stdin the job is abandoned
+and recorded no_return, which is not the same as returning it and failing.
+.PP
+wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
+not claims: every changed path inside the declared write paths and outside the
+denied ones, a change set that is not empty on a job that writes, descendants the
+store carries, and a recorded run of that job's own check that passed. There is no
+field for whether the holder thinks it passed. A job that verifies is recorded
+pass. Exit 1 is a status, naming every rule that failed; exit 2 is magus unable to
+answer, which is a result that would not decode, nothing filed and nothing piped
+in, or a job that would not write. Whether the work is GOOD stays the reading of
+whoever forked it.
+.PP
+run submits one of the daemon's own jobs, the housekeeping magus does for itself,
+and returns. It is a no\-op when no persistent daemon is running, so a VCS hook can
+call it unconditionally.
+.PP
+Reading is elsewhere, on the verbs that read everywhere else: magus ls jobs lists
+them and magus describe job prints one job's terms.
+.SS job fork options
+.RS
+.TP
+\fB\-\-check\fR \fI<target> <project> [-- args]\fR
+The one check this job runs, as `<target> <project> [\-\- args]` (the `magus run` is implied)
+.TP
+\fB\-\-checkpoint\fR \fImagus vcs checkpoint -o name\fR
+The working state this job is handed, as `magus vcs checkpoint \-o name` prints it
+.TP
+\fB\-\-deny\-paths\fR \fIstring\fR
+A path inside the lane this job may not write; repeatable or comma\-separated
+.TP
+\fB\-\-depends\-on\fR \fIstring\fR
+A job this one waits on; repeatable or comma\-separated
+.TP
+\fB\-\-goal\fR \fIstring\fR
+The goal and its observable acceptance criteria
+.TP
+\fB\-\-model\fR \fIstring\fR
+The model the work was matched to
+.TP
+\fB\-\-parent\fR \fIstring\fR
+The job this one is forked from
+.TP
+\fB\-\-read\-only\fR
+A job that gathers evidence and writes nothing
+.TP
+\fB\-\-read\-paths\fR \fIstring\fR
+A path whose projects this job may read; repeatable or comma\-separated (additive: the written paths are readable already)
+.TP
+\fB\-\-schema\fR
+Print the JSON schema a job must satisfy, and exit
+.TP
+\fB\-\-stdin\fR
+Read one job as JSON on stdin instead of taking it from flags
+.TP
+\fB\-\-write\-paths\fR \fIstring\fR
+A path this job may write; repeatable or comma\-separated
+.RE
+.SS job exec options
+.RS
+.TP
+\fB\-\-base\fR \fImagus vcs checkpoint -o name\fR
+The base this checkout landed on, as `magus vcs checkpoint \-o name` prints it (default: read from this checkout)
+.RE
+.SS job exit options
+.RS
+.TP
+\fB\-\-schema\fR
+Print the JSON schema a result must satisfy, and exit
+.TP
+\fB\-\-stdin\fR
+Read this job's result from stdin; without it the job is abandoned
+.RE
+.SS job wait options
+.RS
+.TP
+\fB\-\-schema\fR
+Print the JSON schema a result must satisfy, and exit
+.TP
+\fB\-\-stdin\fR
+Read the result from stdin instead of from the job, for one that was never filed
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBfork\fR
+Declare one job, from flags or a JSON record on stdin
+.TP
+\fBexec\fR
+Take the lease on a job here, and record the base this checkout landed on
+.TP
+\fBexit\fR
+Return a job with its result, or abandon it
+.TP
+\fBwait\fR
+Verify the result a job was exited with
+.TP
+\fBrun\fR
+Submit one of the daemon's own jobs and return
+.RE
+.SH EXAMPLES
+\fIDeclare a job\fR
+.PP
+.EX
+magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'
+.EE
+.PP
+\fIDeclare it from a record\fR
+.PP
+.EX
+magus job fork --stdin < job.json
+.EE
+.PP
+\fITake it in this checkout\fR
+.PP
+.EX
+magus job exec session-load/core
+.EE
+.PP
+\fIReturn it with its result\fR
+.PP
+.EX
+magus job exit session-load/core --stdin < result.json
+.EE
+.PP
+\fIVerify what came back\fR
+.PP
+.EX
+magus job wait session-load/core
+.EE
+.PP
+\fIPrint the result schema\fR
+.PP
+.EX
+magus job exit --schema
+.EE
+.PP
+\fISubmit a daemon job\fR
+.PP
+.EX
+magus job run sync-graph
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-events\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-mcp\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

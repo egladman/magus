@@ -31,13 +31,13 @@ func allowLabel(target string) string {
 // the extra mode command.
 //
 // Under a lease the remedy is not a config edit: the boundary is the lease's own
-// owned_paths, declared by the orchestrator, and telling a worker to widen the
+// write paths, declared by the orchestrator, and telling a worker to widen the
 // workspace allow list would be telling it to route around its contract. The lease
 // hint names the lease and hands the decision back to whoever declared the row.
 func denyHint(lease, mode, target string) string {
 	if lease != "" {
 		return fmt.Sprintf("sandbox blocked access to %s: it is outside the paths lease %s was given. "+
-			"Report it to the orchestrator, which can widen the row's owned_paths with the magus_ledger tool; do not edit sandbox.allow yourself.",
+			"Report it to the orchestrator, which can widen the row's write_paths with the magus_job tool; do not edit sandbox.allow yourself.",
 			target, lease)
 	}
 	label := allowLabel(target)

@@ -391,6 +391,22 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.RetryOnVolatile(reason)))
 			}
+			// The same bar again, aimed at the gate rather than at the cache: this one
+			// claims a failure here does not mean the change is wrong, so a composite
+			// reports it and carries on. A bare `true` cannot tell that from a gate
+			// somebody switched off after a bad week.
+			if av, ok := pv.MapGet("advisory"); ok {
+				var reason string
+				if av.IsStr() {
+					reason = strings.TrimSpace(av.AsString())
+				}
+				if reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].advisory needs a reason string saying why a failure here does not mean the change is wrong, e.g. \"renders from a hand-refreshed record, so a branch is stale by design\". "+
+							"If a failure should stop the gate, leave the policy off; running this target by name fails either way", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Advisory(reason)))
+			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
 			}

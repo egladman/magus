@@ -99,6 +99,13 @@ nearest known one. A key that resembles nothing magus knows is reported as one
 this binary may be too old for, with the upgrade command, because a magusfile
 schema key added upstream fails workspace load for every command at once.
 
+An unknown key in `magus.yaml` fails the load and reads the same way, naming the
+file, the line and the nearest known key:
+
+```text
+magus.yaml:9: unknown key "concurrencyy"; did you mean "concurrency"?
+```
+
 ### `tools`: the version window this project requires
 
 ```buzz

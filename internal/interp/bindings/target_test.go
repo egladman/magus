@@ -1,8 +1,10 @@
 package bindings
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,10 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // noopTargets builds a targets map whose callables are never expected to run, so a
@@ -371,6 +375,74 @@ func TestRunBuzzDependencies(t *testing.T) {
 		err := runBuzzDependencies(context.Background(), targets, []string{"go-build"})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "go-build: ")
+	})
+}
+
+// policyWS is a WorkspaceRepository that answers Root() and Get() for one project, so a
+// test can put a per-target policy where the dependency runner reads it. Everything else
+// is the embedded nil interface, so a reader this double has not thought about panics
+// rather than getting a plausible zero value.
+//
+// Get is keyed by workspace-relative path exactly as types.Workspace.Projects is, so a
+// root project answers to "." and nothing else: that key is what the lookup under test
+// builds, and a double that answered any path would hide getting it wrong.
+type policyWS struct {
+	types.WorkspaceRepository
+	root string
+	proj *types.Project
+}
+
+func (w policyWS) Root() string { return w.root }
+
+func (w policyWS) Get(path string) *types.Project {
+	if path == w.proj.Path {
+		return w.proj
+	}
+	return nil
+}
+
+// An advisory member reports and does not fail the composite that needed it, which is
+// the whole point of the policy: the gate stops paying for a verdict it was never going
+// to act on. Only ctx.needs reaches this path, so `magus run <target>` still fails.
+func TestRunBuzzDependenciesAdvisory(t *testing.T) {
+	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, stubErr{} }
+	targets := map[string]vm.Callable{"coverage-badge": failing, "lint": failing}
+	const reason = "renders from a hand-refreshed per-platform record"
+
+	ctxWith := func(pol map[string]types.Target) context.Context {
+		dir := t.TempDir()
+		ws := policyWS{root: dir, proj: &types.Project{Path: ".", Dir: dir, TargetPolicies: pol}}
+		return interp.WithSource(types.WithWorkspace(context.Background(), ws), &interp.Source{Dir: dir})
+	}
+	advisory := map[string]types.Target{"coverage-badge": {Advisory: true, AdvisoryReason: reason}}
+
+	t.Run("a failing advisory member does not fail the composite", func(t *testing.T) {
+		require.NoError(t, runBuzzDependencies(ctxWith(advisory), targets, []string{"coverage-badge"}))
+	})
+
+	t.Run("the failure is reported with its reason", func(t *testing.T) {
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+
+		require.NoError(t, runBuzzDependencies(ctxWith(advisory), targets, []string{"coverage-badge"}))
+		assert.Equal(t, 1, strings.Count(buf.String(), "advisory"),
+			"an orchestrator reading the gate must meet the target once")
+		assert.Contains(t, buf.String(), "coverage-badge")
+		assert.Contains(t, buf.String(), reason)
+	})
+
+	t.Run("a gating member beside it still fails the composite", func(t *testing.T) {
+		err := runBuzzDependencies(ctxWith(advisory), targets, []string{"coverage-badge", "lint"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "lint: ")
+	})
+
+	t.Run("without the policy the member gates", func(t *testing.T) {
+		err := runBuzzDependencies(ctxWith(nil), targets, []string{"coverage-badge"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "coverage-badge: ")
 	})
 }
 

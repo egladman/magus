@@ -231,3 +231,69 @@ func TestClaimLabel(t *testing.T) {
 		})
 	}
 }
+
+// focusFixture is a WorkspaceReader over the same shapes project's own focus test
+// grades: an upstream dependency, a sibling, and a reverse dependent. It is a fake
+// rather than a real checkout because TestMarkFileFocusStampsEachEntry is about the
+// VERDICT, and standing up a magusfile to reach one would test workspace discovery
+// instead. Mirrors internal/guard's own focusFixture, unexported there.
+type focusFixture struct {
+	root     string
+	projects map[string]*types.Project
+}
+
+func (w focusFixture) Root() string { return w.root }
+
+func (w focusFixture) All() []*types.Project {
+	out := make([]*types.Project, 0, len(w.projects))
+	for _, p := range w.projects {
+		out = append(out, p)
+	}
+	return out
+}
+
+func (w focusFixture) Get(path string) *types.Project      { return w.projects[path] }
+func (w focusFixture) Graph() (*types.Graph, error)        { panic("focus must not build the graph") }
+func (w focusFixture) VCSOptions() types.VCSOptions        { panic("unused") }
+func (w focusFixture) Where(string) (*types.Project, bool) { panic("unused") }
+
+func newFocusFixture() focusFixture {
+	w := focusFixture{root: "/ws", projects: map[string]*types.Project{}}
+	for _, p := range []*types.Project{
+		{Path: ".", Name: "root"},
+		{Path: "app", DependsOn: []string{"libs/core"}},
+		{Path: "libs/core"},
+		{Path: "libs/ui"},
+		{Path: "web", DependsOn: []string{"app"}},
+	} {
+		w.projects[p.Path] = p
+	}
+	return w
+}
+
+// TestMarkFileFocusStampsEachEntry covers the `magus describe file` field: the same
+// computation the guard grades with, surfaced where a caller can ask about a path
+// before reading it rather than after being advised.
+func TestMarkFileFocusStampsEachEntry(t *testing.T) {
+	// EvalSymlinks because a workspace Root is symlink-free and a macOS temp dir is
+	// not: comparing the two spellings literally puts every path outside the tree.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
+	t.Chdir(filepath.Join(root, "app"))
+
+	ws := newFocusFixture()
+	ws.root = root
+	files := []types.FileEntry{
+		{Path: "app/main.go"},
+		{Path: "libs/core/core.go"},
+		{Path: "libs/ui/theme.css"},
+		{Path: "MAGUS.md"},
+	}
+	focus, ok := markFileFocus(ws, files)
+	require.True(t, ok)
+	assert.Equal(t, []string{"app"}, focus.Seeds)
+	assert.Equal(t, []string{types.FocusIn, types.FocusIn, types.FocusOut, types.FocusIn},
+		[]string{files[0].Focus, files[1].Focus, files[2].Focus, files[3].Focus},
+		"the sibling is the only one out; a root file and a declared dependency are in")
+}

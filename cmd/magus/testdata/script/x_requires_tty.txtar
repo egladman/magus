@@ -24,11 +24,12 @@ stderr 'magus x \[filter\.\.\.\]'
 stderr 'requires an interactive terminal'
 stderr 'for scripts use `magus run`'
 
-# Setting the retired key in magus.yaml changes nothing - it is not a config
-# field any more, so it is inert rather than silently re-enabling a broken path.
+# Setting the retired key in magus.yaml cannot re-enable the broken path, and it
+# is not quietly ignored either: it is not a config field any more, so the load
+# rejects it by name rather than leaving a caller to believe it took.
 cp magus.yaml.assume magus.yaml
 ! exec magus x
-stderr 'magus: x requires an interactive terminal'
+stderr 'magus.yaml:2: unknown key "assume_interactive"'
 
 -- magus.yaml --
 concurrency: 2

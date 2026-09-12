@@ -108,7 +108,7 @@ var serverInstructions = strings.Join([]string{
 	toolLine(hint.ToolDiff, "join the review session a person has open: state, comment, suggest, resolve"),
 	toolLine(hint.ToolMemory, "the per-repository memory of decisions, plans, and ruled-out hypotheses"),
 	toolLine(hint.ToolVCSCheckpoint, "record the working state's identity (revision, branch, patch digest)"),
-	toolLine(hint.ToolLedger, "declare the lease plan an orchestrator hands out: goals, paths, states"),
+	toolLine(hint.ToolJob, "declare the job plan an orchestrator hands out: goals, paths, states"),
 	"",
 	"Typical flow:",
 	"  Discover first: " + hint.ToolDescribe.String() + " (list spells/targets/projects/workspaces), " +

@@ -1,5 +1,5 @@
 // Package apply builds per-workspace sandbox policies from config and the acting lease's
-// ledger row, and owns the process-wide landlock application state. It lives here (not in
+// job row, and owns the process-wide landlock application state. It lives here (not in
 // sandbox or config) to break the import cycle.
 package apply
 
@@ -19,7 +19,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/env"
@@ -191,38 +191,38 @@ func RecordApply(ctx context.Context, secs float64, outcome, scope string, polic
 }
 
 // NarrowToLease reduces policy's filesystem WRITE grant to the boundary the lease leaseID
-// names declared in the ledger at loc. It returns policy untouched when there is no
+// names declared in the job store at loc. It returns policy untouched when there is no
 // boundary to derive one from: no lease id, no row, a row that is not live, a ROOT lease
 // (a row with no parent is the orchestrator, and it owns the whole checkout), or a row
-// that declared no owned paths and is not read-only. A read-only row narrows the grant
+// that declared no write paths and is not read-only. A read-only row narrows the grant
 // to nothing but the cache dir and $TMPDIR, the same answer the guard gives its writes.
 //
 // The grant is DERIVED from the row rather than declared a second time in magus.yaml,
 // because a boundary written twice is a boundary that disagrees with itself. The agent
-// guard already grades a write against owned_paths, so a separate sandbox declaration
+// guard already grades a write against the row's write paths, so a separate sandbox declaration
 // would let the kernel refuse something other than what the guard explains, and one of
 // the two would be teaching a rule nothing enforces.
 //
-// Reads are left exactly as the workspace policy granted them: the ledger declares a
+// Reads are left exactly as the workspace policy granted them: the job store declares a
 // write boundary only, and a worker has to read the tree it is changing.
 //
-// Beyond the owned paths it grants writes to the workspace cache directory and $TMPDIR,
+// Beyond the write paths it grants writes to the workspace cache directory and $TMPDIR,
 // which every target run needs to produce output at all.
 //
-// A forbidden path INSIDE an owned one costs the directory holding it, not the owned tree:
+// A deny path INSIDE a write one costs the directory holding it, not the leased tree:
 // this ruleset and landlock are both allowlists with no deny rule, so an enclosing grant
-// is replaced by grants on its children (see splitAroundForbidden).
+// is replaced by grants on its children (see splitAroundDenied).
 //
-// An unreadable ledger fails OPEN with a warning, matching the guard: a lease id that
+// An unreadable job store fails OPEN with a warning, matching the guard: a lease id that
 // stops resolving must not brick the checkout a person is working in.
-func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Location, leaseID string) *sandbox.Policy {
+func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc job.Location, leaseID string) *sandbox.Policy {
 	if policy == nil || loc.Root == "" || leaseID == "" {
 		return policy
 	}
-	rows, err := ledger.NewStore(loc).List()
+	rows, err := job.NewStore(loc).List()
 	if err != nil {
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
-			"lease ledger unreadable; sandbox running with the workspace write grant"),
+			"job store unreadable; sandbox running with the workspace write grant"),
 			"lease", leaseID, "err", err.Error())
 		return policy
 	}
@@ -233,7 +233,7 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Locat
 
 	var granted []string
 	if !row.ReadOnly {
-		granted = grantedPaths(loc.Root, row.OwnedPaths, row.ForbiddenPaths)
+		granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
 	}
 	rules := make([]filesystem.Rule, 0, len(policy.FS.Rules)+len(granted)+2)
 	for _, r := range policy.FS.Rules {
@@ -254,67 +254,67 @@ func NarrowToLease(ctx context.Context, policy *sandbox.Policy, loc ledger.Locat
 	narrowed.FS = filesystem.Ruleset{Rules: rules}
 	narrowed.Lease = row.ID
 	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
-		"lease", row.ID, "parent", row.Parent, "owned_paths", len(row.OwnedPaths), "write_rules", len(granted))
+		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(granted))
 	return &narrowed
 }
 
 // workerLease returns the live row leaseID names when it states a boundary narrower than
-// the workspace: a read-only row of any tier, or a worker row with owned paths. A writable
+// the workspace: a read-only row of any model, or a worker row with write paths. A writable
 // root lease and a writable row with nothing declared report false. Liveness is
-// types.LeaseState.Live, the same test the guard applies, so a row the guard ignores is
+// types.JobState.Live, the same test the guard applies, so a row the guard ignores is
 // one the sandbox ignores.
-func workerLease(rows []types.Lease, leaseID string) (types.Lease, bool) {
+func workerLease(rows []types.Job, leaseID string) (types.Job, bool) {
 	for _, l := range rows {
 		if l.ID != leaseID {
 			continue
 		}
 		if !l.State.Live() {
-			return types.Lease{}, false
+			return types.Job{}, false
 		}
 		// Read-only is a boundary whatever the row's place in the tree: a root row that
 		// declares it gets no writes either, rather than the whole checkout.
 		if l.ReadOnly {
 			return l, true
 		}
-		if l.Parent == "" || len(l.OwnedPaths) == 0 {
-			return types.Lease{}, false
+		if l.Parent == "" || len(l.WritePaths) == 0 {
+			return types.Job{}, false
 		}
 		return l, true
 	}
-	return types.Lease{}, false
+	return types.Job{}, false
 }
 
-// grantedPaths resolves owned (workspace-relative doublestar globs) against root and
+// grantedPaths resolves write (workspace-relative doublestar globs) against root and
 // returns the absolute paths to grant writes on, ancestors first and subsumed descendants
 // pruned so a whole-subtree glob costs one landlock rule rather than one per file.
 //
-// A glob that matches nothing contributes nothing, and so does one that will not parse: an
-// owned path is a claim about files that exist, and inventing a rule for a path that does
+// A glob that matches nothing contributes nothing, and so does one that will not parse: a
+// write path is a claim about files that exist, and inventing a rule for a path that does
 // not would grant a subtree on the strength of a typo. A LITERAL path is the exception,
 // because a lease routinely owns a file it is spawned to create: it grants its nearest
 // existing ancestor, which is the directory the new file lands in. The guard already
 // admits that write, and a kernel that refused it would be the two tiers disagreeing.
-func grantedPaths(root string, owned, forbidden []string) []string {
-	forbiddenAbs := make([]string, 0, len(forbidden))
-	for _, f := range forbidden {
-		forbiddenAbs = append(forbiddenAbs, filesystem.ResolveRulePath(filepath.Join(root, filepath.FromSlash(path.Clean(f)))))
+func grantedPaths(root string, write, deny []string) []string {
+	denyAbs := make([]string, 0, len(deny))
+	for _, f := range deny {
+		denyAbs = append(denyAbs, filesystem.ResolveRulePath(filepath.Join(root, filepath.FromSlash(path.Clean(f)))))
 	}
 
 	// Containment is checked on the RESOLVED path, after symlinks: a declared `..` or a
-	// symlink out of the checkout would otherwise turn an owned path into a grant on
+	// symlink out of the checkout would otherwise turn a write path into a grant on
 	// whatever it points at, and the root itself is never a grant, because a lease that
 	// owns the whole checkout is not a worker.
 	rootAbs := filesystem.ResolveRulePath(root)
-	matched := make([]string, 0, len(owned))
+	matched := make([]string, 0, len(write))
 	grant := func(abs string) {
 		abs = filesystem.ResolveRulePath(abs)
 		if abs == rootAbs || !filesystem.Under(abs, rootAbs) {
 			return
 		}
-		matched = append(matched, splitAroundForbidden(abs, forbiddenAbs)...)
+		matched = append(matched, splitAroundDenied(abs, denyAbs)...)
 	}
 	rootFS := os.DirFS(root)
-	for _, g := range owned {
+	for _, g := range write {
 		pattern := strings.TrimPrefix(path.Clean(filepath.ToSlash(g)), "/")
 		if !strings.ContainsAny(pattern, "*?[{") {
 			if abs := nearestExisting(root, filepath.Join(root, filepath.FromSlash(pattern))); abs != "" {
@@ -360,17 +360,17 @@ func nearestExisting(root, abs string) string {
 	return ""
 }
 
-// splitAroundForbidden returns what may be granted for abs: abs itself when no forbidden
+// splitAroundDenied returns what may be granted for abs: abs itself when no denied
 // path lies inside it, nothing when abs is inside one, and otherwise the same question
 // asked of each of its children.
 //
-// The descent is what keeps one forbidden leaf from costing a worker its whole owned tree.
-// What it cannot recover is write access to the directory HOLDING the forbidden path:
-// granting that would grant the forbidden entry with it, so creating a new file beside a
-// forbidden sibling is refused. An allowlist has no deny rule, and neither does landlock.
-func splitAroundForbidden(abs string, forbidden []string) []string {
+// The descent is what keeps one denied leaf from costing a worker its whole leased tree.
+// What it cannot recover is write access to the directory HOLDING the denied path:
+// granting that would grant the denied entry with it, so creating a new file beside a
+// denied sibling is refused. An allowlist has no deny rule, and neither does landlock.
+func splitAroundDenied(abs string, deny []string) []string {
 	holds := false
-	for _, f := range forbidden {
+	for _, f := range deny {
 		if filesystem.Under(abs, f) {
 			return nil
 		}
@@ -381,13 +381,13 @@ func splitAroundForbidden(abs string, forbidden []string) []string {
 	}
 	entries, err := os.ReadDir(abs)
 	if err != nil {
-		// A forbidden path claims to be inside abs and abs cannot be enumerated, so
+		// A denied path claims to be inside abs and abs cannot be enumerated, so
 		// there is no subset that is safe to grant.
 		return nil
 	}
 	out := make([]string, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, splitAroundForbidden(filepath.Join(abs, e.Name()), forbidden)...)
+		out = append(out, splitAroundDenied(filepath.Join(abs, e.Name()), deny)...)
 	}
 	return out
 }

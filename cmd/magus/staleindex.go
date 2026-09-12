@@ -153,47 +153,6 @@ func sourceNewerThan(dir string, cutoff time.Time) bool {
 	return newer
 }
 
-// The guard's half of the same fact. Half (a) above is the load-bearing one: it works on
-// every host with nothing wired, because it rides the command's own output. This one
-// reaches a host that runs a pre-tool hook, and it arrives one call EARLIER: before the
-// stale answer is read rather than under it.
-//
-// It is an advisory and never a deny. A stale index still answers, the answer is still
-// worth having, and blocking a read to enforce tidiness is the shape of guard rule this
-// project has already reverted once.
-
-// graphReadSubcommands are the verbs that answer FROM the index, so a stale one changes
-// what they report.
-var graphReadSubcommands = []string{"refs", "query", "explain", "path"}
-
-// commandReadsGraph reports whether a shell line would run one of them.
-//
-// Through the parser rather than a pattern, for the reason commandRunsGate is: it resolves
-// quoting and peels wrappers, so a launcher prefix reads the same as the bare form and the
-// word `refs` inside a quoted argument reads as neither.
-//
-// `magus query output <ref>` is exempt. It reads a captured log, not the graph, and it is
-// the same exemption the output-pipe rule carves out for the same reason.
-func commandReadsGraph(command string) bool {
-	cmds, ok := parseGuardCommands(command)
-	if !ok {
-		return false
-	}
-	for _, c := range cmds {
-		if c.Name != "magus" || len(c.Args) == 0 {
-			continue
-		}
-		if !slices.Contains(graphReadSubcommands, c.Args[0]) {
-			continue
-		}
-		if c.Args[0] == "query" && len(c.Args) >= 2 && c.Args[1] == "output" {
-			continue
-		}
-		return true
-	}
-	return false
-}
-
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index
 // older than the tree, or "" when every built index is current.
 func staleGraphAdvice(ctx context.Context) string {

@@ -33,7 +33,7 @@ const (
 // The baggage members magus reads. Namespaced because BAGGAGE is a shared channel: every other
 // member belongs to somebody else and is left alone.
 const (
-	// BaggageLease names the ledger lease the process is ACTING as.
+	// BaggageLease names the job lease the process is ACTING as.
 	BaggageLease = "magus.lease"
 	// BaggageSpawner names the tool or session that spawned it, as a label for a person to
 	// read. It is free text and a claim; nothing resolves it and no verdict reads it.
@@ -50,8 +50,8 @@ const MaxSpawnerLen = 128
 // Trust tier, stated once because every field shares it: the worker's own claim about itself,
 // arriving over a channel any local process may set. NO verdict may key on any of it. The one
 // grading that reads a field here
-// takes Lease to the ledger boundary check, and that check fails open (see
-// cmd/magus/guard_write.go). ParentSpanID is read in one more place and for teaching only:
+// takes Lease to the job store boundary check, and that check fails open (see
+// internal/guard/write.go). ParentSpanID is read in one more place and for teaching only:
 // adviseUnleasedWorker turns silence into an advisory when a process claiming a spawner writes
 // while no lease exists to grade it, which can never deny and never changes a verdict another
 // rule reached. The human is never a claim: a run carrying no trace context IS a
@@ -65,8 +65,8 @@ type Spawn struct {
 	TraceID      string
 	ParentSpanID string
 	Flags        string
-	// Lease is the ledger lease the process acts as, from the magus.lease
-	// baggage member, percent-decoded and validated by [types.ValidLeaseID], the same
+	// Lease is the job lease the process acts as, from the magus.lease
+	// baggage member, percent-decoded and validated by [types.ValidJobID], the same
 	// rule every lease channel shares, and what keeps the trail's redaction exemption
 	// honest.
 	Lease string
@@ -214,12 +214,12 @@ func validLease(id string) string {
 	if id == "" {
 		return ""
 	}
-	if !types.ValidLeaseID(id) {
+	if !types.ValidJobID(id) {
 		baggageNoteOnce.Do(func() {
 			slog.WarnContext(context.Background(),
 				"magus: ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxLeaseIDLen))
+				slog.Int("max_length", types.MaxJobIDLen))
 		})
 		return ""
 	}

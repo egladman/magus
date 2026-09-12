@@ -9,6 +9,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cli"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/guard"
 )
 
 // walkRegistryCommands visits every node in the recursive registry tree
@@ -113,7 +114,7 @@ func bindUnlessRegistered(fs *flag.FlagSet, node cli.Command) {
 // declared Flags), so a bogus or misspelled flag in a documented example is
 // a build-time failure instead of something a reader discovers by pasting it.
 //
-// It reuses parseGuardCommands (guard_shellparse.go) for the shell parsing:
+// It reuses guard.ParseCommands (internal/guard/parse.go) for the shell parsing:
 // the same mvdan.cc/sh AST walk the write-guard already trusts to find every
 // command a shell line would actually run, including inside command
 // substitutions ($(...)) and pipelines, and to correctly EXCLUDE redirects
@@ -142,7 +143,7 @@ func TestRegistryExamplesParse(t *testing.T) {
 				if knownBrokenExamples[ex.Command] {
 					t.Skipf("known broken in the CLI itself, tracked separately: %q", ex.Command)
 				}
-				cmds, ok := parseGuardCommands(ex.Command)
+				cmds, ok := guard.ParseCommands(ex.Command)
 				if !ok {
 					t.Fatalf("example %q does not parse as a shell command line", ex.Command)
 				}

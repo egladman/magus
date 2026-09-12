@@ -62,6 +62,7 @@ func usedSchemaKeys(projects []*types.Project) []gatedKey {
 		for _, policy := range p.TargetPolicies {
 			addPolicy("timeout", policy.Timeout != "")
 			addPolicy("retry_on_volatile", policy.RetryOnVolatile)
+			addPolicy("advisory", policy.Advisory)
 		}
 	}
 	slices.SortFunc(used, func(a, b gatedKey) int { return strings.Compare(a.label, b.label) })

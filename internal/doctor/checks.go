@@ -2206,9 +2206,14 @@ const checkpointTemplate = "magus-checkpoint.sh"
 // reader their tree is wired when the next clone of it is not. It grades nothing
 // either: staleness is the check's job, and it costs a canary subprocess this
 // caller must not pay.
-func HookConfigs(root string) []string {
+func HookConfigs(root string) []string { return guardHookConfigs(root, "") }
+
+// guardHookConfigs is the inventory HookConfigs and the lease-binding check share, so
+// neither can disagree with checkGuardWiring about what counts as wired. home widens it
+// to the machine-wide configs; empty keeps it to the checkout.
+func guardHookConfigs(root, home string) []string {
 	var out []string
-	for _, candidate := range guardWiringCandidates(root, "") {
+	for _, candidate := range guardWiringCandidates(root, home) {
 		for _, path := range hookConfigFiles(candidate) {
 			body, err := os.ReadFile(path)
 			if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
@@ -2443,7 +2448,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: agent.AgentsFile + " carries an older managed block; magus does not write that file, so replace it yourself",
-			Details: append(details, "print the current block: "+hint.AgentSample.With("--section")),
+			Details: append(details, "print the current block: "+hint.AgentStarter.With("--section")),
 		}
 	}
 	return types.DoctorCheck{

@@ -24,6 +24,7 @@ type affectedPlanResult struct {
 
 type affectedPlanTool struct {
 	opts Options
+	next nextFilter
 }
 
 func (t *affectedPlanTool) Name() string { return hint.ToolAffectedPlan.String() }
@@ -55,13 +56,15 @@ func (t *affectedPlanTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 		Source:      plan.Source,
 		Matrix:      make([]affectedPlanShard, len(plan.Shards)),
 	}
+	var projects []string
 	for i, s := range plan.Shards {
 		out.Matrix[i] = affectedPlanShard{
 			Shard:    s.ID,
 			Projects: strings.Join(s.ProjectPaths, " "),
 		}
+		projects = append(projects, s.ProjectPaths...)
 	}
-	return spells.InvokeResponse{Data: out}, nil
+	return spells.InvokeResponse{Data: dataWithNext(out, t.next.served(hint.NextForAffected(target, projects)))}, nil
 }
 
 var _ spells.Driver = (*affectedPlanTool)(nil)

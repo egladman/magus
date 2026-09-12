@@ -459,11 +459,36 @@ var hookConfigExemptions = map[string]map[string]string{
 	"codex": {
 		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
 			"so it earns one host's wiring rather than four; nothing in Codex prevents it",
+		"magus-guard-command.sh on " + mcpToolMatcherPrefix: "there is no vendored evidence Codex fires PreToolUse for an " +
+			"MCP tool call, so the wiring would claim a surface nobody has seen deliver a verdict; " +
+			"the mcp coverage every template declares for codex says none for the same reason",
 	},
 }
 
-// configTemplates returns the shipped templates a hook config's commands invoke.
+// mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
+// wired under it guards a different surface from the same template, so the name
+// below carries it and the parity gate can see the two apart.
+const mcpToolMatcherPrefix = "mcp__magus__"
+
+// configTemplates returns the shipped template FILES a hook config's commands
+// invoke, for the gates that ask whether a file is named somewhere.
 func configTemplates(t *testing.T, path string) map[string]bool {
+	t.Helper()
+	found := map[string]bool{}
+	for template := range configJobs(t, path) {
+		found[strings.SplitN(template, " on ", 2)[0]] = true
+	}
+	return found
+}
+
+// configJobs returns the JOBS a hook config's commands invoke, keyed by the template
+// and, where the matcher selects magus's MCP tools, by that surface too.
+//
+// Keyed by job rather than by file because a template wired twice under different
+// matchers is two jobs: claude-code runs magus-guard-command.sh on Bash AND on the
+// MCP tool call, and a gate collecting basenames alone reads the second as nothing
+// new, which is the whole absence it exists to report.
+func configJobs(t *testing.T, path string) map[string]bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err, "read %s", path)
@@ -476,9 +501,14 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
 				for _, field := range strings.Fields(h.Command) {
-					if strings.HasPrefix(field, hookTemplateDir) {
-						found[filepath.Base(field)] = true
+					if !strings.HasPrefix(field, hookTemplateDir) {
+						continue
 					}
+					name := filepath.Base(field)
+					if strings.Contains(entry.Matcher, mcpToolMatcherPrefix) {
+						name += " on " + mcpToolMatcherPrefix
+					}
+					found[name] = true
 				}
 			}
 		}
@@ -498,7 +528,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 func TestShippedHookConfigsWireTheSameJobs(t *testing.T) {
 	wired := map[string]map[string]bool{}
 	for host, path := range shippedHookConfigs {
-		wired[host] = configTemplates(t, path)
+		wired[host] = configJobs(t, path)
 	}
 
 	for host, templates := range wired {
@@ -1247,24 +1277,85 @@ const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
 // quietly kept testing the old cells, and a declaration nobody executes is the
 // exact failure that let a broken plugin ship.
 //
-// A cell the guard cannot currently produce is declared rather than skipped:
-// `# case: path/deny unreachable - ...` satisfies this and says why in the file
-// where the next person will look.
+// A label is not a case. The gate demands a block that actually EXECUTES a
+// template, because the one form of this file that never fails is a cell whose
+// label reads true and whose body runs nothing, and an "unreachable" note is a
+// claim about the guard that nothing rechecks once the guard grows a rule.
+// unreachableCases is the only door out, and it names the cell and the reason.
 func TestTransportCorpusCoversTheContract(t *testing.T) {
-	body, err := os.ReadFile(transportCorpus)
-	require.NoError(t, err, "read %s", transportCorpus)
-	corpus := string(body)
+	executed, noted := transportCorpusCases(t)
 
 	for _, surface := range agent.GuardSurfaces() {
 		for _, decision := range agent.GuardDecisions() {
-			label := "# case: " + surface + "/" + decision
-			assert.Contains(t, corpus, label,
-				"%s has no case labeled %q.\n"+
-					"Every surface-and-decision pair in the guard contract needs one executed case, or an\n"+
-					"explicit `%s unreachable - <why>` line when the guard cannot produce that verdict.",
-				transportCorpus, label, label)
+			cell := surface + "/" + decision
+			if why, allowed := unreachableCases[cell]; allowed {
+				assert.True(t, noted[cell],
+					"%s executes no %q case and unreachableCases says it cannot (%s), but no `# case: %s unreachable - <why>`\n"+
+						"line says so in the file. Record it where the next person looks, or drop the entry.",
+					transportCorpus, cell, why, cell)
+				continue
+			}
+			assert.True(t, executed[cell],
+				"%s has no EXECUTED case for %q: a `# case: %s` label with a block that runs a template.\n"+
+					"A label alone, or an `unreachable` note, does not satisfy this: a declared stance nobody\n"+
+					"ran is the failure that let a broken plugin ship. If the corpus genuinely cannot produce\n"+
+					"this verdict, add %q to unreachableCases with the reason.",
+				transportCorpus, cell, cell, cell)
 		}
 	}
+
+	for cell := range unreachableCases {
+		assert.False(t, executed[cell],
+			"unreachableCases says %s cannot execute %q, but a case for it runs a template. Drop the entry.",
+			transportCorpus, cell)
+	}
+	for cell := range noted {
+		_, allowed := unreachableCases[cell]
+		assert.True(t, allowed,
+			"%s calls %q unreachable and unreachableCases does not. An unreachable note is a claim about the\n"+
+				"guard that nothing rechecks once a rule grows; record it in unreachableCases so this gate owns it,\n"+
+				"or delete the note and write the case.", transportCorpus, cell)
+	}
+}
+
+// unreachableCases records a surface-and-decision cell the corpus cannot execute,
+// and why. Every other cell owes a real case.
+var unreachableCases = map[string]string{
+	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +
+		"could reach one (gate-repeat, graph-stale, stale-binary) each need state a testscript cannot " +
+		"make deterministic: run logs inside the window, a stale symbol index, a binary older than its sources",
+}
+
+// transportCorpusCases splits the corpus on its case labels and reports, per cell,
+// whether some block for it runs a template and whether some block claims it is
+// unreachable. A cell may carry several cases, so both are ORs over its blocks.
+func transportCorpusCases(t *testing.T) (executed, noted map[string]bool) {
+	t.Helper()
+	body, err := os.ReadFile(transportCorpus)
+	require.NoError(t, err, "read %s", transportCorpus)
+
+	executed, noted = map[string]bool{}, map[string]bool{}
+	cell := ""
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if rest, found := strings.CutPrefix(line, "# case: "); found {
+			fields := strings.Fields(rest)
+			if len(fields) == 0 {
+				cell = ""
+				continue
+			}
+			cell = fields[0]
+			if len(fields) > 1 && fields[1] == "unreachable" {
+				noted[cell] = true
+				cell = ""
+			}
+			continue
+		}
+		if cell != "" && strings.HasPrefix(line, "exec ") {
+			executed[cell] = true
+		}
+	}
+	return executed, noted
 }
 
 // TestParityTableMatchesTheGlueDeclarations keeps the guide's hand-written
@@ -1301,6 +1392,19 @@ func TestParityTableMatchesTheGlueDeclarations(t *testing.T) {
 		if command := surfaces["command"]; command != nil {
 			assertCell("deny", command["deny"] == "model")
 			assertCell("advise", command["advise"] == "model")
+		}
+		// Every host DECLARES the mcp surface, most of them with every stance at
+		// none, so presence says nothing here and delivery is the question: a cell
+		// reading "not wired" against a template that delivers a verdict, or the
+		// reverse, is a reader choosing a host on a promise magus does not keep.
+		if mcp := surfaces["mcp"]; mcp != nil {
+			cell, ok := cells["mcp rules"]
+			require.True(t, ok, "the parity table has no MCP call rules column; the contract needs one")
+			delivers := mcp["deny"] != "none" || mcp["advise"] != "none"
+			assert.Equal(t, delivers, !strings.HasPrefix(strings.ToLower(cell), "not wired"),
+				"parity table row %q, MCP call rules reads %q, which disagrees with the mcp stances the templates declare (deny=%s advise=%s).\n"+
+					"Fix whichever is wrong: the table is a promise to a reader, the declaration is what the file does.",
+				host, cell, mcp["deny"], mcp["advise"])
 		}
 	}
 
@@ -1351,6 +1455,8 @@ func parityTableRows(t *testing.T, guide string) map[string]map[string]string {
 					header = append(header, "command rules")
 				case strings.Contains(cell, "declared-output"):
 					header = append(header, "declared-output rule")
+				case strings.Contains(cell, "MCP call"):
+					header = append(header, "mcp rules")
 				case strings.Contains(cell, "deny"):
 					header = append(header, "deny")
 				case strings.Contains(cell, "advise"):
@@ -1741,12 +1847,13 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 // scan would report hundreds of them and be turned off within the week. A per-host
 // branch that is not deciding a verdict is not the failure this exists to prevent.
 var hostToolVocabularyScope = []string{
-	filepath.Join("cmd", "magus", "guard*.go"),
+	filepath.Join("internal", "guard", "*.go"),
+	filepath.Join("cmd", "magus", "hook*.go"),
 	filepath.Join("internal", "agent", "*.go"),
 }
 
 // hostToolVocabulary is what agent hosts call their tools. magus's own labels
-// (hookToolCommand, hookToolWrite, hookToolRead in cmd/magus/guard.go) are
+// (hookToolCommand, hookToolWrite, hookToolRead in internal/guard/guard.go) are
 // deliberately none of these, and are the positive example: a wrapper maps its
 // host's name to magus's label by which flag it passes, so a host renaming a tool
 // costs its reader one config line instead of costing magus a release.
@@ -1820,11 +1927,47 @@ func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
 			"A switch or a lookup table over \"Read\"/\"Bash\" is a per-host branch with the host's name\n"+
 			"filed off: it passes TestNoHostSpecificBehaviorInCode, and the next time any host renames a\n"+
 			"tool it costs a magus release. Record magus's own label instead (hookToolCommand,\n"+
-			"hookToolWrite, hookToolRead in cmd/magus/guard.go) and let the wrapper in the reader's own\n"+
+			"hookToolWrite, hookToolRead in internal/guard/guard.go) and let the wrapper in the reader's own\n"+
 			"config do the mapping - which flag it passes IS the mapping. If a literal genuinely has to\n"+
 			"be here, add it to hostToolVocabularyByDesign with where that decision is written down.\n\n"+
 			"violations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// verdictTextPrefix opens every reason and every advisory the guard produces, so a
+// literal carrying it is a RULE wherever it sits.
+const verdictTextPrefix = "magus workspace:"
+
+// TestTheHookCommandCarriesNoRuleText keeps the rules on the importable side of the
+// split. A rule written into cmd/magus/hook.go would work, and would be invisible to
+// both the rule suite and the replay path that re-grades a recorded command, because
+// neither can reach package main. Nothing else marks which side a new rule belongs on,
+// and a boundary that lives only in prose is one with roughly even odds.
+func TestTheHookCommandCarriesNoRuleText(t *testing.T) {
+	fset := token.NewFileSet()
+	const path = "cmd/magus/hook.go"
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	require.NoErrorf(t, err, "parse %s: the guard's CLI half moved and this gate stopped looking", path)
+
+	var violations []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		lit, ok := n.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			return true
+		}
+		value, uerr := strconv.Unquote(lit.Value)
+		if uerr != nil || !strings.HasPrefix(value, verdictTextPrefix) {
+			return true
+		}
+		violations = append(violations, fmt.Sprintf("%s: %s", fset.Position(lit.Pos()), lit.Value))
+		return true
+	})
+
+	assert.Empty(t, violations,
+		"a guard rule may not live in %s. Rules belong in internal/guard, where the rule suite\n"+
+			"and `magus session ls`'s replay path can both reach them; this file owns flags, stdin and\n"+
+			"rendering only.\n\nviolations:\n%s",
+		path, strings.Join(violations, "\n"))
 }
 
 // The landing headline rotates through N stacked spans on one shared keyframe
@@ -1936,8 +2079,8 @@ var asciiScanFiles = []string{
 	"internal/handler/mcp/output.go",
 	"internal/handler/mcp/where.go",
 	"cmd/magus/query.go",
-	"cmd/magus/guard_shell.go",
-	"cmd/magus/guard_write.go",
+	"internal/guard/shell.go",
+	"internal/guard/write.go",
 	"cmd/magus/config_console.go",
 	"internal/doctor/checks.go",
 	"cmd/magus/init.go",

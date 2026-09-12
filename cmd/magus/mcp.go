@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/daemon"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
 )
@@ -96,6 +97,7 @@ func publishDaemonTrailBase() {
 		return
 	}
 	daemonTrailBase = base
+	daemonJobStore = job.NewStore(job.Location{CacheDir: base, Root: root})
 }
 
 // startMCPWithDaemon starts the MCP HTTP server as a background goroutine
@@ -168,7 +170,7 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 	}
 	// The hosted-services registry (built by startMultiWorkspaceDaemon) backs the
 	// dashboard's services view the same way daemonRuns backs its runs view. Nil for a
-	// bridge started without the multi-workspace daemon, leaving StatusReport.Services empty.
+	// bridge started without the multi-workspace daemon, leaving StatusSnapshot.Services empty.
 	if daemonServices != nil {
 		daemonOpts = append(daemonOpts, daemon.WithServices(func() []types.StatusService {
 			return serviceStatuses(daemonServices)
@@ -195,6 +197,9 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		// and the magus_diff MCP tool both read it, and that sharing IS the pairing: a
 		// person opens a diff, an agent joins the session they started.
 		DiffSessions: changeset.NewStore(m.CacheDir()),
+		// The same store the OnJobDone callback completes rows in, so the daemon's own
+		// jobs and the delegated ones are one book with one lock.
+		Jobs: daemonJobStore,
 		// Health endpoints share this HTTP server so k8s probes hit the
 		// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
 		// so the kubelet can reach them (default 127.0.0.1 is pod-local).

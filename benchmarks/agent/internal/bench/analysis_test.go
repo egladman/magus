@@ -625,11 +625,12 @@ func mustAnalyze(t *testing.T, records []RunRecord, seed int64) *Analysis {
 }
 
 // TestBenchPipelineMatchesPinnedOutput pins every stage's output over the
-// synthetic fixture (testdata/fixture-*, seed 20260902). The metrics and the
-// analysis are what the Python pipeline wrote from the same tree, and their
-// bootstrap CIs are the strongest check: they only match if the seeding, the
-// draw sequence and the summation order all do. The report is this binary's
-// own, regenerated whenever its rendering changes on purpose.
+// synthetic fixture (testdata/fixture-*, seed 20260902) against checked-in bytes.
+//
+// A regression pin on THIS binary, not a parity check against the Python pipeline:
+// nothing here runs Python, and the fixtures were produced once by hand. It catches a
+// change in seeding, draw sequence or summation order, never the two implementations
+// having diverged before the fixtures were written.
 func TestBenchPipelineMatchesPinnedOutput(t *testing.T) {
 	_, _, records := fixtureRecords(t)
 	metrics, err := RecordsJSONL(records)

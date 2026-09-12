@@ -11,7 +11,7 @@ $__magus_scriptblock = {
     # magus-utils:subcommands:begin
     $subcommands = 'ls', 'describe', 'where', 'run', 'affected', 'x',
                    'clean', 'query', 'refs', 'explain', 'path', 'graph',
-                   'diff', 'vcs', 'session', 'memory', 'ledger', 'notes',
+                   'diff', 'vcs', 'session', 'memory', 'job', 'notes',
                    'watch', 'events', 'server', 'mcp', 'status', 'buzz',
                    'agent', 'init', 'doctor', 'config', 'completion', 'man',
                    'self', 'version', 'help'

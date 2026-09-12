@@ -40,6 +40,7 @@ var describeAlias = map[string]string{
 	"mcp-tool": "mcp-tool", "mcp-tools": "mcp-tool",
 	"file": "file", "files": "file",
 	"tool": "tool", "tools": "tool",
+	"job": "job", "jobs": "job",
 }
 
 func describeCmd(ctx context.Context, root string, args []string) error {
@@ -70,6 +71,8 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 		return describeFiles(ctx, root, rest)
 	case "tool":
 		return describeTools(ctx, root, rest)
+	case "job":
+		return describeJob(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
@@ -1105,6 +1108,9 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.RetryOnVolatile {
 					fmt.Printf("  retry_on_volatile")
 				}
+				if pol.Advisory {
+					fmt.Printf("  advisory=%q", pol.AdvisoryReason)
+				}
 				if pol.SkipCache {
 					fmt.Printf("  skip_cache")
 				}
@@ -1315,6 +1321,9 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			}
 			if e.Policy.RetryOnVolatile {
 				fmt.Printf("  retry_on_volatile")
+			}
+			if e.Policy.Advisory {
+				fmt.Printf("  advisory=%q", e.Policy.AdvisoryReason)
 			}
 			if e.Policy.SkipCache {
 				fmt.Printf("  skip_cache")
@@ -1531,7 +1540,8 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	}
 	focus, inFocus := markFileFocus(ws, files)
 	report := types.NewFileReport(files)
-	next := hint.NextForFiles(files)
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForFiles(files))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -1596,7 +1606,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
 		}
 	}
-	printNext(os.Stdout, nextGate(root), next)
+	printNext(os.Stdout, nx, next)
 	return nil
 }
 

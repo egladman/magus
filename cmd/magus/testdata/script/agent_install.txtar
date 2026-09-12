@@ -28,7 +28,7 @@ exec magus agent install .agents/skills --force
 cmp AGENTS.md theirs.md
 
 # once the block is pasted and current, install stops reprinting it
-exec magus agent sample
+exec magus agent starter
 cp stdout AGENTS.md
 exec magus agent install .agents/skills --force
 ! stderr 'magus:skills:begin'

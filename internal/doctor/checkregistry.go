@@ -253,6 +253,19 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkCheckpointWiring() },
 	},
 	{
+		Name:           "lease-binding",
+		Doc:            "whether the lease this checkout is bound to is a live, registered row, and whether a host hook is wired to judge it",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseBinding() },
+	},
+	{
+		Name:     "daemon-version",
+		Doc:      "whether the daemon answering this workspace is the same build as the binary asking",
+		Evidence: types.EvidenceMeasured,
+		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkDaemonVersion() },
+	},
+	{
 		Name:           "agent-skills",
 		Doc:            "installed agent skills still current with this binary",
 		Evidence:       types.EvidenceMeasured,

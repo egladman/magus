@@ -1,6 +1,7 @@
 package hint
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -160,7 +161,7 @@ func TestNextForFailureWithoutARef(t *testing.T) {
 // it is asserted on the shared trim rather than through one of them: the next builder
 // added is the one that would.
 func TestNextCapsAtThree(t *testing.T) {
-	assert.Equal(t, 3, NextCap, "three, one line each: a longer list is a wall nobody reads")
+	assert.Equal(t, 3, nextCap, "three, one line each: a longer list is a wall nobody reads")
 
 	long := []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}, {ID: "e"}}
 	assert.Equal(t, []Next{{ID: "a"}, {ID: "b"}, {ID: "c"}}, capNext(long))
@@ -180,7 +181,7 @@ func TestNextCapsAtThree(t *testing.T) {
 			})
 		},
 	} {
-		assert.LessOrEqual(t, len(build()), NextCap)
+		assert.LessOrEqual(t, len(build()), nextCap)
 	}
 }
 
@@ -193,4 +194,137 @@ func TestNextSourcePath(t *testing.T) {
 	assert.Empty(t, sourcePath(""))
 	assert.Empty(t, sourcePath("."), "a project directory is not a file to classify")
 	assert.Empty(t, sourcePath("libs/gopherbuzz"))
+}
+
+// The role is read off the row, and a worker's lane comes back with it so the filter
+// can place a write.
+func TestRoleForGradesTheActingRow(t *testing.T) {
+	rows := []types.Job{
+		{ID: "harness/worker", WritePaths: []string{"internal/hint/**"}},
+		{ID: "harness/reviewer", ReadOnly: true, ReadPaths: []string{"cmd/magus/**"}},
+		{ID: "harness/watcher"},
+	}
+	for _, tc := range []struct {
+		id   string
+		role Role
+		lane []string
+	}{
+		{"", RoleUnbound, nil},
+		{"harness/worker", RoleWorker, []string{"internal/hint/**"}},
+		{"harness/reviewer", RoleReviewer, nil},
+		{"harness/watcher", RoleReviewer, nil},
+		{"harness/gone", RoleWorker, nil},
+	} {
+		role, lane := RoleFor(rows, tc.id)
+		assert.Equal(t, tc.role, role, "id %q", tc.id)
+		assert.Equal(t, tc.lane, lane, "id %q", tc.id)
+	}
+}
+
+// Every template, graded per role. A reviewer is handed no write at all; a worker
+// keeps the regeneration of its own project and loses everybody else's.
+func TestServableToDropsWritesOutsideTheLane(t *testing.T) {
+	all := []Next{
+		breadcrumb("query-explain", Explain, "why", "spell:go"),
+		breadcrumb("file-impact", Affected, "why", "--impact"),
+		breadcrumb("file-regenerate", Run, "why", "generate:rw", "docs"),
+	}
+	for _, tc := range []struct {
+		name string
+		role Role
+		lane []string
+		want []string
+	}{
+		{"unbound", RoleUnbound, nil, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"unset", "", nil, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"worker in its lane", RoleWorker, []string{"docs/**"}, []string{"query-explain", "file-impact", "file-regenerate"}},
+		{"worker out of its lane", RoleWorker, []string{"internal/hint/**"}, []string{"query-explain", "file-impact"}},
+		{"worker with no lane", RoleWorker, nil, []string{"query-explain", "file-impact"}},
+		{"reviewer owning the path anyway", RoleReviewer, []string{"docs/**"}, []string{"query-explain", "file-impact"}},
+	} {
+		var ids []string
+		for _, n := range ServableTo(tc.role, tc.lane, all) {
+			ids = append(ids, n.ID)
+		}
+		assert.Equal(t, tc.want, ids, tc.name)
+	}
+}
+
+// A bare `magus run` writes wherever the workspace declares default charms, so the
+// charm token is not what decides it; `affected` reads unless it is asked to run.
+func TestMutatesTreeJudgesTheCommand(t *testing.T) {
+	for _, tc := range []struct {
+		argv []string
+		want bool
+	}{
+		{[]string{"magus", "run", "generate:rw", "."}, true},
+		{[]string{"magus", "run", "test", "."}, true},
+		{[]string{"magus", "affected", "ci"}, true},
+		{[]string{"magus", "affected", "ci", "--plan"}, false},
+		{[]string{"magus", "affected", "--impact"}, false},
+		{[]string{"magus", "affected", "--explain", "libs/textsearch"}, false},
+		{[]string{"magus", "vcs", "add", "."}, true},
+		{[]string{"magus", "vcs", "checkpoint"}, false},
+		{[]string{"magus", "explain", "spell:go"}, false},
+		{[]string{"magus", "query", "kind=target"}, false},
+		{[]string{"magus", "query", "output", "out1a2b3c"}, false},
+		{[]string{"magus", "job", "wait", "harness/worker"}, true},
+		{[]string{"magus", "describe", "job"}, false},
+		{[]string{"magus", "memory", "put", "a", "b"}, true},
+		{[]string{"magus", "notes", "edit", "a"}, true},
+		{[]string{"magus", "clean"}, true},
+		{[]string{"magus", "self", "update"}, true},
+		{[]string{"magus", "config", "token", "generate"}, true},
+		{[]string{"magus", "job", "exec", "harness/worker"}, true},
+		{[]string{"magus", "brand-new-verb"}, true},
+		{[]string{"magus"}, true},
+		{nil, true},
+	} {
+		assert.Equal(t, tc.want, mutatesTree(tc.argv), "%v", tc.argv)
+	}
+}
+
+// Every declared command has to be a verb the classifier KNOWS: one that resolves to
+// itself rather than to a prefix of itself or to the deny-by-default fallthrough.
+//
+// `ledger accept` (now `job wait`) opening with the readable `ledger` was the original
+// case this catches. A shortest-prefix match graded it a read, which is how a reviewer
+// would have been served a command that accepts its own work.
+func TestEveryDeclaredCommandIsClassified(t *testing.T) {
+	for _, c := range AllCommands {
+		ran, ok := longestCommand(c.Argv()[1:])
+		require.True(t, ok, "%s resolves to no declared command", c)
+		assert.Equal(t, c.String(), ran.String(), "%s is graded as a different command", c)
+	}
+
+	for _, c := range readCommands {
+		assert.True(t, slices.ContainsFunc(AllCommands, func(d Command) bool { return d.String() == c.String() }),
+			"%s is graded readable and is not declared in AllCommands", c)
+	}
+}
+
+// A breadcrumb renders twice: quoted for a shell, raw for an exec.
+func TestBreadcrumbRendersRunAndArgv(t *testing.T) {
+	n := breadcrumb("query-doc-sections", Query, "why", "kind=docsection", "id=docs/a b.md")
+	assert.Equal(t, `magus query kind=docsection "id=docs/a b.md"`, n.Run)
+	assert.Equal(t, []string{"magus", "query", "kind=docsection", "id=docs/a b.md"}, n.Argv)
+}
+
+// Both doors print one layout, so a reader who meets a breadcrumb over MCP and on a
+// terminal meets the same two lines. A silenced Why leaves the command standing.
+func TestRenderIsTheOneTwoLineLayout(t *testing.T) {
+	next := []Next{
+		{Run: "magus explain spell:go", Why: "explain names a node's edges."},
+		{Run: "magus path spell:go spell:gomod"},
+	}
+	assert.Equal(t, "\nnext:\n"+
+		"  magus explain spell:go\n"+
+		"      explain names a node's edges.\n"+
+		"  magus path spell:go spell:gomod\n",
+		Render(next, func(n Next) string { return n.Why }))
+	assert.Equal(t, "\nnext:\n"+
+		"  magus explain spell:go\n"+
+		"  magus path spell:go spell:gomod\n",
+		Render(next, func(Next) string { return "" }))
+	assert.Empty(t, Render(nil, func(n Next) string { return n.Why }))
 }

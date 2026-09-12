@@ -1,0 +1,1452 @@
+package guard
+
+import (
+	"regexp"
+	"strings"
+	"testing"
+
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/spells"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestEvaluateBashGuard(t *testing.T) {
+	// The parameterized rules, spelled as their operand so a row reads as the rule
+	// and what it fired on rather than as a struct literal.
+	wholeTree := func(op string) denyRule { return denyRule{Name: denyRuleWholeTree, Arg: op} }
+	sharedStash := func(verb string) denyRule { return denyRule{Name: denyRuleSharedStash, Arg: verb} }
+	rawTool := func(argv string) denyRule { return denyRule{Name: denyRuleRawTool, Arg: argv} }
+
+	tests := []struct {
+		command string
+		// rule is the deny the command must earn, compared whole: the rule that fired
+		// plus what it fired on. A non-zero value is what makes a row a deny row, so
+		// there is no opt-out: a row that denies while declaring no rule lands on the
+		// pass-silently assertion below and fails.
+		//
+		// The identity is compared rather than the reason, which is prose written for
+		// the reader: asserting on a substring of it could not distinguish two rules
+		// that share a sentence, and rewording one churned the table.
+		rule    denyRule
+		context string // "" for none, else a substring the context must carry
+		// denySays and denyOmits are the exception to the rule above: the scope note is
+		// not a rule identity, it is prose whose PRESENCE is the contract, so it is
+		// asserted as a substring on both sides.
+		denySays  string
+		denyOmits string
+	}{
+		{command: "git stash", rule: wholeTree("git stash")},
+		{command: "git stash push -u", rule: wholeTree("git stash")},
+		{command: "cd /repo && git stash", rule: wholeTree("git stash")},
+		// Restoring a stash used to be treated as safe. It is not, in a repository with
+		// more than one worktree: the stash stack is per-REPOSITORY, so an unqualified
+		// pop takes whatever sits at stash@{0} (often another checkout's work) and
+		// drops the entry once it applies. Naming the entry is the deliberate form.
+		// The rule is the SHARED-STACK one, not the whole-tree one: an unqualified
+		// restore is refused for taking whichever entry sits at stash@{0}.
+		{command: "git stash pop", rule: sharedStash("pop")},
+		{command: "git stash apply", rule: sharedStash("apply")},
+		{command: "git stash drop", rule: sharedStash("drop")},
+		{command: "git stash pop stash@{2}"},
+		{command: "git stash apply stash@{0}"},
+		// A PATH-SCOPED push moves only what it names, so the whole-tree reason
+		// does not reach it. This is also the bootstrap-deadlock escape CLAUDE.md
+		// documents (shelve the one hunk an old binary rejects, build, restore),
+		// which this rule denied, putting the documented answer out of reach.
+		{command: "git stash push -- magusfile.buzz"},
+		{command: "git stash push -m wip -- spells/github/actions/spell.buzz"},
+		// Naming nothing still stashes everything, pathspec-less flags included.
+		{command: "git stash push", rule: wholeTree("git stash")},
+		{command: "git stash push -m wip", rule: wholeTree("git stash")},
+		{command: "git stash list"},
+		{command: "git stash show"},
+		// Deleting a worktree takes its uncommitted work with it, and in this repo that
+		// work routinely belongs to another session.
+		{command: "git worktree remove ../wt", rule: denyRule{Name: denyRuleWorktreeRemove}},
+		{command: "git worktree list"},
+		{command: "git reset --hard origin/main", rule: wholeTree("git reset --hard")},
+		{command: "git reset HEAD~1"},
+		{command: "git reset && tool --hard-mode"},
+		{command: "git checkout .", rule: wholeTree("git checkout .")},
+		{command: "git checkout -- .", rule: wholeTree("git checkout .")},
+		// A TREE-ISH before the pathspec is still the whole tree. These read as narrow
+		// reverts while the first operand was compared against ".", so the revision was
+		// what got tested and the pathspec was never reached.
+		{command: "git checkout HEAD -- .", rule: wholeTree("git checkout .")},
+		{command: "git checkout HEAD .", rule: wholeTree("git checkout .")},
+		{command: "git checkout origin/main -- .", rule: wholeTree("git checkout .")},
+		{command: "git restore --source HEAD .", rule: wholeTree("git restore .")},
+		{command: "git restore --source=HEAD .", rule: wholeTree("git restore .")},
+		// Restoring a path from one SIDE of an operation in progress. It reads as a
+		// narrow revert and is not: the working-tree copy is the merge, and this
+		// replaces it with one half. It dropped a branch's own side of a merged
+		// feature here, green the whole way.
+		{command: "git checkout MERGE_HEAD -- magusfile.buzz",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git checkout ORIG_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "ORIG_HEAD"}},
+		{command: "git restore --source=MERGE_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git restore --source MERGE_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "MERGE_HEAD"}},
+		{command: "git checkout CHERRY_PICK_HEAD -- a.go",
+			rule: denyRule{Name: denyRuleMergeSideCheckout, Arg: "CHERRY_PICK_HEAD"}},
+		// Moving HEAD to that ref touches no file, so it is not this rule's business.
+		{command: "git checkout MERGE_HEAD"},
+		// The whole-tree rule owns the pathspec-is-everything case, whichever ref
+		// precedes it, and it is the older and broader reason.
+		{command: "git checkout MERGE_HEAD -- .", rule: wholeTree("git checkout .")},
+		{command: "git checkout main"},
+		{command: "git checkout -b feat/x"},
+		{command: "git restore .", rule: wholeTree("git restore .")},
+		// A path-scoped revert advises now: discarding a file because you did not
+		// hand-edit it is the most common wrong reflex about generated output.
+		{command: "git restore cmd/magus/agent.go", context: "magus-vcs-hygiene"},
+		{command: "git checkout -- gen/", context: "role=output"},
+		{command: "git checkout HEAD -- docs/gen", context: "role=output"},
+		{command: "git clean -fd", rule: wholeTree("git clean")},
+		{command: "git clean -fdx", rule: wholeTree("git clean")},
+		{command: "git clean --force", rule: wholeTree("git clean")},
+		{command: "git clean -n"},
+		// READ-ONLY clean invocations. Matching any word containing one of fdxX denied
+		// both of these on the letters inside the flag NAME ("dry" and "exclude") for
+		// commands that delete nothing.
+		{command: "git clean --dry-run"},
+		{command: "git clean --exclude=build"},
+		{command: "git clean -n -fd"},
+		{command: "git clean -ndx"},
+		{command: "git commit -m 'x'", context: "magus-vcs-hygiene"},
+		// A deny refuses the whole line, so it says so when the line held more than the
+		// one command that earned it. The reason text was always right about the construct
+		// and always silent about the blast radius, and a reader who fixes the named
+		// command and assumes the rest ran is the failure this closes.
+		{command: "echo hi && git stash", rule: wholeTree("git stash"), denySays: "NOTHING on this line ran"},
+		{command: "git stash", rule: wholeTree("git stash"), denyOmits: "NOTHING on this line ran"},
+
+		// Every OTHER backend magus drives, which had no rules at all until 2026-09-08.
+		// The guard doc justified that by saying jj "snapshots the working copy and keeps
+		// an operation log, so its nearest equivalents are undoable", true of jj, and
+		// generalized to Mercurial without argument. hg has no operation log, and hg purge
+		// deletes untracked files with no backup, which is git clean -f's blast radius
+		// exactly. So an hg user had none of a git user's protection.
+		{command: "hg purge", rule: wholeTree("hg purge")},
+		{command: "hg clean", rule: wholeTree("hg clean")},
+		{command: "sl purge", rule: wholeTree("sl purge")},
+		{command: "hg revert --all", rule: wholeTree("hg revert --all")},
+		{command: "hg update -C", rule: wholeTree("hg update --clean")},
+		{command: "sl goto --clean", rule: wholeTree("sl goto --clean")},
+		{command: "jj abandon", rule: wholeTree("jj abandon")},
+		{command: "jj restore", rule: wholeTree("jj restore")},
+		// SCOPED forms stay allowed, matching the git rules: naming paths is the
+		// difference between discarding a tree and discarding what you enumerated.
+		{command: "hg revert internal/agent/catalog.go"},
+		{command: "jj restore internal/agent/catalog.go"},
+		{command: "hg update default"},
+		{command: "hg status"},
+		{command: "jj log"},
+		// Prose, not a command: the parsed path is why these do not match, and it is the
+		// same reason gitGuard stopped pattern-matching.
+		{command: "echo 'run hg purge to clean up'"},
+
+		// Push, not commit: committing mid-mess is ordinary, publishing is the
+		// moment the work stops being yours alone.
+		{command: "git push origin HEAD", context: "magus affected ci"},
+		{command: "git push --force-with-lease", context: "magus affected ci"},
+		// Stage-everything DENIES: `git add <path>` is an exact equivalent, so the
+		// deny costs nothing, and one such call swept 69 files (a regenerated docs
+		// site plus five untouched sources) into a commit about four methods.
+		{command: "git add -A", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add --all", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add .", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add -u", rule: denyRule{Name: denyRuleStageAll}},
+		// The deny holds wherever the stage-everything call sits on the line. It used to
+		// be graded in the ADVISORY pass, so any earlier git command that advised answered
+		// first and the deny was never reached.
+		{command: "git restore -- x && git add -A", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git status && git add .", rule: denyRule{Name: denyRuleStageAll}},
+		{command: "git add -A && git push", rule: denyRule{Name: denyRuleStageAll}},
+		// Deliberate staging is still only advised: that IS the replacement.
+		{command: "git add cmd/magus/agent.go", context: "magus-vcs-hygiene"},
+		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs-hygiene"},
+		// A raw tool denies only when a registered spell renders that exact base
+		// command and verb. Unsupported runners remain available: a guard funnels
+		// capability Magus has, never removes capability it does not.
+		// The raw-tool rule carries the RESOLVED command as its Arg, so a row pins
+		// both which rule fired and what it judged, the property every wrapper row
+		// below exists to prove.
+		{command: "go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "npm test"},
+		{command: "npx prettier --check ."},
+		{command: "pytest tests/"},
+		{command: "cargo build --release", rule: rawTool(`cargo build --release`)},
+		{command: "gofmt -w x.go", rule: rawTool(`gofmt -w x.go`)},
+		// Anchored to a COMMAND position, so the pattern appearing as TEXT is not a
+		// match. This matters far more now these deny: `go test` and `git add -A`
+		// turn up constantly in test data, docs, and commit messages, where
+		// `git reset --hard` almost never did. Without anchoring, writing this very
+		// test file through a shell heredoc was itself denied.
+		{command: "echo 'run go test ./... to check'"},
+		// A BACKSLASH-escaped separator is not a shell separator: it is a regex
+		// alternation inside a quoted argument. Peeling must not reintroduce this:
+		// splitting the line into segments does, which is why peeling substitutes.
+		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
+		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
+		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
+		// Still caught in every real command position.
+		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "make lint; pytest tests/"},
+		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
+		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
+		// a check bypasses nothing, and what it bypasses is the cache, the sandbox and
+		// the affected set, exactly as the rewriting form does. The deny names the charm,
+		// so the reader is not sent at a target that would rewrite the tree.
+		{command: "gofmt -l ./libs", rule: rawTool(`gofmt -l ./libs`)},
+		{command: "gofmt -d x.go", rule: rawTool(`gofmt -d x.go`)},
+		// One per tool family a spell renders without a subcommand. Each passed before,
+		// because the rendering names no verb and the prefix match had nothing to compare.
+		{command: "golangci-lint run ./...", rule: rawTool(`golangci-lint run ./...`)},
+		{command: "govulncheck ./...", rule: rawTool(`govulncheck ./...`)},
+		{command: "shellcheck scripts/release.sh", rule: rawTool(`shellcheck scripts/release.sh`)},
+		// `typos` is the other half of the rule: no built-in spell renders it, so it
+		// still passes. A guard funnels a capability magus has, never one it does not.
+		{command: "typos"},
+		// Asking the binary what it is runs nothing over the tree, and a guard funnels a
+		// capability rather than removing one.
+		{command: "gofmt --version"},
+		{command: "govulncheck -V"},
+		// `go build` denies at EVERY output path. Producing a binary is a write,
+		// and the write rule has no destination-shaped exceptions.
+		{command: "go build -o /tmp/magus ./cmd/magus", rule: rawTool(`go build -o /tmp/magus ./cmd/magus`)},
+		{command: "go build ./...", rule: rawTool(`go build ./...`)},
+		// PASS-THROUGH WRAPPERS. Each of these passed while its bare form denied,
+		// because every raw-tool pattern is anchored at a command position and a
+		// wrapper moves the real command off it. The guard peels them and judges
+		// the payload, so the verdict is the inner command's on its own merits.
+		{command: "mise exec -- env -u GOROOT go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "mise x -- go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "env -u GOROOT go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "GOFLAGS=-count=1 go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "GOFLAGS=-count=1 GOEXPERIMENT=jsonv2 go vet ./...", rule: rawTool(`go vet ./...`)},
+		{command: "bash -c 'go test ./...'", rule: rawTool(`go test ./...`)},
+		{command: `sh -c "gofmt -w x.go"`, rule: rawTool(`gofmt -w x.go`)},
+		{command: "timeout 300 go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "nohup pnpm build"},
+		{command: "time npx prettier --write ."},
+		{command: "nice -n 10 cargo build", rule: rawTool(`cargo build`)},
+		{command: "make deps && mise exec -- go generate ./...", rule: rawTool(`go generate ./...`)},
+		// env -S / --split-string takes its whole argument AS the command line and
+		// never reparses it, so a single token used to tunnel any command (git
+		// tier included) straight past the parsed rules. It is peeled like -c now.
+		// The git tier is what -S tunnelled, so these must land on the git reasons
+		// rather than on any raw-tool one.
+		{command: "env -S'git reset --hard HEAD~5'", rule: wholeTree("git reset --hard")},
+		{command: "timeout 60 env -S'git clean -fdx'", rule: wholeTree("git clean")},
+		{command: "env --split-string='go build -o ./magus ./cmd/magus'", rule: rawTool(`go build -o ./magus ./cmd/magus`)},
+		{command: "env -S'go test ./...'", rule: rawTool(`go test ./...`)},
+		{command: "env -S 'git reset --hard'", rule: wholeTree("git reset --hard")},
+		{command: "env --split-string 'go vet ./...'", rule: rawTool(`go vet ./...`)},
+		// A benign payload inside -S is judged on its own merits, like any peel.
+		{command: "env -S'ls -la'"},
+		// find -exec / -execdir launches a command find never reparses through a
+		// shell, so the payload has to be judged directly. An inner sh -c unwraps too.
+		{command: "find . -type f -exec gofmt -w {} +", rule: rawTool(`gofmt -w {}`)},
+		{command: "find . -name x -exec go test {} +", rule: rawTool(`go test {}`)},
+		{command: "find . -type d -execdir go build ./... ;", rule: rawTool(`go build ./...`)},
+		{command: "find . -type d -exec sh -c 'go vet ./...' {} ;", rule: rawTool(`go vet ./...`)},
+		// find with no -exec, and a benign exec payload, are not the finding.
+		{command: `find . -name "*.go"`, context: "magus refs"},
+		// Predicates between the path and -name are the common form and must still advise.
+		{command: "find . -type f -name '*.go'", context: "magus refs"},
+		{command: "find . -name '*.tmp' -exec rm {} +", context: "magus refs"},
+		// Stacked wrappers reduce all the way down.
+		{command: "env FOO=1 timeout 60 mise exec -- env -u GOROOT go test ./...", rule: rawTool(`go test ./...`)},
+		// The wrapper is never the finding. Peeling exists so the payload can be
+		// judged; only the actual command determines the verdict.
+		{command: "mise exec -- magus run test"},
+		{command: "env -u GOROOT magus run build"},
+		{command: "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus", rule: rawTool(`go build -o /tmp/magus ./cmd/magus`)},
+		{command: "bash -c 'ls -la'"},
+		{command: "mise install"},
+		// `mise run <task>` runs a DECLARED mise task, not a smuggled command, so
+		// it is not peeled; peeling would misattribute the task's contents.
+		{command: "mise run setup"},
+		// THE WRITE RULE. A build landing on a tracked path is a write, so only an
+		// absolute -o (the documented `/tmp/magus` dev loop) is exempt.
+		{command: "go build -o ./bin/magus ./cmd/magus", rule: rawTool(`go build -o ./bin/magus ./cmd/magus`)},
+		{command: "go mod tidy", rule: rawTool(`go mod tidy`)},
+		// A raw tool is guarded only when a spell renders that program. These have no
+		// rendered equivalent, so they remain available instead of being denied by a
+		// stale generic list.
+		{command: "go mod vendor"},
+		{command: "ruff check ."},
+		{command: "mypy ."},
+		{command: "rustfmt src/main.rs"},
+		{command: "vitest run"},
+		{command: "buf lint", rule: rawTool(`buf lint`)},
+		{command: "golangci-lint run", rule: rawTool(`golangci-lint run`)},
+		{command: "buf generate", rule: rawTool(`buf generate`)},
+		{command: "mockery"},
+		// Trimming magus's own output with the shell. DENIED, not advised: as an
+		// advisory this fired repeatedly in one session while its own author kept
+		// piping magus into grep anyway, the same trained-reflex result the raw
+		// tool advisory produced, so it gets the same answer.
+		// The PIPE reason, distinct from the redirect one below: a filter wanted one
+		// field, so it is the projection flags that are named.
+		{command: "magus affected ci 2>&1 | tail -30", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "/tmp/magus run test | head -5", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "MAGUS_X=1 magus query foo | grep bar", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus describe targets | wc -l", rule: denyRule{Name: denyRuleOutputPipe}},
+		{command: "magus run test -s | grep -i fail | head -3", rule: denyRule{Name: denyRuleOutputPipe}},
+		// Running magus from a COPY of the workspace in temp/scratchpad. Denied: the
+		// verdict describes a tree nobody will ship. Taken from a real observed
+		// command that chained a raw `go test`, four redirected magus runs and a
+		// hand-rolled PASS/FAIL loop onto one `cd` into a scratchpad copy.
+		{command: `SP=/private/tmp/claude-501/x/scratchpad; cd "$SP/fixci" && ./magus run generate:rw .`, rule: denyRule{Name: denyRuleThrowawayCopy}},
+		{command: "cd /tmp/copy && magus run lint .", rule: denyRule{Name: denyRuleThrowawayCopy}},
+		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", rule: denyRule{Name: denyRuleThrowawayCopy}},
+		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", rule: denyRule{Name: denyRuleThrowawayCopy}},
+		// Timing magus with the shell. Advisory: magus already prints per-target
+		// durations and a cached/ran verdict, and `-s` is what hides them, so the
+		// shell timer measures the one number magus gave you and drops the rest.
+		{command: "time magus run test .", context: "magus times itself"},
+		{command: "time ./magus run test . -s", context: "cached"},
+		// The wrapper peeling that judges `time go test` as `go test` would erase
+		// the token this rule reads, so it works off the raw line.
+		{command: "time go test ./...", rule: rawTool(`go test ./...`)},
+		// Bounding magus with the shell. Advisory: run and affected take --timeout,
+		// which cancels the run instead of signalling the process.
+		{command: "timeout 300 magus run ci .", context: "--timeout 5m"},
+		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", context: "names the target"},
+		{command: "timeout 60 sleep 30"},
+		// Only run and affected carry the flag, so nothing else is advised toward it.
+		{command: "timeout 60 magus graph build"},
+		{command: "magus run test ."},
+		// A cd WITHIN the workspace stays an advisory: naming the project is the
+		// fix, and the run still describes the tree that ships.
+		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},
+		// --root is the sanctioned way to mean a different workspace, and a temp
+		// path merely MENTIONED is not a relocation.
+		{command: "magus run test . --root /tmp/other-workspace"},
+		{command: "magus graph export -o json --tee /tmp/graph.json"},
+		// REDIRECTS are denied on the same footing as pipes, and for the same
+		// measured reason. These all passed until 2026-08-04, and one session used
+		// every shape below to hide a gate's output from itself: `> /dev/null 2>&1`
+		// reported an exit code with no cause and forced a re-run to learn it.
+		{command: "magus run lint . > /tmp/x.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
+		{command: "magus run build . >> /tmp/log.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
+		{command: "magus run lint . -s 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
+		{command: "magus affected ci --silent > /dev/null 2>&1", rule: denyRule{Name: denyRuleOutputRedirect}},
+		// --silent plus a redirect is the WORST case, not the careful one: silent
+		// mode is quiet until it fails, so the redirect discards exactly the
+		// diagnostics it exists to print.
+		{command: "magus run lint . --silent > /tmp/x.txt", rule: denyRule{Name: denyRuleOutputRedirect}},
+		// --tee is the sanctioned way to keep a copy: it writes the file AND shows
+		// the output, so it is never denied.
+		{command: "magus affected ci --tee /tmp/ci.log --silent"},
+		// `magus query output <ref>` is the ONE exemption: a raw captured tool log
+		// has no schema for magus to project, so searching it has no flag that
+		// replaces it. The exemption covers redirects too.
+		{command: "magus query output ref1a2b3c | grep -n error"},
+		{command: "magus query output ref1a2b3c | tail -50"},
+		{command: "magus query output ref1a2b3c > /tmp/out.txt"},
+		// An input redirect FEEDS magus rather than hiding what it said.
+		{command: "magus buzz - < script.buzz"},
+		// magus must be the COMMAND, not a substring: these are paths and text.
+		{command: "grep -n x cmd/magus/agent_test.go | head"},
+		{command: "ls cmd/magus | wc -l"},
+		{command: "cat x | magus buzz -"},
+		// jq composes with -o json rather than fighting it.
+		{command: "magus graph export -o json | jq ."},
+		// Repo-wide code search: the graph answers from declared sources. Narrow on
+		// purpose: reading one file with grep is not a structural question.
+		// Denied, not advised: a repo-wide text search is the habit that keeps the
+		// graph unused, and an advisory is scrolled past. The reason must ROUTE:
+		// refs for code symbols, query for domain entities, because an agent that
+		// tries `magus query someFunc`, gets 0, and gives up is the failure mode.
+		// The advisory TRANSLATES: it echoes the searched identifier back as the exact command,
+		// so the reader gets `magus refs funcName` to run, not just "consider refs".
+		{command: `grep -rn "funcName" .`, context: "magus refs funcName"},
+		{command: "rg symbolName", context: "magus refs symbolName"},
+		// A multi-word pattern is not a symbol, so it routes to a free-text query, quoted verbatim.
+		{command: `grep -rn "go test" docs/`, context: `magus query "go test"`},
+		// refs is compiled-language symbols only, so shapes it cannot answer route to query: a
+		// diagnostic code and a Buzz op both have graph answers refs would miss.
+		{command: "grep -rn MGS2011 docs/", context: "magus query MGS2011"},
+		{command: "grep -rn mgs_listManifests spells/", context: "magus query mgs_listManifests"},
+		{command: `find . -name "*.go"`, context: "magus refs"},
+		// A find/fd gets a translated lead too: the -name glob converts to a
+		// file-node query, on top of the generic reason above. The regex is
+		// single-quoted so its backslash survives the paste.
+		{command: `find . -name "*.go"`, context: `magus query kind=file 'id=~\.go$'`},
+		// fd's translation shipped unreachable: hint modelled it while the gate
+		// admitted no fd line, so every fd test passed through hint.Suggest and
+		// none through the guard. These go end to end on purpose.
+		{command: "fd -e go", context: `magus query kind=file 'id=~\.go$'`},
+		{command: "fd -g '*.yaml'", context: `magus query kind=file 'id=~\.yaml$'`},
+		{command: "fd guard_ cmd/magus", context: `magus query kind=file id=~guard_`},
+		// A type filter is a tree listing, not a name question: the same reason
+		// `find . -type d` carries no -name and stays silent.
+		{command: "fd -t d"},
+		// egrep and fgrep are the grep family hint already models; the word
+		// boundary in `\bgrep` had been excluding both.
+		{command: "egrep -rn Foo .", context: "magus refs Foo"},
+		{command: `fgrep -rn 'a.b' .`, context: `magus query "a.b"`},
+		// A find feeding a grep is a CONTENT question, so the search-family
+		// suggestion leads, not the file listing.
+		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
+		// magus is CWD-relative, so cd-then-magus is how the right command lands
+		// on the wrong project. The project is an argument; only a different
+		// WORKSPACE needs --root.
+		{command: "cd libs/diagnostics && magus run test", context: "CWD-relative"},
+		{command: "magus run test libs/diagnostics"},
+		{command: "cd libs/diagnostics"},
+		{command: "grep pattern onefile.txt"},
+		{command: "grep -n x file.go"},
+		{command: "cat x | grep y"},
+		{command: "go version"},
+		{command: "magus run test"},
+		{command: "ls -la"},
+		{command: "git status --porcelain"},
+		{command: "git diff --cached --stat"},
+		// Tree identity: a revision alone cannot identify a dirty tree, and
+		// checkpoint adds the patch digest that can. Advise: reading the revision
+		// is legitimate, and checkpoint is a superset rather than a substitute.
+		{command: "git rev-parse HEAD", context: "magus vcs checkpoint"},
+		{command: "git rev-parse --short HEAD", context: "magus vcs checkpoint"},
+		// The build-stamp spelling: `git describe --tags` is asking for a version string
+		// to embed, which a checkpoint does not replace.
+		{command: "git describe --tags"},
+		// `git stash create` returns a commit object without touching the working
+		// tree or the stash stack, so it is not the destructive form.
+		{command: "git stash create", context: "magus vcs checkpoint"},
+		// rev-parse answers repository-LAYOUT questions too, and none of those is
+		// asking which revision this is.
+		{command: "git rev-parse --show-toplevel"},
+		{command: "git rev-parse --git-dir"},
+		{command: "git rev-parse --is-inside-work-tree"},
+		// --abbrev-ref takes HEAD and answers with the BRANCH NAME, which a
+		// checkpoint does not replace.
+		{command: "git rev-parse --abbrev-ref HEAD"},
+		// Reading or searching markdown for content routes to the doc-section layer:
+		// prose is queryable, not just greppable. Matches on ".md" so it fires in any repo.
+		{command: "cat docs/doctrine.md", context: "docsection"},
+		{command: "grep host docs/doctrine.md", context: "docsection"},
+		{command: "rg wiring notes.md", context: "docsection"},
+		{command: "head -50 README.md", context: "docsection"},
+		// A code file is not prose; the doc-section advisory must not fire on it.
+		{command: "cat cmd/magus/main.go"},
+	}
+	for _, tt := range tests {
+		v := Evaluate(testDependencies(), tt.command)
+		if (tt.rule != denyRule{}) {
+			// assert rather than require: a require here stops the loop at the first
+			// wrong row, and a rule change that moves seven of them should name all
+			// seven in one run.
+			assert.Equal(t, tt.rule, v.Rule, "%q must be denied by the rule it names", tt.command)
+			// The rule identifies WHICH refusal fired; this keeps one that forgot to
+			// carry a reason for the reader from passing.
+			assert.NotEmpty(t, v.Deny, "%q must deny", tt.command)
+			assert.Empty(t, v.Context, "%q denies, no context", tt.command)
+			if tt.denySays != "" {
+				assert.Contains(t, v.Deny, tt.denySays, "%q must say how much of the line was refused", tt.command)
+			}
+			if tt.denyOmits != "" {
+				assert.NotContains(t, v.Deny, tt.denyOmits, "%q is one command; the multi-command note would be false", tt.command)
+			}
+			continue
+		}
+		cmds, _ := ParseCommands(tt.command)
+		// Also the enforcement that keeps the rule non-optional: a row that denies while
+		// naming none lands here and fails, rather than being quietly untested.
+		assert.Empty(t, v.Deny, "%q must not deny (parsed: %+v)", tt.command, cmds)
+		if tt.context == "" {
+			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
+		} else {
+			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
+		}
+	}
+}
+
+// TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
+// suggestion, not a drop-in replacement. grep is textual and refs/query are semantic, so they
+// agree only when the pattern is a real symbol. The advisory hands back the exact command AND
+// hedges: an empty semantic result means the pattern was text, and grep was the right tool.
+func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
+	v := Evaluate(testDependencies(), `grep -rn "funcName" .`)
+	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
+	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
+}
+
+// TestSearchAdvisoryLeadPrefersTheContentQuestion pins the lead's ordering on a
+// line carrying both a find and a search: the search answers the content
+// question, so its suggestion must outrank the file listing even though the
+// find comes first on the line, and the piped grep counts as repo-wide, since
+// the find is what feeds it the tree.
+func TestSearchAdvisoryLeadPrefersTheContentQuestion(t *testing.T) {
+	v := Evaluate(testDependencies(), `find . -name '*.go' | xargs grep -l HandleFoo`)
+	assert.Empty(t, v.Deny)
+	assert.Contains(t, v.Context, "magus refs HandleFoo", "the content question leads")
+	assert.NotContains(t, v.Context, "kind=file", "the file listing must not outrank it")
+}
+
+// TestRenderAdvisoryLead pins the Confidence -> verb mapping, which nothing else
+// asserted: rendering every lead as "Maybe try" passed the whole suite. The
+// suggestions are literal rather than translated, so a change in hint's routing
+// cannot make this test agree with the renderer by accident.
+func TestRenderAdvisoryLead(t *testing.T) {
+	one := func(c hint.Confidence) []hint.Suggestion {
+		return []hint.Suggestion{{Run: "magus refs HandleFoo", Why: "refs answers with verified occurrences", Confidence: c, Hedge: "An empty result means it was text."}}
+	}
+	for _, tt := range []struct {
+		name        string
+		suggestions []hint.Suggestion
+		want        string
+	}{
+		{
+			name:        "high confidence",
+			suggestions: one(hint.ConfidenceHigh),
+			want:        "Run `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			name:        "medium confidence",
+			suggestions: one(hint.ConfidenceMedium),
+			want:        "Try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			name:        "low confidence",
+			suggestions: one(hint.ConfidenceLow),
+			want:        "Maybe try `magus refs HandleFoo` - refs answers with verified occurrences. An empty result means it was text.\n\n",
+		},
+		{
+			// The verb and the hedge both come from the FIRST suggestion; the rest
+			// contribute a run and a why and nothing else.
+			name: "two suggestions",
+			suggestions: []hint.Suggestion{
+				{Run: "magus refs A", Why: "why A", Confidence: hint.ConfidenceHigh, Hedge: "hedge A"},
+				{Run: "magus query B", Why: "why B", Confidence: hint.ConfidenceLow, Hedge: "hedge B"},
+			},
+			want: "Run `magus refs A` - why A. Or `magus query B` - why B. hedge A\n\n",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, renderAdvisoryLead(tt.suggestions))
+		})
+	}
+}
+
+// TestDocSearchAdviceCarriesTheReadersOwnTerms: the doc rule is matched before the one
+// that renders a suggestion, so nothing asserted the notice was runnable as printed and
+// a `<terms>` placeholder passed the whole suite. The repeat arm is pinned too: it is
+// the text a session meets on every firing after the first.
+func TestDocSearchAdviceCarriesTheReadersOwnTerms(t *testing.T) {
+	v := Evaluate(testDependencies(), `grep -rn "cache key" docs/concepts/cache.md`)
+	assert.Empty(t, v.Deny)
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Contains(t, v.Context, `magus query kind=docsection "cache key"`, "the lead is runnable as printed")
+	assert.Contains(t, v.Brief, `magus query kind=docsection "cache key"`, "so is the repeat")
+	assert.Contains(t, v.Context, "Load the magus-query skill", "the standing advice still ships under the lead")
+}
+
+// A read carries no pattern to query with, so hint abstains and the placeholder
+// wording is what is left to say. Naming a concrete query there would be inventing
+// terms the reader never typed.
+func TestDocReadKeepsThePlaceholderAdvice(t *testing.T) {
+	v := Evaluate(testDependencies(), "cat docs/doctrine.md")
+	assert.Equal(t, advisoryDocSearch, v.Kind)
+	assert.Equal(t, docSearchBrief, v.Brief)
+	assert.Equal(t, docSearchAdvice, v.Context)
+}
+
+// A prose notice must never lead with a code lookup: the markdown read is what fired
+// it, and the grep beside it asks a different question.
+func TestProseSuggestionIgnoresACodeSearchOnTheSameLine(t *testing.T) {
+	cmds := []hint.Invocation{
+		{Name: "cat", Args: []string{"docs/doctrine.md"}},
+		{Name: "rg", Args: []string{"HandleFoo", "internal/"}},
+	}
+	require.Nil(t, proseSuggestion(cmds, searchHints))
+}
+
+// TestSearchAdvisoryLeadAbstains: with nothing hint recognizes on the line there is
+// no lead, and the generic reason ships alone rather than with an empty paragraph.
+func TestSearchAdvisoryLeadAbstains(t *testing.T) {
+	cmds := []hint.Invocation{{Name: "ls", Args: []string{"-la"}}, {Name: "echo", Args: []string{"hi"}}}
+	require.Empty(t, searchAdvisoryLead(cmds, searchHints))
+}
+
+// TestSearchAdvisoryLeadRanksSearchOverFileFind is the unit-level half of the
+// ranking rule. Both commands here suggest something on their own argv, so unlike
+// the piped end-to-end case nothing rests on the recursive re-ask: the find leads
+// the slice and must still lose to the content question.
+func TestSearchAdvisoryLeadRanksSearchOverFileFind(t *testing.T) {
+	search := hint.Invocation{Name: "rg", Args: []string{"HandleFoo"}}
+	want := renderAdvisoryLead(searchHints.Suggest(search))
+	require.Contains(t, want, "magus refs HandleFoo", "the expectation is only meaningful while the search still routes to refs")
+
+	cmds := []hint.Invocation{
+		{Name: "find", Args: []string{".", "-name", "*.go"}},
+		{Name: "rg", Args: search.Args},
+	}
+	require.Equal(t, want, searchAdvisoryLead(cmds, searchHints), "the lead is what the search alone renders: the find contributed nothing")
+}
+
+// TestEvaluateBashGuardWithScopedTranslator exercises the injected-translator seam
+// directly. The point of the parameter is that the verdict is a pure function of
+// what it is handed, so this proves the scoping path with no hook, manifest, or
+// cache directory in the way.
+func TestEvaluateBashGuardWithScopedTranslator(t *testing.T) {
+	v := evaluateWith(testDependencies(), "grep -rn Foo docs/", hint.NewTranslator(hint.WithProjects([]string{"docs"})))
+	require.Empty(t, v.Deny)
+	require.Equal(t, advisoryCodeSearch, v.Kind)
+	require.Contains(t, v.Context, `magus query Foo 'project=~^docs(/|$)'`)
+}
+
+// TestParseGuardCommands pins the resolution itself, separately from the
+// verdicts it feeds. The decision table above proves the verdicts are right;
+// this proves they are right for the right reason: that what the guard judges
+// is the command the shell would actually run.
+func TestParseGuardCommands(t *testing.T) {
+	tests := []struct {
+		name    string
+		command string
+		want    []hint.Invocation
+	}{
+		{"bare", "go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		// An assignment prefix is a separate AST field, so it never has to be
+		// peeled and can never strand the payload.
+		{"assignment prefix", "GOFLAGS=-count=1 go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"quoted assignment value", `GOFLAGS="-count=1 -v" go test ./...`, []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -u", "env -u GOROOT go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"mise exec", "mise exec -- go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"stacked wrappers", "mise exec -- env -u GOROOT go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"timeout duration is not the program", "timeout 300 go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"absolute path resolves to its base", "/usr/local/bin/go test ./...", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		// A -c payload is a script, so it is parsed rather than treated as a word.
+		{"shell -c", "bash -c 'go test ./...'", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"bundled -c flag", `sh -ec "go vet ./..."`, []hint.Invocation{{Name: "go", Args: []string{"vet", "./..."}}}},
+		// An option that takes its own argument (--rcfile x) must not end the -c scan early,
+		// or the payload after it slips through unjudged.
+		{"-c behind an option-argument", "bash --rcfile x -c 'go test ./...'", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		// Both sides of a compound are commands.
+		{"compound", "make deps && mise exec -- go vet ./...", []hint.Invocation{
+			{Name: "make", Args: []string{"deps"}},
+			{Name: "go", Args: []string{"vet", "./..."}},
+		}},
+		// The tokenizing bugs the parser exists to make impossible: a separator
+		// inside quotes is one word, structurally, not a pipe into another command.
+		{"pipe inside quotes is one word", `grep -n "golangci-lint|gofmt" cmd/`, []hint.Invocation{
+			{Name: "grep", Args: []string{"-n", "golangci-lint|gofmt", "cmd/"}},
+		}},
+		{"tool name in prose is an argument", "echo 'run go test to check'", []hint.Invocation{
+			{Name: "echo", Args: []string{"run go test to check"}},
+		}},
+		// env -S carries its argument AS the command line; every spelling reparses.
+		{"env -S bundled", "env -S'go test ./...'", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -S separated", "env -S 'go vet ./...'", []hint.Invocation{{Name: "go", Args: []string{"vet", "./..."}}}},
+		{"env --split-string=", "env --split-string='go test ./...'", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		{"env -S after other flags", "env -i -S'go test ./...'", []hint.Invocation{{Name: "go", Args: []string{"test", "./..."}}}},
+		// find keeps its own command and adds the -exec payload; the inner sh -c peels.
+		{"find -exec", "find . -exec gofmt -w {} +", []hint.Invocation{
+			{Name: "find", Args: []string{".", "-exec", "gofmt", "-w", "{}", "+"}},
+			{Name: "gofmt", Args: []string{"-w", "{}"}},
+		}},
+		{"find -exec sh -c", "find . -exec sh -c 'go test ./...' {} +", []hint.Invocation{
+			{Name: "find", Args: []string{".", "-exec", "sh", "-c", "go test ./...", "{}", "+"}},
+			{Name: "go", Args: []string{"test", "./..."}},
+		}},
+		// `mise run` is a declared task, not a smuggled command.
+		{"mise run is not a wrapper", "mise run setup", []hint.Invocation{{Name: "mise", Args: []string{"run", "setup"}}}},
+		// The wrapper is not the finding: a magus payload resolves and is judged
+		// on its own merits, which is to say fine.
+		{"magus payload", "mise exec -- magus run test", []hint.Invocation{{Name: "magus", Args: []string{"run", "test"}}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ParseCommands(tt.command)
+			assert.True(t, ok, "must parse")
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestParseGuardCommandsUnparsable pins the fail-open contract: a line the
+// parser cannot read skips the raw-tool rule rather than guessing at it.
+func TestParseGuardCommandsUnparsable(t *testing.T) {
+	_, ok := ParseCommands("go test ./... && (")
+	assert.False(t, ok)
+	_, denied := firstRawToolDenied(testDependencies(), "go test ./... && (")
+	assert.False(t, denied)
+}
+
+func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
+	const spellName = "guard-catalog-test"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
+		spellName,
+		spells.WithTargets("verify"),
+		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
+			if target != "verify" {
+				return "", nil, false, nil
+			}
+			return "catalog-tool", []string{"verify"}, true, nil
+		}),
+	))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	match, ok := rawToolMatch(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"verify", "./..."}})
+	require.True(t, ok)
+	assert.Equal(t, toolMatch{spell: spellName, operation: "verify"}, match)
+	assert.False(t, rawToolDenied(testDependencies(), hint.Invocation{Name: "catalog-tool", Args: []string{"other"}}))
+}
+
+// The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
+// ships in a binary and a workspace calls its targets whatever it likes, so the
+// message points at discovery. The resolved spell op appears only as the
+// arg-passthrough escape hatch, which is the one thing the target form does not
+// cover as directly.
+func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
+	verdict := Evaluate(testDependencies(), "go test ./... -run TestFocused")
+	require.NotEmpty(t, verdict.Deny)
+	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
+	assert.Contains(t, verdict.Deny, "magus describe targets")
+	assert.Contains(t, verdict.Deny, "magus run go::go-test")
+	assert.Contains(t, verdict.Deny, "-- <tool-args>")
+	assert.NotContains(t, verdict.Deny, "mise exec")
+
+	// The op form must not lead: it is the exception, and a verdict that opens
+	// with it teaches the dispreferred spelling to every reader.
+	assert.Less(t, strings.Index(verdict.Deny, "magus run <target>"), strings.Index(verdict.Deny, "magus run go::go-test"),
+		"the target form must precede the spell-op form")
+}
+
+// TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
+// are THIS repository's target names, not magus vocabulary; another magusfile
+// declares whatever it likes. A verdict compiled into the binary that instructs
+// `magus run test` is therefore wrong in most workspaces it will ever judge, so a
+// message names a target only when it resolved one from the workspace's own
+// declarations (see regenerateAdvice), and otherwise points at discovery. `ci` is
+// exempt: it is the one target name magus enforces (docs/recommendations.md), so
+// `magus affected ci` is valid in every workspace.
+func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
+	canonical := regexp.MustCompile(`magus (?:run|affected) (?:test|build|lint|format|generate)\b`)
+	for _, command := range []string{
+		"go test ./...", "gofmt -w x.go", "go mod tidy",
+		"git stash", "git stash pop", "git reset --hard", "git clean -fd",
+		"git worktree remove ../wt", "git add -A", "git push origin HEAD",
+		"git commit -m x", "git restore cmd/magus/agent.go",
+		"magus describe targets | grep build", "magus run lint . > /tmp/x.txt",
+		"cd /tmp/copy && magus run lint .", "cd libs/foo && magus run test",
+		`grep -rn "funcName" .`, "magus notes edit x", "sed -i 's/a/b/' f.go",
+	} {
+		v := Evaluate(testDependencies(), command)
+		assert.NotRegexp(t, canonical, v.Deny, "%q names a canonical target in its deny reason", command)
+		assert.NotRegexp(t, canonical, v.Context, "%q names a canonical target in its advisory", command)
+	}
+}
+
+// TestGuardAdversarial is the hostile pass: every way found to smuggle a covered
+// tool past the guard, and every way found to trip it on something innocent.
+//
+// It is written as an attack list rather than a feature list because that is how
+// the failures actually arrived. The wrapper cases are not hypothetical. An
+// agent does not need to intend evasion to evade; it just needs a habit and a
+// toolchain that is awkward to reach. Treat any new entry here as a bug report,
+// not a nice-to-have.
+func TestGuardAdversarial(t *testing.T) {
+	denied := []struct{ name, command string }{
+		// Wrapper smuggling, the observed failure mode.
+		{"mise exec", "mise exec -- go test ./..."},
+		{"mise exec with tool pin", "mise exec go@1.26.5 -- go test ./..."},
+		{"mise x", "mise x -- go test ./..."},
+		{"env unset", "env -u GOROOT go test ./..."},
+		{"env assignment operand", "env GOFLAGS=-v go test ./..."},
+		{"env -i", "env -i go test ./..."},
+		{"assignment prefix", "GOFLAGS=-count=1 go test ./..."},
+		{"quoted assignment value", `GOFLAGS="-count=1 -v" go test ./...`},
+		{"two assignment prefixes", "A=1 B=2 go test ./..."},
+		{"timeout", "timeout 300 go test ./..."},
+		{"timeout with flag", "timeout --foreground 5m go test ./..."},
+		{"nice", "nice -n 10 go test ./..."},
+		{"nice old syntax", "nice -10 go test ./..."},
+		{"stdbuf", "stdbuf -o0 go test ./..."},
+		{"nohup", "nohup go test ./..."},
+		{"command builtin", "command go test ./..."},
+		{"exec builtin", "exec go test ./..."},
+		{"time", "time go test ./..."},
+		{"xargs", "xargs -n1 go vet"},
+		{"setsid", "setsid go test ./..."},
+		{"sudo", "sudo go test ./..."},
+		{"stacked wrappers", "mise exec -- env -u GOROOT timeout 60 go test ./..."},
+		{"deeply stacked", "nohup nice -n 5 stdbuf -o0 env -u GOROOT go test ./..."},
+
+		// Shell re-entry.
+		{"bash -c", "bash -c 'go test ./...'"},
+		{"sh -c double quotes", `sh -c "go test ./..."`},
+		{"bundled flags", "bash -lc 'go test ./...'"},
+		{"absolute shell path", "/bin/sh -c 'go test ./...'"},
+		{"shell inside wrapper", "mise exec -- bash -c 'go test ./...'"},
+		{"nested shells", `bash -c "sh -c 'go test ./...'"`},
+		{"eval", `eval "go test ./..."`},
+
+		// Program-name obfuscation. A regex could be beaten by every one of
+		// these; a parser resolves the word first and then looks it up.
+		{"absolute path", "/usr/local/bin/go test ./..."},
+		{"relative path", "./bin/go test ./..."},
+		{"quoted program", `"go" test ./...`},
+		{"partially quoted program", `g"o" test ./...`},
+		{"single-quoted fragment", "g'o' test ./..."},
+
+		// Control flow: every branch is a command.
+		{"semicolon", "make deps; go test ./..."},
+		{"and-and", "make deps && go test ./..."},
+		{"or-or", "make deps || go test ./..."},
+		{"pipe", "go test ./... | tee log"},
+		{"subshell", "(cd libs/diagnostics && go test ./...)"},
+		{"brace block", "{ go test ./...; }"},
+		{"if branch", "if true; then go test ./...; fi"},
+		{"for body", "for d in a b; do go test ./$d; done"},
+		{"while body", "while true; do go test ./...; done"},
+		{"function body", "run() { go test ./...; }; run"},
+		{"command substitution", "echo $(go test ./...)"},
+		{"backtick substitution", "echo `go test ./...`"},
+		{"background", "go test ./... &"},
+		{"negated", "! go test ./..."},
+		{"redirected", "go test ./... > /dev/null 2>&1"},
+
+		// The write rule. `go build` produces a binary, so it is a write at EVERY
+		// destination, including the /tmp dev loop that used to be exempt.
+		{"relative build output", "go build -o ./bin/magus ./cmd/magus"},
+		{"relative build output no dot", "go build -o bin/magus ./cmd/magus"},
+		{"absolute build output", "go build -o /tmp/magus ./cmd/magus"},
+		{"wrapped absolute build", "mise exec -- env -u GOROOT go build -o /tmp/magus ./cmd/magus"},
+		{"bare build", "go build ./..."},
+		{"go mod tidy", "go mod tidy"},
+		{"gofmt -w", "gofmt -w ."},
+		{"go generate", "go generate ./..."},
+		{"wrapped write", "mise exec -- go generate ./..."},
+
+		// Destructive git still denies however it is REACHED, the safety property
+		// the old unanchored regexes existed for, kept by parsing both commands.
+		{"stash after cd", "cd /repo && git stash"},
+		{"stash in a subshell", "(cd libs/diagnostics && git stash)"},
+		{"stash push", "git stash push -u"},
+		{"bare stash", "git stash"},
+		{"reset hard", "git reset --hard origin/main"},
+		{"clean -fd", "git clean -fd"},
+		{"checkout dot", "git checkout ."},
+		{"checkout dash dash dot", "git checkout -- ."},
+		{"restore dot", "git restore ."},
+		{"stage everything", "git add -A"},
+		{"stage dot", "git add ."},
+		{"stash behind a wrapper", "bash -c 'git stash'"},
+	}
+	for _, tt := range denied {
+		t.Run("deny/"+tt.name, func(t *testing.T) {
+			cmds, _ := ParseCommands(tt.command)
+			assert.NotEmpty(t, Evaluate(testDependencies(), tt.command).Deny,
+				"%q must deny (parsed: %+v)", tt.command, cmds)
+		})
+	}
+
+	// The other half of the job. A guard that cries wolf gets switched off, and
+	// these are the shapes that made it cry wolf: a tool NAME is not a tool CALL.
+	allowed := []struct{ name, command string }{
+		// The wrapper is never the finding.
+		{"mise exec magus", "mise exec -- magus run test"},
+		{"env magus", "env -u GOROOT magus run build"},
+		{"mise run is a declared task", "mise run setup"},
+		{"mise install", "mise install"},
+		{"bash -c innocuous", "bash -c 'ls -la'"},
+
+		// Documented exemptions. A read-only rendering is NOT one of them any more: see
+		// the two gofmt rows in TestEvaluateBashGuard.
+		{"version probe", "golangci-lint --version"},
+		{"go version", "go version"},
+		{"go help", "go help test"},
+		{"go mod download reads", "go mod download"},
+		{"go list reads", "go list ./..."},
+		{"go mod vendor has no spell operation", "go mod vendor"},
+		{"prettier through an unsupported package runner", "npx prettier --write ."},
+
+		// A tool name as DATA. Every one of these denied at some point.
+		{"prose in echo", "echo 'run go test to check'"},
+		{"prose in commit message", `git commit -m "stop reaching for go test"`},
+		{"grep pattern", `grep -rn "go test" docs/`},
+		{"pipe inside a quoted pattern", `grep -n "golangci-lint|gofmt" cmd/`},
+		{"escaped alternation", `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
+		{"backtick in a quoted argument", "echo 'run `go test` first'"},
+		{"tool name in a path", "cat cmd/magus/gofmt_test.go"},
+		{"heredoc body is data", "cat <<'EOF'\ngo test ./...\nEOF"},
+
+		// Neighbouring programs that merely start the same way.
+		{"godoc", "godoc -http=:6060"},
+		{"gopls", "gopls check ."},
+
+		// Plain magus usage must never be obstructed.
+		{"magus run", "magus run test"},
+		{"magus affected", "magus affected ci"},
+
+		// DESTRUCTIVE GIT COMMANDS AS PROSE. These denied until the git rules moved
+		// onto the parser, and the cost was concrete: writing the magus-vcs-hygiene skill
+		// (the document whose entire subject is these commands) through a heredoc
+		// was blocked twice in one session.
+		{"stash named in a heredoc", "cat <<'EOF' > s.md\nNever run git stash here.\nEOF"},
+		{"stash named in an echo", "echo 'never run git stash to verify a build'"},
+		{"clean named in a commit message", `git commit -m "document why git clean -fd is banned"`},
+		{"reset --hard as documentation", "echo 'git reset --hard destroys untracked work'"},
+		{"checkout dot inside a quoted string", `printf '%s' "git checkout . is denied"`},
+		// Reading a stash stays safe, and so does restoring one you NAMED.
+		{"stash list", "git stash list"},
+		{"stash pop by ref", "git stash pop stash@{1}"},
+		// A branch checkout is not a revert.
+		{"checkout a branch", "git checkout main"},
+		{"checkout -b", "git checkout -b feat/x"},
+		// A scoped clean flag-less invocation is a dry run.
+		{"clean -n", "git clean -n"},
+		{"reset without --hard", "git reset HEAD~1"},
+	}
+	for _, tt := range allowed {
+		t.Run("allow/"+tt.name, func(t *testing.T) {
+			cmds, _ := ParseCommands(tt.command)
+			assert.Empty(t, Evaluate(testDependencies(), tt.command).Deny,
+				"%q must not deny (parsed: %+v)", tt.command, cmds)
+		})
+	}
+}
+
+// TestGuardKnownHoles records what this guard CANNOT catch, as executable fact
+// rather than as a caveat in a comment someone will not read.
+//
+// These are not todos. Each one is unclosable by anything short of running the
+// command, and the entry exists so that nobody re-derives that the hard way, and
+// so a future change that accidentally closes one is noticed. The conclusion to
+// draw is the one the architecture already reflects: this guard is the fast,
+// explanatory layer, and the filesystem sandbox is the enforcement. A hook that
+// reads a command string is defence in depth, never a boundary.
+func TestGuardKnownHoles(t *testing.T) {
+	holes := []struct{ name, command, why string }{
+		{
+			"script file", "sh /tmp/build.sh",
+			"the guard sees a path; the contents are not readable from the command line",
+		},
+		{
+			"command substitution as the program", "$(which go) test ./...",
+			"the program name is produced at runtime, so it has no literal value to resolve",
+		},
+		{
+			"variable as the program", "$GO test ./...",
+			"same: a parameter expansion has no value until the shell runs",
+		},
+		{
+			"alias defined earlier in the session", "gt ./...",
+			"an alias lives in the shell's state, not in the command line the hook receives",
+		},
+		{
+			"make target that shells out", "make test",
+			"the recipe is in a Makefile; only the make invocation is visible",
+		},
+	}
+	for _, tt := range holes {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Empty(t, Evaluate(testDependencies(), tt.command).Deny,
+				"%q is a KNOWN HOLE (%s). If this now denies, the guard got stronger: move it into TestGuardAdversarial rather than deleting it.", tt.command, tt.why)
+		})
+	}
+}
+
+// TestGitGuardFallbackPrefersTheDeny pins the unparsable-line half, where the file's own
+// invariant is that an over-eager deny is the safe direction: there is no AST, and the work
+// these rules protect cannot be recovered.
+//
+// Both cases answered with something weaker. The push ADVISORY was ordered above the
+// stage-all deny, and the safe-stash pattern listed the destructive restores as safe, so
+// each line got a reminder or nothing where the parsed path denies.
+func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git add -A && git push && (",
+		"git stash pop && (",
+		"git stash apply && (",
+		"git stash drop && (",
+		"git stash branch wip && (",
+	} {
+		_, parsed := ParseCommands(cmd)
+		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "%q must deny on the fallback path", cmd)
+	}
+
+	// Reading a stash is still safe, whether or not the line parses.
+	for _, cmd := range []string{"git stash list && (", "git stash show && ("} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// TestDenyOutranksHeldAdvisory pins severity ordering across rules. A git rule
+// that merely ADVISES used to answer first and return, so appending `git commit`
+// to an otherwise-denied line downgraded the whole verdict to an advisory. That is
+// not hypothetical: the observed command cd'd into a scratchpad copy, sent four
+// magus runs to /dev/null, and ended in `git commit`, and the guard said "advise".
+func TestDenyOutranksHeldAdvisory(t *testing.T) {
+	const offending = `SP=/private/tmp/x/scratchpad; cd "$SP/fixci" && ./magus run generate . -s >/dev/null 2>&1`
+
+	require.NotEmpty(t, Evaluate(testDependencies(), offending).Deny, "the line alone must deny")
+	for _, suffix := range []string{
+		"; git commit -q -m x && git log --oneline -1",
+		"; git status --porcelain",
+		"; git add -- file.go",
+	} {
+		assert.NotEmpty(t, Evaluate(testDependencies(), offending+suffix).Deny,
+			"appending %q must not downgrade a deny to an advisory", suffix)
+	}
+
+	// The advisory still surfaces when nothing denies: holding it must not drop it.
+	plain := Evaluate(testDependencies(), "git commit -q -m x")
+	assert.Empty(t, plain.Deny)
+	assert.NotEmpty(t, plain.Context, "a held advisory is still the answer when no rule denies")
+}
+
+// TestOutputGuardNamesTheReplacement pins the REASON each output denial gives,
+// because a deny that only prohibits teaches the next reach for a workaround. The
+// pattern being reinforced is "ask magus for the field", so the pipe denial has
+// to name the projection flags, and the redirect denial has to name --tee. Two
+// distinct messages, because the right replacement differs by shape: a filter
+// wanted one value, a redirect wanted a copy of the whole thing.
+func TestOutputGuardNamesTheReplacement(t *testing.T) {
+	piped := Evaluate(testDependencies(), "magus describe targets | grep build").Deny
+	require.NotEmpty(t, piped)
+	assert.Contains(t, piped, "-o name")
+	assert.Contains(t, piped, "-o template=")
+	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
+
+	redirected := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
+	require.NotEmpty(t, redirected)
+	assert.Contains(t, redirected, "magus query output", "the captured log is already persisted; that is the replacement")
+	assert.Contains(t, redirected, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
+	assert.Contains(t, redirected, "never console text",
+		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
+	assert.Contains(t, redirected, "silent", "the -s + redirect combination is the case worth calling out")
+
+	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
+}
+
+// TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is
+// denied in favour of. This assertion was inverted while the message argued there was
+// deliberately no `magus vcs` wrapper; by then `vcs add` had shipped as exactly that
+// wrapper, so the deny was talking an agent out of the command built to replace it.
+// `git add -- <paths>` stays named: a hand-picked subset is still fine.
+func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
+	verdict := Evaluate(testDependencies(), "git add -A")
+	require.NotEmpty(t, verdict.Deny)
+	assert.Contains(t, verdict.Deny, hint.VCSAdd.String())
+	assert.Contains(t, verdict.Deny, hint.VCSAdd.With("--dry-run"))
+	assert.Contains(t, verdict.Deny, "git add -- <paths>")
+	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
+}
+
+// TestGuardAdvisesCheckpointOnTreeIdentity pins the scoping, which is the whole
+// difficulty of this rule: `git rev-parse` answers repository-layout questions as
+// well as identity ones, and only the identity forms have a magus superset.
+//
+// A deny would be wrong twice over: reading a revision is legitimate, and
+// checkpoint ADDS to it rather than replacing it.
+func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git rev-parse HEAD",
+		"git rev-parse --short HEAD",
+		"git rev-parse --verify HEAD",
+		"git rev-parse HEAD~1",
+		"git rev-parse @",
+		"git describe",
+		"git stash create",
+		"cd libs/foo && git rev-parse HEAD",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
+		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
+	}
+
+	for _, cmd := range []string{
+		"git rev-parse --show-toplevel",
+		"git rev-parse --git-dir",
+		"git rev-parse --is-inside-work-tree",
+		"git rev-parse --show-cdup",
+		"git rev-parse --abbrev-ref HEAD",
+		// A branch whose NAME starts with those four letters is an ordinary revision.
+		"git rev-parse HEADLESS_BRANCH",
+		// The build-stamp spellings: a version string to embed, not the identity of a
+		// tree being handed to someone. This repository's own go_build target uses both.
+		"git describe --tags --always",
+		"git describe --always",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny)
+		assert.NotContains(t, v.Context, "magus vcs checkpoint",
+			"%q is not asking which revision this is", cmd)
+	}
+
+	// A destructive stash form is still a deny: adding `create` to the safe list
+	// must not have widened the arm.
+	for _, cmd := range []string{"git stash", "git stash push -u", "git stash pop"} {
+		assert.NotEmpty(t, Evaluate(testDependencies(), cmd).Deny, "%q must still deny", cmd)
+	}
+}
+
+// TestGuardAdvisesUpdateOnDependencyMutations covers the one rule that routes to a
+// CHARM rather than a command. Re-resolving dependencies writes state that is not
+// reproducible from a clean checkout, which is the whole line between rw and update
+// (types.CharmUpdate), and update is under-discoverable: nothing prompts for a
+// reserved charm nobody declared.
+//
+// ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
+// is none: magus has no verb that re-resolves dependencies on its own.
+func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"go get github.com/foo/bar@latest",
+		"pnpm add lodash",
+		"pnpm up",
+		"npm update",
+		"yarn upgrade",
+		"cargo update",
+		"uv lock",
+		"poetry update",
+		"pip-compile",
+		"cd libs/foo && pnpm add lodash",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
+		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
+	}
+
+	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
+	// spell op and a dependency refresh, and the deny answers first, so without this
+	// the reader is sent to a target that would refuse the write.
+	tidy := Evaluate(testDependencies(), "go mod tidy")
+	require.NotEmpty(t, tidy.Deny)
+	assert.Contains(t, tidy.Deny, ":update")
+
+	// Applying a lockfile is not re-resolving one, and installing a tool is not a
+	// dependency at all. Firing here would put an advisory on the most routine
+	// command in a JS repo.
+	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
+		assert.NotContains(t, Evaluate(testDependencies(), cmd).Context, ":update", "%q does not re-resolve dependencies", cmd)
+	}
+}
+
+// TestGuardDeniesInPlaceSed: `-i` is the one sed flag that WRITES, and the two
+// implementations read each other's spelling as garbage: GNU takes `sed -i 's/x/y/' f` as
+// an edit while BSD reads that script as the backup suffix, and `sed -i ”` inverts it. A
+// command that worked where it was written mangles the file on the next machine, and it has
+// already written by the time anyone looks. Reading with sed is untouched.
+func TestGuardDeniesInPlaceSed(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"sed -i 's/a/b/' f.go",
+		"sed -i '' 's/a/b/' f.go",
+		"sed -i.bak s/a/b/ f",
+		"sed --in-place=.bak s/a/b/ f",
+		"cat x | sed -i s/a/b/ y",
+		"find . -name '*.go' -exec sed -i 's/a/b/' {} +",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+	}
+	for _, cmd := range []string{
+		"sed -n '1,5p' f.go",
+		"sed 's/a/b/' in.txt",
+		"cat f | sed -e 's/a/b/'",
+		"echo x | sed s/x/y/",
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
+	}
+}
+
+// TestGuardDeniesScriptedRewrite: `sed -i` is denied, so the next thing to hand is a
+// python one-liner that substitutes and writes: the same edit, by a route the sed rule
+// cannot see. This is not hypothetical: a `\.Sum\b` rewrite aimed at one proto field also
+// rewrote the OTel SDK's metricdata.Sum and a histogram data point's dp.Sum, because a
+// pattern cannot tell one project's symbol from a dependency's symbol of the same name.
+//
+// The negative cases matter as much: an interpreter that only WRITES is ordinary authoring
+// and must stay available, or the guard costs more than the mistake it prevents.
+func TestGuardDeniesScriptedRewrite(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`python3 -c "import io,re; s=io.open('f.go').read(); s=re.sub(r'\bA\b','B',s); io.open('f.go','w').write(s)"`,
+		`python3 - <<'PY'` + "\n" + `s=re.subn(r'\bP50\b','P50Seconds',s)` + "\n" + `io.open(p,'w').write(s)` + "\nPY",
+		`perl -pi -e 's/a/b/' f.go`,
+		`perl -i.bak -pe s/a/b/ f`,
+		`ruby -i -pe 'gsub(/a/,"b")' f.rb`,
+	} {
+		assert.NotEmpty(t, Evaluate(testDependencies(), cmd).Deny, "expected a deny for %q", cmd)
+	}
+	for _, cmd := range []string{
+		// Authoring a file is not a rewrite: no substitution, nothing to mis-target.
+		`python3 -c "io.open('new.go','w').write(body)"`,
+		// Reading and reporting, however it greps, writes nothing.
+		`python3 -c "print(re.sub(r'a','b',s))"`,
+		`perl -ne 'print if /a/' f.go`,
+		`node -e "console.log(x.replace(/a/,'b'))"`,
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
+	}
+}
+
+// TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
+// agent trusts the graph at all. `magus refs` answers "unknown, not absent" when a project
+// is not indexed, and an agent that reads that as "no matches" falls back to a text match,
+// which is exactly the fallback the advisory exists to prevent.
+func TestSearchGuardRoutesAColdIndex(t *testing.T) {
+	t.Parallel()
+	v := Evaluate(testDependencies(), `grep -rn "someFunc" .`)
+	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
+	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
+}
+
+// TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
+//
+// A receipt claims a PERSON read something. An agent able to mint one turns the measure into
+// a formality it satisfies on the way past, and it would, because stamping the changeset is
+// the obvious tidy-up at the end of a task. The guard is the right place because of what it
+// sees: it is wired into agent hosts, so everything reaching it came from an agent, and a
+// person at a terminal never meets this rule.
+func TestGuardDeniesReadAck(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff ` + "--ack",
+		`./magus diff --impact ` + "--ack",
+		`cd /tmp && magus diff ` + "--ack" + ` --reason x`,
+		// A GLOBAL FLAG before the verb is the same invocation, and the anchored pattern
+		// walked past every one of them: magus accepts its display and workspace flags
+		// ahead of the subcommand, so this spelling minted a receipt unguarded.
+		`magus -o json diff ` + "--ack",
+		`magus --root . diff ` + "--ack",
+		// A line the parser cannot read still falls back to the pattern.
+		`magus diff ` + "--ack" + ` && (`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "only a person can record one")
+	}
+}
+
+// Reading the report is exactly what an agent SHOULD do, so the deny must not reach it. A
+// rule that swallowed the read path would push agents off the surface entirely, which is the
+// opposite of the point: an agent that cannot mint a receipt should still be able to say
+// which files carry none.
+func TestGuardAllowsReadingTheReport(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`magus diff --impact`,
+		`magus diff -o json`,
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "unexpected deny for %q", cmd)
+	}
+}
+
+// The pattern this caught was mine, run perhaps twenty times in one session: format, then
+// lint, then generate, as separate invocations. `lint` needs `format` needs `generate`, so
+// the last one alone does all three: every earlier call was a workspace reload to redo work
+// the next call redid anyway.
+//
+// An advisory rather than a deny: two independent targets on one line is real work, and only
+// the dependency graph knows which case a given chain is.
+func TestChainedRunIsAdvisedNotDenied(t *testing.T) {
+	chained := []string{
+		"./magus run format . --silent; ./magus run lint . --silent",
+		"magus run generate . && magus run lint .",
+		"./magus run generate . --silent; ./magus run format . --silent; ./magus run lint . --silent",
+		// The gate counts too, and this exact line is how the rule's own author tripped MGS4007
+		// an hour after writing it: console:build left an output behind that the gate then read.
+		"./magus run build console --silent; ./magus affected ci --no-default-charms",
+	}
+	for _, cmd := range chained {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "a chain is questionable, not forbidden: %s", cmd)
+		assert.Contains(t, v.Context, "compose through ctx.needs", cmd)
+	}
+
+	// One invocation is the shape being taught, and must stay silent.
+	for _, cmd := range []string{
+		"./magus run lint . --silent",
+		"magus run build api web/studio",
+		"echo 'magus run format . ; magus run lint .'",
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Context, "should not fire: %s", cmd)
+	}
+}
+
+// Naming the side deliberately is the spelling the merge-side deny points at, so it must
+// stay reachable. It still draws the path-scoped revert advisory, which is the pre-existing
+// "classify before you revert" advice and correct here.
+func TestGuardAllowsAnExplicitSideChoice(t *testing.T) {
+	for _, cmd := range []string{
+		"git checkout --ours -- a.go",
+		"git checkout --theirs -- a.go",
+	} {
+		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "an explicit side is the sanctioned form: %s", cmd)
+	}
+}
+
+// A poll loop waits for a notification the host already delivers, and it outlives its
+// purpose: past the tool timeout it is backgrounded rather than killed, so it goes on
+// polling a condition a run that failed early never satisfies.
+func TestGuardDeniesBusyWait(t *testing.T) {
+	for _, cmd := range []string{
+		`until grep -q "^summary:" out.log; do sleep 25; done`,
+		`until grep -qE "^summary:" /tmp/t.output 2>/dev/null; do sleep 20; done; tail -3 /tmp/t.output`,
+		`while ! test -f done.marker; do sleep 5; done`,
+		`while [ ! -f done.marker ]; do sleep 1; done`,
+		`until ./magus query output ref; do sleep 30; done`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+}
+
+// A backgrounded gate's capture is magus output one step removed, and nothing on the
+// filter line is a magus invocation, so the pipe rule cannot see it. Measured twice in
+// one session: a grep for `cause:` dropped the `output:` and `inspect:` lines two below
+// it, which are the only way to read the rest of the failure.
+func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
+	for _, cmd := range []string{
+		// The measured command.
+		`grep -n "^\[fail\]\|cause:" /Users/x/.claude/tasks/abc123.output | head -8`,
+		`grep -c fail tasks/abc123.output`,
+		`tail -40 /tmp/t.output`,
+		`cat tasks/abc123.output | grep cause:`,
+		`awk '/cause:/ {print}' tasks/abc123.output`,
+		`wc -l tasks/abc123.output`,
+		// A range print cuts by position, which is a filter with extra steps.
+		`sed -n '1,200p' tasks/abc123.output`,
+		// The persisted run log is the same content by another route.
+		`grep -n cause: .magus/logs/9f2c1a.log`,
+		`head -20 /Users/x/repo/.magus/logs/9f2c1a.log`,
+		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
+		// command, not the head of the line.
+		`bash -c 'grep cause: tasks/abc123.output'`,
+		`LC_ALL=C grep cause: tasks/abc123.output`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCaptureFilter, v.Rule.Name, cmd)
+	}
+}
+
+// The deny has to name what the filter was about to cut, or the reader corrects the
+// spelling instead of the mistake, and it has to route somewhere that works.
+func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
+	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
+	require.NotEmpty(t, v.Deny)
+	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
+		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
+	}
+	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
+	assert.Contains(t, v.Deny, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+}
+
+// The rule is about the CAPTURE, not about text filters. Reading the file whole, and
+// filtering anything else, both stay allowed.
+func TestGuardAllowsReadingACaptureWhole(t *testing.T) {
+	for _, cmd := range []string{
+		// No filter at all: the whole file is the sanctioned read.
+		`cat tasks/abc123.output`,
+		`cat /Users/x/.claude/tasks/abc123.output`,
+		// An unrelated file is an ordinary search.
+		`grep -n cause: internal/run/run.go`,
+		`head -20 CHANGELOG.md`,
+		// A --tee'd file has a contract, so consuming it is composition.
+		`jq -r 'select(.level=="error")' gate.jsonl`,
+		`cat gate.jsonl | jq -r .target`,
+	} {
+		assert.NotEqual(t, denyRuleCaptureFilter, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+// TestGuardDeniesWatchingCI pins the blocking forms. Measured 2026-09-07: four watches in
+// one session, every one green, each following a local gate that had already run the
+// identical command on the identical tree.
+func TestGuardDeniesWatchingCI(t *testing.T) {
+	for _, cmd := range []string{
+		`gh run watch 34069443069`,
+		`gh run watch 34069443069 --exit-status --interval 60`,
+		`gh pr checks 183 --watch`,
+		`gh run view 34069443069 --watch`,
+		// A wrapper or env prefix reaches the same verdict: the rule reads the parsed
+		// command, not the head of the line.
+		`GH_TOKEN=x gh run watch 123`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleCIWatch, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "GREEN CHANGES NOTHING", cmd)
+	}
+}
+
+// Reading a result that already exists is the point of the tool and stays allowed; what
+// the rule refuses is the WAITING. `watch` also names a real unrelated program.
+func TestGuardAllowsReadingCIWithoutWaiting(t *testing.T) {
+	for _, cmd := range []string{
+		`gh pr list --state open --json number,mergeable,statusCheckRollup`,
+		`gh pr checks 183`,
+		`gh run view 34069443069 --log`,
+		`gh run list --branch main --limit 5`,
+		`gh run view 34069443069 --json status,conclusion`,
+		// Not gh at all.
+		`watch -n 5 free -m`,
+	} {
+		assert.NotEqual(t, denyRuleCIWatch, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}
+
+// The program rules read the parsed commands, so a line that only MENTIONS a program is
+// not that program running. Every case here was a live false positive: the sed rule
+// refused a `grep` looking for where it was tested, and refused an `echo` describing it.
+func TestGuardIgnoresProgramsOnlyMentioned(t *testing.T) {
+	for _, cmd := range []string{
+		`echo "searching for the string sed -i in a file"`,
+		`echo 'until grep -q x f; do sleep 1; done'`,
+		`echo "a doc note about README.md and rg usage"`,
+		`printf '%s\n' "replace the sed -i call with the editor tool"`,
+		`echo "run find . -name '*.go' by hand"`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "a mention is not an invocation: %s", cmd)
+		assert.Empty(t, v.Context, "a mention is not an invocation: %s", cmd)
+	}
+}
+
+// The conversion must not have blunted the rules: each still fires on the real thing.
+func TestGuardStillCatchesTheRealInvocations(t *testing.T) {
+	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -i '' 's/a/b/' f.go`).Deny, "in-place sed")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `sed -ni 's/a/b/' f.go`).Deny, "a packed -i cluster")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `grep -rn "Foo" .`).Context, "a recursive grep")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `rg Foo`).Context, "ripgrep is repo-wide")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `find . -name "*.go"`).Context, "a name query")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `cat docs/guide.md`).Context, "reading prose")
+	assert.NotEmpty(t, Evaluate(testDependencies(), `perl -i -pe 's/a/b/' f`).Deny, "perl -i")
+}
+
+// The rule is about polling, not about loops or about sleep. A loop that does real work
+// each pass, and a bare sleep, both stay allowed.
+func TestGuardAllowsLoopsThatAreNotPolling(t *testing.T) {
+	for _, cmd := range []string{
+		`for f in *.go; do echo "$f"; done`,
+		`while read -r line; do echo "$line"; done < list.txt`,
+		"sleep 5",
+		"for i in 1 2 3; do ./magus run lint .; done",
+		// The case the first, pattern-based version of this rule got wrong: a quoted
+		// string that runs no loop at all. It is why the rule reads the AST.
+		`echo 'until grep -q x f; do sleep 1; done'`,
+		// A loop that sleeps AND does work each pass is working, not polling.
+		`while true; do ./magus run lint .; sleep 60; done`,
+	} {
+		assert.NotEqual(t, denyRuleBusyWait, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
+	}
+}

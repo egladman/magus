@@ -64,6 +64,7 @@ var TargetPolicyOptions = []ProjectOption{
 	{Key: "drift_reason"},
 	{Key: "timeout", Since: "0.4.3"},
 	{Key: "retry_on_volatile", Since: "0.4.3"},
+	{Key: "advisory", Since: "0.4.4"},
 }
 
 // ToolBoundKeys is the ONE list of recognized keys inside one entry of magus.project's

@@ -31,7 +31,6 @@ import (
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
-	ledgerhandler "github.com/egladman/magus/internal/handler/ledger"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
@@ -43,7 +42,7 @@ import (
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/ledger"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
@@ -170,12 +169,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			slog.String("addr", addr.String()))
 	}
 
-	// ONE lease-ledger store for the whole daemon, built before the MCP handler so
-	// the magus_ledger tool and the console's /api/v1/ledger route below hold the same
-	// object. Two stores over one file each take their own mutex, and the merge Update
-	// performs under a single acquisition then serializes against nothing.
-	if opts.Ledger == nil && opts.Magus != nil {
-		opts.Ledger = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+	// ONE job store for the whole daemon, built before the MCP handler so the magus_job
+	// tool and the JobService below hold the same object. Two stores over one file each
+	// take their own mutex, and the merge Update performs under a single acquisition then
+	// serializes against nothing.
+	if opts.Jobs == nil && opts.Magus != nil {
+		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
 
 	// Build the MCP handler (validates opts and wires session tracking). No
@@ -318,7 +317,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// live pool state, the output store for each node's last outcome and its ref), so
 			// it introduces no third notion of what ran.
 			planH := planhandler.NewHandler(svc, outputStore, opts.Magus.Root(), log)
-			ledgerH := ledgerhandler.NewHandler(opts.Ledger, log)
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
@@ -366,10 +364,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
-			// Lease ledger: the plan an orchestrating agent DECLARED, read straight off
-			// the store the magus_ledger MCP tool writes. Read-only here (the write door is
-			// the tool), and magus enforces none of it.
-			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))
 			// Attention queue: GET lists the open requests, POST disposes one. The write is a
 			// PERSON closing a block through their own surface (docs/doctrine.md, "Manual on
 			// purpose"), which is why it sits here on the loopback bridge and NOT in the LAN
@@ -500,7 +494,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
 			// cross-origin allowance as the read services (never unauthenticated), so a browser
 			// client can trigger maintenance without the daemon exposing an open action endpoint.
-			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version), connectReadMax)
+			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version, opts.Jobs), connectReadMax)
 			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, jobHandler))))
 			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 

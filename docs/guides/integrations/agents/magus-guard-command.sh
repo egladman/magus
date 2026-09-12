@@ -10,6 +10,10 @@
 # stdout and exits 0 either way. Override any of the variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
+#   HOST_EVENT_RAW   when set, hand the WHOLE host event to magus session hook
+#                    instead of selecting HOST_EVENT_PATH out of it - for a
+#                    surface whose payload is not one string, such as an MCP
+#                    tool call (a tool name plus a params object)
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
@@ -45,9 +49,18 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none
+# claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
+# so HOST_EVENT_RAW forwards the whole event instead, and the same hookSpecificOutput reply this
+# file already renders for the command surface carries a deny or an advise on this one too.
+# magus-guard-coverage: schema=1 host=codex surface=mcp deny=none advise=none pass=none
+# codex declares NONE here, not model: OpenAI's vendored hooks schema documents PreToolUse
+# firing on Bash and the edit tools by name and says nothing about an MCP tool call. Wiring a
+# matcher this file cannot confirm fires would be a claim the evidence does not support; see
+# testdata/hostschemas/codex/hooks.schema.json and docs/guides/integrations/agents/codex.md.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -151,7 +164,11 @@ fi
 # before attribution existed. One extra process only on an older binary, and none once the flags are
 # in a release.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  if [ -n "$HOST_EVENT_RAW" ]; then
+    printf '%s' "$event" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  else
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+  fi
 }
 
 # guard_failure_notice states WHICH binary went silent, what version it is, and what it

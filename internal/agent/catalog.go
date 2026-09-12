@@ -74,16 +74,17 @@ import (
 // (exclude), id=~regex (regex), with the `:`/`-kind:op` spelling kept as a
 // compat alias. `=` reads as a match over a structured graph, and `!=` removes
 // the flag collision the dash negation carried.
-// 50: magus-handoff-journal gains the `elimination` record: a hypothesis an
+// 50: the memory journal skill, then still named for the agent-industry idiom,
+// gains the `elimination` record: a hypothesis an
 // investigation killed, carrying the why plus an `excerpt` of the evidence that
 // killed it. The excerpt is required because an output ref resolves only from the
 // checkout that minted it, which leaves the ref beside it a best-effort handle.
-// 51: magus-handoff-journal teaches what `put` writes: the fields the caller
+// 51: that same skill teaches what `put` writes: the fields the caller
 // sends, keeping the rest, so refreshing a status does not drop the body. Clearing
 // a field or changing a type is a delete and a create, and `allow_missing: false`
 // (CLI `--amend`) says the entry is meant to exist.
-// 52: magus-handoff-journal is magus-memory again, and "handoff journal" is gone
-// from every surface a reader meets. The word is agent-industry jargon and this
+// 52: that skill is magus-memory again, and the agent-industry name it carried is
+// gone from every surface a reader meets. The word is jargon and this
 // store predates it: it is a repository's memory, which is what the command has
 // always been called. Pre-1.0, so the old directory is not carried: `--prune`
 // removes it, which is what the stale report already names it for.
@@ -133,7 +134,33 @@ import (
 // than a wider owned_paths. Measured over 204 session transcripts: reads left the
 // units the session actually wrote to about a fifth of the time, and widening the
 // write lane to open a read is the move that puts two workers on one file.
-const SkillVersion = 64
+// 65: magus-multi-agent renders the worker prompt with `magus ledger brief` and grades
+// the report with `magus ledger accept` instead of demanding four facts in prose, and
+// carries a coalescing rule: partition by write set, then merge what the write sets
+// allow, because a worker's fixed context load is paid whatever the diff's size.
+// 66: magus-multi-agent says delegate. The agent-industry word it replaces is gone;
+// this tool is written for a person first.
+// 67: magus-multi-agent follows the ledger's grading contract onto its new shape.
+// `magus ledger accept` now reads the report from --stdin only and exits 1 for a
+// rejection or 2 for one that will not decode; it derives pass or fail from the
+// stored attempt behind the report's output ref, since the report carries no
+// `passed` field for a worker to assert. A bound worker's own write door is four
+// things: register its base, shrink its own owned_paths, end its own row, or
+// declare a child inside its own lane; everything else belongs to the unbound
+// orchestrator, and the skill says so plainly instead of pointing a worker at the
+// magus_ledger tool as a way to widen. It also teaches the guard facts the lease
+// runtime gained alongside this: guard wiring is denied under any bound lease, a
+// verdict carries the lease it graded against, a served next is pre-authorized,
+// and `magus ledger register` and `magus session hints` are named as the
+// terminal doors they are.
+// 68: magus-multi-agent says a worker hands out part of its OWN lease rather than
+// delegating, which is the skill's own vocabulary, and states `magus ledger accept`'s
+// refusal as cmd/magus/ledger.go enforces it: any checkout bound to a lease is refused,
+// not only one bound to the row being graded.
+// 69: magus-multi-agent names a lease's lanes write_paths, read_paths and deny_paths and
+// its model `model`, which is what every magus surface now spells them; the old names are
+// accepted on input for one release and nowhere emitted.
+const SkillVersion = 69
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -900,7 +927,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 			// string has been wrong before (it once named a flag that does not
 			// parse), and a stale stamp whose one job is to hand you the command
 			// that fixes it is worth checking against `magus agent -h`.
-			out = append(out, c.gradeStamp(AgentsFile, "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
+			out = append(out, c.gradeStamp(AgentsFile, "magus agent starter (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })

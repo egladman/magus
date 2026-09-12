@@ -124,11 +124,11 @@ List past sessions and the targets they ran (the default)
 \fBload\fR
 Load a normalized agent\-session event stream from a host transcript
 .TP
-\fBlease\fR
-Bind a lease to this checkout so the guard applies its ledger row here
-.TP
 \fBshow\fR
 Report one loaded session: what it ran, what the rules say, what it loaded
+.TP
+\fBhints\fR
+Report uptake per hint id: served, followed, rejected, reflex
 .TP
 \fBattention\fR
 List the open requests agents raised, oldest first; with \-q, print nothing and exit 1 when the queue is empty
@@ -257,7 +257,7 @@ printf '%s\(rsn' 'needs approval' | magus session notify --outcome permission --
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
-\fBmagus\-ledger\fR(1),
+\fBmagus\-job\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),

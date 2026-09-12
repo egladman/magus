@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
 )
@@ -114,14 +115,14 @@ var adoptionReadTools = map[string]bool{"cat": true, "head": true, "tail": true,
 // live guard sees. It returns the dominant category and, for a repo-wide source search, the bare
 // identifier that would route to `magus refs`.
 func classifyCommandLine(line string) (category, symbol string) {
-	cmds, _ := parseGuardCommands(line)
+	cmds, _ := guard.ParseCommands(line)
 	var sawGraph, sawSearch, sawRead, sawMagus bool
 	var srcSearch, proseSearch bool
 	var symbolPat string
 	for _, c := range cmds {
 		// magus-verb detection stays local: hint models the tools magus
 		// replaces, never magus itself.
-		if c.Name == "magus" || c.Name == "./magus" {
+		if c.Name == "magus" {
 			if len(c.Args) > 0 && slices.Contains([]string{"query", "refs", "explain", "path", "graph"}, c.Args[0]) {
 				sawGraph = true
 			} else {
@@ -129,14 +130,13 @@ func classifyCommandLine(line string) (category, symbol string) {
 			}
 			continue
 		}
-		inv := hint.Invocation{Name: c.Name, Args: c.Args}
-		switch hint.Classify(inv) {
+		switch hint.Classify(c) {
 		case hint.ClassSearchProse:
 			sawSearch, proseSearch = true, true
 		case hint.ClassSearchSource:
 			sawSearch, srcSearch = true, true
 			if symbolPat == "" {
-				if pats := hint.Patterns(inv); len(pats) > 0 && looksLikeSymbol(pats[0]) {
+				if pats := hint.Patterns(c); len(pats) > 0 && looksLikeSymbol(pats[0]) {
 					symbolPat = pats[0]
 				}
 			}

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -99,22 +100,26 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 		done := onBlock(holder)
 		defer done()
 	}
-	slog.InfoContext(ctx, "magus: waiting for a cache lock held by another step",
-		slog.String("waiting", displayLockParty(waiter)),
-		slog.String("held_by", displayLockParty(holder)))
+	slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for a cache lock held by %s",
+		displayLockParty(waiter), displayLockParty(holder)))
 	beat := time.NewTicker(lockWaitHeartbeat)
 	defer beat.Stop()
+	started := time.Now()
+	next := lockWaitHeartbeat
 	for {
 		select {
 		case e.sem <- struct{}{}:
 			return took(), nil
 		case <-beat.C:
 			// The beat says this run is not hung, to the watchdog that would otherwise
-			// abort a legitimate wait exactly as if it had wedged.
+			// abort a legitimate wait exactly as if it had wedged. The log backs off as
+			// the wait doubles; the watchdog does not.
 			ProgressFromContext(ctx).Beat()
-			slog.InfoContext(ctx, "magus: still waiting for a cache lock held by another step",
-				slog.String("waiting", displayLockParty(waiter)),
-				slog.String("held_by", displayLockParty(k.holderOf(key))))
+			if elapsed := time.Since(started); elapsed >= next {
+				next *= 2
+				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is still waiting for a cache lock held by %s (%s so far)",
+					displayLockParty(waiter), displayLockParty(k.holderOf(key)), elapsed.Round(time.Second)))
+			}
 		case <-ctx.Done():
 			abandon()
 			return nil, ctx.Err()

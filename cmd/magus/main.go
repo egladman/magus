@@ -330,6 +330,18 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
+	case "job":
+		// `job run` submits one of the daemon's OWN jobs and is called from a VCS hook,
+		// where it promises to be a silent no-op when no daemon answers. Loading the
+		// workspace to make that promise is work nobody asked for, and it breaks the
+		// promise out loud: a checkout carrying one unparsable local spell logs the load
+		// error on every hook. It resolves the daemon socket itself, exactly as
+		// `server job` did before this verb replaced it. Every other job verb reads the
+		// workspace and takes the default.
+		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
+			return dispatchProfile{needsConfig: true}
+		}
+		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
 	case "server":
 		// server subcommands manage the daemon directly and must never forward or host
 		// their own per-process proc server. start IS the daemon (special-cased in startup);
@@ -530,15 +542,19 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	cfg, err := config.LoadWithRoot(config.ExtractFlag(args), earlyRoot)
 	stopCfgLoad()
 	if err != nil {
-		slog.Error("load config failed", slog.String("error", err.Error()))
+		// Printed rather than logged: the unknown-key error names a file, a line and a
+		// suggestion per line, and slog's text handler escapes every quote and newline
+		// in it back into one unreadable run.
+		fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
 	configgen.ApplyEnv(&cfg, os.Getenv)
 	// LoadWithRoot validates the yaml; ApplyEnv then overwrites those fields.
 	// Without a second pass the whole MAGUS_* surface goes unchecked while the
-	// equivalent yaml is rejected. Exit 1 to match the load failure above.
+	// equivalent yaml is rejected. Printed and exiting 1 like the load failure
+	// above, for the same reason: it is the same multi-line validator text.
 	if err := config.Validate(cfg); err != nil {
-		slog.Error("invalid configuration from the environment", slog.String("error", err.Error()))
+		fmt.Fprintf(os.Stderr, "magus: invalid configuration from the environment: %v\n", err)
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// Pass config to the workspace singletons via package-level state.
@@ -749,7 +765,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	switch {
 	case sub == "server" && len(subArgs) > 0 && subArgs[0] == "start":
 		// A help request must print usage and build no daemon, so it skips both the
-		// background handoff and the in-process daemon and falls through to normal dispatch
+		// detach to the background and the in-process daemon and falls through to normal dispatch
 		// (serverStart's flag parse prints the usage). Without this guard `server start -h`
 		// would hit the idempotency check and report "already running" instead of help.
 		if !isServerStartHelp(subArgs) {
@@ -875,8 +891,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return sessionCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
-	case "ledger":
-		return ledgerCmd(ctx, root, subArgs)
+	case "job":
+		return jobCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
 	case "diff":

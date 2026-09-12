@@ -205,7 +205,8 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	out := g.Query(input, qf.Budget)
 	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
 
-	next := hint.NextForQuery(out)
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForQuery(out))
 
 	// The status is decided once, for every format: a rule that held only for text would
 	// leave the callers most likely to branch on it (`-o name` in a chain, `-o json` in a
@@ -245,7 +246,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	}
 	fmt.Printf("\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
 	fmt.Println("Run with -o json for the full subgraph.")
-	printNext(os.Stdout, nextGate(root), next)
+	printNext(os.Stdout, nx, next)
 	printIndexStaleness(ctx, os.Stdout, root)
 	return nil
 }
@@ -756,7 +757,8 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		return exitForVerdict(ans.Verdict)
 	}
 
-	next := hint.NextForExplain(out)
+	nx := newNextGate(root)
+	next := nx.served(hint.NextForExplain(out))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -779,7 +781,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		fmt.Printf("%s\n", authHint)
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
-	printNext(os.Stdout, nextGate(root), next)
+	printNext(os.Stdout, nx, next)
 	printIndexStaleness(ctx, os.Stdout, root)
 	return nil
 }

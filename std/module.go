@@ -301,7 +301,7 @@ type MCPTool struct {
 	// spellings from drifting.
 	Name string
 	// Member is the Method or Namespace this tool wraps, by its descriptor Name
-	// ("insight", "ledger"). Empty when no typed member covers the verb.
+	// ("insight", "job"). Empty when no typed member covers the verb.
 	Member string
 	// Doc is the tool description sent to the client. Agent-facing prose, so it is
 	// authored here rather than inherited from the member: a member's Doc teaches a

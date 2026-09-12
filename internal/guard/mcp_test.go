@@ -1,0 +1,137 @@
+package guard
+
+import (
+	"path"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestMCPJudgedParamsCoverEveryMergedField holds the guard's view of a job fork to the
+// job store's own. A field job.ParseMerge applies and the renderer drops reaches the row with no
+// rule having read it, and the rebind rule then clears a rewrite of it as a plain shrink.
+//
+// The accepted set is PROBED rather than restated: job.ParseMerge exports no key list, and a
+// second hand-written one is forgotten in the same direction as the first.
+func TestMCPJudgedParamsCoverEveryMergedField(t *testing.T) {
+	merged := 0
+	for _, field := range jobJSONFields() {
+		if !jobMergeApplies(field) {
+			continue
+		}
+		merged++
+		assert.Contains(t, mcpJudgedParams, field,
+			"job.ParseMerge applies %q, so a call carrying it has to be judged", field)
+	}
+	require.NotZero(t, merged, "the probe found no merged field at all, so it is measuring nothing")
+
+	for _, key := range mcpJudgedParams {
+		if key == "op" || key == "id" {
+			continue
+		}
+		assert.True(t, jobMergeApplies(key), "%q is judged but no job fork applies it", key)
+	}
+}
+
+// jobJSONFields are the row's wire names, which is the vocabulary both job doors speak.
+func jobJSONFields() []string {
+	t := reflect.TypeFor[types.Job]()
+	out := make([]string, 0, t.NumField())
+	for i := range t.NumField() {
+		name, _, _ := strings.Cut(t.Field(i).Tag.Get("json"), ",")
+		if name != "" && name != "-" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// jobMergeApplies reports whether a fork naming key changes the row. Several values are
+// tried because the merge is typed: a list, a boolean, a string that is also a valid
+// state, and a rendered run line cover every shape it accepts, and a key it ignores leaves
+// the row untouched under all four.
+func jobMergeApplies(key string) bool {
+	for _, value := range []any{"declared", "magus run test .", []any{"x"}, true} {
+		apply, err := job.ParseMerge(map[string]any{key: value})
+		if err != nil {
+			continue
+		}
+		var row types.Job
+		apply(&row)
+		if !reflect.DeepEqual(row, types.Job{}) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestMagusToolCallMatchesOnlyMagusTools: the match used to be a SUFFIX, so any other
+// server's tool whose name happened to end in one of magus's decoded as a magus call, was
+// rendered into magus's activity trail, and could be denied by magus's rules.
+func TestMagusToolCallMatchesOnlyMagusTools(t *testing.T) {
+	assert.Equal(t, "magus_job", magusToolCall("mcp__magus__magus_job"))
+	assert.Equal(t, "magus_job", magusToolCall("magus_job"), "a host that does not prefix is still talking to magus")
+
+	for _, name := range []string{
+		"mcp__other__magus_job",
+		"mcp__mcp__magus__magus_job",
+		"filesystem__write_file",
+		"mcp__magus__magus_nonexistent",
+		"",
+	} {
+		assert.Empty(t, magusToolCall(name), "%q is not a call to magus", name)
+	}
+}
+
+// TestEveryMagusToolRendersSomethingJudgeable is the structural half of the MCP surface:
+// the decode arm keys on the TOOL NAME, so every tool magus declares has to render to a
+// line the rules can read. Requiring an `op` left nineteen of the twenty-one reaching no
+// rule at all while the coverage declaration said deny=model.
+func TestEveryMagusToolRendersSomethingJudgeable(t *testing.T) {
+	for _, tool := range hint.AllToolNames {
+		rendered := renderMCPCall(tool.String(), map[string]any{"op": "list"})
+		require.NotEmpty(t, rendered, "%s renders nothing", tool)
+
+		cmds, ok := ParseCommands(rendered)
+		require.True(t, ok, "%s renders %q, which does not parse", tool, rendered)
+		require.Len(t, cmds, 1, "%s renders %q, which is not one command", tool, rendered)
+
+		if _, hasCLI := mcpCLIEquivalents[tool]; hasCLI || tool == hint.ToolMemory {
+			assert.Equal(t, "magus", path.Base(cmds[0].Name),
+				"%s has a CLI equivalent, so it must render as that argv: %q", tool, rendered)
+			continue
+		}
+		assert.Equal(t, tool.String(), cmds[0].Name,
+			"%s has no CLI equivalent, so it renders its own name and is recorded rather than judged", tool)
+	}
+}
+
+// TestRenderMCPCallSpellsTheWorkTheToolDoes pins the renderings a rule keys on, so a
+// report about the gate cannot render as a run of it.
+func TestRenderMCPCallSpellsTheWorkTheToolDoes(t *testing.T) {
+	for name, tc := range map[string]struct {
+		tool  hint.ToolName
+		input map[string]any
+		want  string
+	}{
+		"a target run":     {hint.ToolRunTarget, map[string]any{"target": "ci", "projects": "."}, "magus run ci ."},
+		"an affected run":  {hint.ToolRunAffected, map[string]any{"target": "ci"}, "magus affected ci"},
+		"a shard plan":     {hint.ToolAffectedPlan, map[string]any{"target": "ci"}, "magus affected --plan ci"},
+		"a checkpoint":     {hint.ToolVCSCheckpoint, nil, "magus vcs checkpoint"},
+		"a memory put":     {hint.ToolMemory, map[string]any{"op": "put", "name": "a-decision"}, "magus memory put a-decision"},
+		"a memory read":    {hint.ToolMemory, map[string]any{"op": "list"}, "magus memory ls"},
+		"a graph query":    {hint.ToolQuery, map[string]any{"query": "guard rules"}, `magus query "guard rules"`},
+		"no CLI door":      {hint.ToolInsight, map[string]any{"lens": "hotspots"}, "magus_insight"},
+		"the job tool":     {hint.ToolJob, map[string]any{"op": "fork", "id": "a/b"}, "magus_job op=fork id=a/b"},
+		"an elided value":  {hint.ToolJob, map[string]any{"op": "fork", "goal": "ship the thing"}, "magus_job op=fork goal=..."},
+		"a missing target": {hint.ToolRunAffected, map[string]any{}, "magus affected"},
+	} {
+		assert.Equal(t, tc.want, renderMCPCall(tc.tool.String(), tc.input), name)
+	}
+}

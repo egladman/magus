@@ -81,20 +81,20 @@ func TestServiceTargetGraph(t *testing.T) {
 	assert.Len(t, out.Projects, 2)
 }
 
-// TestServiceStatusReportSeam checks the injected report is returned verbatim.
-func TestServiceStatusReportSeam(t *testing.T) {
-	want := types.StatusReport{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}
+// TestServiceStatusSnapshotSeam checks the injected report is returned verbatim.
+func TestServiceStatusSnapshotSeam(t *testing.T) {
+	want := types.StatusSnapshot{Pool: &types.StatusOutput{Mode: "daemon", Capacity: 4, Running: 1}}
 	svc := NewService(nil, config.Config{}, types.StatusBase{}, "1.2.3",
-		WithStatusReportFn(func(context.Context) types.StatusReport { return want }))
-	assert.Equal(t, want, svc.StatusReport(context.Background()))
+		WithStatusSnapshotFn(func(context.Context) types.StatusSnapshot { return want }))
+	assert.Equal(t, want, svc.StatusSnapshot(context.Background()))
 }
 
-// TestServiceStatusReportPoolError checks a failed daemon query surfaces as PoolError while
+// TestServiceStatusSnapshotPoolError checks a failed daemon query surfaces as PoolError while
 // the static base fields still ride through.
-func TestServiceStatusReportPoolError(t *testing.T) {
+func TestServiceStatusSnapshotPoolError(t *testing.T) {
 	base := types.StatusBase{Cache: types.CacheStatus{SizeMB: 42}}
 	svc := NewService(nil, config.Config{}, base, "1.2.3", WithDaemonSocket("127.0.0.1:1"))
-	got := svc.StatusReport(context.Background())
+	got := svc.StatusSnapshot(context.Background())
 	assert.Nil(t, got.Pool)
 	assert.NotEmpty(t, got.PoolError)
 	assert.Equal(t, 42, got.Cache.SizeMB)

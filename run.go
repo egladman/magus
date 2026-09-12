@@ -1523,7 +1523,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 	cacheOpts = append(cacheOpts, observability.TargetRunOptions(ctx, m.tel, spellsOf)...)
 	if opts.Report != nil {
-		cacheOpts = append(cacheOpts, report.RunOptions(opts.Report)...)
+		cacheOpts = append(cacheOpts, report.RunOptions(opts.Report, report.ServedIn(m.CacheDir(), m.ws.Root))...)
 	}
 	cacheOpts = append(cacheOpts, diagnosticCaptureOption(ctx))
 	if m.cache == nil {
@@ -1569,7 +1569,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		// stage observer: it prints a progress line as each magus.needs sub-target
 		// completes, giving the reader a checklist of what ran in place of the wall.
 		if m.cache.Collapsing() {
-			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label})
+			spanCtx = buzz.WithObserver(spanCtx, stageObserver{cache: m.cache, label: s.Label, policies: policiesOf(p)})
 		}
 		if s.NoCache {
 			// An uncached composer still executes its body, so this is the runtime
@@ -1670,12 +1670,25 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 type stageObserver struct {
 	cache *cache.Cache
 	label string // normalized project display name (never "" or "."); see types.ProjectLabel
+	// policies is the owning project's per-target policy, read for the one thing the
+	// row cannot show without it: which failures the composite carries on past.
+	policies map[string]types.Target
+}
+
+// policiesOf is p's per-target policy map, nil-safe for a step whose project did not
+// resolve: a missing policy reads as the default one, which is what a target with no
+// magusfile entry has.
+func policiesOf(p *types.Project) map[string]types.Target {
+	if p == nil {
+		return nil
+	}
+	return p.TargetPolicies
 }
 
 func (o stageObserver) TargetEnd(ctx context.Context, name string, elapsed time.Duration, err error) {
 	// ctx, not _: LogStage puts runErr.Error() in an attr, and a magusfile can throw an
 	// interpolated credential. Without the context the record redacts against nothing.
-	o.cache.LogStage(ctx, o.label, name, elapsed, err)
+	o.cache.LogStage(ctx, o.label, name, elapsed, err, o.policies[name].Advisory)
 }
 
 // dedupeByProject returns one step per ProjectPath (first seen).

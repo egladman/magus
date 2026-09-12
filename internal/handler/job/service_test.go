@@ -12,10 +12,12 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
+	"github.com/egladman/magus/types"
 )
 
 // fakeWS is a workspace whose trail lives at dir and whose cache reports a fixed size.
@@ -112,7 +114,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobs.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.job(j, running)
+	got := s.job(j, running, types.Job{})
 
 	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)
@@ -141,4 +143,141 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 		"jobs/sync-graph", "jobs/rotate-activities", "jobs/rotate-logs", "jobs/prune-preserved",
 		"jobs/clear-cache", "jobs/check-review",
 	}, names)
+}
+
+// TestListJobs_ReturnsCatalogAndDelegatedJobs is the listing the merge exists for: the
+// daemon's own catalog beside the jobs a session holds, in one response with one state
+// vocabulary, so a reader never asks which door to knock on for which kind.
+func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
+	dir := t.TempDir()
+	store := jobstore.NewStore(jobstore.Location{CacheDir: dir, Root: dir})
+	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
+		row.State = types.StateRunning
+		row.Model = "opus"
+		row.WritePaths = []string{"internal/handler"}
+	})
+	require.NoError(t, err)
+
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = store
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	byID := make(map[string]*jobv1.Job, len(resp.Msg.Jobs))
+	for _, j := range resp.Msg.Jobs {
+		byID[j.Id] = j
+	}
+
+	catalog := byID["sync-graph"]
+	require.NotNil(t, catalog, "the daemon's own job is missing from the listing")
+	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_DAEMON, catalog.Holder)
+	require.Equal(t, string(types.StateDeclared), catalog.State, "a catalog job nobody has run yet is declared")
+
+	delegated := byID["wave3/merge"]
+	require.NotNil(t, delegated, "the delegated job is missing from the listing")
+	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SESSION, delegated.Holder)
+	require.Equal(t, string(types.StateRunning), delegated.State)
+	require.Equal(t, "opus", delegated.Model)
+	require.Equal(t, []string{"internal/handler"}, delegated.WritePaths)
+}
+
+// TestListJobs_ServesTheStoredRowVerbatim pins what a reader of a delegated row cannot work
+// without: the join key, the state it reached, the tree it was handed, its own heartbeat,
+// and what it released for whoever comes next.
+func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
+	dir := t.TempDir()
+	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
+	_, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
+		row.Goal = "ship the store"
+		row.Checkpoint = "60dc9151"
+		row.WritePaths = []string{"internal/job", "types/job.go"}
+		row.State = types.StateRunning
+	})
+	require.NoError(t, err)
+	// The store derives a release from a claim that shrinks, so giving up types/job.go is
+	// the only way to get one onto the wire.
+	stored, err := store.Update(t.Context(), "job-a", func(row *types.Job) {
+		row.WritePaths = []string{"internal/job"}
+	})
+	require.NoError(t, err)
+	_, err = store.Update(t.Context(), "scout", func(row *types.Job) {
+		row.ReadOnly = true
+		row.State = types.StateNoReturn
+	})
+	require.NoError(t, err)
+
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = store
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	byID := make(map[string]*jobv1.Job, len(resp.Msg.Jobs))
+	for _, j := range resp.Msg.Jobs {
+		byID[j.Id] = j
+	}
+
+	got := byID["job-a"]
+	require.NotNil(t, got, "the delegated row is missing from the listing")
+	require.Equal(t, "ship the store", got.Goal)
+	require.Equal(t, "60dc9151", got.Checkpoint)
+	require.Equal(t, []string{"internal/job"}, got.WritePaths)
+	require.Equal(t, stored.Updated, got.Updated, "the row's own stamp, not the moment it was read")
+	require.Len(t, got.Releases, 1)
+	require.Equal(t, "types/job.go", got.Releases[0].Path)
+	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
+
+	scout := byID["scout"]
+	require.NotNil(t, scout, "the abbreviated row is missing from the listing")
+	require.True(t, scout.ReadOnly)
+	require.Equal(t, string(types.StateNoReturn), scout.State)
+}
+
+// TestListJobs_ReportsOverlappingWritePaths pins that the pairs are derived on the read and
+// stored nowhere, so the listing reports one without either row saying anything about the
+// other. A fact for the reader, not a verdict: nothing is blocked or reordered on account of it.
+func TestListJobs_ReportsOverlappingWritePaths(t *testing.T) {
+	dir := t.TempDir()
+	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
+	for _, row := range []types.Job{
+		{ID: "job-a", WritePaths: []string{"internal/job"}, State: types.StateRunning},
+		{ID: "job-b", WritePaths: []string{"internal/job/store.go"}, State: types.StateDeclared},
+		{ID: "job-done", WritePaths: []string{"internal/job"}, State: types.StatePass},
+	} {
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
+			cur.WritePaths, cur.State = row.WritePaths, row.State
+		})
+		require.NoError(t, err)
+	}
+
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = store
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.Overlaps, 1, "the finished job is not competing for anything")
+	require.Equal(t, "job-a", resp.Msg.Overlaps[0].JobA)
+	require.Equal(t, "job-b", resp.Msg.Overlaps[0].JobB)
+	// Each side's own declaration, kept apart: a reader who cannot tell which job claimed
+	// which has nothing to act on.
+	require.Equal(t, []string{"internal/job"}, resp.Msg.Overlaps[0].PathsA)
+	require.Equal(t, []string{"internal/job/store.go"}, resp.Msg.Overlaps[0].PathsB)
+}
+
+// TestListJobs_EmptyStoreServesEmptyList pins the shape both read doors promise: a workspace
+// where nobody has handed out a job yet lists the catalog and nothing else, never null.
+func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Msg.Jobs)
+	require.Len(t, resp.Msg.Jobs, len(jobs.All()), "an unwritten store handed the listing a row")
+	require.NotNil(t, resp.Msg.Overlaps)
+	require.Empty(t, resp.Msg.Overlaps)
 }

@@ -261,6 +261,45 @@ func TestParseBuzzProjectOpts_RetryOnVolatileReason(t *testing.T) {
 	}
 }
 
+// advisory excuses a target from the gate it is composed into, which is a claim that a
+// failure there does not mean the change is wrong. A bare true cannot tell that from a
+// gate somebody switched off, so the reason is what keeps the exemption auditable.
+func TestParseBuzzProjectOpts_AdvisoryReason(t *testing.T) {
+	t.Run("a reason is recorded", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("advisory", vm.StrValue("renders from a hand-refreshed record"))
+		p := applyOpts(t, targetsOpts("coverage-badge", pol))
+		got := p.TargetPolicies["coverage-badge"]
+		assert.True(t, got.Advisory)
+		assert.Equal(t, "renders from a hand-refreshed record", got.AdvisoryReason)
+	})
+
+	t.Run("an undeclared target gates", func(t *testing.T) {
+		pol := vm.NewMap()
+		pol.MapSet("slots", vm.IntValue(4))
+		p := applyOpts(t, targetsOpts("lint", pol))
+		assert.False(t, p.TargetPolicies["lint"].Advisory)
+	})
+
+	for _, tc := range []struct {
+		name string
+		val  vm.Value
+	}{
+		{"a bare true is not a reason", vm.BoolValue(true)},
+		{"empty is not a reason", vm.StrValue("")},
+		{"whitespace is not a reason", vm.StrValue("  ")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pol := vm.NewMap()
+			pol.MapSet("advisory", tc.val)
+			_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("coverage-badge", pol))
+			assert.ErrorContains(t, err, "needs a reason string")
+			assert.ErrorContains(t, err, "leave the policy off",
+				"the error must say what to do when a failure should stop the gate")
+		})
+	}
+}
+
 func TestParseBuzzProjectOpts_UnknownTopLevelKeyErrors(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("depend_on", vm.ListValue([]vm.Value{vm.StrValue("api")}))

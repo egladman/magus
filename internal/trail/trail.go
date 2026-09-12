@@ -188,6 +188,10 @@ type AgentCommand struct {
 	Reason     string
 	Context    string
 	Lease      string
+	// PreauthorizedBy is the `next` template that had already served this exact command to
+	// this session, so the guard let it through without grading it against the caller's
+	// role. Empty for every other observation, which is nearly all of them.
+	PreauthorizedBy string
 }
 
 const agentCommandSchemaVersion = 1
@@ -208,6 +212,9 @@ type agentCommandResponse struct {
 	Decision      string `json:"decision"`
 	Reason        string `json:"reason,omitempty"`
 	Context       string `json:"context,omitempty"`
+	// No schema bump: an added optional field a reader can ignore leaves every existing
+	// blob readable and every existing reader correct.
+	PreauthorizedBy string `json:"preauthorized_by,omitempty"`
 }
 
 // AppendAgentCommand writes one normalized agent-hook observation into the existing activity
@@ -241,24 +248,25 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Path:          command.Path,
 	})
 	response, _ := json.Marshal(agentCommandResponse{
-		SchemaVersion: agentCommandSchemaVersion,
-		Decision:      command.Decision,
-		Reason:        command.Reason,
-		Context:       command.Context,
+		SchemaVersion:   agentCommandSchemaVersion,
+		Decision:        command.Decision,
+		Reason:          command.Reason,
+		Context:         command.Context,
+		PreauthorizedBy: command.PreauthorizedBy,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
 	// A supplied lease is what the producer could correlate at the observation itself and wins;
 	// the BAGGAGE channel is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidLeaseID falls through to the environment rather than being stamped, on the same
+	// fails types.ValidJobID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
 	// line and a guard's reason, not a lease prompt, and a "lease:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
 	lease := command.Lease
-	if !types.ValidLeaseID(lease) {
+	if !types.ValidJobID(lease) {
 		lease = LeaseFromEnv()
 	}
 
@@ -324,7 +332,7 @@ type agentSpawnRequest struct {
 	Context       string `json:"context"`
 }
 
-// AppendAgentSpawn records one lease handoff and stores the handed context as a blob.
+// AppendAgentSpawn records one spawn and stores the context it was given as a blob.
 //
 // Best-effort and error-free, like every other producer here: an audit write must never be able
 // to fail the lease it observes.
@@ -387,10 +395,9 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 // reads the rest of what that environment claimed.
 //
 // This is the second of the two lease channels, and the two say different things. The
-// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a handoff
-// it is making; the environment is the WORKER's own claim about itself. Where both are
-// available the marker wins: the party doing the partitioning is the one that knows the
-// partition.
+// lease marker (see leaseFromContext) is the ORCHESTRATOR's assertion about a spawn it
+// is making; the environment is the WORKER's own claim about itself. The ENVIRONMENT
+// wins where both are available, because this is what [job.ActingLease] reads first.
 func LeaseFromEnv() string { return SpawnFromEnv().Lease }
 
 // leaseScanBytes bounds the head of the handed context the marker may appear in. The marker
@@ -410,11 +417,11 @@ const leaseMarker = "lease:"
 // First line, not anywhere in the head: a lease prompt routinely quotes things (a
 // ledger listing, a file, another agent's transcript), and a marker line lifted from any
 // of them would stamp the event with a lease that has nothing to do with this
-// handoff. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
+// spawn. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
 // not; the position is the only thing that separates them. Leading blank lines are
 // formatting and are skipped.
 //
-// The id itself has to satisfy [types.ValidLeaseID], which is where the charset and
+// The id itself has to satisfy [types.ValidJobID], which is where the charset and
 // its reasoning live.
 //
 // Anything else (no marker, an empty id, an id carrying spaces or punctuation outside
@@ -435,7 +442,7 @@ func leaseFromContext(handed string) string {
 			return "" // the prompt leads with something else, so it declares no lease
 		}
 		id := strings.TrimSpace(rest)
-		if !types.ValidLeaseID(id) {
+		if !types.ValidJobID(id) {
 			return ""
 		}
 		return id
@@ -551,13 +558,13 @@ func LastRun(base, action string) (Event, bool) {
 // judge whether a rotate is worth running. Best-effort and read-only: a missing or empty trail
 // is (0, 0), and an unreadable directory is skipped rather than erroring: a size readout is
 // never a precondition for anything.
-func Stat(base string) (bytes int64, count int64) {
+func Stat(base string) (size int64, count int64) {
 	if base == "" {
 		return 0, 0
 	}
 	if f, err := os.Open(eventsPath(base)); err == nil {
 		if fi, err := f.Stat(); err == nil {
-			bytes += fi.Size()
+			size += fi.Size()
 		}
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
@@ -571,11 +578,11 @@ func Stat(base string) (bytes int64, count int64) {
 	if entries, err := os.ReadDir(blobsPath(base)); err == nil {
 		for _, ent := range entries {
 			if info, err := ent.Info(); err == nil && !ent.IsDir() {
-				bytes += info.Size()
+				size += info.Size()
 			}
 		}
 	}
-	return bytes, count
+	return size, count
 }
 
 // ReadRecent returns up to limit events from the tail of the trail, newest first. A missing or
@@ -875,7 +882,7 @@ func validRef(ref string) bool {
 // them would break the activity view to protect nothing, the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Lease is the one of those derived from free text (a
 // lease prompt, or the BAGGAGE environment channel) rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [types.ValidLeaseID]'s bare-identifier
+// which is why every channel that can stamp one runs it through [types.ValidJobID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)

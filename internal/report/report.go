@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -183,8 +184,39 @@ func WriterFromContext(ctx context.Context) *Writer {
 	return w
 }
 
+// NextServer grades a failing target's breadcrumbs for whoever is reading the report
+// and records what it handed over. [ServedIn] builds the one production caller;
+// a nil server serves everything and records nothing.
+//
+// A parameter rather than a default, because a report written for a reader magus
+// cannot identify is not the same thing as one written for a bound worker, and the
+// serving side is where that has to be decided.
+type NextServer func(next []hint.Next) []hint.Next
+
+// ServedIn serves a failing run's breadcrumbs the way every other door serves them:
+// filtered for the acting lease's role and journaled in this checkout's cache dir.
+//
+// The failure family is the one this whole mechanism was measured against, so leaving
+// it unjournaled would give the most-served breadcrumb in the tree a denominator of
+// zero in `magus session hints`, and leave it the one suggestion the guard cannot
+// pre-authorize.
+func ServedIn(cacheDir, root string) NextServer {
+	return func(next []hint.Next) []hint.Next {
+		role, lane := hint.RoleUnbound, []string(nil)
+		if id := job.ActingLease(cacheDir); id != "" {
+			role = hint.RoleWorker
+			if rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List(); err == nil {
+				role, lane = hint.RoleFor(rows, id)
+			}
+		}
+		served := hint.ServableTo(role, lane, next)
+		hint.AppendServedNext(cacheDir, served)
+		return served
+	}
+}
+
 // RunOptions returns a cache.RunOption that records hit/miss/error events into w per spec.
-func RunOptions(w *Writer) []cache.RunOption {
+func RunOptions(w *Writer, served NextServer) []cache.RunOption {
 	return []cache.RunOption{
 		cache.OnResult(func(s *cache.Step, r *cache.Result, err error) {
 			tr := TargetResult{
@@ -201,6 +233,9 @@ func RunOptions(w *Writer) []cache.RunOption {
 				tr.Status = "failed"
 				tr.Error = err.Error()
 				tr.Next = hint.NextForFailure(s.ProjectPath, s.Target, r.Ref)
+				if served != nil {
+					tr.Next = served(tr.Next)
+				}
 			}
 			_ = Record(w, tr)
 		}),

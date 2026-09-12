@@ -203,6 +203,20 @@ type Target struct {
 	// CODE BEING WRONG, not a preference, and a bare `true` leaves the next reader no
 	// way to tell a known-volatile suite from a bug somebody stopped chasing.
 	RetryOnVolatileReason string `json:"retry_on_volatile_reason,omitempty" buzz:"retry_on_volatile_reason"`
+	// Advisory keeps this target's failure from failing a composite that reaches it
+	// through ctx.needs: the member still runs, the composite reports the failure with
+	// AdvisoryReason and carries on. Running the target by name still fails, because a
+	// caller who asked for exactly this target asked for its verdict.
+	//
+	// Scoped to the (project, target) pair that declared it, like RetryOnVolatile: an
+	// advisory member of one composite is an advisory member of every composite, but it
+	// excuses nothing else in the chain.
+	Advisory bool `json:"advisory,omitempty" buzz:"advisory"`
+	// AdvisoryReason is the prose the magusfile gave for Advisory, required for the
+	// reason SkipCacheReason is: excusing a target from the gate claims that a failure
+	// here does not mean the change is wrong, and a bare `true` leaves the next reader
+	// no way to tell that claim from a gate somebody switched off after a bad week.
+	AdvisoryReason string `json:"advisory_reason,omitempty" buzz:"advisory_reason"`
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//

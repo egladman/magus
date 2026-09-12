@@ -162,7 +162,7 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		{"memory", []string{"memory"}, "memory.go", "memoryCmd", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"session", []string{"session"}, "sessions.go", "sessionCmd", nil},
+		{"session", []string{"session"}, "session.go", "sessionCmd", nil},
 	}
 
 	for _, tt := range tests {
@@ -201,7 +201,7 @@ func TestServerDispatcherChildrenAreDeclared(t *testing.T) {
 	got := []string{
 		hint.ServerStart.Leaf(),
 		hint.ServerStop.Leaf(),
-		hint.ServerJob.Leaf(),
+		hint.ServerStatus.Leaf(),
 		hint.ServerReload.Leaf(),
 	}
 	slices.Sort(got)

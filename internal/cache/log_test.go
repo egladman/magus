@@ -180,6 +180,20 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		), "  [fail] magus test (")
 	})
 
+	// An advisory member's failure is not the composite's, so the row says advisory
+	// rather than leaving a gate reader to reconcile [fail] against a passing run.
+	t.Run("cache.stage advisory", func(t *testing.T) {
+		t.Parallel()
+		assertPlain(t, buildRecord(
+			"cache.stage",
+			slog.String("label", "magus"),
+			slog.String("target", "security"),
+			slog.Int64("duration", int64(5*time.Second)),
+			slog.String("error", "govulncheck: exit 1"),
+			slog.Bool("advisory", true),
+		), "  [advisory] magus security (")
+	})
+
 	t.Run("cache.warn", func(t *testing.T) {
 		t.Parallel()
 		assertPlain(t, buildRecord(

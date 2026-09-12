@@ -1,6 +1,8 @@
 package trail
 
 import (
+	"bufio"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -234,12 +236,12 @@ type SessionTrail struct {
 	Denied   int `json:"denied"`
 	// Leases are the ledger leases the observations were made under, first seen first.
 	Leases []string `json:"leases,omitempty"`
-	// Spawns are the handoffs this session made to sub-agents, oldest first.
+	// Spawns are the sub-agents this session started, oldest first.
 	Spawns []SessionSpawn `json:"spawns,omitempty"`
 }
 
-// SessionSpawn is one recorded handoff: the label the host gave the callee, the lease the
-// handed context named, and when.
+// SessionSpawn is one recorded spawn: the label the host gave the callee, the lease the
+// context it was given named, and when.
 type SessionSpawn struct {
 	Child string    `json:"child"`
 	Lease string    `json:"lease,omitempty"`
@@ -283,6 +285,69 @@ func ForSession(base, session string, limit int) SessionTrail {
 	}
 	return out
 }
+
+// AgentActivity is the newest guard observation one checkout's trail holds: when a host
+// last ran something past the guard here, and which of its sessions did.
+//
+// It bounds the last API request from BELOW: a turn that ran no tool at all leaves
+// nothing here, so a session can be warmer than this says and never colder.
+type AgentActivity struct {
+	Session string
+	Host    string
+	At      time.Time
+}
+
+// LastAgentActivity returns the newest agent observation in the trail at base. It
+// reports false for an unreadable or absent trail and for one holding no agent event,
+// which are the same fact to a caller: nothing here has been observed, so there is no
+// age to report.
+//
+// ONE decode, over the whole file. It answers a `magus session --brief` that a hook
+// puts in a model's window on every call, and decoding a recent WINDOW of events for
+// one timestamp both cost that path thousands of unmarshals and dropped the answer
+// entirely whenever the window happened to hold no agent event.
+//
+// Nothing new is written to produce it. The guard already appends one event per tool
+// call (appendHookActivity), so the timestamp exists and this only reads it back.
+func LastAgentActivity(base string) (AgentActivity, bool) {
+	if base == "" {
+		return AgentActivity{}, false
+	}
+	f, err := os.Open(eventsPath(base))
+	if err != nil {
+		return AgentActivity{}, false
+	}
+	defer f.Close()
+
+	newest := ""
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	for sc.Scan() {
+		// A substring test rather than a decode: every other line is some other kind,
+		// and the whole point is not to unmarshal them.
+		if line := sc.Text(); strings.Contains(line, agentKindTag) {
+			newest = line
+		}
+	}
+	if sc.Err() != nil || newest == "" {
+		return AgentActivity{}, false
+	}
+	var e Event
+	if json.Unmarshal([]byte(newest), &e) != nil {
+		return AgentActivity{}, false
+	}
+	if e.Kind != KindAgentCommand && e.Kind != KindAgentSpawn || e.Ts <= 0 {
+		// A missing timestamp would clock to 1970, which is not time.Time's zero, so
+		// the prompt-cache clock would print an age of half a century with every
+		// window closed instead of taking its documented empty branch.
+		return AgentActivity{}, false
+	}
+	return AgentActivity{Session: e.Session, Host: e.Host, At: time.UnixMilli(e.Ts)}, true
+}
+
+// agentKindTag is the encoded prefix both agent kinds share, which is what makes the
+// scan above a substring test instead of a decode.
+const agentKindTag = `"kind":"agent_`
 
 // relativize turns a recorded path into the workspace-relative form a review speaks. A path
 // already relative, or one outside the workspace entirely, is returned unchanged; the latter

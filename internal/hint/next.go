@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/types"
 )
 
@@ -27,15 +29,30 @@ import (
 // Run always has the real ids or refs filled in, never a placeholder, because a
 // command that still needs editing is prose. Why is one sentence: a caller that
 // repeats a result within a session shows Run every time and Why once.
+//
+// Argv is the same command as an argument vector, unquoted: Run is for a person to
+// paste and Argv for a caller to exec, so the two differ wherever an argument needs
+// shell quotes.
 type Next struct {
-	ID  string `json:"id"            yaml:"id"`
-	Run string `json:"run"           yaml:"run"`
-	Why string `json:"why,omitempty" yaml:"why,omitempty"`
+	ID   string   `json:"id"             yaml:"id"`
+	Run  string   `json:"run"            yaml:"run"`
+	Argv []string `json:"argv,omitempty" yaml:"argv,omitempty"`
+	Why  string   `json:"why,omitempty"  yaml:"why,omitempty"`
 }
 
-// NextCap bounds how many breadcrumbs one result may carry. A next that fires every
+// breadcrumb builds one entry from raw, unquoted args: Run gets them shell-quoted,
+// Argv gets them as they are.
+func breadcrumb(id string, c Command, why string, args ...string) Next {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = matcherArg(a)
+	}
+	return Next{ID: id, Run: c.With(quoted...), Argv: c.Argv(args...), Why: why}
+}
+
+// nextCap bounds how many breadcrumbs one result may carry. A next that fires every
 // time trains ignoring, and context is the budget it spends.
-const NextCap = 3
+const nextCap = 3
 
 // NextForQuery breadcrumbs a graph search: explain the top match, open a matched
 // doc page's sections, connect two matches that share a kind, and list a matched
@@ -47,33 +64,25 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 	if len(out.Matches) == 0 {
 		return nil
 	}
-	next := []Next{{
-		ID:  "query-explain",
-		Run: Explain.With(out.Matches[0].ID),
-		Why: "explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
-	}}
+	next := []Next{breadcrumb("query-explain", Explain,
+		"explain names a node's edges, provenance and blast radius, which is what says whether the top match is the one you meant.",
+		out.Matches[0].ID)}
 	// Ranked above path and refs: a reader holding a page wants the passage, and
 	// nothing else in the result says the page is retrievable a heading at a time.
 	if page, ok := unsectionedDocPage(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-doc-sections",
-			Run: Query.With(matcherArg("kind="+types.KindDocSection), matcherArg("id="+page)),
-			Why: "every heading in that page is its own node, so the answer is one section to read instead of the whole file.",
-		})
+		next = append(next, breadcrumb("query-doc-sections", Query,
+			"every heading in that page is its own node, so the answer is one section to read instead of the whole file.",
+			"kind="+types.KindDocSection, "id="+page))
 	}
 	if a, b, ok := firstSharedKind(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-path",
-			Run: Path.With(a, b),
-			Why: "two matches of one kind usually connect, and path prints the chain instead of leaving you to walk it.",
-		})
+		next = append(next, breadcrumb("query-path", Path,
+			"two matches of one kind usually connect, and path prints the chain instead of leaving you to walk it.",
+			a, b))
 	}
 	if sym, ok := firstSymbol(out.Matches); ok {
-		next = append(next, Next{
-			ID:  "query-refs",
-			Run: Refs.With(sym),
-			Why: "refs lists a symbol's definition and every use, generated and cross-language ones included.",
-		})
+		next = append(next, breadcrumb("query-refs", Refs,
+			"refs lists a symbol's definition and every use, generated and cross-language ones included.",
+			sym))
 	}
 	return capNext(next)
 }
@@ -84,25 +93,19 @@ func NextForQuery(out types.KnowledgeQueryOutput) []Next {
 func NextForExplain(out types.KnowledgeExplainOutput) []Next {
 	var next []Next
 	if other, ok := heaviestNeighbor(out); ok {
-		next = append(next, Next{
-			ID:  "explain-path",
-			Run: Path.With(out.Node.ID, other),
-			Why: "path resolves the chain between two nodes, and this is the neighbor the card names most.",
-		})
+		next = append(next, breadcrumb("explain-path", Path,
+			"path resolves the chain between two nodes, and this is the neighbor the card names most.",
+			out.Node.ID, other))
 	}
 	if out.Node.Kind == types.KindSymbol {
-		next = append(next, Next{
-			ID:  "explain-refs",
-			Run: Refs.With(out.Node.Label),
-			Why: "the card holds the graph's edges; refs holds the call sites.",
-		})
+		next = append(next, breadcrumb("explain-refs", Refs,
+			"the card holds the graph's edges; refs holds the call sites.",
+			out.Node.Label))
 	}
 	if p := sourcePath(out.Node.Source); p != "" {
-		next = append(next, Next{
-			ID:  "explain-describe-file",
-			Run: DescribeFile.With(p),
-			Why: "describe file says whether that path is generated, a declared source, or claimed by nothing.",
-		})
+		next = append(next, breadcrumb("explain-describe-file", DescribeFile,
+			"describe file says whether that path is generated, a declared source, or claimed by nothing.",
+			p))
 	}
 	return capNext(next)
 }
@@ -117,21 +120,17 @@ func NextForFiles(files []types.FileEntry) []Next {
 	var next []Next
 	for _, f := range files {
 		if len(f.SourceOf) > 0 {
-			next = append(next, Next{
-				ID:  "file-impact",
-				Run: Affected.With("--impact"),
-				Why: "a declared source pulls its project into the affected set, and --impact is the set it pulls in.",
-			})
+			next = append(next, breadcrumb("file-impact", Affected,
+				"a declared source pulls its project into the affected set, and --impact is the set it pulls in.",
+				"--impact"))
 			break
 		}
 	}
 	for _, f := range files {
 		if project := regeneratingProject(f); project != "" {
-			next = append(next, Next{
-				ID:  "file-regenerate",
-				Run: Run.With("generate:rw", project),
-				Why: "a declared output is never hand-edited: change the source of truth and regenerate it into the same commit.",
-			})
+			next = append(next, breadcrumb("file-regenerate", Run,
+				"a declared output is never hand-edited: change the source of truth and regenerate it into the same commit.",
+				"generate:rw", project))
 			break
 		}
 	}
@@ -163,16 +162,12 @@ func NextForAffected(target string, projects []string) []Next {
 		return nil
 	}
 	return []Next{
-		{
-			ID:  "affected-plan",
-			Run: Affected.With(target, "--plan"),
-			Why: "the plan is the same set sharded, which is what CI runs and what says how long it will take.",
-		},
-		{
-			ID:  "affected-explain",
-			Run: Affected.With("--explain", projects[0]),
-			Why: "a project in the set for a reason you did not expect is a declaration to fix, not a run to sit through.",
-		},
+		breadcrumb("affected-plan", Affected,
+			"the plan is the same set sharded, which is what CI runs and what says how long it will take.",
+			target, "--plan"),
+		breadcrumb("affected-explain", Affected,
+			"a project in the set for a reason you did not expect is a declaration to fix, not a run to sit through.",
+			"--explain", projects[0]),
 	}
 }
 
@@ -185,23 +180,201 @@ func NextForAffected(target string, projects []string) []Next {
 func NextForFailure(project, target, ref string) []Next {
 	var next []Next
 	if ref != "" {
-		next = append(next, Next{
-			ID:  "run-output",
-			Run: QueryOutput.With(ref),
-			Why: "the ref holds the run's whole captured output, so nothing has to be reproduced to be read.",
-		})
+		next = append(next, breadcrumb("run-output", QueryOutput,
+			"the ref holds the run's whole captured output, so nothing has to be reproduced to be read.",
+			ref))
 	}
 	if project != "" && target != "" {
-		next = append(next, Next{
-			ID:  "run-explain-target",
-			Run: Explain.With("target:" + project + ":" + target),
-			Why: "a target that fails on its inputs is explained by what feeds it, which the node names.",
-		})
+		next = append(next, breadcrumb("run-explain-target", Explain,
+			"a target that fails on its inputs is explained by what feeds it, which the node names.",
+			"target:"+project+":"+target))
 	}
 	return capNext(next)
 }
 
-// capNext trims to NextCap and normalizes empty to nil.
+// Role is who a result is being served to, read off the acting lease's row by
+// [RoleFor].
+//
+// It exists so the obligation sits where the breadcrumb is MINTED: serving a worker a
+// write outside its lane and relying on the guard to refuse it afterwards teaches the
+// reader that the tool's own advice does not apply to them.
+type Role string
+
+const (
+	RoleUnbound  Role = "unbound"
+	RoleWorker   Role = "worker"
+	RoleReviewer Role = "reviewer"
+)
+
+// RoleFor grades the acting lease id against the rows, and returns the lane that id
+// may write in. No id is unbound, a read-only row or one owning no path is a
+// reviewer, anything else a worker.
+//
+// Derived rather than stored. The row already says what a lease may write, and a
+// second field saying the same thing is a field that can disagree with it. A bound id
+// whose row is gone still grades as a worker with no lane: something claimed a lane,
+// and serving the full unbound set on the strength of a missing row is the wrong way
+// to be wrong.
+func RoleFor(rows []types.Job, id string) (Role, []string) {
+	if id == "" {
+		return RoleUnbound, nil
+	}
+	for _, row := range rows {
+		if row.ID != id {
+			continue
+		}
+		if row.ReadOnly || len(row.WritePaths) == 0 {
+			return RoleReviewer, nil
+		}
+		return RoleWorker, row.WritePaths
+	}
+	return RoleWorker, nil
+}
+
+// ServableTo drops the breadcrumbs role may not be served: every write for a
+// reviewer, and for a worker every write that does not land inside lane. Unbound
+// keeps the lot.
+//
+// Dropped, never rewritten. A template narrowed to fit a role would be a command
+// nobody wrote, and the cap is applied afterwards so a filtered list still fills up
+// to nextCap from what survives.
+func ServableTo(role Role, lane []string, next []Next) []Next {
+	if role == "" || role == RoleUnbound {
+		return capNext(next)
+	}
+	kept := make([]Next, 0, len(next))
+	for _, n := range next {
+		if mutatesTree(n.Argv) && (role != RoleWorker || !withinLane(lane, n.Argv)) {
+			continue
+		}
+		kept = append(kept, n)
+	}
+	return capNext(kept)
+}
+
+// readCommands is every declared Command that cannot change the tree. It is the
+// ALLOWLIST mutatesTree grades against, so a verb added to clicommand.go and not
+// added here reads as a write until somebody decides otherwise.
+//
+// `affected` is absent on purpose: it runs unless asked for one of its dry forms, so
+// it gets a branch below rather than a row here.
+var readCommands = []Command{
+	Query, QueryOutput, QueryInvocation,
+	GraphExport, GraphStats, GraphDiff,
+	Status, Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile,
+	DescribeGraph, DescribeMCPTools,
+	Explain, Path, Diff, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs,
+	MemoryLs, MemoryVerify,
+	DescribeJob,
+	NotesLs, NotesGet,
+	Session, SessionShow, SessionAttention,
+	VCSCheckpoint,
+	ConfigView, ConfigToken, ConfigTokenPrint,
+	ConfigConsoleToken, ConfigMCPConnectorLs,
+	AgentStarter,
+}
+
+// mutatesTree reports whether argv would change the tree, judged from the command
+// alone.
+//
+// DENY BY DEFAULT: a verb readCommands does not carry is a write. The inverse failed
+// open, so `ledger accept`, `memory put`, `clean` and `self update` would all have
+// been served to a reviewer as reads.
+//
+// Deliberately blunt on `run`: magus.yaml may declare default charms, so a bare
+// `magus run generate <project>` writes exactly as `generate:rw` does, and reading
+// the charm off the token would call that one read-only. `affected` goes the other
+// way, since its dry forms are the ones breadcrumbs use.
+func mutatesTree(argv []string) bool {
+	if len(argv) < 2 {
+		return true
+	}
+	for _, a := range argv[1:] {
+		if strings.Contains(a, ":rw") {
+			return true
+		}
+	}
+	if argv[1] == Affected.Head() {
+		return !slices.ContainsFunc(argv[2:], func(a string) bool {
+			return a == "--plan" || a == "--impact" || a == "--explain" || a == "--dry-run"
+		})
+	}
+	ran, ok := longestCommand(argv[1:])
+	if !ok {
+		return true
+	}
+	return !slices.ContainsFunc(readCommands, func(r Command) bool { return slices.Equal(r.tokens, ran.tokens) })
+}
+
+// longestCommand resolves args to the declared command it invokes, longest path
+// first: `ledger accept` is its own command and not the readable `ledger` it opens
+// with.
+func longestCommand(args []string) (Command, bool) {
+	var best Command
+	for _, c := range AllCommands {
+		if len(args) < len(c.tokens) || len(c.tokens) <= len(best.tokens) {
+			continue
+		}
+		if slices.Equal(args[:len(c.tokens)], c.tokens) {
+			best = c
+		}
+	}
+	return best, len(best.tokens) > 0
+}
+
+// withinLane reports whether every project a write names sits inside lane, so a
+// worker keeps the regeneration of its own project and loses everybody else's.
+func withinLane(lane []string, argv []string) bool {
+	projects := writeProjects(argv)
+	if len(lane) == 0 || len(projects) == 0 {
+		return false
+	}
+	for _, p := range projects {
+		if !laneCovers(lane, p) {
+			return false
+		}
+	}
+	return true
+}
+
+// writeProjects names the project operands of a write, or nothing when the command
+// takes none. Nothing is the conservative answer: a write that names no project
+// touches whatever the workspace resolves, which is wider than any lane.
+func writeProjects(argv []string) []string {
+	if len(argv) < 4 || argv[1] != Run.Head() {
+		return nil
+	}
+	var projects []string
+	for _, a := range argv[3:] {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		projects = append(projects, a)
+	}
+	return projects
+}
+
+// laneCovers reports whether one of lane's declared globs covers project. An entry
+// naming the whole tree by naming nothing is skipped, the way the guard's own
+// declaration match skips it: it would put the lease on every path in the plan.
+func laneCovers(lane []string, project string) bool {
+	rel := path.Clean(strings.TrimSpace(project))
+	for _, raw := range lane {
+		decl := path.Clean(strings.TrimSpace(raw))
+		if decl == "." || decl == "/" {
+			continue
+		}
+		if ok, err := doublestar.Match(decl, rel); err == nil && ok {
+			return true
+		}
+		if ok, err := doublestar.Match(decl+"/**", rel); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// capNext trims to nextCap and normalizes empty to nil.
 //
 // Absence has to be measurable, so a result with nothing to suggest carries no field
 // at all rather than an empty list.
@@ -209,8 +382,8 @@ func capNext(next []Next) []Next {
 	if len(next) == 0 {
 		return nil
 	}
-	if len(next) > NextCap {
-		return next[:NextCap]
+	if len(next) > nextCap {
+		return next[:nextCap]
 	}
 	return next
 }
@@ -307,4 +480,25 @@ func sourcePath(source string) string {
 		return ""
 	}
 	return source
+}
+
+// Render writes the two-line `next:` block: the command on its own line, and the
+// reason indented under it. why decides what a caller shows on the second line, since
+// the CLI silences a Why it has already fired and -s drops it outright.
+//
+// One renderer for both doors: a reader who meets the breadcrumbs over MCP and on a
+// terminal meets one layout.
+func Render(next []Next, why func(Next) string) string {
+	if len(next) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\nnext:\n")
+	for _, n := range next {
+		b.WriteString("  " + n.Run + "\n")
+		if w := why(n); w != "" {
+			b.WriteString("      " + w + "\n")
+		}
+	}
+	return b.String()
 }

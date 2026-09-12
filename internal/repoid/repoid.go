@@ -125,7 +125,7 @@ func dirName(id string) string {
 // absent, or dir already exists.
 //
 // Exported for the legacy this package's own key cannot name: a store that lived
-// somewhere else entirely before it moved here, such as the lease ledger's old home in
+// somewhere else entirely before it moved here, such as the job store's old home in
 // the workspace cache directory. The caller supplies that path and the rule stays here,
 // so there is one answer to what adoption does.
 //

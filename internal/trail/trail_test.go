@@ -272,7 +272,7 @@ func TestLeaseFromContext(t *testing.T) {
 		"wrong key":            {"leases: MGS1021", ""},
 		"illegal characters":   {"lease: MGS1021!", ""},
 		// The reason the marker has to LEAD: both of these carry a well-formed marker that
-		// this handoff did not write: one quoted below the prompt's own opening line, one
+		// this spawn did not write: one quoted below the prompt's own opening line, one
 		// pushed out of the head by a pathological first line. A wrong join is worse than none.
 		"below the first line": {"do this\nlease: a.b:c_d-1\n", ""},
 		"past the head cap":    {strings.Repeat(" ", leaseScanBytes) + "lease: MGS1021", ""},

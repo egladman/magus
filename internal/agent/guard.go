@@ -4,12 +4,9 @@ package agent
 // the one package that both the CLI producing a verdict and the repo-root
 // dogfood tests can import.
 //
-// It lives here rather than beside the guard in cmd/magus for a mechanical
-// reason: package main cannot be imported, so a parity check living outside it
-// would have to RESTATE the contract, and a restated contract is exactly the
-// copy that goes stale. Keeping the lists here makes "every host handles every
-// decision on every surface" a comparison against the source of truth instead
-// of against a second opinion.
+// It lived here because package main could not be imported. The rules are now
+// internal/guard, so that reason has expired: the lists could move beside the Verdict
+// they describe, and only the installed-artifact constants below still belong here.
 
 // GuardSchemaVersion is the version of the verdict envelope every host glue
 // parses, carried on the wire as schema_version. Bump it only when an existing
@@ -24,11 +21,13 @@ const GuardSchemaVersion = 1
 // what collects on that promise.
 var guardDecisions = []string{"pass", "advise", "deny"}
 
-// guardSurfaces is every input the guard judges: a shell command, or a file
-// path an edit is about to write (`magus session hook --path`). A host wires each
-// surface to a different one of its events, and a host that cannot wire one
-// covers less, which is a coverage difference to record, not to hide.
-var guardSurfaces = []string{"command", "path"}
+// guardSurfaces is every input the guard judges: a shell command, a file path
+// an edit is about to write (`magus session hook --path`), or an MCP tool call
+// (a tool name plus a params object, forwarded whole rather than reduced to a
+// single string). A host wires each surface to a different one of its events,
+// and a host that cannot wire one covers less, which is a coverage difference
+// to record, not to hide.
+var guardSurfaces = []string{"command", "path", "mcp"}
 
 // GuardTemplateVersion is the revision of the hook templates a reader installs
 // into their agent host.
@@ -50,6 +49,11 @@ var guardSurfaces = []string{"command", "path"}
 // Bump it whenever a template's BEHAVIOR changes, not for a comment or a
 // rewording. TestShippedTemplatesCarryTheCurrentVersion makes the bump total:
 // every template must be re-stamped or the build fails.
+//
+// 1, 5 and 6 have no entry, and the gap is recorded rather than left to be
+// rediscovered: 1 is the marker's own starting value and predates this log, and
+// nothing in the tree or its history says what 5 and 6 changed. Read them as
+// versions nobody documented rather than as versions that mean something here.
 //
 // 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
@@ -115,7 +119,15 @@ var guardSurfaces = []string{"command", "path"}
 // (a deny on an after-the-write event is a warning, not a block), and the brief a
 // compacted session is handed back renders as a JSON envelope on request, for a host that
 // parses a session-start hook's stdout as a reply rather than reading it as context.
-const GuardTemplateVersion = 12
+//
+// 13: the contract grew a third surface, MCP tool calls, and magus-guard-command.sh grew
+// HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
+// HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
+// forwards the whole event instead of reducing it to one jq extraction. A copy that
+// predates this has no HOST_EVENT_RAW arm at all, so a host that tries to wire an
+// mcp__magus__* matcher through it ships the literal string "null" as the command to
+// judge rather than the envelope the guard can at least recognize and pass through.
+const GuardTemplateVersion = 13
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

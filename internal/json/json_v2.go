@@ -50,6 +50,18 @@ func unmarshalDuration(dec *jsontext.Decoder, d *time.Duration) error {
 func Marshal(v any) ([]byte, error)      { return jsonv2.Marshal(v, marshalOpts) }
 func Unmarshal(data []byte, v any) error { return jsonv2.Unmarshal(data, v, unmarshalOpts) }
 func Valid(data []byte) bool             { return jsontext.Value(data).IsValid() }
+
+// UnmarshalStrict is Unmarshal for a TYPED INPUT: a member the target does not declare is
+// an error rather than something quietly dropped.
+//
+// For input a person or an agent composed, never for data magus wrote. A record magus
+// reads back from its own store has to survive being written by a newer magus, so dropping
+// an unknown field is right there; a field the grader never looks at reads to its author
+// as one that was taken into account.
+func UnmarshalStrict(data []byte, v any) error {
+	return jsonv2.Unmarshal(data, v, unmarshalOpts, jsonv2.RejectUnknownMembers(true))
+}
+
 func MarshalIndent(v any, prefix, indent string) ([]byte, error) {
 	data, err := jsonv2.Marshal(v, marshalOpts)
 	if err != nil {

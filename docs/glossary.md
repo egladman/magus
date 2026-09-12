@@ -300,18 +300,26 @@ The human act of closing an attention request: a judgment rendered, recorded
 with who and why. Distinct from resolving a review thread or a merge conflict -
 a disposition answers a request; it does not merge anything.
 
+### Job
+
+The unit of delegated work, and one row of the job store: what an orchestrating
+agent handed out, with its goal, the checkpoint it was cut against, the paths it
+may write or must not touch, and the one check it runs. A job's holder is either
+a session, for work an orchestrator handed out, or the daemon, for its own
+maintenance. The store records; the agent guard is what reads those facts back
+when grading a write. See [doctrine.md](doctrine.md).
+
 ### Lease
 
-One row of the lease ledger: a piece of work an orchestrating agent handed
-out, with its goal, the checkpoint it was cut against, and the paths it owns or
-must not touch. The ledger records; the agent guard is what reads those facts
-back when grading a write. See [doctrine.md](doctrine.md).
+The grant a holder takes on a job: the write and read lanes that job declared,
+enforced in the checkout that took it with `magus job exec`. A job is the piece
+of work; a lease is permission over it.
 
 ### Lease id
 
 The short identifier a worker carries (the `--lease` flag, or the
 `magus.lease` member of the W3C `BAGGAGE` environment channel) so its runs,
-journal facts, and guard verdicts attribute to its lease. Letters, digits
+journal facts, and guard verdicts attribute to the job it holds. Letters, digits
 and `-_./:` only.
 
 ### Spawn claim

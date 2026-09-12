@@ -39,7 +39,7 @@ import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { agentsTile } from "./tiles/agents";
-import { leaseTile } from "./tiles/lease";
+import { jobsTile } from "./tiles/jobs";
 import { openSurface } from "../surface-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
@@ -65,7 +65,7 @@ import { registerCommand, unregisterCommand } from "../commands";
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
 // initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
 import { getDefaultHost } from "../../lib/settings";
-import { activate as activatePlan } from "../plan/main";
+import { activate as activateJobs } from "../plan/main";
 import type { SurfaceInstance } from "../standalone";
 import { publishStatus } from "../status";
 
@@ -112,37 +112,38 @@ function setConn(conn: ConnView): void {
 // state so the bar catches up on return. Standalone (no console) this stays false, unchanged.
 let surfaceHidden = false;
 let lastState: DashboardState | null = null;
-type DashboardMode = "overview" | "plan";
+type DashboardMode = "overview" | "jobs";
 type DashboardViewWindow = Window & { __magusConsoleDashboardView?: DashboardMode };
 let dashboardMode: DashboardMode = "overview";
-let planMount: SurfaceInstance | null = null;
+let jobsMount: SurfaceInstance | null = null;
 
-function disposePlan(): void {
-  planMount?.deactivate();
-  planMount = null;
+function disposeJobs(): void {
+  jobsMount?.deactivate();
+  jobsMount = null;
 }
 
 function setDashboardMode(mode: DashboardMode): void {
   const main = el("dash-main");
   const overview = el("dash-overview");
-  const planHost = el("dash-plan-host");
-  opt("dash-plan-controls")?.toggleAttribute("hidden", mode !== "plan");
+  const jobsHost = el("dash-jobs-host");
+  opt("dash-jobs-controls")?.toggleAttribute("hidden", mode !== "jobs");
   dashboardMode = mode;
   main.dataset.mode = mode;
   overview.hidden = mode !== "overview";
-  planHost.hidden = mode !== "plan";
-  if (mode === "plan") {
-    if (!planMount) planMount = activatePlan(planHost);
-    planMount.setVisible?.(!surfaceHidden);
+  jobsHost.hidden = mode !== "jobs";
+  if (mode === "jobs") {
+    if (!jobsMount) jobsMount = activateJobs(jobsHost);
+    jobsMount.setVisible?.(!surfaceHidden);
     return;
   }
-  // The plan's keyboard commands and poller only make sense while its mode is in front. Rebuilding
-  // it on return is deliberate: it leaves no hidden command owner or retained canvas behind.
-  disposePlan();
+  // The Jobs view's keyboard commands and poller only make sense while its mode is in front.
+  // Rebuilding it on return is deliberate: it leaves no hidden command owner or retained canvas
+  // behind.
+  disposeJobs();
 }
 
-// The dashboard's two modes were reachable only by pointer: the Big Picture button and the Work
-// plan's cross-link. Both are declared as COMMANDS so they appear in the palette, the Actions
+// The dashboard's two modes were reachable only by pointer: the Big Picture button and the Jobs
+// tile's cross-link. Both are declared as COMMANDS so they appear in the palette, the Actions
 // surface and the cheat sheet, and both carry a surface-local single key rather than a console-wide
 // chord - the diff surface's shape, and for its reason: a bare "b" must not present a dashboard
 // while somebody is reading a log in another pane. The keys are dispatched from #dash-main below,
@@ -150,7 +151,7 @@ function setDashboardMode(mode: DashboardMode): void {
 // reads the keymap for them, so an override would change the display and not the behavior).
 //
 // b and p are free everywhere they could collide: no dashboard tile binds a bare letter (only
-// Escape, the arrows and Home), the Plan mounted inside this surface takes j/k/r/0/+/-/Escape, and
+// Escape, the arrows and Home), the Jobs view mounted inside this surface takes j/k/r/0/+/-/Escape, and
 // every CONSOLE_KEYMAP default and preset binding is either modifier-led or - the Vim preset's "g t"
 // - prefixed by g, which is why neither of these is g or t.
 const COMMANDS: readonly { id: string; label: string; key: string; run: () => void }[] = [
@@ -161,10 +162,10 @@ const COMMANDS: readonly { id: string; label: string; key: string; run: () => vo
     run: () => toggleBigPicture(),
   },
   {
-    id: "dashboard.plan.toggle",
-    label: "Dashboard: show the work plan",
+    id: "dashboard.jobs.toggle",
+    label: "Dashboard: show the jobs",
     key: "p",
-    run: () => setDashboardMode(dashboardMode === "plan" ? "overview" : "plan"),
+    run: () => setDashboardMode(dashboardMode === "jobs" ? "overview" : "jobs"),
   },
 ];
 
@@ -172,14 +173,14 @@ function takeDashboardViewIntent(): DashboardMode | null {
   const win = window as DashboardViewWindow;
   const mode = win.__magusConsoleDashboardView;
   delete win.__magusConsoleDashboardView;
-  return mode === "plan" || mode === "overview" ? mode : null;
+  return mode === "jobs" || mode === "overview" ? mode : null;
 }
 
 export function setVisible(visible: boolean): void {
   surfaceHidden = !visible;
   if (visible) transport.resume();
   else transport.suspend();
-  planMount?.setVisible?.(visible && dashboardMode === "plan");
+  jobsMount?.setVisible?.(visible && dashboardMode === "jobs");
   const big = viewMode.get() === "bigPicture";
   for (const tile of tiles) tile.setVisible?.(visible && (!big || !boardOnlyTiles.has(tile)));
   if (visible && lastState) renderStatusBar(lastState);
@@ -382,7 +383,7 @@ function mountTiles(): void {
   cacheStats.el.dataset.half = "";
 
   const attention = attentionTile();
-  const lease = leaseTile();
+  const jobs = jobsTile();
   const activity = activityTile();
   const agents = agentsTile();
   const gantt = ganttTile(); // the live execution timeline (fed by Status.runs)
@@ -414,7 +415,7 @@ function mountTiles(): void {
   // or board-only in the presentation layout.
   const boardTiles: BoardTile[] = [
     { tile: attention, section: "live", bigPicture: "always" },
-    { tile: lease, section: "live", bigPicture: "always" },
+    { tile: jobs, section: "live", bigPicture: "always" },
     { tile: agents, section: "live", bigPicture: "always" },
     { tile: activity, section: "live", bigPicture: "always" },
     { tile: gantt, section: "live", bigPicture: "always" },
@@ -699,8 +700,8 @@ function onNewVersion(): void {
 // keys work on arrival rather than only after something inside has been clicked - the same pair of
 // moves the diff surface makes with its scroll container.
 //
-// The listener is on the surface root, not on document: the plan mounted inside it dispatches its
-// own single keys from a descendant, and this handler skips an event that one already claimed.
+// The listener is on the surface root, not on document: the Jobs view mounted inside it dispatches
+// its own single keys from a descendant, and this handler skips an event that one already claimed.
 function wireKeys(): void {
   const main = opt("dash-main");
   if (!main) return;
@@ -739,7 +740,7 @@ export function activate(): void {
   // time the console reopens this surface, and the module (with its store and tile list)
   // outlives the tab.
   releaseTiles();
-  disposePlan();
+  disposeJobs();
   lifecycleAbort?.abort();
   lifecycleAbort = new AbortController();
   mountTiles();
@@ -751,7 +752,7 @@ export function activate(): void {
   }
   wireResumeForm();
   wireKeys();
-  opt("dash-plan-back")?.addEventListener("click", () => setDashboardMode("overview"), {
+  opt("dash-jobs-back")?.addEventListener("click", () => setDashboardMode("overview"), {
     signal: lifecycleAbort?.signal,
   });
 
@@ -759,7 +760,7 @@ export function activate(): void {
     "console:dashboard-view",
     (event) => {
       const mode = (event as CustomEvent<{ mode?: DashboardMode }>).detail?.mode;
-      if (mode === "plan" || mode === "overview") setDashboardMode(mode);
+      if (mode === "jobs" || mode === "overview") setDashboardMode(mode);
     },
     { signal: lifecycleAbort?.signal },
   );
@@ -848,7 +849,7 @@ export function activate(): void {
 export function deactivate(): void {
   for (const c of COMMANDS) unregisterCommand(c.id);
   resetBigPicture();
-  disposePlan();
+  disposeJobs();
   transport.stop();
   demo?.stop();
   demo = null;

@@ -9,9 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 
+	"github.com/egladman/magus/internal/hint"
 	"gopkg.in/yaml.v3"
 )
 
@@ -94,7 +96,9 @@ func UserCacheDir() (string, error) {
 	return filepath.Join(home, ".cache"), nil
 }
 
-// Load merges defaults → user-global → workspace → cwd → MAGUS_* env vars.
+// Load merges defaults → user-global → workspace → cwd. The MAGUS_* tier is NOT
+// applied here: callers overlay it with configgen.ApplyEnv, which lives in a
+// generated package this one cannot import.
 // If explicitPath is non-empty only that file is loaded (missing = hard error).
 func Load(explicitPath string) (Config, error) {
 	return LoadWithRoot(explicitPath, "")
@@ -219,29 +223,127 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 }
 
 // loadFileInto parses the YAML at path and merges its values on top of cfg.
-// Unknown YAML keys are silently accepted (non-strict mode) but a WARN is
-// emitted via slog so users can spot typos or stale config keys.
 func loadFileInto(cfg Config, path string) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, overlay, err := decodeFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("config: read %s: %w", path, err)
-	}
-	// Probe for unknown keys: use a strict decoder and discard the error
-	// (we still accept the file), but log a warning so users notice typos.
-	// io.EOF is an EMPTY document, not a malformed one; a magus.yaml holding
-	// only comments would otherwise warn about "unknown keys ... detail=EOF".
-	var probe Config
-	dec := yaml.NewDecoder(bytes.NewReader(data))
-	dec.KnownFields(true)
-	if decErr := dec.Decode(&probe); decErr != nil && !errors.Is(decErr, io.EOF) {
-		slog.Warn("config: unknown or unexpected keys in config file (run 'magus config validate' for details)",
-			"path", path, "detail", decErr.Error())
-	}
-	var overlay Config
-	if err := yaml.Unmarshal(data, &overlay); err != nil {
-		return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
+		return Config{}, err
 	}
 	return mergeOverlay(cfg, overlay, data), nil
+}
+
+// decodeFile reads path and decodes it with unknown keys rejected, returning the
+// document bytes mergeOverlay needs alongside the decoded overlay. Every tier and
+// [LoadFile] decode here, so what magus doctor rejects is what loading rejects.
+//
+// An unknown key is an error because magus will not honor it, and a value the
+// tool drops must never look like one it applied. io.EOF is an EMPTY document,
+// not a malformed one; an empty or comment-only magus.yaml declares nothing,
+// which is valid.
+func decodeFile(path string) ([]byte, Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, Config{}, fmt.Errorf("config: read %s: %w", path, err)
+	}
+	var overlay Config
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
+		if ue := unknownKeyError(path, err); ue != nil {
+			return nil, Config{}, ue
+		}
+		return nil, Config{}, fmt.Errorf("config: %s: %w", path, err)
+	}
+	// A decoder reads one document; a second would be dropped without a word.
+	var extra yaml.Node
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, Config{}, fmt.Errorf("config: %s: expected a single document in the stream", path)
+	}
+	return data, overlay, nil
+}
+
+// unknownFieldIssue matches yaml.v3's own wording for a key KnownFields rejected,
+// capturing the line, the key, and the Go type it was decoding into.
+var unknownFieldIssue = regexp.MustCompile(`^line (\d+): field (.+) not found in type (\S+)$`)
+
+// unknownKeyError re-renders yaml.v3's rejection as magus's own message: the file
+// and line, the key, and the nearest known key at that level. It returns nil when
+// err is not a rejection this can restate, leaving the caller's wrap in place.
+//
+// The Go type name yaml.v3 reports is a fact about magus's source, not about the
+// file the reader wrote, so it never reaches the message. A TypeError carrying
+// anything else (a type mismatch, say) is left alone whole rather than rewritten
+// in part: that detail has no place in this shape, and half a message is worse
+// than yaml's.
+func unknownKeyError(path string, err error) error {
+	var terr *yaml.TypeError
+	if !errors.As(err, &terr) || len(terr.Errors) == 0 {
+		return nil
+	}
+	lines := make([]string, 0, len(terr.Errors))
+	for _, issue := range terr.Errors {
+		m := unknownFieldIssue.FindStringSubmatch(issue)
+		if m == nil {
+			return nil
+		}
+		line, key, goType := m[1], m[2], m[3]
+		msg := fmt.Sprintf("%s:%s: unknown key %q", workspaceRelPath(path), line, key)
+		if sug := hint.Nearest(key, knownKeysIn(goType)); sug != "" {
+			msg += fmt.Sprintf("; did you mean %q?", sug)
+		}
+		lines = append(lines, msg)
+	}
+	return errors.New(strings.Join(lines, "\n"))
+}
+
+// knownKeysIn returns the document keys accepted by the struct type yaml.v3 named
+// goType, or nil when Config's type graph holds no type by that name.
+//
+// Derived from the struct rather than listed: a hand-kept list drifts the moment a
+// field lands, and the generated inventory in schema/gen covers only the fields
+// carrying an env var or a flag, not every key the decoder takes.
+func knownKeysIn(goType string) []string {
+	seen := map[reflect.Type]bool{}
+	var walk func(reflect.Type) []string
+	walk = func(t reflect.Type) []string {
+		for t.Kind() == reflect.Pointer || t.Kind() == reflect.Slice || t.Kind() == reflect.Array || t.Kind() == reflect.Map {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct || seen[t] {
+			return nil
+		}
+		seen[t] = true
+		if t.String() == goType {
+			keys := make([]string, 0, t.NumField())
+			for i := range t.NumField() {
+				f := t.Field(i)
+				if k := yamlKey(f); k != "" && f.IsExported() {
+					keys = append(keys, k)
+				}
+			}
+			return keys
+		}
+		for i := range t.NumField() {
+			if keys := walk(t.Field(i).Type); keys != nil {
+				return keys
+			}
+		}
+		return nil
+	}
+	return walk(reflect.TypeOf(Config{}))
+}
+
+// workspaceRelPath renders path the way the reader would type it: relative to the
+// workspace root while it is inside one, absolute otherwise.
+func workspaceRelPath(path string) string {
+	root := findWorkspaceRoot()
+	if root == "" {
+		return path
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return path
+	}
+	return rel
 }
 
 // mergeConfig returns dst with every non-zero field from src applied on top,
@@ -332,31 +434,15 @@ func parseBoolEnv(v string, fallback bool) bool {
 	return fallback
 }
 
-// LoadFile parses the config file at path on top of Defaults() and returns
-// the merged Config. When strict is true, unknown YAML keys are rejected and
-// Validate is run on the result; errors from either step are returned as
-// structured errors (*ValidationError for validation failures, plain errors
-// for YAML syntax and unknown-field errors). When strict is false the
-// behavior mirrors the internal loadFileInto: unknown keys are silently
-// ignored and Validate is not run.
+// LoadFile parses the config file at path on top of Defaults() and returns the
+// merged Config. A YAML syntax error and an unknown key are rejected either way;
+// strict additionally runs [Validate] on the result and returns its
+// *ValidationError. A caller holding a partial or foreign file passes false to
+// read the values without grading them.
 func LoadFile(path string, strict bool) (Config, error) {
-	data, err := os.ReadFile(path)
+	data, overlay, err := decodeFile(path)
 	if err != nil {
-		return Config{}, fmt.Errorf("config: read %s: %w", path, err)
-	}
-	var overlay Config
-	if strict {
-		dec := yaml.NewDecoder(bytes.NewReader(data))
-		dec.KnownFields(true)
-		// io.EOF is an empty document: an empty or comment-only magus.yaml declares
-		// nothing, which is valid, so `magus config validate` must not reject it.
-		if err := dec.Decode(&overlay); err != nil && !errors.Is(err, io.EOF) {
-			return Config{}, err
-		}
-	} else {
-		if err := yaml.Unmarshal(data, &overlay); err != nil {
-			return Config{}, fmt.Errorf("config: parse %s: %w", path, err)
-		}
+		return Config{}, err
 	}
 	merged := mergeOverlay(Defaults(), overlay, data)
 	if strict {

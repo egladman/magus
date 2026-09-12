@@ -51,9 +51,18 @@
 # note in magus-guard-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 12
+# magus-guard-template: 13
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none
+# NOT because the transport is missing: testdata/hostschemas/cursor/hooks.schema.json DOES
+# declare beforeMCPExecution and afterMCPExecution, the MCP-call twins of beforeShellExecution
+# and preToolUse/postToolUse above. What is missing is the PAYLOAD: no vendored source (Cursor
+# ships no schema for it, only the config-shape validator the rows above are transcribed from)
+# says what field carries the tool name and params on those two events, and this script does
+# not guess at one - wiring a guard against an unverified field name is the exact silent-failure
+# class this whole contract exists to catch (see subagentStart's own "unverified live" note
+# below). Flip this the day Cursor documents, or this file verifies, that payload.
 
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does

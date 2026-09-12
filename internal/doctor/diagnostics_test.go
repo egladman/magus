@@ -174,7 +174,7 @@ func TestCheckDiagnosticDocsSilentElsewhere(t *testing.T) {
 
 // TestCheckDiagnosticDocsBreakageIsNotAbsence covers the two shapes that resolve no page
 // at all inside the tree that owns the pages. Both are total breakage, and reporting them
-// as the out-of-scope skip would hand back a green check that graded nothing.
+// as the out-of-scope skip would return a green check that graded nothing.
 func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
 	codes := []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}
 

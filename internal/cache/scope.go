@@ -77,14 +77,18 @@ func (c *Cache) LogBase(ctx context.Context, base, vcs string) {
 // under a project, routed through the cache logger like the other events. In collapse
 // mode (where a project's subprocess output is withheld) these lines give the reader a
 // checklist of what ran and whether it passed; runErr is nil on success.
-func (c *Cache) LogStage(ctx context.Context, label, target string, elapsed time.Duration, runErr error) {
+//
+// advisory marks a failure the composite carries on past, so the row says so in place of
+// the status it would otherwise carry: a gate reader that meets `[fail]` on a row nothing
+// failed on has to go looking for which of the two answers is the real one.
+func (c *Cache) LogStage(ctx context.Context, label, target string, elapsed time.Duration, runErr error, advisory bool) {
 	attrs := []any{
 		slog.String("label", label),
 		slog.String("target", target),
 		slog.Int64("duration", int64(elapsed)),
 	}
 	if runErr != nil {
-		attrs = append(attrs, slog.String("error", runErr.Error()))
+		attrs = append(attrs, slog.String("error", runErr.Error()), slog.Bool("advisory", advisory))
 	}
 	c.log.InfoContext(ctx, "cache.stage", attrs...)
 }

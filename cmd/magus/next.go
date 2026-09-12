@@ -6,6 +6,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 )
 
@@ -34,42 +35,66 @@ type filesWithNext struct {
 	Next             []hint.Next `json:"next,omitempty" yaml:"next,omitempty"`
 }
 
-// nextGate holds each breadcrumb's Why to one firing per session, reusing the marker
-// store the guard advisories already keep.
+// nextGate is what one result needs to serve its breadcrumbs: the marker store that
+// holds each Why to a single firing, and the role and lane the entries are filtered
+// for.
 //
-// A CLI run carries no host session id (only a hook envelope reports one), so these
-// markers land in the anonymous bucket and expire on advisoryAnonWindow: one firing
-// per checkout for a working session's length, which is the suppression the
-// measurement asked for. A workspace magus cannot locate suppresses nothing, which
-// is the right direction to fail.
-func nextGate(root string) advisoryGate {
-	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), magus.WithLoadedConfig(globalCfg))
-	if err != nil {
-		return advisoryGate{}
-	}
-	return newAdvisoryGate(dir, "")
+// A CLI run carries no host session id (only a hook envelope reports one), so the
+// markers land in the anonymous bucket, which expires on hint's anonWindow: one
+// firing per checkout for a working session's length. A workspace magus cannot locate
+// suppresses nothing and records nothing, which is the right direction to fail.
+type nextGate struct {
+	gate hint.Gate
+	role hint.Role
+	lane []string
 }
 
-// printNext writes a result's breadcrumbs, one line each.
+// newNextGate resolves the gate for a command running against root.
+func newNextGate(root string) nextGate {
+	dir, err := magus.ResolveCacheDir(resolveRootOrEmpty(root), magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nextGate{role: hint.RoleUnbound}
+	}
+	role, lane := actingRole(dir, resolveRootOrEmpty(root))
+	return nextGate{gate: hint.NewGate(dir, ""), role: role, lane: lane}
+}
+
+// actingRole grades the acting lease against this checkout's job store.
+func actingRole(cacheDir, root string) (hint.Role, []string) {
+	id := job.ActingLease(cacheDir)
+	if id == "" {
+		return hint.RoleUnbound, nil
+	}
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	if err != nil {
+		return hint.RoleWorker, nil
+	}
+	return hint.RoleFor(rows, id)
+}
+
+// served filters next for the acting role and records what survived to the journal.
 //
-// The Run line prints every time: it is navigation, and a reader who has seen it
-// before still needs the ids filled in. The Why is advice, and advice says nothing
-// the second time, so it goes through the gate. -s drops it outright without
-// spending the firing, so the next full run still explains itself.
-func printNext(w io.Writer, gate advisoryGate, next []hint.Next) {
-	if len(next) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\nnext:\n")
-	for _, n := range next {
-		why := ""
-		if !global.silent {
-			why = gate.once(advisoryKind("next-"+n.ID), n.Why)
+// Every surface that carries breadcrumbs calls it, structured output included: the
+// journal's readers ask what a reader was given, and an entry that reached a harness
+// as a field was given over exactly as one printed on a terminal was.
+func (n nextGate) served(next []hint.Next) []hint.Next {
+	served := hint.ServableTo(n.role, n.lane, next)
+	hint.AppendServedNext(n.gate.CacheDir(), served)
+	return served
+}
+
+// printNext writes a result's breadcrumbs, the command on its own line and the reason
+// indented under it.
+//
+// The Run line prints every time, since it is navigation and a reader who has seen it
+// before still needs the ids filled in. The Why is advice, so it goes through the
+// gate; -s drops it without spending the firing, and the next full run still explains
+// itself.
+func printNext(w io.Writer, n nextGate, next []hint.Next) {
+	fmt.Fprint(w, hint.Render(next, func(entry hint.Next) string {
+		if global.silent {
+			return ""
 		}
-		if why == "" {
-			fmt.Fprintf(w, "  %s\n", n.Run)
-			continue
-		}
-		fmt.Fprintf(w, "  %s  (%s)\n", n.Run, why)
-	}
+		return n.gate.Once(hint.MarkerKind("next-"+entry.ID), entry.Why)
+	}))
 }

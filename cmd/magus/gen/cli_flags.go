@@ -241,6 +241,40 @@ const (
 	FlagInitLocal = "local"
 	// init: --vcs
 	FlagInitVCS = "vcs"
+	// job exec: --base
+	FlagJobExecBase = "base"
+	// job exit: --schema
+	FlagJobExitSchema = "schema"
+	// job exit: --stdin
+	FlagJobExitStdin = "stdin"
+	// job fork: --check
+	FlagJobForkCheck = "check"
+	// job fork: --checkpoint
+	FlagJobForkCheckpoint = "checkpoint"
+	// job fork: --deny-paths
+	FlagJobForkDenyPaths = "deny-paths"
+	// job fork: --depends-on
+	FlagJobForkDependsOn = "depends-on"
+	// job fork: --goal
+	FlagJobForkGoal = "goal"
+	// job fork: --model
+	FlagJobForkModel = "model"
+	// job fork: --parent
+	FlagJobForkParent = "parent"
+	// job fork: --read-only
+	FlagJobForkReadOnly = "read-only"
+	// job fork: --read-paths
+	FlagJobForkReadPaths = "read-paths"
+	// job fork: --schema
+	FlagJobForkSchema = "schema"
+	// job fork: --stdin
+	FlagJobForkStdin = "stdin"
+	// job fork: --write-paths
+	FlagJobForkWritePaths = "write-paths"
+	// job wait: --schema
+	FlagJobWaitSchema = "schema"
+	// job wait: --stdin
+	FlagJobWaitStdin = "stdin"
 	// man install: --dir
 	FlagManInstallDir = "dir"
 	// man install: --dry-run
@@ -355,6 +389,8 @@ const (
 	FlagServerReloadSocket = "socket"
 	// server start: --foreground
 	FlagServerStartForeground = "foreground"
+	// server status: --socket
+	FlagServerStatusSocket = "socket"
 	// server stop: --services
 	FlagServerStopServices = "services"
 	// server stop: --socket
@@ -492,6 +528,9 @@ func BindDescribeSpells(fs *flag.FlagSet) *DescribeSpellsFlags {
 }
 
 // RunFlags are the flags declared for `magus run`.
+//
+// It does NOT carry --skip: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type RunFlags struct {
 	Graph             bool          // --graph
 	Upstream          bool          // --upstream
@@ -553,6 +592,9 @@ func BindWhere(fs *flag.FlagSet) *WhereFlags {
 }
 
 // AffectedFlags are the flags declared for `magus affected`.
+//
+// It does NOT carry --explain, --plan: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type AffectedFlags struct {
 	Base              string        // --base, -b
 	Stdin             bool          // --stdin
@@ -840,6 +882,9 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 }
 
 // WatchFlags are the flags declared for `magus watch`.
+//
+// It does NOT carry --ignore: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type WatchFlags struct {
 	Debounce time.Duration // --debounce
 	Initial  bool          // --initial
@@ -1192,6 +1237,9 @@ func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
 }
 
 // MemoryPutFlags are the flags declared for `magus memory put`.
+//
+// It does NOT carry --ref, --reference: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type MemoryPutFlags struct {
 	Amend   bool   // --amend
 	Type    string // --type
@@ -1211,7 +1259,79 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
+// JobForkFlags are the flags declared for `magus job fork`.
+//
+// It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
+type JobForkFlags struct {
+	Schema     bool   // --schema
+	Stdin      bool   // --stdin
+	Goal       string // --goal
+	Parent     string // --parent
+	Checkpoint string // --checkpoint
+	Check      string // --check
+	Model      string // --model
+	ReadOnly   bool   // --read-only
+}
+
+// BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
+func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
+	var f JobForkFlags
+	fs.BoolVar(&f.Schema, FlagJobForkSchema, false, "Print the JSON schema a job must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
+	fs.StringVar(&f.Goal, FlagJobForkGoal, "", "The goal and its observable acceptance criteria")
+	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
+	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
+	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")
+	fs.StringVar(&f.Model, FlagJobForkModel, "", "The model the work was matched to")
+	fs.BoolVar(&f.ReadOnly, FlagJobForkReadOnly, false, "A job that gathers evidence and writes nothing")
+	return &f
+}
+
+// JobExecFlags are the flags declared for `magus job exec`.
+type JobExecFlags struct {
+	Base string // --base
+}
+
+// BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
+func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
+	var f JobExecFlags
+	fs.StringVar(&f.Base, FlagJobExecBase, "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+	return &f
+}
+
+// JobExitFlags are the flags declared for `magus job exit`.
+type JobExitFlags struct {
+	Schema bool // --schema
+	Stdin  bool // --stdin
+}
+
+// BindJobExit registers `magus job exit`'s flags on fs and returns the destination.
+func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
+	var f JobExitFlags
+	fs.BoolVar(&f.Schema, FlagJobExitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobExitStdin, false, "Read this job's result from stdin; without it the job is abandoned")
+	return &f
+}
+
+// JobWaitFlags are the flags declared for `magus job wait`.
+type JobWaitFlags struct {
+	Schema bool // --schema
+	Stdin  bool // --stdin
+}
+
+// BindJobWait registers `magus job wait`'s flags on fs and returns the destination.
+func BindJobWait(fs *flag.FlagSet) *JobWaitFlags {
+	var f JobWaitFlags
+	fs.BoolVar(&f.Schema, FlagJobWaitSchema, false, "Print the JSON schema a result must satisfy, and exit")
+	fs.BoolVar(&f.Stdin, FlagJobWaitStdin, false, "Read the result from stdin instead of from the job, for one that was never filed")
+	return &f
+}
+
 // NotesCaptureFlags are the flags declared for `magus notes capture`.
+//
+// It does NOT carry --tag: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type NotesCaptureFlags struct {
 	Title   string // --title
 	Name    string // --name
@@ -1292,6 +1412,18 @@ func BindServerStop(fs *flag.FlagSet) *ServerStopFlags {
 	var f ServerStopFlags
 	fs.StringVar(&f.Socket, FlagServerStopSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
 	fs.BoolVar(&f.Services, FlagServerStopServices, false, "Stop the daemon's hosted services, leaving the daemon running")
+	return &f
+}
+
+// ServerStatusFlags are the flags declared for `magus server status`.
+type ServerStatusFlags struct {
+	Socket string // --socket
+}
+
+// BindServerStatus registers `magus server status`'s flags on fs and returns the destination.
+func BindServerStatus(fs *flag.FlagSet) *ServerStatusFlags {
+	var f ServerStatusFlags
+	fs.StringVar(&f.Socket, FlagServerStatusSocket, "", "Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)")
 	return &f
 }
 

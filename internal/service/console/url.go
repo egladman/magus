@@ -112,6 +112,20 @@ type FragmentParam struct {
 	Value string
 }
 
+// Root is the console's own address, the one a person opens when they want the console
+// rather than a particular surface: http://<host>/console/. Empty when there is no host.
+//
+// Beside Link rather than spelled at each caller, for the reason Link's own doc gives: the
+// grammar has one home. Link with an empty surface would render "/console//", which some
+// servers redirect and some do not, so the root is its own answer rather than a special
+// case of a surface link.
+func Root(host string) string {
+	if host == "" {
+		return ""
+	}
+	return "http://" + host + "/console/"
+}
+
 // Link assembles a console surface's daemon-origin deep link:
 // http://<host>/console/<surface>/#[<directives>&]token=<token>. Under the daemon-origin grammar
 // the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback

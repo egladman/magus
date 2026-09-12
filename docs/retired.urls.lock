@@ -288,3 +288,17 @@ reference/skills/magus-docs/
 reference/skills/magus-handoff-journal/
 reference/skills/magus-vcs/
 tags/journal/
+
+# `magus ledger` became `magus job`: a JOB is the unit of delegated work and a LEASE
+# is the grant a holder takes on one, so the verb that read the store was renamed with
+# the noun. A manpage page is generated per command and has no source file to carry a
+# redirect, so this retires rather than aliases, the same way the folded magus-sessions
+# pages above did; the successor carries every verb at reference/manpage/magus-job/.
+reference/manpage/magus-ledger/
+
+# The two tag pages naming the retired verb go with it. `leases` follows the count > 1
+# rule above instead: the tag is now carried by one page (guides/integrations/agents/leases/),
+# so it stays reachable as a search chip there and generates no index of its own.
+tags/ledger/
+tags/leases/
+tags/magus-ledger/

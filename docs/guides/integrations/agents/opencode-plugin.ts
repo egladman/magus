@@ -18,7 +18,7 @@
 // deny throws and its reason arrives as the tool error, while an advise is
 // appended to the tool's own result by tool.execute.after, joined to the call it
 // belongs to by callID. That append is what replaced a console.warn, which reached
-// the person and never the model. The two declarations below record it, and they
+// the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
 // magus-guard-command.sh.
 //
@@ -26,9 +26,18 @@
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 12
+// magus-guard-template: 13
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
+// magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none
+// NOT because tool.execute.before/.after cannot see an MCP call: they are generic and already
+// intercept every tool call OpenCode makes, MCP included - only the two branches below (bash,
+// edit/write) narrow that down by tool NAME. What is missing is knowing what name OpenCode
+// gives an MCP tool call at all; no vendored source documents its convention (SOURCES.md:
+// OpenCode ships no hook config schema, only the typed Plugin interface this file already
+// type-checks against), and a third `if (input.tool === ...)` branch keyed on a guessed string
+// risks silently misjudging an unrelated tool rather than catching magus's own calls. Flip this
+// once that naming convention is confirmed against a real OpenCode session.
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,

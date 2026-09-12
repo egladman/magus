@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -57,6 +56,14 @@ type sessionBrief struct {
 	// Rules are the instruction files and skill directories that exist here, named
 	// so the model re-reads them instead of trusting a summary of them.
 	Rules []string `json:"rules,omitempty"`
+	// Console is where a person opens the console for this checkout, empty when none is
+	// served. It is here because this payload lands in a model's context, and a model
+	// that knows the address can hand it to the person who asked where to look.
+	Console string `json:"console,omitempty"`
+	// PromptCache is how long since a tool call last ran past the guard in this
+	// checkout, against every published cache window: a resume past a closed window
+	// re-pays the whole prompt. Empty Providers when the trail here has seen nothing.
+	PromptCache sessions.PromptCacheClock `json:"prompt_cache,omitzero"`
 }
 
 // briefUnpushed counts the commits this checkout carries that its base ref does not.
@@ -87,7 +94,7 @@ type briefTree struct {
 type briefLease struct {
 	ID         string `json:"id"`
 	State      string `json:"state,omitempty"`
-	Bind       string `json:"bind"`
+	Exec       string `json:"exec"`
 	Goal       string `json:"goal,omitempty"`
 	Validation string `json:"validation,omitempty"`
 }
@@ -158,6 +165,8 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
 	brief.Rules = ruleLocations(root)
+	brief.PromptCache = promptCacheForCheckout(root, time.Now())
+	brief.Console = consoleRootURL()
 	return brief
 }
 
@@ -217,7 +226,7 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 // same filter the write guard applies, so the brief and the refusals agree about
 // which leases are live.
 func briefLeases(root string) []briefLease {
-	store, err := openLedger(root)
+	store, err := openJobs(root)
 	if err != nil {
 		return nil
 	}
@@ -225,16 +234,20 @@ func briefLeases(root string) []briefLease {
 	if err != nil {
 		return nil
 	}
-	live := liveLeases(rows)
-	out := make([]briefLease, 0, len(live))
-	for _, row := range live {
-		// The bind line comes from the brief constructor rather than from a second
-		// spelling here, so `magus ledger brief` and this cannot drift.
+	out := make([]briefLease, 0, len(rows))
+	for _, row := range rows {
+		if !row.State.Live() {
+			continue
+		}
+		goal, _, _ := strings.Cut(strings.TrimSpace(row.Goal), "\n")
+		if goal == "" {
+			goal = "no goal recorded"
+		}
 		out = append(out, briefLease{
 			ID:         row.ID,
 			State:      string(row.State),
-			Bind:       ledger.NewBrief(row).Bind,
-			Goal:       goalLine(row),
+			Exec:       hint.JobExec.With(row.ID),
+			Goal:       goal,
 			Validation: row.Validation,
 		})
 	}
@@ -326,7 +339,11 @@ func (b sessionBrief) Text() string {
 		}
 		briefLine(&s, "unpushed: %s%d commit(s) not on %s", at, u.Count, u.Base)
 	}
+	if b.Console != "" {
+		briefLine(&s, "console: %s (it asks for a token)", b.Console)
+	}
 	b.writeTree(&s)
+	b.writePromptCache(&s)
 	b.writeLeases(&s)
 	b.writeFailures(&s)
 
@@ -362,6 +379,34 @@ func (b sessionBrief) writeTree(s *strings.Builder) {
 		b.Tree.Dirty, len(b.Tree.Sources), len(b.Tree.Outputs), len(b.Tree.Unclaimed))
 }
 
+// writePromptCache splits the windows into the two groups a resuming session acts on,
+// rather than listing each one's closing instant the way the human listing does. The
+// question here is binary and the answer is three lines of context at most: this lands in
+// a model's window through a hook, and a five-row table of clock times would cost more
+// than the decision it informs.
+func (b sessionBrief) writePromptCache(s *strings.Builder) {
+	if len(b.PromptCache.Providers) == 0 {
+		return
+	}
+	var closed, open []string
+	for _, p := range b.PromptCache.Providers {
+		for _, w := range p.Windows {
+			if w.Closed {
+				closed = append(closed, p.Provider+" "+w.Window)
+			} else {
+				open = append(open, p.Provider+" "+w.Window)
+			}
+		}
+	}
+	briefLine(s, "prompt cache: last tool call here %s ago; a resume past a closed window re-pays the prompt", b.PromptCache.SinceText())
+	if len(closed) > 0 {
+		briefLine(s, "  closed: %s", strings.Join(closed, ", "))
+	}
+	if len(open) > 0 {
+		briefLine(s, "  open: %s", strings.Join(open, ", "))
+	}
+}
+
 func (b sessionBrief) writeLeases(s *strings.Builder) {
 	if len(b.Leases) == 0 {
 		return
@@ -369,7 +414,7 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 	briefLine(s, "leases live here:")
 	for _, l := range b.Leases {
 		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Goal))
-		briefLine(s, "    bind: %s", l.Bind)
+		briefLine(s, "    exec: %s", l.Exec)
 		if l.Validation != "" {
 			briefLine(s, "    validation: %s", l.Validation)
 		}
