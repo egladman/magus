@@ -421,7 +421,7 @@ type Job struct {
 // JSON only: this is decoded from stdin and never emitted, so it carries no yaml tags.
 //
 // Registered in cmd/magus-utils/boundary_types.go with no RuntimeObject: a magusfile can
-// construct one, but nothing hands one back out to Buzz - job.DecodeDeclaration is the only
+// construct one, but nothing hands one back out to Buzz; job.DecodeDeclaration is the only
 // decoder, and it reads JSON, not a Buzz value.
 type Declaration struct {
 	// SchemaVersion is the row shape this record is written in, and it is required: a

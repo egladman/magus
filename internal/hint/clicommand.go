@@ -41,8 +41,8 @@ func (c Command) String() string { return c.StringAs(BinaryName()) }
 func (c Command) With(args ...string) string { return c.WithAs(BinaryName(), args...) }
 
 // StringAs renders the bare invocation spelled with bin instead of this process's
-// own invocation. For a renderer whose reader is not this process - a doc committed
-// to the repo, generated once and read by whoever checks it out - the live
+// own invocation. For a renderer whose reader is not this process (a doc committed
+// to the repo, generated once and read by whoever checks it out), the live
 // BinaryName would make the file's content depend on how it happened to be built.
 func (c Command) StringAs(bin string) string { return bin + " " + strings.Join(c.tokens, " ") }
 
