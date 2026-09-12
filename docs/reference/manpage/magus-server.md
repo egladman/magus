@@ -44,6 +44,11 @@ check for the file with [ -S "$socket" ] before starting one.
 **--socket** *string*
 : Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
 
+### server status options
+
+**--socket** *string*
+: Daemon socket (default: config / MAGUS_DAEMON_ADDRESS / auto-detect)
+
 ### server reload options
 
 **--socket** *string*
@@ -56,6 +61,9 @@ check for the file with [ -S "$socket" ] before starting one.
 
 **stop**
 : Send a graceful shutdown request to a running daemon
+
+**status**
+: The daemon: whether it is up and where you reach it
 
 **reload**
 : Re-read configuration without restarting: drop the daemon's open workspaces

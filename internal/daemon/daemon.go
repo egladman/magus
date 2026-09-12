@@ -31,7 +31,6 @@ import (
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
 	insighthandler "github.com/egladman/magus/internal/handler/insight"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
-	jobshandler "github.com/egladman/magus/internal/handler/jobs"
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
@@ -170,10 +169,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			slog.String("addr", addr.String()))
 	}
 
-	// ONE job store for the whole daemon, built before the MCP handler so
-	// the magus_job tool and the console's /api/v1/jobs route below hold the same
-	// object. Two stores over one file each take their own mutex, and the merge Update
-	// performs under a single acquisition then serializes against nothing.
+	// ONE job store for the whole daemon, built before the MCP handler so the magus_job
+	// tool and the JobService below hold the same object. Two stores over one file each
+	// take their own mutex, and the merge Update performs under a single acquisition then
+	// serializes against nothing.
 	if opts.Jobs == nil && opts.Magus != nil {
 		opts.Jobs = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
@@ -318,7 +317,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// live pool state, the output store for each node's last outcome and its ref), so
 			// it introduces no third notion of what ran.
 			planH := planhandler.NewHandler(svc, outputStore, opts.Magus.Root(), log)
-			jobsH := jobshandler.NewHandler(opts.Jobs, log)
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
 			// checkout, so the console lists what `magus session attention` lists from any worktree.
@@ -366,10 +364,6 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
-			// Job store: the plan an orchestrating agent DECLARED, read straight off
-			// the store the magus_job MCP tool writes. Read-only here (the write door is
-			// the tool), and magus enforces none of it.
-			bridgeMux.Handle("/api/v1/jobs", cors(jobsH))
 			// Attention queue: GET lists the open requests, POST disposes one. The write is a
 			// PERSON closing a block through their own surface (docs/doctrine.md, "Manual on
 			// purpose"), which is why it sits here on the loopback bridge and NOT in the LAN

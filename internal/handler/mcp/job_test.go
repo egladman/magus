@@ -2,16 +2,17 @@ package mcp
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
-	jobshandler "github.com/egladman/magus/internal/handler/jobs"
+	"connectrpc.com/connect"
+	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/job"
+	jobcatalog "github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/json"
+	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -293,12 +294,22 @@ func TestJobToolForkMergesConcurrently(t *testing.T) {
 	assert.Equal(t, "the declared goal", got[0].Goal, "neither fork erased the field it did not name")
 }
 
+// tmpWorkspace is a JobService workspace whose trail and cache live under a temp
+// directory, so the service sizes a job's target without reading the developer's own cache.
+type tmpWorkspace struct{ dir string }
+
+func (w tmpWorkspace) CacheDir() string      { return w.dir }
+func (w tmpWorkspace) CacheDiskBytes() int64 { return 0 }
+
 // TestJobDoorsAgreeOnAnEmptyStore is the parity the constructor exists to guarantee.
-// The job store has two read doors (this tool and the console's GET /api/v1/jobs), and an
-// unwritten store is the case they used to answer differently, one serving "jobs":[]
-// because the route normalized it by hand and the other serving null.
+// The job store has two read doors (this tool and JobService's ListJobs), and an unwritten
+// store is the case they used to answer differently, one serving "jobs":[] because it
+// normalized by hand and the other serving null.
+//
+// The service lists the daemon's own catalog whatever the store holds, so its side of the
+// parity is that the store contributed no row and derived no overlap.
 func TestJobDoorsAgreeOnAnEmptyStore(t *testing.T) {
-	t.Parallel()
+	t.Setenv("MAGUS_DAEMON_SOCKET", "") // no daemon to query, so nothing lists as running
 
 	store := tmpJobStore(t, t.TempDir())
 	tool := &jobTool{store: store}
@@ -306,14 +317,12 @@ func TestJobDoorsAgreeOnAnEmptyStore(t *testing.T) {
 	require.NoError(t, err)
 	fromTool, err := json.Marshal(resp.Data)
 	require.NoError(t, err)
-
-	w := httptest.NewRecorder()
-	jobshandler.NewHandler(store, nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/jobs", nil))
-	require.Equal(t, http.StatusOK, w.Code)
-
-	var route, toolBody any
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &route))
-	require.NoError(t, json.Unmarshal(fromTool, &toolBody))
-	assert.Equal(t, route, toolBody)
 	assert.Contains(t, string(fromTool), `"jobs":[]`)
+
+	svc := jobhandler.NewService(tmpWorkspace{dir: t.TempDir()}, "test", store)
+	listed, err := svc.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	require.NotNil(t, listed.Msg.Jobs)
+	assert.Len(t, listed.Msg.Jobs, len(jobcatalog.All()), "an unwritten store handed the listing a row")
+	assert.Empty(t, listed.Msg.Overlaps)
 }

@@ -50,7 +50,6 @@ namespace outright.
 | `internal/handler/diff`      | `/api/v1/diff` and everything under it            |
 | `internal/handler/plan`      | `/api/v1/plan`                                    |
 | `internal/handler/attention` | `/api/v1/attention`                               |
-| `internal/handler/ledger`    | `/api/v1/ledger`                                  |
 
 A route package is NOT a place to put whatever has no home yet. `handler/status` accumulated
 five of these before they were split out, while its own doc still described one thing: mapping

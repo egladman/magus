@@ -514,7 +514,7 @@ type JobList struct {
 // The registration facts take the opposite route and are NOT derived here. ReportedBase,
 // BaseVerdict and Registered describe one row against the checkpoint that row was handed,
 // so they belong on the row, are computed once when the worker registers, and reach every
-// reader of this list (magus_job's list op, the console's /api/v1/jobs) by riding
+// reader of this list (magus_job's list op, JobService's ListJobs) by riding
 // the leases. Deriving a second copy at read time would be a duplicate to keep true, which
 // is exactly what the overlap rule above avoids in the other direction.
 //
