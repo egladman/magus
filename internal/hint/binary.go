@@ -16,10 +16,11 @@ import (
 // been using `./magus` throughout. The stale binary answered, and nothing in either
 // output said the two were different programs.
 
-// defaultBinaryName is what a hint spells when nothing better is known: the PATH
+// DefaultBinaryName is what a hint spells when nothing better is known: the PATH
 // invocation, which is right for an installed magus and is the spelling every
-// existing test and doc page carries.
-const defaultBinaryName = "magus"
+// existing test and doc page carries. Exported for a renderer whose reader is not
+// this process (see Command.StringAs), the same case OnPath below handles.
+const DefaultBinaryName = "magus"
 
 // invokedAs holds the resolved spelling. Atomic because a hint renders from whatever
 // goroutine is printing, and the tests that pin this rule write it.
@@ -43,13 +44,13 @@ func init() { ResolveBinaryNameFrom(os.Args[0]) }
 func ResolveBinaryNameFrom(argv0 string) {
 	argv0 = strings.TrimSpace(argv0)
 	base := filepath.Base(argv0)
-	if base != defaultBinaryName {
+	if base != DefaultBinaryName {
 		return
 	}
 	switch {
 	case !strings.ContainsRune(argv0, filepath.Separator):
 		// Resolved through PATH, so PATH is what a reader would type.
-		invokedAs.Store(defaultBinaryName)
+		invokedAs.Store(DefaultBinaryName)
 	case filepath.IsAbs(argv0):
 		// A hook template resolves the workspace's binary absolutely and runs with the
 		// workspace as its working directory, so that one is the `./magus` a reader
@@ -59,7 +60,7 @@ func ResolveBinaryNameFrom(argv0 string) {
 			invokedAs.Store("." + string(filepath.Separator) + base)
 			return
 		}
-		invokedAs.Store(defaultBinaryName)
+		invokedAs.Store(DefaultBinaryName)
 	default:
 		// Relative and spelled with a separator: exactly as typed, which is the
 		// spelling the reader already used.
@@ -72,7 +73,7 @@ func BinaryName() string {
 	if s, ok := invokedAs.Load().(string); ok && s != "" {
 		return s
 	}
-	return defaultBinaryName
+	return DefaultBinaryName
 }
 
 // OnPath respells next as the PATH invocation, for a surface whose reader is not this
@@ -82,14 +83,14 @@ func BinaryName() string {
 // `./magus server start` would otherwise render `./magus ...` into every MCP reply,
 // which resolves against the CLIENT's working directory rather than the daemon's.
 func OnPath(next []Next) []Next {
-	if BinaryName() == defaultBinaryName {
+	if BinaryName() == DefaultBinaryName {
 		return next
 	}
 	out := make([]Next, 0, len(next))
 	for _, n := range next {
-		n.Run = defaultBinaryName + strings.TrimPrefix(n.Run, BinaryName())
+		n.Run = DefaultBinaryName + strings.TrimPrefix(n.Run, BinaryName())
 		if len(n.Argv) > 0 {
-			n.Argv = slices.Concat([]string{defaultBinaryName}, n.Argv[1:])
+			n.Argv = slices.Concat([]string{DefaultBinaryName}, n.Argv[1:])
 		}
 		out = append(out, n)
 	}

@@ -34,15 +34,24 @@ func cmd(tokens ...string) Command { return Command{tokens: tokens} }
 // String renders the bare invocation, e.g. "magus query output". The binary is
 // spelled as this process was invoked (see BinaryName), so a hint copied out of a
 // worktree runs the binary that printed it.
-func (c Command) String() string { return BinaryName() + " " + strings.Join(c.tokens, " ") }
+func (c Command) String() string { return c.StringAs(BinaryName()) }
 
 // With renders the invocation followed by trailing args, e.g.
 // QueryOutput.With(ref, "--open") => "magus query output <ref> --open".
-func (c Command) With(args ...string) string {
+func (c Command) With(args ...string) string { return c.WithAs(BinaryName(), args...) }
+
+// StringAs renders the bare invocation spelled with bin instead of this process's
+// own invocation. For a renderer whose reader is not this process - a doc committed
+// to the repo, generated once and read by whoever checks it out - the live
+// BinaryName would make the file's content depend on how it happened to be built.
+func (c Command) StringAs(bin string) string { return bin + " " + strings.Join(c.tokens, " ") }
+
+// WithAs is StringAs followed by trailing args.
+func (c Command) WithAs(bin string, args ...string) string {
 	if len(args) == 0 {
-		return c.String()
+		return c.StringAs(bin)
 	}
-	return c.String() + " " + strings.Join(args, " ")
+	return c.StringAs(bin) + " " + strings.Join(args, " ")
 }
 
 // Argv renders the invocation as an argument vector, args unquoted: the form a caller
