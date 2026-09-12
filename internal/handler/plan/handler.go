@@ -24,7 +24,7 @@ import (
 // a generated snapshot is only as fresh as the last `generate`, and this route reports live.
 type Source interface {
 	TargetGraph(ctx context.Context) (types.TargetGraphOutput, error)
-	StatusReport(ctx context.Context) types.StatusSnapshot
+	StatusSnapshot(ctx context.Context) types.StatusSnapshot
 }
 
 // planOutputs is the stored-run half of the state overlay: the same descriptor list
@@ -131,7 +131,7 @@ func (h *Handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	index := indexPlanTargets(graph)
 
-	report := h.src.StatusReport(r.Context())
+	report := h.src.StatusSnapshot(r.Context())
 	descs := h.outputs.ListDescriptors()
 
 	target, anchor, ok := h.resolveAnchor(r.URL.Query().Get("target"), index, report, descs)

@@ -949,6 +949,18 @@ func (v JobAttempt) BuzzObject() BuzzObject {
 	}
 }
 
+func (v JobRun) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"invocation":     v.Invocation,
+		"ended":          v.Ended,
+		"durationMs":     v.DurationMs,
+		"ok":             v.OK,
+		"error":          v.Error,
+		"itemsRemoved":   v.ItemsRemoved,
+		"bytesReclaimed": v.BytesReclaimed,
+	}
+}
+
 func (v Job) BuzzObject() BuzzObject {
 	var optCheck any
 	if v.Check != nil {
@@ -970,6 +982,10 @@ func (v Job) BuzzObject() BuzzObject {
 	if v.Attempt != nil {
 		optAttempt = (*v.Attempt).BuzzObject()
 	}
+	var optLastRun any
+	if v.LastRun != nil {
+		optLastRun = (*v.LastRun).BuzzObject()
+	}
 	return BuzzObject{
 		"schemaVersion": v.SchemaVersion,
 		"id":            v.ID,
@@ -984,6 +1000,7 @@ func (v Job) BuzzObject() BuzzObject {
 		"check":         optCheck,
 		"validation":    v.Validation,
 		"state":         string(v.State),
+		"holder":        string(v.Holder),
 		"readOnly":      v.ReadOnly,
 		"releases":      itemsReleases,
 		"unattributed":  itemsUnattributed,
@@ -995,6 +1012,7 @@ func (v Job) BuzzObject() BuzzObject {
 		"updated":       v.Updated,
 		"result":        optResult,
 		"attempt":       optAttempt,
+		"lastRun":       optLastRun,
 	}
 }
 

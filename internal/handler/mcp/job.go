@@ -15,7 +15,7 @@ import (
 // jobTool (magus_job) declares jobs and lets a holder act on one: an orchestrating agent
 // forks a job, a holder takes it (exec) and later returns its work, and anyone lists the
 // plan. It is the AGENT's write door onto internal/job; magus\job and `magus job` are the
-// others, and the console's /api/v1/jobs endpoint reads the same file.
+// others, and the daemon's JobService reads the same file.
 //
 // It blocks no write to the tree: the AGENT GUARD is what reads these rows to grade one,
 // and exec's status is returned and stored as a fact rather than a refusal.

@@ -21,7 +21,7 @@ type fakeSource struct {
 	report types.StatusSnapshot
 }
 
-func (f fakeSource) StatusReport(context.Context) types.StatusSnapshot { return f.report }
+func (f fakeSource) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
 
 func TestEventsHandler_OptionsNoContent(t *testing.T) {
 	h := NewEventsHandler(fakeSource{}, types.BuildInfo{}, nil, nil, 0, 0, nil)

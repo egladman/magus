@@ -27,7 +27,7 @@ func (f fakeCollector) Collect(context.Context) (metricdata.ResourceMetrics, err
 
 type fakeStatus struct{ rep types.StatusSnapshot }
 
-func (f fakeStatus) StatusReport(context.Context) types.StatusSnapshot { return f.rep }
+func (f fakeStatus) StatusSnapshot(context.Context) types.StatusSnapshot { return f.rep }
 
 func fixtureRM() metricdata.ResourceMetrics {
 	return metricdata.ResourceMetrics{

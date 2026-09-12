@@ -50,6 +50,7 @@ var RuntimeBoundaryTypes = []any{
 	types.JobRelease{},
 	types.JobResult{},
 	types.JobResultValidation{},
+	types.JobRun{},
 	types.JobUnattributedWrite{},
 	types.KnowledgeAnswer{},
 	types.KnowledgeSymbolGap{},

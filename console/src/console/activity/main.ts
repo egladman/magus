@@ -6,9 +6,8 @@
 // console, or the last daemon the dashboard connected to), resolves an event's payload refs on demand
 // through ActivityService.GetPayload, and shows a synthesized demo trail on the
 // shared #demo fragment so the
-// design is inspectable offline. On a live trail it also mounts the maintenance-jobs control
-// (jobs.ts, JobService) above the stream - the jobs whose results this trail records.
-// activate(host) builds the scaffold, kicks the initial load, and
+// design is inspectable offline. What a job DID lands here; the Jobs view is where one is read and
+// run. activate(host) builds the scaffold, kicks the initial load, and
 // returns a teardown the console calls on close (it just marks in-flight loads stale - there is no
 // long-lived stream yet).
 
@@ -44,7 +43,6 @@ import {
   createDaemonTransport,
 } from "../../lib/daemon";
 import { errMessage } from "../../lib/guards";
-import { mountJobs, type JobsControl } from "./jobs";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
@@ -471,23 +469,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // daemon the events came from. Null on the demo trail, and that is what gates the expand control:
   // a synthesized event's refs name blobs no store holds, so the offer could only fail.
   let payloadClient: Client<typeof ActivityService> | null = null;
-  // The maintenance-jobs control, mounted only once a live trail has loaded. It sits in the scroll
-  // box above the stream rather than in the body, which render() replaces wholesale.
-  let jobs: JobsControl | null = null;
-
-  function dropJobs(): void {
-    jobs?.destroy();
-    jobs = null;
-  }
-
-  // showJobs mounts the control for daemonHost, replacing one left over from a previous host.
-  function showJobs(daemonHost: string): void {
-    dropJobs();
-    jobs = mountJobs(daemonHost);
-    refs.scroll.prepend(jobs.el);
-    void jobs.load();
-  }
-
   // The event index: the collapsible left panel shared with the log viewer's run browser. Its refresh
   // icon re-runs load(); the "N events" count rides in its header. It starts collapsed on a phone and
   // hides entirely when the trail is empty (the golden empty-state card carries the cold state alone).
@@ -713,10 +694,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
       loadedEvents = loadedEvents.concat(resp.events);
       nextPageToken = resp.nextPageToken;
       loadMore = nextPageToken ? () => void loadLive(daemonHost, nextPageToken) : null;
-      // After the trail answered, and only on a cold load: the daemon is proven reachable, so a
-      // JobService failure from here is that service refusing rather than a dead daemon, and paging
-      // does not re-mount a control the reader may have just pressed.
-      if (!pageToken) showJobs(daemonHost);
       render(loadedEvents);
       notifyDenials(resp.events);
       if (loadedEvents.length === 0) {
@@ -766,9 +743,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     adoptDaemonOrigin();
     if (wantsDemo(params)) {
       payloadClient = null;
-      // Same gate the payload control is under: the demo has no daemon behind it, so a Run action
-      // could only fail.
-      dropJobs();
       render(demoEvents(Date.now()));
       return;
     }
@@ -779,7 +753,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
       void loadLive(daemonHost);
       return;
     }
-    dropJobs();
     showEmpty(
       "No daemon connected",
       "Activity records what the daemon did: MCP calls, jobs, config changes.",
@@ -795,7 +768,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     setVisible(): void {},
     deactivate(): void {
       stale = true;
-      dropJobs();
     },
   };
 }

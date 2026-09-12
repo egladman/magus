@@ -87,6 +87,57 @@ func (SubmitState) EnumDescriptor() ([]byte, []int) {
 	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{0}
 }
 
+// JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
+// daemon's own housekeeping from work a session was handed without asking a second door.
+type JobHolder int32
+
+const (
+	JobHolder_JOB_HOLDER_UNSPECIFIED JobHolder = 0
+	JobHolder_JOB_HOLDER_DAEMON      JobHolder = 1 // the daemon's own maintenance catalog
+	JobHolder_JOB_HOLDER_SESSION     JobHolder = 2 // work an orchestrator declared for somebody else to hold
+)
+
+// Enum value maps for JobHolder.
+var (
+	JobHolder_name = map[int32]string{
+		0: "JOB_HOLDER_UNSPECIFIED",
+		1: "JOB_HOLDER_DAEMON",
+		2: "JOB_HOLDER_SESSION",
+	}
+	JobHolder_value = map[string]int32{
+		"JOB_HOLDER_UNSPECIFIED": 0,
+		"JOB_HOLDER_DAEMON":      1,
+		"JOB_HOLDER_SESSION":     2,
+	}
+)
+
+func (x JobHolder) Enum() *JobHolder {
+	p := new(JobHolder)
+	*p = x
+	return p
+}
+
+func (x JobHolder) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (JobHolder) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_job_v1alpha1_job_proto_enumTypes[1].Descriptor()
+}
+
+func (JobHolder) Type() protoreflect.EnumType {
+	return &file_magus_job_v1alpha1_job_proto_enumTypes[1]
+}
+
+func (x JobHolder) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use JobHolder.Descriptor instead.
+func (JobHolder) EnumDescriptor() ([]byte, []int) {
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{1}
+}
+
 // RunJobResponse reports what the submission did: whether the job started or coalesced, the
 // invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
 // caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
@@ -158,17 +209,42 @@ func (x *RunJobResponse) GetJob() *Job {
 	return nil
 }
 
-// Job is the full picture of one job: what it is, whether an instance is running now, its
-// most recent completed run, and the current magnitude of the resource it maintains.
+// Job is the full picture of one job: what it is, who holds it, whether an instance is
+// running now, its most recent run, and the current magnitude of the resource it maintains.
+//
+// ONE message for both kinds. A catalog job fills the description and target; a delegated
+// one fills the lanes and the check it was given; both carry id, holder and state, which is
+// what lets a client render the two in one list without branching on which it has.
 type Job struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id
-	// is the last segment, and is what the CLI's `server job <name>` leaf takes.
-	Name          string        `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string        `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Running       bool          `protobuf:"varint,3,opt,name=running,proto3" json:"running,omitempty"`               // an instance is in flight right now
-	LastRun       *JobRun       `protobuf:"bytes,4,opt,name=last_run,json=lastRun,proto3" json:"last_run,omitempty"` // most recent completed run; unset if the job has not run this daemon session
-	Target        *ResourceSize `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`                  // current size of what the job operates on (trail, cache, or logs)
+	// is the last segment, and is what the CLI's `job run <name>` leaf takes.
+	Name        string        `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string        `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Running     bool          `protobuf:"varint,3,opt,name=running,proto3" json:"running,omitempty"`                                 // an instance is in flight right now
+	LastRun     *JobRun       `protobuf:"bytes,4,opt,name=last_run,json=lastRun,proto3" json:"last_run,omitempty"`                   // most recent run; unset if the job has never been submitted
+	Target      *ResourceSize `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`                                    // current size of what the job operates on (trail, cache, or logs)
+	Id          string        `protobuf:"bytes,6,opt,name=id,proto3" json:"id,omitempty"`                                            // the bare row id, without the "jobs/" collection segment
+	Holder      JobHolder     `protobuf:"varint,7,opt,name=holder,proto3,enum=magus.job.v1alpha1.JobHolder" json:"holder,omitempty"` // who runs it
+	// state is the row's lifecycle position: declared, running, exited, pass, fail or
+	// no_return. A string rather than an enum because the vocabulary is the job store's and a
+	// second closed set here would be a second place to add a value to.
+	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	// The facts a DELEGATED job carries, empty on a catalog job. These are what an
+	// orchestrator declared, never a verdict magus reached.
+	Goal          string        `protobuf:"bytes,9,opt,name=goal,proto3" json:"goal,omitempty"`
+	Parent        string        `protobuf:"bytes,10,opt,name=parent,proto3" json:"parent,omitempty"` // the job this one was handed out under, empty for a root
+	Model         string        `protobuf:"bytes,11,opt,name=model,proto3" json:"model,omitempty"`
+	Check         string        `protobuf:"bytes,12,opt,name=check,proto3" json:"check,omitempty"` // the one check this job runs, rendered as the command that runs it
+	WritePaths    []string      `protobuf:"bytes,13,rep,name=write_paths,json=writePaths,proto3" json:"write_paths,omitempty"`
+	DenyPaths     []string      `protobuf:"bytes,14,rep,name=deny_paths,json=denyPaths,proto3" json:"deny_paths,omitempty"`
+	ReadPaths     []string      `protobuf:"bytes,15,rep,name=read_paths,json=readPaths,proto3" json:"read_paths,omitempty"`
+	DependsOn     []string      `protobuf:"bytes,16,rep,name=depends_on,json=dependsOn,proto3" json:"depends_on,omitempty"`
+	ReadOnly      bool          `protobuf:"varint,17,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	Checkpoint    string        `protobuf:"bytes,18,opt,name=checkpoint,proto3" json:"checkpoint,omitempty"`
+	Releases      []*JobRelease `protobuf:"bytes,19,rep,name=releases,proto3" json:"releases,omitempty"`
+	Created       int64         `protobuf:"varint,20,opt,name=created,proto3" json:"created,omitempty"` // unix SECONDS, as the store records them
+	Updated       int64         `protobuf:"varint,21,opt,name=updated,proto3" json:"updated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -238,6 +314,256 @@ func (x *Job) GetTarget() *ResourceSize {
 	return nil
 }
 
+func (x *Job) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Job) GetHolder() JobHolder {
+	if x != nil {
+		return x.Holder
+	}
+	return JobHolder_JOB_HOLDER_UNSPECIFIED
+}
+
+func (x *Job) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Job) GetGoal() string {
+	if x != nil {
+		return x.Goal
+	}
+	return ""
+}
+
+func (x *Job) GetParent() string {
+	if x != nil {
+		return x.Parent
+	}
+	return ""
+}
+
+func (x *Job) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *Job) GetCheck() string {
+	if x != nil {
+		return x.Check
+	}
+	return ""
+}
+
+func (x *Job) GetWritePaths() []string {
+	if x != nil {
+		return x.WritePaths
+	}
+	return nil
+}
+
+func (x *Job) GetDenyPaths() []string {
+	if x != nil {
+		return x.DenyPaths
+	}
+	return nil
+}
+
+func (x *Job) GetReadPaths() []string {
+	if x != nil {
+		return x.ReadPaths
+	}
+	return nil
+}
+
+func (x *Job) GetDependsOn() []string {
+	if x != nil {
+		return x.DependsOn
+	}
+	return nil
+}
+
+func (x *Job) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
+func (x *Job) GetCheckpoint() string {
+	if x != nil {
+		return x.Checkpoint
+	}
+	return ""
+}
+
+func (x *Job) GetReleases() []*JobRelease {
+	if x != nil {
+		return x.Releases
+	}
+	return nil
+}
+
+func (x *Job) GetCreated() int64 {
+	if x != nil {
+		return x.Created
+	}
+	return 0
+}
+
+func (x *Job) GetUpdated() int64 {
+	if x != nil {
+		return x.Updated
+	}
+	return 0
+}
+
+// JobRelease is a path a job gave up, and the version of it the next one inherits. The
+// digest is the file's sha256 when there was a file; "absent" and "dir" are carried through
+// as they are rather than turned into a hash-shaped lie.
+type JobRelease struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	ReleasedAt    int64                  `protobuf:"varint,3,opt,name=released_at,json=releasedAt,proto3" json:"released_at,omitempty"` // unix seconds
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobRelease) Reset() {
+	*x = JobRelease{}
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobRelease) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobRelease) ProtoMessage() {}
+
+func (x *JobRelease) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobRelease.ProtoReflect.Descriptor instead.
+func (*JobRelease) Descriptor() ([]byte, []int) {
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *JobRelease) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *JobRelease) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *JobRelease) GetReleasedAt() int64 {
+	if x != nil {
+		return x.ReleasedAt
+	}
+	return 0
+}
+
+// JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
+// read and stored nowhere, and never a verdict: a client draws it and the reader decides
+// whether their plan meant it.
+//
+// Each side's intersecting declarations come separately, because the two are rarely the
+// same string ("internal/job" and "internal/job/store.go" intersect) and a reader who
+// cannot tell which job claimed which has nothing to act on.
+type JobOverlap struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	JobA          string                 `protobuf:"bytes,1,opt,name=job_a,json=jobA,proto3" json:"job_a,omitempty"`
+	JobB          string                 `protobuf:"bytes,2,opt,name=job_b,json=jobB,proto3" json:"job_b,omitempty"`
+	PathsA        []string               `protobuf:"bytes,3,rep,name=paths_a,json=pathsA,proto3" json:"paths_a,omitempty"`
+	PathsB        []string               `protobuf:"bytes,4,rep,name=paths_b,json=pathsB,proto3" json:"paths_b,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobOverlap) Reset() {
+	*x = JobOverlap{}
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobOverlap) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobOverlap) ProtoMessage() {}
+
+func (x *JobOverlap) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobOverlap.ProtoReflect.Descriptor instead.
+func (*JobOverlap) Descriptor() ([]byte, []int) {
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *JobOverlap) GetJobA() string {
+	if x != nil {
+		return x.JobA
+	}
+	return ""
+}
+
+func (x *JobOverlap) GetJobB() string {
+	if x != nil {
+		return x.JobB
+	}
+	return ""
+}
+
+func (x *JobOverlap) GetPathsA() []string {
+	if x != nil {
+		return x.PathsA
+	}
+	return nil
+}
+
+func (x *JobOverlap) GetPathsB() []string {
+	if x != nil {
+		return x.PathsB
+	}
+	return nil
+}
+
 // JobRun is one completed execution of a job.
 type JobRun struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
@@ -257,7 +583,7 @@ type JobRun struct {
 
 func (x *JobRun) Reset() {
 	*x = JobRun{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -269,7 +595,7 @@ func (x *JobRun) String() string {
 func (*JobRun) ProtoMessage() {}
 
 func (x *JobRun) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[2]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -282,7 +608,7 @@ func (x *JobRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JobRun.ProtoReflect.Descriptor instead.
 func (*JobRun) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{2}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *JobRun) GetInvocationId() string {
@@ -346,7 +672,7 @@ type ResourceSize struct {
 
 func (x *ResourceSize) Reset() {
 	*x = ResourceSize{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +684,7 @@ func (x *ResourceSize) String() string {
 func (*ResourceSize) ProtoMessage() {}
 
 func (x *ResourceSize) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[3]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +697,7 @@ func (x *ResourceSize) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSize.ProtoReflect.Descriptor instead.
 func (*ResourceSize) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{3}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ResourceSize) GetSizeBytes() int64 {
@@ -400,7 +726,7 @@ type RunJobRequest struct {
 
 func (x *RunJobRequest) Reset() {
 	*x = RunJobRequest{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -412,7 +738,7 @@ func (x *RunJobRequest) String() string {
 func (*RunJobRequest) ProtoMessage() {}
 
 func (x *RunJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[4]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -425,7 +751,7 @@ func (x *RunJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunJobRequest.ProtoReflect.Descriptor instead.
 func (*RunJobRequest) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{4}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RunJobRequest) GetName() string {
@@ -447,7 +773,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -459,7 +785,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[5]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -472,7 +798,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{5}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListJobsRequest) GetPageSize() int32 {
@@ -491,15 +817,17 @@ func (x *ListJobsRequest) GetPageToken() string {
 
 type ListJobsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`                                          // every registered job, in a stable order
+	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`                                          // every job, catalog and delegated, in a stable order
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"` // empty while one page holds the registry
+	// overlaps are the pairs of jobs claiming common ground, derived from jobs on every read.
+	Overlaps      []*JobOverlap `protobuf:"bytes,3,rep,name=overlaps,proto3" json:"overlaps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +839,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[6]
+	mi := &file_magus_job_v1alpha1_job_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +852,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{6}
+	return file_magus_job_v1alpha1_job_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -541,6 +869,13 @@ func (x *ListJobsResponse) GetNextPageToken() string {
 	return ""
 }
 
+func (x *ListJobsResponse) GetOverlaps() []*JobOverlap {
+	if x != nil {
+		return x.Overlaps
+	}
+	return nil
+}
+
 var File_magus_job_v1alpha1_job_proto protoreflect.FileDescriptor
 
 const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
@@ -551,13 +886,48 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xc6\x01\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xa6\x05\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
 	"\arunning\x18\x03 \x01(\bR\arunning\x125\n" +
 	"\blast_run\x18\x04 \x01(\v2\x1a.magus.job.v1alpha1.JobRunR\alastRun\x128\n" +
-	"\x06target\x18\x05 \x01(\v2 .magus.job.v1alpha1.ResourceSizeR\x06target\"\x8f\x02\n" +
+	"\x06target\x18\x05 \x01(\v2 .magus.job.v1alpha1.ResourceSizeR\x06target\x12\x0e\n" +
+	"\x02id\x18\x06 \x01(\tR\x02id\x125\n" +
+	"\x06holder\x18\a \x01(\x0e2\x1d.magus.job.v1alpha1.JobHolderR\x06holder\x12\x14\n" +
+	"\x05state\x18\b \x01(\tR\x05state\x12\x12\n" +
+	"\x04goal\x18\t \x01(\tR\x04goal\x12\x16\n" +
+	"\x06parent\x18\n" +
+	" \x01(\tR\x06parent\x12\x14\n" +
+	"\x05model\x18\v \x01(\tR\x05model\x12\x14\n" +
+	"\x05check\x18\f \x01(\tR\x05check\x12\x1f\n" +
+	"\vwrite_paths\x18\r \x03(\tR\n" +
+	"writePaths\x12\x1d\n" +
+	"\n" +
+	"deny_paths\x18\x0e \x03(\tR\tdenyPaths\x12\x1d\n" +
+	"\n" +
+	"read_paths\x18\x0f \x03(\tR\treadPaths\x12\x1d\n" +
+	"\n" +
+	"depends_on\x18\x10 \x03(\tR\tdependsOn\x12\x1b\n" +
+	"\tread_only\x18\x11 \x01(\bR\breadOnly\x12\x1e\n" +
+	"\n" +
+	"checkpoint\x18\x12 \x01(\tR\n" +
+	"checkpoint\x12:\n" +
+	"\breleases\x18\x13 \x03(\v2\x1e.magus.job.v1alpha1.JobReleaseR\breleases\x12\x18\n" +
+	"\acreated\x18\x14 \x01(\x03R\acreated\x12\x18\n" +
+	"\aupdated\x18\x15 \x01(\x03R\aupdated\"Y\n" +
+	"\n" +
+	"JobRelease\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
+	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1f\n" +
+	"\vreleased_at\x18\x03 \x01(\x03R\n" +
+	"releasedAt\"h\n" +
+	"\n" +
+	"JobOverlap\x12\x13\n" +
+	"\x05job_a\x18\x01 \x01(\tR\x04jobA\x12\x13\n" +
+	"\x05job_b\x18\x02 \x01(\tR\x04jobB\x12\x17\n" +
+	"\apaths_a\x18\x03 \x03(\tR\x06pathsA\x12\x17\n" +
+	"\apaths_b\x18\x04 \x03(\tR\x06pathsB\"\x8f\x02\n" +
 	"\x06JobRun\x12#\n" +
 	"\rinvocation_id\x18\x01 \x01(\tR\finvocationId\x125\n" +
 	"\bend_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x125\n" +
@@ -577,14 +947,19 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x02 \x01(\tR\tpageToken\"g\n" +
+	"page_token\x18\x02 \x01(\tR\tpageToken\"\xa3\x01\n" +
 	"\x10ListJobsResponse\x12+\n" +
 	"\x04jobs\x18\x01 \x03(\v2\x17.magus.job.v1alpha1.JobR\x04jobs\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken*i\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12:\n" +
+	"\boverlaps\x18\x03 \x03(\v2\x1e.magus.job.v1alpha1.JobOverlapR\boverlaps*i\n" +
 	"\vSubmitState\x12\x1c\n" +
 	"\x18SUBMIT_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SUBMIT_STATE_SUBMITTED\x10\x01\x12 \n" +
-	"\x1cSUBMIT_STATE_ALREADY_RUNNING\x10\x022\xb4\x01\n" +
+	"\x1cSUBMIT_STATE_ALREADY_RUNNING\x10\x02*V\n" +
+	"\tJobHolder\x12\x1a\n" +
+	"\x16JOB_HOLDER_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11JOB_HOLDER_DAEMON\x10\x01\x12\x16\n" +
+	"\x12JOB_HOLDER_SESSION\x10\x022\xb4\x01\n" +
 	"\n" +
 	"JobService\x12U\n" +
 	"\bListJobs\x12#.magus.job.v1alpha1.ListJobsRequest\x1a$.magus.job.v1alpha1.ListJobsResponse\x12O\n" +
@@ -603,37 +978,43 @@ func file_magus_job_v1alpha1_job_proto_rawDescGZIP() []byte {
 	return file_magus_job_v1alpha1_job_proto_rawDescData
 }
 
-var file_magus_job_v1alpha1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_job_v1alpha1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_magus_job_v1alpha1_job_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_magus_job_v1alpha1_job_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_magus_job_v1alpha1_job_proto_goTypes = []any{
 	(SubmitState)(0),              // 0: magus.job.v1alpha1.SubmitState
-	(*RunJobResponse)(nil),        // 1: magus.job.v1alpha1.RunJobResponse
-	(*Job)(nil),                   // 2: magus.job.v1alpha1.Job
-	(*JobRun)(nil),                // 3: magus.job.v1alpha1.JobRun
-	(*ResourceSize)(nil),          // 4: magus.job.v1alpha1.ResourceSize
-	(*RunJobRequest)(nil),         // 5: magus.job.v1alpha1.RunJobRequest
-	(*ListJobsRequest)(nil),       // 6: magus.job.v1alpha1.ListJobsRequest
-	(*ListJobsResponse)(nil),      // 7: magus.job.v1alpha1.ListJobsResponse
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
+	(JobHolder)(0),                // 1: magus.job.v1alpha1.JobHolder
+	(*RunJobResponse)(nil),        // 2: magus.job.v1alpha1.RunJobResponse
+	(*Job)(nil),                   // 3: magus.job.v1alpha1.Job
+	(*JobRelease)(nil),            // 4: magus.job.v1alpha1.JobRelease
+	(*JobOverlap)(nil),            // 5: magus.job.v1alpha1.JobOverlap
+	(*JobRun)(nil),                // 6: magus.job.v1alpha1.JobRun
+	(*ResourceSize)(nil),          // 7: magus.job.v1alpha1.ResourceSize
+	(*RunJobRequest)(nil),         // 8: magus.job.v1alpha1.RunJobRequest
+	(*ListJobsRequest)(nil),       // 9: magus.job.v1alpha1.ListJobsRequest
+	(*ListJobsResponse)(nil),      // 10: magus.job.v1alpha1.ListJobsResponse
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),   // 12: google.protobuf.Duration
 }
 var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
-	0, // 0: magus.job.v1alpha1.RunJobResponse.state:type_name -> magus.job.v1alpha1.SubmitState
-	2, // 1: magus.job.v1alpha1.RunJobResponse.job:type_name -> magus.job.v1alpha1.Job
-	3, // 2: magus.job.v1alpha1.Job.last_run:type_name -> magus.job.v1alpha1.JobRun
-	4, // 3: magus.job.v1alpha1.Job.target:type_name -> magus.job.v1alpha1.ResourceSize
-	8, // 4: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
-	9, // 5: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
-	2, // 6: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
-	6, // 7: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
-	5, // 8: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
-	7, // 9: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
-	1, // 10: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
-	9, // [9:11] is the sub-list for method output_type
-	7, // [7:9] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	0,  // 0: magus.job.v1alpha1.RunJobResponse.state:type_name -> magus.job.v1alpha1.SubmitState
+	3,  // 1: magus.job.v1alpha1.RunJobResponse.job:type_name -> magus.job.v1alpha1.Job
+	6,  // 2: magus.job.v1alpha1.Job.last_run:type_name -> magus.job.v1alpha1.JobRun
+	7,  // 3: magus.job.v1alpha1.Job.target:type_name -> magus.job.v1alpha1.ResourceSize
+	1,  // 4: magus.job.v1alpha1.Job.holder:type_name -> magus.job.v1alpha1.JobHolder
+	4,  // 5: magus.job.v1alpha1.Job.releases:type_name -> magus.job.v1alpha1.JobRelease
+	11, // 6: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
+	12, // 7: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
+	3,  // 8: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
+	5,  // 9: magus.job.v1alpha1.ListJobsResponse.overlaps:type_name -> magus.job.v1alpha1.JobOverlap
+	9,  // 10: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
+	8,  // 11: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
+	10, // 12: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
+	2,  // 13: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_magus_job_v1alpha1_job_proto_init() }
@@ -646,8 +1027,8 @@ func file_magus_job_v1alpha1_job_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_job_v1alpha1_job_proto_rawDesc), len(file_magus_job_v1alpha1_job_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   7,
+			NumEnums:      2,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

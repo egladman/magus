@@ -18,7 +18,7 @@ import { authHeaders } from "../../../lib/daemon";
 
 // AttentionRequest mirrors one row of GET /api/v1/attention's JSON, which is the same shape
 // `magus session attention -o json` prints. Hand-written rather than generated because it rides the
-// plain /api routes, the same as the lease ledger beside it.
+// plain /api routes, the same as the target plan beside it.
 //
 // Every field but the id is optional here even where the route always sends it: this is parsed
 // from the network, and a missing outcome must render as a blank cell rather than the string
@@ -138,7 +138,7 @@ export type AttentionRead =
   | { readonly kind: "unreadable"; readonly detail: string };
 
 // loadAttention reads GET /api/v1/attention under the same bearer + no-store rules as the
-// lease ledger beside it. 404 and 501 are "absent", not failures: on any daemon predating
+// target plan beside it. 404 and 501 are "absent", not failures: on any daemon predating
 // the route that is the honest answer, and the tile says so by name.
 //
 // A cross-origin console (a hosted page reaching a loopback daemon over #port=) cannot always

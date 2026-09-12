@@ -32,7 +32,7 @@ import {
   type AttentionRequest,
 } from "./attentionQueue";
 
-// The poll cadence and request budget the lease tile reads its ledger on. Same numbers on
+// The poll cadence and request budget the jobs tile reads on. Same numbers on
 // purpose: both tiles poll a small JSON route on the same daemon, and two boards refreshing at
 // two rhythms would make one of them look stuck.
 const REFRESH_MS = 4_000;

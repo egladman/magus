@@ -149,11 +149,11 @@ func printJobTree(out io.Writer, report types.JobList) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "JOB\tSTATE\tMODEL\tPATHS\tCHECK")
+	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tCHECK")
 	for _, row := range jobTreeOrder(report.Jobs) {
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%d\t%s\n",
+		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
-			orDash(string(row.lease.State)), orDash(row.lease.Model),
+			string(row.lease.Holder.OrSession()), orDash(string(row.lease.State)), orDash(row.lease.Model),
 			len(row.lease.WritePaths), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()

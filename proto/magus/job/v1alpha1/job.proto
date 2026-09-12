@@ -53,16 +53,74 @@ message RunJobResponse {
   Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
 }
 
-// Job is the full picture of one job: what it is, whether an instance is running now, its
-// most recent completed run, and the current magnitude of the resource it maintains.
+// JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
+// daemon's own housekeeping from work a session was handed without asking a second door.
+enum JobHolder {
+  JOB_HOLDER_UNSPECIFIED = 0;
+  JOB_HOLDER_DAEMON = 1;  // the daemon's own maintenance catalog
+  JOB_HOLDER_SESSION = 2; // work an orchestrator declared for somebody else to hold
+}
+
+// Job is the full picture of one job: what it is, who holds it, whether an instance is
+// running now, its most recent run, and the current magnitude of the resource it maintains.
+//
+// ONE message for both kinds. A catalog job fills the description and target; a delegated
+// one fills the lanes and the check it was given; both carry id, holder and state, which is
+// what lets a client render the two in one list without branching on which it has.
 message Job {
   // name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id
-  // is the last segment, and is what the CLI's `server job <name>` leaf takes.
+  // is the last segment, and is what the CLI's `job run <name>` leaf takes.
   string name = 1;
   string description = 2;
   bool running = 3;        // an instance is in flight right now
-  JobRun last_run = 4;     // most recent completed run; unset if the job has not run this daemon session
+  JobRun last_run = 4;     // most recent run; unset if the job has never been submitted
   ResourceSize target = 5; // current size of what the job operates on (trail, cache, or logs)
+
+  string id = 6;        // the bare row id, without the "jobs/" collection segment
+  JobHolder holder = 7; // who runs it
+  // state is the row's lifecycle position: declared, running, exited, pass, fail or
+  // no_return. A string rather than an enum because the vocabulary is the job store's and a
+  // second closed set here would be a second place to add a value to.
+  string state = 8;
+
+  // The facts a DELEGATED job carries, empty on a catalog job. These are what an
+  // orchestrator declared, never a verdict magus reached.
+  string goal = 9;
+  string parent = 10; // the job this one was handed out under, empty for a root
+  string model = 11;
+  string check = 12; // the one check this job runs, rendered as the command that runs it
+  repeated string write_paths = 13;
+  repeated string deny_paths = 14;
+  repeated string read_paths = 15;
+  repeated string depends_on = 16;
+  bool read_only = 17;
+  string checkpoint = 18;
+  repeated JobRelease releases = 19;
+  int64 created = 20; // unix SECONDS, as the store records them
+  int64 updated = 21;
+}
+
+// JobRelease is a path a job gave up, and the version of it the next one inherits. The
+// digest is the file's sha256 when there was a file; "absent" and "dir" are carried through
+// as they are rather than turned into a hash-shaped lie.
+message JobRelease {
+  string path = 1;
+  string digest = 2;
+  int64 released_at = 3; // unix seconds
+}
+
+// JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
+// read and stored nowhere, and never a verdict: a client draws it and the reader decides
+// whether their plan meant it.
+//
+// Each side's intersecting declarations come separately, because the two are rarely the
+// same string ("internal/job" and "internal/job/store.go" intersect) and a reader who
+// cannot tell which job claimed which has nothing to act on.
+message JobOverlap {
+  string job_a = 1;
+  string job_b = 2;
+  repeated string paths_a = 3;
+  repeated string paths_b = 4;
 }
 
 // JobRun is one completed execution of a job.
@@ -101,6 +159,8 @@ message ListJobsRequest {
   string page_token = 2;
 }
 message ListJobsResponse {
-  repeated Job jobs = 1;      // every registered job, in a stable order
+  repeated Job jobs = 1;      // every job, catalog and delegated, in a stable order
   string next_page_token = 2; // empty while one page holds the registry
+  // overlaps are the pairs of jobs claiming common ground, derived from jobs on every read.
+  repeated JobOverlap overlaps = 3;
 }

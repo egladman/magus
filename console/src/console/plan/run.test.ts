@@ -12,7 +12,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { layoutPlan } from "./ledger";
+import { layoutNodes } from "./jobs";
 import {
   anchorPhrase,
   emptyRunPlan,
@@ -134,7 +134,7 @@ test("an unrecognized state reads as idle and keeps what the daemon said", () =>
   assert.equal(node?.rawState, "skipped");
 });
 
-// no_return belongs to the lease ledger alone: it is what a worker that never came back
+// no_return belongs to the jobs alone: it is what a worker that never came back
 // leaves behind, and an engine that resolved a DAG always knows what happened to every node.
 test("no_return is not a state this plan has - it reads as idle like any other unknown", () => {
   assert.equal(normalizeRunState("no_return"), "idle");
@@ -195,7 +195,7 @@ test("the overview leads with the anchor, then counts the targets and breaks dow
 });
 
 // A call-out that disappears at zero is a call-out a reader stops watching for - the same
-// discipline the ledger's no-return count follows.
+// discipline the jobs' no-return count follows.
 test("the fail count is present even when it is zero", () => {
   assert.equal(
     runOverviewLine(parseRunPlan({ target: "ci", anchor: "recent", nodes: [{ id: "a" }] })),
@@ -215,10 +215,10 @@ test("idle is not counted in the line, but fail and running are", () => {
 
 // ---- placement -------------------------------------------------------------
 
-// The run plan places through the SAME layered pass the ledger view does, which is the whole point
+// The target plan places through the SAME layered pass the jobs do, which is the whole point
 // of the second tenant: two sources, one drawing.
 test("a dependent is placed to the right of what it depends on", () => {
-  const at = layoutPlan(parseRunPlan(BODY)).at;
+  const at = layoutNodes(parseRunPlan(BODY)).at;
   const x = (id: string): number => at.get(id)?.x ?? Number.NaN;
   assert.ok(x(".:generate") < x(".:lint"), "lint waits on generate, so it sits downstream of it");
   assert.ok(x(".:generate") < x(".:build"));
@@ -226,7 +226,7 @@ test("a dependent is placed to the right of what it depends on", () => {
 });
 
 test("an empty plan lays out without a NaN viewBox", () => {
-  const layout = layoutPlan(emptyRunPlan());
+  const layout = layoutNodes(emptyRunPlan());
   assert.equal(layout.viewBox, "0 0 1 1");
   assert.equal(layout.at.size, 0);
 });
@@ -253,7 +253,7 @@ test("project-level ordering edges survive beside the intra-project steps", () =
     ],
   });
   assert.equal(plan.edges.length, 3, "the anchor-to-anchor edge is an ordinary edge, not a kind");
-  const at = layoutPlan(plan).at;
+  const at = layoutNodes(plan).at;
   const x = (id: string): number => at.get(id)?.x ?? Number.NaN;
   assert.ok(
     x("libs/api:ci") < x("app:ci"),

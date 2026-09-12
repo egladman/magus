@@ -136,7 +136,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
-	// magus\ledger's bundle (put/list), leaf-first: Job.releases and
+	// magus\job's bundle (put/list), leaf-first: Job.releases and
 	// JobList.overlaps are each a list of the other two, and Job.registeredBy is
 	// one of the actor.
 	{Name: "JobRelease", Type: reflect.TypeFor[types.JobRelease](), RuntimeObject: true},
@@ -146,6 +146,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobResult", Type: reflect.TypeFor[types.JobResult](), RuntimeObject: true},
 	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},
 	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
+	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},

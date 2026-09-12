@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
@@ -304,6 +306,50 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 		ev.Error = err.Error()
 	}
 	trail.Append(ctx, base, ev)
+	completeJobRow(ctx, args, dur, err)
+}
+
+// daemonJobStore is the daemon's ONE job store, published beside daemonTrailBase and for
+// the same reason: this callback needs it, and a second Store over one file would hold its
+// own mutex and serialize against nothing.
+var daemonJobStore *job.Store
+
+// completeJobRow finishes a catalog job's row: where it now stands, what the run cost, and
+// whether it worked. The invocation id is not here to record - this callback is handed argv,
+// duration and error only - so it merges into the row the submit left.
+//
+// Best-effort, like the trail append above it. The store refuses a write from a checkout
+// bound to a lease, and background maintenance must not fail because a worker holds this one.
+func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobErr error) {
+	if daemonJobStore == nil {
+		return
+	}
+	i := slices.IndexFunc(jobs.All(), func(j jobs.Job) bool { return slices.Equal(j.Argv, args) })
+	if i < 0 {
+		return // an adopted run rather than one of the daemon's own, so there is no row
+	}
+	catalog := jobs.All()[i]
+	if _, err := daemonJobStore.Update(ctx, catalog.Name, func(row *types.Job) {
+		row.Holder = types.HolderDaemon
+		row.Goal = catalog.Desc
+		row.State = types.StatePass
+		if jobErr != nil {
+			row.State = types.StateFail
+		}
+		if row.LastRun == nil {
+			row.LastRun = &types.JobRun{}
+		}
+		row.LastRun.Ended = time.Now().UnixMilli()
+		row.LastRun.DurationMs = dur.Milliseconds()
+		row.LastRun.OK = jobErr == nil
+		row.LastRun.Error = ""
+		if jobErr != nil {
+			row.LastRun.Error = jobErr.Error()
+		}
+	}); err != nil {
+		slog.DebugContext(ctx, "completing the job's row failed",
+			slog.String("job", catalog.Name), slog.String("error", err.Error()))
+	}
 }
 
 // adoptBridge registers an already-open Magus (the daemon's bridge workspace, loaded by

@@ -21,9 +21,9 @@ import (
 // remember to open.
 var jobFieldNames = []string{
 	"schema_version", "id", "parent", "goal", "checkpoint", "write_paths", "deny_paths",
-	"read_paths", "depends_on", "model", "check", "validation", "state", "read_only",
-	"releases", "unattributed", "reported_base", "base_verdict", "registered_by",
-	"registered", "created", "updated", "result", "attempt",
+	"read_paths", "depends_on", "model", "check", "validation", "state", "holder",
+	"read_only", "releases", "unattributed", "reported_base", "base_verdict",
+	"registered_by", "registered", "created", "updated", "result", "attempt", "last_run",
 }
 
 // TestJobSchemaVersionCoversEveryField pins Job's field set against jobFieldNames, read

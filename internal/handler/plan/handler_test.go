@@ -27,7 +27,7 @@ func (f fakePlanSource) TargetGraph(context.Context) (types.TargetGraphOutput, e
 	return f.graph, f.graphErr
 }
 
-func (f fakePlanSource) StatusReport(context.Context) types.StatusSnapshot { return f.report }
+func (f fakePlanSource) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
 
 // fakePlanOutputs is a planOutputs over a fixed descriptor list, newest first (the order the
 // real store returns).

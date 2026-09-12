@@ -16,11 +16,11 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":3,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
+		`{"schema_version":4,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
 	require.Equal(t, Declaration{
-		SchemaVersion: 3,
+		SchemaVersion: 4,
 		ID:            "adj/ledger",
 		WritePaths:    []string{"internal/ledger"},
 		DenyPaths:     []string{"MAGUS.md"},
@@ -33,7 +33,7 @@ func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":3,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+		`{"schema_version":4,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -89,25 +89,34 @@ func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 	t.Parallel()
 
-	for _, field := range []string{`"created":1`, `"registered_by":{"session":"someone"}`, `"releases":[]`} {
-		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj/store",` + field + `}`))
-		require.Error(t, err, field)
+	for _, field := range []struct{ name, member string }{
+		{"created", `"created":1`},
+		{"registered_by", `"registered_by":{"session":"someone"}`},
+		{"releases", `"releases":[]`},
+	} {
+		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj/store",` + field.member + `}`))
+		require.Error(t, err, field.name)
+		// The refusal has to NAME the field. An error alone is satisfied by the version
+		// check too, so a fixture whose schema_version fell behind would leave this
+		// passing while testing nothing it claims to.
+		assert.Contains(t, err.Error(), field.name, field.name)
+		assert.NotContains(t, err.Error(), "accepts version", field.name)
 	}
 }
 
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj store"}`))
+	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj store"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":3,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj/store","state":"done"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":3,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
+		`{"schema_version":4,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
