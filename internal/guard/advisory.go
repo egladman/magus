@@ -24,6 +24,7 @@ const (
 	advisoryGateRepeat    hint.MarkerKind = "gate-repeat"
 	advisoryFocus         hint.MarkerKind = "focus"
 	advisoryHookWiring    hint.MarkerKind = "hook-wiring"
+	advisoryNewFile       hint.MarkerKind = "new-file"
 	advisoryLeaseTerminal hint.MarkerKind = "lease-terminal"
 	advisoryLeaseInvalid  hint.MarkerKind = "lease-invalid"
 )

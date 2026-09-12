@@ -38,7 +38,7 @@ func TestDenyIgnoresEverySpentAdvisoryMarker(t *testing.T) {
 	for _, kind := range []hint.MarkerKind{
 		advisoryStaleBinary, advisoryCodeSearch, advisoryDocSearch, advisoryPrecedent,
 		advisoryStageClassify, advisoryUnleasedWrite, advisorySkillSource, advisoryRegenSource,
-		advisoryGraphStale, advisoryFocus,
+		advisoryGraphStale, advisoryFocus, advisoryNewFile,
 	} {
 		require.NotEmpty(t, gate.Once(kind, "x"), "fixture: spend every family")
 		require.Empty(t, gate.Once(kind, "x"), "fixture: the family is now spent")
