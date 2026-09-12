@@ -13,10 +13,10 @@ stdout 'agent-skills: not installed'
 stdout 'magus agent install'
 
 # After an install every location reports current. AGENTS.md is PASTED rather than
-# installed - magus never writes it - so copying `agent sample` here stands in for
+# installed - magus never writes it - so copying `agent starter` here stands in for
 # the developer, and grading it proves the printed block round-trips.
 exec magus agent install .claude/skills
-exec magus agent sample
+exec magus agent starter
 cp stdout AGENTS.md
 ! exec magus doctor
 stdout 'agent-skills: 2 install location\(s\) current'
