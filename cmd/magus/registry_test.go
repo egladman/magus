@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sync"
@@ -174,4 +177,61 @@ func TestEvictAllOnEmptyRegistry(t *testing.T) {
 
 	assert.Zero(t, dropped)
 	assert.Zero(t, busy)
+}
+
+// TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord pins the two-writer split the row depends
+// on. OnJobDone is handed argv, duration and error and no invocation, so completion has to
+// MERGE into the row submit left; a completion that replaced it would drop the one field
+// naming the log the run produced.
+func TestCompleteJobRowKeepsWhatOnlySubmitCouldRecord(t *testing.T) {
+	dir := t.TempDir()
+	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { daemonJobStore = nil })
+
+	_, err := daemonJobStore.Update(t.Context(), "sync-graph", func(row *types.Job) {
+		row.Holder = types.HolderDaemon
+		row.State = types.StateRunning
+		row.LastRun = &types.JobRun{Invocation: "inv-1"}
+	})
+	require.NoError(t, err)
+
+	completeJobRow(t.Context(), []string{"graph", "build"}, 250*time.Millisecond, nil)
+
+	rows, err := daemonJobStore.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	got := rows[0]
+	assert.Equal(t, "sync-graph", got.ID)
+	assert.Equal(t, types.HolderDaemon, got.Holder)
+	assert.Equal(t, types.StatePass, got.State)
+	require.NotNil(t, got.LastRun)
+	assert.Equal(t, "inv-1", got.LastRun.Invocation)
+	assert.Equal(t, int64(250), got.LastRun.DurationMs)
+	assert.True(t, got.LastRun.OK)
+	assert.Positive(t, got.LastRun.Ended)
+
+	completeJobRow(t.Context(), []string{"graph", "build"}, time.Second, errors.New("graph build failed"))
+
+	rows, err = daemonJobStore.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateFail, rows[0].State)
+	assert.False(t, rows[0].LastRun.OK)
+	assert.Equal(t, "graph build failed", rows[0].LastRun.Error)
+	assert.Equal(t, "inv-1", rows[0].LastRun.Invocation)
+}
+
+// TestCompleteJobRowIgnoresAnAdoptedRun keeps the callback narrow: it fires for every
+// background job the daemon finishes, and an adopted run is somebody's `magus run`, which
+// has no row of its own to complete.
+func TestCompleteJobRowIgnoresAnAdoptedRun(t *testing.T) {
+	dir := t.TempDir()
+	daemonJobStore = job.NewStore(job.Location{CacheDir: dir, Root: dir})
+	t.Cleanup(func() { daemonJobStore = nil })
+
+	completeJobRow(t.Context(), []string{"run", "test", "."}, time.Second, nil)
+
+	rows, err := daemonJobStore.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
 }
