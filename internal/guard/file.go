@@ -134,7 +134,6 @@ func derivedFromSibling(stem, base string, siblings []string) bool {
 	return false
 }
 
-
 func newFileNameAdvice(dir, name string, siblings []string) string {
 	shown, more := siblings, ""
 	if len(shown) > siblingsShown {
