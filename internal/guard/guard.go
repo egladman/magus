@@ -313,7 +313,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Mutually exclusive with the rung below: that one answers an empty directory,
 		// this one a populated one. Held to one firing per session, where the new-directory
 		// rule is not, because creating a file is ordinary work and creating a boundary
-		// is not (internal/guard/newfile.go).
+		// is not (internal/guard/file.go).
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseNewFileName(input); text != "" {
 				advice, spoken = markers.Once(advisoryNewFile, text), true

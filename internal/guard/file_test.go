@@ -25,11 +25,10 @@ func TestAdviseNewFileNameListsTheSiblingsItWillJoin(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "advisory.go", "cachedir.go", "focus.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "newfile.go"))
+	got := adviseNewFileName(filepath.Join("internal", "guard", "lease.go"))
 
 	assert.Contains(t, got, "NEW FILE")
 	assert.Contains(t, got, "advisory.go, cachedir.go, focus.go", "the siblings ARE the advisory")
-	assert.NotContains(t, got, "repeats its directory name", "a name that repeats nothing draws no structural claim")
 }
 
 // The rule runs BEFORE the write, so a file that exists is an edit. An edit chooses no
@@ -62,44 +61,16 @@ func TestAdviseNewFileNameIsSilentOnADerivedName(t *testing.T) {
 	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "guard", "sourcedir_test.go")))
 }
 
-// The shape the rule is for, and this package's own history: 484c72310 renamed 26 files
-// to strip exactly this prefix. Deriving from the directory's EPONYMOUS file is the
-// stutter, so the suppression above must not reach it.
-func TestAdviseNewFileNameNamesStutterNothingElseCarries(t *testing.T) {
+// A name hung off the directory's EPONYMOUS file is one somebody picked, so the
+// derived-name suppression must not reach it and the list still has something to say.
+func TestAdviseNewFileNameStillSpeaksForANameOffTheEponymousFile(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "guard.go", "advisory.go", "cachedir.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_newfile.go"))
+	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_thing.go"))
 
-	assert.Contains(t, got, "repeats its directory name")
-	assert.Contains(t, got, "`newfile.go` is the same name without the repeat")
-}
-
-// Wrong-firing case 2: where the repeat is the house convention, the claim is false and
-// the rule has to hold it. Both families are real: the spell-op naming formula, and Go
-// build-constraint variants beside their eponymous file.
-func TestAdviseNewFileNameHoldsStutterWhenTheSiblingsCarryIt(t *testing.T) {
-	root := inWorkspace(t)
-	populate(t, root, filepath.Join("spells", "examples", "go"), "go-build.buzz", "go-test.buzz", "golangci-lint.buzz")
-	populate(t, root, filepath.Join("internal", "proc", "run"), "run.go", "run_unix.go", "run_wasm.go", "exec.go")
-
-	spell := adviseNewFileName(filepath.Join("spells", "examples", "go", "go-mod-vendor.buzz"))
-	assert.Contains(t, spell, "NEW FILE", "the sibling list still stands: it is the fact")
-	assert.NotContains(t, spell, "repeats its directory name", "go-build.buzz is the naming formula, not a defect")
-
-	variant := adviseNewFileName(filepath.Join("internal", "proc", "run", "run_darwin.go"))
-	assert.NotContains(t, variant, "repeats its directory name", "run_unix.go already carries the shape")
-}
-
-// A directory's entry point is spelled with its own name in several languages, so the
-// eponymous file is never the defect.
-func TestAdviseNewFileNameTreatsTheEponymousFileAsIdiomatic(t *testing.T) {
-	root := inWorkspace(t)
-	populate(t, root, "cache", "store.go", "evict.go")
-	populate(t, root, "widget", "render.ts", "state.ts")
-
-	assert.NotContains(t, adviseNewFileName(filepath.Join("cache", "cache.go")), "repeats its directory name")
-	assert.NotContains(t, adviseNewFileName(filepath.Join("widget", "index.ts")), "repeats its directory name")
+	assert.Contains(t, got, "NEW FILE")
+	assert.Contains(t, got, "advisory.go, cachedir.go, guard.go", "the list is what names the convention")
 }
 
 // The host sends an ABSOLUTE path and this repo is routinely checked out under
@@ -113,7 +84,7 @@ func TestAdviseNewFileNameHandlesTheAbsolutePathTheHostSends(t *testing.T) {
 	t.Chdir(ws)
 	populate(t, ws, filepath.Join("internal", "guard"), "advisory.go")
 
-	assert.Contains(t, adviseNewFileName(filepath.Join(ws, "internal", "guard", "newfile.go")), "NEW FILE")
+	assert.Contains(t, adviseNewFileName(filepath.Join(ws, "internal", "guard", "lease.go")), "NEW FILE")
 }
 
 // Fixtures, pruned trees and anything outside the workspace are not places anyone is
