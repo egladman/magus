@@ -76,15 +76,68 @@ var _ jobv1alpha1connect.JobServiceHandler = (*Service)(nil)
 // and the CLI both speak the bare id, so this is the only place the two spellings meet.
 const jobsPrefix = "jobs/"
 
-// ListJobs returns every registered job with its running state, last run, and target size.
+// ListJobs returns every job, the daemon's own catalog beside the delegated ones, with each
+// one's holder, state, last run and target size.
+//
+// The catalog leads and the stored rows follow, so the fixed set a reader can act on stays
+// in one place while the plan grows under it. A catalog job nobody has run yet still lists,
+// which is why the catalog is iterated rather than the store: the set is declared by the
+// binary, and a job with no row has not run rather than not existing.
 func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJobsRequest]) (*connect.Response[jobv1.ListJobsResponse], error) {
 	running := s.runningByArgv(ctx)
-	all := jobs.All()
-	out := make([]*jobv1.Job, 0, len(all))
-	for _, j := range all {
-		out = append(out, s.job(j, running))
+	rows := s.rows()
+	byID := make(map[string]types.Job, len(rows))
+	for _, row := range rows {
+		byID[row.ID] = row
 	}
-	return connect.NewResponse(&jobv1.ListJobsResponse{Jobs: out}), nil
+	all := jobs.All()
+	out := make([]*jobv1.Job, 0, len(all)+len(rows))
+	catalog := make(map[string]bool, len(all))
+	for _, j := range all {
+		catalog[j.Name] = true
+		out = append(out, s.job(j, running, byID[j.Name]))
+	}
+	for _, row := range rows {
+		if !catalog[row.ID] {
+			out = append(out, delegatedJob(row))
+		}
+	}
+	return connect.NewResponse(&jobv1.ListJobsResponse{Jobs: out, Overlaps: overlaps(rows)}), nil
+}
+
+// rows reads the job store, empty when there is none or it will not read. A listing that
+// drops the delegated jobs beats one that fails: the catalog beside it is still true, and
+// the daemon's maintenance surface must not go dark because a plan file is unreadable.
+func (s *Service) rows() []types.Job {
+	if s.store == nil {
+		return nil
+	}
+	rows, err := s.store.List()
+	if err != nil {
+		return nil
+	}
+	return rows
+}
+
+// row is the stored row for the job named name, zero when nothing has recorded one.
+func (s *Service) row(name string) types.Job {
+	for _, r := range s.rows() {
+		if r.ID == name {
+			return r
+		}
+	}
+	return types.Job{}
+}
+
+// overlaps derives the pairs claiming common ground through the same constructor every
+// other read door uses, so two doors cannot disagree about whether an overlap exists.
+func overlaps(rows []types.Job) []*jobv1.JobOverlap {
+	derived := types.NewJobList(rows).Overlaps
+	out := make([]*jobv1.JobOverlap, 0, len(derived))
+	for _, o := range derived {
+		out = append(out, &jobv1.JobOverlap{JobA: o.JobA, JobB: o.JobB, PathsA: o.PathsA, PathsB: o.PathsB})
+	}
+	return out
 }
 
 // RunJob submits the named job. An unregistered name is NotFound rather than a SubmitState:
@@ -120,7 +173,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	info := s.job(j, running)
+	info := s.job(j, running, s.row(j.Name))
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
 	if inv == "" { // the daemon coalesced this into an identical in-flight job
@@ -165,19 +218,85 @@ func (s *Service) recordSubmit(ctx context.Context, j jobs.Job, inv string) {
 // job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) job(j jobs.Job, running map[string]string) *jobv1.Job {
+func (s *Service) job(j jobs.Job, running map[string]string, row types.Job) *jobv1.Job {
 	info := &jobv1.Job{
 		Name:        jobsPrefix + j.Name,
+		Id:          j.Name,
+		Holder:      jobv1.JobHolder_JOB_HOLDER_DAEMON,
 		Description: j.Desc,
+		State:       string(types.StateDeclared),
 		Target:      s.targetSize(j),
+	}
+	if row.State != "" {
+		info.State = string(row.State)
 	}
 	if _, ok := running[argvKey(j.Argv)]; ok {
 		info.Running = true
 	}
-	if ev, ok := trail.LastRun(s.ws.CacheDir(), jobs.ActionString(j.Argv)); ok {
+	// The row first, because only it carries the invocation id. The trail is the fallback
+	// for a job that ran before anything wrote rows, where a run with no id still beats none.
+	if row.LastRun != nil {
+		info.LastRun = storedRun(row.LastRun)
+	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobs.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
 	return info
+}
+
+// delegatedJob maps a stored row to the wire Job: what an orchestrator DECLARED about work
+// it handed out. It carries no description or target size, which are a catalog job's; a
+// delegated job's equivalents are its goal and the lanes it was given.
+//
+// Running is left unset rather than derived from the state. Nothing here watched the
+// worker, and a row still reading `running` after its holder died would be the stored
+// running flag this service refuses to keep for the catalog.
+func delegatedJob(row types.Job) *jobv1.Job {
+	j := &jobv1.Job{
+		Name:       jobsPrefix + row.ID,
+		Id:         row.ID,
+		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
+		State:      string(row.State),
+		Goal:       row.Goal,
+		Parent:     row.Parent,
+		Model:      row.Model,
+		Check:      row.Validation,
+		WritePaths: row.WritePaths,
+		DenyPaths:  row.DenyPaths,
+		ReadPaths:  row.ReadPaths,
+		DependsOn:  row.DependsOn,
+		ReadOnly:   row.ReadOnly,
+		Checkpoint: row.Checkpoint,
+		Created:    row.Created,
+		Updated:    row.Updated,
+	}
+	if row.Holder.OrSession() == types.HolderDaemon {
+		j.Holder = jobv1.JobHolder_JOB_HOLDER_DAEMON
+	}
+	for _, r := range row.Releases {
+		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt})
+	}
+	if row.LastRun != nil {
+		j.LastRun = storedRun(row.LastRun)
+	}
+	return j
+}
+
+// storedRun maps the row's own run record to the wire JobRun.
+func storedRun(r *types.JobRun) *jobv1.JobRun {
+	run := &jobv1.JobRun{
+		InvocationId:   r.Invocation,
+		Ok:             r.OK,
+		Error:          r.Error,
+		ItemsRemoved:   r.ItemsRemoved,
+		BytesReclaimed: r.BytesReclaimed,
+	}
+	if r.Ended > 0 {
+		run.EndTime = timestamppb.New(time.UnixMilli(r.Ended))
+	}
+	if r.DurationMs > 0 {
+		run.Duration = durationpb.New(time.Duration(r.DurationMs) * time.Millisecond)
+	}
+	return run
 }
 
 // lastRun maps a trail job Event to the wire JobRun. The trail records the run's start (Ts) and

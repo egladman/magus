@@ -12,9 +12,11 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/types"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 )
 
@@ -112,7 +114,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobs.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.job(j, running)
+	got := s.job(j, running, types.Job{})
 
 	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)
@@ -141,4 +143,41 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 		"jobs/sync-graph", "jobs/rotate-activities", "jobs/rotate-logs", "jobs/prune-preserved",
 		"jobs/clear-cache", "jobs/check-review",
 	}, names)
+}
+
+// TestListJobs_ReturnsCatalogAndDelegatedJobs is the listing the merge exists for: the
+// daemon's own catalog beside the jobs a session holds, in one response with one state
+// vocabulary, so a reader never asks which door to knock on for which kind.
+func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
+	dir := t.TempDir()
+	store := jobstore.NewStore(jobstore.Location{CacheDir: dir, Root: dir})
+	_, err := store.Update(t.Context(), "wave3/merge", func(row *types.Job) {
+		row.State = types.StateRunning
+		row.Model = "opus"
+		row.WritePaths = []string{"internal/handler"}
+	})
+	require.NoError(t, err)
+
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = store
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	byID := make(map[string]*jobv1.Job, len(resp.Msg.Jobs))
+	for _, j := range resp.Msg.Jobs {
+		byID[j.Id] = j
+	}
+
+	catalog := byID["sync-graph"]
+	require.NotNil(t, catalog, "the daemon's own job is missing from the listing")
+	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_DAEMON, catalog.Holder)
+	require.Equal(t, string(types.StateDeclared), catalog.State, "a catalog job nobody has run yet is declared")
+
+	delegated := byID["wave3/merge"]
+	require.NotNil(t, delegated, "the delegated job is missing from the listing")
+	require.Equal(t, jobv1.JobHolder_JOB_HOLDER_SESSION, delegated.Holder)
+	require.Equal(t, string(types.StateRunning), delegated.State)
+	require.Equal(t, "opus", delegated.Model)
+	require.Equal(t, []string{"internal/handler"}, delegated.WritePaths)
 }
