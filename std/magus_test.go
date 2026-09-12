@@ -338,10 +338,13 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 // TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
 // internal/job.Merge with the magus_job MCP tool: a later put naming only
 // `state` must not erase the goal an earlier put declared.
+// Not parallel, and the env is why: see TestLedgerIsServedInProcess above. A root of
+// "" hashes to the same state directory in every checkout, so these rows would land in
+// the developer's own store and the clear below would drop what it found there.
 func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
-	t.Parallel()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"goal": "the declared goal", "write_paths": "internal/job"})
 	require.NoError(t, err)
@@ -357,18 +360,18 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 // silently ignored; internal/job.Merge is what enforces this, and this pins that
 // the Buzz binding does not swallow its error.
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
-	t.Parallel()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 }
 
 func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
-	t.Parallel()
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", nil)
 	require.NoError(t, err)
 	_, err = MagusPutJob(ctx, "u2", nil)
