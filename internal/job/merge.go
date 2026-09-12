@@ -129,7 +129,7 @@ var mergeFields = []string{
 
 // renamedFields pairs each lane's pre-rename JSON key with the one it answers to now.
 //
-// ParseMerge itself no longer accepts these spellings on a fork - that compat, and the
+// ParseMerge itself no longer accepts these spellings on a fork; that compat, and the
 // guard's mirrored allowance, were deleted outright since the MCP put surface never
 // shipped them. This table survives for a narrower, still-live reason: Store.mergeRowRaw
 // (store.go) strips an old key out of a row's raw bytes on every merge so it cannot ride

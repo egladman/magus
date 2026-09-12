@@ -638,7 +638,7 @@ func rawRowsByID(raw []byte, rows []types.Job) (map[string]json.RawMessage, erro
 		return nil, err
 	}
 	if len(envelope.Jobs) != len(rows) {
-		return nil, nil
+		return map[string]json.RawMessage{}, nil
 	}
 	out := make(map[string]json.RawMessage, len(rows))
 	for i, row := range rows {
@@ -727,7 +727,7 @@ type jobsEnvelope struct {
 }
 
 // mergeRows folds every row's known fields over its own raw baggage from rawByID, in file
-// order. A row absent from rawByID - one this binary created this call - has nothing to
+// order. A row absent from rawByID (one this binary created this call) has nothing to
 // merge over and is marshalled plain, which is what every row did before this existed.
 func mergeRows(jobs []types.Job, rawByID map[string]json.RawMessage) (jobsEnvelope, error) {
 	out := jobsEnvelope{Jobs: make([]json.RawMessage, len(jobs))}
@@ -743,7 +743,7 @@ func mergeRows(jobs []types.Job, rawByID map[string]json.RawMessage) (jobsEnvelo
 
 // mergeRowRaw folds row's own current field values over prevRaw, the row's raw bytes as
 // this Store last read them from disk. A member prevRaw carries that row's struct does not
-// declare - an unreleased field, or one an OLDER binary wrote beside it - survives
+// declare (an unreleased field, or one an OLDER binary wrote beside it) survives
 // untouched. A member the struct DOES declare is overwritten with row's current value even
 // when that value is the zero one: a field the caller just cleared has to read back
 // cleared, not come back as whatever version was still sitting in prevRaw.
@@ -778,7 +778,7 @@ func mergeRowRaw(row types.Job, prevRaw json.RawMessage) (json.RawMessage, error
 }
 
 // rowFields is every JSON field types.Job declares, by name, marshalled at its CURRENT
-// value regardless of whether that value is the zero one - read off the struct with
+// value regardless of whether that value is the zero one; read off the struct with
 // reflect so a field added there cannot silently stay out of this merge. json.Marshal(row)
 // itself cannot serve this: its tags carry `omitempty`, which is right for a fresh row but
 // would leave an emptied field's key out of the result entirely, and the overlay in

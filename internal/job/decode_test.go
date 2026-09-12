@@ -166,7 +166,7 @@ func TestDeclarationSchemaMatchesTheStruct(t *testing.T) {
 // The two write doors accept the same CURRENT fields or a row declared on one is not the
 // row the other would have recorded. ParseMerge is the MCP tool's decoder and Declaration
 // is the CLI's. Declaration alone still carries the pre-rename spellings
-// (owned_paths/forbidden_paths/focus/tier - see foldLegacyLanes): that compat is decode.go's
+// (owned_paths/forbidden_paths/focus/tier; see foldLegacyLanes): that compat is decode.go's
 // own and was never mirrored into ParseMerge, so it is excluded from this comparison rather
 // than asserted as shared vocabulary.
 func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {

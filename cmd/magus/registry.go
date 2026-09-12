@@ -315,8 +315,8 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 var daemonJobStore *job.Store
 
 // completeJobRow finishes a catalog job's row: where it now stands, what the run cost, and
-// whether it worked. The invocation id is not here to record - this callback is handed argv,
-// duration and error only - so it merges into the row the submit left.
+// whether it worked. The invocation id is not here to record (this callback is handed argv,
+// duration and error only), so it merges into the row the submit left.
 //
 // Best-effort, like the trail append above it. The store refuses a write from a checkout
 // bound to a lease, and background maintenance must not fail because a worker holds this one.

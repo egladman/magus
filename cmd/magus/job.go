@@ -778,7 +778,7 @@ func resultToVerify(ctx context.Context, root string, one types.Job, stdin bool)
 	if stdin {
 		result, err := job.DecodeResult(os.Stdin)
 		if err != nil {
-			return types.JobResult{}, types.JobAttempt{}, fmt.Errorf("%s (`%s` prints the schema it must satisfy)", err, hint.JobWait.With("--schema"))
+			return types.JobResult{}, types.JobAttempt{}, fmt.Errorf("%w (`%s` prints the schema it must satisfy)", err, hint.JobWait.With("--schema"))
 		}
 		att, err := storedAttempt(ctx, root, result.Validation.OutputRef)
 		return result, att, err

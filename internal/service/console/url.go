@@ -112,19 +112,6 @@ type FragmentParam struct {
 	Value string
 }
 
-// Link assembles a console surface's daemon-origin deep link:
-// http://<host>/console/<surface>/#[<directives>&]token=<token>. Under the daemon-origin grammar
-// the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback
-// /console/) and the data API, so nothing but content state and the bearer token rides the
-// fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
-// surface URL: the daemon serves the shell for it (SPA fallback) and the console's boot router
-// opens that surface from the path. The token rides the fragment (never transmitted on the
-// document GET) and is emitted LAST, after any content directives, so callers hold a secret: a
-// link with a token must only be surfaced to an interactive user, never written to a log.
-//
-// This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
-// the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
-// policy (encodeComponent, the encodeURIComponent equivalent the page's hash parser reverses).
 // Root is the console's own address, the one a person opens when they want the console
 // rather than a particular surface: http://<host>/console/. Empty when there is no host.
 //
@@ -139,6 +126,19 @@ func Root(host string) string {
 	return "http://" + host + "/console/"
 }
 
+// Link assembles a console surface's daemon-origin deep link:
+// http://<host>/console/<surface>/#[<directives>&]token=<token>. Under the daemon-origin grammar
+// the ORIGIN names which daemon: the daemon serves both the console shell (over its loopback
+// /console/) and the data API, so nothing but content state and the bearer token rides the
+// fragment; there is no #live= host directive. The clean /console/<surface>/ PATH is the canonical
+// surface URL: the daemon serves the shell for it (SPA fallback) and the console's boot router
+// opens that surface from the path. The token rides the fragment (never transmitted on the
+// document GET) and is emitted LAST, after any content directives, so callers hold a secret: a
+// link with a token must only be surfaced to an interactive user, never written to a log.
+//
+// This is the ONE home for the grammar: url.GraphLink composes it rather than hand-building
+// the "http://"+host+"/console/graph/"+frag string, so both producers share a single escaping
+// policy (encodeComponent, the encodeURIComponent equivalent the page's hash parser reverses).
 func Link(opts LinkOpts) string {
 	var parts []string
 	for _, p := range opts.Fragment {
