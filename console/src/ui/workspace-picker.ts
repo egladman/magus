@@ -57,6 +57,7 @@ export function initWorkspacePicker(
   const wrap = document.createElement("div");
   wrap.className = "console-shell-scope";
   wrap.id = "console-scope";
+  wrap.dataset.controlSize = "compact";
 
   const caption = document.createElement("span");
   caption.className = "console-shell-scope__caption";
@@ -65,7 +66,6 @@ export function initWorkspacePicker(
 
   const btn = document.createElement("button");
   btn.id = "console-scope-btn";
-  btn.dataset.controlSize = "compact";
   btn.type = "button";
   btn.className = "pf-v6-c-button pf-m-plain";
   btn.setAttribute("aria-haspopup", "true");

@@ -87,6 +87,12 @@ describe("the workspace scope control", () => {
     assert.equal(caption.textContent, "Workspace");
     assert.equal(caption.parentElement, wrap, "the caption must live inside the bordered control");
     assert.equal(btn.parentElement, wrap, "and so must the value");
+    assert.equal(
+      wrap.dataset.controlSize,
+      "compact",
+      "both segments must share one control metric",
+    );
+    assert.equal(btn.dataset.controlSize, undefined, "the value inherits the wrapper's metric");
     // One name, not a visible one and a different spoken one.
     assert.equal(btn.getAttribute("aria-labelledby"), "console-scope-caption " + btn.id);
     assert.equal(btn.getAttribute("aria-label"), null, "aria-label would override the pair");
