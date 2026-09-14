@@ -78,6 +78,7 @@ type HarnessPreToolUse struct {
 type HarnessHookEntry struct {
 	Matcher string         `json:"matcher"`
 	Hook    map[string]any `json:"hook"`
+	Observe bool           `json:"observe,omitempty"`
 }
 
 // HarnessEntries declares exact entries in another host hook event. These
@@ -115,6 +116,7 @@ type HarnessVerification struct {
 	Path       string `json:"path"`
 	Status     string `json:"status"`
 	Reason     string `json:"reason,omitempty"`
+	Guarded    bool   `json:"guarded,omitempty"`
 }
 
 // LoadHarness resolves one validated descriptor. Workspace-owned descriptors
@@ -365,7 +367,7 @@ func VerifyHarness(root, host string) (HarnessVerification, error) {
 		return result, nil
 	}
 	for _, wanted := range d.PreToolUse.Entries {
-		wantedHook := descriptorHook(d.ID, wanted.Hook)
+		wantedHook := descriptorHook(d.ID, wanted)
 		found := false
 		for _, entry := range matchingDescriptorEntries(entries, d.PreToolUse.MatcherKey, wanted.Matcher) {
 			hooks, ok := entry[d.PreToolUse.HooksKey].([]any)
@@ -383,6 +385,7 @@ func VerifyHarness(root, host string) (HarnessVerification, error) {
 			return result, nil
 		}
 	}
+	result.Guarded = true
 	for _, group := range d.ManagedEntries {
 		entries, err := managedEntries(config, group)
 		if err != nil {
@@ -428,16 +431,39 @@ func ensureDescriptorPreToolUse(config map[string]any, d HarnessDescriptor) (boo
 	changed := false
 	for _, wanted := range d.PreToolUse.Entries {
 		matches := matchingDescriptorEntries(entries, d.PreToolUse.MatcherKey, wanted.Matcher)
-		wantedHook := descriptorHook(d.ID, wanted.Hook)
+		wantedHook := descriptorHook(d.ID, wanted)
+		found := false
+		for _, match := range matches {
+			hooks, _ := match[d.PreToolUse.HooksKey].([]any)
+			filtered := make([]any, 0, len(hooks))
+			for _, raw := range hooks {
+				hook, ok := raw.(map[string]any)
+				if !ok {
+					filtered = append(filtered, raw)
+					continue
+				}
+				if containsExactEntry([]any{hook}, wantedHook) {
+					found = true
+					filtered = append(filtered, raw)
+					continue
+				}
+				if command, ok := hook["command"].(string); ok && isHarnessHookCommand(d.ID, command) {
+					changed = true
+					continue
+				}
+				filtered = append(filtered, raw)
+			}
+			match[d.PreToolUse.HooksKey] = filtered
+		}
+		if found {
+			continue
+		}
 		if len(matches) == 0 {
 			entries = append(entries, map[string]any{
 				d.PreToolUse.MatcherKey: wanted.Matcher,
 				d.PreToolUse.HooksKey:   []any{wantedHook},
 			})
 			changed = true
-			continue
-		}
-		if hasDescriptorHook(matches, d.PreToolUse.HooksKey, wantedHook) {
 			continue
 		}
 		first := matches[0]
@@ -555,26 +581,32 @@ func matchingDescriptorEntries(entries []any, matcherKey, matcher string) []map[
 	return matches
 }
 
-func descriptorHook(host string, extra map[string]any) map[string]any {
+func descriptorHook(host string, entry HarnessHookEntry) map[string]any {
+	extra := entry.Hook
 	hook := make(map[string]any, len(extra)+1)
 	for key, value := range extra {
 		hook[key] = value
 	}
-	hook["command"] = "magus agent hook --host " + host
+	hook["command"] = HarnessHookCommand(host, entry.Observe)
 	return hook
 }
 
-func hasDescriptorHook(entries []map[string]any, hooksKey string, wanted map[string]any) bool {
-	for _, entry := range entries {
-		hooks, ok := entry[hooksKey].([]any)
-		if !ok && entry[hooksKey] != nil {
-			continue
-		}
-		if containsExactEntry(hooks, wanted) {
-			return true
-		}
+// HarnessHookCommand is the Magus-owned adapter command injected into host hook
+// configs. It prefers the workspace binary found by walking up to magusfile.buzz,
+// then falls back to PATH for installs without a checked-out binary.
+func HarnessHookCommand(host string, observe bool) string {
+	args := "agent hook --host " + host
+	if observe {
+		args += " --observe"
 	}
-	return false
+	return `guard_root=$PWD; while [ -n "$guard_root" ]; do if [ -f "$guard_root/magusfile.buzz" ]; then if [ -x "$guard_root/magus" ]; then exec "$guard_root/magus" ` + args + `; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus ` + args
+}
+
+func isHarnessHookCommand(host, command string) bool {
+	return command == "magus agent hook --host "+host ||
+		command == "magus agent hook --host "+host+" --observe" ||
+		command == HarnessHookCommand(host, false) ||
+		command == HarnessHookCommand(host, true)
 }
 
 func containsExactEntry(entries []any, wanted map[string]any) bool {

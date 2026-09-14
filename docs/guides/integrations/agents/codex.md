@@ -85,7 +85,7 @@ magus agent harness apply --host codex
 magus agent harness verify --host codex
 ```
 
-The descriptor writes `.codex/hooks.json` and installs the three guard entries
+The descriptor writes `.codex/hooks.json` and installs the guard entries
 shown here:
 
 ```json
@@ -97,7 +97,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -107,7 +107,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -117,8 +117,18 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking MCP tool call"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex --observe; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex --observe",
+            "statusMessage": "magus: recording read"
           }
         ]
       }
@@ -150,10 +160,11 @@ shown here:
 }
 ```
 
-`magus agent hook` derives the path, command, and MCP surfaces from the raw
-event and emits Codex's hook reply. It replaces the `magus-guard-command.sh`
-and `magus-guard-path.sh` templates. It requires `magus` on `PATH`; otherwise
-use [Guard hook templates](guard-templates.md).
+`magus agent hook` derives the path, command, read, and MCP surfaces from the
+raw event and emits Codex's hook reply. It replaces the
+`magus-guard-command.sh`, `magus-guard-path.sh`, and read-observer templates.
+The generated adapter walks up to the workspace root, prefers that checkout's
+`./magus`, and falls back to `PATH` only when no workspace binary is executable.
 
 The two `PreToolUse` entries used to carry `GUARD_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks

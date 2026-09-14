@@ -2213,7 +2213,7 @@ func guardHookConfigs(root string) []string {
 	}
 	for _, id := range ids {
 		verification, err := agent.VerifyHarness(root, id)
-		if err == nil && verification.Status == "verified" {
+		if err == nil && (verification.Status == "verified" || verification.Guarded) {
 			out = append(out, verification.Path)
 		}
 	}
@@ -2341,6 +2341,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 	}
 
 	var stale, details []string
+	var staleStatuses []agent.Status
 	var pastedStale bool
 	for _, st := range statuses {
 		details = append(details, st.Location+": "+st.Detail)
@@ -2350,6 +2351,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			pastedStale = true
 		default:
 			stale = append(stale, st.Location)
+			staleStatuses = append(staleStatuses, st)
 		}
 	}
 
@@ -2382,7 +2384,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Status:  types.DoctorFail,
 			Message: "installed skills are behind this binary: " + strings.Join(stale, ", "),
 			Details: details,
-			Fix:     []string{"agent", "install", stale[0], "--force", "--dir", root},
+			Fix:     skillInstallFix(root, staleStatuses[0]),
 		}
 	case pastedStale:
 		return types.DoctorCheck{
@@ -2398,6 +2400,13 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		Message: fmt.Sprintf("%d install location(s) current with this binary", len(statuses)),
 		Details: details,
 	}
+}
+
+func skillInstallFix(root string, st agent.Status) []string {
+	if st.Host != "" {
+		return []string{"agent", "harness", "install", "--host", st.Host}
+	}
+	return []string{"agent", "install", st.Location, "--force", "--dir", root}
 }
 
 // orphanedSkillDirs returns the installed skill directories this binary no longer ships,

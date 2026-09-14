@@ -40,7 +40,7 @@ func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
 // case can separate "bound and registered" from "bound, registered and judged".
 func wireGuardHook(t *testing.T, root string) {
 	t.Helper()
-	writeCheckpointHarness(t, root, guardedHarnessConfig)
+	writeCheckpointHarness(t, root, guardedHarnessConfig())
 }
 
 func TestLeaseBindingPassesWithNoLeaseBound(t *testing.T) {

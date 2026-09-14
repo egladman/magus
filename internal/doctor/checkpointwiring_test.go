@@ -3,8 +3,11 @@ package doctor
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,13 +40,15 @@ func writeCheckpointHarness(t *testing.T, root, body string) {
 	plant(t, root, "host/hooks.json", body)
 }
 
-const guardedHarnessConfig = `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host test-host"}]}]}}`
+func guardedHarnessConfig() string {
+	return `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":` + strconv.Quote(agent.HarnessHookCommand("test-host", false)) + `}]}]}}`
+}
 
 // The case this check exists for: a host wired for the guard months ago, judging
 // correctly, and silently recording nothing about where work stopped.
 func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig)
+	writeCheckpointHarness(t, root, guardedHarnessConfig())
 
 	got := checkCheckpointWiring(root)
 
@@ -53,7 +58,8 @@ func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
 
 func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig[:len(guardedHarnessConfig)-1]+`,"checkpoint":"magus session checkpoint"}`)
+	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
+	writeCheckpointHarness(t, root, body)
 
 	got := checkCheckpointWiring(root)
 
@@ -65,7 +71,8 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 // does not have to reimplement the binary lookup, not as the only way in.
 func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
 	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig[:len(guardedHarnessConfig)-1]+`,"checkpoint":"magus session checkpoint"}`)
+	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
+	writeCheckpointHarness(t, root, body)
 
 	got := checkCheckpointWiring(root)
 
@@ -80,6 +87,17 @@ func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
 	assert.Equal(t, types.DoctorOK, got.Status)
 	assert.Equal(t, types.EvidenceUnknown, got.Evidence)
 	assert.Contains(t, got.Message, "skipped")
+}
+
+func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorHarness(t, root)
+	plant(t, root, "host/hooks.json", guardedHarnessConfig())
+
+	got := checkCheckpointWiring(root)
+
+	assert.Equal(t, types.DoctorAdvice, got.Status)
+	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
 // A config that never mentions magus is somebody else's, and reading it as an unrecording

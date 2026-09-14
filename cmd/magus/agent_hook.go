@@ -24,6 +24,7 @@ func agentHookCmd(ctx context.Context, root string, in io.Reader, out io.Writer,
 	fset := flag.NewFlagSet("agent hook", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	host := fset.String("host", "", "harness descriptor receiving the guard response")
+	observe := fset.Bool("observe", false, "record the input as a read observation instead of judging it")
 	fset.Usage = func() { agentHookUsage(fset.Output()) }
 	if err := fset.Parse(args); err != nil {
 		return err
@@ -40,10 +41,14 @@ func agentHookCmd(ctx context.Context, root string, in io.Reader, out io.Writer,
 		return fmt.Errorf("magus agent hook: %w", err)
 	}
 
-	err = hookCmdWithErrorWriter(ctx, in, out, io.Discard, []string{
+	hookArgs := []string{
 		"--agent-name", *host,
 		"-o", "template=" + response,
-	})
+	}
+	if *observe {
+		hookArgs = append(hookArgs, "--observe")
+	}
+	err = hookCmdWithErrorWriter(ctx, in, out, io.Discard, hookArgs)
 	return agentHookDeliveryResult(err)
 }
 
@@ -59,5 +64,6 @@ func agentHookUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent hook --host <harness-id>")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read one PreToolUse event from stdin and emit the selected harness's deny or advisory reply.")
+	fmt.Fprintln(w, "--observe records the input as a read and emits no policy verdict.")
 	fmt.Fprintln(w, "Harnesses are user-owned descriptors under harnesses/, .magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses.")
 }

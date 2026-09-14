@@ -57,7 +57,8 @@ magus agent harness verify --host claude-code
 ```
 
 The current descriptor installs entries for commands, file edits, and Magus MCP
-tool calls. Each calls the adapter directly:
+tool calls. Each calls a root-aware adapter that prefers this checkout's
+`./magus` before falling back to `PATH`:
 
 ```json
 {
@@ -65,20 +66,21 @@ tool calls. Each calls the adapter directly:
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }]
       }
     ]
   }
 }
 ```
 
-This repository's own `.claude/settings.json` uses that same direct command. It
-replaces the `magus-guard-command.sh` and `magus-guard-path.sh` templates. Use
-the [guard templates](guard-templates.md) where `magus` is unavailable on `PATH`.
+This repository's own `.claude/settings.json` uses that same root-aware command.
+It replaces the `magus-guard-command.sh` and `magus-guard-path.sh` templates.
+Use the [guard templates](guard-templates.md) where a host cannot run shell
+adapters from the workspace.
 
 `magus agent hook --host claude-code` reads Claude Code's event JSON directly:
 `tool_input.command`, `tool_input.file_path`, `session_id` and `hook_event_name`
@@ -91,9 +93,9 @@ with no `jq` and no script:
 magus agent hook --host claude-code
 ```
 
-It requires the current binary on `PATH`. The templates retain the more verbose
-missing-or-broken-binary notice and are the right fallback when that prerequisite
-cannot be enforced.
+The generated harness command tries the workspace binary first. The templates
+retain the more verbose missing-or-broken-binary notice and remain the fallback
+when a host cannot use the descriptor adapter.
 
 ### Maintaining the workspace harness
 
@@ -125,7 +127,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }
+          { "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }
         ]
       }
     ]

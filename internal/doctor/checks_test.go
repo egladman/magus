@@ -649,6 +649,21 @@ func TestCheckAgentSkills(t *testing.T) {
 		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
 		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
 	})
+
+	t.Run("descriptor install -> fix through harness installer", func(t *testing.T) {
+		root := t.TempDir()
+		writeDoctorHarness(t, root)
+		require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents/skills/magus-query"), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(root, ".agents/skills/magus-query/SKILL.md"),
+			[]byte("---\nname: magus-query\n---\nold generated body\n"), 0o644))
+		r := &runner{ws: rootStubWorkspace{root: root}}
+		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
+
+		got := r.checkAgentSkills()
+
+		require.Equal(t, types.DoctorFail, got.Status)
+		assert.Equal(t, []string{"agent", "harness", "install", "--host", "test-host"}, got.Fix)
+	})
 }
 
 // The case this was written for: the root claims **/*.md through the markdown spell, which sweeps

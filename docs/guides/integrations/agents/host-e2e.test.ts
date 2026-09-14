@@ -74,6 +74,25 @@ test("validates every packaged descriptor without maintaining a provider registr
   assert.equal(new Set(descriptors.map((descriptor) => descriptor.id)).size, descriptors.length);
 });
 
+test("runtime harness descriptors cover read observation and checkpoints", () => {
+  const runtimeHarnesses = ["codex.json", "claude-code.json"].map((name) =>
+    JSON.parse(readFileSync(path.join(repository, "harnesses", name), "utf8")),
+  );
+  for (const harness of runtimeHarnesses) {
+    const entries = harness.pre_tool_use.entries as Array<Record<string, unknown>>;
+    const managed = harness.managed_entries as Array<Record<string, unknown>>;
+    assert.ok(
+      entries.some((entry) => entry.matcher === "Read" && entry.observe === true) ||
+        managed.some((group) => JSON.stringify(group).includes("magus-guard-observe.sh")),
+      `${harness.id} must record read observations`,
+    );
+    assert.ok(
+      managed.some((group) => JSON.stringify(group).includes("magus-checkpoint.sh")),
+      `${harness.id} must record stop checkpoints`,
+    );
+  }
+});
+
 test("selects the named VCS-neutral command-deny scenario", () => {
   assert.deepEqual(selectedScenarios(), [
     {

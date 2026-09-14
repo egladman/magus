@@ -36,6 +36,7 @@ func TestApplyHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "my-own-hook")
 	assert.Contains(t, string(body), "magus agent hook --host test-host")
+	assert.Contains(t, string(body), "guard_root=$PWD")
 	assert.Contains(t, string(body), "\"other\": {")
 
 	second, err := ApplyHarness(HarnessApplyOptions{Root: root, Host: "test-host"})
@@ -71,8 +72,40 @@ func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "9007199254740993")
-	assert.Contains(t, string(body), "my custom status")
+	assert.NotContains(t, string(body), "my custom status", "Magus-owned adapters are upgraded rather than preserved as user hooks")
 	assert.Contains(t, string(body), "magus guard: checking command")
+	assert.NotContains(t, string(body), `"command": "magus agent hook --host test-host"`)
+	assert.Contains(t, string(body), "guard_root=$PWD")
+}
+
+func TestApplyHarnessCanWireReadObserver(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "harnesses")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "reader.json"), []byte(`{
+  "schema_version": 2,
+  "id": "reader",
+  "display": {"name": "Reader"},
+  "config": {"path": "reader/hooks.json"},
+  "skills": {"paths": [".agents/skills"], "form": "full"},
+  "pre_tool_use": {
+    "path": ["hooks", "PreToolUse"], "matcher_key": "matcher", "hooks_key": "hooks",
+    "response_template": "{{toJson .reason}}",
+    "entries": [{"matcher": "Read", "observe": true, "hook": {"type": "command"}}]
+  }
+}`), 0o644))
+
+	update, err := ApplyHarness(HarnessApplyOptions{Root: root, Host: "reader"})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+
+	body, err := os.ReadFile(filepath.Join(root, "reader/hooks.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "agent hook --host reader --observe")
+
+	result, err := VerifyHarness(root, "reader")
+	require.NoError(t, err)
+	assert.Equal(t, "verified", result.Status)
 }
 
 func TestApplyHarnessRejectsDuplicateKeys(t *testing.T) {

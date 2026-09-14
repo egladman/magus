@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -26,8 +26,18 @@
         "hooks": [
           {
             "type": "command",
-            "command": "magus agent hook --host codex",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
             "statusMessage": "magus guard: checking MCP tool call"
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex --observe; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex --observe",
+            "statusMessage": "magus: recording read"
           }
         ]
       }
