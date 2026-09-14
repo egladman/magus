@@ -86,6 +86,28 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
 }
 
+func TestCheckStatusesDoesNotTreatHandAuthoredSkillDirAsInstall(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	writeTestHarness(t, dir)
+
+	local := filepath.Join(dir, ".agents/skills", LocalSkillName)
+	require.NoError(t, os.MkdirAll(local, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(local, "SKILL.md"), []byte("---\nname: "+LocalSkillName+"\n---\nour rules\n"), 0o644))
+
+	assert.Empty(t, catalog.CheckStatuses(dir), "a descriptor path with only hand-authored skills is not an installed generated tree")
+
+	oldInstall := filepath.Join(dir, ".agents/skills", "magus-run")
+	require.NoError(t, os.MkdirAll(oldInstall, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(oldInstall, "SKILL.md"), []byte("---\nname: magus-run\n---\nold generated install\n"), 0o644))
+
+	statuses := catalog.CheckStatuses(dir)
+	require.Len(t, statuses, 1)
+	assert.Equal(t, ".agents/skills", statuses[0].Location)
+	assert.True(t, statuses[0].Stale)
+	assert.Contains(t, statuses[0].Detail, "missing "+anchorSkillRel)
+}
+
 // TestCheckStatusesIgnoresASkillMagusDidNotWrite pins the other half of the promise
 // LocalSkillName makes. A workspace is told to put its own rules in a skill beside the
 // installed ones, and that file carries no stamp, so grading it reported drift on every
