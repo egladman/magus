@@ -394,6 +394,7 @@ func tidyBlankLines(s string) string {
 // Status is the verification verdict for one installed skill location.
 type Status struct {
 	Location  string
+	Host      string
 	Installed bool
 	Stale     bool
 	Detail    string
@@ -916,14 +917,19 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 		if err != nil {
 			if os.IsNotExist(err) {
 				if _, dirErr := os.Stat(filepath.Join(dir, location.Path)); dirErr == nil {
-					out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --host " + location.Host})
+					if !c.hasMagusOwnedSkill(dir, location.Path) {
+						continue
+					}
+					out = append(out, Status{Location: location.Path, Host: location.Host, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --host " + location.Host})
 				}
 				continue
 			}
-			out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
+			out = append(out, Status{Location: location.Path, Host: location.Host, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
-		out = append(out, c.gradeDest(dir, location))
+		st := c.gradeDest(dir, location)
+		st.Host = location.Host
+		out = append(out, st)
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, AgentsFile)); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
@@ -937,6 +943,24 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
 	return out
+}
+
+// hasMagusOwnedSkill answers whether a descriptor-declared skill directory contains
+// anything this catalog should grade. A clean checkout may carry hand-authored
+// magus-* skills beside an ignored generated destination; those are not an
+// installed Magus skill tree, so a missing anchor is not stale by itself.
+func (c *Catalog) hasMagusOwnedSkill(dir, dest string) bool {
+	shipped, shippedErr := c.shipped(FormBoth)
+	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
+		if shippedErr != nil || shipped[name] {
+			return true
+		}
+		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
+		if err == nil && bytes.Contains(body, []byte(generatedSkillMarker)) {
+			return true
+		}
+	}
+	return false
 }
 
 // HarnessSkillLocation is one descriptor-declared skill tree and the one form
