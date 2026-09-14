@@ -487,7 +487,8 @@ func TestPrettyHandlerWantsColorRespectsTermDumb(t *testing.T) {
 // SGR + heading text) while the trailing cause/output/inspect lines stay
 // in the scrolling region above.
 func TestPrettyHandlerErrorWritesHeadingToStickyRegion(t *testing.T) {
-	t.Parallel()
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
 
 	var buf ttyBuf
 	h := newTerminalHandler(&buf)

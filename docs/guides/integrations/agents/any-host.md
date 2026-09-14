@@ -220,5 +220,6 @@ magus doctor
 ```
 
 The first proves magus judges at all from your shell. **guard wiring** in
-`doctor` inventories the host config locations it knows and reports when none of
-them invokes a current template.
+`doctor` loads the harness descriptors available to this workspace and reports
+each one as `verified`, `uncovered`, or `invalid`. A host without a descriptor
+is portable by design, but its copied adapter is not automatically verifiable.

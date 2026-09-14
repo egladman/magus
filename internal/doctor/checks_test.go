@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"context"
-	"fmt"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
@@ -311,108 +310,36 @@ func TestCheckGuardWiring(t *testing.T) {
 		assert.Contains(t, joined, "rebuild: magus run build .")
 	})
 
-	t.Run("canary passes, no config anywhere -> advice naming the guide", func(t *testing.T) {
+	t.Run("canary passes, no descriptor anywhere -> advice", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
 
 		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
 		require.Equal(t, types.DoctorAdvice, c.Status)
-		assert.Contains(t, c.Message, "no agent-host hook config found")
-		assert.Contains(t, strings.Join(c.Details, "\n"), "docs/guides/integrations/agents.md")
+		assert.Contains(t, c.Message, "no harness descriptor found")
+		assert.Contains(t, strings.Join(c.Details, "\n"), "harnesses/")
 	})
 
-	t.Run("canary passes, config mentions magus and hook with no template reference -> ok", func(t *testing.T) {
+	t.Run("canary passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
-
-		settingsDir := filepath.Join(root, ".claude")
-		require.NoError(t, os.MkdirAll(settingsDir, 0o755))
-		settingsPath := filepath.Join(settingsDir, "settings.json")
-		require.NoError(t, os.WriteFile(settingsPath,
-			[]byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"magus session hook -o json"}]}]}}`), 0o600))
+		writeCheckpointHarness(t, root, guardedHarnessConfig)
 
 		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
 		require.Equal(t, types.DoctorOK, c.Status)
-		assert.Contains(t, c.Details, settingsPath)
+		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
 	})
 
-	t.Run("canary passes, referenced template carries a stale marker -> fail naming path and fix", func(t *testing.T) {
+	t.Run("canary passes, descriptor exposes a missing adapter -> fail", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
-
-		tmplDir := filepath.Join(root, "docs", "guides", "integrations", "agents")
-		require.NoError(t, os.MkdirAll(tmplDir, 0o755))
-		staleVersion := agent.GuardTemplateVersion - 1
-		tmplPath := filepath.Join(tmplDir, "magus-guard-command.sh")
-		require.NoError(t, os.WriteFile(tmplPath,
-			[]byte(fmt.Sprintf("#!/usr/bin/env sh\n# %s %d\n", agent.GuardTemplateMarker, staleVersion)), 0o644))
-
-		settingsDir := filepath.Join(root, ".claude")
-		require.NoError(t, os.MkdirAll(settingsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(settingsDir, "settings.json"),
-			[]byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"sh docs/guides/integrations/agents/magus-guard-command.sh"}]}]}}`), 0o600))
+		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
 		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
 		require.Equal(t, types.DoctorFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
-		assert.Contains(t, joined, tmplPath)
-		assert.Contains(t, joined, fmt.Sprintf("template version %d", staleVersion))
-		assert.Contains(t, joined, "re-download it")
-	})
-
-	t.Run("canary passes, referenced template file is missing -> fail naming the missing path", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardCanaryStub(t, root, denyingCanaryStub)
-
-		settingsDir := filepath.Join(root, ".claude")
-		require.NoError(t, os.MkdirAll(settingsDir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(settingsDir, "settings.json"),
-			[]byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"sh docs/guides/integrations/agents/magus-guard-command.sh"}]}]}}`), 0o600))
-		// No template file written at all: the config names one that does not exist.
-
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
-		require.Equal(t, types.DoctorFail, c.Status)
-		joined := strings.Join(c.Details, "\n")
-		assert.Contains(t, joined, "magus-guard-command.sh")
-		assert.Contains(t, joined, "does not exist")
-	})
-
-	// The case measured on a real machine: an installed plugin predating the
-	// marker, still calling a subcommand magus removed, graded healthy because
-	// "no marker" was read as "nothing to compare". No marker means older than
-	// versioning, which is the copy most likely to be judging nothing at all.
-	t.Run("a template carrying no marker at all is a finding, not a pass", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardCanaryStub(t, root, denyingCanaryStub)
-
-		pluginsDir := filepath.Join(root, ".opencode", "plugins")
-		require.NoError(t, os.MkdirAll(pluginsDir, 0o755))
-		pluginPath := filepath.Join(pluginsDir, "magus-guard.ts")
-		require.NoError(t, os.WriteFile(pluginPath,
-			[]byte("// forwards to `magus agent hook`\nBun.spawn([magus, \"agent\", \"hook\", \"--\", command]);\n"), 0o644))
-
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
-		require.Equal(t, types.DoctorFail, c.Status)
-		joined := strings.Join(c.Details, "\n")
-		assert.Contains(t, joined, pluginPath)
-		assert.Contains(t, joined, "predates template versioning")
-	})
-
-	t.Run("self-contained template discovered in a plugins directory checks its own marker", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardCanaryStub(t, root, denyingCanaryStub)
-
-		pluginsDir := filepath.Join(root, ".opencode", "plugins")
-		require.NoError(t, os.MkdirAll(pluginsDir, 0o755))
-		staleVersion := agent.GuardTemplateVersion - 1
-		pluginPath := filepath.Join(pluginsDir, "guard.ts")
-		require.NoError(t, os.WriteFile(pluginPath,
-			[]byte(fmt.Sprintf("// magus session hook\n// %s %d\n", agent.GuardTemplateMarker, staleVersion)), 0o644))
-
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
-		require.Equal(t, types.DoctorFail, c.Status)
-		joined := strings.Join(c.Details, "\n")
-		assert.Contains(t, joined, pluginPath)
+		assert.Contains(t, c.Message, "harness wiring is incomplete")
+		assert.Contains(t, joined, "missing Magus adapter")
 	})
 }
 
@@ -819,9 +746,8 @@ func TestCheckSessionLoadStates(t *testing.T) {
 // nothing about whether the next clone of this repository is wired.
 func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
-	wired := filepath.Join(root, ".claude", "settings.json")
-	require.NoError(t, os.WriteFile(wired, []byte(`{"command":"magus session hook"}`), 0o644))
+	writeCheckpointHarness(t, root, guardedHarnessConfig)
+	wired := filepath.Join(root, "host", "hooks.json")
 
 	assert.Equal(t, []string{wired}, HookConfigs(root))
 

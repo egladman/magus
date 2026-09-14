@@ -397,9 +397,12 @@ func TestDiffUsageNamesEveryBoundFlag(t *testing.T) {
 func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 	var buf bytes.Buffer
 	agentUsage(&buf)
-	want := "Usage: magus agent <install|starter|adoption> [flags] Subcommands: " +
+	want := "Usage: magus agent <install|hook|harness|improve|starter|adoption> [flags] Subcommands: " +
 		"install render the embedded skills and write or stream them into named destinations " +
-		"(.claude/skills, .agents/skills, .opencode/skills, ...) " +
+		"(<skills-dir>, ...) " +
+		"hook translate a descriptor-defined guard event without a copied shell wrapper " +
+		"harness apply or verify a user-owned harness descriptor in this workspace " +
+		"improve review recurring guard feedback; --apply updates a named workspace-local harness " +
 		"starter print a starter AGENTS.md to stdout to own and tweak; never writes a file " +
 		"adoption report how often agents used the graph versus grep, over shell commands piped in (stdin or --commands) " +
 		"magus never writes your AGENTS.md. That file is yours, and an installer that edits a file you own " +
@@ -407,8 +410,7 @@ func TestAgentUsageKeepsItsWordsWhenFolded(t *testing.T) {
 		"to paste, and only when your AGENTS.md is missing it or carrying a stale one. " +
 		"Stdout philosophy: `magus agent` is a pure data generator. To install skills anywhere your shell " +
 		"can reach, use --tar and pipe to tar: " +
-		"magus agent install --tar | tar -xf - -C .claude/skills " +
-		"magus agent install --tar | tar -xf - -C ~/.config/opencode/skills " +
+		"magus agent install --tar | tar -xf - -C <skills-dir> " +
 		"The write-to-disk form is only for the in-repo, paths-relative-to-<dir> case, where it preserves " +
 		"the previous one-line ergonomics. Absolute destinations are refused unless --global is set, to keep " +
 		"magus from silently writing outside the working tree. " +

@@ -414,21 +414,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 .console-dashboard-agents__seat {
   aspect-ratio: 1; border-radius: 2px;
-  border: 1px solid var(--console-stone);
+  border: 1px solid var(--agent-host-accent, var(--console-stone));
   background: transparent;
 }
-.console-dashboard-agents__seat[data-warm="yes"] { background: var(--console-stone); }
-/* Per-host hues from the console's earthy accent set, not the status palette: a host is an
-   identity, not a severity, and reusing the status colors here would make "codex" read as an
-   error. */
-.console-dashboard-agents__seat[data-host="claude-code"] { border-color: var(--console-clay); }
-.console-dashboard-agents__seat[data-host="claude-code"][data-warm="yes"] { background: var(--console-clay); }
-.console-dashboard-agents__seat[data-host="codex"] { border-color: var(--console-spruce); }
-.console-dashboard-agents__seat[data-host="codex"][data-warm="yes"] { background: var(--console-spruce); }
-.console-dashboard-agents__seat[data-host="cursor"] { border-color: var(--console-indigo); }
-.console-dashboard-agents__seat[data-host="cursor"][data-warm="yes"] { background: var(--console-indigo); }
-.console-dashboard-agents__seat[data-host="opencode"] { border-color: var(--console-moss); }
-.console-dashboard-agents__seat[data-host="opencode"][data-warm="yes"] { background: var(--console-moss); }
+.console-dashboard-agents__seat[data-warm="yes"] {
+  background: var(--agent-host-accent, var(--console-stone));
+}
+/* The renderer gives each host a deterministic accent from its id. A host is an identity, not a
+   severity, so these intentionally do not reuse the status colors or know individual providers. */
 
 /* The seat key: which hue is which agent.
  *
@@ -443,12 +436,8 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-agents__keyitem::before {
   content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px;
   margin-right: 0.3em; vertical-align: middle;
-  background: var(--console-stone);
+  background: var(--agent-host-accent, var(--console-stone));
 }
-.console-dashboard-agents__keyitem[data-host="claude-code"]::before { background: var(--console-clay); }
-.console-dashboard-agents__keyitem[data-host="codex"]::before { background: var(--console-spruce); }
-.console-dashboard-agents__keyitem[data-host="cursor"]::before { background: var(--console-indigo); }
-.console-dashboard-agents__keyitem[data-host="opencode"]::before { background: var(--console-moss); }
 [data-bigpicture] .console-dashboard-agents__key { font-size: calc(var(--bp-u) * 1); }
 
 /* The recent-calls list under the per-host totals: what agents actually did, not just how much.

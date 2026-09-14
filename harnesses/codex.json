@@ -1,0 +1,74 @@
+{
+  "schema_version": 2,
+  "id": "codex",
+  "display": {
+    "name": "Codex"
+  },
+  "config": {
+    "path": ".codex/hooks.json"
+  },
+  "skills": {"paths": [".agents/skills"], "form": "both"},
+  "pre_tool_use": {
+    "path": [
+      "hooks",
+      "PreToolUse"
+    ],
+    "matcher_key": "matcher",
+    "hooks_key": "hooks",
+    "response_template": "{{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}",
+    "entries": [
+      {
+        "matcher": "Bash",
+        "hook": {
+          "type": "command",
+          "statusMessage": "magus guard: checking command"
+        }
+      },
+      {
+        "matcher": "Edit|Write",
+        "hook": {
+          "type": "command",
+          "statusMessage": "magus guard: checking file"
+        }
+      },
+      {
+        "matcher": "mcp__.*",
+        "hook": {
+          "type": "command",
+          "statusMessage": "magus guard: checking MCP tool call"
+        }
+      }
+    ]
+  },
+  "managed_entries": [
+    {
+      "path": ["hooks", "SessionStart"],
+      "entries": [
+        {
+          "matcher": "compact",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-rehydrate.sh\"",
+              "statusMessage": "magus: restating this checkout's rules"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "Stop"],
+      "entries": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+              "statusMessage": "magus: recording where the work stands"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

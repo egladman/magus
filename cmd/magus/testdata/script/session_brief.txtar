@@ -12,7 +12,7 @@ stdout 'magus brief: read from this checkout just now'
 stdout 'tree: '
 # The checkout carries a hook config and an instruction file, so both trailers are
 # the positive arm rather than the "none here" one.
-stdout 'guard wiring: \.claude/settings\.json'
+stdout 'guard wiring: host/hooks\.json'
 stdout 'rules live in AGENTS\.md'
 stdout 're-read them'
 
@@ -36,14 +36,7 @@ magus.project({"sources": ["*.md"]});
 # rules
 
 The workspace's own instructions live here.
--- .claude/settings.json --
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "magus session hook", "timeout": 10 }]
-      }
-    ]
-  }
-}
+-- harnesses/brief-host.json --
+{"schema_version":2,"id":"brief-host","display":{"name":"Brief Host"},"config":{"path":"host/hooks.json"},"skills":{"paths":[".agents/skills"],"form":"both"},"pre_tool_use":{"path":["hooks","before"],"matcher_key":"match","hooks_key":"commands","response_template":"{{toJson .}}","entries":[{"matcher":"run","hook":{"type":"command"}}]}}
+-- host/hooks.json --
+{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host brief-host"}]}]}}

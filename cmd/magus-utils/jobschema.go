@@ -49,7 +49,7 @@ var jobRecords = []jobRecord{
 // jobSources are the files the records and every type they reach are declared in.
 var jobSources = []string{
 	"internal/job/verify.go",
-	"types/job.go", "types/jobresult.go",
+	"types/job.go",
 }
 
 const (

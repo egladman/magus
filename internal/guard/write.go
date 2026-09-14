@@ -11,7 +11,6 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
@@ -606,22 +605,16 @@ func adviseMemoryWrite(path string) string {
 // Unreachable in magus's own tree, which is worth knowing before hunting a bug:
 // this repo declares its installed skills as outputs, so adviseGeneratedWrite
 // claims the path first and can name the producing target.
-func adviseInstalledSkillWrite(path string) string {
-	clean := filepath.ToSlash(strings.TrimSpace(path))
+func adviseInstalledSkillWrite(filePath string) string {
+	clean := filepath.ToSlash(strings.TrimSpace(filePath))
 	if filepath.Base(clean) != "SKILL.md" {
 		return ""
 	}
-	installed := false
-	for _, dir := range agent.WellKnownSkillDirs() {
-		if strings.Contains(clean, dir+"/") {
-			installed = true
-			break
-		}
-	}
-	if !installed {
+	parent := path.Dir(clean)
+	if path.Base(path.Dir(parent)) != "skills" || path.Base(parent) == "." {
 		return ""
 	}
-	body, err := os.ReadFile(path)
+	body, err := os.ReadFile(filePath)
 	if err != nil || !strings.Contains(string(body), "source: magus") {
 		return ""
 	}

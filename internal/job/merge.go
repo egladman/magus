@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -58,6 +59,11 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 	list("read_paths", func(u *types.Job, v []string) { u.ReadPaths = v })
 	list("depends_on", func(u *types.Job, v []string) { u.DependsOn = v })
 	str("model", func(u *types.Job, v string) { u.Model = strings.TrimSpace(v) })
+	if gates, ok, e := mergeCompletionGates(params, "completion_gates"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		set = append(set, func(u *types.Job) { u.CompletionGates = gates })
+	}
 
 	// check and validation are two spellings of one field, and the row stores both halves,
 	// so a put naming each of them is a caller that does not know which one it meant.
@@ -124,7 +130,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "goal", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "model", "check", "validation", "state", "read_only",
+	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only",
 }
 
 // renamedFields pairs each lane's pre-rename JSON key with the one it answers to now.
@@ -204,4 +210,26 @@ func mergeList(params map[string]any, key string) ([]string, bool, error) {
 		return out, true, nil
 	}
 	return nil, false, badType
+}
+
+// mergeCompletionGates accepts the natural JSON/Buzz object array and validates it
+// through the same typed declaration boundary stdin uses. Authorization then treats
+// the collection as a declared plan field, so a bound holder cannot rewrite it.
+func mergeCompletionGates(params map[string]any, key string) ([]types.CompletionGate, bool, error) {
+	v, present := params[key]
+	if !present {
+		return nil, false, nil
+	}
+	body, err := json.Marshal(v)
+	if err != nil {
+		return nil, false, fmt.Errorf("job: %s must be an array of completion gates: %w", key, err)
+	}
+	var gates []types.CompletionGate
+	if err := json.Unmarshal(body, &gates); err != nil {
+		return nil, false, fmt.Errorf("job: %s must be an array of completion gates: %w", key, err)
+	}
+	if err := (types.Declaration{ID: "merge", CompletionGates: gates}).Validate(); err != nil {
+		return nil, false, err
+	}
+	return gates, true, nil
 }

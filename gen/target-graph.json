@@ -2083,6 +2083,12 @@
             },
             {
               "glob": "concepts/review.md"
+            },
+            {
+              "glob": "reference/config *.md"
+            },
+            {
+              "glob": "changelog *.md"
             }
           ]
         },
@@ -2251,6 +2257,12 @@
             },
             {
               "glob": "concepts/review.md"
+            },
+            {
+              "glob": "reference/config *.md"
+            },
+            {
+              "glob": "changelog *.md"
             }
           ]
         },
@@ -2592,6 +2604,20 @@
           "reads_secrets": false
         },
         {
+          "name": "host-integration",
+          "declared": "host_integration",
+          "doc": "host-integration is deliberately NOT a dependency of ci.",
+          "dependencies": [
+            "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
           "name": "ci",
           "doc": "'ci' is the anchor `magus affected ci` keys off.",
           "dependencies": [
@@ -2617,15 +2643,37 @@
         {
           "name": "format",
           "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates.",
+          "dependencies": [
+            "preflight"
+          ],
           "spells": [
             {
               "spell": "markdown",
               "ops": [
                 "dprint"
               ]
+            },
+            {
+              "spell": "typescript",
+              "ops": [
+                "biome-format"
+              ]
             }
           ],
-          "reads_secrets": false
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "*.md"
+            },
+            {
+              "glob": "*.ts"
+            }
+          ]
         }
       ]
     },

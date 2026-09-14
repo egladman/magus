@@ -21,9 +21,9 @@ import (
 // remember to open.
 var jobFieldNames = []string{
 	"schema_version", "id", "parent", "goal", "checkpoint", "write_paths", "deny_paths",
-	"read_paths", "depends_on", "model", "check", "validation", "state", "holder",
+	"read_paths", "depends_on", "model", "check", "validation", "completion_gates", "state", "holder",
 	"read_only", "releases", "unattributed", "reported_base", "base_verdict",
-	"registered_by", "registered", "created", "updated", "result", "attempt", "last_run",
+	"registered_by", "registered", "created", "updated", "result", "attempt", "gate_attempts", "last_run",
 }
 
 // TestJobSchemaVersionCoversEveryField pins Job's field set against jobFieldNames, read
@@ -215,36 +215,45 @@ func TestJobCloneCopiesEverySliceField(t *testing.T) {
 	t.Parallel()
 
 	orig := Job{
-		ID:           "a",
-		WritePaths:   append(make([]string, 0, 4), "types/"),
-		DenyPaths:    append(make([]string, 0, 4), "gen/"),
-		DependsOn:    append(make([]string, 0, 4), "b"),
-		Releases:     append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
-		Unattributed: append(make([]JobUnattributedWrite, 0, 4), JobUnattributedWrite{Path: "types/y.go"}),
+		ID:              "a",
+		WritePaths:      append(make([]string, 0, 4), "types/"),
+		DenyPaths:       append(make([]string, 0, 4), "gen/"),
+		DependsOn:       append(make([]string, 0, 4), "b"),
+		CompletionGates: append(make([]CompletionGate, 0, 4), CompletionGate{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"check"}}),
+		GateAttempts:    append(make([]JobGateAttempt, 0, 4), JobGateAttempt{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}),
+		Releases:        append(make([]JobRelease, 0, 4), JobRelease{Path: "types/x.go"}),
+		Unattributed:    append(make([]JobUnattributedWrite, 0, 4), JobUnattributedWrite{Path: "types/y.go"}),
 	}
 
 	first, second := orig.Clone(), orig.Clone()
 	first.WritePaths = append(first.WritePaths, "first/")
 	first.DenyPaths = append(first.DenyPaths, "first/")
 	first.DependsOn = append(first.DependsOn, "first")
+	first.CompletionGates[0].DependsOn = append(first.CompletionGates[0].DependsOn, "first")
+	first.GateAttempts = append(first.GateAttempts, JobGateAttempt{GateID: "first"})
 	first.Releases = append(first.Releases, JobRelease{Path: "first/z.go"})
 	first.Unattributed = append(first.Unattributed, JobUnattributedWrite{Path: "first/z.go"})
 
 	second.WritePaths = append(second.WritePaths, "second/")
 	second.DenyPaths = append(second.DenyPaths, "second/")
 	second.DependsOn = append(second.DependsOn, "second")
+	second.CompletionGates[0].DependsOn = append(second.CompletionGates[0].DependsOn, "second")
+	second.GateAttempts = append(second.GateAttempts, JobGateAttempt{GateID: "second"})
 	second.Releases = append(second.Releases, JobRelease{Path: "second/z.go"})
 	second.Unattributed = append(second.Unattributed, JobUnattributedWrite{Path: "second/z.go"})
 
 	assert.Equal(t, []string{"types/", "first/"}, first.WritePaths)
 	assert.Equal(t, []string{"gen/", "first/"}, first.DenyPaths)
 	assert.Equal(t, []string{"b", "first"}, first.DependsOn)
+	assert.Equal(t, []string{"check", "first"}, first.CompletionGates[0].DependsOn)
+	assert.Equal(t, []JobGateAttempt{{GateID: "unit", Attempt: JobAttempt{Ref: "out1"}}, {GateID: "first"}}, first.GateAttempts)
 	assert.Equal(t, []JobRelease{{Path: "types/x.go"}, {Path: "first/z.go"}}, first.Releases)
 	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}, {Path: "first/z.go"}}, first.Unattributed)
 
 	// The original is the store's row and nobody appended through it, so it must still
 	// hold exactly what it held.
 	assert.Equal(t, []string{"types/"}, orig.WritePaths)
+	assert.Equal(t, []string{"check"}, orig.CompletionGates[0].DependsOn)
 	assert.Equal(t, []JobUnattributedWrite{{Path: "types/y.go"}}, orig.Unattributed)
 }
 
@@ -256,6 +265,22 @@ func TestJobCloneKeepsNilSlicesNil(t *testing.T) {
 	c := Job{ID: "a"}.Clone()
 	assert.Nil(t, c.Unattributed)
 	assert.Nil(t, c.Releases)
+	assert.Nil(t, c.CompletionGates)
+	assert.Nil(t, c.GateAttempts)
+}
+
+func TestDeclarationRejectsCyclicCompletionGates(t *testing.T) {
+	t.Parallel()
+
+	err := (Declaration{
+		ID: "gated",
+		CompletionGates: []CompletionGate{
+			{ID: "unit", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"publish"}},
+			{ID: "publish", Check: LeaseCheck{Target: "test", Project: "."}, DependsOn: []string{"unit"}},
+		},
+	}).Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "dependencies contain a cycle")
 }
 
 // The parse is what makes a check comparable with a stored run, so the shapes it refuses

@@ -3,10 +3,12 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -25,12 +27,13 @@ import (
 // internal/job.authorizeRow.
 //
 // The op set is list | fork | exec | exit | wait, mirroring the CLI verbs
-// (hint.LsJobs, hint.JobFork, hint.JobExec, hint.JobExit, hint.JobWait). Only list, fork
-// (the old put, including the update path a state change takes) and exec (the old
-// register, which already called store.Exec) are wired here: exit and wait are full CLI
-// behaviors (cmd/magus/job.go's jobExit/jobWait) with no equivalent Store method to call
-// yet, and wiring them would be new handler logic rather than an op rename.
-type jobTool struct{ store *job.Store }
+// (hint.LsJobs, hint.JobFork, hint.JobExec, hint.JobExit, hint.JobWait). Lifecycle
+// operations delegate to internal/job, the single capability boundary shared with the
+// CLI and Buzz; this adapter only decodes MCP's JSON-shaped result map.
+type jobTool struct {
+	store   *job.Store
+	resolve job.AttemptResolver
+}
 
 func (t *jobTool) Name() string { return hint.ToolJob.String() }
 
@@ -80,6 +83,28 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		}
 		return spells.InvokeResponse{Text: job.BaseAdvice(stored), Data: stored}, nil
 
+	case "exit":
+		result, err := jobResultParam(req.Params)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
+		stored, err := job.Exit(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
+		return spells.InvokeResponse{Data: stored}, nil
+
+	case "wait":
+		result, err := jobResultParam(req.Params)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
+		status, err := job.Wait(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), result, t.resolve)
+		if err != nil {
+			return spells.InvokeResponse{}, err
+		}
+		return spells.InvokeResponse{Data: status}, nil
+
 	case "clear":
 		// Report what was dropped. Clearing is how a fresh plan starts, and it is also
 		// how one orchestrator silently erases another's plan; a count is the cheapest
@@ -91,8 +116,30 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		return spells.InvokeResponse{Data: map[string]any{"cleared": dropped}}, nil
 
 	default:
-		return spells.InvokeResponse{}, errors.New("mcp: job op must be one of list, fork, exec, clear")
+		return spells.InvokeResponse{}, errors.New("mcp: job op must be one of list, fork, exec, exit, wait, clear")
 	}
+}
+
+// jobResultParam preserves the strict, versioned JSON contract used by the CLI and
+// Buzz. MCP maps are transport values, not a second result schema.
+func jobResultParam(params map[string]any) (*types.JobResult, error) {
+	v, present := params["result"]
+	if !present || v == nil {
+		return nil, errors.New("mcp: job result is required")
+	}
+	result, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("mcp: job result must be an object")
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return nil, fmt.Errorf("mcp: encode job result: %w", err)
+	}
+	decoded, err := job.DecodeResult(strings.NewReader(string(raw)))
+	if err != nil {
+		return nil, err
+	}
+	return &decoded, nil
 }
 
 var _ spells.Driver = (*jobTool)(nil)

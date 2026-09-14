@@ -3,26 +3,23 @@
   "$id": "https://magus.invalid/job/result.schema.json",
   "$comment": "Generated from JobResult by `magus-utils jobschema`. DO NOT EDIT; run `magus run job-generate .`.",
   "title": "magus job result",
-  "description": "JobResult is what a holder returns when its job is done: changed paths, the evidence for the check it was given, the jobs it forked, and the risks it could not settle.",
+  "description": "JobResult is the result a holder files for a job.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "changed_paths", "validation", "unresolved_risks"],
+  "required": ["schema_version", "changed_paths", "unresolved_risks"],
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 1,
-      "description": "SchemaVersion is the shape this result was written in, and it is REQUIRED: the decoder rejects a version it does not know by name, so a holder whose harness is a release ahead reads \"this magus accepts version 1\" instead of watching a field it was told to send be rejected as unknown."
+      "const": 2
     },
     "job": {
-      "type": "string",
-      "description": "Job is the id the holder believes it is filing under. Optional, and checked against the stored job when present: a result filed under the wrong id happens when several holders share a prompt template, and it reads as success because every other field is plausible."
+      "type": "string"
     },
     "changed_paths": {
       "type": "array",
       "items": {
         "type": "string"
-      },
-      "description": "ChangedPaths are the workspace-relative paths this holder wrote, as it reports them. Never proof: the integration pass compares the store against the ACTUAL diff since the checkpoint. This is the CLAIM, and checking it against the declared lanes is what catches the holder that widened its own scope."
+      }
     },
     "validation": {
       "type": "object",
@@ -30,29 +27,40 @@
       "required": ["command", "output_ref"],
       "properties": {
         "command": {
-          "type": "string",
-          "description": "Command is the check as the holder ran it, rendered beside the status for a person. The job's own check is what the evidence is bound to, so a command here that disagrees with the ref is a discrepancy a reader sees rather than a rule."
+          "type": "string"
         },
         "output_ref": {
-          "type": "string",
-          "description": "OutputRef is the reference id magus stored that run's captured output under."
+          "type": "string"
         }
-      },
-      "description": "Validation is the one check the job was given, and how it ended."
+      }
+    },
+    "gate_evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["gate_id", "output_ref"],
+        "properties": {
+          "gate_id": {
+            "type": "string"
+          },
+          "output_ref": {
+            "type": "string"
+          }
+        }
+      }
     },
     "descendants": {
       "type": "array",
       "items": {
         "type": "string"
-      },
-      "description": "Descendants are the jobs this holder forked. One the store does not carry is a branch of the plan nobody is tracking, which job.Verify reports."
+      }
     },
     "unresolved_risks": {
       "type": "array",
       "items": {
         "type": "string"
-      },
-      "description": "UnresolvedRisks is what the holder could not settle. Never omitempty: an absent list and an empty one are the same JSON once the key can vanish, so a holder that never considered the question would be indistinguishable from one that found nothing."
+      }
     }
   }
 }

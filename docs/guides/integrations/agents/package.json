@@ -7,7 +7,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "biome": "biome check .",
-    "test": "node --test *.test.ts"
+    "test": "node --test *.test.ts",
+    "e2e": "node host-e2e.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",

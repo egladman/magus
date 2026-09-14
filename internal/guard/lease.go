@@ -246,7 +246,7 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 	if !ok || LeaseOwnsGate(me) {
 		return ""
 	}
-	if me.Validation == "" && me.Check == nil {
+	if me.Validation == "" && me.Check == nil && len(me.CompletionGates) == 0 {
 		return fmt.Sprintf(
 			"magus workspace: lease %s declares no check, so the `%s` gate is not yours to run. The orchestrator gates once, in its own tree, after every unit lands.\n"+
 				"Run the narrowest target covering your paths and report what it said. "+leaseActorClause("record a check on this row"),
@@ -634,6 +634,12 @@ func LeaseOwnsGate(row types.Job) bool {
 	if row.Check != nil {
 		t, err := types.ParseTarget(row.Check.Target)
 		return err == nil && t.Name == types.TargetCI
+	}
+	for _, gate := range row.CompletionGates {
+		t, err := types.ParseTarget(gate.Check.Target)
+		if err == nil && t.Name == types.TargetCI {
+			return true
+		}
 	}
 	return validationNamesGate(row.Validation)
 }

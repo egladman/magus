@@ -606,7 +606,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	}
 
 	if !stdin {
-		stored, aerr := store.Update(ctx, pos[0], func(u *types.Job) { u.State = types.StateNoReturn })
+		stored, aerr := job.Exit(ctx, store, pos[0], nil, nil)
 		if aerr != nil {
 			return usagef("magus job exit: %s", aerr)
 		}
@@ -618,24 +618,11 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return usagef("magus job exit: %s (`%s` prints the schema it must satisfy)", err, hint.JobExit.With("--schema"))
 	}
-	// The run is resolved in the holder's own checkout, which is the only place it exists:
-	// an output store belongs to a cache dir, so a parent waiting from another worktree
-	// asked its own store for a ref it never held and read every honest result as evidence
-	// from nowhere. Filing the store's record beside the result is what makes the evidence
-	// travel with it.
-	att, err := storedAttempt(ctx, flagRoot, result.Validation.OutputRef)
-	if err != nil {
-		return usagef("magus job exit: %s", err)
-	}
-	if !att.Found {
-		return usagef("magus job exit: the result's output ref %q names no run this checkout recorded, so there is nothing behind it."+
-			" Run the job's check here, then file the ref that run prints; a result nobody can reopen is an assertion",
-			result.Validation.OutputRef)
-	}
-
-	stored, err := store.Update(ctx, pos[0], func(u *types.Job) {
-		u.Result, u.Attempt = &result, &att
-		u.State = types.StateExited
+	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
+	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
+	// the historical primary check.
+	stored, err := job.Exit(ctx, store, pos[0], &result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
+		return storedAttempt(ctx, flagRoot, ref)
 	})
 	if err != nil {
 		return usagef("magus job exit: %s", err)
@@ -684,8 +671,9 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Verify the result a job was exited with, against the job it was handed: every")
 			fmt.Fprintln(os.Stderr, "changed path inside its write paths and outside its denied ones, a change set")
-			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and a run recording a PASSING")
-			fmt.Fprintln(os.Stderr, "execution of this job's own check. A job that verifies is recorded "+string(types.StatePass)+".")
+			fmt.Fprintln(os.Stderr, "that is not empty, descendants the store carries, and PASSING output for every")
+			fmt.Fprintln(os.Stderr, "completion gate. Evidence must be newer than this job's declaration; each target")
+			fmt.Fprintln(os.Stderr, "keeps its own execution timeout. A job that verifies is recorded "+string(types.StatePass)+".")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Exit 1 is a status: the result was read and rejected, and every rule that failed")
 			fmt.Fprintln(os.Stderr, "is named. Exit 2 is magus unable to answer: nothing was filed and nothing was")
@@ -720,32 +708,18 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
 
-	jobs, err := store.List()
-	if err != nil {
-		return err
-	}
-	i := slices.IndexFunc(jobs, func(one types.Job) bool { return one.ID == pos[0] })
-	if i < 0 {
-		return fmt.Errorf("magus job wait: there is no job %q (run `%s` to see them)", pos[0], hint.LsJobs)
-	}
-
-	result, att, err := resultToVerify(ctx, flagRoot, jobs[i], stdin)
-	if err != nil {
-		// Exit 2: magus could not answer, and that is not a status about the work. 1 is
-		// reserved for a result that was read and rejected.
-		return usagef("magus job wait: %s", err)
-	}
-
-	// Verified and recorded under ONE lock: the job a two-step read-then-write verified is
-	// not the job it stamps, so a release or a clear landing in between verifies lanes that
-	// are gone. Only the state moves, so a rejection leaves every declared field alone.
-	var status job.Status
-	if _, err := store.Update(ctx, pos[0], func(u *types.Job) {
-		status = job.Verify(*u, result, att, jobs)
-		if status.Verified {
-			u.State = types.StatePass
+	var result *types.JobResult
+	if stdin {
+		decoded, derr := job.DecodeResult(os.Stdin)
+		if derr != nil {
+			return usagef("magus job wait: %s (`%s` prints the schema it must satisfy)", derr, hint.JobWait.With("--schema"))
 		}
-	}); err != nil {
+		result = &decoded
+	}
+	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
+		return storedAttempt(ctx, flagRoot, ref)
+	})
+	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
 
@@ -767,34 +741,6 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	return errSilent{exitCode: 1}
 }
 
-// resultToVerify is the result wait reads and the run record behind it: what exit filed on
-// the job, or what a caller pipes in for a job that was never exited.
-//
-// The FILED pair is preferred and its attempt is taken as filed, because the holder
-// resolved it in the checkout that ran it. A piped result is resolved against this
-// checkout's own store, which is right for the local case and is exactly what cannot work
-// across two worktrees.
-func resultToVerify(ctx context.Context, root string, one types.Job, stdin bool) (types.JobResult, types.JobAttempt, error) {
-	if stdin {
-		result, err := job.DecodeResult(os.Stdin)
-		if err != nil {
-			return types.JobResult{}, types.JobAttempt{}, fmt.Errorf("%w (`%s` prints the schema it must satisfy)", err, hint.JobWait.With("--schema"))
-		}
-		att, err := storedAttempt(ctx, root, result.Validation.OutputRef)
-		return result, att, err
-	}
-	if one.Result == nil {
-		return types.JobResult{}, types.JobAttempt{}, fmt.Errorf("job %s has filed no result: it is %s, and nothing was piped in."+
-			" Its holder files one with `%s`, or pass --stdin with a result this job never filed",
-			one.ID, orDash(string(one.State)), hint.JobExit.With(one.ID+" --stdin < result.json"))
-	}
-	var att types.JobAttempt
-	if one.Attempt != nil {
-		att = *one.Attempt
-	}
-	return *one.Result, att, nil
-}
-
 // storedAttempt is what the output store recorded about the run behind ref: which command
 // produced it, and whether it failed. An empty ref, and one that aged out of the cache,
 // both report MISSING rather than an error: nobody can reopen either, and that is the fact
@@ -813,7 +759,7 @@ func storedAttempt(ctx context.Context, root, ref string) (types.JobAttempt, err
 	switch d, err := m.OutputDescriptorByRef(ref); {
 	case err == nil:
 		return types.JobAttempt{
-			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed,
+			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
 		}, nil
 	case errors.Is(err, fs.ErrNotExist):
 		return types.JobAttempt{}, nil
@@ -833,6 +779,17 @@ func printJobStatus(out io.Writer, s job.Status) {
 	}
 	if s.Command != "" {
 		fmt.Fprintf(out, "its holder reports it ran %s\n", s.Command)
+	}
+	for _, gate := range s.Gates {
+		state := "rejected"
+		if gate.Verified {
+			state = "verified"
+		}
+		fmt.Fprintf(out, "completion gate %s: %s", gate.ID, state)
+		if gate.OutputRef != "" {
+			fmt.Fprintf(out, " (%s)", gate.OutputRef)
+		}
+		fmt.Fprintln(out)
 	}
 	if len(s.Risks) > 0 {
 		fmt.Fprintln(out, "unresolved risks its holder reported")

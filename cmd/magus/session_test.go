@@ -236,7 +236,7 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 }
 
 // loadStream writes lines to a file and loads them, returning what the command
-// printed. --file rather than stdin because the flag is the path a recipe uses and
+// printed. --file rather than stdin because the flag is the path an adapter uses and
 // swapping os.Stdin would test the plumbing rather than the load.
 func loadStream(t *testing.T, root string, lines ...string) (string, error) {
 	t.Helper()
@@ -277,7 +277,7 @@ func loadedEvent(t *testing.T, root, session string, i int) sessions.AgentEvent 
 	return events[i]
 }
 
-// TestSessionLoadIsIdempotent is the property every recipe is built on: a recipe
+// TestSessionLoadIsIdempotent is the property every adapter is built on: an adapter
 // re-reads whole transcript files rather than tracking where it stopped, so the
 // second pass over the same file has to be free.
 func TestSessionLoadIsIdempotent(t *testing.T) {
@@ -368,7 +368,7 @@ func TestSessionLoadRejudgesADeniedCommand(t *testing.T) {
 }
 
 // A rejected line names what is wrong with it and does not take the rest of the
-// stream down: a recipe emitting one bad shape emits it for a whole transcript.
+// stream down: an adapter emitting one bad shape emits it for a whole transcript.
 func TestSessionLoadRejectsAnUnknownKind(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	global = globalFlags{}

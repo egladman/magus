@@ -1387,10 +1387,10 @@ what actually ran, including commands no hook was wired for, the skills a
 session loaded, and what the hook printed back. Joining the two is what makes
 "was this session guarded, and did it comply" answerable at all.
 
-Extraction is NOT magus's job. A per-host recipe you own turns a transcript
+Extraction is not magus's job. A per-host adapter you own turns a transcript
 into this stream, the same division ` + "`magus agent adoption`" + ` draws: magus takes
-a corpus in its own vocabulary rather than learning to read a host's logs, so
-a host changing its format costs you one recipe edit instead of a magus
+a stream in its own vocabulary rather than learning to read a host's logs, so
+a host changing its format costs you one adapter edit instead of a magus
 release.
 
 The stream is one JSON object per line, on stdin or from --file. Every line
@@ -1399,8 +1399,8 @@ file.write, skill.load, hook.output, spawn, or magus.call, and any other kind
 is rejected with a diagnostic naming the set. cwd, ts, text, transcript and
 outcome are optional.
 
-Events are keyed on (host, session, kind, ref), so re-running a recipe over the same
-transcript loads nothing twice: a recipe re-reads whole files instead of
+Events are keyed on (host, session, kind, ref), so re-running an adapter over the same
+transcript loads nothing twice: an adapter re-reads whole files instead of
 tracking where it stopped. Events whose cwd belongs to another repository are
 dropped, and worktrees of this one are kept. A checkout that no longer exists
 identifies as its own path, so events from a worktree since deleted drop too.
@@ -1607,7 +1607,7 @@ none. This is the only command that opens one.`,
 		{"Show today's work", "magus session --since 24h"},
 		{"Hand a compacted session this checkout's state", "magus session --brief"},
 		{"Full session records as JSON", "magus session -o json"},
-		{"Load a host transcript a recipe normalized", "magus session load --file events.ndjson"},
+		{"Load a host transcript an adapter normalized", "magus session load --file events.ndjson"},
 		{"Read one loaded session back", "magus session show 8f1c2d4e"},
 		{"List open attention requests", "magus session attention"},
 		{"Ask whether anyone is waiting", "magus session attention -q"},
@@ -1622,7 +1622,7 @@ none. This is the only command that opens one.`,
 	// that advise passes and that 2 is overloaded.
 	ExitStatus: []ExitCode{
 		{0, "Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
-		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error). load: at least one line was rejected; the lines that were usable are still loaded, and the summary is still printed, so fixing the recipe and re-running costs nothing. show: the session named has no loaded events."},
+		{1, "dispose: the request named is not in the store, or was already disposed; a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or watch loop can branch on status instead of parsing the listing. notify: stdin could not be read. Text that is not a complete event envelope becomes the event's message rather than an error. load: at least one line was rejected; usable lines are still loaded and the summary is printed, so fix the adapter and run it again. show: the session named has no loaded events."},
 		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
 	},
 }
@@ -1732,12 +1732,14 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and a recorded run of that job's own check that passed. There is no
-field for whether the holder thinks it passed. A job that verifies is recorded
-pass. Exit 1 is a status, naming every rule that failed; exit 2 is magus unable to
-answer, which is a result that would not decode, nothing filed and nothing piped
-in, or a job that would not write. Whether the work is GOOD stays the reading of
-whoever forked it.
+store carries, and a recorded run of every declared completion gate that passed.
+Evidence must have been captured after the job was declared, so an old green run
+cannot satisfy new work. A target's own run policy bounds its execution; wait does
+not add a competing wall-clock timeout. There is no field for whether the holder
+thinks it passed. A job that verifies is recorded pass. Exit 1 is a status, naming
+every rule that failed; exit 2 is magus unable to answer, which is a result that
+would not decode, nothing filed and nothing piped in, or a job that would not
+write. Whether the work is GOOD stays the reading of whoever forked it.
 
 run submits one of the daemon's own jobs, the housekeeping magus does for itself,
 and returns. It is a no-op when no persistent daemon is running, so a VCS hook can
@@ -2042,12 +2044,11 @@ Server Protocol over stdio for an editor integration.`,
 
 var agentCommand = Command{
 	Name:        "agent",
-	Short:       "Install the knowledge-graph agent skills into a repository",
-	Description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own.",
-	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install"},
+	Short:       "Manage skills, harnesses, and agent feedback",
+	Description: "Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.",
+	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install", "harness", "hook", "improve"},
 	Long: `Render the agent skills embedded in this binary and write or stream them
-into named destinations (.claude/skills, .agents/skills, .opencode/skills,
-and so on).
+into named destinations (<skills-dir>).
 
 magus never writes your AGENTS.md. That file is yours, and an installer that
 edits a file you own leaves bytes you did not write and cannot audit. So
@@ -2055,13 +2056,17 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
+hook translates a descriptor-defined host event into the response format its host expects.
+harness applies or verifies a user-owned descriptor. improve reviews recurring
+guard feedback and can explicitly update descriptor-managed entries.
+
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-<dir> case. Absolute destinations are refused unless
 --global is set, so magus cannot silently write outside the working tree.
 
-adoption reads a corpus of shell commands, one per line, from stdin or from
+adoption reads shell commands, one per line, from stdin or from
 --commands <file>, and reports how often the graph was reached versus a raw
 text search. -o json emits the report as one object keyed total, graph_verbs,
 text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
@@ -2071,12 +2076,25 @@ shape: magus query for a diagnostic code or a Buzz op, which magus refs
 (compiled-language symbols only) would miss, and magus refs otherwise. The
 text report prints the same command after each pattern, and run is empty for
 a pattern no graph verb fits.`,
-	Usage: "magus agent <install|starter|adoption> [flags]",
+	Usage: "magus agent <install|hook|harness|improve|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
+		{Name: "hook", Short: "Translate a descriptor-defined guard event into a host response", Flags: []Flag{
+			{Name: "host", Kind: FlagString, Doc: "Harness descriptor receiving the guard response"},
+		}},
+		{Name: "harness", Short: "Apply or verify a user-owned harness descriptor", Children: []Command{
+			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "host", Kind: FlagString, Doc: "Harness descriptor ID"}}},
+			{Name: "verify", Short: "Verify a descriptor and its configured hook file", Flags: []Flag{{Name: "host", Kind: FlagString, Doc: "Harness descriptor ID"}}},
+		}},
+		{Name: "improve", Short: "Review recurring guard feedback and propose a harness update", Flags: []Flag{
+			{Name: "session", Kind: FlagString, Doc: "Only evidence from this host session"},
+			{Name: "all", Kind: FlagBool, Doc: "Include one-off feedback"},
+			{Name: "apply", Kind: FlagBool, Doc: "Apply one descriptor-managed harness update"},
+			{Name: "host", Kind: FlagString, Doc: "Harness descriptor to update with --apply"},
+		}},
 		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{
-			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it the corpus is read from stdin"},
+			{Name: "commands", Kind: FlagString, Doc: "File of shell commands, one per line; without it commands are read from stdin"},
 		}},
 	},
 	Flags: []Flag{
@@ -2089,14 +2107,14 @@ a pattern no graph verb fits.`,
 		{Name: "skill-form", Kind: FlagString, Default: "both", Doc: "Skill form to install: both (default), short, or full (agent install)"},
 	},
 	Examples: []Example{
-		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},
-		{"Refresh installed skills", "magus agent install .claude/skills --force"},
-		{"Refresh, and drop skills this version no longer ships", "magus agent install .claude/skills --force --prune"},
-		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
-		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
+		{"Install into a repository's agent skills directory", "magus agent install .agents/skills"},
+		{"Refresh installed skills", "magus agent install .agents/skills --force"},
+		{"Refresh, and drop skills this version no longer ships", "magus agent install .agents/skills --force --prune"},
+		{"See what a prune would remove first", "magus agent install .agents/skills --prune --dry-run"},
+		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C .agents/skills"},
 		{"Print a starter AGENTS.md", "magus agent starter"},
-		{"Measure graph adoption over a corpus of shell commands", "magus agent adoption --commands commands.txt"},
-		{"Read the corpus from stdin instead", "magus agent adoption < commands.txt"},
+		{"Measure graph adoption from shell commands", "magus agent adoption --commands commands.txt"},
+		{"Read commands from stdin", "magus agent adoption < commands.txt"},
 		{"The report as JSON, for a dashboard", "magus agent adoption --commands commands.txt -o json"},
 	},
 }

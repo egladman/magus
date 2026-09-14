@@ -117,6 +117,10 @@ type Verdict struct {
 	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
+	// Rule names the stable guard rule that denied the call, when the rule can
+	// identify itself. It is evidence for later review, not text for the host to
+	// render: host adapters keep using Reason and Context.
+	Rule string `json:"rule,omitempty"`
 	// Lease is the row this verdict was graded under, empty when the call named none.
 	//
 	// A session bound to a typo'd id, a session bound to a finished row, and a session
@@ -346,6 +350,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// anyway, and the structural test is what says so before it ships.
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
+			verdict.Rule = v.RuleName()
 		case v.Context != "" && preauth == "":
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
@@ -738,6 +743,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Decision:        verdict.Decision,
 		Reason:          verdict.Reason,
 		Context:         verdict.Context,
+		Rule:            verdict.Rule,
 	}
 	if tool == hookToolCommand {
 		command.Command = input

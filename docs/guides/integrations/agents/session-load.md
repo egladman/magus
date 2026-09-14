@@ -1,17 +1,17 @@
 ---
-title: Session load recipes
-description: Per-host recipes that turn an agent host's own session log into the magus session event contract, so an audit can ask which skills loaded, whether the guard fired, and what ran unjudged.
+title: Session load adapters
+description: Per-host adapters that turn an agent host's own session log into the magus session event contract, so an audit can ask which skills loaded, whether the guard fired, and what ran unjudged.
 tags: [agents, session, audit, guard, claude code, codex, opencode]
 ---
 
-# Session load recipes
+# Session load adapters
 
 The guard is magus's record of itself, and there are questions it cannot answer
 by construction: whether a denied command was actually abandoned, which skills an
 agent loaded, and what ran in a session where the hook was never wired. A host's
 own session log is the independent witness for all three.
 
-magus does not read that log. Extraction is yours, one recipe per host, exactly
+magus does not read that log. Extraction is yours, one adapter per host, exactly
 as the [guard hook templates](guard-templates.md) are yours: files you download,
 edit, and own from then on.
 [Doctrine](../../../doctrine.md#the-host-wiring-is-yours) records that trade and
@@ -93,7 +93,7 @@ make: this command reports and changes nothing.
 
 ## The contract
 
-A recipe emits one JSON object per line on stdout and pipes it into
+An adapter emits one JSON object per line on stdout and pipes it into
 `magus session load`:
 
 ```json
@@ -131,7 +131,7 @@ Four things are worth knowing before writing your own:
 
 ## Session load across hosts
 
-Every recipe emits the same contract. What differs is what its host's log
+Every adapter emits the same contract. What differs is what its host's log
 records, and a host that supplies less declares less.
 
 | host        | commands | exit | skills | hook output | spawn | session id |
@@ -144,7 +144,7 @@ A report reads this table and says **unobservable** for a `none`, never zero.
 Zero is a measurement; unobservable is the absence of one, and collapsing the two
 turns a host with a thinner log into a host whose agents look better behaved.
 
-The table is not prose. Each recipe carries the same statement in a line the
+The table is not prose. Each adapter carries the same statement in a line the
 build reads:
 
 ```sh
@@ -155,7 +155,7 @@ grep magus-session-coverage magus-session-load-claude-code.sh
 # magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
 ```
 
-A recipe that drops a dimension fails the build, and so does a table cell that
+An adapter that drops a dimension fails the build, and so does a table cell that
 disagrees with one. Silence is the bug: an undeclared dimension is one nobody was
 asked about.
 
@@ -164,11 +164,11 @@ asked about.
 Claude Code writes a hook record only when the hook produced OUTPUT. A guard that
 passed silently and a guard that was never wired leave the same nothing behind.
 Measured over 98,233 Bash calls in one 21-day window: 14,257 carried a hook
-record, and not one of the 12,012 successes carried an empty one. So a recipe
+record, and not one of the 12,012 successes carried an empty one. So an adapter
 emits what is there and never infers absence, and "this command was unguarded" is
 a verdict for the join against magus's trail, not for the extraction.
 
-## Running a recipe
+## Run an adapter
 
 ```sh
 sh magus-session-load-claude-code.sh            # extract and load
@@ -185,11 +185,11 @@ a scratch directory for that run.
 
 Each file's header lists the variables it takes. Every one of them announces
 itself on stderr when it cannot run, rather than exiting quietly, because a
-recipe that extracted nothing looks exactly like a host nobody used.
+adapter that extracted nothing looks exactly like a host nobody used.
 
 ## Checking whether your copy is current
 
-The recipes carry the same version marker the guard templates do, for the same
+The adapters carry the same version marker the guard templates do, for the same
 reason: once you copy one it is yours, magus cannot reach it again, and nothing
 about your copy says how old it is.
 
@@ -205,7 +205,7 @@ the delegated half of every fanned-out session goes with them.
 
 ```sh
 #!/usr/bin/env sh
-# magus session load recipe: turns Claude Code's session store into the magus
+# magus session load adapter: turns Claude Code's session store into the magus
 # session event contract, one JSON object per line.
 #
 # This file is the source of truth. The docs site embeds it, magus's own
@@ -222,9 +222,9 @@ the delegated half of every fanned-out session goes with them.
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
 #
-#   HOST_REPO_ROOT      the repository to scope to; default is the git toplevel
-#                       of the current directory. A cwd UNDER it counts, which is
-#                       what keeps worktrees in
+#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+#                       workspace of the current directory. A cwd UNDER it counts,
+#                       which keeps nested project sessions in
 #   HOST_SESSION_STORE  where Claude Code keeps its sessions
 #   HOST_PROJECT_DIRS   the directories to walk, space separated. Default is
 #                       every project directory under the store whose name
@@ -246,10 +246,10 @@ the delegated half of every fanned-out session goes with them.
 #
 # The line below declares, per dimension of the contract, what this host can
 # supply: yes when the store carries it, none when it does not. It is machine-read
-# by the session-parity gate, which fails the build when a recipe drops a
+# by the session-parity gate, which fails the build when an adapter drops a
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
-# magus-guard-template: 11
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes
 
 # NO `set -e`. Every failure below is a transcript this run does not read, not a
@@ -258,39 +258,40 @@ the delegated half of every fanned-out session goes with them.
 
 [ -n "$HOST_SESSION_STORE" ] || HOST_SESSION_STORE=$HOME/.claude/projects
 [ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/claude-code
-[ -n "$HOST_REPO_ROOT" ] || HOST_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no repository here, so there is nothing to scope events to. Run this inside a checkout, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-# jq is the whole extraction. Announce its absence rather than reporting an empty
-# session store: a recipe that silently loads nothing looks exactly like a host
-# nobody has used, which is the reading this audit exists to make impossible.
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the recipe.' >&2
-  exit 0
-fi
-
-# Prefer the workspace's own ./magus over PATH, found by walking UP to the
-# magusfile - the same resolution the guard templates use, and for the same
-# reason: a PATH binary too old for `session load` rejects the subcommand and the
-# stream goes nowhere.
+# Resolve the workspace's own binary before asking it for the active workspace.
+# A session can start below the checkout root; the workspace model is VCS-neutral
+# and its root is not necessarily a Git toplevel.
 if [ -z "$SESSION_MAGUS_BIN" ]; then
   session_root=$PWD
   while [ -n "$session_root" ]; do
-    if [ -f "$session_root/magusfile.buzz" ]; then
-      [ -x "$session_root/magus" ] && SESSION_MAGUS_BIN=$session_root/magus
+    if [ -x "$session_root/magus" ]; then
+      SESSION_MAGUS_BIN=$session_root/magus
       break
     fi
     session_root=${session_root%/*}
   done
 fi
 [ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
+if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
+  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
+fi
+
+session_stdout=
+[ "$1" = "--stdout" ] && session_stdout=1
+
+if [ -z "$HOST_REPO_ROOT" ]; then
+  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
+  exit 0
+fi
+
+# jq is the whole extraction. Announce its absence rather than reporting an empty
+# session store: an adapter that silently loads nothing looks exactly like a host
+# nobody has used, which is the reading this audit exists to make impossible.
+if ! command -v jq >/dev/null 2>&1; then
+  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
+  exit 0
+fi
 
 if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
   echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2
@@ -420,7 +421,7 @@ exit-like signal describes a patch rather than a command.
 
 ```sh
 #!/usr/bin/env sh
-# magus session load recipe: turns Codex's rollout files into the magus session
+# magus session load adapter: turns Codex's rollout files into the magus session
 # event contract, one JSON object per line.
 #
 # This file is the source of truth. The docs site embeds it, and you can download
@@ -430,9 +431,9 @@ exit-like signal describes a patch rather than a command.
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
 #
-#   HOST_REPO_ROOT      the repository to scope to; default is the git toplevel
-#                       of the current directory. A cwd UNDER it counts, which is
-#                       what keeps worktrees in
+#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+#                       workspace of the current directory. A cwd UNDER it counts,
+#                       which keeps nested project sessions in
 #   HOST_SESSION_STORE  where Codex keeps its rollout files
 #   SESSION_STATE_DIR   where the per-file offsets live
 #   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
@@ -442,39 +443,44 @@ exit-like signal describes a patch rather than a command.
 # command. The coverage line says so, and a report reading it says unobservable
 # for those dimensions rather than zero. Declaring commands=yes on the strength
 # of what the other hosts supply is the failure this line exists to prevent.
-# magus-guard-template: 11
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes
 
 # NO `set -e`: a rollout this run cannot read is not a reason to abandon the rest.
 
 [ -n "$HOST_SESSION_STORE" ] || HOST_SESSION_STORE=$HOME/.codex/sessions
 [ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/codex
-[ -n "$HOST_REPO_ROOT" ] || HOST_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no repository here, so there is nothing to scope events to. Run this inside a checkout, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the recipe.' >&2
-  exit 0
-fi
-
+# Resolve the workspace's own binary before asking it for the active workspace.
+# A session can start below the checkout root; the workspace model is VCS-neutral
+# and its root is not necessarily a Git toplevel.
 if [ -z "$SESSION_MAGUS_BIN" ]; then
   session_root=$PWD
   while [ -n "$session_root" ]; do
-    if [ -f "$session_root/magusfile.buzz" ]; then
-      [ -x "$session_root/magus" ] && SESSION_MAGUS_BIN=$session_root/magus
+    if [ -x "$session_root/magus" ]; then
+      SESSION_MAGUS_BIN=$session_root/magus
       break
     fi
     session_root=${session_root%/*}
   done
 fi
 [ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
+if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
+  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
+fi
+
+session_stdout=
+[ "$1" = "--stdout" ] && session_stdout=1
+
+if [ -z "$HOST_REPO_ROOT" ]; then
+  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
+  exit 0
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
+  exit 0
+fi
 
 if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
   echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2
@@ -557,13 +563,13 @@ done < "$work/marks"
 
 ## OpenCode
 
-`opencode export <sessionID>` is documented output, so this recipe reads a
+`opencode export <sessionID>` is documented output, so this adapter reads a
 contract rather than a store. OpenCode is the only one of the three that records
 a command's exit code, and the only one with no hook records and no spawn part.
 
 ```sh
 #!/usr/bin/env sh
-# magus session load recipe: turns `opencode export` output into the magus
+# magus session load adapter: turns `opencode export` output into the magus
 # session event contract, one JSON object per line.
 #
 # This file is the source of truth. The docs site embeds it, and you can download
@@ -573,9 +579,9 @@ a command's exit code, and the only one with no hook records and no spawn part.
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
 #
-#   HOST_REPO_ROOT      the repository to scope to; default is the git toplevel
-#                       of the current directory. A cwd UNDER it counts, which is
-#                       what keeps worktrees in
+#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+#                       workspace of the current directory. A cwd UNDER it counts,
+#                       which keeps nested project sessions in
 #   HOST_SESSION_IDS    the sessions to export, space separated. Default is every
 #                       id `opencode sessions` lists
 #   HOST_OPENCODE_BIN   path to the opencode binary, when it is not on PATH
@@ -590,25 +596,42 @@ a command's exit code, and the only one with no hook records and no spawn part.
 # OpenCode is the only host of the three that records a command's exit code, and
 # the only one with neither hook records nor a spawn part. The coverage line says
 # both; a report reading it says unobservable, never zero.
-# magus-guard-template: 11
+# magus-guard-template: 13
 # magus-session-coverage: schema=1 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes
 
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.
 
 [ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/opencode
-[ -n "$HOST_REPO_ROOT" ] || HOST_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -n "$HOST_OPENCODE_BIN" ] || HOST_OPENCODE_BIN=$(command -v opencode 2>/dev/null)
+
+# Resolve the workspace's own binary before asking it for the active workspace.
+# A session can start below the checkout root; the workspace model is VCS-neutral
+# and its root is not necessarily a Git toplevel.
+if [ -z "$SESSION_MAGUS_BIN" ]; then
+  session_root=$PWD
+  while [ -n "$session_root" ]; do
+    if [ -x "$session_root/magus" ]; then
+      SESSION_MAGUS_BIN=$session_root/magus
+      break
+    fi
+    session_root=${session_root%/*}
+  done
+fi
+[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
+if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
+  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
+fi
 
 session_stdout=
 [ "$1" = "--stdout" ] && session_stdout=1
 
 if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no repository here, so there is nothing to scope events to. Run this inside a checkout, or set HOST_REPO_ROOT.' >&2
+  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
   exit 0
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the recipe.' >&2
+  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
   exit 0
 fi
 
@@ -616,18 +639,6 @@ if [ -z "$HOST_OPENCODE_BIN" ] || [ ! -x "$HOST_OPENCODE_BIN" ]; then
   echo 'magus session load: opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.' >&2
   exit 0
 fi
-
-if [ -z "$SESSION_MAGUS_BIN" ]; then
-  session_root=$PWD
-  while [ -n "$session_root" ]; do
-    if [ -f "$session_root/magusfile.buzz" ]; then
-      [ -x "$session_root/magus" ] && SESSION_MAGUS_BIN=$session_root/magus
-      break
-    fi
-    session_root=${session_root%/*}
-  done
-fi
-[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
   echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2

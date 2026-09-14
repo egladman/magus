@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "id": "claude-code",
+  "binary": "claude",
+  "guardTemplate": "../magus-guard-command.sh",
+  "setup": [{"kind": "json", "path": "claude-settings.json", "value": {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "{{guard_command}}", "timeout": 20}]}]}}}],
+  "launch": {"args": ["--settings", "{{workspace}}/claude-settings.json", "--print", "--output-format", "stream-json", "--include-hook-events", "--dangerously-skip-permissions", "Use the Bash tool once to run exactly go test ./.... Do not make any other change."]},
+  "evidence": {"kind": "shell-deny", "transport": "shell"}
+}

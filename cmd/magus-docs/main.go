@@ -115,8 +115,51 @@ func main() {
 		fmt.Fprintf(os.Stderr, "magus-docs: index: %v\n", err)
 		os.Exit(1)
 	}
+	if err := prune(*outDir, modules); err != nil {
+		fmt.Fprintf(os.Stderr, "magus-docs: prune %s: %v\n", *outDir, err)
+		os.Exit(1)
+	}
 
 	fmt.Fprintf(os.Stderr, "magus-docs: wrote %d module docs to %s\n", len(modules), *outDir)
+}
+
+// prune removes stale pages this generator owns. Output globs are intentionally
+// broad so the cache can replay every module page, which means a copied or
+// de-collided page would otherwise become part of the next cache artifact and
+// spread to every checkout. Frontmatter is the ownership proof: an authored
+// Markdown page, even in a mistaken -out directory, is never a deletion target.
+func prune(outDir string, modules []std.Module) error {
+	keep := map[string]bool{"index.md": true}
+	for _, m := range modules {
+		keep[m.Name+".md"] = true
+	}
+
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || keep[name] || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(outDir, name))
+		if err != nil {
+			return err
+		}
+		frontmatter, ok := docs.ParseFrontmatter(string(body))
+		if !ok || !modulePageGeneratedFrom(frontmatter.GeneratedFrom) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(outDir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func modulePageGeneratedFrom(source string) bool {
+	return source == "reference/buzz/" || source == "std/**/*.go, internal/hostmodules/**/*.go"
 }
 
 // sourceURL builds a repoBlob link to the first line of path whose trimmed text

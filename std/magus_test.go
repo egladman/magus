@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,12 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 			assert.Equal(t, tc.wantWarn, got, "warn mismatch (log=%q)", buf.String())
 		})
 	}
+}
+
+func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	ctx := proc.WithLease(t.Context(), "fleet/captured")
+	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
 
 // TestResolveRunDir covers where a nested magus runs. opts.dir is resolved relative to
@@ -386,6 +393,16 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	assert.Empty(t, report.Jobs)
 }
 
+func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
+
+	store, err := jobStoreFromContext(ctx, "job.put")
+	require.NoError(t, err)
+	assert.Equal(t, "fleet/captured", store.Actor().Lease)
+}
+
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_job MCP
 // tool are two doors onto the same file: a row put through one is visible through the
 // other, and internal/job.Store's own path derivation (CacheDir/ledger/leases.json)
@@ -405,4 +422,31 @@ func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, leases, 1)
 	assert.Equal(t, "shared row", leases[0].Goal)
+}
+
+func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
+	t.Parallel()
+
+	result, err := jobResultFromMap(map[string]any{
+		"schema_version": job.ResultSchemaVersion,
+		"changed_paths":  []any{"internal/job/lifecycle.go"},
+		"validation": map[string]any{
+			"command":    "magus run test .",
+			"output_ref": "out123",
+		},
+		"unresolved_risks": []any{},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, job.ResultSchemaVersion, result.SchemaVersion)
+	assert.Equal(t, "out123", result.Validation.OutputRef)
+
+	_, err = jobResultFromMap(map[string]any{
+		"schema_version":   job.ResultSchemaVersion,
+		"changed_paths":    []any{},
+		"validation":       map[string]any{},
+		"unresolved_risks": []any{},
+		"claimed_pass":     true,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
 }

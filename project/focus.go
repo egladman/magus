@@ -20,20 +20,16 @@ import (
 //     package.json). A file at depth zero belongs to no subtree; it describes the
 //     workspace. Naming them one by one would go stale on the first workspace that
 //     keeps a different one.
-//   - .claude/skills, the directory `magus agent install` writes installed skills
-//     to. The same instruction surface as AGENTS.md, one level down, and telling an
-//     agent its own instructions are out of scope is the one advisory that would be
-//     actively wrong. It is a PATH, the single host-specific step magus owns;
-//     nothing here branches on a host name.
 //
-// A per-host instruction file is deliberately absent: a host loads its own before
-// the first tool call, so it never reaches a read hook, and enumerating the ones
-// that exist would put a host list in magus.
+// Harness-owned files are deliberately absent: their locations come from a
+// user-owned descriptor, and a host loads its own instructions before the first
+// tool call. Giving one conventional directory special focus semantics would make
+// that convention part of Magus's compiled policy.
 //
 // NOT on the list: the root project's tree. In a workspace whose root project owns
 // most of the files, treating everything under the root as shared would leave the
 // focus set equal to the workspace and the whole rule inert.
-var SharedRoots = []string{".claude/skills"}
+var SharedRoots []string
 
 // Focus is the read lane a session stands in: the project holding its working
 // directory (or the projects a lease was leased), everything those projects

@@ -1,0 +1,89 @@
+{
+  "schema_version": 2,
+  "id": "claude-code",
+  "display": {
+    "name": "Claude Code"
+  },
+  "config": {
+    "path": ".claude/settings.json"
+  },
+  "skills": {"paths": [".claude/skills"], "form": "both"},
+  "pre_tool_use": {
+    "path": [
+      "hooks",
+      "PreToolUse"
+    ],
+    "matcher_key": "matcher",
+    "hooks_key": "hooks",
+    "response_template": "{{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}",
+    "entries": [
+      {
+        "matcher": "Bash",
+        "hook": {
+          "type": "command",
+          "timeout": 10
+        }
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hook": {
+          "type": "command",
+          "timeout": 10
+        }
+      },
+      {
+        "matcher": "^mcp__magus__",
+        "hook": {
+          "type": "command",
+          "timeout": 10
+        }
+      }
+    ]
+  },
+  "managed_entries": [
+    {
+      "path": ["hooks", "PreToolUse"],
+      "entries": [
+        {
+          "matcher": "Read",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "SessionStart"],
+      "entries": [
+        {
+          "matcher": "compact",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "sh docs/guides/integrations/agents/magus-rehydrate.sh",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": ["hooks", "Stop"],
+      "entries": [
+        {
+          "hooks": [
+            {
+              "type": "command",
+              "command": "sh docs/guides/integrations/agents/magus-checkpoint.sh",
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -109,6 +109,14 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
+		Name:        "magus_console_present",
+		Description: "Return a tokenless link to a local magus console surface. Use this only when a person asked to see the dashboard or related status. The MCP client may present the link as an action; this tool never opens a browser or changes console state.",
+		Params: []ParamDescriptor{
+			{Name: "surface", Type: "string", Description: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
+			{Name: "reason", Type: "string", Description: "Optional brief text a compatible MCP client may show with the link."},
+		},
+	},
+	{
 		Name:        "magus_config_get",
 		Description: "Return the resolved workspace configuration as JSON. Read-only - use the magus CLI to edit config.",
 	},
@@ -197,11 +205,12 @@ var Registry = []ToolDescriptor{
 	{
 		Name:        "magus_job",
 		Member:      "job",
-		Description: "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, validation, and state. Write and deny paths are a DECLARATION this store never acts on: the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning job named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around it. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY, so every worktree and clone reads the same rows: clear starts a fresh one and archives what it dropped beside the store. Re-fork your row on every state change: each write re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the job as possibly dead, which is the READER's judgment, since nothing here transitions a row on its own. The op set here is list, fork, exec and clear; exit and wait are `magus job exit`/`magus job wait` CLI-only for now.",
+		Description: "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed completion gates. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
 		Params: []ParamDescriptor{
-			{Name: "op", Type: "string", Description: "One of: list (default; every row, plus overlaps: the pairs of live jobs whose write_paths intersect, reported as job_a/job_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), fork (create or replace one row by id), exec (a holder reports reported_base, the base a worker actually landed on, and gets the divergence verdict back), clear (drop every row to start a fresh plan)."},
+			{Name: "op", Type: "string", Description: "One of: list (default; every row plus derived live-job overlaps), fork (create or replace one row by id), exec (a holder reports its landed base), exit (file a result or record no_return), wait (verify evidence and record pass only if every completion gate holds), clear (drop every row to start a fresh plan)."},
 			{Name: "reported_base", Type: "string", Description: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: "string", Description: "fork and exec, REQUIRED: the job's id, which fork upserts on. Use the same id you put in the worker's prompt."},
+			{Name: "id", Type: "string", Description: "fork, exec, exit, and wait: the job id. Use the same id in the worker's prompt and result."},
+			{Name: "result", Type: "object", Description: "exit or wait only: an optional strict JobResult object. It must carry the current schema_version and cite output_ref evidence for every declared completion gate; omit it from exit to record no_return, or from wait to verify the result exit filed."},
 			{Name: "parent", Type: "string", Description: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
 			{Name: "goal", Type: "string", Description: "fork only: the job's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
 			{Name: "checkpoint", Type: "string", Description: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},

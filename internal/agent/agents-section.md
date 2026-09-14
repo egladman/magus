@@ -17,6 +17,7 @@ after something breaks:
 | answer "how does magus X" from memory                      | magus-docs-lookup     |
 | summarize what merged or landed recently                   | magus-change-summary  |
 | edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
+| recurring guard feedback or a proposed local rule          | magus-workspace-rules |
 
 Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.

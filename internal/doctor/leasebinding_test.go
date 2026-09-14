@@ -40,10 +40,7 @@ func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
 // case can separate "bound and registered" from "bound, registered and judged".
 func wireGuardHook(t *testing.T, root string) {
 	t.Helper()
-	dir := filepath.Join(root, ".claude")
-	require.NoError(t, os.MkdirAll(dir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "settings.json"),
-		[]byte(`{"hooks":{"PreToolUse":[{"command":"magus session hook"}]}}`), 0o644))
+	writeCheckpointHarness(t, root, guardedHarnessConfig)
 }
 
 func TestLeaseBindingPassesWithNoLeaseBound(t *testing.T) {

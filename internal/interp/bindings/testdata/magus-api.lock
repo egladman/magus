@@ -19,9 +19,11 @@ hasCharm
 insight
 job
 job.clear
+job.exit
 job.list
 job.put
 job.register
+job.wait
 log
 log.debug
 log.error

@@ -4,6 +4,7 @@
 // diagram is added in exactly one place.
 namespace diagrams;
 
+import "assert";
 import "fs";
 import "../libs/diagram/diagram" as _;
 import "site/diagrams/daemon-http" as _;
@@ -66,10 +67,38 @@ export fun renderAll() > {str: str} !> any {
 // dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
 export fun writeStandalonePair(dir: str) > void !> any {
     fs\mkdirAll(dir);
+    final expected: mut [str] = mut [<str>];
     foreach (d in allDiagrams()) {
-        fs\writeFile(dir + "/diagram-" + d.id + ".svg", renderSvg(d, darkPalette()));
-        fs\writeFile(dir + "/diagram-" + d.id + "-light.svg", renderSvg(d, lightPalette()));
+        final dark = dir + "/diagram-" + d.id + ".svg";
+        final light = dir + "/diagram-" + d.id + "-light.svg";
+        expected.append(dark);
+        expected.append(light);
+        fs\writeFile(dark, renderSvg(d, darkPalette()));
+        fs\writeFile(light, renderSvg(d, lightPalette()));
     }
+    // This target owns every diagram-*.svg in its output directory. Prune an
+    // obsolete id or a filesystem-de-collided copy before the output glob is
+    // snapshotted, or the cache will replay that extra file into other checkouts.
+    foreach (candidate in fs\glob(dir + "/diagram-*.svg")) {
+        var current = false;
+        foreach (path in expected) {
+            if (fs\basename(path) == fs\basename(candidate.value)) { current = true; }
+        }
+        if (current == false) { fs\remove(candidate.value); }
+    }
+}
+
+test "writeStandalonePair prunes an obsolete owned diagram" {
+    final dir = fs\tempDir("magus-diagrams-");
+    fs\writeFile(dir + "/diagram-ci-pipeline 3.svg", "stale copy");
+    fs\writeFile(dir + "/not-a-diagram.svg", "authored");
+
+    writeStandalonePair(dir);
+
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline.svg"), true, "current diagram remains");
+    assert\equal(fs\exists(dir + "/diagram-ci-pipeline 3.svg"), false, "stale diagram copy removed");
+    assert\equal(fs\exists(dir + "/not-a-diagram.svg"), true, "outside the owned prefix remains");
+    fs\removeAll(dir);
 }
 
 // inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on

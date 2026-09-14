@@ -40,6 +40,38 @@ func passingResult() types.JobResult {
 // does not hold.
 var passingRun = types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
 
+func completionGateRow() types.Job {
+	return types.Job{
+		ID:         "harness/gated",
+		WritePaths: []string{"internal/job"},
+		State:      types.StateRunning,
+		CompletionGates: []types.CompletionGate{
+			{ID: "unit", Description: "job package tests pass", Check: types.LeaseCheck{Target: "go::go-test", Project: "."}},
+			{ID: "docs", Description: "docs checks pass", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"unit"}},
+		},
+	}
+}
+
+func completionGateResult() types.JobResult {
+	return types.JobResult{
+		SchemaVersion: ResultSchemaVersion,
+		Job:           "harness/gated",
+		ChangedPaths:  []string{"internal/job/verify.go"},
+		GateEvidence: []types.GateEvidence{
+			{GateID: "unit", OutputRef: "unit-ref"},
+			{GateID: "docs", OutputRef: "docs-ref"},
+		},
+		UnresolvedRisks: []string{},
+	}
+}
+
+func completionGateAttempts() []types.JobGateAttempt {
+	return []types.JobGateAttempt{
+		{GateID: "unit", Attempt: types.JobAttempt{Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go"}},
+		{GateID: "docs", Attempt: types.JobAttempt{Found: true, Ref: "docs-ref", Project: "docs", Target: "test"}},
+	}
+}
+
 func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -49,6 +81,88 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Risks:    []string{},
 		Command:  "magus run go::go-test . -- -run Ledger",
 	}, Verify(acceptRow(), passingResult(), passingRun, nil))
+}
+
+func TestVerifyCompletionGatesRequireEvidenceForEveryDeclaredGate(t *testing.T) {
+	t.Parallel()
+
+	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil)
+	assert.True(t, status.Verified, status.Violations)
+	require.Len(t, status.Gates, 2)
+	assert.True(t, status.Gates[0].Verified)
+	assert.True(t, status.Gates[1].Verified)
+}
+
+func TestVerifyCompletionGatesRejectMissingOrWrongEvidence(t *testing.T) {
+	t.Parallel()
+
+	rep := completionGateResult()
+	rep.GateEvidence = rep.GateEvidence[:1]
+	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, completionGateAttempts()[:1], nil)
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `completion gate "docs"`)
+
+	rep = completionGateResult()
+	attempts := completionGateAttempts()
+	attempts[1].Attempt.Project = "."
+	status = VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil)
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "different run")
+}
+
+func TestVerifyCompletionGatesRejectUndeclaredEvidence(t *testing.T) {
+	t.Parallel()
+
+	rep := completionGateResult()
+	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "invented", OutputRef: "invented-ref"})
+	attempts := append(completionGateAttempts(), types.JobGateAttempt{
+		GateID:  "invented",
+		Attempt: types.JobAttempt{Found: true, Ref: "invented-ref", Project: ".", Target: "go-test"},
+	})
+	status := VerifyGates(completionGateRow(), rep, types.JobAttempt{}, attempts, nil)
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "undeclared completion gate \"invented\"")
+}
+
+func TestVerifyRejectsEvidenceCapturedBeforeJobDeclaration(t *testing.T) {
+	t.Parallel()
+
+	row := acceptRow()
+	row.Created = 100
+	attempt := passingRun
+	attempt.TimestampMs = 99_999
+	status := Verify(row, passingResult(), attempt, nil)
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "before job declaration")
+}
+
+func TestVerifyCompletionGateDependenciesPropagate(t *testing.T) {
+	t.Parallel()
+
+	row := completionGateRow()
+	row.CompletionGates = append(row.CompletionGates, types.CompletionGate{
+		ID: "publish", Check: types.LeaseCheck{Target: "test", Project: "docs"}, DependsOn: []string{"docs"},
+	})
+	rep := completionGateResult()
+	rep.GateEvidence = append(rep.GateEvidence, types.GateEvidence{GateID: "publish", OutputRef: "publish-ref"})
+	attempts := append(completionGateAttempts(), types.JobGateAttempt{
+		GateID: "publish", Attempt: types.JobAttempt{Found: true, Ref: "publish-ref", Project: "docs", Target: "test"},
+	})
+	attempts[0].Attempt.Failed = true
+	status := VerifyGates(row, rep, types.JobAttempt{}, attempts, nil)
+	assert.False(t, status.Verified)
+	assert.Contains(t, status.Gates[1].Violations, `depends_on completion gate "unit" has not verified`)
+	assert.Contains(t, status.Gates[2].Violations, `depends_on completion gate "docs" has not verified`)
+}
+
+func TestVerifyCompletionGatesEnforceJobDependencies(t *testing.T) {
+	t.Parallel()
+
+	row := completionGateRow()
+	row.DependsOn = []string{"upstream"}
+	status := VerifyGates(row, completionGateResult(), types.JobAttempt{}, completionGateAttempts(), []types.Job{{ID: "upstream", State: types.StateExited}})
+	assert.False(t, status.Verified)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), "upstream")
 }
 
 // Every rule reports independently: an orchestrator repartitions for one violation and
@@ -75,7 +189,7 @@ func TestVerifyNamesEveryViolation(t *testing.T) {
 func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	t.Parallel()
 
-	raw := `{"schema_version":1,"job":"harness/ledger-accept","changed_paths":[],` +
+	raw := `{"schema_version":2,"job":"harness/ledger-accept","changed_paths":[],` +
 		`"validation":{"command":"magus run go::go-test .","output_ref":"deadbeef","passed":true},` +
 		`"unresolved_risks":[],"confidence":"high"}`
 
@@ -119,7 +233,7 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 
 	v := Verify(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
-	assert.Contains(t, v.Violations[0], "declares no check")
+	assert.Contains(t, v.Violations[0], "declares no completion gate")
 }
 
 // A charm, the binary's spelling and the args after `--` are all ways of running one

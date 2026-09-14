@@ -65,6 +65,7 @@ func testCatalog(t *testing.T) *Catalog {
 func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
+	writeTestHarness(t, dir)
 	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources), "a full install writes one file per skill and no twins")
@@ -93,6 +94,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
+	writeTestHarness(t, dir)
 	_, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.False(t, catalog.CheckStatuses(dir)[0].Stale)
@@ -600,7 +602,7 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 	require.NoError(t, os.Chmod(blocked, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o644) })
 
-	got := catalog.gradeDest(dir, dest)
+	got := catalog.gradeDest(dir, HarnessSkillLocation{Host: "test", Path: dest, Form: FormBoth})
 
 	assert.True(t, got.Stale, "an unreadable installed skill graded as current")
 	assert.Contains(t, got.Detail, "magus-run")

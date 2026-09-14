@@ -17,7 +17,7 @@
 // hack script rather than a puppeteer install. The top of screenshots.sh explains why a browser
 // driver is a dependency this repo does not want.
 //
-//   node hacks/screenshot.mjs <chrome> <url> <out.png> <width> <height> <scale> <mobile:0|1> [keys]
+//   node hack/screenshot.mjs <chrome> <url> <out.png> <width> <height> <scale> <mobile:0|1> [keys]
 //
 // `keys` is a comma-separated list of keys to press once the surface has settled, so a picture can
 // show a state that only a keystroke reaches - a send box, an overview. A surface reachable only by

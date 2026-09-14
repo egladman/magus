@@ -356,7 +356,7 @@ func TestPaintLeavesTheCursorWhereTheCallerLeftIt(t *testing.T) {
 // vanishes with nothing to replace it, leaving a clean row rather than a stale
 // one.
 func TestPaintNotificationsExpireWithoutResidue(t *testing.T) {
-	t.Parallel()
+	t.Setenv("NO_COLOR", "")
 	s := screen.New(80, 24)
 	z := NewZone(s, terminal(80, 24))
 	n, clock := newTestNotifier(z, 3)

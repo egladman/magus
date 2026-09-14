@@ -9,7 +9,9 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"strings"
 	"time"
@@ -129,6 +131,8 @@ func buildMCPTool(d ToolDescriptor) mcplib.Tool {
 			opts = append(opts, mcplib.WithBoolean(p.Name, propOpts...))
 		case "number":
 			opts = append(opts, mcplib.WithNumber(p.Name, propOpts...))
+		case "object":
+			opts = append(opts, mcplib.WithObject(p.Name, propOpts...))
 		default:
 			panic(fmt.Sprintf("mcp: tool %q param %q has unknown type %q", d.Name, p.Name, p.Type))
 		}
@@ -150,6 +154,12 @@ func allToolDrivers(opts Options) []spells.Driver {
 		jobStore = job.NewStore(job.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
 	}
 	next := nextFilter{cacheDir: opts.Magus.CacheDir(), rows: jobStore}
+	consoleUnavailable := ""
+	if opts.Config.Console.Enabled != nil && !*opts.Config.Console.Enabled {
+		consoleUnavailable = "console.enabled is false"
+	} else if !opts.httpAddr().Addr().IsLoopback() {
+		consoleUnavailable = "mcp.address is not loopback"
+	}
 	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&describeFileTool{ws: opts.Magus, next: next},
@@ -171,7 +181,21 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&refsTool{graph: opts.Magus},
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
-		&jobTool{store: jobStore},
+		&consolePresentTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
+		&jobTool{store: jobStore, resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+			if strings.TrimSpace(ref) == "" {
+				return types.JobAttempt{}, nil
+			}
+			desc, err := opts.Magus.OutputDescriptorByRef(ref)
+			switch {
+			case err == nil:
+				return types.JobAttempt{Found: true, Ref: ref, Project: desc.Project, Target: desc.Target, Spell: desc.Spell, Failed: desc.Failed, TimestampMs: desc.TimestampMs}, nil
+			case errors.Is(err, fs.ErrNotExist):
+				return types.JobAttempt{}, nil
+			default:
+				return types.JobAttempt{}, err
+			}
+		}},
 	}
 }
 

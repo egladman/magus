@@ -1,21 +1,21 @@
-# EXTRACTION PARITY: a shipped session-load recipe, executed against a synthetic
+# EXTRACTION PARITY: a shipped session-load adapter, executed against a synthetic
 # transcript.
 #
-# The sibling gate in conventions_test.go checks that every recipe DECLARES what
+# The sibling gate in conventions_test.go checks that every adapter DECLARES what
 # its host supplies and that the guide's table agrees. A declaration can be
 # sincere and still wrong, because nothing there runs the file: the OpenCode guard
 # plugin declared a correct stance for months while invoking a subcommand that no
 # longer existed. This runs the real file (GUARD_TEMPLATES is an absolute path to
 # docs/guides/integrations/agents, never a copy) and asserts the lines it emits.
 #
-# Every case is labeled `# kind: <kind>`; TestSessionRecipeCorpusCoversEveryKind
+# Every case is labeled `# kind: <kind>`; TestSessionAdapterCasesCoverEveryKind
 # fails when the contract grows a kind no case covers.
 #
 # The fixture is SYNTHETIC and stays that way. A real transcript carries a
 # person's own commands, paths and prompts, and a fixture is committed forever.
 
-[!exec:jq] skip 'the session recipes extract with jq, which is not installed'
-[windows] skip 'POSIX sh recipes; a Windows host reads the same stores differently'
+[!exec:jq] skip 'the session adapters extract with jq, which is not installed'
+[windows] skip 'POSIX sh adapters; a Windows host reads the same stores differently'
 
 env HOST_REPO_ROOT=/repo
 env HOST_PROJECT_DIRS=$WORK/transcripts
@@ -52,7 +52,7 @@ stdout '"kind":"file.read","ref":"t5","text":"README.md"'
 stdout '"kind":"file.write","ref":"t6","text":"AGENTS.md"'
 
 # kind: magus.call
-# A direct MCP call to magus. It never appears as a shell command, so a recipe
+# A direct MCP call to magus. It never appears as a shell command, so an adapter
 # that only read Bash tool uses would report a session driving magus hard as one
 # that never touched it.
 stdout '"kind":"magus.call","ref":"t7","text":"mcp__magus__magus_query"'
@@ -68,7 +68,7 @@ stdout '"exit":null'
 ! stdout '"exit":0'
 
 # A re-run reads only what is new. Without the checkpoint an audit re-loads the
-# whole store on every invocation, which is the cost that gets a recipe switched
+# whole store on every invocation, which is the cost that gets an adapter switched
 # off after the first week.
 exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
 ! stdout .
@@ -79,16 +79,16 @@ exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
 stdout '"kind":"shell.command","ref":"t8"'
 ! stdout '"ref":"t1"'
 
-# --- fail-open: a recipe that cannot run says so ------------------------------
+# --- fail-open: an adapter that cannot run says so ----------------------------
 #
-# A recipe that loaded nothing looks exactly like a host nobody used, and that is
+# An adapter that loaded nothing looks exactly like a host nobody used, and that is
 # the reading this whole arrangement exists to make impossible.
 
 env HOST_REPO_ROOT=
 cd $WORK/nogit
 exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
 ! stdout .
-stderr 'no repository here'
+stderr 'no Magus workspace here'
 cd $WORK
 
 -- transcripts/s1.jsonl --
@@ -115,4 +115,4 @@ cd $WORK
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:08.000Z","message":{"content":[{"type":"tool_use","id":"t7","name":"mcp__magus__magus_query","input":{}}]}}
 {"type":"assistant","sessionId":"s1","cwd":"/repo","timestamp":"2026-09-09T12:00:09.000Z","message":{"content":[{"type":"tool_use","id":"t8","name":"Bash","input":{"command":"a later command"}}]}}
 -- nogit/keep.txt --
-a directory outside any checkout, so the recipe has nothing to scope to
+a directory outside any checkout, so the adapter has nothing to scope to

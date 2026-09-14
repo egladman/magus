@@ -134,7 +134,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See [**magus-init**(1)](magus-init.md).
 
 **agent**
-: Install the knowledge-graph agent skills into a repository. See [**magus-agent**(1)](magus-agent.md).
+: Manage skills, harnesses, and agent feedback. See [**magus-agent**(1)](magus-agent.md).
 
 **self**
 : Manage the magus binary (update, refresh, registry, install-shorthand). See [**magus-self**(1)](magus-self.md).

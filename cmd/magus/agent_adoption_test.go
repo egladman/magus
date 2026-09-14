@@ -173,18 +173,18 @@ top repo-wide patterns that look like symbols, with the graph query to try:
 }
 
 // TestAgentAdoptionCmdCommandsFile exercises the command end to end through the
-// generated --commands binder: a file of shell commands becomes the corpus, and
-// the whole rendered report is compared so a corpus that arrived truncated or
+// generated --commands binder: a file of shell commands becomes the input, and
+// the whole rendered report is compared so input that arrived truncated or
 // empty cannot pass.
 func TestAgentAdoptionCmdCommandsFile(t *testing.T) {
 	for _, tt := range []struct {
-		name   string
-		corpus string
-		want   string
+		name     string
+		commands string
+		want     string
 	}{
 		{
-			name:   "corpus of commands",
-			corpus: "grep -rn HandleFoo internal/\ncat foo.go\nmagus query kind=spell\n",
+			name:     "commands",
+			commands: "grep -rn HandleFoo internal/\ncat foo.go\nmagus query kind=spell\n",
 			want: `agent adoption over 3 commands:
 
   graph verbs (query/refs/explain/path/graph)          1
@@ -200,8 +200,8 @@ top repo-wide patterns that look like symbols, with the graph query to try:
 `,
 		},
 		{
-			name:   "empty file",
-			corpus: "",
+			name:     "empty file",
+			commands: "",
 			want: `agent adoption over 0 commands:
 
   graph verbs (query/refs/explain/path/graph)          0
@@ -222,7 +222,7 @@ top repo-wide patterns that look like symbols, with the graph query to try:
 			global.output = ""
 
 			path := filepath.Join(t.TempDir(), "commands.txt")
-			require.NoError(t, os.WriteFile(path, []byte(tt.corpus), 0o644))
+			require.NoError(t, os.WriteFile(path, []byte(tt.commands), 0o644))
 
 			var err error
 			out := captureStdout(t, func() { err = agentAdoptionCmd([]string{"--commands", path}) })

@@ -1,13 +1,12 @@
 .TH MAGUS-AGENT 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-agent \- Install the knowledge\-graph agent skills into a repository
+magus\-agent \- Manage skills, harnesses, and agent feedback
 .SH SYNOPSIS
 .B magus
-.RI "agent <install|starter|adoption> [flags]"
+.RI "agent <install|hook|harness|improve|starter|adoption> [flags]"
 .SH DESCRIPTION
 Render the agent skills embedded in this binary and write or stream them
-into named destinations (.claude/skills, .agents/skills, .opencode/skills,
-and so on).
+into named destinations (<skills\-dir>).
 .PP
 magus never writes your AGENTS.md. That file is yours, and an installer that
 edits a file you own leaves bytes you did not write and cannot audit. So
@@ -15,13 +14,17 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 .PP
+hook translates a descriptor\-defined host event into the response format its host expects.
+harness applies or verifies a user\-owned descriptor. improve reviews recurring
+guard feedback and can explicitly update descriptor\-managed entries.
+.PP
 agent is a pure data generator, which is what makes \-\-tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write\-to\-disk form exists for the in\-repo,
 paths\-relative\-to\-<dir> case. Absolute destinations are refused unless
 \-\-global is set, so magus cannot silently write outside the working tree.
 .PP
-adoption reads a corpus of shell commands, one per line, from stdin or from
+adoption reads shell commands, one per line, from stdin or from
 \-\-commands <file>, and reports how often the graph was reached versus a raw
 text search. \-o json emits the report as one object keyed total, graph_verbs,
 text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
@@ -55,17 +58,59 @@ Skill form to install: both (default), short, or full (agent install)
 \fB\-\-tar\fR
 Stream a tar archive to stdout instead of writing files (agent install)
 .RE
+.SS agent hook options
+.RS
+.TP
+\fB\-\-host\fR \fIstring\fR
+Harness descriptor receiving the guard response
+.RE
+.SS agent harness apply options
+.RS
+.TP
+\fB\-\-host\fR \fIstring\fR
+Harness descriptor ID
+.RE
+.SS agent harness verify options
+.RS
+.TP
+\fB\-\-host\fR \fIstring\fR
+Harness descriptor ID
+.RE
+.SS agent improve options
+.RS
+.TP
+\fB\-\-all\fR
+Include one\-off feedback
+.TP
+\fB\-\-apply\fR
+Apply one descriptor\-managed harness update
+.TP
+\fB\-\-host\fR \fIstring\fR
+Harness descriptor to update with \-\-apply
+.TP
+\fB\-\-session\fR \fIstring\fR
+Only evidence from this host session
+.RE
 .SS agent adoption options
 .RS
 .TP
 \fB\-\-commands\fR \fIstring\fR
-File of shell commands, one per line; without it the corpus is read from stdin
+File of shell commands, one per line; without it commands are read from stdin
 .RE
 .SH SUBCOMMANDS
 .RS
 .TP
 \fBinstall\fR
 Render the embedded skills and write or stream them into named destinations
+.TP
+\fBhook\fR
+Translate a descriptor\-defined guard event into a host response
+.TP
+\fBharness\fR
+Apply or verify a user\-owned harness descriptor
+.TP
+\fBimprove\fR
+Review recurring guard feedback and propose a harness update
 .TP
 \fBstarter\fR
 Print a starter AGENTS.md to stdout; never writes a file
@@ -74,34 +119,34 @@ Print a starter AGENTS.md to stdout; never writes a file
 Report how often agents used the knowledge graph versus a raw text search
 .RE
 .SH EXAMPLES
-\fIInstall into a repo's agent skills directory\fR
+\fIInstall into a repository's agent skills directory\fR
 .PP
 .EX
-magus agent install .claude/skills
+magus agent install .agents/skills
 .EE
 .PP
 \fIRefresh installed skills\fR
 .PP
 .EX
-magus agent install .claude/skills --force
+magus agent install .agents/skills --force
 .EE
 .PP
 \fIRefresh, and drop skills this version no longer ships\fR
 .PP
 .EX
-magus agent install .claude/skills --force --prune
+magus agent install .agents/skills --force --prune
 .EE
 .PP
 \fISee what a prune would remove first\fR
 .PP
 .EX
-magus agent install .claude/skills --prune --dry-run
+magus agent install .agents/skills --prune --dry-run
 .EE
 .PP
 \fIInstall anywhere via tar\fR
 .PP
 .EX
-magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
+magus agent install --tar | tar -xf - -C .agents/skills
 .EE
 .PP
 \fIPrint a starter AGENTS.md\fR
@@ -110,13 +155,13 @@ magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 magus agent starter
 .EE
 .PP
-\fIMeasure graph adoption over a corpus of shell commands\fR
+\fIMeasure graph adoption from shell commands\fR
 .PP
 .EX
 magus agent adoption --commands commands.txt
 .EE
 .PP
-\fIRead the corpus from stdin instead\fR
+\fIRead commands from stdin\fR
 .PP
 .EX
 magus agent adoption < commands.txt

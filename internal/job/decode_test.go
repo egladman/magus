@@ -16,11 +16,11 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":4,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
+		`{"schema_version":5,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
-		SchemaVersion: 4,
+		SchemaVersion: types.JobSchemaVersion,
 		ID:            "adj/ledger",
 		WritePaths:    []string{"internal/ledger"},
 		DenyPaths:     []string{"MAGUS.md"},
@@ -33,7 +33,7 @@ func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":4,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+		`{"schema_version":5,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -44,7 +44,7 @@ func TestDecodeRejectsFieldsNobodyAskedFor(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeResult(strings.NewReader(
-		`{"schema_version":1,"changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
+		`{"schema_version":2,"changed_paths":["a.go"],"validation":{"command":"c","output_ref":"r"},` +
 			`"unresolved_risks":[],"confidence":"high"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "confidence")
@@ -56,7 +56,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{
-		"a version from the future": `{"schema_version":2,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
+		"a version from the future": `{"schema_version":3,"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[],"next_field":1}`,
 		"no version at all":         `{"changed_paths":[],"validation":{"command":"c","output_ref":"r"},"unresolved_risks":[]}`,
 	}
 	for name, raw := range cases {
@@ -65,7 +65,7 @@ func TestDecodeNamesTheVersionsItAccepts(t *testing.T) {
 
 			_, err := DecodeResult(strings.NewReader(raw))
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "version 1")
+			assert.Contains(t, err.Error(), "version 2")
 			assert.NotContains(t, err.Error(), "next_field", "the version is the reason, not the field")
 		})
 	}
@@ -75,7 +75,7 @@ func TestDecodeReportReadsAWellFormedOne(t *testing.T) {
 	t.Parallel()
 
 	rep, err := DecodeResult(strings.NewReader(
-		`{"schema_version":1,"job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
+		`{"schema_version":2,"job":"adj/store","changed_paths":["internal/ledger/store.go"],` +
 			`"validation":{"command":"magus run test internal/ledger","output_ref":"out1a2b"},` +
 			`"unresolved_risks":["the archive is never read back"]}`))
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 		{"registered_by", `"registered_by":{"session":"someone"}`},
 		{"releases", `"releases":[]`},
 	} {
-		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj/store",` + field.member + `}`))
+		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":5,"id":"adj/store",` + field.member + `}`))
 		require.Error(t, err, field.name)
 		// The refusal has to NAME the field. An error alone is satisfied by the version
 		// check too, so a fixture whose schema_version fell behind would leave this
@@ -107,16 +107,16 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj store"}`))
+	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":5,"id":"adj store"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":4,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":5,"id":"adj/store","state":"done"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":4,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
+		`{"schema_version":5,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
@@ -187,6 +187,11 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = "test internal/job"
 		case "validation":
 			value = "magus run test internal/job"
+		case "completion_gates":
+			value = []any{map[string]any{
+				"id":    "unit",
+				"check": map[string]any{"target": "test", "project": "internal/job"},
+			}}
 		}
 		_, err := ParseMerge(map[string]any{field: value})
 		assert.NoError(t, err, "magus_job fork rejects %q, which `magus job fork` accepts", field)

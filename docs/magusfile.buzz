@@ -245,7 +245,11 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     // magus-examples replace in place and hard-error on if the markers are missing.
     // Declared as outputs they were deletable, and excluded from the source hash.
     ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md",
-        "concepts/review.md");
+        "concepts/review.md",
+        // pruneContentPageCopies removes only byte-identical numeric collisions
+        // next to pages it just regenerated. Those copies are still source files
+        // until removed, so name that narrow mutation lane explicitly.
+        "reference/config *.md", "changelog *.md");
     go["go-run"](ctx, {"args": ["../cmd/magus-docs", "-out", "./reference/buzz"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-configdocs", "-out", "./reference/config.md"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-spelldocs", "-out", "./concepts/spells", "-spells", "../spells"]});
@@ -287,6 +291,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("benchmarks");
     // A report sits at reports/<date>/<provider>/<model>.md and keeps that path on
     // the site, so a URL names the run the way the tree does.
+    final contentPages: mut [str] = mut ["reference/config.md", "changelog.md", "benchmarks/build-tools.md"];
     foreach (report in fs\glob("../benchmarks/agent/reports/*/*/*.md")) {
         final rel = report.value.split("../benchmarks/agent/reports/").join("");
         final segments = rel.split("/");
@@ -300,12 +305,64 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
             + "description: One published run of the agent harness benchmark, the controls first, then cost-of-pass, paired deltas and pass rates. Generated from the committed report.\n"
             + "tags: [benchmarks, agents, harness, measurement]\n---\n\n"
             + fs\readFile(report.value));
+        contentPages.append(fs\join("benchmarks", rel));
     }
     fs\writeFile("benchmarks/build-tools.md",
         "---\ntitle: Build-tool benchmarks\ngenerated_from: benchmarks/BENCHMARKS.md\n"
         + "description: magus timed against make on one fixture with hyperfine, stamped with the date, hardware and tool versions. Generated from the committed results.\n"
         + "tags: [benchmarks, performance, measurement]\n---\n\n"
         + fs\readFile("../benchmarks/BENCHMARKS.md"));
+    pruneContentPageCopies(contentPages);
+    pruneGeneratedPageCopies("reference/skills/*.md");
+    pruneGeneratedPageCopies("reference/manpage/*.md");
+}
+
+// pruneContentPageCopies removes only a byte-identical numeric copy beside a page
+// content_generate just wrote. That narrow proof preserves authored pages and stale
+// pages whose provenance needs review, while preventing macOS-style "name 3.md"
+// collisions from being captured by this target's broad output glob and replayed.
+fun pruneContentPageCopies(canonicals: [str]) > void !> any {
+    foreach (canonical in canonicals) {
+        if (fs\exists(canonical) == false) { continue; }
+        final stem = canonical.sub(0, canonical.len() - ".md".len());
+        final body = fs\readFile(canonical);
+        foreach (candidate in fs\glob(stem + " *.md")) {
+            final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
+            if (isDecimalCopySuffix(suffix) and fs\readFile(candidate.value) == body) {
+                fs\remove(candidate.value);
+            }
+        }
+    }
+}
+
+// pruneGeneratedPageCopies cleans whole-page generated directories. Unlike the
+// mixed-content pages above, these directories are entirely target-owned outputs:
+// if a numeric sibling has a canonical page, it cannot be an authored document.
+// Comparing only names makes a stale previous generation disappear even when the
+// current skills changed its bytes.
+fun pruneGeneratedPageCopies(pattern: str) > void !> any {
+    final pages = fs\glob(pattern);
+    foreach (canonical in pages) {
+        final stem = canonical.value.sub(0, canonical.value.len() - ".md".len());
+        foreach (candidate in pages) {
+            if (candidate.value.startsWith(stem + " ") == false) { continue; }
+            final suffix = candidate.value.sub(stem.len(), len: candidate.value.len() - stem.len() - ".md".len());
+            if (isDecimalCopySuffix(suffix)) {
+                fs\remove(candidate.value);
+            }
+        }
+    }
+}
+
+fun isDecimalCopySuffix(suffix: str) > bool {
+    if (suffix.len() < 2 or suffix.startsWith(" ") == false) { return false; }
+    var i = 1;
+    while (i < suffix.len()) {
+        final code = suffix.byte(i);
+        if (code < 48 or code > 57) { return false; }
+        i = i + 1;
+    }
+    return true;
 }
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
@@ -353,7 +410,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // This was latent until an example was added to review.md: knowledge.md and spells.md rarely
     // change in the same run that regenerates them, so the composed target almost never wrote one
     // and the missing declaration never fired.
-    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md");
+    ctx.modifiesExistingFiles("concepts/spells.md", "concepts/knowledge.md", "concepts/review.md",
+        "reference/config *.md", "changelog *.md");
     // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md, the root
     // CHANGELOG.md, assets/gen (the README's diagram pair), and the derived Markdown in
     // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so

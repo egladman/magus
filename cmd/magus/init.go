@@ -230,7 +230,7 @@ func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal b
 	// so it does not belong in repo bootstrap; init just says where to look.
 	interactive.Emit(os.Stderr, "")
 	interactive.Emit(os.Stderr, "let an agent use this workspace over the daemon (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With(".agents/skills")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
+	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
 	interactive.Emit(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
 }
 

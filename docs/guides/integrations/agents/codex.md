@@ -8,20 +8,22 @@ tags: [agents, codex, skills, AGENTS.md, guard, hooks, MCP]
 
 Codex reads two things, and it wants both: `.agents/skills/` for focused
 workflows it loads on demand, and `AGENTS.md` for guidance that is always on.
-Its hook events and replies match Claude Code's, so nothing here needs a script of
-its own: one wiring file points at the same shipped templates.
+Its hook payloads differ from Claude Code's, but both hosts accept the same
+verdict shape. Current Magus binaries therefore receive those events directly;
+the shared templates remain the portable fallback for hosts without that host
+contract.
 
-| what             | where                                                                 |
-| ---------------- | --------------------------------------------------------------------- |
-| skills           | `.agents/skills/`                                                     |
-| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)              |
-| guard wiring     | `~/.codex/hooks.json`, `PreToolUse`                                   |
-| command surface  | deny and advise both reach the model                                  |
-| file surface     | deny and advise both reach the model                                  |
-| MCP call surface | not wired: no vendored evidence `PreToolUse` fires on one (see below) |
-| checkpoint       | `Stop`                                                                |
-| rehydration      | `SessionStart` (`compact`)                                            |
-| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                          |
+| what             | where                                                          |
+| ---------------- | -------------------------------------------------------------- |
+| skills           | `.agents/skills/`                                              |
+| always-on rules  | `AGENTS.md` (you paste the block; magus never writes it)       |
+| guard wiring     | `.codex/hooks.json`, `PreToolUse`                              |
+| command surface  | deny and advise both reach the model                           |
+| file surface     | deny and advise both reach the model                           |
+| MCP call surface | `PreToolUse` (`mcp__.*`), deny and advise both reach the model |
+| checkpoint       | `Stop`                                                         |
+| rehydration      | `SessionStart` (`compact`)                                     |
+| MCP              | `~/.codex/config.toml`, see [MCP](../mcp.md)                   |
 
 ## Skills
 
@@ -69,12 +71,22 @@ Check that hooks are on before wiring anything:
 codex features list
 ```
 
-The `hooks` row reports the stage and whether it is enabled. It is stable and on
-by default as of codex-cli 0.145.0; older builds gated it behind a feature flag
-in `~/.codex/config.toml`, so read the row rather than trusting this paragraph.
+The `hooks` row reports the stage and whether it is enabled. Hooks are stable and
+enabled by default; read the row when working with an older local build.
 
-Save this as `~/.codex/hooks.json` (or `.codex/hooks.json`), with the paths
-pointing at wherever you put your copies of the templates:
+The shipped `codex` harness descriptor owns the host `PreToolUse` wiring: its
+workspace config path, matchers, and response template are data in
+`harnesses/codex.json`. Apply and verify it from the workspace root. The
+lifecycle entries below remain portable scripts because they are not guard
+verdicts:
+
+```sh
+magus agent harness apply --host codex
+magus agent harness verify --host codex
+```
+
+The descriptor writes `.codex/hooks.json` and installs the three guard entries
+shown here:
 
 ```json
 {
@@ -85,7 +97,7 @@ pointing at wherever you put your copies of the templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "magus agent hook --host codex",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -95,8 +107,18 @@ pointing at wherever you put your copies of the templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "magus agent hook --host codex",
             "statusMessage": "magus guard: checking file"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus agent hook --host codex",
+            "statusMessage": "magus guard: checking MCP tool call"
           }
         ]
       }
@@ -107,7 +129,7 @@ pointing at wherever you put your copies of the templates:
         "hooks": [
           {
             "type": "command",
-            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-rehydrate.sh\"",
             "statusMessage": "magus: restating this checkout's rules"
           }
         ]
@@ -118,7 +140,7 @@ pointing at wherever you put your copies of the templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -128,10 +150,10 @@ pointing at wherever you put your copies of the templates:
 }
 ```
 
-`GUARD_AGENT_NAME` labels the observation magus records; it cannot change a
-verdict. Everything else about the four scripts is described in
-[Guard hook templates](guard-templates.md), including the variables that let one
-implementation serve several hosts.
+`magus agent hook` derives the path, command, and MCP surfaces from the raw
+event and emits Codex's hook reply. It replaces the `magus-guard-command.sh`
+and `magus-guard-path.sh` templates. It requires `magus` on `PATH`; otherwise
+use [Guard hook templates](guard-templates.md).
 
 The two `PreToolUse` entries used to carry `GUARD_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks
@@ -141,6 +163,22 @@ continue the call, are `continue`, `stopReason` and `suppressOutput`. Suppressio
 cost this host every explanation the guard had to give while enforcing every deny,
 which is the half of the contract nothing in a session reports missing. If your own
 build behaves otherwise, `GUARD_NO_ADVISE=1` still suppresses the arm.
+
+### Maintaining the workspace harness
+
+When repeated guard evidence identifies an outdated Codex harness, review the
+proposal with `magus agent improve`, then explicitly apply it:
+
+```sh
+magus agent improve --apply --host codex
+```
+
+That command delegates the write to the `codex` descriptor. It updates only its
+Magus-owned host `PreToolUse` entries in the descriptor's workspace
+configuration path; it preserves unrelated settings and does not touch
+user-level configuration, lifecycle entries, templates, compiled guard rules,
+skills, memory, or `AGENTS.md`. Review the normal JSON diff before committing
+it, then run `magus agent harness verify --host codex`.
 
 The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
@@ -156,6 +194,9 @@ session's history with a summary, and runs
 this checkout: branch and revision, commits not yet on the base ref, the dirty
 tree split into sources, generated outputs and unclaimed paths, the live leases,
 the last recorded run's failures, and where the rules live.
+When repeated guard feedback needs review, the same brief adds one bounded line
+that directs the model to `magus agent improve`; it does not edit memory or
+instructions by itself.
 
 Two variables shape it for this host. `REHYDRATE_FORMAT=json` is required, not
 cosmetic: Codex reads a `SessionStart` hook's stdout as a JSON reply and adds
@@ -180,30 +221,23 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do - 
 
 ## Coverage and limits
 
-- **The MCP call surface is not wired.** OpenAI's vendored hooks schema documents
-  `PreToolUse` firing on `Bash` and the edit tools by name; it says nothing about
-  an MCP tool call, unlike Claude Code's event stream, which carries one directly
-  and is what [`magus-guard-command.sh`](claude-code.md#mcp-tool-calls) now
-  forwards under `HOST_EVENT_RAW`. Wiring a third matcher here on evidence this
-  thin would compound the uncertainty already open for `apply_patch`/`Edit`/`Write`
-  below, not resolve it.
+- **The MCP call surface is wired.** The descriptor's third matcher receives
+  the complete `tool_input` object and sends the raw event to the same host
+  adapter as the command and file surfaces. It is transport-complete, but no
+  shipped rule currently judges arbitrary MCP tool names or parameters.
 - Hooks are not available on Windows, and `[features] hooks = false` turns the
   whole surface off. A repo-local `.codex/hooks.json` is also inert until you
   trust the project layer, and every non-managed hook wants a per-hash review
   through `/hooks`, so a config committed to a repository guards nobody who has
   not accepted it. That is the one way this host differs from the others in kind
   rather than degree.
-- Reports disagree on whether `apply_patch`, `Edit` and `Write` fire
-  `PreToolUse`. OpenAI's hooks page says they do; at least one third-party
-  reference says `Bash` only. Treat the second matcher as provisional and
-  confirm it against the current documentation.
-- `apply_patch` delivers a PATCH in `tool_input.command`, not a file path, so
-  the declared-output guard wants the `Edit`/`Write` matcher rather than
-  `apply_patch`.
-- The command rules are executed against this binary with a real event. The
-  file surface is wired per OpenAI's documentation and has not been executed
-  here, and neither is the `SessionStart` envelope: `REHYDRATE_FORMAT=json`
-  renders the shape the reference documents, against no live Codex.
+- Codex documents `PreToolUse` for `Bash`, `apply_patch`, `Edit`, and `Write`.
+  `apply_patch` carries a patch in `tool_input.command`, rather than a file path,
+  so the declared-output guard intentionally matches `Edit|Write`.
+- The command rules are exercised by this repository's harness. The file and
+  MCP surfaces are wired to the documented events but still need a live Codex
+  event in this workspace to make the observation empirical; the `SessionStart`
+  envelope is likewise rendered from the documented JSON contract.
 - **Lease capture has an event but no context.** `SubagentStart` exists and
   matches on `agent_type`, which retires the older claim here that Codex had no
   sub-agent lifecycle at all. What its payload carries is `agent_id`,
@@ -222,7 +256,7 @@ magus status --probe=liveness,mcp
 magus doctor
 ```
 
-doctor's **agent skills** check grades the installed skills and the pasted `AGENTS.md` block
-against the running binary. `doctor`'s **guard binary** and **guard wiring**
-checks report which binary a hook resolves and whether any host config actually
-invokes a current template.
+doctor's **agent skills** check grades the installed skills and the pasted
+`AGENTS.md` block against the running binary. **guard wiring** loads each
+available harness descriptor and reports the explicit `verified`, `uncovered`,
+or `invalid` result rather than guessing at host config locations.

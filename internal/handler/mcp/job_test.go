@@ -136,7 +136,7 @@ func TestJobTool(t *testing.T) {
 	t.Run("an unknown op is rejected, not silently listed", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "delete"}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "list, fork, exec, clear")
+		assert.Contains(t, err.Error(), "list, fork, exec, exit, wait, clear")
 	})
 
 	// exec is the worker's door: it reports the base it actually landed on and is
@@ -206,6 +206,42 @@ func TestJobTool(t *testing.T) {
 		assert.Contains(t, err.Error(), "goal")
 		assert.Contains(t, err.Error(), "read_only", "a client that mistyped two params learns both in one round trip")
 	})
+}
+
+func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
+	t.Parallel()
+
+	tool := &jobTool{
+		store: tmpJobStore(t, t.TempDir()),
+		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}, nil
+		},
+	}
+	invoke := func(params map[string]any) spells.InvokeResponse {
+		t.Helper()
+		response, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: params})
+		require.NoError(t, err)
+		return response
+	}
+	invoke(map[string]any{
+		"op": "fork", "id": "evidence", "state": "running", "write_paths": "internal/job",
+		"check": "go::go-test .",
+	})
+	result := map[string]any{
+		"schema_version":   job.ResultSchemaVersion,
+		"job":              "evidence",
+		"changed_paths":    []any{"internal/job/verify.go"},
+		"validation":       map[string]any{"command": "magus run go::go-test .", "output_ref": "out-evidence"},
+		"unresolved_risks": []any{},
+	}
+	exited := invoke(map[string]any{"op": "exit", "id": "evidence", "result": result}).Data.(types.Job)
+	assert.Equal(t, types.StateExited, exited.State)
+	status := invoke(map[string]any{"op": "wait", "id": "evidence"}).Data.(types.JobStatus)
+	assert.True(t, status.Verified, status.Violations)
+
+	_, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "exit", "id": "evidence", "result": "not-an-object"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "result must be an object")
 }
 
 // TestJobToolListAnswersOverlapsAndReleases covers what a list is FOR beyond the

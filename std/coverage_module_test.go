@@ -226,7 +226,7 @@ func TestValidateModuleRejectsMalformedMCPTools(t *testing.T) {
 		{
 			"param type must be a schema scalar",
 			MCPTool{Name: "m_a", Doc: "d", Params: []MCPParam{{Name: "p", Type: TypeStringSlice}}},
-			"has no JSON schema scalar",
+			"has no supported JSON schema shape",
 		},
 		{
 			"param names are unique",

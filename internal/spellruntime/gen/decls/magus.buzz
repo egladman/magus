@@ -448,6 +448,13 @@ export object LeaseCheck {
     args: [str] = [],
 }
 
+export object CompletionGate {
+    id: str = "",
+    description: str = "",
+    check: LeaseCheck = LeaseCheck{},
+    dependsOn: [str] = [],
+}
+
 export object JobRelease {
     path: str = "",
     digest: str = "",
@@ -470,11 +477,17 @@ export object JobResultValidation {
     outputRef: str = "",
 }
 
+export object GateEvidence {
+    gateID: str = "",
+    outputRef: str = "",
+}
+
 export object JobResult {
     schemaVersion: int = 0,
     job: str = "",
     changedPaths: [str] = [],
     validation: JobResultValidation = JobResultValidation{},
+    gateEvidence: [GateEvidence] = [],
     descendants: [str] = [],
     unresolvedRisks: [str] = [],
 }
@@ -482,10 +495,16 @@ export object JobResult {
 export object JobAttempt {
     found: bool = false,
     ref: str = "",
+    timestampMs: int = 0,
     project: str = "",
     target: str = "",
     spell: str = "",
     failed: bool = false,
+}
+
+export object JobGateAttempt {
+    gateID: str = "",
+    attempt: JobAttempt = JobAttempt{},
 }
 
 export object JobRun {
@@ -511,6 +530,7 @@ export object Job {
     model: str = "",
     check: LeaseCheck? = null,
     validation: str = "",
+    completionGates: [CompletionGate] = [],
     state: str = "",
     holder: str = "",
     readOnly: bool = false,
@@ -524,6 +544,7 @@ export object Job {
     updated: int = 0,
     result: JobResult? = null,
     attempt: JobAttempt? = null,
+    gateAttempts: [JobGateAttempt] = [],
     lastRun: JobRun? = null,
 }
 
@@ -537,6 +558,22 @@ export object JobOverlap {
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
+}
+
+export object GateStatus {
+    id: str = "",
+    verified: bool = false,
+    outputRef: str = "",
+    violations: [str] = [],
+}
+
+export object JobStatus {
+    job: str = "",
+    verified: bool = false,
+    violations: [str] = [],
+    risks: [str] = [],
+    command: str = "",
+    gates: [GateStatus] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
@@ -598,11 +635,13 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
 export object job {
     static extern fun clear() > int !> any;
+    static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;
     static extern fun list() > JobList !> any;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Job !> any;
     static extern fun register(id: str, reported_base: str) > {str: any} !> any;
+    static extern fun wait(id: str, result: {str: any} = {<str: any>}) > JobStatus !> any;
 }
 

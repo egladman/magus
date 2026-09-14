@@ -160,7 +160,11 @@ import (
 // 69: magus-multi-agent names a lease's lanes write_paths, read_paths and deny_paths and
 // its model `model`, which is what every magus surface now spells them; the old names are
 // accepted on input for one release and nowhere emitted.
-const SkillVersion = 69
+// 70: magus-workspace-rules makes the recurring guard-feedback loop actionable:
+// a person or unbound orchestrator may explicitly refresh only the Magus-owned
+// host hook entries, while the rule engine, installed skills, memory,
+// and repository instructions remain outside that write set.
+const SkillVersion = 70
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -183,12 +187,6 @@ const AgentsFile = "AGENTS.md"
 // file.
 // TestLocalSkillNameIsReserved is what makes the promise enforceable.
 const LocalSkillName = "magus-local-development"
-
-var wellKnownSkillDirs = []string{".agents/skills", ".claude/skills", ".opencode/skills"}
-
-// WellKnownSkillDirs returns the conventional locations verification probes.
-// Installation remains explicit: callers must name every destination to write.
-func WellKnownSkillDirs() []string { return append([]string(nil), wellKnownSkillDirs...) }
 
 // AgentSkill is Magus's provider-neutral skill contract. Renderers own provider
 // metadata and file shape; the Markdown body only explains the workflow.
@@ -902,23 +900,30 @@ func (c *Catalog) skillSourceFiles() ([]string, error) {
 var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
 var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
 
-// CheckStatuses inspects known skill locations plus AGENTS.md, returning only
+// CheckStatuses inspects descriptor-declared skill locations plus AGENTS.md, returning only
 // locations with a Magus install. The result order is deterministic.
 func (c *Catalog) CheckStatuses(dir string) []Status {
 	var out []Status
-	for _, dest := range wellKnownSkillDirs {
+	locations, err := HarnessSkillLocations(dir)
+	if err != nil {
+		out = append(out, Status{Location: harnessDirName, Installed: true, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
+	}
+	for _, location := range locations {
 		// The anchor decides only whether magus is installed HERE; grading is
 		// per-skill below, so its contents are not read.
-		path := filepath.Join(dir, dest, anchorSkillRel)
+		path := filepath.Join(dir, location.Path, anchorSkillRel)
 		_, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
+				if _, dirErr := os.Stat(filepath.Join(dir, location.Path)); dirErr == nil {
+					out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --host " + location.Host})
+				}
 				continue
 			}
-			out = append(out, Status{Location: dest, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
+			out = append(out, Status{Location: location.Path, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
-		out = append(out, c.gradeDest(dir, dest))
+		out = append(out, c.gradeDest(dir, location))
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, AgentsFile)); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
@@ -934,13 +939,63 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	return out
 }
 
+// HarnessSkillLocation is one descriptor-declared skill tree and the one form
+// it is allowed to contain.
+type HarnessSkillLocation struct {
+	Host string
+	Path string
+	Form Form
+}
+
+// HarnessSkillLocations discovers skill locations from user-owned descriptors.
+// There is no compiled fallback list: adding a collaborator is data, not a release.
+func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
+	descriptors, err := loadHarnesses(root)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]HarnessSkillLocation{}
+	for _, loaded := range descriptors {
+		for _, path := range loaded.descriptor.Skills.Paths {
+			location := HarnessSkillLocation{Host: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
+			if prior, exists := seen[path]; exists {
+				if prior.Form != location.Form {
+					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.Host, location.Host, path)
+				}
+				continue
+			}
+			seen[path] = location
+		}
+	}
+	locations := make([]HarnessSkillLocation, 0, len(seen))
+	for _, location := range seen {
+		locations = append(locations, location)
+	}
+	sort.Slice(locations, func(i, j int) bool { return locations[i].Path < locations[j].Path })
+	return locations, nil
+}
+
+// HarnessSkillDirs returns descriptor-declared locations for display-only callers.
+func HarnessSkillDirs(root string) []string {
+	locations, err := HarnessSkillLocations(root)
+	if err != nil {
+		return nil
+	}
+	paths := make([]string, 0, len(locations))
+	for _, location := range locations {
+		paths = append(paths, location.Path)
+	}
+	return paths
+}
+
 // gradeDest grades every magus skill installed under dest, not just the anchor.
 //
 // Reading one skill worked only while the digest covered the whole catalog. With
 // a per-skill digest that shortcut goes blind: a stale magus-run reads as current
 // when magus-query happens not to have changed.
-func (c *Catalog) gradeDest(dir, dest string) Status {
-	reinstall := "magus agent install " + dest + " --force"
+func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
+	reinstall := "magus agent harness install --host " + location.Host
+	dest := location.Path
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
 	// pre-versioning install of a shipped skill, the one case that must still report.
@@ -948,6 +1003,11 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	// writes, and a twin beside its primary is a correct install rather than litter.
 	// Pruning is the question that needs the form the caller chose.
 	shipped, shippedErr := c.shipped(FormBoth)
+	expected, expectedErr := c.shipped(location.Form)
+	if expectedErr != nil {
+		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
+	}
+	seen := make(map[string]bool, len(expected))
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
@@ -968,8 +1028,17 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 		if shippedErr == nil && !shipped[name] && !bytes.Contains(body, []byte(generatedSkillMarker)) {
 			continue
 		}
+		if !expected[name] {
+			return Status{Location: dest, Installed: true, Stale: true, Detail: name + " is not part of the descriptor's " + string(location.Form) + " form; re-run: " + reinstall}
+		}
+		seen[name] = true
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
 			return Status{Location: dest, Installed: true, Stale: true, Detail: name + ": " + st.Detail}
+		}
+	}
+	for name := range expected {
+		if !seen[name] {
+			return Status{Location: dest, Installed: true, Stale: true, Detail: "missing " + name + "; re-run: " + reinstall}
 		}
 	}
 	return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}

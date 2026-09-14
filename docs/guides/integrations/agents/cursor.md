@@ -444,7 +444,7 @@ against this repository's binary. The Cursor half is written against the
 product's published hook documentation and has not been executed here, so
 confirm it against [Cursor hooks](https://cursor.com/docs/agent/hooks).
 
-There is also no session-load recipe for this host, where the other three ship
+There is also no session-load adapter for this host, where the other three ship
 one. Nothing in Cursor prevents it; nobody has written it.
 
 ## Verify

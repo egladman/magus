@@ -8,8 +8,11 @@ tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 
 Most agent hosts can run a hook before executing a shell command or writing a
 file. magus supplies the rule evaluation; the host supplies the hook that calls
-it. `magus session hook` reads one command or one path, applies the rules, and returns a
-neutral verdict.
+it. `magus session hook` reads one command or one path, applies the rules, and
+returns a neutral verdict. A harness descriptor can select the tested
+`magus agent hook --host <id>` adapter and its reply template without adding
+host-specific code to Magus; portable hosts can render the neutral verdict
+themselves.
 
 Wiring is per host: [Claude Code](claude-code.md), [Codex](codex.md),
 [Cursor](cursor.md), [OpenCode](opencode.md), or
@@ -55,7 +58,7 @@ not because grep is safe.
 
 **It breaks a provenance guarantee.** The first three judge the write - whether
 it can be taken back, whether it bypassed the tool, whether it was redundant.
-This one judges what the write does to the corpus: the artifact's value depends
+This one judges what the write does to the checkout: the artifact's value depends
 on a guarantee about who authored it, and undoing the write does not restore the
 guarantee.
 
@@ -411,18 +414,15 @@ an unresolved risk and stop." The texts they replace ended by naming the
 `magus_job` tool, meaning "ask the orchestrator", and two independent readers
 took it as permission and widened their own row with it.
 
-A fourth rule DENIES and is not about the lane at all: a write to the host's own
-guard wiring. `.claude/settings.json` and `.claude/settings.local.json`,
-`.claude/hooks/`, `.cursor/hooks.json` and `.cursor/hooks/`, `.codex/hooks.json`,
-and `.opencode/plugins/` (or `~/.config/opencode/plugins/`) are where every rule
-on this page is switched on, so an edit there decides whether the guard runs at
-all from the host's next session start. That is refused under ANY bound lease, no
-matter what the lane says: a lane that happens to contain `.claude/` was a lane,
-not the guard's own switch. An unbound session gets a once-per-session advisory
-instead, because rewiring a host is exactly what an orchestrator or a person does,
-and what they are owed is the sentence saying which file this is. The failure is
-silent either way, since a disarmed guard and a clean session produce identical
-output, which is the whole reason the rule exists.
+A fourth rule DENIES and is not about the lane at all: a write to a harness
+descriptor's own guard wiring. The descriptor declares the configuration path
+that switches its guard on for the host's next session, so a bound lease cannot
+edit that path regardless of what the lane says. An unbound session gets a
+once-per-session advisory instead, because rewiring a host is exactly what an
+orchestrator or a person does, and what they are owed is the sentence saying
+which descriptor owns the file. The failure is silent either way, since a
+disarmed guard and a clean session produce identical output, which is the whole
+reason the rule exists.
 
 The rest are heuristics on the path, and each only fills a silence the
 definitive rules leave: a cross-host instruction file (`AGENTS.md`, `CLAUDE.md`)
@@ -527,7 +527,7 @@ host-specific code in magus.
 It reads a command string and returns an opinion. That catches a habit and does
 nothing against intent. `TestGuardKnownHoles` records what it misses: a command
 inside a script file, a program name from `$(...)` or a variable, a shell alias,
-a recipe behind `make`.
+an adapter behind `make`.
 
 You own the hook script and its response template. Edit them so denials stop
 arriving, and you have configured your tool, the same way you can turn off every
@@ -566,7 +566,8 @@ only the stable fields:
 ```
 
 For a file-edit hook, `path` replaces `command`. The response carries the same
-schema version plus `decision` and, where applicable, `reason` or `context`.
+schema version plus `decision` and, where applicable, `reason`, `context`, or a
+stable denial `rule` identifier.
 `host` and `session` also sit on the event row itself, not only in the blob, so
 a view can group a page of observations without fetching a payload per row.
 
@@ -594,6 +595,35 @@ A host without a hook cannot be observed: no local CLI can discover commands
 another process did not report. The coverage boundary is explicit rather than
 guessed.
 
+## Improving recurring friction
+
+The trail is evidence, not automatic self-modification. By default, `magus agent
+improve` is read-only. It deduplicates only repeated stable denial rules (three
+times in one host session, or across two sessions) and proposes a destination:
+discard it, improve a local skill, update a Magus-owned host harness, or
+report an upstream issue.
+
+```sh
+magus agent improve
+magus agent improve --session <host-session-id> -o json
+magus agent improve --apply --host claude-code
+magus agent improve --apply --host codex
+```
+
+`--apply` is the explicit authorization to write. It updates only Magus-owned
+host `PreToolUse` entries in the workspace-local JSON configuration for the
+selected host and preserves all other settings. It never creates or changes a
+user-level host config, compiled guard rules, installed skills, `AGENTS.md`, or
+memory. Review the resulting ordinary config diff; commit it only when that
+workspace keeps its harness in version control.
+
+A later `magus run` request in the same host session is shown as a follow-up,
+not a success: pre-tool hooks cannot observe execution or an exit status. After
+a person makes a durable decision, use the existing workspace-rules loop to
+create a memory decision and, when appropriate, a stamped local skill. A host
+harness update is not itself a memory decision. Never relax a compiled guard
+locally.
+
 One payload shape is recorded and never judged. A hook event carrying a `prompt`
 rather than a command or a file path is a lease handoff: it appends an
 `agent_spawn` event and returns `pass` without evaluating a rule, because there
@@ -605,7 +635,7 @@ command would otherwise block the lease that describes it. See
 
 The point of the grep-to-query nudge is to move a number: how often agents reach
 for the knowledge graph versus a raw text search. `magus agent adoption` reports
-it from a corpus of shell commands - the graph-to-grep ratio, the file reads a
+it from shell commands: the graph-to-grep ratio, the file reads a
 targeted read would beat, and the top repo-wide greps whose pattern is a real
 identifier, each with the graph command its shape routes to (`magus refs` for a
 symbol, `magus query` for a diagnostic code or a Buzz op).

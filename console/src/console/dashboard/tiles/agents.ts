@@ -1,10 +1,10 @@
 // agents.ts - who is driving magus right now, and through which tool.
 //
-// magus is increasingly operated by agents rather than by hands: every Claude Code, Codex, Cursor
-// and OpenCode session funnels its shell and file-edit calls through the same `magus session hook`
-// guard, and every MCP call goes through the daemon. All of it lands in the activity trail. Until
-// this tile, none of it reached the dashboard - the board could tell you the pool was saturated but
-// not that three agents were the reason, and it could not show a guard denial at all.
+// magus is increasingly operated by agents rather than by hands: every configured harness funnels
+// its shell and file-edit calls through the same `magus session hook` guard, and every MCP call goes
+// through the daemon. All of it lands in the activity trail. Until this tile, none of it reached the
+// dashboard - the board could tell you the pool was saturated but not that three agents were the
+// reason, and it could not show a guard denial at all.
 //
 // == The metric is "active recently", NOT "running now" ==
 //
@@ -76,11 +76,32 @@ function noticeGlyph(kind: "deny" | "advise" | "pass"): SVGElement {
 // brightness.
 const RECENT_MS = 60_000;
 
-// hostLabel renders the wrapper's host id for display. The ids are the ones the guard templates
-// send (claude-code, codex, cursor, opencode); anything else passes through, so a host magus has
-// never heard of still appears rather than being bucketed away as unknown.
+// hostLabel renders the host id as supplied. An unknown host remains visible rather than being
+// bucketed away as unknown.
 function hostLabel(host: string): string {
   return host === "unattributed" ? "unattributed" : host;
+}
+
+// hostAccent derives a stable display accent from any host id. This is presentation only: the
+// dashboard receives no provider registry and contains no provider-specific styling or allowlist.
+// FNV-1a keeps the same id in the same color across frames while the small palette remains legible
+// against the console's neutral surface.
+function hostAccent(host: string): string {
+  const palette = [
+    "var(--console-clay)",
+    "var(--console-spruce)",
+    "var(--console-indigo)",
+    "var(--console-moss)",
+  ];
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < host.length; i++) {
+    hash = Math.imul(hash ^ host.charCodeAt(i), 0x01000193);
+  }
+  return palette[(hash >>> 0) % palette.length];
+}
+
+function applyHostAccent(element: HTMLElement, host: string): void {
+  element.style.setProperty("--agent-host-accent", hostAccent(host));
 }
 
 export function agentsTile(): Tile {
@@ -179,7 +200,7 @@ export function agentsTile(): Tile {
     seatKey.replaceChildren(
       ...hosts.map((hv) => {
         const item = h("span", "console-dashboard-agents__keyitem", hostLabel(hv.host));
-        item.dataset.host = hv.host;
+        applyHostAccent(item, hv.host);
         return item;
       }),
     );
@@ -194,7 +215,7 @@ export function agentsTile(): Tile {
     for (const hostView of view.hosts) {
       for (let i = 0; i < hostView.sessions && cells.length < 64; i++) {
         const cell = h("div", "console-dashboard-agents__seat");
-        cell.dataset.host = hostView.host;
+        applyHostAccent(cell, hostView.host);
         cell.dataset.warm = now - hostView.lastMs < RECENT_MS ? "yes" : "no";
         cell.title = hostLabel(hostView.host) + " - " + hostView.calls + " calls";
         cells.push(cell);

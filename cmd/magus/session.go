@@ -435,14 +435,14 @@ func sessionsSince(summaries []sessions.Summary, cutoff time.Time) []sessions.Su
 // and what the hook printed back. Neither store answers "did this session comply"
 // alone, and the join is what makes the question answerable at all.
 //
-// Extraction is not here and never will be: a per-host recipe the reader owns
+// Extraction is not here and never will be: a per-host adapter the reader owns
 // turns a transcript into the stream below, exactly as `magus agent adoption`
-// takes a corpus rather than reading a host's logs. magus takes normalized events
+// takes input rather than reading a host's logs. magus takes normalized events
 // in its own vocabulary, so a host renaming a tool costs its reader one config
 // line instead of costing magus a release.
 
 // loadEvent is one line of the stream. The field names are the guard envelope's
-// where they overlap, since a recipe author is already reading that contract.
+// where they overlap, since an adapter author is already reading that contract.
 type loadEvent struct {
 	Host       string `json:"host"`
 	Session    string `json:"session"`
@@ -461,7 +461,7 @@ type loadEvent struct {
 
 // loadMaxLineBytes bounds one event. A hook's output is the largest thing a line
 // legitimately carries and it is prose, so a line past this was produced by a
-// recipe piping something else entirely.
+// adapter piping something else entirely.
 const loadMaxLineBytes = 1 << 20
 
 // loadHookTextCap bounds what a hook.output event stores. The text is magus's own
@@ -469,7 +469,7 @@ const loadMaxLineBytes = 1 << 20
 // the same paragraph every session already has.
 const loadHookTextCap = 2000
 
-// loadRejectsShown bounds the diagnostics a failed load prints. A recipe that
+// loadRejectsShown bounds the diagnostics a failed load prints. An adapter that
 // emits one bad line emits thousands, and the first few say which field is wrong.
 const loadRejectsShown = 5
 
@@ -499,7 +499,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "store: one JSON object per line, host vocabulary already mapped onto magus's.")
 		fmt.Fprintln(os.Stderr, "Every line needs host, session, kind and ref; kind is one of "+strings.Join(sessions.EventKinds, ", ")+".")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running a recipe over the same")
+		fmt.Fprintln(os.Stderr, "Events are keyed on (host, session, kind, ref), so re-running an adapter over the same")
 		fmt.Fprintln(os.Stderr, "transcript loads nothing twice. Events whose cwd belongs to another repository")
 		fmt.Fprintln(os.Stderr, "are dropped; worktrees of this one are kept.")
 		fmt.Fprintln(os.Stderr, "")
@@ -579,9 +579,9 @@ func sessionLoad(root string, args []string) error {
 // readLoadStream decodes the stream, judges what it must, and returns the events
 // worth storing on the summary, with the counts and the per-line diagnostics.
 //
-// A rejected line does not stop the read, and neither does an overlong one. A recipe
+// A rejected line does not stop the read, and neither does an overlong one. An adapter
 // emitting one bad shape emits it for a whole transcript, and loading the rest is what
-// lets the reader fix the recipe and re-run without losing what already worked.
+// lets the reader fix the adapter and re-run without losing what already worked.
 func readLoadStream(in io.Reader, dir string) (sessionLoadSummary, error) {
 	var summary sessionLoadSummary
 	reject := func(line int, format string, args ...any) {

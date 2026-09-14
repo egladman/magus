@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# magus session load recipe: turns `opencode export` output into the magus
+# magus session load adapter: turns `opencode export` output into the magus
 # session event contract, one JSON object per line.
 #
 # This file is the source of truth. The docs site embeds it, and you can download
@@ -9,9 +9,9 @@
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
 #
-#   HOST_REPO_ROOT      the repository to scope to; default is the git toplevel
-#                       of the current directory. A cwd UNDER it counts, which is
-#                       what keeps worktrees in
+#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+#                       workspace of the current directory. A cwd UNDER it counts,
+#                       which keeps nested project sessions in
 #   HOST_SESSION_IDS    the sessions to export, space separated. Default is every
 #                       id `opencode sessions` lists
 #   HOST_OPENCODE_BIN   path to the opencode binary, when it is not on PATH
@@ -32,19 +32,36 @@
 # NO `set -e`: a session whose export fails is not a reason to abandon the rest.
 
 [ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/opencode
-[ -n "$HOST_REPO_ROOT" ] || HOST_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -n "$HOST_OPENCODE_BIN" ] || HOST_OPENCODE_BIN=$(command -v opencode 2>/dev/null)
+
+# Resolve the workspace's own binary before asking it for the active workspace.
+# A session can start below the checkout root; the workspace model is VCS-neutral
+# and its root is not necessarily a Git toplevel.
+if [ -z "$SESSION_MAGUS_BIN" ]; then
+  session_root=$PWD
+  while [ -n "$session_root" ]; do
+    if [ -x "$session_root/magus" ]; then
+      SESSION_MAGUS_BIN=$session_root/magus
+      break
+    fi
+    session_root=${session_root%/*}
+  done
+fi
+[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
+if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
+  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
+fi
 
 session_stdout=
 [ "$1" = "--stdout" ] && session_stdout=1
 
 if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no repository here, so there is nothing to scope events to. Run this inside a checkout, or set HOST_REPO_ROOT.' >&2
+  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
   exit 0
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the recipe.' >&2
+  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
   exit 0
 fi
 
@@ -52,18 +69,6 @@ if [ -z "$HOST_OPENCODE_BIN" ] || [ ! -x "$HOST_OPENCODE_BIN" ]; then
   echo 'magus session load: opencode is not on PATH, so no session events were extracted. Set HOST_OPENCODE_BIN to its path.' >&2
   exit 0
 fi
-
-if [ -z "$SESSION_MAGUS_BIN" ]; then
-  session_root=$PWD
-  while [ -n "$session_root" ]; do
-    if [ -f "$session_root/magusfile.buzz" ]; then
-      [ -x "$session_root/magus" ] && SESSION_MAGUS_BIN=$session_root/magus
-      break
-    fi
-    session_root=${session_root%/*}
-  done
-fi
-[ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
   echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2

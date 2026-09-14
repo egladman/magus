@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 4,
+      "const": 5,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
@@ -123,6 +123,51 @@
     "validation": {
       "type": "string",
       "description": "Validation is the check as a rendered `magus run` line."
+    },
+    "completion_gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "check"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "check": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target"],
+            "properties": {
+              "target": {
+                "type": "string",
+                "description": "Target is the magus target the check runs, without the `magus run` in front of it."
+              },
+              "project": {
+                "type": "string",
+                "description": "Project is the project the target runs in, \".\" when the row names none."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Args are forwarded to the tool after `--`, never to magus."
+              }
+            }
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "description": "CompletionGates declare additional evidence-backed acceptance conditions."
     }
   }
 }

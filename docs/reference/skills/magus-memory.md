@@ -3,8 +3,8 @@ title: magus-memory
 generated_from: internal/agent/skills/magus-memory/SKILL.md
 description: "Maintain a user-owned per-repository memory through magus_memory or `magus memory`: named decisions, plans, pointers, and the hypotheses an investigation ruled out, all surviving worktrees and sessions."
 tags: [agents, skills, magus-memory]
-skill_full_bytes: 5557
-skill_short_bytes: 4609
+skill_full_bytes: 5720
+skill_short_bytes: 4772
 ---
 
 # magus-memory
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `69` |
+| `agent-skill-version` | `70` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `d7efb12dcc37` |
+| `skill-content` | `48164904e93e` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -140,6 +140,8 @@ than a ref you can anchor, it is theirs to record, not yours.
 - Facts the repo already records (code structure, git history, MAGUS.md) do not
   belong in memory; record the `magus_query` that surfaces them instead.
 - Records live outside the repo, keyed by repository identity. Console, CLI and MCP all show the same entries.
+- Do not create a memory entry for each guard event. Activity is automatic evidence;
+  memory starts only after a person makes a durable decision or plan from it.
 ````
 
 
@@ -246,6 +248,8 @@ than a ref you can anchor, it is theirs to record, not yours.
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
   session erase another's entry.
+- Do not create a memory entry for each guard event. Activity is automatic evidence;
+  memory starts only after a person makes a durable decision or plan from it.
 ````
 
 

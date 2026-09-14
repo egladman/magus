@@ -315,8 +315,8 @@ type MCPTool struct {
 }
 
 // MCPParam is one named parameter of an MCPTool. Type is restricted to the
-// scalars JSON schema and the MCP tool builder both have: TypeString, TypeInt,
-// TypeFloat, TypeBool.
+// JSON-schema shapes the MCP tool builder supports: string, number, boolean,
+// and an untyped object for a strict downstream decoder to validate.
 type MCPParam struct {
 	Name     string
 	Type     TypeTag

@@ -54,3 +54,21 @@ func TestModuleDocsUpToDate(t *testing.T) {
 			"orphaned doc %s: no module registers it; delete it (re-run magus-docs)", base)
 	}
 }
+
+func TestPruneRemovesOnlyStaleModulePages(t *testing.T) {
+	out := t.TempDir()
+	modules := []std.Module{{Name: "keep"}}
+	require.NoError(t, os.WriteFile(filepath.Join(out, "keep.md"), []byte(renderModule(modules[0])), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "index.md"), []byte(renderIndex(modules)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "keep 3.md"), []byte(renderModule(modules[0])), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "index 3.md"), []byte(renderIndex(modules)), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(out, "authored.md"), []byte("---\ngenerated_from: elsewhere.md\n---\n# Keep me\n"), 0o644))
+
+	require.NoError(t, prune(out, modules))
+
+	assert.FileExists(t, filepath.Join(out, "keep.md"))
+	assert.FileExists(t, filepath.Join(out, "index.md"))
+	assert.NoFileExists(t, filepath.Join(out, "keep 3.md"))
+	assert.NoFileExists(t, filepath.Join(out, "index 3.md"))
+	assert.FileExists(t, filepath.Join(out, "authored.md"))
+}

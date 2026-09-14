@@ -66,6 +66,8 @@ func mcpParamType(t std.TypeTag) (string, error) {
 		return "boolean", nil
 	case std.TypeInt, std.TypeFloat:
 		return "number", nil
+	case std.TypeAnyMap:
+		return "object", nil
 	default:
 		return "", fmt.Errorf("param type %s has no JSON schema scalar", t.GoType())
 	}

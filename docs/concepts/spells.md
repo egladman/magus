@@ -261,10 +261,10 @@ For cache-correctness rules (declare every input in `needs`, declare `provides` 
 
 ## What magus bounds, and what it does not
 
-A spell is code. That is the design, not a compromise: a build system whose
-configuration cannot express a loop or a conditional pushes that logic into shell
-scripts nobody can cache, or into the CI provider nobody can run locally. Config
-as code means the config is code, and code runs.
+A spell is executable Buzz code, not inert configuration. That is the design, not
+a compromise: a build system whose declarations cannot express a loop or a
+conditional pushes that logic into shell scripts nobody can cache, or into the CI
+provider nobody can run locally.
 
 So the question is not "how do we stop a spell doing things" - it is "which
 things does magus govern, and which are yours". Being explicit about that line is

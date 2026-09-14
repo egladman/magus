@@ -11,8 +11,11 @@
 package json
 
 import (
+	"bytes"
+	legacyjson "encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"fmt"
 	"io"
 	"time"
 )
@@ -60,6 +63,86 @@ func Valid(data []byte) bool             { return jsontext.Value(data).IsValid()
 // as one that was taken into account.
 func UnmarshalStrict(data []byte, v any) error {
 	return jsonv2.Unmarshal(data, v, unmarshalOpts, jsonv2.RejectUnknownMembers(true))
+}
+
+// UnmarshalLossless decodes an untyped JSON document without silently
+// collapsing duplicate object keys or large numbers. Configuration mergers use
+// it before rewriting a caller-owned document.
+func UnmarshalLossless(data []byte, v any) error {
+	if err := rejectDuplicateKeys(data); err != nil {
+		return err
+	}
+	decoder := legacyjson.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(v); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("unexpected second JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+func rejectDuplicateKeys(data []byte) error {
+	decoder := legacyjson.NewDecoder(bytes.NewReader(data))
+	if err := walkJSONValue(decoder); err != nil {
+		return err
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("unexpected second JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
+func walkJSONValue(decoder *legacyjson.Decoder) error {
+	token, err := decoder.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := token.(legacyjson.Delim)
+	if !ok {
+		return nil
+	}
+	switch delim {
+	case '{':
+		keys := map[string]bool{}
+		for decoder.More() {
+			key, err := decoder.Token()
+			if err != nil {
+				return err
+			}
+			name, ok := key.(string)
+			if !ok {
+				return fmt.Errorf("object key is not a string")
+			}
+			if keys[name] {
+				return fmt.Errorf("duplicate JSON object key %q", name)
+			}
+			keys[name] = true
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	case '[':
+		for decoder.More() {
+			if err := walkJSONValue(decoder); err != nil {
+				return err
+			}
+		}
+		_, err = decoder.Token()
+		return err
+	default:
+		return fmt.Errorf("unexpected JSON delimiter %q", delim)
+	}
 }
 
 func MarshalIndent(v any, prefix, indent string) ([]byte, error) {

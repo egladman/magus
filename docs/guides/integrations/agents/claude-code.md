@@ -46,10 +46,18 @@ uses the CLI fallback; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
-Two `PreToolUse` entries: one matching `Bash` for the command rules, one
-matching the file-editing tools for the declared-output and notes rules. Both
-run a template you own - download them from
-[Guard hook templates](guard-templates.md) and point the config at your copies.
+The shipped `claude-code` harness descriptor owns the `PreToolUse` entries: its
+matchers, reply template, and `.claude/settings.json` path are data in
+`harnesses/claude-code.json`, not a provider-specific branch in Magus. Apply it
+from the workspace root:
+
+```sh
+magus agent harness apply --host claude-code
+magus agent harness verify --host claude-code
+```
+
+The current descriptor installs entries for commands, file edits, and Magus MCP
+tool calls. Each calls the adapter directly:
 
 ```json
 {
@@ -57,41 +65,58 @@ run a template you own - download them from
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/magus-guard-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh ~/.claude/hooks/magus-guard-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }]
       }
     ]
   }
 }
 ```
 
-This repository's own `.claude/settings.json` points at the templates in
-`docs/guides/integrations/agents/` rather than at a private copy, and a test
-fails if it stops doing so. What magus dogfoods is what you download.
+This repository's own `.claude/settings.json` uses that same direct command. It
+replaces the `magus-guard-command.sh` and `magus-guard-path.sh` templates. Use
+the [guard templates](guard-templates.md) where `magus` is unavailable on `PATH`.
 
-`magus session hook` also reads Claude Code's event JSON directly: `tool_input.command`,
-`tool_input.file_path`, `session_id` and `hook_event_name` are the fields it
-knows, and a payload carrying a file path is judged as a write without `--path`.
-So one command serves both matchers, with no `jq` and no script:
+`magus agent hook --host claude-code` reads Claude Code's event JSON directly:
+`tool_input.command`, `tool_input.file_path`, `session_id` and `hook_event_name`
+are the fields it knows, and a payload carrying a file path is judged as a write
+without `--path`. The adapter supplies the host response format and suppresses
+the internal shell-oriented denial status, so one command serves both matchers
+with no `jq` and no script:
 
 ```sh
-magus session hook -o 'template={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+magus agent hook --host claude-code
 ```
 
-What it trades away is the templates' handling of a magus that is missing or too
-old to judge: both of those render nothing, and Claude Code reads nothing as
-allow, so the session goes unguarded with no sign of it. Use the short form
-while you are experimenting; use the templates once you rely on the guard.
+It requires the current binary on `PATH`. The templates retain the more verbose
+missing-or-broken-binary notice and are the right fallback when that prerequisite
+cannot be enforced.
+
+### Maintaining the workspace harness
+
+When repeated guard evidence identifies an outdated Claude Code harness, review
+the proposal with `magus agent improve`, then explicitly apply it:
+
+```sh
+magus agent improve --apply --host claude-code
+```
+
+That command delegates the write to the `claude-code` descriptor. It updates
+only its Magus-owned host `PreToolUse` entries in the descriptor's workspace
+configuration path, preserves unrelated settings, and does not touch user-level
+configuration, templates, compiled guard rules, skills, memory, or `AGENTS.md`.
+Review the normal JSON diff before committing it, then run `magus agent harness
+verify --host claude-code`.
 
 ## MCP tool calls
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
-`mcp__<server>__<tool>`. If you configured the `magus` daemon as `magus` (the
-name [MCP](../mcp.md) uses in its own examples), a fourth entry judges every
-call to it the same way the command surface is judged:
+`mcp__<server>__<tool>`. The shipped descriptor includes a Magus-MCP matcher,
+so `magus agent harness apply --host claude-code` installs this entry alongside
+the command and file surfaces:
 
 ```json
 {
@@ -100,7 +125,7 @@ call to it the same way the command surface is judged:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 sh ~/.claude/hooks/magus-guard-command.sh", "timeout": 10 }
+          { "type": "command", "command": "magus agent hook --host claude-code", "timeout": 10 }
         ]
       }
     ]
@@ -108,10 +133,9 @@ call to it the same way the command surface is judged:
 }
 ```
 
-Same template, same reply shape - `HOST_EVENT_RAW` is the only difference. An
-MCP call carries no `tool_input.command` for `HOST_EVENT_PATH` to select, only
-a tool name and a params object, so this forwards the event whole instead of
-extracting one field. `magus session hook` already parses that whole envelope;
+Same adapter, same reply shape. An MCP call carries no `tool_input.command`,
+only a tool name and a params object, so the adapter forwards the event whole
+instead of extracting one field. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than
 denying or advising on one - which is the honest state to ship rather than
@@ -269,6 +293,9 @@ commits not yet on the base ref, the dirty tree split into sources, generated
 outputs and unclaimed paths, the live leases with the command that binds each
 one, the last recorded run's failures with the ref that holds their output, the
 guard wiring, and where the rules live.
+If recurring guard evidence crossed its review threshold, it also receives one
+improvement-review line with `magus agent improve`; it is a proposal, never an
+automatic instruction or memory edit.
 
 ```json
 {

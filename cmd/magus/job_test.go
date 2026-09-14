@@ -143,7 +143,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		model:      "principal",
 	}
 	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 4,
+	  "schema_version": 5,
 	  "id": "adj/store",
 	  "parent": "adjacency",
 	  "goal": "the store is the enforcement point",

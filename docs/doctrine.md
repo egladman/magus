@@ -399,16 +399,16 @@ The explain lenses cover verdicts magus computes. magus captures and replays
 the output of the tools a target drives, but it cannot make a third-party
 tool's reasoning inspectable; the lens stops at the tool boundary.
 
-The host boundary is not as clean as the entry above states it. The binary
-still knows a handful of host paths: `magus doctor` inventories the config
-locations it can name when it reports on guard wiring, and `agent install`
-probes the conventional skill directories. Both are read-only conveniences over
-locations on disk, and a host neither one names still works, but extending
-either list is a magus release. The envelope field names came from one host's
-payload shape rather than from a neutral design, so a host that spells them
-differently reshapes its payload before piping it. And the OpenCode plugin
-carries a type-check and tests because it is real TypeScript, which is more
-upkeep than a shell template and more than an example should need.
+The host boundary still has costs, but the binary no longer owns host location
+lists. A harness descriptor declares a configuration path, native event
+matchers, response template, and skill locations; `magus doctor` verifies that
+contract as data, and `agent install` follows its declared skill paths. A host
+neither one names can still work through a portable adapter, while a new native
+host can add a collaborator without a Magus release. The envelope field names
+remain host-shaped, so a host that spells them differently reshapes its payload
+before piping it. And the OpenCode plugin carries a type-check and tests because
+it is real TypeScript, which is more upkeep than a shell template and more than
+an example should need.
 
 Four rules on this page live only in prose today, and by this page's own
 standard that makes each a debt. Every one is a read of what magus already

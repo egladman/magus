@@ -59,25 +59,29 @@ verdict, not those host capabilities.
 A full setup is two steps: install the guidance where the host reads it, then
 wire the guard hook. Both are on your host's page.
 
-| host                                 | skills                        | guard                        |
-| ------------------------------------ | ----------------------------- | ---------------------------- |
-| [Claude Code](agents/claude-code.md) | `.claude/skills/`             | two `PreToolUse` hooks       |
-| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | `hooks.json`, same templates |
-| [Cursor](agents/cursor.md)           | AGENTS.md only                | one self-contained script    |
-| [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | a TypeScript plugin          |
-| [Any other host](agents/any-host.md) | wherever it reads them        | your own few lines of config |
+| host                                 | skills                        | guard                                                    |
+| ------------------------------------ | ----------------------------- | -------------------------------------------------------- |
+| [Claude Code](agents/claude-code.md) | `.claude/skills/`             | descriptor-owned `PreToolUse` entries                    |
+| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | descriptor-owned `PreToolUse` entries                    |
+| [Cursor](agents/cursor.md)           | AGENTS.md only                | one self-contained script                                |
+| [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | a TypeScript plugin                                      |
+| [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
-What you wire is yours. magus ships the rules and the verdict; the host-shaped
-few lines that carry an event in and a reply back are a template you copy and
-own, so a host magus has never heard of works the same way and a host that
-changes next month is your edit rather than a magus release.
+What you wire is yours. A native harness is a JSON descriptor: it names its own
+configuration path, event matchers, response template, and skill locations.
+Magus loads those collaborators rather than compiling host paths or matcher
+rules into the binary. `magus agent harness apply --host <id>` writes only the
+descriptor's Magus-owned `PreToolUse` entries, while `verify` reports whether
+the configuration still matches. A host Magus has never heard of can therefore
+ship its own descriptor without a Magus release; a portable adapter remains an
+option where a native event contract is not available.
 [Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
 what it costs you.
 
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the files Claude Code
-and Codex run, [Session load recipes](agents/session-load.md) for reading a
+and Codex run, [Session load adapters](agents/session-load.md) for reading a
 host's own session log back into magus,
 [Attention hooks](agents/notifications.md) for `magus session notify`,
 and [Jobs and leases](agents/leases.md) for the surface an agent uses when it
@@ -96,7 +100,8 @@ revision, commits not yet on the base ref, the dirty tree split by the same
 classifier `magus describe file` uses, the live leases with the command that
 binds each one, the last recorded run's failures with the ref that holds their
 output, whether any hook config here invokes magus, and where this workspace's
-rules live. Every line is read off the disk on the call, so none of it can
+rules live. When recurring guard evidence needs a human decision, it adds one
+bounded improvement-review line pointing to `magus agent improve`. Every line is read off the disk on the call, so none of it can
 degrade; it restates no rule, because a rule copied into a context block is a
 second copy to go stale.
 
@@ -109,23 +114,69 @@ event your host fires after compaction: `SessionStart` with matcher `compact` on
 the same brief into the compaction prompt itself. [Cursor](agents/cursor.md) is
 the one host that cannot: `preCompact` returns a message for the person and
 nothing for the model, so there run the command yourself and read the same thing.
+The review belongs here rather than in a `Stop` hook: a stop event can record
+evidence, but cannot reliably inject an actionable message into the model's next
+context.
 
 ## Parity across hosts
 
 Every host gets the same RULES - they come from one binary, and none of them is
 per-host. What differs is how much of a verdict a host's hook surface can carry.
+Claude Code is the reference contract: parity means every supported adapter
+exercises the same guard decision cells and preserves the verdict semantics.
+It does not mean vendors expose the same tools, payloads, or lifecycle events.
 
-|             | command rules  | declared-output rule                       | MCP call rules                                    | `deny` reaches the model               | `advise` reaches the model                 |
-| ----------- | -------------- | ------------------------------------------ | ------------------------------------------------- | -------------------------------------- | ------------------------------------------ |
-| Claude Code | yes (verified) | yes (verified)                             | wired, rule-empty (see below)                     | yes                                    | yes (`additionalContext`)                  |
-| Codex       | yes (verified) | yes, per OpenAI's docs (unverified here)   | not wired: no vendored evidence the event fires   | yes                                    | yes (`additionalContext`, unverified here) |
-| Cursor      | yes (verified) | yes, blocked before the write (unverified) | not wired: the event exists, the payload does not | yes (`user_message` + `agent_message`) | yes (`postToolUse`, after the call)        |
-| OpenCode    | yes (verified) | yes (verified)                             | not wired: sees the call, tool name unconfirmed   | yes (thrown)                           | yes (appended to the tool result)          |
+## Manual host end-to-end harness
 
-"Verified" means executed against this binary with a real event on stdin.
-"Wired, rule-empty" means the transport carries a verdict end to end but the
-guard has no MCP-specific rule yet, so every call passes - not because the
-channel is silent, but because nothing has been asked of it.
+The ordinary checks are deterministic: vendored schemas validate configuration
+and reply shapes, and the fixture-driven transport corpus executes every guard
+decision cell against the shipped adapters. That proves the guard's decision
+and adapter behavior for controlled events; it does not prove that a locally
+installed vendor client discovers configuration or dispatches a real hook.
+
+That separate, opt-in end-to-end check currently proves one narrow boundary:
+host discovery and delivery of a **denied command**. It is not a general host
+certification or a replacement for the deterministic corpus:
+
+```sh
+MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
+  host-e2e/claude-code.json host-e2e/codex.json host-e2e/opencode.json
+```
+
+It is deliberately not part of `ci` or `magus affected ci`. The runner makes a
+temporary Magus workspace and applies each supplied descriptor's isolated host
+configuration, then asks the host to use Bash for the denied command. The guard must
+intercept that call and render a deny; a broken hook can affect only the
+temporary workspace. A missing selected host is reported as a structured skip,
+while an installed host that never dispatches its hook is a failure. A run in
+which every selected host skips is inconclusive and exits nonzero
+rather than looking like a pass. Failures retain their workspace with the trace,
+generated configuration, and capped host stdout/stderr logs for inspection.
+Successful workspaces are deleted by default; set `MAGUS_HOST_E2E_KEEP=1` to
+retain them deliberately.
+
+It can use local authentication and quota, so the environment variable is a
+second explicit confirmation. The descriptor is the extension seam: a user can
+add a host without changing the runner by declaring its binary, isolated setup,
+launch command, and evidence contract. A descriptor must represent a real host
+dispatch path; the runner never substitutes a fixture and calls that an
+end-to-end pass.
+
+|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                             |
+| ----------- | ------------- | -------------------- | ---- | ------ | ----------------------------------------------- | ------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                                             | wired, rule-empty; live pending             |
+| Codex       | yes           | yes                  | yes  | yes    | yes                                             | wired, fixture-verified; live pending       |
+| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                     | not wired: event exists, payload does not   |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                                             | not wired: sees call, tool name unconfirmed |
+
+"Fixture-verified" means the adapter executed against this binary with a
+controlled host event on stdin. "Manual-E2E-proven" means a locally installed
+host discovered an isolated configuration, dispatched the `git stash` command
+hook, and delivered its deny. Neither label proves filesystem-path delivery,
+MCP delivery, or lifecycle delivery unless that cell says so; those remain
+pending. "Wired, rule-empty" means the transport carries a verdict end to end
+but the guard has no MCP-specific rule yet, so every call passes - not because
+the channel is silent, but because nothing has been asked of it.
 
 Both decisions now reach the model everywhere, which they did not until recently:
 one host was sent no advisory at all, one delivered it to the person on stderr,
@@ -137,21 +188,24 @@ twice, leaving two rows in the activity trail where the other hosts leave one.
 ### What each host carries
 
 One row per job magus does through a host event. A cell names the event that
-carries it, or the reason nothing does.
+carries it, or the reason nothing does. This is the intended host capability
+mapping, not a claim that the manual command/deny E2E run has proven delivery of
+each row. Path, MCP, and lifecycle delivery remain pending unless the evidence
+matrix above explicitly marks them proven.
 
-| job                         | Claude Code                                | Codex                                    | Cursor                                                    | OpenCode                          |
-| --------------------------- | ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------- | --------------------------------- |
-| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                      | `beforeShellExecution`                                    | `tool.execute.before`             |
-| command guard, advise       | `additionalContext`                        | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools           | `preToolUse`                                              | `tool.execute.before`             |
-| write guard, advise         | `additionalContext`                        | `additionalContext`                      | `postToolUse.additional_context`                          | `tool.execute.after`              |
-| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | not wired: event unconfirmed             | not wired: payload unconfirmed                            | not wired: tool name unconfirmed  |
-| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope) | not expressible: `preCompact` returns `user_message` only | `experimental.session.compacting` |
-| checkpoint                  | `Stop`                                     | `Stop`                                   | `sessionEnd`                                              | the `session.idle` bus event      |
-| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt       | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
-| read observation            | `PreToolUse` `Read`                        | not wired                                | not wired                                                 | not wired                         |
-| tool-failure hint           | not wired                                  | not wired                                | not expressible: no response fields                       | not wired                         |
-| session-load recipe         | ships one                                  | ships one                                | none written                                              | ships one                         |
+| job                         | Claude Code                                | Codex                                                            | Cursor                                                    | OpenCode                          |
+| --------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------- |
+| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                                              | `beforeShellExecution`                                    | `tool.execute.before`             |
+| command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
+| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                              | `tool.execute.before`             |
+| write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                          | `tool.execute.after`              |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | not wired: payload unconfirmed                            | not wired: tool name unconfirmed  |
+| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible: `preCompact` returns `user_message` only | `experimental.session.compacting` |
+| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                              | the `session.idle` bus event      |
+| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                         | not wired: no confirmed tool id   |
+| read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                 | not wired                         |
+| tool-failure hint           | not wired                                  | not wired                                                        | not expressible: no response fields                       | not wired                         |
+| session-load adapter        | ships one                                  | ships one                                                        | none written                                              | ships one                         |
 
 Two kinds of blank belong in that table and they are not the same. **Not
 expressible** is a host contract magus cannot reach through, and it is named

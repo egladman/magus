@@ -1,0 +1,31 @@
+import { appendFileSync } from "node:fs";
+import { {{subject_export}} as subject } from "{{subject}}";
+
+export const {{wrapper_export}} = async (...args: Parameters<typeof subject>) => {
+  const hooks = await subject(...args);
+  const before = hooks["tool.execute.before"];
+  const record = (outcome: "allow" | "deny" | "error", reason: string) =>
+    appendFileSync(
+      "{{trace}}",
+      JSON.stringify({provider: "{{provider}}", scenario: "{{scenario}}", transport: "{{transport}}", outcome, reason}) + "\n",
+    );
+  if (typeof before !== "function") {
+    const reason = "production tool.execute.before hook is absent";
+    record("error", reason);
+    throw new Error(reason);
+  }
+  return {
+    ...hooks,
+    "tool.execute.before": async (...call: Parameters<NonNullable<typeof before>>) => {
+      try {
+        const result = await before(...call);
+        record("allow", "production before hook allowed the tool call");
+        return result;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        record(reason.startsWith("[magus guard] ") ? "deny" : "error", reason);
+        throw error;
+      }
+    },
+  };
+};

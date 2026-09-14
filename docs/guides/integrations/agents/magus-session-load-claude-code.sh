@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# magus session load recipe: turns Claude Code's session store into the magus
+# magus session load adapter: turns Claude Code's session store into the magus
 # session event contract, one JSON object per line.
 #
 # This file is the source of truth. The docs site embeds it, magus's own
@@ -16,9 +16,9 @@
 # Run it with no arguments to pipe the stream into `magus session load`; run it
 # with --stdout to read the stream yourself. Override any of:
 #
-#   HOST_REPO_ROOT      the repository to scope to; default is the git toplevel
-#                       of the current directory. A cwd UNDER it counts, which is
-#                       what keeps worktrees in
+#   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+#                       workspace of the current directory. A cwd UNDER it counts,
+#                       which keeps nested project sessions in
 #   HOST_SESSION_STORE  where Claude Code keeps its sessions
 #   HOST_PROJECT_DIRS   the directories to walk, space separated. Default is
 #                       every project directory under the store whose name
@@ -40,7 +40,7 @@
 #
 # The line below declares, per dimension of the contract, what this host can
 # supply: yes when the store carries it, none when it does not. It is machine-read
-# by the session-parity gate, which fails the build when a recipe drops a
+# by the session-parity gate, which fails the build when an adapter drops a
 # dimension or the guide's table disagrees with it. A host that supplies less
 # declares less; the report then says unobservable rather than zero.
 # magus-guard-template: 13
@@ -52,39 +52,40 @@
 
 [ -n "$HOST_SESSION_STORE" ] || HOST_SESSION_STORE=$HOME/.claude/projects
 [ -n "$SESSION_STATE_DIR" ] || SESSION_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/magus/session-load/claude-code
-[ -n "$HOST_REPO_ROOT" ] || HOST_REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
 
-session_stdout=
-[ "$1" = "--stdout" ] && session_stdout=1
-
-if [ -z "$HOST_REPO_ROOT" ]; then
-  echo 'magus session load: no repository here, so there is nothing to scope events to. Run this inside a checkout, or set HOST_REPO_ROOT.' >&2
-  exit 0
-fi
-
-# jq is the whole extraction. Announce its absence rather than reporting an empty
-# session store: a recipe that silently loads nothing looks exactly like a host
-# nobody has used, which is the reading this audit exists to make impossible.
-if ! command -v jq >/dev/null 2>&1; then
-  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the recipe.' >&2
-  exit 0
-fi
-
-# Prefer the workspace's own ./magus over PATH, found by walking UP to the
-# magusfile - the same resolution the guard templates use, and for the same
-# reason: a PATH binary too old for `session load` rejects the subcommand and the
-# stream goes nowhere.
+# Resolve the workspace's own binary before asking it for the active workspace.
+# A session can start below the checkout root; the workspace model is VCS-neutral
+# and its root is not necessarily a Git toplevel.
 if [ -z "$SESSION_MAGUS_BIN" ]; then
   session_root=$PWD
   while [ -n "$session_root" ]; do
-    if [ -f "$session_root/magusfile.buzz" ]; then
-      [ -x "$session_root/magus" ] && SESSION_MAGUS_BIN=$session_root/magus
+    if [ -x "$session_root/magus" ]; then
+      SESSION_MAGUS_BIN=$session_root/magus
       break
     fi
     session_root=${session_root%/*}
   done
 fi
 [ -n "$SESSION_MAGUS_BIN" ] || SESSION_MAGUS_BIN=$(command -v magus 2>/dev/null)
+if [ -z "$HOST_REPO_ROOT" ] && [ -n "$SESSION_MAGUS_BIN" ] && [ -x "$SESSION_MAGUS_BIN" ]; then
+  HOST_REPO_ROOT=$("$SESSION_MAGUS_BIN" describe projects -o 'template={{.workspace}}' 2>/dev/null)
+fi
+
+session_stdout=
+[ "$1" = "--stdout" ] && session_stdout=1
+
+if [ -z "$HOST_REPO_ROOT" ]; then
+  echo 'magus session load: no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.' >&2
+  exit 0
+fi
+
+# jq is the whole extraction. Announce its absence rather than reporting an empty
+# session store: an adapter that silently loads nothing looks exactly like a host
+# nobody has used, which is the reading this audit exists to make impossible.
+if ! command -v jq >/dev/null 2>&1; then
+  echo 'magus session load: jq is not installed, so no session events were extracted. Install jq to restore the adapter.' >&2
+  exit 0
+fi
 
 if [ -z "$session_stdout" ] && { [ -z "$SESSION_MAGUS_BIN" ] || [ ! -x "$SESSION_MAGUS_BIN" ]; }; then
   echo 'magus session load: magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.' >&2

@@ -84,7 +84,7 @@ func TestFocusContains(t *testing.T) {
 		{"web/server.go", false, "a reverse dependent: affected runs this way, focus does not"},
 		{"README.md", true, "a file at depth zero describes the workspace"},
 		{"magusfile.buzz", true, "the workspace declaration every project resolves through"},
-		{".claude/skills/magus-run/SKILL.md", true, "the session's own instructions"},
+		{"harnesses/example.json", true, "a root-owned file remains in the root project's focus without a special host convention"},
 		{"vendor/x/y.go", true, "only the root catches it, so no lane it could be outside of"},
 	} {
 		assert.Equal(t, tc.want, f.Contains(tc.path), "%s: %s", tc.path, tc.why)

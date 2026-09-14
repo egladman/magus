@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"fmt"
-	"os"
 	"slices"
 
 	"github.com/egladman/magus/internal/hint"
@@ -12,8 +11,7 @@ import (
 )
 
 func (r *runner) checkLeaseBinding() types.DoctorCheck {
-	home, _ := os.UserHomeDir()
-	return checkLeaseBinding(r.cacheDir(), r.ws.Root(), home)
+	return checkLeaseBinding(r.cacheDir(), r.ws.Root(), "")
 }
 
 // checkLeaseBinding grades the lease this checkout is bound to: an unknown id, a
@@ -24,7 +22,7 @@ func (r *runner) checkLeaseBinding() types.DoctorCheck {
 // It reads the job store through Root alone, so a diagnostic never adopts a legacy
 // cache-dir store on the way past. The MCP surface is outside what it can see: no leg
 // here says anything about whether a magus tool call is judged.
-func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
+func checkLeaseBinding(cacheDir, root, _ string) types.DoctorCheck {
 	const name = "lease-binding"
 
 	id := job.ActingLease(cacheDir)
@@ -95,7 +93,7 @@ func checkLeaseBinding(cacheDir, root, home string) types.DoctorCheck {
 		}
 	}
 
-	if len(guardHookConfigs(root, home)) == 0 {
+	if len(guardHookConfigs(root)) == 0 {
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorAdvice,

@@ -143,9 +143,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "JobUnattributedWrite", Type: reflect.TypeFor[types.JobUnattributedWrite](), RuntimeObject: true},
 	{Name: "JobActor", Type: reflect.TypeFor[types.JobActor](), RuntimeObject: true},
 	{Name: "LeaseCheck", Type: reflect.TypeFor[types.LeaseCheck](), RuntimeObject: true},
+	{Name: "CompletionGate", Type: reflect.TypeFor[types.CompletionGate](), RuntimeObject: true},
+	{Name: "GateEvidence", Type: reflect.TypeFor[types.GateEvidence](), RuntimeObject: true},
 	{Name: "JobResult", Type: reflect.TypeFor[types.JobResult](), RuntimeObject: true},
 	{Name: "JobResultValidation", Type: reflect.TypeFor[types.JobResultValidation](), RuntimeObject: true},
 	{Name: "JobAttempt", Type: reflect.TypeFor[types.JobAttempt](), RuntimeObject: true},
+	{Name: "JobGateAttempt", Type: reflect.TypeFor[types.JobGateAttempt](), RuntimeObject: true},
 	{Name: "JobRun", Type: reflect.TypeFor[types.JobRun](), RuntimeObject: true},
 	{Name: "Job", Type: reflect.TypeFor[types.Job](), RuntimeObject: true},
 	// Declaration is Job's INPUT twin: a magusfile can construct one, but nothing hands one
@@ -153,6 +156,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "Declaration", Type: reflect.TypeFor[types.Declaration]()},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobList", Type: reflect.TypeFor[types.JobList](), RuntimeObject: true},
+	{Name: "JobStatus", Type: reflect.TypeFor[types.JobStatus](), RuntimeObject: true},
+	{Name: "GateStatus", Type: reflect.TypeFor[types.GateStatus](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

@@ -43,12 +43,14 @@ and recorded no_return, which is not the same as returning it and failing.
 wait verifies what comes back. It reads the filed result and verifies EVIDENCE,
 not claims: every changed path inside the declared write paths and outside the
 denied ones, a change set that is not empty on a job that writes, descendants the
-store carries, and a recorded run of that job's own check that passed. There is no
-field for whether the holder thinks it passed. A job that verifies is recorded
-pass. Exit 1 is a status, naming every rule that failed; exit 2 is magus unable to
-answer, which is a result that would not decode, nothing filed and nothing piped
-in, or a job that would not write. Whether the work is GOOD stays the reading of
-whoever forked it.
+store carries, and a recorded run of every declared completion gate that passed.
+Evidence must have been captured after the job was declared, so an old green run
+cannot satisfy new work. A target's own run policy bounds its execution; wait does
+not add a competing wall\-clock timeout. There is no field for whether the holder
+thinks it passed. A job that verifies is recorded pass. Exit 1 is a status, naming
+every rule that failed; exit 2 is magus unable to answer, which is a result that
+would not decode, nothing filed and nothing piped in, or a job that would not
+write. Whether the work is GOOD stays the reading of whoever forked it.
 .PP
 run submits one of the daemon's own jobs, the housekeeping magus does for itself,
 and returns. It is a no\-op when no persistent daemon is running, so a VCS hook can

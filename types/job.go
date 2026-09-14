@@ -85,6 +85,34 @@ type LeaseCheck struct {
 	Args []string `json:"args,omitempty"     yaml:"args,omitempty"`
 }
 
+// PrimaryCompletionGateID names the existing singular check when it is projected
+// into the completion-gate model. It is a stable identity, not a user assertion.
+const PrimaryCompletionGateID = "check"
+
+// CompletionGate is one machine-verifiable condition a job must satisfy before it
+// can pass. Goal remains the human-readable objective; gates bind that objective to
+// recorded Magus output rather than a holder's boolean attestation. The output
+// must have been captured after the job was declared; target execution limits
+// remain the target's run policy rather than a second gate timeout.
+type CompletionGate struct {
+	ID          string     `json:"id"                     yaml:"id"`
+	Description string     `json:"description,omitempty" yaml:"description,omitempty"`
+	Check       LeaseCheck `json:"check"                  yaml:"check"`
+	DependsOn   []string   `json:"depends_on,omitempty"  yaml:"depends_on,omitempty"`
+}
+
+// EffectiveCompletionGates returns the declared gates plus the historical primary
+// Check as a gate. Keeping the projection at the model boundary means guards that
+// still read Check retain their capability semantics while every verifier has one
+// complete gate collection to grade.
+func (u Job) EffectiveCompletionGates() []CompletionGate {
+	gates := cloneCompletionGates(u.CompletionGates)
+	if u.Check != nil {
+		gates = append([]CompletionGate{{ID: PrimaryCompletionGateID, Check: *u.Check}}, gates...)
+	}
+	return gates
+}
+
 // String renders the check as the command that runs it.
 func (c LeaseCheck) String() string {
 	project := c.Project
@@ -237,7 +265,7 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 4
+const JobSchemaVersion = 5
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -249,6 +277,73 @@ type JobActor struct {
 	Session string `json:"session,omitempty" yaml:"session,omitempty"`
 	// Host is the agent host that produced the write, as its own wrapper named itself.
 	Host string `json:"host,omitempty" yaml:"host,omitempty"`
+}
+
+// JobResult is the result a holder files for a job.
+type JobResult struct {
+	SchemaVersion   int                 `json:"schema_version" yaml:"schema_version"`
+	Job             string              `json:"job,omitempty" yaml:"job,omitempty"`
+	ChangedPaths    []string            `json:"changed_paths" yaml:"changed_paths"`
+	Validation      JobResultValidation `json:"validation,omitempty" yaml:"validation,omitempty"`
+	GateEvidence    []GateEvidence      `json:"gate_evidence,omitempty" yaml:"gate_evidence,omitempty"`
+	Descendants     []string            `json:"descendants,omitempty" yaml:"descendants,omitempty"`
+	UnresolvedRisks []string            `json:"unresolved_risks" yaml:"unresolved_risks"`
+}
+
+// GateEvidence links a completion gate to captured Magus output.
+type GateEvidence struct {
+	GateID    string `json:"gate_id" yaml:"gate_id"`
+	OutputRef string `json:"output_ref" yaml:"output_ref"`
+}
+
+// JobResultValidation cites the output for a job's primary check.
+type JobResultValidation struct {
+	Command   string `json:"command" yaml:"command"`
+	OutputRef string `json:"output_ref" yaml:"output_ref"`
+}
+
+// JobStatus reports the result of verifying a job.
+type JobStatus struct {
+	Job        string       `json:"job" yaml:"job"`
+	Verified   bool         `json:"verified" yaml:"verified"`
+	Violations []string     `json:"violations,omitempty" yaml:"violations,omitempty"`
+	Risks      []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
+	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
+	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+}
+
+// GateStatus reports verification of one completion gate.
+type GateStatus struct {
+	ID         string   `json:"id" yaml:"id"`
+	Verified   bool     `json:"verified" yaml:"verified"`
+	OutputRef  string   `json:"output_ref,omitempty" yaml:"output_ref,omitempty"`
+	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
+}
+
+// JobAttempt is the stored record for one captured run.
+type JobAttempt struct {
+	Found       bool   `json:"found" yaml:"found"`
+	Ref         string `json:"ref,omitempty" yaml:"ref,omitempty"`
+	TimestampMs int64  `json:"timestamp_ms,omitempty" yaml:"timestamp_ms,omitempty"`
+	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target      string `json:"target,omitempty" yaml:"target,omitempty"`
+	Spell       string `json:"spell,omitempty" yaml:"spell,omitempty"`
+	Failed      bool   `json:"failed,omitempty" yaml:"failed,omitempty"`
+}
+
+// JobGateAttempt is the stored output record for one completion gate.
+type JobGateAttempt struct {
+	GateID  string     `json:"gate_id" yaml:"gate_id"`
+	Attempt JobAttempt `json:"attempt" yaml:"attempt"`
+}
+
+// String renders the recorded command.
+func (a JobAttempt) String() string {
+	target := a.Target
+	if a.Spell != "" {
+		target = a.Spell + "::" + target
+	}
+	return LeaseCheck{Target: target, Project: a.Project}.String()
 }
 
 // Job is one row of an orchestrating agent's lease ledger: what that
@@ -331,6 +426,10 @@ type Job struct {
 	// on every put so the two cannot disagree, and a client that sends it instead of
 	// Check is still understood.
 	Validation string `json:"validation,omitempty" yaml:"validation,omitempty"`
+	// CompletionGates are additional evidence-backed acceptance conditions. Check
+	// remains the primary gate projection for rows declared before this collection
+	// existed; no caller can mark either kind passed without a recorded output ref.
+	CompletionGates []CompletionGate `json:"completion_gates,omitempty" yaml:"completion_gates,omitempty"`
 	// State is the row's lifecycle position. See JobState for why no_return is
 	// its own value.
 	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
@@ -398,6 +497,9 @@ type Job struct {
 	// store's record rather than anything the holder asserts.
 	Result  *JobResult  `json:"result,omitempty"  yaml:"result,omitempty"`
 	Attempt *JobAttempt `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	// GateAttempts are the portable output-store snapshots for every explicit
+	// completion gate. Attempt remains the snapshot for the primary Check.
+	GateAttempts []JobGateAttempt `json:"gate_attempts,omitempty" yaml:"gate_attempts,omitempty"`
 	// LastRun is the job's most recent run, nil until one is submitted. It is filled in
 	// two steps because no single writer sees the whole of it: the invocation id at
 	// submit, and what the run cost and whether it worked when it ends.
@@ -480,6 +582,8 @@ type Declaration struct {
 	// before the check record existed, so it is accepted and parsed into Check. Sending
 	// both is refused rather than merged, since nothing here can say which one meant it.
 	Validation string `json:"validation,omitempty"`
+	// CompletionGates declare additional evidence-backed acceptance conditions.
+	CompletionGates []CompletionGate `json:"completion_gates,omitempty"`
 }
 
 // FoldLegacyLanes moves a lane declared under its old name onto the field that carries it,
@@ -520,8 +624,83 @@ func (r Declaration) Validate() error {
 	if r.State != "" && !ValidJobState(r.State) {
 		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
 	}
-	_, _, err := r.check()
-	return err
+	check, declared, err := r.check()
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	if declared {
+		_ = check
+		seen[PrimaryCompletionGateID] = true
+	}
+	for i, gate := range r.CompletionGates {
+		if err := gate.Validate(); err != nil {
+			return fmt.Errorf("job: completion_gates[%d]: %w", i, err)
+		}
+		if seen[gate.ID] {
+			return fmt.Errorf("job: completion_gates carries duplicate id %q", gate.ID)
+		}
+		seen[gate.ID] = true
+	}
+	for _, gate := range r.CompletionGates {
+		for _, dep := range gate.DependsOn {
+			if !seen[dep] {
+				return fmt.Errorf("job: completion gate %q depends_on unknown gate %q", gate.ID, dep)
+			}
+			if dep == gate.ID {
+				return fmt.Errorf("job: completion gate %q cannot depend on itself", gate.ID)
+			}
+		}
+	}
+	visiting := make(map[string]bool, len(r.CompletionGates))
+	visited := make(map[string]bool, len(r.CompletionGates))
+	byID := make(map[string]CompletionGate, len(r.CompletionGates))
+	for _, gate := range r.CompletionGates {
+		byID[gate.ID] = gate
+	}
+	var visit func(string) error
+	visit = func(id string) error {
+		if id == PrimaryCompletionGateID {
+			return nil
+		}
+		if visiting[id] {
+			return fmt.Errorf("job: completion gate dependencies contain a cycle at %q", id)
+		}
+		if visited[id] {
+			return nil
+		}
+		visiting[id] = true
+		for _, dep := range byID[id].DependsOn {
+			if err := visit(dep); err != nil {
+				return err
+			}
+		}
+		visiting[id] = false
+		visited[id] = true
+		return nil
+	}
+	for _, gate := range r.CompletionGates {
+		if err := visit(gate.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Validate reports whether a gate can be matched to an output record without
+// interpreting a shell command.
+func (g CompletionGate) Validate() error {
+	if !ValidJobID(strings.TrimSpace(g.ID)) {
+		return fmt.Errorf("id %q is not a gate id", g.ID)
+	}
+	parsed, err := ParseLeaseCheck(g.Check.Target + " " + g.Check.Project)
+	if err != nil {
+		return err
+	}
+	if len(g.Check.Args) > 0 {
+		parsed.Args = g.Check.Args
+	}
+	return nil
 }
 
 // check is the row's declared check, from either spelling, and whether it declares one at
@@ -579,8 +758,22 @@ func (r Declaration) Apply(u *Job) {
 	if declared {
 		u.Check, u.Validation = &check, check.String()
 	}
+	u.CompletionGates = cloneCompletionGates(r.CompletionGates)
 	u.State = r.State
 	u.ReadOnly = r.ReadOnly
+}
+
+func cloneCompletionGates(in []CompletionGate) []CompletionGate {
+	if in == nil {
+		return nil
+	}
+	out := make([]CompletionGate, len(in))
+	for i, gate := range in {
+		out[i] = gate
+		out[i].Check.Args = slices.Clone(gate.Check.Args)
+		out[i].DependsOn = slices.Clone(gate.DependsOn)
+	}
+	return out
 }
 
 // trimmedNonEmpty trims every element of in and drops the ones left empty.
@@ -817,6 +1010,7 @@ func (u Job) Clone() Job {
 	c.DenyPaths = slices.Clone(u.DenyPaths)
 	c.ReadPaths = slices.Clone(u.ReadPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
+	c.CompletionGates = cloneCompletionGates(u.CompletionGates)
 	c.Releases = slices.Clone(u.Releases)
 	c.Unattributed = slices.Clone(u.Unattributed)
 	if u.Result != nil {
@@ -824,12 +1018,14 @@ func (u Job) Clone() Job {
 		result.ChangedPaths = slices.Clone(u.Result.ChangedPaths)
 		result.Descendants = slices.Clone(u.Result.Descendants)
 		result.UnresolvedRisks = slices.Clone(u.Result.UnresolvedRisks)
+		result.GateEvidence = slices.Clone(u.Result.GateEvidence)
 		c.Result = &result
 	}
 	if u.Attempt != nil {
 		attempt := *u.Attempt
 		c.Attempt = &attempt
 	}
+	c.GateAttempts = slices.Clone(u.GateAttempts)
 	if u.LastRun != nil {
 		run := *u.LastRun
 		c.LastRun = &run

@@ -1,6 +1,6 @@
 # TRANSPORT PARITY: the shipped guard templates, executed against real host events.
 #
-# The sibling gate in dogfood_test.go checks that every host DECLARES a stance for
+# The sibling gate in conventions_test.go checks that every host DECLARES a stance for
 # every decision and surface. A declaration can be sincere and still wrong, because
 # nothing there runs the file: the OpenCode plugin declared a correct stance for
 # months while invoking a subcommand that no longer existed, so it never received a
@@ -13,7 +13,7 @@
 # same way the templates resolve it in a session.
 #
 # Every case is labeled `# case: <surface>/<decision>`; TestTransportCorpusCoversTheContract
-# in dogfood_test.go fails when the guard contract grows a cell no case covers.
+# in conventions_test.go fails when the guard contract grows a cell no case covers.
 
 # jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
 # dependency of the TEMPLATES a user installs into their host, not of building magus,
@@ -26,7 +26,14 @@
 
 env GUARD_AGENT_NAME=testscript
 
-# --- magus-guard-command.sh: the Claude Code shape ---------------------------
+# The shared templates serve these two hosts with the same documented envelope
+# fields and reply dialect. Keep the hosts explicit: TestShellTransportCorpusCovers-
+# TheHostContract reads this marker and refuses a coverage claim that no executed
+# fixture reaches. A shared fixture is intentional here; copying the identical
+# JSON would create two opportunities for the recorded contract to drift.
+# hosts: claude-code,codex
+
+# --- magus-guard-command.sh: the shared Claude Code / Codex shape ------------
 
 # case: command/deny
 stdin deny-command.json
@@ -82,7 +89,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/mcp-worker --goal 'the transport corpus, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --goal 'the transport test set, held so the rebind rule has a job to read'
 exec magus job exec harness/mcp-worker
 
 # case: mcp/pass
@@ -163,6 +170,7 @@ cd $WORK
 # message on an allow, so the advisory has to ride the post-tool event. These cases
 # run both halves, because the declaration now claims advise=model on both surfaces
 # and only the file can show whether the text really arrives.
+# hosts: cursor
 
 # case: command/deny
 stdin cursor-shell-deny.json

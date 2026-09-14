@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "magus agent hook --host claude-code",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "magus agent hook --host claude-code",
             "timeout": 10
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "magus agent hook --host claude-code",
             "timeout": 10
           }
         ]

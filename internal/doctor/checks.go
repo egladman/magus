@@ -1878,7 +1878,7 @@ func (r *runner) checkSessionLoad() types.DoctorCheck {
 			Message: "no agent session has ever been loaded here, so nothing can say which commands ran unguarded",
 			Details: []string{
 				"the guard trail holds only what the hook saw; a command run with no hook wired leaves no record at all",
-				"extract a host transcript with the recipe for your agent host, then: " + hint.SessionLoad.String(),
+				"extract a host transcript with the adapter for your agent host, then: " + hint.SessionLoad.String(),
 			},
 		}
 	}
@@ -1889,7 +1889,7 @@ func (r *runner) checkSessionLoad() types.DoctorCheck {
 			Message: fmt.Sprintf("the newest loaded session event is %d days old, so an audit here describes work that has moved on", int(age.Hours()/24)),
 			Details: []string{
 				"newest event: " + time.UnixMilli(newest).Format(time.RFC3339),
-				"re-run the recipe for your agent host; loading the same transcript twice loads nothing twice",
+				"re-run the adapter for your agent host; loading the same transcript twice loads nothing twice",
 				"then: " + hint.SessionLoad.String(),
 			},
 		}
@@ -1975,30 +1975,24 @@ var guardTemplateBasenames = []string{
 	"magus-rehydrate.sh",
 }
 
-// guardWiringCandidates are the config locations a shipped host glue installs
-// into (docs/guides/integrations/agents.md), workspace-relative and
-// home-relative. Path-shaped literals only, so the check can refer to "host
-// hook config at <path>" without ever naming a host in Go.
-func guardWiringCandidates(root, home string) []string {
-	candidates := []string{
-		filepath.Join(root, ".claude", "settings.json"),
-		filepath.Join(root, ".cursor", "hooks.json"),
-		filepath.Join(root, ".opencode", "plugins"),
-		filepath.Join(root, ".codex", "hooks.json"),
+// harnessConfigCandidates resolves configuration paths from user-owned
+// contracts. Doctor deliberately has no built-in host inventory: adding a
+// collaborator must be data, not a binary release.
+func harnessConfigCandidates(root string) ([]string, error) {
+	ids, err := agent.KnownHarnesses(root)
+	if err != nil {
+		return nil, err
 	}
-	if home != "" {
-		candidates = append(candidates,
-			// The hook wiring and the settings that enable it are separate files, and
-			// only the second was listed here. So a machine whose hooks were never
-			// installed graded exactly like one whose hooks were installed and
-			// current: measured 2026-09-08, a full day of sessions ran unguarded on
-			// this machine and no check anywhere reported it.
-			filepath.Join(home, ".codex", "hooks.json"),
-			filepath.Join(home, ".codex", "config.toml"),
-			filepath.Join(home, ".config", "opencode", "plugins"),
-		)
+	paths := make([]string, 0, len(ids))
+	for _, id := range ids {
+		descriptor, _, err := agent.LoadHarness(root, id)
+		if err != nil {
+			return nil, err
+		}
+		paths = append(paths, filepath.Join(root, descriptor.Config.Path))
 	}
-	return candidates
+	slices.Sort(paths)
+	return paths, nil
 }
 
 // resolveGuardBinaryForWiring resolves the binary a guard hook would actually
@@ -2030,6 +2024,7 @@ func resolveGuardBinaryForWiring(root string) (string, bool) {
 // at a template that is not there runs nothing, and reporting only what
 // resolved would grade exactly that case as healthy.
 func guardReferencedTemplates(root, configDir string, body []byte) (found, missing []string) {
+	const workspaceRoot = "$(magus describe projects -o 'template={{.workspace}}')/"
 	for _, base := range guardTemplateBasenames {
 		idx := bytes.Index(body, []byte(base))
 		if idx == -1 {
@@ -2045,10 +2040,20 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 			}
 			break
 		}
+		// Hook commands run from the task's working directory, which can be below
+		// the repository root. The shipped config uses this exact VCS-neutral
+		// expansion so a template stays reachable there. Treat only that expansion
+		// as root-relative; executing or accepting arbitrary hook commands would
+		// turn a diagnostic into a risk.
+		if rootStart := bytes.LastIndex(body[:idx], []byte(workspaceRoot)); rootStart >= 0 &&
+			!bytes.ContainsAny(body[rootStart+len(workspaceRoot):idx], "\"'\n") {
+			start = rootStart
+		}
 		token := string(body[start : idx+len(base)])
+		rootToken := strings.TrimPrefix(token, workspaceRoot)
 		resolved := ""
 		for _, candidate := range []string{
-			filepath.Join(root, token),
+			filepath.Join(root, rootToken),
 			filepath.Join(configDir, token),
 			token,
 		} {
@@ -2066,7 +2071,7 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 	return found, missing
 }
 
-// guardTemplateMarkerProblem reports why path's magus-guard-template marker is
+// guardTemplateMarkerProblem reports why a magus-guard-template marker is
 // behind agent.GuardTemplateVersion, or "" when it is current.
 //
 // A MISSING marker is a finding, not a pass, and this is the case that
@@ -2082,11 +2087,11 @@ func guardReferencedTemplates(root, configDir string, body []byte) (found, missi
 // Only ever called on a file already identified AS a template. A wiring-only
 // config that merely names templates (JSON, no comment syntax to carry a
 // marker) is never passed here; what it names is what gets checked.
-func guardTemplateMarkerProblem(path string, body []byte) string {
+func guardTemplateMarkerProblem(body []byte) string {
 	idx := bytes.Index(body, []byte(agent.GuardTemplateMarker))
 	if idx == -1 {
-		return fmt.Sprintf("%s carries no %s line, so it predates template versioning and may not judge anything - re-download it: docs/guides/integrations/agents.md",
-			path, agent.GuardTemplateMarker)
+		return fmt.Sprintf("template carries no %s line, so it predates template versioning and may not judge anything; re-download it: docs/guides/integrations/agents.md",
+			agent.GuardTemplateMarker)
 	}
 	rest := body[idx+len(agent.GuardTemplateMarker):]
 	if end := bytes.IndexByte(rest, '\n'); end != -1 {
@@ -2096,8 +2101,8 @@ func guardTemplateMarkerProblem(path string, body []byte) string {
 	if err != nil || version >= agent.GuardTemplateVersion {
 		return ""
 	}
-	return fmt.Sprintf("%s carries template version %d, current is %d - re-download it: docs/guides/integrations/agents.md",
-		path, version, agent.GuardTemplateVersion)
+	return fmt.Sprintf("template version %d is older than current version %d; re-download it: docs/guides/integrations/agents.md",
+		version, agent.GuardTemplateVersion)
 }
 
 // checkGuardWiring answers the question checkGuardBinary cannot: not just
@@ -2127,8 +2132,7 @@ func (r *runner) checkGuardWiring() types.DoctorCheck {
 }
 
 func (r *runner) checkCheckpointWiring() types.DoctorCheck {
-	home, _ := os.UserHomeDir()
-	return checkCheckpointWiring(r.ws.Root(), home)
+	return checkCheckpointWiring(r.ws.Root())
 }
 
 // checkCheckpointWiring reports a host that magus is wired into but that records no
@@ -2141,27 +2145,18 @@ func (r *runner) checkCheckpointWiring() types.DoctorCheck {
 //
 // Advice rather than a failure. Not every workspace wants this wired, and a doctor that
 // fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(root, home string) types.DoctorCheck {
+func checkCheckpointWiring(root string) types.DoctorCheck {
 	const name = "checkpoint-wiring"
 
 	var hosts, recording []string
-	for _, candidate := range guardWiringCandidates(root, home) {
-		for _, path := range hookConfigFiles(candidate) {
-			body, err := os.ReadFile(path)
-			if err != nil || !bytes.Contains(body, []byte("magus")) {
-				continue
-			}
-			if !bytes.Contains(body, []byte("hook")) && !bytes.Contains(body, []byte(checkpointTemplate)) {
-				continue
-			}
-			hosts = append(hosts, path)
-			// The word alone, not a spelling of the invocation. A plugin calling magus
-			// directly passes its arguments as a list, so "session checkpoint" never
-			// appears as text there, and a detector that demanded it would report every
-			// such host as recording nothing.
-			if bytes.Contains(body, []byte("checkpoint")) {
-				recording = append(recording, path)
-			}
+	for _, path := range HookConfigs(root) {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		hosts = append(hosts, path)
+		if bytes.Contains(body, []byte("checkpoint")) {
+			recording = append(recording, path)
 		}
 	}
 
@@ -2206,45 +2201,23 @@ const checkpointTemplate = "magus-checkpoint.sh"
 // reader their tree is wired when the next clone of it is not. It grades nothing
 // either: staleness is the check's job, and it costs a canary subprocess this
 // caller must not pay.
-func HookConfigs(root string) []string { return guardHookConfigs(root, "") }
+func HookConfigs(root string) []string { return guardHookConfigs(root) }
 
 // guardHookConfigs is the inventory HookConfigs and the lease-binding check share, so
-// neither can disagree with checkGuardWiring about what counts as wired. home widens it
-// to the machine-wide configs; empty keeps it to the checkout.
-func guardHookConfigs(root, home string) []string {
+// neither can disagree with checkGuardWiring about what counts as verified wiring.
+func guardHookConfigs(root string) []string {
 	var out []string
-	for _, candidate := range guardWiringCandidates(root, home) {
-		for _, path := range hookConfigFiles(candidate) {
-			body, err := os.ReadFile(path)
-			if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
-				continue
-			}
-			out = append(out, path)
-		}
-	}
-	return out
-}
-
-// hookConfigFiles expands one wiring candidate into the files worth reading: a plugin
-// DIRECTORY contributes its TypeScript, a config file contributes itself.
-func hookConfigFiles(candidate string) []string {
-	info, err := os.Stat(candidate)
+	ids, err := agent.KnownHarnesses(root)
 	if err != nil {
 		return nil
 	}
-	if !info.IsDir() {
-		return []string{candidate}
-	}
-	entries, err := os.ReadDir(candidate)
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, e := range entries {
-		if !e.IsDir() && filepath.Ext(e.Name()) == ".ts" {
-			out = append(out, filepath.Join(candidate, e.Name()))
+	for _, id := range ids {
+		verification, err := agent.VerifyHarness(root, id)
+		if err == nil && verification.Status == "verified" {
+			out = append(out, verification.Path)
 		}
 	}
+	slices.Sort(out)
 	return out
 }
 
@@ -2258,7 +2231,7 @@ const guardCanaryBudget = 5 * time.Second
 // checkGuardWiring is the free-function core, taking home explicitly rather
 // than calling os.UserHomeDir() itself so a test can point it at a fixture
 // directory instead of the machine's real home.
-func checkGuardWiring(ctx context.Context, root, home string, budget time.Duration) types.DoctorCheck {
+func checkGuardWiring(ctx context.Context, root, _ string, budget time.Duration) types.DoctorCheck {
 	const name = "guard-wiring"
 
 	bin, ok := resolveGuardBinaryForWiring(root)
@@ -2301,76 +2274,44 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 		}
 	}
 
-	var wired []string
-	var problems []string
-	for _, candidate := range guardWiringCandidates(root, home) {
-		info, err := os.Stat(candidate)
+	ids, err := agent.KnownHarnesses(root)
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Message: "could not load harness descriptors", Details: []string{err.Error()}}
+	}
+	var wired, problems []string
+	for _, id := range ids {
+		verification, err := agent.VerifyHarness(root, id)
 		if err != nil {
+			problems = append(problems, fmt.Sprintf("%s: %v", id, err))
 			continue
 		}
-		if info.IsDir() {
-			entries, err := os.ReadDir(candidate)
-			if err != nil {
-				continue
-			}
-			for _, e := range entries {
-				if e.IsDir() || filepath.Ext(e.Name()) != ".ts" {
-					continue
-				}
-				p := filepath.Join(candidate, e.Name())
-				body, err := os.ReadFile(p)
-				if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
-					continue
-				}
-				wired = append(wired, p)
-				if problem := guardTemplateMarkerProblem(p, body); problem != "" {
-					problems = append(problems, problem)
-				}
-			}
+		if verification.Status != "verified" {
+			problems = append(problems, fmt.Sprintf("%s harness is %s: %s", id, verification.Status, verification.Reason))
 			continue
 		}
-
-		body, err := os.ReadFile(candidate)
-		if err != nil || !bytes.Contains(body, []byte("magus")) || !bytes.Contains(body, []byte("hook")) {
-			continue
-		}
-		wired = append(wired, candidate)
-		refPaths, missing := guardReferencedTemplates(root, filepath.Dir(candidate), body)
-		for _, token := range missing {
-			problems = append(problems, fmt.Sprintf("%s references %s, which does not exist, so that hook runs nothing: re-download it: docs/guides/integrations/agents.md", candidate, token))
-		}
-		for _, refPath := range refPaths {
-			refBody, err := os.ReadFile(refPath)
-			if err != nil {
-				problems = append(problems, fmt.Sprintf("%s references %s, which cannot be read: %v", candidate, refPath, err))
-				continue
-			}
-			if problem := guardTemplateMarkerProblem(refPath, refBody); problem != "" {
-				problems = append(problems, problem)
-			}
-		}
+		wired = append(wired, verification.Path)
 	}
 
-	if len(wired) == 0 {
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorAdvice,
-			Message: "no agent-host hook config found in this checkout; the guard rules exist but nothing invokes them",
-			Details: []string{"see docs/guides/integrations/agents.md"},
-		}
-	}
 	if len(problems) > 0 {
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: "guard wiring found but out of date",
+			Message: "harness wiring is incomplete",
 			Details: problems,
+		}
+	}
+	if len(wired) == 0 {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: "no harness descriptor found in this checkout; the guard rules exist but no collaborator is configured to invoke them",
+			Details: []string{"add a descriptor under harnesses/ or .magus/harnesses/"},
 		}
 	}
 	return types.DoctorCheck{
 		Name:    name,
 		Status:  types.DoctorOK,
-		Message: fmt.Sprintf("guard wired via %d host hook config path(s)", len(wired)),
+		Message: fmt.Sprintf("guard verified through %d harness config path(s)", len(wired)),
 		Details: wired,
 	}
 }
@@ -2395,7 +2336,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 			Name:    name,
 			Status:  types.DoctorAdvice,
 			Message: "not installed, so agents in this checkout have no magus vocabulary",
-			Details: []string{"install them: " + hint.AgentInstall.With(".claude/skills")},
+			Details: []string{"install them into a harness descriptor's skills path: " + hint.AgentInstall.With("<skills-dir>")},
 		}
 	}
 

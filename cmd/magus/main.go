@@ -59,6 +59,7 @@ import (
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sys/mem"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -82,6 +83,10 @@ func runCLI() int {
 	args := expandVerbosityArgs(os.Args[1:])
 
 	rootCtx, stopSignals, interrupted := watchInterrupts(context.Background())
+	// Freeze the caller's lease at the trust boundary. A Buzz script may change its
+	// process environment later, but it must not shed the job identity it was handed
+	// before invoking another Magus entry point.
+	rootCtx = proc.WithLease(rootCtx, trail.LeaseFromEnv())
 	// Stamp the binary's version onto the root context so host methods (the drift
 	// classifier) can tell a dev build from the pinned release without importing main.
 	rootCtx = types.WithMagusVersion(rootCtx, version)
@@ -908,7 +913,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "init":
 		return initCmd(ctx, root, subArgs)
 	case "agent":
-		return agentCmd(ctx, subArgs)
+		return agentCmd(ctx, root, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

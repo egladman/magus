@@ -63,6 +63,20 @@ const (
 	FlagAffectedWait = "wait"
 	// agent adoption: --commands
 	FlagAgentAdoptionCommands = "commands"
+	// agent harness apply: --host
+	FlagAgentHarnessApplyHost = "host"
+	// agent harness verify: --host
+	FlagAgentHarnessVerifyHost = "host"
+	// agent hook: --host
+	FlagAgentHookHost = "host"
+	// agent improve: --all
+	FlagAgentImproveAll = "all"
+	// agent improve: --apply
+	FlagAgentImproveApply = "apply"
+	// agent improve: --host
+	FlagAgentImproveHost = "host"
+	// agent improve: --session
+	FlagAgentImproveSession = "session"
 	// agent: --dir
 	FlagAgentDir = "dir"
 	// agent: --dry-run
@@ -1518,6 +1532,60 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	return &f
 }
 
+// AgentHookFlags are the flags declared for `magus agent hook`.
+type AgentHookFlags struct {
+	Host string // --host
+}
+
+// BindAgentHook registers `magus agent hook`'s flags on fs and returns the destination.
+func BindAgentHook(fs *flag.FlagSet) *AgentHookFlags {
+	var f AgentHookFlags
+	fs.StringVar(&f.Host, FlagAgentHookHost, "", "Harness descriptor receiving the guard response")
+	return &f
+}
+
+// AgentHarnessApplyFlags are the flags declared for `magus agent harness apply`.
+type AgentHarnessApplyFlags struct {
+	Host string // --host
+}
+
+// BindAgentHarnessApply registers `magus agent harness apply`'s flags on fs and returns the destination.
+func BindAgentHarnessApply(fs *flag.FlagSet) *AgentHarnessApplyFlags {
+	var f AgentHarnessApplyFlags
+	fs.StringVar(&f.Host, FlagAgentHarnessApplyHost, "", "Harness descriptor ID")
+	return &f
+}
+
+// AgentHarnessVerifyFlags are the flags declared for `magus agent harness verify`.
+type AgentHarnessVerifyFlags struct {
+	Host string // --host
+}
+
+// BindAgentHarnessVerify registers `magus agent harness verify`'s flags on fs and returns the destination.
+func BindAgentHarnessVerify(fs *flag.FlagSet) *AgentHarnessVerifyFlags {
+	var f AgentHarnessVerifyFlags
+	fs.StringVar(&f.Host, FlagAgentHarnessVerifyHost, "", "Harness descriptor ID")
+	return &f
+}
+
+// AgentImproveFlags are the flags declared for `magus agent improve`.
+type AgentImproveFlags struct {
+	Session string // --session
+	All     bool   // --all
+	Apply   bool   // --apply
+	Host    string // --host
+}
+
+// BindAgentImprove registers `magus agent improve`'s flags on fs and returns the destination.
+func BindAgentImprove(fs *flag.FlagSet) *AgentImproveFlags {
+	var f AgentImproveFlags
+	fs.StringVar(&f.Session, FlagAgentImproveSession, "", "Only evidence from this host session")
+	fs.BoolVar(&f.All, FlagAgentImproveAll, false, "Include one-off feedback")
+	fs.BoolVar(&f.Apply, FlagAgentImproveApply, false, "Apply one descriptor-managed harness update")
+	fs.StringVar(&f.Host, FlagAgentImproveHost, "", "Harness descriptor to update with --apply")
+	return &f
+}
+
 // AgentAdoptionFlags are the flags declared for `magus agent adoption`.
 type AgentAdoptionFlags struct {
 	Commands string // --commands
@@ -1526,7 +1594,7 @@ type AgentAdoptionFlags struct {
 // BindAgentAdoption registers `magus agent adoption`'s flags on fs and returns the destination.
 func BindAgentAdoption(fs *flag.FlagSet) *AgentAdoptionFlags {
 	var f AgentAdoptionFlags
-	fs.StringVar(&f.Commands, FlagAgentAdoptionCommands, "", "File of shell commands, one per line; without it the corpus is read from stdin")
+	fs.StringVar(&f.Commands, FlagAgentAdoptionCommands, "", "File of shell commands, one per line; without it commands are read from stdin")
 	return &f
 }
 

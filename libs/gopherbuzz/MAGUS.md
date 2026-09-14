@@ -68,7 +68,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | .                               |      50 | `magus query project=.`                               | `generate`, `buzz-test`, `release-index`                 |
 | console                         |       8 | `magus query project=console`                         | `preflight`, `build`, `ci`                               |
 | docs                            |      18 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
-| docs/guides/integrations/agents |       5 | `magus query project=docs/guides/integrations/agents` | `ci`, `format`, `lint`                                   |
+| docs/guides/integrations/agents |       6 | `magus query project=docs/guides/integrations/agents` | `format`, `preflight`, `ci`                              |
 | libs/commentdash                |       8 | `magus query project=libs/commentdash`                | `format`, `test`, `build`                                |
 | libs/diagnostics                |       8 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/diagram                    |       2 | `magus query project=libs/diagram`                    | `test`, `ci`                                             |
@@ -170,13 +170,14 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 ## Project: docs/guides/integrations/agents
 
-| Target      | What it does                                                                                                                                                                                                                                                         |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lint`      | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
-| `test`      | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |
-| `ci`        | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
-| `preflight` |                                                                                                                                                                                                                                                                      |
-| `format`    | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
+| Target             | What it does                                                                                                                                                                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lint`             | lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). |
+| `test`             | test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.                                                                                     |
+| `host-integration` | host-integration is deliberately NOT a dependency of ci.                                                                                                                                                                                                             |
+| `ci`               | 'ci' is the anchor `magus affected ci` keys off.                                                                                                                                                                                                                     |
+| `format`           | format owns the Markdown in this directory - the per-host guide pages beside the templates.                                                                                                                                                                          |
+| `preflight`        |                                                                                                                                                                                                                                                                      |
 
 ## Project: libs/commentdash
 

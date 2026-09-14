@@ -13,7 +13,7 @@ import (
 // ResultSchemaVersion is the version of the result shape this magus accepts. A holder
 // sends it, the decoder rejects what it does not know by name, and the schema requires
 // it. See types.JobSchemaVersion for the job's half of the same rule.
-const ResultSchemaVersion = 1
+const ResultSchemaVersion = 2
 
 // ResultSchema is the JSON Schema for [types.JobResult], embedded so a harness can give a
 // holder a response format without magus having to render one. Generated from the struct
@@ -22,22 +22,10 @@ const ResultSchemaVersion = 1
 //go:embed gen/result.schema.json
 var ResultSchema string
 
-// Status is what waiting on a job answers: every rule that failed, and nothing about the
-// rules that held.
-//
-// Violations rather than a bare boolean, because the caller is deciding what to do next
-// and "not verified" sends it nowhere. A path outside the lanes means repartition; a
-// missing output ref means ask for the run again.
-type Status struct {
-	Job        string   `json:"job"                  yaml:"job"`
-	Verified   bool     `json:"verified"             yaml:"verified"`
-	Violations []string `json:"violations,omitempty" yaml:"violations,omitempty"`
-	// Risks and Command are carried through from the result so the one reader who has to
-	// act on them sees them. A required field nobody renders teaches a holder that filling
-	// it in is theater.
-	Risks   []string `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
-	Command string   `json:"command,omitempty"          yaml:"command,omitempty"`
-}
+// Status is kept as the internal package spelling for callers that predate
+// types.JobStatus. The public type lives in types because it now crosses the typed Buzz
+// boundary from magus\job.wait.
+type Status = types.JobStatus
 
 // Verify checks a holder's result against the job it was given: every changed path
 // inside the declared lanes and outside the declared deny list, a change set that is
@@ -53,6 +41,14 @@ type Status struct {
 // file while the store's lock is held. declared is the rest of the plan, which is what the
 // result's descendant ids are checked against.
 func Verify(row types.Job, rep types.JobResult, att types.JobAttempt, declared []types.Job) Status {
+	return VerifyGates(row, rep, att, nil, declared)
+}
+
+// VerifyGates checks the primary check plus every explicit completion gate. It
+// derives every verdict from output-store snapshots; GateEvidence has no passed bit
+// by design. Callers that only carry the historical primary attempt may keep using
+// Verify while Exit/Wait use this complete form.
+func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job) Status {
 	v := Status{Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
 
 	if rep.Job != "" && rep.Job != row.ID {
@@ -90,34 +86,136 @@ func Verify(row types.Job, rep types.JobResult, att types.JobAttempt, declared [
 		}
 	}
 
-	v.Violations = append(v.Violations, evidence(row, rep, att)...)
+	if row.Check == nil && len(row.CompletionGates) == 0 {
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s declares no completion gate, so no recorded run can be bound to it. Declare one with a typed check", row.ID))
+	}
+
+	declaredGates := make(map[string]types.CompletionGate, len(row.CompletionGates))
+	for _, gate := range row.CompletionGates {
+		declaredGates[gate.ID] = gate
+	}
+
+	attemptByGate := make(map[string]types.JobAttempt, len(gateAttempts))
+	for _, snapshot := range gateAttempts {
+		if _, declared := declaredGates[snapshot.GateID]; !declared {
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries an attempt snapshot for undeclared completion gate %q", row.ID, snapshot.GateID))
+			continue
+		}
+		if _, exists := attemptByGate[snapshot.GateID]; exists {
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s carries duplicate attempt snapshots for completion gate %q", row.ID, snapshot.GateID))
+			continue
+		}
+		attemptByGate[snapshot.GateID] = snapshot.Attempt
+	}
+	evidenceByGate := make(map[string]string, len(rep.GateEvidence))
+	for _, evidence := range rep.GateEvidence {
+		if _, declared := declaredGates[evidence.GateID]; !declared {
+			v.Violations = append(v.Violations, fmt.Sprintf("the result carries evidence for undeclared completion gate %q", evidence.GateID))
+			continue
+		}
+		if _, exists := evidenceByGate[evidence.GateID]; exists {
+			v.Violations = append(v.Violations, fmt.Sprintf("the result carries duplicate evidence for completion gate %q", evidence.GateID))
+			continue
+		}
+		evidenceByGate[evidence.GateID] = evidence.OutputRef
+	}
+
+	statusByGate := map[string]types.GateStatus{}
+	if row.Check != nil {
+		statusByGate[types.PrimaryCompletionGateID] = verifyGate(row, types.CompletionGate{ID: types.PrimaryCompletionGateID, Check: *row.Check}, rep.Validation.OutputRef, att)
+	}
+	for _, gate := range row.CompletionGates {
+		statusByGate[gate.ID] = verifyGate(row, gate, evidenceByGate[gate.ID], attemptByGate[gate.ID])
+	}
+	// A dependency may appear after its consumer in the declaration. Re-evaluate until
+	// no status changes so a failed prerequisite propagates through the whole typed
+	// graph. Declaration.Validate rejects cycles, so this always reaches a fixed point.
+	for changed := true; changed; {
+		changed = false
+		for _, gate := range row.CompletionGates {
+			status := statusByGate[gate.ID]
+			for _, dependency := range gate.DependsOn {
+				dependencyStatus, ok := statusByGate[dependency]
+				if ok && dependencyStatus.Verified {
+					continue
+				}
+				violation := fmt.Sprintf("depends_on completion gate %q has not verified", dependency)
+				if !slices.Contains(status.Violations, violation) {
+					status.Violations = append(status.Violations, violation)
+				}
+				if status.Verified {
+					status.Verified = false
+					changed = true
+				}
+			}
+			statusByGate[gate.ID] = status
+		}
+	}
+	if row.Check != nil && len(row.CompletionGates) > 0 {
+		v.Gates = append(v.Gates, statusByGate[types.PrimaryCompletionGateID])
+	}
+	if row.Check != nil {
+		v.Violations = append(v.Violations, prefixedGateViolations(statusByGate[types.PrimaryCompletionGateID])...)
+	}
+	for _, gate := range row.CompletionGates {
+		status := statusByGate[gate.ID]
+		v.Gates = append(v.Gates, status)
+		v.Violations = append(v.Violations, prefixedGateViolations(status)...)
+	}
+	for _, dependency := range row.DependsOn {
+		i := slices.IndexFunc(declared, func(candidate types.Job) bool { return candidate.ID == dependency })
+		switch {
+		case i < 0:
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s depends_on %q, but no such job is declared", row.ID, dependency))
+		case declared[i].State != types.StatePass:
+			v.Violations = append(v.Violations, fmt.Sprintf("job %s depends_on %q, which is %s rather than pass", row.ID, dependency, declared[i].State))
+		}
+	}
 	v.Verified = len(v.Violations) == 0
 	return v
 }
 
-// evidence checks the ref against the job's check, one violation per rule that failed.
-func evidence(row types.Job, rep types.JobResult, att types.JobAttempt) []string {
-	ref := strings.TrimSpace(rep.Validation.OutputRef)
-	if ref == "" {
-		return []string{"the result carries no validation output_ref, so there is no run to reopen"}
+func prefixedGateViolations(status types.GateStatus) []string {
+	if status.Verified {
+		return nil
 	}
-	if !att.Found {
-		return []string{fmt.Sprintf("no run is recorded for output ref %q", ref)}
-	}
-
-	var out []string
-	switch {
-	case row.Check == nil:
-		out = append(out, fmt.Sprintf("job %s declares no check, so no recorded run can be bound to it."+
-			" Declare one as `<target> <project> [-- args]` and have its holder run it", row.ID))
-	case !bindsTo(*row.Check, att):
-		out = append(out, fmt.Sprintf("output ref %q records `%s` and this job's check is `%s`,"+
-			" so the evidence is from a different run", ref, att, row.Check))
-	}
-	if att.Failed {
-		out = append(out, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", ref))
+	out := make([]string, 0, len(status.Violations))
+	for _, violation := range status.Violations {
+		out = append(out, fmt.Sprintf("completion gate %q: %s", status.ID, violation))
 	}
 	return out
+}
+
+func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt types.JobAttempt) types.GateStatus {
+	status := types.GateStatus{ID: gate.ID, OutputRef: strings.TrimSpace(ref)}
+	if status.OutputRef == "" {
+		status.Violations = append(status.Violations, "carries no output_ref, so there is no run to reopen")
+		return status
+	}
+	if !attempt.Found {
+		status.Violations = append(status.Violations, fmt.Sprintf("no run is recorded for output ref %q", status.OutputRef))
+		return status
+	}
+	if row.Created > 0 {
+		// Declaration time is persisted in seconds while run evidence is in
+		// milliseconds. Require the next whole second so same-second historical
+		// output never closes a job it predates.
+		declaredAt := row.Created*1000 + 999
+		switch {
+		case attempt.TimestampMs == 0:
+			status.Violations = append(status.Violations, "records no timestamp, so Magus cannot prove the evidence was captured after this job was declared")
+		case attempt.TimestampMs < declaredAt:
+			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (%d < %d), so historical output cannot close this job", attempt.TimestampMs, declaredAt))
+		}
+	}
+	if !bindsTo(gate.Check, attempt) {
+		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this gate's check is `%s`, so the evidence is from a different run", status.OutputRef, attempt, gate.Check))
+	}
+	if attempt.Failed {
+		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q failed, so its check did not pass", status.OutputRef))
+	}
+	status.Verified = len(status.Violations) == 0
+	return status
 }
 
 // bindsTo reports whether a recorded run is a run of this check.

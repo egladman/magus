@@ -920,12 +920,33 @@ func (v LeaseCheck) BuzzObject() BuzzObject {
 	}
 }
 
+func (v CompletionGate) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"id":          v.ID,
+		"description": v.Description,
+		"check":       v.Check.BuzzObject(),
+		"dependsOn":   v.DependsOn,
+	}
+}
+
+func (v GateEvidence) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"gateID":    v.GateID,
+		"outputRef": v.OutputRef,
+	}
+}
+
 func (v JobResult) BuzzObject() BuzzObject {
+	itemsGateEvidence := make([]any, len(v.GateEvidence))
+	for indexGateEvidence := range v.GateEvidence {
+		itemsGateEvidence[indexGateEvidence] = v.GateEvidence[indexGateEvidence].BuzzObject()
+	}
 	return BuzzObject{
 		"schemaVersion":   v.SchemaVersion,
 		"job":             v.Job,
 		"changedPaths":    v.ChangedPaths,
 		"validation":      v.Validation.BuzzObject(),
+		"gateEvidence":    itemsGateEvidence,
 		"descendants":     v.Descendants,
 		"unresolvedRisks": v.UnresolvedRisks,
 	}
@@ -940,12 +961,20 @@ func (v JobResultValidation) BuzzObject() BuzzObject {
 
 func (v JobAttempt) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"found":   v.Found,
-		"ref":     v.Ref,
-		"project": v.Project,
-		"target":  v.Target,
-		"spell":   v.Spell,
-		"failed":  v.Failed,
+		"found":       v.Found,
+		"ref":         v.Ref,
+		"timestampMs": v.TimestampMs,
+		"project":     v.Project,
+		"target":      v.Target,
+		"spell":       v.Spell,
+		"failed":      v.Failed,
+	}
+}
+
+func (v JobGateAttempt) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"gateID":  v.GateID,
+		"attempt": v.Attempt.BuzzObject(),
 	}
 }
 
@@ -966,6 +995,10 @@ func (v Job) BuzzObject() BuzzObject {
 	if v.Check != nil {
 		optCheck = (*v.Check).BuzzObject()
 	}
+	itemsCompletionGates := make([]any, len(v.CompletionGates))
+	for indexCompletionGates := range v.CompletionGates {
+		itemsCompletionGates[indexCompletionGates] = v.CompletionGates[indexCompletionGates].BuzzObject()
+	}
 	itemsReleases := make([]any, len(v.Releases))
 	for indexReleases := range v.Releases {
 		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
@@ -982,37 +1015,43 @@ func (v Job) BuzzObject() BuzzObject {
 	if v.Attempt != nil {
 		optAttempt = (*v.Attempt).BuzzObject()
 	}
+	itemsGateAttempts := make([]any, len(v.GateAttempts))
+	for indexGateAttempts := range v.GateAttempts {
+		itemsGateAttempts[indexGateAttempts] = v.GateAttempts[indexGateAttempts].BuzzObject()
+	}
 	var optLastRun any
 	if v.LastRun != nil {
 		optLastRun = (*v.LastRun).BuzzObject()
 	}
 	return BuzzObject{
-		"schemaVersion": v.SchemaVersion,
-		"id":            v.ID,
-		"parent":        v.Parent,
-		"goal":          v.Goal,
-		"checkpoint":    v.Checkpoint,
-		"writePaths":    v.WritePaths,
-		"denyPaths":     v.DenyPaths,
-		"readPaths":     v.ReadPaths,
-		"dependsOn":     v.DependsOn,
-		"model":         v.Model,
-		"check":         optCheck,
-		"validation":    v.Validation,
-		"state":         string(v.State),
-		"holder":        string(v.Holder),
-		"readOnly":      v.ReadOnly,
-		"releases":      itemsReleases,
-		"unattributed":  itemsUnattributed,
-		"reportedBase":  v.ReportedBase,
-		"baseVerdict":   string(v.BaseVerdict),
-		"registeredBy":  v.RegisteredBy.BuzzObject(),
-		"registered":    v.Registered,
-		"created":       v.Created,
-		"updated":       v.Updated,
-		"result":        optResult,
-		"attempt":       optAttempt,
-		"lastRun":       optLastRun,
+		"schemaVersion":   v.SchemaVersion,
+		"id":              v.ID,
+		"parent":          v.Parent,
+		"goal":            v.Goal,
+		"checkpoint":      v.Checkpoint,
+		"writePaths":      v.WritePaths,
+		"denyPaths":       v.DenyPaths,
+		"readPaths":       v.ReadPaths,
+		"dependsOn":       v.DependsOn,
+		"model":           v.Model,
+		"check":           optCheck,
+		"validation":      v.Validation,
+		"completionGates": itemsCompletionGates,
+		"state":           string(v.State),
+		"holder":          string(v.Holder),
+		"readOnly":        v.ReadOnly,
+		"releases":        itemsReleases,
+		"unattributed":    itemsUnattributed,
+		"reportedBase":    v.ReportedBase,
+		"baseVerdict":     string(v.BaseVerdict),
+		"registeredBy":    v.RegisteredBy.BuzzObject(),
+		"registered":      v.Registered,
+		"created":         v.Created,
+		"updated":         v.Updated,
+		"result":          optResult,
+		"attempt":         optAttempt,
+		"gateAttempts":    itemsGateAttempts,
+		"lastRun":         optLastRun,
 	}
 }
 
@@ -1037,5 +1076,29 @@ func (v JobList) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"jobs":     itemsJobs,
 		"overlaps": itemsOverlaps,
+	}
+}
+
+func (v JobStatus) BuzzObject() BuzzObject {
+	itemsGates := make([]any, len(v.Gates))
+	for indexGates := range v.Gates {
+		itemsGates[indexGates] = v.Gates[indexGates].BuzzObject()
+	}
+	return BuzzObject{
+		"job":        v.Job,
+		"verified":   v.Verified,
+		"violations": v.Violations,
+		"risks":      v.Risks,
+		"command":    v.Command,
+		"gates":      itemsGates,
+	}
+}
+
+func (v GateStatus) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"id":         v.ID,
+		"verified":   v.Verified,
+		"outputRef":  v.OutputRef,
+		"violations": v.Violations,
 	}
 }

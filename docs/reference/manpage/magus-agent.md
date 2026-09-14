@@ -1,23 +1,22 @@
 ---
 title: magus agent
 generated_from: internal/cli/registry.go
-description: "Render the embedded agent skills into a repository's skill directories, or print a starter AGENTS.md; it never writes the AGENTS.md you own."
-tags: [cli, magus agent, skills, agents, AGENTS.md, install]
+description: Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.
+tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness, hook, improve]
 ---
 
 # magus-agent
 
-Install the knowledge-graph agent skills into a repository
+Manage skills, harnesses, and agent feedback
 
 ## Synopsis
 
-**magus** agent \<install|starter|adoption\> [flags]
+**magus** agent \<install|hook|harness|improve|starter|adoption\> [flags]
 
 ## Description
 
 Render the agent skills embedded in this binary and write or stream them
-into named destinations (.claude/skills, .agents/skills, .opencode/skills,
-and so on).
+into named destinations (\<skills-dir\>).
 
 magus never writes your AGENTS.md. That file is yours, and an installer that
 edits a file you own leaves bytes you did not write and cannot audit. So
@@ -25,13 +24,17 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
+hook translates a descriptor-defined host event into the response format its host expects.
+harness applies or verifies a user-owned descriptor. improve reviews recurring
+guard feedback and can explicitly update descriptor-managed entries.
+
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
 anywhere a shell can reach. The write-to-disk form exists for the in-repo,
 paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 --global is set, so magus cannot silently write outside the working tree.
 
-adoption reads a corpus of shell commands, one per line, from stdin or from
+adoption reads shell commands, one per line, from stdin or from
 --commands \<file\>, and reports how often the graph was reached versus a raw
 text search. -o json emits the report as one object keyed total, graph_verbs,
 text_searches, search_of_source, search_of_prose, file_reads, magus_runs,
@@ -65,15 +68,53 @@ a pattern no graph verb fits.
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
 
+### agent hook options
+
+**--host** *string*
+: Harness descriptor receiving the guard response
+
+### agent harness apply options
+
+**--host** *string*
+: Harness descriptor ID
+
+### agent harness verify options
+
+**--host** *string*
+: Harness descriptor ID
+
+### agent improve options
+
+**--all**
+: Include one-off feedback
+
+**--apply**
+: Apply one descriptor-managed harness update
+
+**--host** *string*
+: Harness descriptor to update with --apply
+
+**--session** *string*
+: Only evidence from this host session
+
 ### agent adoption options
 
 **--commands** *string*
-: File of shell commands, one per line; without it the corpus is read from stdin
+: File of shell commands, one per line; without it commands are read from stdin
 
 ## Subcommands
 
 **install**
 : Render the embedded skills and write or stream them into named destinations
+
+**hook**
+: Translate a descriptor-defined guard event into a host response
+
+**harness**
+: Apply or verify a user-owned harness descriptor
+
+**improve**
+: Review recurring guard feedback and propose a harness update
 
 **starter**
 : Print a starter AGENTS.md to stdout; never writes a file
@@ -83,34 +124,34 @@ a pattern no graph verb fits.
 
 ## Examples
 
-*Install into a repo's agent skills directory*
+*Install into a repository's agent skills directory*
 
 ```sh
-magus agent install .claude/skills
+magus agent install .agents/skills
 ```
 
 *Refresh installed skills*
 
 ```sh
-magus agent install .claude/skills --force
+magus agent install .agents/skills --force
 ```
 
 *Refresh, and drop skills this version no longer ships*
 
 ```sh
-magus agent install .claude/skills --force --prune
+magus agent install .agents/skills --force --prune
 ```
 
 *See what a prune would remove first*
 
 ```sh
-magus agent install .claude/skills --prune --dry-run
+magus agent install .agents/skills --prune --dry-run
 ```
 
 *Install anywhere via tar*
 
 ```sh
-magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
+magus agent install --tar | tar -xf - -C .agents/skills
 ```
 
 *Print a starter AGENTS.md*
@@ -119,13 +160,13 @@ magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 magus agent starter
 ```
 
-*Measure graph adoption over a corpus of shell commands*
+*Measure graph adoption from shell commands*
 
 ```sh
 magus agent adoption --commands commands.txt
 ```
 
-*Read the corpus from stdin instead*
+*Read commands from stdin*
 
 ```sh
 magus agent adoption < commands.txt

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "opencode",
+  "binary": "opencode",
+  "variables": {
+    "subject": "{{templates}}/opencode-plugin.ts",
+    "subject_export": "MagusGuard",
+    "wrapper_export": "MagusGuard",
+    "transport": "plugin"
+  },
+  "setup": [{"kind": "template", "path": "config/opencode/plugins/magus-e2e.ts", "source": "guard-plugin.tmpl"}],
+  "launch": {
+    "args": ["run", "--format", "json", "--dir", "{{workspace}}", "--auto", "Use the Bash tool once to run exactly go test ./.... Do not make any other change."],
+    "env": {"XDG_CONFIG_HOME": "{{workspace}}/config", "GUARD_MAGUS_BIN": "{{workspace}}/magus"}
+  },
+  "evidence": {"kind": "guard-deny", "transport": "plugin"}
+}

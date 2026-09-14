@@ -28,13 +28,19 @@ var agentSkills = agent.Default(types.KnowledgeSchemaVersion)
 // repo's agent-config dirs happens only through `install`. AGENTS.md is the one
 // file magus refuses to write: `install` prints the block for the developer to
 // paste instead.
-func agentCmd(ctx context.Context, args []string) error {
+func agentCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 {
 		return agentUsageErr()
 	}
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
+	case "hook":
+		return agentHookCmd(ctx, root, os.Stdin, os.Stdout, args[1:])
+	case "improve":
+		return agentImproveCmd(ctx, root, args[1:])
+	case "harness":
+		return agentHarnessCmd(ctx, root, args[1:])
 	case "starter":
 		return agentStarterCmd()
 	case "adoption":
@@ -43,17 +49,23 @@ func agentCmd(ctx context.Context, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, starter, or adoption)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, hook, harness, improve, starter, or adoption)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|starter|adoption> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|hook|harness|improve|starter|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	tty.ProseItem(w, tty.SystemProbe, "  install            ",
 		"render the embedded skills and write or stream them into named destinations",
-		"(.claude/skills, .agents/skills, .opencode/skills, ...)")
+		"(<skills-dir>, ...)")
+	tty.ProseItem(w, tty.SystemProbe, "  hook               ",
+		"translate a descriptor-defined guard event without a copied shell wrapper")
+	tty.ProseItem(w, tty.SystemProbe, "  harness            ",
+		"apply or verify a user-owned harness descriptor in this workspace")
+	tty.ProseItem(w, tty.SystemProbe, "  improve            ",
+		"review recurring guard feedback; --apply updates a named workspace-local harness")
 	tty.ProseItem(w, tty.SystemProbe, "  starter            ",
 		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
 	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",
@@ -69,8 +81,7 @@ func agentUsage(w io.Writer) {
 		"Stdout philosophy: `magus agent` is a pure data generator.",
 		"To install skills anywhere your shell can reach, use --tar and pipe to tar:")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C .claude/skills")
-	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C ~/.config/opencode/skills")
+	fmt.Fprintln(w, "  magus agent install --tar | tar -xf - -C <skills-dir>")
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
 		"The write-to-disk form is only for the in-repo, paths-relative-to-<dir> case, where it preserves the previous one-line ergonomics.",

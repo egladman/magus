@@ -276,16 +276,16 @@ func TestGuardAdviceHasSkillCoverage(t *testing.T) {
 	entries, err := os.ReadDir(embeddedSkillDir)
 	require.NoError(t, err, "read %s", embeddedSkillDir)
 
-	var corpus strings.Builder
+	var allBodies strings.Builder
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 		body, err := os.ReadFile(filepath.Join(embeddedSkillDir, entry.Name(), "SKILL.md"))
 		require.NoError(t, err, "read skill %s", entry.Name())
-		corpus.Write(body)
+		allBodies.Write(body)
 	}
-	all := corpus.String()
+	all := allBodies.String()
 
 	for advisory, token := range guardAdviceSkillCoverage {
 		assert.Contains(t, all, token,
@@ -363,7 +363,7 @@ var templatePage = map[string]string{
 	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
 	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
 	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
-	// The three session-load recipes share a page with the contract they emit and
+	// The three session-load adapters share a page with the contract they emit and
 	// the coverage table that compares them, because choosing between hosts is
 	// exactly the question that page answers.
 	"magus-session-load-claude-code.sh": sessionGuideDoc,
@@ -391,7 +391,7 @@ var hookTemplates = []string{
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",
-	// The session-load recipes are shipped artifacts too: version-stamped, embedded
+	// The session-load adapters are shipped artifacts too: version-stamped, embedded
 	// in their page, and registered here so a new one cannot arrive unnoticed. They
 	// carry no guard coverage, because they judge nothing, and answer the session
 	// parity gate below instead.
@@ -400,21 +400,21 @@ var hookTemplates = []string{
 	"magus-session-load-opencode.sh",
 }
 
-// sessionRecipePrefix names a session-load recipe. Registration is by NAME rather
-// than by a hand-kept second list alone, so a fourth host's recipe dropped into
+// sessionAdapterPrefix names a session-load adapter. Registration is by NAME rather
+// than by a hand-kept second list alone, so a fourth host's adapter dropped into
 // the directory is claimed by the gates below the moment it exists.
-const sessionRecipePrefix = "magus-session-load-"
+const sessionAdapterPrefix = "magus-session-load-"
 
-// sessionRecipes are the per-host extraction recipes. Every one of them must also
+// sessionAdapters are the per-host extraction adapters. Every one of them must also
 // appear in hookTemplates, which is what gets it embedded and version-stamped;
 // this list is what the coverage and parity gates iterate.
-var sessionRecipes = []string{
+var sessionAdapters = []string{
 	"magus-session-load-claude-code.sh",
 	"magus-session-load-codex.sh",
 	"magus-session-load-opencode.sh",
 }
 
-// sessionGuideDoc is the page that embeds the recipes and carries the parity
+// sessionGuideDoc is the page that embeds the adapters and carries the parity
 // table they are checked against.
 const sessionGuideDoc = "docs/guides/integrations/agents/session-load.md"
 
@@ -458,10 +458,7 @@ var hookConfigPage = map[string]string{
 var hookConfigExemptions = map[string]map[string]string{
 	"codex": {
 		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
-			"so it earns one host's wiring rather than four; nothing in Codex prevents it",
-		"magus-guard-command.sh on " + mcpToolMatcherPrefix: "there is no vendored evidence Codex fires PreToolUse for an " +
-			"MCP tool call, so the wiring would claim a surface nobody has seen deliver a verdict; " +
-			"the mcp coverage every template declares for codex says none for the same reason",
+			"so it earns one host's wiring rather than four; nothing in the hook contract prevents it",
 	},
 }
 
@@ -500,12 +497,23 @@ func configJobs(t *testing.T, path string) map[string]bool {
 	for _, entries := range cfg.Hooks {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
-				for _, field := range strings.Fields(h.Command) {
-					if !strings.HasPrefix(field, hookTemplateDir) {
+				if nativeAgentHookFor(h.Command, "claude-code") || nativeAgentHookFor(h.Command, "codex") {
+					name := "magus-guard-command.sh"
+					if strings.Contains(entry.Matcher, "Edit") || strings.Contains(entry.Matcher, "Write") {
+						name = "magus-guard-path.sh"
+					}
+					if strings.Contains(entry.Matcher, "mcp__") {
+						name += " on " + mcpToolMatcherPrefix
+					}
+					found[name] = true
+					continue
+				}
+				for _, template := range hookTemplates {
+					if filepath.Ext(template) != ".sh" || !strings.Contains(h.Command, template) {
 						continue
 					}
-					name := filepath.Base(field)
-					if strings.Contains(entry.Matcher, mcpToolMatcherPrefix) {
+					name := template
+					if strings.Contains(entry.Matcher, "mcp__") {
 						name += " on " + mcpToolMatcherPrefix
 					}
 					found[name] = true
@@ -621,6 +629,11 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 		for _, entry := range entries {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
+				if nativeAgentHookFor(h.Command, "claude-code") {
+					assert.Equal(t, "PreToolUse", event,
+						"the native guard adapter is only a PreToolUse transport; lifecycle hooks need their own commands")
+					continue
+				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
 						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
@@ -656,6 +669,8 @@ var templateDirScaffolding = map[string]bool{
 	"pnpm-lock.yaml":          true,
 	"magusfile.buzz":          true,
 	"opencode-plugin.test.ts": true,
+	"host-e2e.ts":             true,
+	"host-e2e.test.ts":        true,
 	// The binary-interface twin: proves the recorded shim's argv shape still gets
 	// a real verdict from a real magus, but is not itself something a reader
 	// copies into a host; see the note at its top for the split with the file
@@ -833,16 +848,19 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		}
 	}
 
-	// Codex ships no script of its own: codex-hooks.json points at the two
-	// generic templates. Those templates claim the codex host, so this is what
-	// makes the claim checkable rather than aspirational.
+	// Codex either points at the generic templates or at the native adapter.
+	// The adapter covers every guard surface session hook understands, so it is
+	// a checkable replacement for copied shell glue, not an untested shortcut.
 	//
 	// The claim is read off the GUARD declaration rather than off the file's text.
-	// A session-load recipe names the same host on a contract this config has
+	// A session-load adapter names the same host on a contract this config has
 	// nothing to do with, and matching that would demand a hook wiring for a file
 	// nobody wires to a hook.
 	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
 	require.NoError(t, err)
+	if nativeAgentHookFor(string(wiring), "codex") {
+		return
+	}
 	for _, name := range hookTemplates {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err)
@@ -852,6 +870,10 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
+}
+
+func nativeAgentHookFor(command, host string) bool {
+	return strings.Contains(command, "magus agent hook --host "+host)
 }
 
 // claimsGuardHost reports whether a template names host in one of its guard
@@ -1010,20 +1032,20 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 		name, line)
 }
 
-// TestEverySessionRecipeIsRegistered gives the session recipes the property the
+// TestEverySessionAdapterIsRegistered gives the session adapters the property the
 // guard templates already have: a fourth host arrives and nothing stays green by
 // accident.
 //
-// Two directions, because either one alone leaves a hole. A recipe in the
-// directory that no list names answers to no gate; a recipe listed here but
+// Two directions, because either one alone leaves a hole. An adapter in the
+// directory that no list names answers to no gate; an adapter listed here but
 // absent from hookTemplates is neither version-stamped nor embedded in its page,
 // so a reader browsing the docs site never sees it.
-func TestEverySessionRecipeIsRegistered(t *testing.T) {
-	registered := make(map[string]bool, len(sessionRecipes))
-	for _, name := range sessionRecipes {
+func TestEverySessionAdapterIsRegistered(t *testing.T) {
+	registered := make(map[string]bool, len(sessionAdapters))
+	for _, name := range sessionAdapters {
 		registered[name] = true
 		assert.Contains(t, hookTemplates, name,
-			"%s is a session recipe but is not in hookTemplates, so it carries no version marker\n"+
+			"%s is a session adapter but is not in hookTemplates, so it carries no version marker\n"+
 				"and the guide is not required to embed it.", name)
 	}
 
@@ -1031,11 +1053,11 @@ func TestEverySessionRecipeIsRegistered(t *testing.T) {
 	require.NoError(t, err, "read %s", hookTemplateDir)
 	for _, entry := range entries {
 		name := entry.Name()
-		if entry.IsDir() || !strings.HasPrefix(name, sessionRecipePrefix) {
+		if entry.IsDir() || !strings.HasPrefix(name, sessionAdapterPrefix) {
 			continue
 		}
 		assert.True(t, registered[name],
-			"%s ships %s, but sessionRecipes does not list it, so the parity gates skip it:\n"+
+			"%s ships %s, but sessionAdapters does not list it, so the parity gates skip it:\n"+
 				"no coverage declaration is demanded of it and the table in %s owes it no row.",
 			hookTemplateDir, name, sessionGuideDoc)
 	}
@@ -1045,8 +1067,8 @@ func TestEverySessionRecipeIsRegistered(t *testing.T) {
 type sessionCoverage map[string]map[string]string
 
 // parseSessionCoverage reads every session-coverage declaration out of the
-// recipes, and is the sibling of parseGuardCoverage: same shape, different
-// contract. A recipe that names a dimension the contract does not have, or omits
+// adapters, and is the sibling of parseGuardCoverage: same shape, different
+// contract. An adapter that names a dimension the contract does not have, or omits
 // one it does, fails here rather than in a report that quietly reads the gap as
 // a measured zero.
 func parseSessionCoverage(t *testing.T) sessionCoverage {
@@ -1057,7 +1079,7 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 	}
 
 	cov := sessionCoverage{}
-	for _, name := range sessionRecipes {
+	for _, name := range sessionAdapters {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err, "read %s", name)
 
@@ -1076,12 +1098,12 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 			}
 			require.Equal(t, strconv.Itoa(agent.SessionSchemaVersion), fields["schema"],
 				"%s declares session schema %q; the contract is agent.SessionSchemaVersion=%d.\n"+
-					"A schema bump means every recipe must be updated and re-downloaded before it loads again.",
+					"A schema bump means every adapter must be updated and re-downloaded before it loads again.",
 				name, fields["schema"], agent.SessionSchemaVersion)
 			host := fields["host"]
 			require.NotEmpty(t, host, "%s: coverage declaration names no host", name)
 			require.Nil(t, cov[host],
-				"host %q has two session-coverage declarations; one recipe per host, or the gate cannot tell which is true", host)
+				"host %q has two session-coverage declarations; one adapter per host, or the gate cannot tell which is true", host)
 
 			declared := map[string]string{}
 			for _, dimension := range agent.SessionDimensions() {
@@ -1098,17 +1120,17 @@ func parseSessionCoverage(t *testing.T) sessionCoverage {
 		}
 		assert.True(t, found, "%s carries no %s line, so nothing states what its host can supply", name, agent.SessionCoverageMarker)
 	}
-	require.NotEmpty(t, cov, "no %s declarations found in any session recipe", agent.SessionCoverageMarker)
+	require.NotEmpty(t, cov, "no %s declarations found in any session adapter", agent.SessionCoverageMarker)
 	return cov
 }
 
-// TestSessionParityTableMatchesTheRecipeDeclarations keeps the guide's
-// hand-written "Session load across hosts" table honest against the recipes.
+// TestSessionParityTableMatchesTheAdapterDeclarations keeps the guide's
+// hand-written "Session load across hosts" table honest against the adapters.
 //
 // The table is what a person reads before believing a report. A cell claiming a
-// dimension the recipe cannot supply turns "unobservable" into a silent zero,
+// dimension the adapter cannot supply turns "unobservable" into a silent zero,
 // which is the one reading this whole arrangement exists to prevent.
-func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
+func TestSessionParityTableMatchesTheAdapterDeclarations(t *testing.T) {
 	cov := parseSessionCoverage(t)
 	guide, err := os.ReadFile(sessionGuideDoc)
 	require.NoError(t, err, "read %s", sessionGuideDoc)
@@ -1117,8 +1139,8 @@ func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
 	for host, dimensions := range cov {
 		cells, ok := rows[normalizeHost(host)]
 		require.True(t, ok,
-			"host %q is declared by a recipe but has no row in the session parity table in %s.\n"+
-				"Every host with a recipe belongs in the table a reader uses to judge a report.", host, sessionGuideDoc)
+			"host %q is declared by an adapter but has no row in the session parity table in %s.\n"+
+				"Every host with an adapter belongs in the table a reader uses to judge a report.", host, sessionGuideDoc)
 		for dimension, stance := range dimensions {
 			cell, ok := cells[dimension]
 			require.True(t, ok, "the session parity table has no %q column; the contract needs one", dimension)
@@ -1127,7 +1149,7 @@ func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
 				got = "yes"
 			}
 			assert.Equal(t, stance, got,
-				"session parity table row %q, column %q reads %q, which disagrees with the recipe's declaration.\n"+
+				"session parity table row %q, column %q reads %q, which disagrees with the adapter's declaration.\n"+
 					"Fix whichever is wrong - the table is a promise to a reader, the declaration is what the file does.",
 				host, dimension, cell)
 		}
@@ -1140,7 +1162,7 @@ func TestSessionParityTableMatchesTheRecipeDeclarations(t *testing.T) {
 	sort.Strings(declared)
 	for row := range rows {
 		assert.Contains(t, declared, row,
-			"the session parity table in %s promises host %q, which no recipe declares coverage for", sessionGuideDoc, row)
+			"the session parity table in %s promises host %q, which no adapter declares coverage for", sessionGuideDoc, row)
 	}
 }
 
@@ -1184,18 +1206,18 @@ func sessionParityRows(t *testing.T, guide string) map[string]map[string]string 
 	return rows
 }
 
-// sessionExitArmRe matches a recipe giving up: a bare `exit 0` inside a
+// sessionExitArmRe matches an adapter giving up: a bare `exit 0` inside a
 // conditional block, which is how every one of these arms ends.
 var sessionExitArmRe = regexp.MustCompile(`^exit 0$`)
 
-// TestSessionRecipeFailOpenArmsAnnounceThemselves is the session half of the
+// TestSessionAdapterFailOpenArmsAnnounceThemselves is the session half of the
 // doctrine's enforcement point, and it exists for the same reason its guard
-// sibling does: a recipe that extracted nothing looks exactly like a host nobody
+// sibling does: an adapter that extracted nothing looks exactly like a host nobody
 // used, and that reading is the one the audit must never invite.
 //
 // Structural, so rewording a message costs nothing and DELETING one fails.
-func TestSessionRecipeFailOpenArmsAnnounceThemselves(t *testing.T) {
-	for _, name := range sessionRecipes {
+func TestSessionAdapterFailOpenArmsAnnounceThemselves(t *testing.T) {
+	for _, name := range sessionAdapters {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err, "read %s", name)
 
@@ -1212,7 +1234,7 @@ func TestSessionRecipeFailOpenArmsAnnounceThemselves(t *testing.T) {
 			arms++
 			assert.True(t, strings.Contains(strings.Join(block, "\n"), ">&2"),
 				"%s stops extracting at line %d and says nothing.\n"+
-					"A recipe that loaded no events looks exactly like a host nobody used, so every arm that\n"+
+					"An adapter that loaded no events looks exactly like a host nobody used, so every arm that\n"+
 					"gives up announces why on stderr.", name, i+1)
 		}
 		assert.NotZero(t, arms,
@@ -1232,48 +1254,48 @@ func sessionArmGivesUp(block []string) bool {
 	return false
 }
 
-// sessionRecipeCorpus is the testscript that executes a session recipe against a
+// sessionAdapterCases is the testscript that executes a session adapter against a
 // synthetic transcript. Synthetic on purpose: a real one carries a person's own
 // commands and prompts, and a fixture is committed forever.
-const sessionRecipeCorpus = "cmd/magus/testdata/script/session_load_recipes.txtar"
+const sessionAdapterCases = "cmd/magus/testdata/script/session_load_adapters.txtar"
 
-// TestSessionRecipeCorpusCoversEveryKind ties the executed cases to the contract
+// TestSessionAdapterCasesCoverEveryKind ties the executed cases to the contract
 // the declarations answer to.
 //
-// Coverage parity asks a recipe to DECLARE what its host supplies; this asks that
+// Coverage parity asks an adapter to DECLARE what its host supplies; this asks that
 // somebody ran it and looked at what came out. Without it, adding a kind would
-// demand new declarations while the corpus quietly kept asserting the old ones,
+// demand new declarations while the test cases quietly kept asserting the old ones,
 // which is exactly how a shell artifact ships broken with a correct declaration
 // on top of it.
 //
-// A kind no recipe can currently produce is declared rather than skipped:
+// A kind no adapter can currently produce is declared rather than skipped:
 // `# kind: file.read unreachable - <why>` satisfies this in the file where the
 // next person will look.
-func TestSessionRecipeCorpusCoversEveryKind(t *testing.T) {
-	body, err := os.ReadFile(sessionRecipeCorpus)
-	require.NoError(t, err, "read %s", sessionRecipeCorpus)
-	corpus := string(body)
+func TestSessionAdapterCasesCoverEveryKind(t *testing.T) {
+	body, err := os.ReadFile(sessionAdapterCases)
+	require.NoError(t, err, "read %s", sessionAdapterCases)
+	cases := string(body)
 
 	for _, kind := range agent.SessionKinds() {
 		label := "# kind: " + kind
-		assert.Contains(t, corpus, label,
+		assert.Contains(t, cases, label,
 			"%s has no case labeled %q.\n"+
 				"Every kind in the session contract needs one executed case, or an explicit\n"+
-				"`%s unreachable - <why>` line when no recipe can produce it.",
-			sessionRecipeCorpus, label, label)
+				"`%s unreachable - <why>` line when no adapter can produce it.",
+			sessionAdapterCases, label, label)
 	}
 }
 
-// transportCorpus is the testscript that executes the sh templates against real
+// transportCases is the testscript that executes the sh templates against real
 // host events. Its cases are labeled so the contract can demand one per cell.
-const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
+const transportCases = "cmd/magus/testdata/script/guard_templates.txtar"
 
-// TestTransportCorpusCoversTheContract ties the executed cases to the same
+// TestTransportCasesCoverTheContract ties the executed cases to the same
 // contract the declarations answer to.
 //
 // Coverage parity asks every glue to DECLARE a stance; this asks that somebody
 // actually ran it. Without this, growing the contract would demand new
-// declarations (which the sibling test enforces) while the transport corpus
+// declarations (which the sibling test enforces) while the transport cases
 // quietly kept testing the old cells, and a declaration nobody executes is the
 // exact failure that let a broken plugin ship.
 //
@@ -1282,8 +1304,8 @@ const transportCorpus = "cmd/magus/testdata/script/guard_templates.txtar"
 // label reads true and whose body runs nothing, and an "unreachable" note is a
 // claim about the guard that nothing rechecks once the guard grows a rule.
 // unreachableCases is the only door out, and it names the cell and the reason.
-func TestTransportCorpusCoversTheContract(t *testing.T) {
-	executed, noted := transportCorpusCases(t)
+func TestTransportCasesCoverTheContract(t *testing.T) {
+	executed, noted := transportCasesByCell(t)
 
 	for _, surface := range agent.GuardSurfaces() {
 		for _, decision := range agent.GuardDecisions() {
@@ -1292,33 +1314,33 @@ func TestTransportCorpusCoversTheContract(t *testing.T) {
 				assert.True(t, noted[cell],
 					"%s executes no %q case and unreachableCases says it cannot (%s), but no `# case: %s unreachable - <why>`\n"+
 						"line says so in the file. Record it where the next person looks, or drop the entry.",
-					transportCorpus, cell, why, cell)
+					transportCases, cell, why, cell)
 				continue
 			}
 			assert.True(t, executed[cell],
 				"%s has no EXECUTED case for %q: a `# case: %s` label with a block that runs a template.\n"+
 					"A label alone, or an `unreachable` note, does not satisfy this: a declared stance nobody\n"+
-					"ran is the failure that let a broken plugin ship. If the corpus genuinely cannot produce\n"+
+					"ran is the failure that let a broken plugin ship. If these cases genuinely cannot produce\n"+
 					"this verdict, add %q to unreachableCases with the reason.",
-				transportCorpus, cell, cell, cell)
+				transportCases, cell, cell, cell)
 		}
 	}
 
 	for cell := range unreachableCases {
 		assert.False(t, executed[cell],
 			"unreachableCases says %s cannot execute %q, but a case for it runs a template. Drop the entry.",
-			transportCorpus, cell)
+			transportCases, cell)
 	}
 	for cell := range noted {
 		_, allowed := unreachableCases[cell]
 		assert.True(t, allowed,
 			"%s calls %q unreachable and unreachableCases does not. An unreachable note is a claim about the\n"+
 				"guard that nothing rechecks once a rule grows; record it in unreachableCases so this gate owns it,\n"+
-				"or delete the note and write the case.", transportCorpus, cell)
+				"or delete the note and write the case.", transportCases, cell)
 	}
 }
 
-// unreachableCases records a surface-and-decision cell the corpus cannot execute,
+// unreachableCases records a surface-and-decision cell the cases cannot execute,
 // and why. Every other cell owes a real case.
 var unreachableCases = map[string]string{
 	"mcp/advise": "every rule that fires on a judged MCP call denies, and the advisory families that " +
@@ -1326,13 +1348,13 @@ var unreachableCases = map[string]string{
 		"make deterministic: run logs inside the window, a stale symbol index, a binary older than its sources",
 }
 
-// transportCorpusCases splits the corpus on its case labels and reports, per cell,
+// transportCasesByCell splits the cases on their labels and reports, per cell,
 // whether some block for it runs a template and whether some block claims it is
 // unreachable. A cell may carry several cases, so both are ORs over its blocks.
-func transportCorpusCases(t *testing.T) (executed, noted map[string]bool) {
+func transportCasesByCell(t *testing.T) (executed, noted map[string]bool) {
 	t.Helper()
-	body, err := os.ReadFile(transportCorpus)
-	require.NoError(t, err, "read %s", transportCorpus)
+	body, err := os.ReadFile(transportCases)
+	require.NoError(t, err, "read %s", transportCases)
 
 	executed, noted = map[string]bool{}, map[string]bool{}
 	cell := ""
@@ -1356,6 +1378,107 @@ func transportCorpusCases(t *testing.T) (executed, noted map[string]bool) {
 		}
 	}
 	return executed, noted
+}
+
+// TestShellTransportCasesCoverTheHostContract is the host-aware companion to
+// TestTransportCasesCoverTheContract. The latter proves every guard cell runs
+// somewhere; that is insufficient for a shared template, where a new host can
+// claim the same reply dialect without any fixture ever naming it. The `# hosts:`
+// markers bind an executed recorded event to each shell host that relies on it.
+//
+// OpenCode is deliberately outside these cases: it is TypeScript rather than sh,
+// and docs/guides/integrations/agents/opencode-plugin.test.ts executes its
+// plugin interface directly (with a separate live-binary twin). Keeping its
+// runtime-specific test in the project that owns the runtime avoids a fake shell
+// adapter merely to make this table uniform.
+func TestShellTransportCasesCoverTheHostContract(t *testing.T) {
+	executed := transportCasesByHost(t)
+	coverage := parseGuardCoverage(t)
+
+	for host := range shellGuardHosts(t) {
+		for _, surface := range agent.GuardSurfaces() {
+			wired := false
+			for _, decision := range agent.GuardDecisions() {
+				wired = wired || coverage[host][surface][decision] != "none"
+			}
+			if !wired {
+				continue
+			}
+			for _, decision := range agent.GuardDecisions() {
+				cell := surface + "/" + decision
+				if _, unreachable := unreachableCases[cell]; unreachable {
+					continue
+				}
+				assert.True(t, executed[host][cell],
+					"%s wires the %s surface, but no `# hosts: %s` fixture executes %s. "+
+						"Record the host beside the real event that reaches its adapter, or change the declaration.",
+					host, surface, host, cell)
+			}
+		}
+	}
+}
+
+// shellGuardHosts discovers the hosts served by a shell template rather than
+// duplicating a provider list beside the cases. A new shell-backed host therefore
+// owes fixtures as soon as it adds its coverage marker.
+func shellGuardHosts(t *testing.T) map[string]bool {
+	t.Helper()
+	hosts := map[string]bool{}
+	for _, name := range hookTemplates {
+		if filepath.Ext(name) != ".sh" {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
+		require.NoError(t, err, "read %s", name)
+		for _, match := range coverageHost.FindAllStringSubmatch(string(body), -1) {
+			hosts[match[1]] = true
+		}
+	}
+	require.NotEmpty(t, hosts, "no shell template declared a host, so the host transport gate graded nothing")
+	return hosts
+}
+
+// transportCasesByHost reports the cells an executed fixture reaches for
+// each `# hosts:` declaration. A host marker remains active until the next one,
+// matching the cases' section structure; an unlabeled section cannot satisfy a
+// host claim by accident.
+func transportCasesByHost(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	body, err := os.ReadFile(transportCases)
+	require.NoError(t, err, "read %s", transportCases)
+
+	executed := map[string]map[string]bool{}
+	var hosts []string
+	cell := ""
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if rest, found := strings.CutPrefix(line, "# hosts: "); found {
+			hosts = strings.Split(rest, ",")
+			for i := range hosts {
+				hosts[i] = strings.TrimSpace(hosts[i])
+				require.NotEmpty(t, hosts[i], "%s has an empty host in %q", transportCases, line)
+			}
+			continue
+		}
+		if rest, found := strings.CutPrefix(line, "# case: "); found {
+			fields := strings.Fields(rest)
+			cell = ""
+			if len(fields) > 0 && (len(fields) == 1 || fields[1] != "unreachable") {
+				cell = fields[0]
+			}
+			continue
+		}
+		if cell == "" || !strings.HasPrefix(line, "exec ") {
+			continue
+		}
+		for _, host := range hosts {
+			if executed[host] == nil {
+				executed[host] = map[string]bool{}
+			}
+			executed[host][cell] = true
+		}
+	}
+	return executed
 }
 
 // TestParityTableMatchesTheGlueDeclarations keeps the guide's hand-written

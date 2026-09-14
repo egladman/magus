@@ -60,15 +60,15 @@ export fun main() > void !> any {
         final cells = line.split("|");
         if (cells.len() < 7) { continue; }
 
-        final file = code(cells, 1);
-        final origin = plain(cells, 2);
+        final file = code(cells, index: 1);
+        final origin = plain(cells, index: 2);
         if (origin != "published") {
-            std\print("skip {file}: {origin}, so " + code(cells, 3) + " has no bytes to diff; re-read it by hand");
+            std\print("skip {file}: {origin}, so " + code(cells, index: 3) + " has no bytes to diff; re-read it by hand");
             continue;
         }
 
-        final url = code(cells, 3);
-        final recorded = code(cells, 5);
+        final url = code(cells, index: 3);
+        final recorded = code(cells, index: 5);
         final body = http\get(url, opts: {"fail": true}).body;
         final digest = crypto\sha256Hex(body);
         checked = checked + 1;

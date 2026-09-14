@@ -66,6 +66,14 @@ func hookUsage(w io.Writer) {
 // fails CLOSED, because bytes were on their way and were lost, so the guard has
 // judged nothing and the command it never saw must not be reported as cleared.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+	return hookCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
+}
+
+// hookCmdWithErrorWriter is hookCmd's transport seam. The session CLI reports a
+// deny reason on stderr for machine-readable output, while a host adapter has
+// already carried that reason in its host reply and must not leak a second,
+// non-protocol message into the host's hook stream.
+func hookCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
@@ -126,7 +134,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
 		}
-		return enforceVerdict(opts, verdict)
+		return enforceVerdictTo(errOut, opts, verdict)
 	}
 	verdict := guard.Judge(ctx, hookDependencies(), guard.Request{
 		Input:      input,
@@ -141,7 +149,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
-	return enforceVerdict(opts, verdict)
+	return enforceVerdictTo(errOut, opts, verdict)
 }
 
 // hookDependencies hands the guard the five workspace facts its rules cannot resolve for
@@ -190,11 +198,15 @@ const guardDenyExitCode = 2
 // one discards stderr outright, so an unconditional copy printed a kilobyte-plus
 // reason twice to an audience with a context budget.
 func enforceVerdict(opts OutputOptions, verdict guard.Verdict) error {
+	return enforceVerdictTo(os.Stderr, opts, verdict)
+}
+
+func enforceVerdictTo(errOut io.Writer, opts OutputOptions, verdict guard.Verdict) error {
 	if verdict.Decision != "deny" {
 		return nil
 	}
 	if opts.Format != FormatText {
-		fmt.Fprintln(os.Stderr, verdict.Reason)
+		fmt.Fprintln(errOut, verdict.Reason)
 	}
 	return errSilent{exitCode: guardDenyExitCode}
 }

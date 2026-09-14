@@ -4,12 +4,12 @@
 // config that invokes them are one directory instead of three places to keep in sync.
 //
 //   magus run lint docs/guides/integrations/agents   type-check (tsc) + biome
-//   magus run ci docs/guides/integrations/agents     lint
+//   magus run ci docs/guides/integrations/agents     format + lint + transport tests
 //
 // Registered as its own project for one reason: the OpenCode plugin is real TypeScript that
 // ships to users, so it must be held to the same gates as the rest of the workspace instead
 // of being prose in a markdown file nobody type-checks. The shell templates are POSIX sh and
-// are exercised by the Go tests at the repo root (dogfood_test.go), which assert that this
+// are exercised by the Go tests at the repo root (conventions_test.go), which assert that this
 // repository's own agent config invokes these files and that the guide embeds them verbatim.
 //
 // There is deliberately NO build target: nothing here is compiled. The shell templates are
@@ -18,7 +18,7 @@
 //
 // The docs SSG renders only *.md, so these templates never become pages and this magusfile is
 // invisible to it. The per-host guide pages beside them (claude-code.md, codex.md, ...) DO
-// render: they belong to the docs project's **/*.md corpus, not to this project's sources.
+// render: they belong to the docs project's **/*.md set, not to this project's sources.
 
 import "magus";
 // os shells out to pnpm for the install and the two gates.
@@ -40,7 +40,8 @@ magus\project({
     "spells": [bash, typescript],
     // Affected tracking is glob-based, not import-graph-based, so every input must be named to
     // be watched: the templates themselves, and the config files that drive the gates.
-    "sources": ["*.ts", "*.sh", "codex-hooks.json", "*.md", "*.tmpl",
+    "sources": ["*.ts", "*.sh", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
+                "host-e2e/*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
                 "dprint.json"],
     "targets": {
@@ -92,9 +93,29 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "test"], ".", {});
 }
 
+// host-integration is deliberately NOT a dependency of ci. It starts real, locally installed
+// agent hosts, so it can consume the caller's authentication and quota. A person
+// opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness
+// descriptors explicitly:
+//
+//   MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
+//     host-e2e/example.json
+//
+// The runner creates a disposable workspace and applies each descriptor's config. A
+// missing local host is a structured skip; a present host that fails to dispatch
+// its hook is a failure, not a skip. An all-skip run is inconclusive and exits
+// nonzero. Successful workspaces are deleted unless MAGUS_HOST_E2E_KEEP=1; a
+// failure keeps its trace, config, and capped host logs for inspection.
+export fun host_integration(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    var command = mut ["run", "e2e", "--"];
+    foreach (arg in args) { command.append(arg); }
+    proc\exec("pnpm", args: command, dir: ".", opts: {});
+}
+
 // 'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is
 // lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked
-// at the repo root: dogfood_test.go verifies that this repository's own hook config invokes them,
+// at the repo root: conventions_test.go verifies that this repository's own hook config invokes them,
 // that the guide embeds them verbatim, and that each declares a stance for every decision and
 // surface in the guard contract (the magus-guard-coverage lines).
 //
@@ -114,5 +135,11 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 // descendant project (MGS3001). So the pages are formatted by the project that owns them,
 // which is the same rule every other project with Markdown follows.
 export fun format(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(preflight);
+    // dprint amends the authored guide pages in place. They are inputs, not
+    // generated outputs: declaring them as outputs would make magus clean delete
+    // a reader's documentation.
+    ctx.modifiesExistingFiles("*.md", "*.ts");
     markdown["dprint"](ctx);
+    typescript["biome-format"](ctx);
 }

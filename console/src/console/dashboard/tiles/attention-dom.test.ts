@@ -28,7 +28,7 @@ function request(openedMs: number): AttentionRequest {
     opened_ms: openedMs,
     outcome: "waiting",
     severity: "",
-    source: "claude/Notification",
+    source: "harness/Notification",
     where: "/repo",
     lease: "",
     message: "needs the deploy key",

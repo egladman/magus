@@ -100,9 +100,9 @@ var coverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
 //
 // HOST_RESPONSE is matched as two segments because the shell splices
 // "$HOST_ADVISE_BRANCH" between them. Composing it here rather than reading one string
-// is what lets the test render BOTH arrangements: with the advise arm, which is what
-// Claude Code gets, and without it, which is what codex-hooks.json asks for by setting
-// GUARD_NO_ADVISE.
+// is what lets the test render both supported arrangements. Claude Code and Codex
+// use the advise arm today; GUARD_NO_ADVISE remains an opt-in for a future host
+// that rejects additionalContext rather than silently ignoring it.
 var (
 	adviseBranchAssign = regexp.MustCompile(`(?m)^\s*\[ -n "\$HOST_ADVISE_BRANCH" \] \|\| HOST_ADVISE_BRANCH='(.*)'$`)
 	hostResponseAssign = regexp.MustCompile(`(?m)^\[ -n "\$HOST_RESPONSE" \] \|\| HOST_RESPONSE='(.*)'"\$HOST_ADVISE_BRANCH"'(.*)'$`)
@@ -264,8 +264,8 @@ func guardResponses(t *testing.T, name, body string) []string {
 		advise := adviseBranchAssign.FindStringSubmatch(body)
 		require.NotNil(t, advise,
 			"%s splices $HOST_ADVISE_BRANCH into HOST_RESPONSE but never assigns it a default", name)
-		// Both arrangements, because both ship: the advise arm is what Claude Code
-		// renders, and GUARD_NO_ADVISE empties it for Codex.
+		// Both arrangements remain valid template behavior. The advise arm is what
+		// Claude Code and Codex render; GUARD_NO_ADVISE is a supported host override.
 		bodies = append(bodies, segments[1]+advise[1]+segments[2], segments[1]+segments[2])
 	}
 	for _, match := range inlineTemplateArg.FindAllStringSubmatch(body, -1) {

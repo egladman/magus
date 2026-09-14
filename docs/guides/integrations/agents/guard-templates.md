@@ -137,11 +137,11 @@ overrides and execs it, so there is one implementation to reason about.
 # claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
 # so HOST_EVENT_RAW forwards the whole event instead, and the same hookSpecificOutput reply this
 # file already renders for the command surface carries a deny or an advise on this one too.
-# magus-guard-coverage: schema=1 host=codex surface=mcp deny=none advise=none pass=none
-# codex declares NONE here, not model: OpenAI's vendored hooks schema documents PreToolUse
-# firing on Bash and the edit tools by name and says nothing about an MCP tool call. Wiring a
-# matcher this file cannot confirm fires would be a claim the evidence does not support; see
-# testdata/hostschemas/codex/hooks.schema.json and docs/guides/integrations/agents/codex.md.
+# magus-guard-coverage: schema=1 host=codex surface=mcp deny=model advise=model pass=none
+# Codex's current hook reference permits PreToolUse matchers for canonical MCP tool names
+# (mcp__<server>__<tool>) and supplies the full argument object as tool_input. codex-hooks.json
+# wires that event through HOST_EVENT_RAW, so the same reply arm carries its deny and advisory;
+# see docs/guides/integrations/agents/codex.md and the host-marked transport tests.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.

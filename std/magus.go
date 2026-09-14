@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
@@ -55,7 +57,7 @@ var Magus = Module{
 		"`magus buzz` script as well as in a magusfile, and a " +
 		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
 		"`where` and `insight` all answer in-process, and so does `magus\\job` (list, put, " +
-		"register, clear): the job store an orchestrating agent declares about work it handed " +
+		"register, exit, wait, clear): the job store an orchestrating agent declares about work it handed " +
 		"out (see types.Job). The `magus job` CLI subcommand is a third write door onto " +
 		"the same rows: ls and describe read, fork declares a row, exec records a worker's " +
 		"landed base, and wait blocks on a dependency. Only the members that DECLARE into " +
@@ -452,7 +454,7 @@ var Magus = Module{
 				"returns rather than a gate. The one thing the store DOES refuse is a write to a " +
 				"row the caller does not own. See the field docs on " +
 				"types.Job. This namespace, the magus_job MCP tool and `magus job` " +
-				"(fork, exec, wait) are the three WRITE doors onto it. Bound by " +
+				"(fork, exec, exit, wait) are the three WRITE doors onto it. Bound by " +
 				"hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
 				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
@@ -534,6 +536,40 @@ var Magus = Module{
 						"run inside a workspace; raises MGS1022 only when there is no workspace to " +
 						"read.",
 					Returns: []Ret{{Type: TypeInt}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "exit",
+					Doc: "File a worker's result and the recorded attempt behind its output_ref, " +
+						"then move the job to exited. With no result it records no_return instead: " +
+						"the worker did not return evidence, which is distinct from a result that " +
+						"fails verification. A result is decoded with the same strict, versioned " +
+						"contract as `magus job exit --stdin`; keys use that JSON spelling " +
+						"(schema_version, changed_paths, output_ref). The output ref is resolved " +
+						"from this checkout before it is filed, so a verifier in another worktree " +
+						"can read the evidence without this cache. Returns the stored row.",
+					Args: []Arg{
+						{Name: "id", Type: TypeString},
+						{Name: "result", Type: TypeAnyMap, Optional: true},
+					},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "Job"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "wait",
+					Doc: "Mechanically verify a returned result against the current job terms and " +
+						"record pass only when every check holds. A rejected result returns JobStatus " +
+						"with every violation and leaves the row's state unchanged; it does not raise. " +
+						"With no result it uses the result and attempt filed by exit. With one, it " +
+						"decodes that strict, versioned JSON-shaped map and resolves its output_ref " +
+						"from this checkout. A holder cannot wait on its own job.",
+					Args: []Arg{
+						{Name: "id", Type: TypeString},
+						{Name: "result", Type: TypeAnyMap, Optional: true},
+					},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "JobStatus"}},
 					Raises:  true,
 					Extern:  true,
 				},
@@ -632,6 +668,14 @@ var magusMCPTools = []MCPTool{
 			{Name: "target", Type: TypeString, Doc: "Target to plan (default: ci; any affected target is accepted)."},
 			{Name: "base", Type: TypeString, Doc: "Optional VCS base ref override."},
 			{Name: "max_shards", Type: TypeInt, Doc: "Maximum CI shards (default: from config; -1 means unlimited)."},
+		},
+	},
+	{
+		Name: hint.ToolConsolePresent.String(),
+		Doc:  "Return a tokenless link to a local magus console surface. Use this only when a person asked to see the dashboard or related status. The MCP client may present the link as an action; this tool never opens a browser or changes console state.",
+		Params: []MCPParam{
+			{Name: "surface", Type: TypeString, Doc: "Console surface to show: dashboard (default), activity, logs, graph, notes, diff, plan, or runs."},
+			{Name: "reason", Type: TypeString, Doc: "Optional brief text a compatible MCP client may show with the link."},
 		},
 	},
 	{
@@ -735,11 +779,12 @@ var magusMCPTools = []MCPTool{
 	{
 		Name:   hint.ToolJob.String(),
 		Member: "job",
-		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, validation, and state. Write and deny paths are a DECLARATION this store never acts on: the agent guard is what reads these facts to grade an agent's file writes, loudly and with the owning job named, which is a separate surface on purpose: a store that quietly enforced would teach agents to route around it. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY, so every worktree and clone reads the same rows: clear starts a fresh one and archives what it dropped beside the store. Re-fork your row on every state change: each write re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the job as possibly dead, which is the READER's judgment, since nothing here transitions a row on its own. The op set here is list, fork, exec and clear; exit and wait are `magus job exit`/`magus job wait` CLI-only for now.",
+		Doc:    "Record the orchestrating agent's declared job plan so humans can see it; the store gates no run, and the one write it refuses is a write to a row the caller does not own. One row per job, in the magus-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the job was handed, write and deny paths, dependencies, model, and typed completion gates. Write and deny paths are a DECLARATION the store never acts on; the agent guard reads these facts to grade an agent's file writes. Every row should end in pass, fail, or no_return; a read-only job carries an abbreviated row with no paths. One plan per REPOSITORY means every worktree and clone reads the same rows. The op set is list, fork, exec, exit, wait, and clear; exit and wait use the same strict evidence contract as the CLI and Buzz, and a pass is derived from captured Magus output, never an agent assertion.",
 		Params: []MCPParam{
-			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row, plus overlaps: the pairs of live jobs whose write_paths intersect, reported as job_a/job_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), fork (create or replace one row by id), exec (a holder reports reported_base, the base a worker actually landed on, and gets the divergence verdict back), clear (drop every row to start a fresh plan)."},
+			{Name: "op", Type: TypeString, Doc: "One of: list (default; every row plus derived live-job overlaps), fork (create or replace one row by id), exec (a holder reports its landed base), exit (file a result or record no_return), wait (verify evidence and record pass only if every completion gate holds), clear (drop every row to start a fresh plan)."},
 			{Name: "reported_base", Type: TypeString, Doc: "exec only, REQUIRED: the checkpoint token the worker actually landed on, as `magus vcs checkpoint -o name` prints it. Recorded on the row under this same name, next to the checkpoint the job was handed. The answer is a verdict (match, revision-match, diverged, unknown) and a reading of it - a fact returned and stored, never a refusal."},
-			{Name: "id", Type: TypeString, Doc: "fork and exec, REQUIRED: the job's id, which fork upserts on. Use the same id you put in the worker's prompt."},
+			{Name: "id", Type: TypeString, Doc: "fork, exec, exit, and wait: the job id. Use the same id in the worker's prompt and result."},
+			{Name: "result", Type: TypeAnyMap, Doc: "exit or wait only: an optional strict JobResult object. It must carry the current schema_version and cite output_ref evidence for every declared completion gate; omit it from exit to record no_return, or from wait to verify the result exit filed."},
 			{Name: "parent", Type: TypeString, Doc: "fork only: the id of the job this one was handed out under. Omit for a job the root spawned."},
 			{Name: "goal", Type: TypeString, Doc: "fork only: the job's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
 			{Name: "checkpoint", Type: TypeString, Doc: "fork only: the working state this job was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
@@ -1163,7 +1208,14 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	return job.NewStore(job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}), nil
+	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}
+	// A Buzz process keeps the lease it was launched under in context. Do not
+	// rediscover it from the mutable environment at each job-store write: a script
+	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run.
+	if lease := proc.LeaseFromContext(ctx); lease != "" {
+		loc.Actor = &job.Actor{Lease: lease}
+	}
+	return job.NewStore(loc), nil
 }
 
 // MagusListJob backs magus\job.list (hand-bound in
@@ -1227,6 +1279,85 @@ func MagusClearJob(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	return store.Clear(ctx)
+}
+
+// jobResultFromMap applies the exact same versioned, strict decoder a JSON result uses.
+// Buzz's untyped map is deliberately treated as the JSON-shaped input contract rather
+// than as a partial Go struct: an unknown field must be rejected here too, or a result
+// an agent sends through a Buzz target could claim a field no verifier actually reads.
+func jobResultFromMap(result map[string]any) (types.JobResult, error) {
+	raw, err := json.Marshal(result)
+	if err != nil {
+		return types.JobResult{}, fmt.Errorf("magus\\job: encode result: %w", err)
+	}
+	return job.DecodeResult(strings.NewReader(string(raw)))
+}
+
+// jobAttemptFromContext reads the output descriptor from the workspace already on ctx.
+// A job plan is repository-wide but output records are checkout-local, so Exit resolves
+// the worker's record once and files its portable summary on the job for a later Wait.
+func jobAttemptFromContext(ctx context.Context, ref string) (types.JobAttempt, error) {
+	if strings.TrimSpace(ref) == "" {
+		return types.JobAttempt{}, nil
+	}
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		return types.JobAttempt{}, types.DiagnosticErrorf(types.MagusfileOnlyMember,
+			"magus\\job: no workspace on the context: output evidence is read from the workspace magus already has open")
+	}
+	cd, ok := ws.(workspaceCacheDir)
+	if !ok {
+		return types.JobAttempt{}, fmt.Errorf("magus\\job: this workspace has no cache directory")
+	}
+	desc, err := cache.NewOutputStore(cd.CacheDir()).DescriptorByRef(ref)
+	switch {
+	case err == nil:
+		return types.JobAttempt{Found: true, Ref: ref, Project: desc.Project, Target: desc.Target, Spell: desc.Spell, Failed: desc.Failed, TimestampMs: desc.TimestampMs}, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return types.JobAttempt{}, nil
+	default:
+		return types.JobAttempt{}, err
+	}
+}
+
+// MagusExitJob backs magus\job.exit with a result map. The result map follows the
+// versioned JSON result contract; see jobResultFromMap.
+func MagusExitJob(ctx context.Context, id string, result map[string]any) (types.Job, error) {
+	store, err := jobStoreFromContext(ctx, "job.exit")
+	if err != nil {
+		return types.Job{}, err
+	}
+	report, err := jobResultFromMap(result)
+	if err != nil {
+		return types.Job{}, err
+	}
+	return job.Exit(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext)
+}
+
+// MagusAbandonJob backs magus\job.exit without a result.
+func MagusAbandonJob(ctx context.Context, id string) (types.Job, error) {
+	store, err := jobStoreFromContext(ctx, "job.exit")
+	if err != nil {
+		return types.Job{}, err
+	}
+	return job.Exit(ctx, store, strings.TrimSpace(id), nil, nil)
+}
+
+// MagusWaitJob backs magus\job.wait. A nil result selects the evidence Exit filed;
+// otherwise the supplied JSON-shaped map is decoded and resolved locally.
+func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.JobStatus, error) {
+	store, err := jobStoreFromContext(ctx, "job.wait")
+	if err != nil {
+		return types.JobStatus{}, err
+	}
+	if result == nil {
+		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil)
+	}
+	report, err := jobResultFromMap(result)
+	if err != nil {
+		return types.JobStatus{}, err
+	}
+	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or
@@ -1329,22 +1460,9 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 	}
 	full = append(full, args...)
 
-	// Re-inject the daemon socket vars: childEnv withholds them from subprocesses
-	// (the socket is unauthenticated: MGS2008), but a nested magus is a legitimate
-	// recursive invocation that needs daemon access. Passed as Env overrides, which
-	// childEnv layers last so they win; MAGUS/MAGUS_LEVEL are added by childEnv. The
-	// withheld set is run.DaemonForwardVars, so this re-injection stays in lockstep.
-	var env []string
-	for _, k := range run.DaemonForwardVars {
-		if v := os.Getenv(k); v != "" {
-			env = append(env, k+"="+v)
-			// Debug, not Info: this fires on every recursive invocation (a fan-out can
-			// spawn many), so at default verbosity it is noise. An internal correctness
-			// note, not user-actionable; surface it only at -v.
-			slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
-				"daemon socket injected into recursive magus invocation"), "var", k)
-		}
-	}
+	// childEnv withholds daemon sockets from subprocesses, while a recursive Magus
+	// call must retain both that trusted transport and its captured lease.
+	env := recursiveMagusEnv(ctx)
 
 	// Run in the contextual project dir; "" inherits the process cwd (the
 	// behavior for magusfile targets that run under a process chdir). opts.dir
@@ -1399,6 +1517,24 @@ func runMagus(ctx context.Context, label string, args []string, opts map[string]
 		return types.ExecResult{}, fmt.Errorf("magus.%s: %w", label, err)
 	}
 	return rec, cmdErr
+}
+
+// recursiveMagusEnv carries only the invocation facts a nested Magus process needs.
+// It deliberately rebuilds BAGGAGE from the context instead of forwarding the mutable
+// process value, so a script cannot shed its bound lease before calling magus\cmd.
+func recursiveMagusEnv(ctx context.Context) []string {
+	var env []string
+	if lease := proc.LeaseFromContext(ctx); lease != "" {
+		env = append(env, trail.EnvBaggage+"="+trail.BaggageLease+"="+lease)
+	}
+	for _, k := range run.DaemonForwardVars {
+		if v := os.Getenv(k); v != "" {
+			env = append(env, k+"="+v)
+			slog.DebugContext(ctx, types.FormatDiagnostic(types.DaemonSocketWithheld,
+				"daemon socket injected into recursive magus invocation"), "var", k)
+		}
+	}
+	return env
 }
 
 // MagusDiagnoseDrift diagnoses a generate gate's drift into a coded diagnostic. Given the

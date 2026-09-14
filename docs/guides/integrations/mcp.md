@@ -67,7 +67,7 @@ The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If 
 
 ## Available tools
 
-The daemon exposes 21 tools. This list is authoritative at the time of writing;
+The daemon exposes these tools. This list is authoritative at the time of writing;
 `magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
 the live set with full parameters, so trust that over this table if they ever differ.
 
@@ -126,6 +126,16 @@ Memory and scratch:
 | -------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `magus_memory` | User-owned per-repo memory: list/get/put/delete/verify named entries shared across worktrees                              |
 | `magus_job`    | The orchestrating agent's declared jobs (list/fork/exec/exit/wait), recorded for humans to see; magus never enforces them |
+
+Console:
+
+| Tool                    | Purpose                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| `magus_console_present` | Return a tokenless link to a local console surface when the user asks to see dashboard status or output |
+
+`magus_console_present` does not open a browser or hand a client a token. A compatible
+desktop client may render its link as an action. Other clients can return the link as text.
+The console must be enabled and bound locally.
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 
@@ -216,7 +226,7 @@ logs and history). How you connect depends on the client:
 
   For a dedicated, revocable credential, run
   `magus config mcp connector create --name codex --expires never` and store the
-  printed value as `MAGUS_MCP_TOKEN` in your local secret manager instead. The
+  printed value as `MAGUS_MCP_TOKEN` in your local secret manager instead.
   For the ChatGPT desktop app or Codex IDE extension, set the variable through
   the OS environment before launching or restarting the client; exporting it in
   a terminal does not configure an already-running app. Start a new task after

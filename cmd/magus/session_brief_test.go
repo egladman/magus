@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,6 +29,18 @@ func assertBriefIsContextSafe(t *testing.T, text string) {
 		assert.LessOrEqual(t, len(line), briefTextWidth,
 			"a brief line runs past briefTextWidth, so a long goal or path list is spending the window this lands in:\n%s", line)
 	}
+}
+
+func TestSessionBriefSurfacesOneRecurringFeedbackReview(t *testing.T) {
+	brief := sessionBrief{Feedback: []trail.GuardFeedback{
+		{Rule: "raw-tool", Denied: 3, Sessions: 1, FollowedSessions: 1},
+		{Rule: "output-pipe", Denied: 2, Sessions: 2},
+	}}
+	text := brief.Text()
+	assert.Contains(t, text, "improvement review: raw-tool denied 3 times")
+	assert.Contains(t, text, "magus agent improve")
+	assert.NotContains(t, text, "output-pipe", "rehydration gets one bounded review, not a table")
+	assertBriefIsContextSafe(t, text)
 }
 
 func TestSessionBriefTextCarriesEverySection(t *testing.T) {
@@ -57,7 +70,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 			Ref: "abc123", Inspect: "magus query output abc123", At: "2026-09-10 12:03:04",
 		}},
 		GuardWiring: []string{".claude/settings.json"},
-		Rules:       []string{"AGENTS.md", ".claude/skills"},
+		Rules:       []string{"AGENTS.md", "harnesses/example.json"},
 		PromptCache: briefClock(),
 	}
 
@@ -72,7 +85,7 @@ func TestSessionBriefTextCarriesEverySection(t *testing.T) {
 		"the last recorded run failed:",
 		"magus query output abc123",
 		"guard wiring: .claude/settings.json",
-		"rules live in AGENTS.md, .claude/skills",
+		"rules live in AGENTS.md, harnesses/example.json",
 		"prompt cache: last tool call here 7m ago",
 		"closed: Anthropic default",
 		"open: Anthropic 1h opt-in",
@@ -113,9 +126,24 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// An empty magusfile marks the directory as a workspace root.
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# rules\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".claude"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".claude", "settings.json"),
-		[]byte(`{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"command":"magus session hook"}]}]}}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "brief-host.json"), []byte(`{
+  "schema_version": 2,
+  "id": "brief-host",
+  "display": {"name": "Brief Host"},
+  "config": {"path": "host/hooks.json"},
+  "skills": {"paths": [".agents/skills"], "form": "both"},
+  "pre_tool_use": {
+    "path": ["hooks", "before"],
+    "matcher_key": "match",
+    "hooks_key": "commands",
+    "response_template": "{{toJson .}}",
+    "entries": [{"matcher":"run","hook":{"type":"command"}}]
+  }
+}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
+		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host brief-host"}]}]}}`), 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -149,7 +177,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Equal(t, "ref-1", brief.Failures[0].Ref)
 	assert.Equal(t, "magus query output ref-1", brief.Failures[0].Inspect)
 
-	assert.Equal(t, []string{filepath.Join(".claude", "settings.json")}, brief.GuardWiring)
+	assert.Equal(t, []string{filepath.Join("host", "hooks.json")}, brief.GuardWiring)
 	assert.Contains(t, brief.Rules, "AGENTS.md")
 
 	text := brief.Text()

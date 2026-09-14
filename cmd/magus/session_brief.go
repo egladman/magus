@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	rootmagus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -39,6 +41,12 @@ const briefTextWidth = 160
 // the walk stops and says so rather than paying for precision nobody uses.
 const briefCommitWalk = 20
 
+const (
+	briefFeedbackEvents   = 100
+	briefFeedbackItems    = 1
+	briefFeedbackEvidence = 2
+)
+
 // sessionBrief is the whole payload, and the -o json shape.
 type sessionBrief struct {
 	Workspace string `json:"workspace"`
@@ -64,6 +72,10 @@ type sessionBrief struct {
 	// checkout, against every published cache window: a resume past a closed window
 	// re-pays the whole prompt. Empty Providers when the trail here has seen nothing.
 	PromptCache sessions.PromptCacheClock `json:"prompt_cache,omitzero"`
+	// Feedback is the bounded, recurring guard evidence a compacted session can
+	// review. It is derived from activity on every brief, not copied into a
+	// checkpoint, so an old stop never keeps injecting an already-resolved issue.
+	Feedback []trail.GuardFeedback `json:"feedback,omitempty"`
 }
 
 // briefUnpushed counts the commits this checkout carries that its base ref does not.
@@ -166,6 +178,19 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
 	brief.Rules = ruleLocations(root)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
+	if base, err := rootmagus.ResolveCacheDir(root, rootmagus.WithLoadedConfig(globalCfg)); err == nil {
+		if feedback, err := trail.RecentGuardFeedback(base, "", briefFeedbackEvents); err == nil {
+			for _, item := range feedback {
+				if item.NeedsReview() {
+					item.Evidence = item.Evidence[:min(len(item.Evidence), briefFeedbackEvidence)]
+					brief.Feedback = append(brief.Feedback, item)
+					if len(brief.Feedback) == briefFeedbackItems {
+						break
+					}
+				}
+			}
+		}
+	}
 	brief.Console = consoleRootURL()
 	return brief
 }
@@ -297,7 +322,7 @@ func ruleLocations(root string) []string {
 	if _, err := os.Stat(filepath.Join(root, agent.AgentsFile)); err == nil {
 		out = append(out, agent.AgentsFile)
 	}
-	for _, dir := range agent.WellKnownSkillDirs() {
+	for _, dir := range agent.HarnessSkillDirs(root) {
 		if info, err := os.Stat(filepath.Join(root, dir)); err == nil && info.IsDir() {
 			out = append(out, dir)
 		}
@@ -346,6 +371,7 @@ func (b sessionBrief) Text() string {
 	b.writePromptCache(&s)
 	b.writeLeases(&s)
 	b.writeFailures(&s)
+	b.writeFeedback(&s)
 
 	if len(b.GuardWiring) > 0 {
 		briefLine(&s, "guard wiring: %s", strings.Join(b.GuardWiring, ", "))
@@ -356,6 +382,19 @@ func (b sessionBrief) Text() string {
 		briefLine(&s, "rules live in %s; re-read them, nothing above restates one", strings.Join(b.Rules, ", "))
 	}
 	return s.String()
+}
+
+func (b sessionBrief) writeFeedback(s *strings.Builder) {
+	if len(b.Feedback) == 0 {
+		return
+	}
+	item := b.Feedback[0]
+	followed := "no later replacement request observed"
+	if item.FollowedSessions > 0 {
+		followed = fmt.Sprintf("replacement requested in %d session(s); execution outcome is unobservable", item.FollowedSessions)
+	}
+	briefLine(s, "improvement review: %s denied %d times across %d session(s); %s", item.Rule, item.Denied, item.Sessions, followed)
+	briefLine(s, "  inspect evidence and choose a human-reviewed action: magus agent improve")
 }
 
 func (b sessionBrief) writeTree(s *strings.Builder) {

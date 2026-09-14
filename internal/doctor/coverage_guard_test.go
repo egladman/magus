@@ -173,20 +173,13 @@ func TestResolveGuardBinaryForWiring(t *testing.T) {
 	})
 }
 
-func TestGuardWiringCandidates(t *testing.T) {
-	withHome := guardWiringCandidates("/repo", "/home/dev")
-	assert.Equal(t, []string{
-		filepath.Join("/repo", ".claude", "settings.json"),
-		filepath.Join("/repo", ".cursor", "hooks.json"),
-		filepath.Join("/repo", ".opencode", "plugins"),
-		filepath.Join("/repo", ".codex", "hooks.json"),
-		filepath.Join("/home/dev", ".codex", "hooks.json"),
-		filepath.Join("/home/dev", ".codex", "config.toml"),
-		filepath.Join("/home/dev", ".config", "opencode", "plugins"),
-	}, withHome)
+func TestHarnessConfigCandidates(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorHarness(t, root)
 
-	// os.UserHomeDir can fail, and the workspace-relative candidates still apply.
-	assert.Len(t, guardWiringCandidates("/repo", ""), 4)
+	got, err := harnessConfigCandidates(root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(root, "host", "hooks.json")}, got)
 }
 
 func TestGuardReferencedTemplates(t *testing.T) {
@@ -202,6 +195,23 @@ func TestGuardReferencedTemplates(t *testing.T) {
 		found, missing := guardReferencedTemplates(root, configDir, body)
 		assert.Equal(t, []string{fromRoot, besideConfig}, found)
 		assert.Empty(t, missing)
+	})
+
+	t.Run("resolves Codex's VCS-neutral workspace-root shell expansion", func(t *testing.T) {
+		body := []byte(`{"command": "sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/magus-guard-command.sh\""}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Equal(t, []string{fromRoot}, found)
+		assert.Empty(t, missing)
+	})
+
+	// Root-relative treatment is deliberately a narrow compatibility rule for the
+	// documented expansion, not a way for a config to smuggle an arbitrary shell
+	// command into doctor.
+	t.Run("does not resolve an arbitrary magus shell expansion from the root", func(t *testing.T) {
+		body := []byte(`{"command": "sh \"$(magus version)/docs/guides/magus-guard-command.sh\""}`)
+		found, missing := guardReferencedTemplates(root, configDir, body)
+		assert.Empty(t, found)
+		assert.NotEmpty(t, missing)
 	})
 
 	// A config whose hook points at a template that is not there runs nothing;
@@ -234,18 +244,18 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 
 	t.Run("current", func(t *testing.T) {
 		body := []byte("#!/bin/sh\n# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion) + "\n")
-		assert.Equal(t, "", guardTemplateMarkerProblem("/x.sh", body))
+		assert.Equal(t, "", guardTemplateMarkerProblem(body))
 	})
 
 	t.Run("ahead of this binary", func(t *testing.T) {
 		body := []byte("# " + marker + " " + strconv.Itoa(agent.GuardTemplateVersion+1) + "\n")
-		assert.Equal(t, "", guardTemplateMarkerProblem("/x.sh", body))
+		assert.Equal(t, "", guardTemplateMarkerProblem(body))
 	})
 
 	t.Run("behind", func(t *testing.T) {
 		body := []byte("# " + marker + " 1\n")
-		got := guardTemplateMarkerProblem("/x.sh", body)
-		assert.Contains(t, got, "/x.sh carries template version 1, current is "+strconv.Itoa(agent.GuardTemplateVersion))
+		got := guardTemplateMarkerProblem(body)
+		assert.Contains(t, got, "template version 1 is older than current version "+strconv.Itoa(agent.GuardTemplateVersion))
 		assert.Contains(t, got, "re-download it")
 	})
 
@@ -253,7 +263,7 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 	// so a copy carrying none is older than versioning. Measured on a real machine, a
 	// plugin still calling a removed subcommand graded healthy without this.
 	t.Run("no marker at all", func(t *testing.T) {
-		got := guardTemplateMarkerProblem("/x.sh", []byte("#!/bin/sh\necho hi\n"))
+		got := guardTemplateMarkerProblem([]byte("#!/bin/sh\necho hi\n"))
 		assert.Contains(t, got, "carries no "+marker+" line")
 		assert.Contains(t, got, "predates template versioning")
 	})
@@ -261,12 +271,12 @@ func TestGuardTemplateMarkerProblem(t *testing.T) {
 	// An unreadable version is treated as current rather than as a version-0 copy:
 	// the marker is there, so the file is not from before versioning.
 	t.Run("unparsable version", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem("/x.sh", []byte("# "+marker+" seven\n")))
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" seven\n")))
 	})
 
 	// The marker on the last line, with no newline after it.
 	t.Run("marker at end of file", func(t *testing.T) {
-		assert.Equal(t, "", guardTemplateMarkerProblem("/x.sh", []byte("# "+marker+" "+strconv.Itoa(agent.GuardTemplateVersion))))
+		assert.Equal(t, "", guardTemplateMarkerProblem([]byte("# "+marker+" "+strconv.Itoa(agent.GuardTemplateVersion))))
 	})
 }
 

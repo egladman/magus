@@ -192,15 +192,22 @@ func authorizeChild(actor Actor, id string, next types.Job, exists bool, rows []
 // runsTheGate reports whether a row's declared check IS the release gate, the one check
 // that carries a capability with it.
 func runsTheGate(row types.Job) bool {
-	return row.Check != nil && row.Check.Target == types.TargetCI
+	return slices.ContainsFunc(row.EffectiveCompletionGates(), func(gate types.CompletionGate) bool {
+		return gate.Check.Target == types.TargetCI
+	})
 }
 
 // checkLine names a row's check as a refusal quotes it.
 func checkLine(row types.Job) string {
-	if row.Check == nil {
+	gates := row.EffectiveCompletionGates()
+	if len(gates) == 0 {
 		return "no check at all"
 	}
-	return row.Check.String()
+	lines := make([]string, 0, len(gates))
+	for _, gate := range gates {
+		lines = append(lines, gate.Check.String())
+	}
+	return strings.Join(lines, ", ")
 }
 
 // readLane is the declarations a row may READ: its read paths when it declares any, else
@@ -241,10 +248,27 @@ func changedFields(prev, next types.Job) []string {
 	add("depends_on", !slices.Equal(prev.DependsOn, next.DependsOn))
 	add("model", prev.Model != next.Model)
 	add("validation", prev.Validation != next.Validation)
+	add("completion_gates", !completionGatesEqual(prev.CompletionGates, next.CompletionGates))
 	add("state", prev.State != next.State)
 	add("read_only", prev.ReadOnly != next.ReadOnly)
 	add("reported_base", prev.ReportedBase != next.ReportedBase)
 	return out
+}
+
+// completionGatesEqual is deliberately explicit instead of reflect.DeepEqual: this
+// path grades every bound worker mutation, and the model is small, typed, and stable.
+func completionGatesEqual(a, b []types.CompletionGate) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].ID != b[i].ID || a[i].Description != b[i].Description ||
+			a[i].Check.Target != b[i].Check.Target || a[i].Check.Project != b[i].Check.Project ||
+			!slices.Equal(a[i].Check.Args, b[i].Check.Args) || !slices.Equal(a[i].DependsOn, b[i].DependsOn) {
+			return false
+		}
+	}
+	return true
 }
 
 // subset reports whether every declaration in inner is one outer also holds, compared as

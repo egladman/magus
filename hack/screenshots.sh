@@ -19,8 +19,8 @@
 # comes out as the launcher. That mistake costs an hour; the assembly step below is what
 # prevents it.
 #
-#   ./hacks/screenshots.sh            # assemble, serve, capture everything
-#   ./hacks/screenshots.sh dashboard  # just one, by name
+#   ./hack/screenshots.sh            # assemble, serve, capture everything
+#   ./hack/screenshots.sh dashboard  # just one, by name
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -66,7 +66,7 @@ find_chrome() {
 # on (pointer: coarse) rather than on width and so does not follow from a narrow window alone.
 #
 # Both of those need CDP device emulation; the plain --screenshot flag form cannot express either.
-# hacks/screenshot.mjs is that driver and explains the two limits it exists to get past.
+# hack/screenshot.mjs is that driver and explains the two limits it exists to get past.
 shots=(
   "console-dashboard|console/dashboard/#demo|1280|820|2|0"
   "console-dashboard-bigpicture|console/dashboard/#demo|1280|820|2|0|b"
@@ -115,7 +115,7 @@ for shot in "${shots[@]}"; do
   [ -n "$want" ] && [ "$want" != "$name" ] && continue
   label=$([ "$mobile" = 1 ] && echo "mobile" || echo "desktop")
   echo "==> $name  (${w}x${h} @${scale}x, $label${keys:+, keys $keys})"
-  node "$repo_root/hacks/screenshot.mjs" \
+  node "$repo_root/hack/screenshot.mjs" \
     "$chrome" "http://127.0.0.1:$port/$path" "$out_dir/$name.png" "$w" "$h" "$scale" "$mobile" "${keys:-}"
   [ -s "$out_dir/$name.png" ] || { echo "screenshots: $name produced nothing" >&2; exit 1; }
 done

@@ -96,3 +96,5 @@ than a ref you can anchor, it is theirs to record, not yours.
   CLI, and MCP all show the same entries. A legacy cursor can still be read for
   migration, but writes are intentionally retired: one shared cursor lets one
   session erase another's entry.{{else}} Console, CLI and MCP all show the same entries.{{end}}
+- Do not create a memory entry for each guard event. Activity is automatic evidence;
+  memory starts only after a person makes a durable decision or plan from it.

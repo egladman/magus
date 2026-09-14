@@ -187,7 +187,10 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
-	Lease      string
+	// Rule is the guard's stable denial identifier. It is empty for a pass,
+	// advisory, or a deny whose producer cannot identify a single rule.
+	Rule  string
+	Lease string
 	// PreauthorizedBy is the `next` template that had already served this exact command to
 	// this session, so the guard let it through without grading it against the caller's
 	// role. Empty for every other observation, which is nearly all of them.
@@ -212,6 +215,7 @@ type agentCommandResponse struct {
 	Decision      string `json:"decision"`
 	Reason        string `json:"reason,omitempty"`
 	Context       string `json:"context,omitempty"`
+	Rule          string `json:"rule,omitempty"`
 	// No schema bump: an added optional field a reader can ignore leaves every existing
 	// blob readable and every existing reader correct.
 	PreauthorizedBy string `json:"preauthorized_by,omitempty"`
@@ -252,6 +256,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Decision:        command.Decision,
 		Reason:          command.Reason,
 		Context:         command.Context,
+		Rule:            command.Rule,
 		PreauthorizedBy: command.PreauthorizedBy,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)

@@ -17,12 +17,12 @@ import (
 )
 
 // adoptionReport measures how often agents reached for the knowledge graph versus a raw text
-// search, over a corpus of shell commands. It turns magus's own doctrine (query before
+// search, over shell commands. It turns magus's own doctrine (query before
 // grepping) into a number a user can watch move as the graph gets easier to reach.
 //
 // magus does the ANALYSIS; it never reads a specific agent host's logs, because it is
 // host-agnostic (a conventions test forbids naming one). The caller extracts the commands from
-// wherever their host records them (the help prints the recipe) and feeds them in.
+// wherever their host records them (the help prints the adapter) and feeds them in.
 type adoptionReport struct {
 	Total          int            `json:"total"`
 	GraphVerbs     int            `json:"graph_verbs"`      // magus query/refs/explain/path/graph
@@ -98,7 +98,7 @@ func adoptionRun(pattern string) string {
 
 // adoptionHints renders suggestions through the same translator the live guard
 // suggests with, so the report and the guard agree on what to try. Bare on
-// purpose: adoption reads any host's history, and the corpus may come from a
+// purpose: adoption reads any host's history, and the input may come from a
 // different repo than the cwd, so scoping suggestions to the local workspace's
 // projects would be dishonest.
 var adoptionHints = hint.NewTranslator()
@@ -311,8 +311,8 @@ func agentAdoptionUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: magus agent adoption [--commands <file>] [-o json]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Reports how often agents used the knowledge graph versus a raw text search,")
-	fmt.Fprintln(w, "over a corpus of shell commands (one per line, from stdin or --commands).")
+	fmt.Fprintln(w, "over shell commands (one per line, from stdin or --commands).")
 	fmt.Fprintln(w, "magus stays host-agnostic: it analyzes commands, never a host's session logs.")
 	fmt.Fprintln(w, "Extract the shell commands your agent host recorded - one per line - and pipe")
-	fmt.Fprintln(w, "them in. The magus documentation carries the per-host extraction recipe.")
+	fmt.Fprintln(w, "them in. The magus documentation carries the per-host extraction adapter.")
 }

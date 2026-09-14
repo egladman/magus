@@ -289,21 +289,21 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   const agentStart = t0;
   function buildAgents(now: number): AgentActivityView {
     const mins = Math.max(0, (now - agentStart) / 60000);
-    const claudeCalls = 34 + Math.floor(mins * 7);
-    const codexCalls = 11 + Math.floor(mins * 2);
+    const primaryCalls = 34 + Math.floor(mins * 7);
+    const secondaryCalls = 11 + Math.floor(mins * 2);
     const hosts: AgentHostView[] = [
       {
-        host: "claude-code",
+        host: "harness-alpha",
         sessions: 2,
-        calls: claudeCalls,
+        calls: primaryCalls,
         denied: 1,
         advised: 3,
         lastMs: now - 4000,
       },
       {
-        host: "codex",
+        host: "harness-beta",
         sessions: 1,
-        calls: codexCalls,
+        calls: secondaryCalls,
         denied: 0,
         advised: 1,
         // Deliberately cool: past the tile's RECENT_MS, so the showcase demonstrates a seat that
@@ -311,17 +311,17 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         lastMs: now - 95_000,
       },
     ];
-    // The recent calls are the SAME session the activity trail records (demo-scenario.ts): claude-code
-    // is the host that ran services/identity:test and is still working, so the tools it calls here are
-    // the tools that appear there - magus_run_target, magus_query - and the guard verdicts around them
-    // are the ones that story implies. The deny is a raw `go test` the guard turned back because the
-    // run belongs to magus; the advise is the edit to libs/authkit that started all of this. Those two
-    // rows are what the tile exists to make findable, so the showcase must contain both.
+    // The recent calls are the SAME session the activity trail records (demo-scenario.ts): the primary
+    // harness ran services/identity:test and is still working, so the tools it calls here are the tools
+    // that appear there - magus_run_target, magus_query - and the guard verdicts around them are the
+    // ones that story implies. The deny is a raw `go test` the guard turned back because the run belongs
+    // to magus; the advise is the edit to libs/authkit that started all of this. Those two rows are what
+    // the tile exists to make findable, so the showcase must contain both.
     const recent: AgentCallView[] = [
       { atMs: now - 4000, host: "mcp", tool: "magus_run_target", decision: "", mcp: true },
       {
         atMs: now - 12_000,
-        host: "claude-code",
+        host: "harness-alpha",
         tool: "file.write",
         decision: "advise",
         mcp: false,
@@ -329,18 +329,24 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       { atMs: now - 26_000, host: "mcp", tool: "magus_query", decision: "", mcp: true },
       {
         atMs: now - 41_000,
-        host: "claude-code",
+        host: "harness-alpha",
         tool: "shell.command",
         decision: "deny",
         mcp: false,
       },
-      { atMs: now - 95_000, host: "codex", tool: "shell.command", decision: "pass", mcp: false },
+      {
+        atMs: now - 95_000,
+        host: "harness-beta",
+        tool: "shell.command",
+        decision: "pass",
+        mcp: false,
+      },
     ];
     return {
       windowMs: AGENT_WINDOW_MS,
       hosts,
       recent,
-      totalCalls: claudeCalls + codexCalls,
+      totalCalls: primaryCalls + secondaryCalls,
       totalSessions: 3,
       denied: 1,
       mcpCalls: 18 + Math.floor(mins * 3),
