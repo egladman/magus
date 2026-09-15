@@ -53,7 +53,7 @@ func TestNamesWorkspaceCacheDirIsSilentEverywhereElse(t *testing.T) {
 		".magus-notes/a.md",
 		".magusfile",
 		"magus/lease",
-		"cmd/magus/guard_cachedir.go",
+		"internal/guard/cache.go",
 		"docs/guides/integrations/agents/guard.md",
 		filepath.Join(t.TempDir(), ".magus-notes", "a.md"),
 		"elsewhere/.magus-x",

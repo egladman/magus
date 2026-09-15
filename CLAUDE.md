@@ -127,8 +127,8 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 - Record decisions worth keeping, with the why, via `magus_memory`.
 - If a convention matters, give it an enforcement point. Measured 2026-08-24: the
   only skills that loaded on their own were the two a hook demanded, and a rule
-  that lives only in prose has roughly even odds. `internal/guard/sourcedir.go`
-  is the worked example.
+  that lives only in prose has roughly even odds. `internal/guard/dir.go` is the
+  worked example.
 
 ## Workflows
 

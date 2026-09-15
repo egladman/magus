@@ -48,8 +48,8 @@ var nameSeps = []string{"_", "-"}
 // per-file, and a reader who has it can run ls. No brief on the repeat, because this
 // reports a condition and carries no command to run.
 //
-// THE WRONG-FIRING CASE: a name that was DERIVED rather than chosen. `sourcedir_test.go`
-// beside `sourcedir.go` had no naming decision in it, so the list would buy nothing.
+// THE WRONG-FIRING CASE: a name that was DERIVED rather than chosen. `dir_test.go`
+// beside `dir.go` had no naming decision in it, so the list would buy nothing.
 // derivedFromSibling suppresses those. The directory's EPONYMOUS file is excepted, since
 // a name hung off the entry point (`guard_thing.go` in guard/) is one somebody picked
 // rather than one the tree computed, and picking is what this rule speaks to.
@@ -109,7 +109,7 @@ func fileStem(name string) string {
 }
 
 // derivedFromSibling reports whether stem extends a sibling's name, the shape of a twin
-// (`sourcedir_test.go` beside `sourcedir.go`) or a variant (`rusage_darwin.go` beside
+// (`dir_test.go` beside `dir.go`) or a variant (`rusage_darwin.go` beside
 // `rusage_unix.go`). The directory answered the naming question when it named the file
 // this one hangs off.
 //
