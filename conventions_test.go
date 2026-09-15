@@ -12,11 +12,13 @@ package magus
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -998,6 +1000,42 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
+}
+
+// TestCursorGuardAnnouncesAMissingJq runs the template with no jq on PATH, which
+// is the one dependency failure the text scan above cannot see.
+//
+// Every field that template branches on is selected with jq. Without it they all
+// come back empty, the shape fallback has nothing left to infer from, and the
+// event reaches the default arm: exit 0, no reply, every deny rule off, and
+// nothing saying so, which is indistinguishable from a guarded session.
+func TestCursorGuardAnnouncesAMissingJq(t *testing.T) {
+	script, err := filepath.Abs(filepath.Join(hookTemplateDir, "cursor-guard.sh"))
+	require.NoError(t, err)
+
+	// A PATH holding only what the template needs before it reads the event, plus
+	// a magus stub so a missing binary cannot be what answers. jq is not in it.
+	bin := t.TempDir()
+	for _, tool := range []string{"cat", "printf", "mkdir", "cksum", "cut", "find", "grep"} {
+		real, err := exec.LookPath(tool)
+		require.NoError(t, err, "this test needs %s", tool)
+		require.NoError(t, os.Symlink(real, filepath.Join(bin, tool)))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+
+	cmd := exec.Command("sh", script)
+	cmd.Dir = t.TempDir()
+	cmd.Env = []string{"PATH=" + bin, "TMPDIR=" + t.TempDir()}
+	cmd.Stdin = strings.NewReader(`{"hook_event_name":"beforeShellExecution","command":"rm -rf /","cwd":"/ws"}`)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	require.NoError(t, cmd.Run(),
+		"the hook must exit 0: a non-zero status reads as a crash and fails open. stderr: %s", stderr.String())
+
+	assert.Contains(t, stderr.String(), "jq is not on PATH",
+		"a guard that cannot read the event must say so, or a disarmed guard looks like a clean session")
+	assert.Equal(t, `{"permission":"allow"}`, stdout.String(),
+		"a gating event needs an explicit reply; an empty one is read as no opinion")
 }
 
 // TestEverySessionAdapterIsRegistered gives the session adapters the property the

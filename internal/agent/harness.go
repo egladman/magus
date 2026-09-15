@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -180,14 +181,14 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 			return
 		}
 	}
-	descriptors, loadErr := loadHarnesses(root)
+	descriptors, problems, loadErr := loadHarnessDescriptors(root)
 	if loadErr != nil {
 		err = loadErr
 		return
 	}
 	d, ok := descriptors[id]
 	if !ok {
-		err = fmt.Errorf("no harness named %q (wire magus\\harness.provider(<spell>), or install a descriptor in harnesses/, .magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses)", id)
+		err = harnessMissingError(id, problems)
 		return
 	}
 	descriptor, source = d.descriptor, d.source
@@ -199,7 +200,59 @@ type loadedHarness struct {
 	source     string
 }
 
+// HarnessProblem names a descriptor file that disqualified ITSELF, and why. One
+// unreadable file must not disable every host on the machine: a stray .json in a
+// user config dir would otherwise turn harness support off everywhere. It is
+// never dropped in silence either, which is what Source and Reason are for.
+type HarnessProblem struct {
+	Source string `json:"source"`
+	ID     string `json:"id,omitempty"`
+	Reason string `json:"reason"`
+}
+
+func (p HarnessProblem) String() string {
+	return p.Source + ": " + p.Reason
+}
+
+// HarnessProblems lists the descriptors that disqualified themselves, so a
+// command surface can report a misconfiguration instead of skipping it.
+func HarnessProblems(ctx context.Context, root string) ([]HarnessProblem, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	_, problems, err := loadHarnessDescriptors(root)
+	return problems, err
+}
+
+// harnessMissingError explains a miss. A descriptor that disqualified itself is
+// named with its reason: without that, a typo and a malformed file read the same,
+// and only one of the two is fixable by trying another name.
+func harnessMissingError(id string, problems []HarnessProblem) error {
+	for _, p := range problems {
+		if p.ID == id {
+			return fmt.Errorf("harness %q is disqualified by its descriptor %s: %s", id, p.Source, p.Reason)
+		}
+	}
+	missing := fmt.Sprintf("no harness named %q (wire magus\\harness.provider(<spell>), or install a descriptor in harnesses/, .magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses)", id)
+	if len(problems) == 0 {
+		return errors.New(missing)
+	}
+	reported := make([]string, 0, len(problems))
+	for _, p := range problems {
+		reported = append(reported, p.String())
+	}
+	return fmt.Errorf("%s; these descriptors disqualified themselves: %s", missing, strings.Join(reported, "; "))
+}
+
 func loadHarnesses(root string) (map[string]loadedHarness, error) {
+	loaded, _, err := loadHarnessDescriptors(root)
+	return loaded, err
+}
+
+// loadHarnessDescriptors loads every descriptor it can and reports the rest.
+// A descriptor is disqualified one file at a time: an unreadable directory is
+// still an error, because that is the machine failing rather than a file.
+func loadHarnessDescriptors(root string) (map[string]loadedHarness, []HarnessProblem, error) {
 	dirs := make([]string, 0, 2)
 	if base, err := config.UserConfigDir(); err == nil {
 		dirs = append(dirs, filepath.Join(base, "magus", harnessDirName))
@@ -209,15 +262,16 @@ func loadHarnesses(root string) (map[string]loadedHarness, error) {
 		filepath.Join(root, ".magus", harnessDirName),
 	)
 	loaded := map[string]loadedHarness{}
+	var problems []HarnessProblem
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if os.IsNotExist(err) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("agent: read harness descriptors in %s: %w", dir, err)
+			return nil, nil, fmt.Errorf("agent: read harness descriptors in %s: %w", dir, err)
 		}
-		seen := map[string]bool{}
+		seen := map[string]string{}
 		for _, entry := range entries {
 			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
 				continue
@@ -225,23 +279,27 @@ func loadHarnesses(root string) (map[string]loadedHarness, error) {
 			source := filepath.Join(dir, entry.Name())
 			body, err := os.ReadFile(source)
 			if err != nil {
-				return nil, fmt.Errorf("agent: read harness descriptor %s: %w", source, err)
+				problems = append(problems, HarnessProblem{Source: source, Reason: "read harness descriptor: " + err.Error()})
+				continue
 			}
 			var d HarnessDescriptor
 			if err := decodeHarnessJSON(body, &d); err != nil {
-				return nil, fmt.Errorf("parse harness descriptor %s: %w", source, err)
+				problems = append(problems, HarnessProblem{Source: source, Reason: "parse harness descriptor: " + err.Error()})
+				continue
 			}
 			if err := validateHarnessDescriptor(d); err != nil {
-				return nil, fmt.Errorf("invalid harness descriptor %s: %w", source, err)
+				problems = append(problems, HarnessProblem{Source: source, ID: d.ID, Reason: "invalid harness descriptor: " + err.Error()})
+				continue
 			}
-			if seen[d.ID] {
-				return nil, fmt.Errorf("duplicate harness descriptor ID %q in %s", d.ID, dir)
+			if first, dup := seen[d.ID]; dup {
+				problems = append(problems, HarnessProblem{Source: source, ID: d.ID, Reason: fmt.Sprintf("duplicate harness descriptor ID %q, already loaded from %s", d.ID, first)})
+				continue
 			}
-			seen[d.ID] = true
+			seen[d.ID] = source
 			loaded[d.ID] = loadedHarness{descriptor: d, source: source}
 		}
 	}
-	return loaded, nil
+	return loaded, problems, nil
 }
 
 func validateHarnessDescriptor(d HarnessDescriptor) error {
@@ -685,21 +743,40 @@ func harnessConfigPath(root, rel string) (string, error) {
 	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("harness config path escapes the workspace")
 	}
-	current := workspace
-	for _, part := range strings.Split(inside, string(filepath.Separator)) {
+	link, err := firstSymlinkComponent(workspace, inside)
+	if err != nil {
+		return "", err
+	}
+	if link != "" {
+		return "", fmt.Errorf("harness config path contains symlink %q", link)
+	}
+	return path, nil
+}
+
+// firstSymlinkComponent returns the first existing component of rel under dir
+// that is a symlink, and "" when there is none. Cleaning a path is lexical and
+// sees no symlink, so every caller that resolves a caller-supplied relative path
+// before writing or deleting through it walks the components with Lstat. Shared
+// so the write side and the delete side cannot harden differently.
+func firstSymlinkComponent(dir, rel string) (string, error) {
+	current := dir
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "" || part == "." {
+			continue
+		}
 		current = filepath.Join(current, part)
 		info, err := os.Lstat(current)
 		if os.IsNotExist(err) {
-			break
+			return "", nil
 		}
 		if err != nil {
-			return "", fmt.Errorf("agent: stat harness config path %s: %w", current, err)
+			return "", fmt.Errorf("agent: stat %s: %w", current, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return "", fmt.Errorf("harness config path contains symlink %q", current)
+			return current, nil
 		}
 	}
-	return path, nil
+	return "", nil
 }
 
 // decodeHarnessJSON keeps large numeric values exact and rejects duplicate keys

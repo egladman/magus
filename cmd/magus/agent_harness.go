@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/egladman/magus/internal/agent"
@@ -56,31 +57,78 @@ func agentHarnessInstallCmd(ctx context.Context, rootOverride string, args []str
 	if err != nil {
 		return fmt.Errorf("magus agent harness install: %w", err)
 	}
+	harnessProblemsFor(ctx, root)
 	for _, harnessID := range ids {
 		skills, err := agent.HarnessSkillsFor(ctx, root, harnessID)
 		if err != nil {
 			return fmt.Errorf("magus agent harness install: %w", err)
 		}
 		for _, path := range skills.Paths {
-			if globalCfg.DryRun {
-				planned, err := agentSkills.PlanSkillTree(root, path, skills.Form)
-				if err != nil {
-					return err
-				}
-				for _, file := range planned {
-					fmt.Fprintln(os.Stdout, file)
-				}
-				continue
-			}
-			if _, err := agentSkills.WriteSkillTree(root, path, true, skills.Form); err != nil {
-				return err
-			}
-			if _, err := agentSkills.PruneSkillTree(root, path, skills.Form); err != nil {
+			if err := installHarnessSkillPath(ctx, root, path, skills.Form, globalCfg.DryRun); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// installHarnessSkillPath writes one skill tree and prunes what this binary no
+// longer ships, reporting both. It overwrites without asking and prunes without
+// asking, so what it writes and what it deletes is the only thing standing
+// between a person and a skill that left without being named. Same wording as
+// `magus agent install`, which reports the same two lists.
+func installHarnessSkillPath(ctx context.Context, root, path string, form agent.Form, dryRun bool) error {
+	if dryRun {
+		planned, err := agentSkills.PlanSkillTree(root, path, form)
+		if err != nil {
+			return err
+		}
+		for _, file := range planned {
+			fmt.Fprintln(os.Stdout, file)
+		}
+		stale, err := agentSkills.StaleSkillDirs(root, path, form)
+		if err != nil {
+			return err
+		}
+		for _, dir := range stale {
+			slog.InfoContext(ctx, "agent harness install: would remove skill this binary no longer ships", slog.String("path", dir))
+		}
+		return nil
+	}
+	written, err := agentSkills.WriteSkillTree(root, path, true, form)
+	if err != nil {
+		return err
+	}
+	for _, file := range written {
+		slog.InfoContext(ctx, "agent harness install: wrote", slog.String("path", file))
+	}
+	removed, err := agentSkills.PruneSkillTree(root, path, form)
+	if err != nil {
+		return err
+	}
+	// Reported at the same level as a write. A silent delete is how a person loses
+	// a skill they thought they had.
+	for _, file := range removed {
+		slog.InfoContext(ctx, "agent harness install: removed skill this binary no longer ships", slog.String("path", file))
+	}
+	return nil
+}
+
+// harnessProblemsFor reports every descriptor that disqualified itself, by name
+// and with its reason. Printed on every harness subcommand, not only where it
+// changes a verdict: a descriptor magus skipped is a misconfiguration, and a
+// skip nobody prints looks exactly like a host nobody installed.
+func harnessProblemsFor(ctx context.Context, root string) []agent.HarnessProblem {
+	problems, err := agent.HarnessProblems(ctx, root)
+	if err != nil {
+		slog.ErrorContext(ctx, "agent harness: harness descriptors could not be read", slog.String("error", err.Error()))
+		return nil
+	}
+	for _, p := range problems {
+		slog.ErrorContext(ctx, "agent harness: descriptor disqualified itself and was not loaded",
+			slog.String("descriptor", p.Source), slog.String("reason", p.Reason))
+	}
+	return problems
 }
 
 func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []string) error {
@@ -102,6 +150,7 @@ func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []strin
 	if err != nil {
 		return fmt.Errorf("magus agent harness apply: %w", err)
 	}
+	harnessProblemsFor(ctx, root)
 	for _, harnessID := range ids {
 		update, err := agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
 			Root:        root,
@@ -139,6 +188,11 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		return fmt.Errorf("magus agent harness verify: %w", err)
 	}
 	var firstFail error
+	// A descriptor that disqualified itself is a coverage gap on this machine, and
+	// verify is the surface whose exit code says so.
+	if problems := harnessProblemsFor(ctx, root); len(problems) > 0 {
+		firstFail = fmt.Errorf("magus agent harness verify: %d harness descriptor(s) disqualified themselves; the first is %s", len(problems), problems[0])
+	}
 	for _, harnessID := range ids {
 		result, err := agent.VerifyHarness(ctx, root, harnessID)
 		if err != nil {

@@ -233,6 +233,16 @@ guard_failure_notice() {
     "$GUARD_MAGUS_BIN" "$ver" "$why" >&2
 }
 
+# jq is the only reader of the event: without it every field selected above came back
+# empty, the shape fallback had nothing to infer from, and every arm below would reach
+# the silent default, which looks exactly like a guarded session. Announce it and answer
+# the gating shape explicitly rather than infer an event this cannot read.
+if ! command -v jq >/dev/null 2>&1; then
+  guard_notice_once nojq && printf '%s\n' "magus guard is NOT running: jq is not on PATH, so this hook cannot read the event and its deny and advise rules are unenforced right now. Install jq to restore the guard." >&2
+  printf '%s' '{"permission":"allow"}'
+  exit 0
+fi
+
 # One availability check for every arm. Cursor already fails open on a hook crash or
 # malformed JSON unless the hook sets failClosed, so allowing here matches the
 # surrounding contract rather than pretending to be stricter than it; for strict

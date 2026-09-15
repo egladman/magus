@@ -384,6 +384,41 @@ func TestCheckDestinationRefusesEscapes(t *testing.T) {
 	assert.Error(t, checkDestination(dir, "../../outside"), "a traversal escapes the tree")
 }
 
+// TestSkillTreeRefusesASymlinkedDestination pins the delete side of the guard.
+// Cleaning a path is lexical and sees no symlink, so a destination whose parent
+// is a link cleaned fine and landed a write, and then PruneSkillTree's RemoveAll,
+// wherever the link pointed.
+func TestSkillTreeRefusesASymlinkedDestination(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	outside := t.TempDir()
+
+	// A stamped skill outside the tree: magus wrote it, so a prune reaching it
+	// would delete it.
+	victim := filepath.Join(outside, "skills", "magus-retired")
+	require.NoError(t, os.MkdirAll(victim, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(victim, "SKILL.md"),
+		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantShort), 0o644))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, ".agents")))
+
+	dest := filepath.Join(".agents", "skills")
+	err := checkDestination(dir, dest)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "symlink")
+
+	_, err = catalog.WriteSkillTree(dir, dest, true, FormFull)
+	require.Error(t, err, "a write through a symlinked component lands outside the tree")
+	_, err = catalog.PlanSkillTree(dir, dest, FormFull)
+	require.Error(t, err, "a plan must refuse what the writer refuses")
+
+	// An install writes before it prunes, so the refused write is what keeps the
+	// delete from running.
+	assert.DirExists(t, victim, "nothing outside the tree may be removed")
+
+	// A destination with no symlink in it still resolves.
+	assert.NoError(t, checkDestination(dir, ".claude/skills"))
+}
+
 func TestInstalledSkillNamesListsOnlyMagusDirs(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()

@@ -416,6 +416,54 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	assert.Equal(t, "spell/hooks.json", d.Config.Path)
 }
 
+// TestOneBadDescriptorDisqualifiesOnlyItself bounds the blast radius of a stray
+// file. A single unparsable descriptor used to fail the whole load, so one .json
+// in a user config dir turned harness support off for every host on the machine.
+// It is skipped now, but never quietly: it is reported by name with its error,
+// and a lookup that misses names it too, because a typo and a malformed file
+// would otherwise read the same.
+func TestOneBadDescriptorDisqualifiesOnlyItself(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	broken := filepath.Join(root, "harnesses", "broken.json")
+	require.NoError(t, os.WriteFile(broken, []byte(`{"schema_version": 2, "id":`), 0o644))
+
+	d, source, err := LoadHarness(context.Background(), root, "test-host")
+	require.NoError(t, err, "a malformed neighbour must not disqualify a valid descriptor")
+	assert.Equal(t, "test-host", d.ID)
+	assert.Equal(t, filepath.Join(root, "harnesses", "test-host.json"), source)
+
+	ids, err := KnownHarnesses(context.Background(), root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test-host"}, ids)
+
+	problems, err := HarnessProblems(context.Background(), root)
+	require.NoError(t, err)
+	require.Len(t, problems, 1)
+	assert.Equal(t, broken, problems[0].Source)
+	assert.Contains(t, problems[0].Reason, "parse harness descriptor")
+
+	_, _, err = LoadHarness(context.Background(), root, "absent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "broken.json", "a miss must name what disqualified itself")
+
+	// A descriptor that parses but fails validation knows its own id, so the miss
+	// answers with the reason rather than with "no harness named".
+	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "escaping.json"), []byte(`{
+  "schema_version": 2,
+  "id": "escaping",
+  "display": {"name": "Escaping"},
+  "config": {"path": "../outside.json"}
+}`), 0o644))
+	_, _, err = LoadHarness(context.Background(), root, "escaping")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "workspace-relative")
+	ids, err = KnownHarnesses(context.Background(), root)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"test-host"}, ids)
+}
+
 func writeTestHarness(t *testing.T, root string) {
 	t.Helper()
 	dir := filepath.Join(root, "harnesses")

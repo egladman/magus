@@ -679,14 +679,24 @@ func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 }
 
 // checkDestination refuses a destination that lands outside dir. The joined path
-// is cleaned and re-checked because "../../outside" is neither absolute nor ~.
+// is cleaned and re-checked because "../../outside" is neither absolute nor ~,
+// and then walked component by component because cleaning is lexical: a symlink
+// mid-path lands a write, and the prune that follows it, outside the tree.
 func checkDestination(dir, dest string) error {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
 	joined := filepath.Clean(filepath.Join(dir, dest))
-	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	rel, err := filepath.Rel(dir, joined)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	}
+	link, err := firstSymlinkComponent(dir, rel)
+	if err != nil {
+		return fmt.Errorf("agent install: %w", err)
+	}
+	if link != "" {
+		return fmt.Errorf("agent install: destination %q contains symlink %q, so a write or a prune through it lands outside the working tree", dest, link)
 	}
 	return nil
 }
