@@ -25,14 +25,24 @@ import (
 // without a manual `magus run ::scip`. It lives ONLY in the daemon (a one-shot CLI has
 // no long-lived loop to schedule it) and is deliberately unobtrusive: it never runs on
 // the query path, coalesces a burst of edits into one run (the quiet window), caps how
-// often a project re-indexes (the min interval), dispatches only when no other work is
-// running, and cancels itself the moment a user run is starved for a slot. Each run
-// goes through the normal m.Run path, so it is cached and shows up as an ordinary
-// journaled job: transparent, not hidden background magic.
+// often a project re-indexes (the min interval), holds off while a user run is starved
+// for a slot, and cancels itself if one becomes starved mid-run. Each run goes through
+// the normal m.Run path, so it is cached and shows up as an ordinary journaled job:
+// transparent, not hidden background magic.
+//
+// It waits for CONTENTION to clear, not for the machine to fall idle. An idle gate
+// (nothing running at all) reads as the safer choice and is in practice an off switch:
+// an agent session almost always has something running, so the index goes stale exactly
+// while it is being queried hardest, and every rule that needs a definitive index falls
+// silent. The limiter already bounds concurrency and execute already yields the moment a
+// user run queues, so the queue depth is the honest signal and idleness was never it.
 
 const (
-	defaultSymbolQuiet       = 60 * time.Second // sources must be this quiet before a re-index
-	defaultSymbolMinInterval = 5 * time.Minute  // ceiling on how often one project re-indexes
+	// Tuned for an agent session, where a stale index is read within seconds of the edit
+	// that staled it. A minute of quiet plus a five-minute ceiling meant the index was
+	// almost never current while anyone was working; one scip run is a few hundred ms.
+	defaultSymbolQuiet       = 10 * time.Second // sources must be this quiet before a re-index
+	defaultSymbolMinInterval = 45 * time.Second // ceiling on how often one project re-indexes
 	symbolIndexTick          = 5 * time.Second  // how often the scheduler re-evaluates
 	symbolIndexBackoffBase   = 2 * time.Minute  // first backoff after a failed run (doubles, capped)
 	symbolIndexBackoffMax    = 30 * time.Minute
@@ -58,8 +68,7 @@ type symbolIndexer struct {
 
 	projectForPath func(absPath string) (string, bool)             // changed file -> owning symbol-capable project, ok
 	runIndex       func(ctx context.Context, project string) error // execute the scip op for a project
-	idle           func() bool                                     // true when no work runs (safe to dispatch)
-	contended      func() bool                                     // true when a user run is starved (cancel in flight)
+	contended      func() bool                                     // true when a user run is starved (hold off, and cancel in flight)
 	onChange       func()                                          // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
 
 	busy  atomic.Bool // an auto-index run is in flight (only one at a time)
@@ -68,7 +77,7 @@ type symbolIndexer struct {
 }
 
 // loop runs the scheduler: it folds change batches into per-project state and, on each
-// tick, dispatches at most one due project when the workspace is idle. It returns when
+// tick, dispatches at most one due project when nothing is starved. It returns when
 // ctx is cancelled or the batch channel closes (the watcher stopped).
 func (si *symbolIndexer) loop(ctx context.Context, batches <-chan watch.Batch) {
 	ticker := time.NewTicker(symbolIndexTick)
@@ -124,11 +133,11 @@ func (si *symbolIndexer) fireChange() {
 	}
 }
 
-// dispatchDue starts an index run for one due project, but only when nothing else is
-// running (idle gate) and no auto-index is already in flight. One at a time keeps the
-// auto-indexer from ever being the reason the machine is busy.
+// dispatchDue starts an index run for one due project, unless a user run is already
+// queued for a slot or an auto-index is in flight. One at a time keeps the auto-indexer
+// from ever being the reason the machine is busy.
 func (si *symbolIndexer) dispatchDue(ctx context.Context) {
-	if si.busy.Load() || !si.idle() {
+	if si.busy.Load() || si.contended() {
 		return
 	}
 	proj, ok := si.pickDue()
@@ -189,7 +198,7 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 	if err != nil && ctx.Err() != nil {
 		// Cancelled to yield to user work: the run never completed, so leave lastRun
 		// alone (minInterval measures from the last real run) and re-mark dirty to retry
-		// the next idle window. Not a failure, no backoff.
+		// once the queue drains. Not a failure, no backoff.
 		st.dirty = true
 		si.log.DebugContext(parent, "magus: background symbol index yielded to user work", slog.String("project", proj))
 		return
@@ -295,7 +304,7 @@ func matchProject(absPath string, projects []capableProject) (string, bool) {
 
 // WatchSymbolIndexing starts the daemon's background symbol auto-indexer: a file watcher
 // that re-runs each symbol-capable project's scip op when its sources change, throttled
-// and idle-gated (see symbolIndexer). It returns a stop function; the long-lived daemon
+// and contention-gated (see symbolIndexer). It returns a stop function; the daemon
 // calls it once at startup, alongside WatchKnowledgeGraph. A no-op (never an error) when
 // disabled by config or when no project is symbol-capable, so nothing is spun up need-
 // lessly. A one-shot CLI never calls it and so never auto-indexes.
@@ -337,7 +346,6 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			c := byPath[project]
 			return symbolRunError(types.NewProjectRef(c.path, c.dir), c.language, err)
 		},
-		idle:      func() bool { s := m.limiter().Snapshot(); return s.Running == 0 && s.Queued == 0 },
 		contended: func() bool { return m.limiter().Snapshot().Queued > 0 },
 		// This watcher is what makes the freshness memo trustworthy: it drops the memo
 		// whenever a capable project's sources change or an index run finishes.

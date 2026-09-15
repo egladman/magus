@@ -82,7 +82,7 @@ func TestMatchProject(t *testing.T) {
 }
 
 // newTestIndexer builds a symbolIndexer with a controllable clock and a recording
-// runIndex, wired idle and uncontended by default.
+// runIndex, wired uncontended by default.
 func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 	t.Helper()
 	clock := time.Unix(2_000_000, 0)
@@ -101,7 +101,6 @@ func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 			mu.Unlock()
 			return nil
 		},
-		idle:      func() bool { return true },
 		contended: func() bool { return false },
 	}
 	return si, &runs, &clock
@@ -331,4 +330,28 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	bareKey, _, err := m.cache.StepKey(ctx, &bare)
 	require.NoError(t, err)
 	assert.NotEqual(t, runKey, bareKey, "buildStep alone is not the key any run mints")
+}
+
+// TestDispatchDueRunsWhileOtherWorkRuns pins the gate this scheduler actually wants. It
+// held off until the limiter was completely empty, which in a session with an agent in it
+// is never, so the index went stale exactly while it was being queried hardest and every
+// rule needing a definitive index fell silent. Contention, not idleness, is the signal.
+func TestDispatchDueRunsWhileOtherWorkRuns(t *testing.T) {
+	si, runs, clock := newTestIndexer(t)
+	starved := false
+	si.contended = func() bool { return starved }
+
+	si.mark([]string{"/w/pkg/a/x.go"})
+	*clock = clock.Add(2 * si.quiet)
+
+	si.dispatchDue(t.Context())
+	require.Eventually(t, func() bool { return len(*runs) == 1 }, time.Second, 5*time.Millisecond,
+		"a busy machine with nothing starved must still re-index")
+
+	starved = true
+	si.busy.Store(false)
+	si.mark([]string{"/w/pkg/a/y.go"})
+	*clock = clock.Add(2 * si.minInterval)
+	si.dispatchDue(t.Context())
+	assert.Len(t, *runs, 1, "a starved user run still holds the auto-indexer off")
 }

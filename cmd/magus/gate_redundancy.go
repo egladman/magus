@@ -285,8 +285,17 @@ func resolvedSpells(projects []*types.Project) []*spells.Spell {
 	return out
 }
 
+// record persists this run's verdict, so a later gate on the same inputs can defer to it.
+//
+// A run that was CUT SHORT records nothing. Testing runErr alone is not enough to see
+// that: a cancelled run can return no error at all, because the targets it had already
+// dispatched report their own cancellation and the run itself then has nothing to add. A
+// gate killed at six seconds by a terminating shell took that path and recorded a PASS
+// over nine projects it never ran, and MGS3010 refused every later gate on that commit
+// on the strength of it. ctx is the invocation's own context, so asking IT whether the
+// run was cut short is the question that cannot be answered wrong.
 func (g *gateRedundancy) record(ctx context.Context, runErr error) {
-	if g == nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+	if g == nil || ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return
 	}
 	outcome := sessions.OutcomePass
