@@ -25,7 +25,12 @@ import (
 // `buzz:"-"` omissions, timestamps as RFC3339 text).
 type BuzzObject map[string]any
 
-//go:generate go run ../cmd/magus-utils buzzobjects -out buzzobject_gen.go
+// The tag excludes buzzobject_gen.go from THIS build. The generator imports this
+// package, so without it a stale generated file (one naming a field that was since
+// renamed or removed) stops types compiling, which stops the generator building, which
+// makes regeneration impossible without hand-editing a file marked DO NOT EDIT.
+//
+//go:generate go run -tags magusgen ../cmd/magus-utils buzzobjects -out buzzobject_gen.go
 
 // FileInfo mirrors fs.stat's {size, mtime, mode, is_dir} object: size in bytes,
 // mtime as Unix milliseconds, mode as the integer permission bits.
