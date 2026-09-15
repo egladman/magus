@@ -2,6 +2,7 @@ package hint
 
 import (
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,6 +45,37 @@ func TestAdvisoryGateSpeaksAgainInAFreshSession(t *testing.T) {
 	assert.Empty(t, NewGate(base, "session-1").Once(testKindA, "n"),
 		"a hook is a short-lived process, so the marker on disk is the only thing that carries the session")
 	assert.Equal(t, "n", NewGate(base, "session-2").Once(testKindA, "n"))
+}
+
+// TestAdvisoryGateHoldsOneFiringAcrossConcurrentCallers pins the gate against the access
+// pattern it actually meets. A host runs one hook process per tool call and an agent
+// issues tool calls in parallel, so a stat-then-write check-and-set lets every racing
+// caller believe it is the first and the reader gets one notice N times.
+func TestAdvisoryGateHoldsOneFiringAcrossConcurrentCallers(t *testing.T) {
+	base := t.TempDir()
+	const callers = 16
+
+	var wg sync.WaitGroup
+	spoke := make([]string, callers)
+	start := make(chan struct{})
+	for i := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			spoke[i] = NewGate(base, "session-1").Once(testKindA, "the notice")
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	said := 0
+	for _, s := range spoke {
+		if s != "" {
+			said++
+		}
+	}
+	assert.Equal(t, 1, said, "exactly one of %d racing callers may spend the firing", callers)
 }
 
 // TestAdvisoryGateExpiresTheAnonymousMarker covers the surface with no session identity.

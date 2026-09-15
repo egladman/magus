@@ -125,22 +125,44 @@ func (g Gate) AlreadyFired(kind MarkerKind) bool {
 // MarkFired marks kind reported for this session and returns whether it ALREADY was: a
 // check-and-set, and the return is the check half.
 //
+// The set half is an exclusive create, not a stat followed by a write. A host runs one
+// hook process per tool call and an agent issues tool calls in parallel, so the racing
+// callers are the normal case rather than the exotic one: four processes that each stat
+// a missing marker and then each write it all believe they are the first, and the reader
+// gets the notice four times. That is the shape this gate exists to prevent, arriving
+// through the gate itself.
+//
 // Every failure returns false, which speaks. State magus cannot write is not a reason to
 // go quiet: a notice repeated is a smaller failure than a notice nobody ever gets.
 func (g Gate) MarkFired(kind MarkerKind) bool {
-	if g.AlreadyFired(kind) {
-		return true
+	if kind == "" || g.cacheDir == "" {
+		return false
 	}
 	path := g.markerPath(kind)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return false
 	}
-	// Rewritten rather than created, so an expired anonymous marker starts its window
-	// again instead of staying expired forever.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err == nil {
+		_ = f.Close()
+		sweepMarkers(filepath.Dir(path))
+		return false
+	}
+	if !os.IsExist(err) {
+		return false
+	}
+	// The marker is there, so someone fired. A session-keyed marker settles it; an
+	// anonymous one is held only for its window, and past that this caller takes the
+	// firing and restarts the window by rewriting the file.
+	if g.session != "" {
+		return true
+	}
+	if info, serr := os.Stat(path); serr == nil && time.Since(info.ModTime()) < anonWindow {
+		return true
+	}
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
 		return false
 	}
-	sweepMarkers(filepath.Dir(path))
 	return false
 }
 
