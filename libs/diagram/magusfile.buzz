@@ -15,11 +15,10 @@
 // It is NOT a spell. A spell adapts an external tool and hands a project type its ops; this
 // adapts nothing and is called as a library, so libs/ is the honest home.
 import "magus";
-import "magus/spell/buzz";
 
 magus\project({
-    "spells": [buzz],
     // The renderer is one self-contained file; its tests live in it as `test "..."` blocks.
+    // No spell claims .buzz, so this is what makes the file a declared source at all.
     "sources": ["*.buzz"],
 });
 

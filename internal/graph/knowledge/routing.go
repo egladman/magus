@@ -38,10 +38,6 @@ const maxAnchors = 3
 // charm is deliberately absent: types.Spell carries no charm field, so a charm node exists
 // only where a magusfile writes ctx.hasCharm(...), and withholding that size would cost a
 // real signal for nothing.
-//
-// TODO: the anchors have the same defect and are not withheld. Every node of a
-// binary-supplied kind is degree-tied, so topLabels falls back to the id tiebreak and one
-// new std module sorting before "archive" rewrites six committed files.
 var binarySuppliedKinds = map[string]bool{
 	types.KindDiagnostic: true,
 	types.KindModule:     true,
@@ -49,6 +45,22 @@ var binarySuppliedKinds = map[string]bool{
 	types.KindSpell:      true,
 	types.KindOp:         true,
 	types.KindTool:       true,
+}
+
+// anchorTiedKinds are the binary-supplied kinds whose nodes carry no edge that could ever
+// distinguish one from another, so every node ties at the same degree and topLabels' id
+// tiebreak becomes the whole ranking rather than a tiebreak. Measured against the live
+// graph: diagnostic (documents edges), spell (one contains edge per op it exposes, so `go`
+// legitimately outranks a one-op spell), module and op and tool (uses edges from whatever
+// actually calls them) all carry real degree spread today, so their anchors report a real
+// "most connected" answer and stay. method does not: a method's only edge is the fixed
+// module-provides-it link every method gets exactly once, nothing else in the graph
+// references an individual host method, so all of them tie at degree 1 forever. A new host
+// module contributes new tied method nodes, and if its name sorts before the current
+// alphabetically-first one, the "anchor" silently becomes whichever id sorts first now,
+// rewriting every committed index for a ranking that was never meaningful.
+var anchorTiedKinds = map[string]bool{
+	types.KindMethod: true,
 }
 
 // Routing derives the compact "query first" routing summary: per-kind counts with
@@ -129,12 +141,17 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 		if !ok {
 			continue
 		}
-		out.Kinds = append(out.Kinds, types.KnowledgeRoutingKind{
+		row := types.KnowledgeRoutingKind{
 			Kind:       kind,
 			Count:      len(xs),
-			Anchors:    topLabels(xs),
 			FromBinary: binarySuppliedKinds[kind],
-		})
+		}
+		// Degree-tied nodes have no real "most connected" winner, so ranking them would
+		// only report which id happens to sort first. See anchorTiedKinds above.
+		if !anchorTiedKinds[kind] {
+			row.Anchors = topLabels(xs)
+		}
+		out.Kinds = append(out.Kinds, row)
 	}
 
 	projects := make([]string, 0, len(byProject))

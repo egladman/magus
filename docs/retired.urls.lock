@@ -302,3 +302,10 @@ reference/manpage/magus-ledger/
 tags/ledger/
 tags/leases/
 tags/magus-ledger/
+
+# The buzz spell's ops (buzz-check, buzz-test, magus-buzz) had no caller left once
+# the lua/teal interpreter they were written against was deleted, so they are gone
+# and the spell no longer registers. Not aliased: the root magusfile and
+# libs/diagram now declare "**/*.buzz"/"*.buzz" as a plain source instead of
+# through a spell, so there is no successor spell page to send a reader to.
+concepts/spells/buzz/

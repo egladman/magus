@@ -378,25 +378,32 @@ type Daemon struct {
 // survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
-	// RotateActivities is how often the daemon trims the activity trail.
-	//
-	// It is that trail's only bound, so this job owns rotation outright, and it runs hourly
-	// because a rotate on an already-small trail costs one stat. A write-triggered rotate
-	// running off a producer's own append counter cannot share the job: a counter only bounds
-	// the producer that owns it, and an agent hook is a short-lived process with nowhere to
-	// keep one, so a hook-fed trail would be bounded by nothing at all.
-	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
-	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
-	// PrunePreserved drops the working-copy captures `vcs checkpoint --preserve` minted
-	// once they outlive the thirty days that flag promises.
-	//
+	// RotateActivities is only how often the daemon CHECKS whether the activity trail is due
+	// for a trim; it is not a retention age. The trail rotates on event count instead (10000
+	// events, with a per-kind floor that keeps a rare kind's newest entries no matter how loud
+	// its neighbors are; see maxEvents and perKindFloor in internal/trail), so there is no age
+	// cutoff this field could hand it: an age cutoff would have to decide whether it or the
+	// per-kind floor wins when the two disagree, and that policy does not exist. It runs
+	// hourly because a rotate on an already-small trail costs one stat.
+	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // poll cadence only; retention is trail.maxEvents (10000), not this
+	// RotateLogs is both how often the daemon checks the run-log journals AND, since the
+	// check doubles as the enforcement, the maximum age a kept journal may reach: a journal
+	// older than this is dropped even when the workspace is well under the count (500) and
+	// size (2GB) caps those also enforce, and the tightest of the three wins. Weekly by
+	// default, because run-logs otherwise have no age bound at all.
+	RotateLogs time.Duration `json:"rotate_logs" yaml:"rotate_logs"` // trim run-log journals older than this; default 7d
+	// PrunePreserved is only how often the daemon checks for expired `vcs checkpoint
+	// --preserve` captures; it is not the retention window. That window is fixed at 30 days
+	// (vcs.preserveRetention) and stays out of this field on purpose: the days a preserved
+	// capture survives is a promise the `--preserve` flag itself advertises, and letting a
+	// per-daemon poll knob also change what gets deleted would make that promise mean
+	// whatever this config happened to say (see the rationale on vcs.PrunePreserved).
 	// Preserve prunes on its own call too, but only a repository preserved a SECOND time
-	// ever reaches that pass, so this is what makes the promise true for one preserved
-	// once. Daily, because the window it enforces is thirty days: a capture surviving an
-	// extra day costs nothing, and the pass is one listing on a repository that has never
-	// preserved anything.
-	PrunePreserved time.Duration `json:"prune_preserved" yaml:"prune_preserved"`
-	SyncGraph      time.Duration `json:"sync_graph" yaml:"sync_graph"` // reconcile the graph; default 6h (a safety net behind the VCS hook)
+	// ever reaches that pass, so this scheduled job is what makes the promise hold for a
+	// repository preserved once and never again. Daily, since a capture surviving an
+	// extra day past the fixed window costs nothing.
+	PrunePreserved time.Duration `json:"prune_preserved" yaml:"prune_preserved"` // poll cadence only; retention is vcs.preserveRetention (30d), not this
+	SyncGraph      time.Duration `json:"sync_graph" yaml:"sync_graph"`           // reconcile the graph; default 6h (a safety net behind the VCS hook)
 	// CheckReview notices a merge or a new remark on a review this tree took part in. The only
 	// scheduled job that leaves the machine, so its default is the longest here: a pull request
 	// merges once, and a remark waiting fifteen minutes costs nobody anything.
@@ -637,9 +644,9 @@ func Defaults() Config {
 		Daemon: Daemon{
 			Enabled: true,
 			Maintenance: Maintenance{
-				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
-				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
-				PrunePreserved:   24 * time.Hour,     // enforces a thirty-day window; a day's lag costs nothing
+				RotateActivities: time.Hour,          // poll cadence; cheap to check often (one stat when small)
+				RotateLogs:       7 * 24 * time.Hour, // poll cadence AND the age cap it enforces: weekly
+				PrunePreserved:   24 * time.Hour,     // poll cadence only; the 30-day window is fixed elsewhere
 				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
 				CheckReview:      15 * time.Minute,   // the only one that reaches a forge; a merge happens once
 			},

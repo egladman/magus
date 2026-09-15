@@ -93,6 +93,44 @@ func TestRoutingProjects(t *testing.T) {
 	assert.True(t, slices.IsSorted(paths), "projects sorted by path")
 }
 
+// TestRoutingWithholdsAnchorsForMethodKind pins the routing.go fix. A method's only
+// possible edge is the fixed module-provides-it link every method gets exactly once (no
+// other relation in the graph references an individual host method), so every method node
+// ties at the same degree and the old code fell back to ranking by id, reporting whichever
+// id happened to sort first as "most connected." Anchors for method are withheld entirely
+// rather than computed and discarded, so a new host module contributing methods that sort
+// before the current first anchor cannot perturb this row (a committed index carrying it
+// would otherwise churn for a ranking that was never meaningful). The other five
+// binary-supplied kinds are unaffected: TestRoutingIgnoresRuntimeShard already pins that
+// diagnostic, for one, keeps real anchors from its documents edges.
+func TestRoutingWithholdsAnchorsForMethodKind(t *testing.T) {
+	build := func(methodIDs ...string) *Graph {
+		g := NewGraph()
+		for _, id := range methodIDs {
+			g.AddNode(types.KnowledgeNode{ID: id, Kind: types.KindMethod, Label: id})
+		}
+		return g
+	}
+
+	before := build(methodID("archive", "compress"), methodID("fs", "list"), methodID("json", "stringify"))
+	beforeRouting := before.Routing()
+	row, ok := routingKind(beforeRouting, types.KindMethod)
+	require.True(t, ok, "method kind row present")
+	assert.True(t, row.FromBinary)
+	assert.Empty(t, row.Anchors, "method reports no anchors")
+	assert.Equal(t, 3, row.Count)
+
+	// A new host module ("aardvark") sorts before every id above; under the old
+	// id-tiebreak behavior its method would have become the reported anchor.
+	after := build(methodID("archive", "compress"), methodID("fs", "list"), methodID("json", "stringify"),
+		methodID("aardvark", "sniff"))
+	afterRouting := after.Routing()
+	rowAfter, ok := routingKind(afterRouting, types.KindMethod)
+	require.True(t, ok)
+	assert.Equal(t, row.Anchors, rowAfter.Anchors, "a new host module cannot churn withheld method anchors")
+	assert.Equal(t, 4, rowAfter.Count)
+}
+
 // TestRoutingIncludesOwnerKind pins that owner nodes, merged into the default graph by
 // store.go (it excludes only symbol/coverage shards), actually surface in the routing
 // table, not just get loaded and then dropped by an incomplete kind allowlist.

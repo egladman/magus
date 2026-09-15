@@ -28,7 +28,6 @@ import "semver";
 import "magus/spell/go";
 import "magus/spell/docker";
 import "magus/spell/cosign";
-import "magus/spell/buzz";
 import "magus/spell/markdown";
 import "magus/spell/bash";
 
@@ -114,7 +113,7 @@ magus\project({
     // every generated index naming it - which is why regenerating MAGUS.md from
     // a worktree produced spurious diffs.
     "name": "magus",
-    "spells": [go, buzz, markdown, bash],
+    "spells": [go, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no
     // spell glob, so leaving one undeclared buys a cache HIT on an edit to it: golangci-lint
@@ -128,6 +127,11 @@ magus\project({
     // .gitignore (no target reads it at all). Both keep seeding by containment, and
     // doctor keeps saying so - an undeclared file is only wrong when it is an input.
     "sources": [
+        // No spell claims .buzz any more (the buzz spell carried no working op and
+        // is gone, see go_build's own note on why this glob has to stay a source
+        // even so); stated explicitly so a spell edit still invalidates go_build,
+        // which never grew its own readsFiles and so keys on the tree.
+        "**/*.buzz",
         ".golangci.yml",        // golangci-lint, via the go spell's lint op
         ".mockery.yaml",        // drives `go tool mockery` in generate
         ".markdownlintignore",  // markdownlint, via the markdown spell's lint op

@@ -218,7 +218,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES",
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-rotate-activities"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is how often the daemon trims the activity trail.",
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_ACTIVITIES: RotateActivities is only how often the daemon CHECKS whether the activity trail is due for a trim; it is not a retent...",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.RotateLogs",
@@ -226,7 +226,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS",
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-rotate-logs"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS",
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_ROTATE_LOGS: RotateLogs is both how often the daemon checks the run-log journals AND, since the check doubles as the enforcement, ...",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.PrunePreserved",
@@ -234,7 +234,7 @@ var Fields = []fieldtype.Field{
 		EnvVar:   "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED",
 		Flag:     fieldtype.FlagNames{Long: "daemon-maintenance-prune-preserved"},
 		Kind:     fieldtype.KindDuration,
-		Usage:    "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED: PrunePreserved drops the working-copy captures 'vcs checkpoint --preserve' minted once they outlive the thirty days t...",
+		Usage:    "MAGUS_DAEMON_MAINTENANCE_PRUNE_PRESERVED: PrunePreserved is only how often the daemon checks for expired 'vcs checkpoint --preserve' captures; it is not the re...",
 	},
 	{
 		GoPath:   "Daemon.Maintenance.SyncGraph",

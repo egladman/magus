@@ -104,12 +104,6 @@ var spellMeta = map[string]spellInfo{
 		intro:       "The `cosign` spell forks the Sigstore `cosign` CLI to sign, attest, and verify artifacts. Signing and attestation pass `--yes` for non-interactive (CI) use.",
 		tags:        []string{"cosign", "sigstore", "signing", "supply-chain"},
 	},
-	"buzz": {
-		dir: "buzz", language: "Buzz",
-		description: "Buzz spell: check and test .buzz sources, plus run them through the magus interpreter.",
-		intro:       "The `buzz` spell checks and tests Buzz sources. Each op finds every `.buzz` file and runs `buzz --check`, `buzz --test`, or the magus interpreter over it.",
-		tags:        []string{"buzz", "gopherbuzz", "check", "test"},
-	},
 	"bash": {
 		dir: "bash", language: "Shell",
 		description: "Bash spell: shellcheck linting for shell scripts.",
