@@ -298,6 +298,28 @@ func TestGuardAdviceHasSkillCoverage(t *testing.T) {
 	}
 }
 
+// TestGenerateDriftThrowNamesTheEngineDriftCode pins completion-gates plan step 4:
+// the root magusfile's whole-tree drift throw and the engine's declared-output path
+// (types.ClassifyDrift, types/vcs.go) both diagnose "generated output drifted", and
+// must name it with the same code so a reader does not learn two spellings of one
+// condition. The magusfile throw deliberately does not CALL ClassifyDrift (see the
+// comment above it: whole-tree drift has no single target's inputs to classify
+// against), so this only pins the code text, not the classification call.
+func TestGenerateDriftThrowNamesTheEngineDriftCode(t *testing.T) {
+	body, err := os.ReadFile(rootMagusfile)
+	require.NoError(t, err, "read %s", rootMagusfile)
+
+	i := strings.Index(string(body), "regeneration changed generated files")
+	require.NotEqual(t, -1, i, "%s: the whole-tree drift throw moved or was reworded", rootMagusfile)
+	// The code is a plain-text prefix on the throw (the same idiom
+	// spells/golang/gomod.buzz uses for MGS1016), not a magus\raise call:
+	// magus\raise refuses the MGS namespace as reserved for magus's own diagnostics.
+	line := string(body[max(0, i-80):i])
+	assert.Contains(t, line, string(types.StaleGeneratedOutput),
+		"%s: whole-tree drift throw must carry %s, the same code the engine's declared-output path emits via types.ClassifyDrift",
+		rootMagusfile, types.StaleGeneratedOutput)
+}
+
 func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 	body, err := os.ReadFile(rootMagusfile)
 	require.NoError(t, err, "read %s", rootMagusfile)

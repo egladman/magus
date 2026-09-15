@@ -1347,7 +1347,12 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
         // second regeneration separates them, which is what --race=replay does, so the
         // message routes there rather than reimplementing it (and a nested `generate`
         // would contend for this target's own exclusive lock).
-        throw "generate: regeneration changed generated files; re-run "
+        //
+        // MGS4006, the same code the engine's declared-output path names via
+        // types.ClassifyDrift (types/vcs.go): this is the identical condition
+        // (generated output drifted) diagnosed from the whole tree instead of one
+        // target's declarations, and the two producers must name it identically.
+        throw "MGS4006: generate: regeneration changed generated files; re-run "
             + "`magus run generate:rw .` and commit" + detail + drift\secondCause;
     }
 }

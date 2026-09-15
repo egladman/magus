@@ -82,6 +82,32 @@ func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
 	assert.Contains(t, out.String(), "magus_job")
 }
 
+// TestPrintJobStatusFailedGateNamesHowToReadIt pins the completion-gates plan's
+// step 3: a failed gate named an output ref but not how to read it, leaving the
+// holder to reconstruct `magus query output <ref>` by hand. The line must be
+// rendered through hint.QueryOutput (never a hardcoded string), and must appear
+// only for a gate that actually failed and actually carries a ref.
+func TestPrintJobStatusFailedGateNamesHowToReadIt(t *testing.T) {
+	t.Parallel()
+
+	status := job.Status{
+		Job:        "plan",
+		Violations: []string{`completion gate "ci": the run behind output ref "outdeadbeef" failed, so its check did not pass`},
+		Gates: []types.GateStatus{
+			{ID: "ci", Verified: false, OutputRef: "outdeadbeef"},
+			{ID: "lint", Verified: true, OutputRef: "outfeedface"},
+		},
+	}
+
+	var out strings.Builder
+	printJobStatus(&out, status)
+	got := out.String()
+
+	assert.Contains(t, got, "completion gate ci: rejected (outdeadbeef)")
+	assert.Contains(t, got, "magus query output outdeadbeef", "a failed gate must name how to read its ref")
+	assert.NotContains(t, got, "magus query output outfeedface", "a verified gate needs no query-output line")
+}
+
 // Explain resolves a bare name fuzzily, which is right for a person typing
 // `magus explain build` and wrong for evidence: asked for "cmd/magus" it once answered
 // target:.:release-sign, and a blast radius from an unrelated node is worse than silence.

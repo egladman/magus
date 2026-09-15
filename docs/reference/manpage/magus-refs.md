@@ -30,16 +30,27 @@ and says so rather than falling back to a text search - a grep result
 and an index result answer different questions, and quietly substituting
 one for the other is how a wrong answer looks right.
 
+--text switches to that other question on purpose: a literal substring
+search with no symbol index and no graph, printed as path:line:text like
+every other grep-shaped tool. It is the replacement a guard deny routes a
+recursive grep to, so it answers on a cold worktree with no index built.
+Its exit code is grep's (0 matched, 1 no match, 2 error), not the verdict
+codes the symbol lookup above uses - the two modes answer different
+questions and are not meant to share a contract.
+
 ## Options
 
 **--no-generated** *string*
-: In the fallback text search shown beside a symbol miss, exclude declared-output files entirely instead of searching them and marking the ones that match
+: In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match
 
 **--occurrences**
 : Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in
 
 **--refresh**
 : Re-ingest the SCIP index before answering
+
+**--text**
+: Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes)
 
 ## Examples
 
@@ -59,6 +70,12 @@ magus refs symbol:github.com/egladman/magus/Open
 
 ```sh
 magus refs Open -o json
+```
+
+*Raw text search, no index needed*
+
+```sh
+magus refs TODO --text
 ```
 
 ## See Also

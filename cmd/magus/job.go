@@ -855,6 +855,11 @@ func printJobStatus(out io.Writer, s job.Status) {
 			fmt.Fprintf(out, " (%s)", gate.OutputRef)
 		}
 		fmt.Fprintln(out)
+		// A failed gate names the ref but not how to read it; one command away
+		// from the projects the run touched and the diff it produced.
+		if !gate.Verified && gate.OutputRef != "" {
+			fmt.Fprintf(out, "  %s\n", hint.QueryOutput.With(gate.OutputRef))
+		}
 	}
 	if len(s.Risks) > 0 {
 		fmt.Fprintln(out, "unresolved risks its holder reported")
