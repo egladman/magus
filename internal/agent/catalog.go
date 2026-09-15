@@ -165,7 +165,7 @@ import (
 // a person or unbound orchestrator may explicitly refresh only the Magus-owned
 // host hook entries, while the rule engine, installed skills, memory,
 // and repository instructions remain outside that write set.
-const SkillVersion = 75
+const SkillVersion = 76
 
 const skillLicense = "GPL-3.0-or-later"
 

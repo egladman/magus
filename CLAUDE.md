@@ -87,6 +87,13 @@ leaves a fresh binary behind. Rebuild after gating.
   subagent, and run mutating subagents isolated or serialized. Never a whole-tree
   git op (`stash`/`reset`/`checkout .`/`clean`) to verify a build; it wipes a
   concurrent agent's untracked work. See the magus-vcs-hygiene skill.
+- Every spawn NAMES its model. Inheriting the parent's on purpose is fine; inheriting
+  it because nobody said is how nine workers in one session all ran on the most
+  expensive model available (2026-09-15), five of them on mechanical work. There is no
+  ordering rule to fall back on, since same-strength offload is legitimate, so when the
+  right model is unclear ASK rather than defaulting. A subagent also needs a `./magus`
+  built from ITS OWN worktree before it can validate anything: the guard denies raw
+  `go build`/`go test`, and a fresh worktree has no binary.
 - Code that exists ONLY to keep older data, artifacts, or callers working carries a
   `compat(until: <condition>):` comment, in the shape of the existing
   `optimization:` prefix. Three things, or it is not auditable: what it supports,

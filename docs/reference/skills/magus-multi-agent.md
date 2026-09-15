@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the leases cannot collide, bound fan-out depth, and match each lease's model to the work it needs."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 28509
-skill_short_bytes: 20278
+skill_full_bytes: 29770
+skill_short_bytes: 21383
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `75` |
+| `agent-skill-version` | `76` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `25ae796440e5` |
+| `skill-content` | `a0f74a9bc3b1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -161,9 +161,27 @@ it a definitive end:
   the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work.
+Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
+runs both ways: a mechanical rename does not need the strongest model available, and
+an ambiguous API boundary does not get the cheapest one because it looked like less
+work.
+
+Naming it is the half that is checkable. Every spawn names a model, or names an agent
+definition that names one. Inheriting the parent's model ON PURPOSE is fine and often
+right, since a hard review under a cheaper coordinator is exactly the case an ordering
+rule would forbid. Inheriting it BY OMISSION is the failure: a host whose default is
+"same as the parent" turns every unnamed spawn into the most expensive one available,
+and nothing afterwards records that no choice was made.
+
+ASK THE HUMAN when the right model is unclear, before spawning rather than after the
+budget is spent. There is no ordering rule to fall back on: "only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate. So an
+unclear case is a question, not a default.
+
+Model NAMES belong to the host, never to magus: they change faster than any table here
+could track. Name the model your host names, or point the spawn at an agent definition
+the user owns. Where the host has a default-subagent setting, setting it is what makes
+omission cheap instead of expensive.
 
 Map work to provider capabilities without assuming model names:
 
@@ -593,12 +611,31 @@ it a definitive end:
   the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work.
-Matching the model to the work is the only cost decision worth making here - past
-that, cost is not your call to agonize over, and a job done badly by an
+Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
+runs both ways: a mechanical rename does not need the strongest model available, and
+an ambiguous API boundary does not get the cheapest one because it looked like less
+work. Matching the model to the work is the only cost decision worth making here -
+past that, cost is not your call to agonize over, and a job done badly by an
 under-powered worker costs more than the model it saved.
+
+Naming it is the half that is checkable. Every spawn names a model, or names an agent
+definition that names one. Inheriting the parent's model ON PURPOSE is fine and often
+right, since a hard review under a cheaper coordinator is exactly the case an ordering
+rule would forbid. Inheriting it BY OMISSION is the failure: a host whose default is
+"same as the parent" turns every unnamed spawn into the most expensive one available,
+and nothing afterwards records that no choice was made. Measured 2026-09-15: nine
+workers spawned in one session, every one inheriting the root's model, five of them
+mechanical work a cheaper model does as well.
+
+ASK THE HUMAN when the right model is unclear, before spawning rather than after the
+budget is spent. There is no ordering rule to fall back on: "only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate. So an
+unclear case is a question, not a default.
+
+Model NAMES belong to the host, never to magus: they change faster than any table here
+could track. Name the model your host names, or point the spawn at an agent definition
+the user owns. Where the host has a default-subagent setting, setting it is what makes
+omission cheap instead of expensive.
 
 Map work to provider capabilities without assuming model names:
 

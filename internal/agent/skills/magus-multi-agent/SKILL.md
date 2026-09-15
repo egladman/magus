@@ -155,12 +155,31 @@ it a definitive end:
   the callers in no project belong to nobody, so every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job. That is the whole rule, and it runs both ways:
-a mechanical rename does not need the strongest model available, and an ambiguous
-API boundary does not get the cheapest one because it looked like less work{{if .Full}}.
-Matching the model to the work is the only cost decision worth making here - past
-that, cost is not your call to agonize over, and a job done badly by an
+Pick the model that FITS the job, and SAY which one. That is the whole rule, and it
+runs both ways: a mechanical rename does not need the strongest model available, and
+an ambiguous API boundary does not get the cheapest one because it looked like less
+work{{if .Full}}. Matching the model to the work is the only cost decision worth making here -
+past that, cost is not your call to agonize over, and a job done badly by an
 under-powered worker costs more than the model it saved{{end}}.
+
+Naming it is the half that is checkable. Every spawn names a model, or names an agent
+definition that names one. Inheriting the parent's model ON PURPOSE is fine and often
+right, since a hard review under a cheaper coordinator is exactly the case an ordering
+rule would forbid. Inheriting it BY OMISSION is the failure: a host whose default is
+"same as the parent" turns every unnamed spawn into the most expensive one available,
+and nothing afterwards records that no choice was made{{if .Full}}. Measured 2026-09-15: nine
+workers spawned in one session, every one inheriting the root's model, five of them
+mechanical work a cheaper model does as well{{end}}.
+
+ASK THE HUMAN when the right model is unclear, before spawning rather than after the
+budget is spent. There is no ordering rule to fall back on: "only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate. So an
+unclear case is a question, not a default.
+
+Model NAMES belong to the host, never to magus: they change faster than any table here
+could track. Name the model your host names, or point the spawn at an agent definition
+the user owns. Where the host has a default-subagent setting, setting it is what makes
+omission cheap instead of expensive.
 
 Map work to provider capabilities without assuming model names:
 
