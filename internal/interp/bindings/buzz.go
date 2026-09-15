@@ -182,7 +182,7 @@ func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver
 		if name != "" && len(out) == 0 {
 			return vm.Null, fmt.Errorf("magus.describeModule: unknown module %q", name)
 		}
-		return bindinggen.MapsVal(out), nil
+		return bindinggen.ObjectSlice(out, bindinggen.ObjectModuleEntry), nil
 	}))
 
 	// magus.normalize(name): the canonical form of any magus entity name (a target, a

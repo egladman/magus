@@ -34,7 +34,7 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(report.BuzzObject()), nil
+		return bindinggen.ObjectJobList(report), nil
 	}))
 	job.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		id := bindinggen.Str(args, 0)
@@ -43,7 +43,7 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(row.BuzzObject()), nil
+		return bindinggen.ObjectJob(row), nil
 	}))
 	// register answers with a two-key map rather than the row alone, which is the shape
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
@@ -54,7 +54,10 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(map[string]any{"job": row.BuzzObject(), "advice": advice}), nil
+		out := vm.NewMap()
+		out.MapSet("job", bindinggen.ObjectJob(row))
+		out.MapSet("advice", bindinggen.StrVal(advice))
+		return out, nil
 	}))
 	job.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var (
@@ -69,7 +72,7 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(row.BuzzObject()), nil
+		return bindinggen.ObjectJob(row), nil
 	}))
 	job.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var result map[string]any
@@ -80,7 +83,7 @@ func buildJob(obs buzz.DirectObserver) vm.Value {
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
-		return bindinggen.AnyMapVal(status.BuzzObject()), nil
+		return bindinggen.ObjectJobStatus(status), nil
 	}))
 	job.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearJob(ctx)

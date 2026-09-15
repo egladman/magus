@@ -65,9 +65,12 @@ leaves a fresh binary behind. Rebuild after gating.
 - Never hand-edit generated files (`gen/` dirs, `MAGUS.md`, `docs/gen/`); change
   the source of truth and regenerate. Generated output lives in a `gen/` dir and
   carries no extra suffix, so the directory is the signal. The one exception is a
-  generated METHOD set (`types/buzzobject_gen.go`, `types/enum_gen.go`): Go puts a
+  generated METHOD set (`types/enum_gen.go`, `spells/enum_gen.go`): Go puts a
   method in its receiver's package, so those files cannot live in a subdirectory
-  and carry the `_gen.go` suffix instead.
+  and carry the `_gen.go` suffix instead. Reach for that suffix only when the
+  output is a method set; the Go-to-Buzz encoders were methods until they became
+  free functions in `internal/interp/bindings/gen`, which is where the directory
+  says it for them.
 - Regenerate in the SAME commit as the source change that invalidated the output.
   The `magus-local-development` skill carries this stamped, under "A std/
   descriptor edit is never local", with the evidence and the retire-when.

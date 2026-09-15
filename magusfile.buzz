@@ -1021,17 +1021,20 @@ export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
         "-releases", "./releases", "-changelog", "./CHANGELOG.md"]);
 }
 
-// Regenerates the runtime BuzzObject maps before anything imports a host binding.
-// Its reflection lives only in magus-utils while writing this Go file; the emitted
-// methods use direct field access, so Magus never reflects at a Buzz boundary.
-// The enum helpers (Values/Valid/String for each boundaryEnum) come from a SECOND
-// directive, and it lives in cmd/magus-utils rather than in types/, so
-// `go generate ./types` never ran it. Adding a boundaryEnums entry therefore left
-// types/enum_gen.go and spells/enum_gen.go stale with nothing to say so - found
-// when PlatformStyle was added and its Valid() simply was not there.
+// Regenerates everything derived from the boundary registry: the enum helpers
+// (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the
+// Go-to-Buzz encoders. The reflection lives only in magus-utils while writing those
+// files; the emitted encoders use direct field access, so Magus never reflects at a
+// Buzz boundary.
+//
+// Every directive lives in cmd/magus-utils rather than beside its output, so one
+// `go generate` runs them all. When the enum directive lived in types/, adding a
+// boundaryEnums entry left types/enum_gen.go and spells/enum_gen.go stale with nothing
+// to say so - found when PlatformStyle was added and its Valid() simply was not there.
 export fun types_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.writesFiles("types/buzzobject_gen.go", "types/enum_gen.go", "spells/enum_gen.go");
-    proc\exec("go", ["generate", "./types"]);
+    ctx.writesFiles("types/enum_gen.go", "spells/enum_gen.go",
+        "internal/interp/bindings/gen/boundary_list.go",
+        "internal/interp/bindings/gen/boundary_objects.go");
     proc\exec("go", ["generate", "./cmd/magus-utils"]);
 }
 

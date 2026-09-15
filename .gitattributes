@@ -85,6 +85,8 @@ internal/cli/testdata/api.lock merge=magus linguist-generated
 internal/config/gen/*.go merge=magus linguist-generated
 internal/handler/mcp/gen/registry.go merge=magus linguist-generated
 internal/interp/bindings/gen/*.go merge=magus linguist-generated
+internal/interp/bindings/gen/boundary_list.go merge=magus linguist-generated
+internal/interp/bindings/gen/boundary_objects.go merge=magus linguist-generated
 internal/interp/bindings/testdata/magus-api.lock merge=magus linguist-generated
 internal/job/gen/*.json merge=magus linguist-generated
 internal/langservice/manifest_data.go merge=magus linguist-generated
@@ -107,6 +109,5 @@ schema/gen/*.go merge=magus linguist-generated
 spells/enum_gen.go merge=magus linguist-generated
 tapes/core-loop.capture merge=magus linguist-generated
 tapes/showcase.capture merge=magus linguist-generated
-types/buzzobject_gen.go merge=magus linguist-generated
 types/enum_gen.go merge=magus linguist-generated
 # END magus-generated

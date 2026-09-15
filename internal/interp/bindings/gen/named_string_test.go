@@ -13,19 +13,17 @@ import (
 // NULL: `doctor().checks[0].status` read null rather than "ok", and a magusfile told to
 // branch on status was branching on nothing.
 func TestAnyValNamedStringType(t *testing.T) {
-	c := types.DoctorCheck{Name: "cache writable", Status: types.DoctorOK, Message: "ok"}
-	got, ok := AnyVal(c.BuzzObject()).MapGet("status")
+	got, ok := AnyVal(map[string]any{"status": types.DoctorOK}).MapGet("status")
 	require.True(t, ok, "status key missing")
-	require.True(t, got.IsStr(), "DoctorCheck.status crossed as %s, not a string", got.Kind())
+	require.True(t, got.IsStr(), "a named string crossed as %s, not a string", got.Kind())
 	assert.Equal(t, "ok", got.AsString())
 }
 
 // The same hole, one type over: TargetRun.state is types.TargetRunState.
 func TestAnyValNamedStringOnTargetRun(t *testing.T) {
-	r := types.StatusTargetRun{Target: "build", State: types.TargetRunPassed}
-	got, ok := AnyVal(r.BuzzObject()).MapGet("state")
+	got, ok := AnyVal(map[string]any{"state": types.TargetRunPassed}).MapGet("state")
 	require.True(t, ok)
-	require.True(t, got.IsStr(), "TargetRun.state crossed as %s", got.Kind())
+	require.True(t, got.IsStr(), "a named string crossed as %s", got.Kind())
 	assert.Equal(t, "passed", got.AsString())
 }
 

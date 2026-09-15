@@ -10,8 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
-	"time"
 )
 
 // RegisterVcs builds the "vcs" module map and returns it.
@@ -47,7 +45,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsPathSlice(ret0), nil
+		return ObjectSlice(ret0, ObjectPath), nil
 	}))
 	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsRef(ctx)
@@ -62,7 +60,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsStatus(ret0), nil
+		return ObjectStatus(ret0), nil
 	}))
 	m.MapSet("isDirty", vm.DirectValue("vcs.isDirty", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		paths := StrSlice(bzArgs, 0)
@@ -86,7 +84,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsCommit(ret0), nil
+		return ObjectCommit(ret0), nil
 	}))
 	m.MapSet("history", vm.DirectValue("vcs.history", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		limit := Int(bzArgs, 0, 10)
@@ -94,7 +92,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsCommitSlice(ret0), nil
+		return ObjectSlice(ret0, ObjectCommit), nil
 	}))
 	m.MapSet("cmd", vm.DirectValue("vcs.cmd", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
@@ -103,7 +101,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsExecResult(ret0), nil
+		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("tags", vm.DirectValue("vcs.tags", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		pattern := Str(bzArgs, 0)
@@ -111,7 +109,7 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueVcsVCSTagSlice(ret0), nil
+		return ObjectSlice(ret0, ObjectVCSTag), nil
 	}))
 	m.MapSet("describe", vm.DirectValue("vcs.describe", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		ret0, err := std.VcsDescribe(ctx)
@@ -121,107 +119,4 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		return StrVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueVcsPath(v types.Path) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("value", vm.StrValue(v.Value))
-	out.MapSet("base", vm.StrValue(v.Base))
-	out.MapSet("isDir", vm.BoolValue(v.IsDir))
-	return out
-}
-
-func buzzValueVcsPathSlice(values []types.Path) vm.Value {
-	items := make([]vm.Value, len(values))
-	for i, value := range values {
-		items[i] = buzzValueVcsPath(value)
-	}
-	return vm.ListValue(items)
-}
-
-func buzzValueVcsStatus(v types.Status) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("clean", vm.BoolValue(v.Clean))
-	itemsFiles := make([]vm.Value, len(v.Files))
-	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = buzzValueVcsPath(v.Files[indexFiles])
-	}
-	out.MapSet("files", vm.ListValue(itemsFiles))
-	return out
-}
-
-func buzzValueVcsPerson(v types.Person) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("email", vm.StrValue(v.Email))
-	return out
-}
-
-func buzzValueVcsCommit(v types.Commit) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("id", vm.StrValue(v.ID))
-	out.MapSet("short", vm.StrValue(v.Short))
-	out.MapSet("author", buzzValueVcsPerson(v.Author))
-	formattedDate := ""
-	if !v.Date.IsZero() {
-		formattedDate = v.Date.Format(time.RFC3339)
-	}
-	out.MapSet("date", vm.StrValue(formattedDate))
-	out.MapSet("subject", vm.StrValue(v.Subject))
-	out.MapSet("body", vm.StrValue(v.Body))
-	itemsParents := make([]vm.Value, len(v.Parents))
-	for indexParents := range v.Parents {
-		itemsParents[indexParents] = vm.StrValue(v.Parents[indexParents])
-	}
-	out.MapSet("parents", vm.ListValue(itemsParents))
-	return out
-}
-
-func buzzValueVcsCommitSlice(values []types.Commit) vm.Value {
-	items := make([]vm.Value, len(values))
-	for i, value := range values {
-		items[i] = buzzValueVcsCommit(value)
-	}
-	return vm.ListValue(items)
-}
-
-func buzzValueVcsExecResult(v types.ExecResult) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("stdout", vm.StrValue(v.Stdout))
-	out.MapSet("stderr", vm.StrValue(v.Stderr))
-	out.MapSet("code", vm.IntValue(int64(v.Code)))
-	out.MapSet("ok", vm.BoolValue(v.OK))
-	return out
-}
-
-func buzzValueVcsSemverVersion(v types.SemverVersion) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("major", vm.IntValue(int64(v.Major)))
-	out.MapSet("minor", vm.IntValue(int64(v.Minor)))
-	out.MapSet("patch", vm.IntValue(int64(v.Patch)))
-	out.MapSet("prerelease", vm.StrValue(v.Prerelease))
-	out.MapSet("metadata", vm.StrValue(v.Metadata))
-	out.MapSet("original", vm.StrValue(v.Original))
-	return out
-}
-
-func buzzValueVcsVCSTag(v types.VCSTag) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("prefix", vm.StrValue(v.Prefix))
-	out.MapSet("version", buzzValueVcsSemverVersion(v.Version))
-	formattedDate := ""
-	if !v.Date.IsZero() {
-		formattedDate = v.Date.Format(time.RFC3339)
-	}
-	out.MapSet("date", vm.StrValue(formattedDate))
-	out.MapSet("id", vm.StrValue(v.ID))
-	return out
-}
-
-func buzzValueVcsVCSTagSlice(values []types.VCSTag) vm.Value {
-	items := make([]vm.Value, len(values))
-	for i, value := range values {
-		items[i] = buzzValueVcsVCSTag(value)
-	}
-	return vm.ListValue(items)
 }

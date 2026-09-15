@@ -10,7 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterArchive builds the "archive" module map and returns it.
@@ -27,7 +26,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueArchiveUncompressResult(ret0), nil
+		return ObjectUncompressResult(ret0), nil
 	}))
 	m.MapSet("compress", vm.DirectValue("archive.compress", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := Str(bzArgs, 0)
@@ -37,7 +36,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueArchiveCompressResult(ret0), nil
+		return ObjectCompressResult(ret0), nil
 	}))
 	m.MapSet("list", vm.DirectValue("archive.list", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := Str(bzArgs, 0)
@@ -46,7 +45,7 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueArchiveArchiveEntrySlice(ret0), nil
+		return ObjectSlice(ret0, ObjectArchiveEntry), nil
 	}))
 	m.MapSet("readFile", vm.DirectValue("archive.readFile", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		src := Str(bzArgs, 0)
@@ -59,50 +58,4 @@ func RegisterArchive(ctx context.Context, sess *buzz.Session) vm.Value {
 		return StrVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueArchivePath(v types.Path) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("value", vm.StrValue(v.Value))
-	out.MapSet("base", vm.StrValue(v.Base))
-	out.MapSet("isDir", vm.BoolValue(v.IsDir))
-	return out
-}
-
-func buzzValueArchiveUncompressResult(v types.UncompressResult) vm.Value {
-	out := vm.NewMap()
-	itemsFiles := make([]vm.Value, len(v.Files))
-	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = buzzValueArchivePath(v.Files[indexFiles])
-	}
-	out.MapSet("files", vm.ListValue(itemsFiles))
-	out.MapSet("bytes", vm.IntValue(int64(v.Bytes)))
-	return out
-}
-
-func buzzValueArchiveCompressResult(v types.CompressResult) vm.Value {
-	out := vm.NewMap()
-	itemsFiles := make([]vm.Value, len(v.Files))
-	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = buzzValueArchivePath(v.Files[indexFiles])
-	}
-	out.MapSet("files", vm.ListValue(itemsFiles))
-	out.MapSet("bytes_in", vm.IntValue(int64(v.BytesIn)))
-	out.MapSet("bytes_out", vm.IntValue(int64(v.BytesOut)))
-	return out
-}
-
-func buzzValueArchiveArchiveEntry(v types.ArchiveEntry) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("name", vm.StrValue(v.Name))
-	out.MapSet("size", vm.IntValue(int64(v.Size)))
-	out.MapSet("is_dir", vm.BoolValue(v.IsDir))
-	return out
-}
-
-func buzzValueArchiveArchiveEntrySlice(values []types.ArchiveEntry) vm.Value {
-	items := make([]vm.Value, len(values))
-	for i, value := range values {
-		items[i] = buzzValueArchiveArchiveEntry(value)
-	}
-	return vm.ListValue(items)
 }

@@ -345,12 +345,13 @@ func TestFsStatMapKeys(t *testing.T) {
 	info, err := FsStat(context.Background(), "os.go")
 	require.NoError(t, err)
 
-	m := info.BuzzObject()
-	require.Contains(t, m, "mtime", "serve's staleness stamp reads st[\"mtime\"]")
-	require.Contains(t, m, "size", "serve's staleness stamp reads st[\"size\"]")
-	assert.Contains(t, m, "mode")
-	assert.Contains(t, m, "is_dir")
-	assert.NotContains(t, m, "modTime", "there is no modTime key; std/examples/fs/stat.buzz once implied otherwise")
+	// The KEY names are pinned where the encoder lives, in
+	// internal/interp/bindings/gen's TestObjectKeys; std cannot import that package.
+	// What this asserts is that stat fills the fields those keys are derived from.
+	require.NotZero(t, info.Mtime, "serve's staleness stamp reads the mtime")
+	require.NotZero(t, info.Size, "serve's staleness stamp reads the size")
+	assert.NotZero(t, info.Mode)
+	assert.False(t, info.IsDir)
 }
 
 // watchCallback adapts a Go func(changed) (stop bool) to the host.Callback the

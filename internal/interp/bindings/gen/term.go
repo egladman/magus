@@ -10,7 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterTerm builds the "term" module map and returns it.
@@ -38,7 +37,7 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueTermTermSize(ret0), nil
+		return ObjectTermSize(ret0), nil
 	}))
 	m.MapSet("colorize", vm.DirectValue("term.colorize", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		s := Str(bzArgs, 0)
@@ -77,10 +76,4 @@ func RegisterTerm(ctx context.Context, sess *buzz.Session) vm.Value {
 		return vm.Null, nil
 	}))
 	return m
-}
-func buzzValueTermTermSize(v types.TermSize) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("width", vm.IntValue(int64(v.Width)))
-	out.MapSet("height", vm.IntValue(int64(v.Height)))
-	return out
 }

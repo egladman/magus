@@ -10,7 +10,6 @@ import (
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
-	"github.com/egladman/magus/types"
 )
 
 // RegisterProc builds the "proc" module map and returns it.
@@ -28,7 +27,7 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueProcExecResult(ret0), nil
+		return ObjectExecResult(ret0), nil
 	}))
 	m.MapSet("shell", vm.DirectValue("proc.shell", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		line := Str(bzArgs, 0)
@@ -37,7 +36,7 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueProcShellCommand(ret0), nil
+		return ObjectShellCommand(ret0), nil
 	}))
 	m.MapSet("which", vm.DirectValue("proc.which", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		cmd := Str(bzArgs, 0)
@@ -63,23 +62,4 @@ func RegisterProc(ctx context.Context, sess *buzz.Session) vm.Value {
 		return BoolVal(ret0), nil
 	}))
 	return m
-}
-func buzzValueProcExecResult(v types.ExecResult) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("stdout", vm.StrValue(v.Stdout))
-	out.MapSet("stderr", vm.StrValue(v.Stderr))
-	out.MapSet("code", vm.IntValue(int64(v.Code)))
-	out.MapSet("ok", vm.BoolValue(v.OK))
-	return out
-}
-
-func buzzValueProcShellCommand(v types.ShellCommand) vm.Value {
-	out := vm.NewMap()
-	out.MapSet("bin", vm.StrValue(v.Bin))
-	itemsArgs := make([]vm.Value, len(v.Args))
-	for indexArgs := range v.Args {
-		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
-	}
-	out.MapSet("args", vm.ListValue(itemsArgs))
-	return out
 }

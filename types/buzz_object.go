@@ -7,12 +7,12 @@ import (
 // Boundary mirrors of the objects magus host methods return. Each is the typed
 // value a Go SDK caller gets and the serializable view a magusfile can annotate
 // (`> FileInfo`, `> HttpResponse`, ...) for compile-checked field access. The
-// Impl returns the struct; its BuzzObject method is the {field: value} map the
-// generated Buzz trampoline turns into the corresponding map. The Buzz `object`
+// Impl returns the struct; the encoder generated for it in
+// internal/interp/bindings/gen turns it into the map the VM reads. The Buzz `object`
 // mirrors are generated from these structs by cmd/magus-utils types (go:generate)
 // and shipped with the host module that returns each one (os, fs, http, encoding,
 // semver, vcs; see internal/spellruntime/hosttypes.go), so the Go struct stays the
-// single source of truth and struct, BuzzObject, and mirror can't drift.
+// single source of truth and struct, encoder, and mirror can't drift.
 
 // BuzzObject is the Buzz `object` a host method's return crosses the boundary
 // as: the map a magusfile sees when it annotates a result (`> FileInfo`,
@@ -24,13 +24,6 @@ import (
 // this is NOT the JSON shape and deliberately differs from it (camelCase keys,
 // `buzz:"-"` omissions, timestamps as RFC3339 text).
 type BuzzObject map[string]any
-
-// The tag excludes buzzobject_gen.go from THIS build. The generator imports this
-// package, so without it a stale generated file (one naming a field that was since
-// renamed or removed) stops types compiling, which stops the generator building, which
-// makes regeneration impossible without hand-editing a file marked DO NOT EDIT.
-//
-//go:generate go run -tags magusgen ../cmd/magus-utils buzzobjects -out buzzobject_gen.go
 
 // FileInfo mirrors fs.stat's {size, mtime, mode, is_dir} object: size in bytes,
 // mtime as Unix milliseconds, mode as the integer permission bits.

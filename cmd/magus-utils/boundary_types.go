@@ -3,6 +3,7 @@ package main
 //go:generate go run . enums -package types -out ../../types/enum_gen.go
 //go:generate go run . enums -package spells -out ../../spells/enum_gen.go
 //go:generate go run . boundarylist -out ../../internal/interp/bindings/gen/boundary_list.go
+//go:generate go run . boundaryobjects -out ../../internal/interp/bindings/gen/boundary_objects.go
 
 import (
 	"reflect"
@@ -126,8 +127,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "ProjectRef", Type: reflect.TypeFor[types.ProjectRef](), RuntimeObject: true},
 	{Name: "KnowledgeSymbolGap", Type: reflect.TypeFor[types.KnowledgeSymbolGap](), RuntimeObject: true},
 	// Registered because KnowledgeAnswer carries it: a struct field on a registered Buzz
-	// object must itself be registered, or the generated BuzzObject() calls a method the
-	// field's type does not have.
+	// object must itself be registered, or the generated encoder calls one the field's
+	// type does not have.
 	{Name: "KnowledgeTextPresence", Type: reflect.TypeFor[types.KnowledgeTextPresence](), RuntimeObject: true},
 	{Name: "KnowledgeAnswer", Type: reflect.TypeFor[types.KnowledgeAnswer](), RuntimeObject: true},
 	{Name: "UnreferencedEntry", Type: reflect.TypeFor[types.UnreferencedEntry](), RuntimeObject: true},
