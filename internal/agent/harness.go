@@ -82,10 +82,10 @@ type HarnessEntries struct {
 
 // HarnessUpdate records an explicit, narrow harness mutation.
 type HarnessUpdate struct {
-	ID         string `json:"id"`
-	Path       string `json:"path"`
-	Changed    bool   `json:"changed"`
-	Planned    bool   `json:"planned,omitempty"`
+	ID      string `json:"id"`
+	Path    string `json:"path"`
+	Changed bool   `json:"changed"`
+	Planned bool   `json:"planned,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
 }
 
@@ -108,9 +108,9 @@ type HarnessVerification struct {
 	Path       string        `json:"path"`
 	Status     HarnessStatus `json:"status"`
 	Reason     string        `json:"reason,omitempty"`
-	Guarded   bool          `json:"guarded,omitempty"`
-	MCPStatus HarnessStatus `json:"mcp_status,omitempty"`
-	MCPReason string        `json:"mcp_reason,omitempty"`
+	Guarded    bool          `json:"guarded,omitempty"`
+	MCPStatus  HarnessStatus `json:"mcp_status,omitempty"`
+	MCPReason  string        `json:"mcp_reason,omitempty"`
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -393,7 +393,10 @@ func ApplyHarness(ctx context.Context, opts HarnessApplyOptions) (HarnessUpdate,
 			if len(d.ManagedEntries) > 0 || len(d.ConfigDefaults) > 0 {
 				return update, fmt.Errorf("descriptor %q declares no harness fragments to write", d.ID)
 			}
-		} else if len(d.ManagedEntries) > 0 && !configInvokesMagus(config) {
+		} else if !configInvokesMagus(config) {
+			// Naming a config path is the obligation, not declaring entries. A descriptor
+			// that contributes no fragment still claims this file is the host's guard
+			// wiring, and a config nothing in it calls magus from is coverage in name only.
 			return update, fmt.Errorf("config does not invoke magus")
 		}
 	}
@@ -415,6 +418,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	}
 	d, source, loadErr := LoadHarness(ctx, root, id)
 	if loadErr != nil {
+		//nolint:nilerr // a missing descriptor is a coverage verdict, carried in Reason, not a command failure
 		return HarnessVerification{ID: id, Status: HarnessUncovered, Reason: loadErr.Error()}, nil
 	}
 	result := HarnessVerification{ID: d.ID, Descriptor: source}
@@ -441,6 +445,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	if decodeErr := decodeHarnessJSON(body, &config); decodeErr != nil {
 		result.Status, result.Reason = HarnessInvalid, "parse existing JSON: "+decodeErr.Error()
 		verifyHarnessMCP(d, &result)
+		//nolint:nilerr // an unparseable host config is an invalid verdict, carried in Reason, not a command failure
 		return result, nil
 	}
 	for _, group := range d.ManagedEntries {
@@ -448,6 +453,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 		if err != nil {
 			result.Status, result.Reason = HarnessInvalid, err.Error()
 			verifyHarnessMCP(d, &result)
+			//nolint:nilerr // a malformed managed-entry path is an invalid verdict, carried in Reason, not a command failure
 			return result, nil
 		}
 		for _, wanted := range group.Entries {
@@ -745,7 +751,7 @@ func writeHarnessAtomically(path string, body []byte) error {
 // hosts; bouncing between LLM providers is the intended case.
 //
 // Omitting wired (or passing a nil/empty slice) means no magusfile providers to
-// union - that is fine. A blank entry inside wired is not: empty and whitespace-
+// union, which is fine. A blank entry inside wired is not: empty and whitespace-
 // only names are rejected rather than skipped, so a bad AddHarness cannot
 // disappear into the union.
 func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
