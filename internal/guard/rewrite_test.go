@@ -37,8 +37,13 @@ PY`,
 		"perl -pi -e 's/a/b/' internal/ledger/store.go",
 		"perl -i -e 's/a/b/' internal/ledger/store.go",
 		"ruby -i -e 'gsub' internal/ledger/store.go",
+		// The backup-suffix spelling of in-place: -i takes "bak" as a value in flag
+		// clusters, but perl/ruby fold it into one word instead.
+		"perl -i.bak -pe 's/a/b/' internal/ledger/store.go",
 		`node -e "require('fs').writeFileSync('internal/ledger/store.go', out)"`,
 		`awk '{print > "internal/ledger/store.go"}' f`,
+		// The append form of the same redirect.
+		`awk '{print >> "internal/ledger/store.go"}' f`,
 		"cat f | python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY",
 	} {
 		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
@@ -61,6 +66,13 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		// Reads.
 		`python3 -c "print(open('internal/ledger/store.go').read())"`,
 		"python3 - <<'PY'\nprint(open('internal/ledger/store.go').read())\nPY",
+
+		// A pure print: awk's range/comparison operators share a character with its
+		// redirect operator, but neither follows a print/printf statement here, so this
+		// is a read like any other. The exact false positive observed live.
+		"awk 'NR>=1,NR<=20' internal/ledger/store.go",
+		// A bare (no `=`) comparison, same reasoning.
+		"awk '$1 > 5' internal/ledger/store.go",
 
 		// Not an interpreter: a heredoc into cat is data, and the lane rule is what judges
 		// where it lands.

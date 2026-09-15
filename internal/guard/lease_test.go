@@ -623,6 +623,12 @@ func TestDenyLeaseScopedLaneWriteStaysQuiet(t *testing.T) {
 		"cp internal/ledger/store.go /tmp/x",
 		`echo "rm -rf internal/ledger"`,
 
+		// A pure print: awk's range/comparison operators share a character with its
+		// redirect operator, but neither follows a print/printf statement here, so
+		// this is a read like any other.
+		"awk 'NR>=1,NR<=20' internal/ledger/store.go",
+		"awk '$1 > 5' internal/ledger/store.go",
+
 		// magus's own argv is never a target: it writes in there by construction, and the
 		// guard grades the agent's tool calls rather than magus's own processes.
 		"./magus run test .",

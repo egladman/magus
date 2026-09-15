@@ -36,6 +36,12 @@ var scriptWriteCalls = []string{
 // file is left alone.
 var openWriteRe = regexp.MustCompile(`open\s*\([^)]*['"][rbt+]*[wa][rbt+]*['"]`)
 
+// awkRedirectRe matches awk's own redirect operators, `>` and `>>`, in the one place awk's
+// grammar accepts a write target: right after a `print` or `printf` statement. A bare `>`
+// or `>=` used as a numeric or string comparison (`NR>=1`, `$1 > 5`) never follows one of
+// those two keywords, so requiring it is what tells a range selection from a write.
+var awkRedirectRe = regexp.MustCompile(`\b(?:print|printf)\b[^;{}\n]*>`)
+
 // scriptWrites reports a program that would write a file, in the spelling name uses.
 func scriptWrites(name, script string, args []string) bool {
 	switch name {
@@ -45,7 +51,7 @@ func scriptWrites(name, script string, args []string) bool {
 		}
 	case "awk":
 		// awk redirects in its own language, so the write is inside the program text.
-		if strings.Contains(script, ">") {
+		if awkRedirectRe.MatchString(script) {
 			return true
 		}
 	}

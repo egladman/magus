@@ -129,6 +129,12 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"grep -r lease .magus",
 		"head -n 5 .magus/lease",
 		"jq . .magus/advisories/anon.served-next",
+
+		// A pure print: awk's range/comparison operators share a character with its
+		// redirect operator, but neither follows a print/printf statement here, so
+		// this is a read like any other.
+		"awk 'NR>=1,NR<=20' .magus/lease",
+		"awk '$1 > 5' .magus/lease",
 	} {
 		assert.Empty(t, denyCacheDirCommand(at, command, DialectBash), "%q does not write into the cache dir", command)
 	}

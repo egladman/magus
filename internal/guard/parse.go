@@ -263,8 +263,11 @@ func onlyReads(name string, args []string) bool {
 		return !hasFlag(args, 'o', "output-file")
 	case "awk":
 		// awk's own language redirects, so the write is inside the program text rather
-		// than on the shell line the parser walked.
-		return !slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, ">") })
+		// than on the shell line the parser walked. Shared with scriptWrites in
+		// rewrite.go rather than a second copy of the pattern: a bare `>` also reads as
+		// a numeric/string comparison (`NR>=1`), so only a `>`/`>>` following print or
+		// printf counts as a write.
+		return !awkRedirectRe.MatchString(strings.Join(args, "\n"))
 	case "find":
 		return !slices.ContainsFunc(args, func(a string) bool {
 			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
