@@ -1180,19 +1180,29 @@ one. Symbols come from a declared SCIP index; see knowledge.symbols in
 the configuration. A workspace with no index has no symbols to report,
 and says so rather than falling back to a text search - a grep result
 and an index result answer different questions, and quietly substituting
-one for the other is how a wrong answer looks right.`,
+one for the other is how a wrong answer looks right.
+
+--text switches to that other question on purpose: a literal substring
+search with no symbol index and no graph, printed as path:line:text like
+every other grep-shaped tool. It is the replacement a guard deny routes a
+recursive grep to, so it answers on a cold worktree with no index built.
+Its exit code is grep's (0 matched, 1 no match, 2 error), not the verdict
+codes the symbol lookup above uses - the two modes answer different
+questions and are not meant to share a contract.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
+		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes)"},
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
-		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, exclude declared-output files entirely instead of searching them and marking the ones that match"},
+		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{
 		{"Every reference to a symbol", "magus refs Open"},
 		{"By fully-qualified node ID", "magus refs symbol:github.com/egladman/magus/Open"},
 		{"As JSON", "magus refs Open -o json"},
+		{"Raw text search, no index needed", "magus refs TODO --text"},
 	},
 }
 

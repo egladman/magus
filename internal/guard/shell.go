@@ -351,6 +351,15 @@ func mentionsMagusCommand(command string, d Dialect) bool {
 	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return c.Name == "magus" })
 }
 
+// trimmableMagus reports a magus invocation whose output the pipe and redirect
+// rules should catch: a structured record with a `-o` shape a text filter has no
+// business reaching for.
+//
+// Two exemptions carry the same reasoning: `magus query output <ref>` (a raw
+// captured log with no schema to project) and `magus refs <pattern> --text` (a
+// raw grep replacement whose whole purpose is being piped or redirected). Every
+// OTHER refs invocation is a symbol lookup that renders a structured record
+// `-o` already shapes, so only the --text spelling is let through.
 func trimmableMagus(cmds []hint.Invocation) bool {
 	for _, c := range cmds {
 		if c.Name != "magus" {
@@ -359,9 +368,19 @@ func trimmableMagus(cmds []hint.Invocation) bool {
 		if len(c.Args) >= 2 && c.Args[0] == "query" && c.Args[1] == "output" {
 			continue
 		}
+		if len(c.Args) >= 1 && c.Args[0] == "refs" && slices.ContainsFunc(c.Args, isRefsTextFlag) {
+			continue
+		}
 		return true
 	}
 	return false
+}
+
+// isRefsTextFlag matches refs' --text flag, spelled either --text or -text (Go's
+// flag package treats a single and a double dash the same), bare or with a value
+// (--text=true).
+func isRefsTextFlag(a string) bool {
+	return a == "-text" || a == "--text" || strings.HasPrefix(a, "-text=") || strings.HasPrefix(a, "--text=")
 }
 
 func isTextFilter(cmds []hint.Invocation) bool {

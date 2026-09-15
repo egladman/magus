@@ -355,6 +355,8 @@ const (
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
+	// refs: --text
+	FlagRefsText = "text"
 	// run: --depth
 	FlagRunDepth = "depth"
 	// run: --detach
@@ -894,6 +896,7 @@ func BindPath(fs *flag.FlagSet) *PathFlags {
 type RefsFlags struct {
 	Refresh     bool // --refresh
 	Occurrences bool // --occurrences
+	Text        bool // --text
 }
 
 // BindRefs registers `magus refs`'s flags on fs and returns the destination.
@@ -901,6 +904,7 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
+	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes)")
 	return &f
 }
 

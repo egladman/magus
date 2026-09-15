@@ -45,8 +45,25 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, "magus refs: requires a symbol ID or name")
+		if rf.Text {
+			fmt.Fprintln(os.Stderr, "magus refs --text: requires a search pattern")
+		} else {
+			fmt.Fprintln(os.Stderr, "magus refs: requires a symbol ID or name")
+		}
 		return errSilent{exitCode: 2}
+	}
+
+	if rf.Text {
+		// Computed here, once, and passed down - the same shape the symbol-miss
+		// branch below uses classify in. inspectWorkspace memoizes globally per
+		// process (see helpers.go), so it belongs at the call site that runs once
+		// per invocation, not inside a function a test may call several times
+		// with different roots.
+		var classify classifyFunc
+		if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
+			classify = ws.ClassifyFiles
+		}
+		return refsTextCmd(ctx, root, pos[0], noGenerated, classify)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -170,6 +187,61 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
 	printIndexStaleness(os.Stdout, out.Answer)
+	return nil
+}
+
+// refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
+// PRINTS matching lines, the shape a guard pipe deny routes a recursive grep to (see
+// internal/guard's trimmableMagus). It runs textScan directly - no symbol index, no
+// knowledge graph - so it answers on a cold worktree with no index built, which is the
+// one thing a grep replacement may never fail to do: textindex.Scan is index-free by
+// design for exactly this reason.
+//
+// Its exit code is grep's: 0 matched, 1 no match, 2 error. Deliberately NOT
+// exitForVerdict (see verdict.go): that contract states what magus VERIFIED about a
+// SYMBOL (absent=2, unknown=1), and a raw text search asks no such question, so
+// reusing it would make "exit 1" mean opposite things depending on a flag on the same
+// command. refs' own -o name format already carves out its own exit meaning per mode
+// for the same reason (see emitOccurrences); this is that same move made explicit
+// for --text rather than left to collide silently with the verdict path.
+func refsTextCmd(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) error {
+	searchRoot := resolveRootOrEmpty(root)
+	if searchRoot == "" {
+		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
+		return errSilent{exitCode: 2}
+	}
+	// A root that cannot be listed at all - missing, not a directory, permission
+	// denied - is a search that never ran, and must not read as "ran and found
+	// nothing" (exit 1). searchableFiles skips an individual entry that vanishes
+	// mid-walk (a live checkout's ordinary churn); this is the coarser check that
+	// the walk never had anything to do in the first place.
+	if _, err := os.ReadDir(searchRoot); err != nil {
+		fmt.Fprintf(os.Stderr, "magus refs --text: cannot search %s: %v\n", searchRoot, err)
+		return errSilent{exitCode: 2}
+	}
+
+	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, noGenerated, classify)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
+		return errSilent{exitCode: 2}
+	}
+
+	matchedFiles := map[string]bool{}
+	for _, m := range matches {
+		fmt.Printf("%s:%d:%s\n", m.Path, m.Line, m.Text)
+		matchedFiles[m.Path] = true
+	}
+	// Same accounting textPresence prints beside a symbol miss, on stderr so stdout
+	// stays exactly the match stream a pipe or xargs expects: any filtering must be
+	// counted and said out loud, because a silent under-report is the one failure
+	// that makes this worse than the grep it replaces.
+	if notes := textPresenceNotes(skipped, generated, len(matchedFiles), classified, noGenerated); len(notes) > 0 {
+		fmt.Fprintf(os.Stderr, "magus refs --text: %s\n", strings.Join(notes, "; "))
+	}
+
+	if len(matches) == 0 {
+		return errSilent{exitCode: 1}
+	}
 	return nil
 }
 

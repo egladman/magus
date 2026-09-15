@@ -117,9 +117,26 @@ func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
 // classify these paths, and the caller must say so rather than imply zero generated
 // files exist.
 func textPresence(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) (hits, files, searched, skipped, generated int, classified bool, err error) {
+	matches, searched, skipped, generated, classified, err := textScan(ctx, root, pattern, noGenerated, classify)
+	if err != nil {
+		return 0, 0, searched, skipped, generated, classified, err
+	}
+	seen := map[string]bool{}
+	for _, m := range matches {
+		seen[m.Path] = true
+	}
+	return len(matches), len(seen), searched, skipped, generated, classified, nil
+}
+
+// textScan is the search both textPresence and `refs --text` run: walk root,
+// apply the same --no-generated exclusion, and return every literal match plus
+// the accounting a reader needs to trust the result (see searchableFiles and
+// textPresence's own doc comment). textPresence reduces the matches to counts;
+// refs --text prints them, which is the one thing this shares with grep.
+func textScan(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) (matches []textindex.Match, searched, skipped, generated int, classified bool, err error) {
 	paths, skipped, err := searchableFiles(root)
 	if err != nil {
-		return 0, 0, 0, skipped, 0, false, err
+		return nil, 0, skipped, 0, false, err
 	}
 
 	genSet := map[string]bool{}
@@ -150,22 +167,22 @@ func textPresence(ctx context.Context, root, pattern string, noGenerated bool, c
 	r := textindex.NewReader()
 	defer func() { _ = r.Close() }()
 
-	matches, err := textindex.Scan(paths, refusingBinary(r.Read), pattern, false)
+	matches, err = textindex.Scan(paths, refusingBinary(r.Read), pattern, false)
 	if err != nil {
-		return 0, 0, len(paths), skipped, generated, classified, err
-	}
-	seen := map[string]bool{}
-	for _, m := range matches {
-		seen[m.Path] = true
+		return nil, len(paths), skipped, generated, classified, err
 	}
 	if !noGenerated && classified {
-		for p := range seen {
-			if genSet[p] {
-				generated++
+		seen := map[string]bool{}
+		for _, m := range matches {
+			if !seen[m.Path] {
+				seen[m.Path] = true
+				if genSet[m.Path] {
+					generated++
+				}
 			}
 		}
 	}
-	return len(matches), len(seen), len(paths), skipped, generated, classified, nil
+	return matches, len(paths), skipped, generated, classified, nil
 }
 
 // textPresenceNotes renders the parenthetical that extends refs' text-presence line:

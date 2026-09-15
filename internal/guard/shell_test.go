@@ -354,6 +354,13 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "magus query output ref1a2b3c | grep -n error"},
 		{command: "magus query output ref1a2b3c | tail -50"},
 		{command: "magus query output ref1a2b3c > /tmp/out.txt"},
+		// `magus refs <pattern> --text` is the other exemption: a raw grep
+		// replacement whose whole purpose is being piped or redirected. Every
+		// OTHER refs invocation (a symbol lookup) still renders a structured
+		// record `-o` shapes, so the deny still fires without --text.
+		{command: "magus refs TODO --text | grep -n fixme"},
+		{command: "magus refs TODO --text > /tmp/hits.txt"},
+		{command: "magus refs Open | grep -n Open", rule: denyRule{Name: denyRuleOutputPipe}},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -1034,6 +1041,18 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.Contains(t, redirected, "silent", "the -s + redirect combination is the case worth calling out")
 
 	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
+}
+
+// TestGuardExemptsRefsTextFromOutputRules pins the --text exemption's SCOPE: it
+// covers exactly the flag that makes refs a grep replacement, not the command
+// name in general.
+func TestGuardExemptsRefsTextFromOutputRules(t *testing.T) {
+	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text | grep -n fixme").Deny,
+		"a raw text search exists to be piped")
+	assert.Empty(t, Evaluate(testDependencies(), "magus refs TODO --text > /tmp/hits.txt").Deny,
+		"and to be redirected")
+	assert.NotEmpty(t, Evaluate(testDependencies(), "magus refs Open | grep -n Open").Deny,
+		"a symbol lookup still renders a structured record -o shapes; only --text is exempt")
 }
 
 // TestStageEverythingDenialNamesDirectStaging pins the replacement `git add -A` is

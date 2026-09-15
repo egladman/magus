@@ -150,6 +150,7 @@ flag query/url
 flag refs/no-generated
 flag refs/occurrences
 flag refs/refresh
+flag refs/text
 flag run/depth
 flag run/detach
 flag run/graph
