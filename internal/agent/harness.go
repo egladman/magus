@@ -24,9 +24,25 @@ const (
 type HarnessStatus string
 
 const (
-	HarnessVerified  HarnessStatus = "verified"
+	HarnessVerified HarnessStatus = "verified"
+	// HarnessUncovered means a config that DECLARES guard wiring is missing it, or the
+	// wired command produced no evidence it runs. Never confuse this with
+	// HarnessSkillsOnly, which is a descriptor that never wired a guard at all.
 	HarnessUncovered HarnessStatus = "uncovered"
 	HarnessInvalid   HarnessStatus = "invalid"
+	// HarnessSkillsOnly is a descriptor with no config path at all: there is
+	// nothing wired to invoke magus, so there is no guard to be covered or
+	// uncovered. Reported distinct from HarnessVerified so a skills-only
+	// descriptor can never read as "the guard runs here": the single most
+	// misleading verdict this surface could give.
+	HarnessSkillsOnly HarnessStatus = "skills-only"
+	// HarnessUnprobed means presence matched (the config carries the declared
+	// fragments) but VerifyHarness could not confirm the wired command actually
+	// answers: the interpreter, jq, or the magus binary the guard script would
+	// resolve is missing from this environment. Distinct from HarnessVerified,
+	// because presence was never proof the guard runs, and distinct from
+	// HarnessUncovered, because the gap is this machine's tooling, not the config.
+	HarnessUnprobed HarnessStatus = "unprobed"
 )
 
 var (
@@ -88,6 +104,20 @@ type HarnessUpdate struct {
 	Changed bool   `json:"changed"`
 	Planned bool   `json:"planned,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
+	// Removed marks this update as RemoveHarness's inverse of apply, so a renderer
+	// can print "removed"/"would remove" instead of "updated"/"would update"
+	// without a second, near-identical struct.
+	Removed bool `json:"removed,omitempty"`
+}
+
+// HarnessRemoveOptions is RemoveHarness's sole input, mirroring
+// HarnessApplyOptions: root, which descriptor, whether to only plan, and the
+// acting lease authority a bound job cannot claim.
+type HarnessRemoveOptions struct {
+	Root        string
+	ID          string
+	DryRun      bool
+	ActingLease string
 }
 
 // HarnessApplyOptions contains the sole authority needed to mutate a harness.
@@ -465,6 +495,169 @@ func ApplyHarness(ctx context.Context, opts HarnessApplyOptions) (HarnessUpdate,
 	return update, nil
 }
 
+// RemoveHarness is ApplyHarness's inverse: it deletes ONLY what apply would have
+// written for this descriptor (the exact managed entries, matched the same way
+// apply finds "this is our hook, just edited", by managed identity, not merely by
+// byte-exact value; and a config_defaults key still holding the value apply wrote),
+// and leaves everything else in the file untouched, including a user's own hooks
+// living beside them.
+//
+// There was no way to undo `harness apply` before this: a descriptor that wires a
+// broken guard command could lock an agent out of editing the very file that is
+// denying it, with no command to recover short of hand-editing host config from
+// outside the session. A flag on apply was considered and rejected: apply's whole
+// contract is "merge toward the descriptor," and inverting that with a flag risks
+// a person reading `apply --remove` as "apply, and also remove something" or
+// forgetting the flag when they meant to restore. A separate verb matches how
+// install/apply/verify already split by concern, and needs no new vocabulary:
+// remove is exactly apply's opposite, so it is named the same way subtract names
+// the opposite of add.
+//
+// This does not ask for confirmation: nothing else on this surface does, and a
+// session locked out by a broken hook needs a command it can run in one shot
+// without an interactive prompt the broken guard might block anyway. What it does
+// instead is print exactly what it removed (RemoveHarness's caller renders
+// HarnessUpdate the same way apply's is rendered, just with different verbs), and
+// it honors --dry-run so a caller can preview a removal before committing to it.
+// The file itself stays under version control or otherwise recoverable, which is
+// the actual safety net for "removed something a person did not mean to remove".
+func RemoveHarness(ctx context.Context, opts HarnessRemoveOptions) (HarnessUpdate, error) {
+	if err := ctx.Err(); err != nil {
+		return HarnessUpdate{}, err
+	}
+	if opts.Root == "" {
+		return HarnessUpdate{}, fmt.Errorf("workspace root is required")
+	}
+	if opts.ActingLease != "" {
+		return HarnessUpdate{}, fmt.Errorf("a bound job (%s) cannot rewire a host harness; have its unbound orchestrator run the explicit remove", opts.ActingLease)
+	}
+	d, _, err := LoadHarness(ctx, opts.Root, opts.ID)
+	if err != nil {
+		return HarnessUpdate{}, err
+	}
+	update := HarnessUpdate{ID: d.ID, Removed: true}
+	if d.Config.Path == "" {
+		// Skills-only: apply never wrote a config fragment, so there is nothing here
+		// for remove to undo.
+		return update, nil
+	}
+	path, err := harnessConfigPath(opts.Root, d.Config.Path)
+	if err != nil {
+		return HarnessUpdate{}, err
+	}
+	update.Path = path
+	body, readErr := os.ReadFile(path)
+	if os.IsNotExist(readErr) {
+		return update, nil
+	}
+	if readErr != nil {
+		return update, fmt.Errorf("agent: read harness config %s: %w", path, readErr)
+	}
+	config := map[string]any{}
+	if err := decodeHarnessJSON(body, &config); err != nil {
+		return update, fmt.Errorf("parse existing JSON: %w", err)
+	}
+	entriesChanged, err := removeManagedEntries(config, d.ManagedEntries)
+	if err != nil {
+		return update, err
+	}
+	defaultsChanged := removeConfigDefaults(config, d.ConfigDefaults)
+	if !entriesChanged && !defaultsChanged {
+		return update, nil
+	}
+	if opts.DryRun {
+		update.Changed = true
+		update.Planned = true
+		return update, nil
+	}
+	encoded, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return update, fmt.Errorf("encode merged JSON: %w", err)
+	}
+	if err := writeHarnessAtomically(path, append(encoded, '\n')); err != nil {
+		return update, fmt.Errorf("agent: write harness config %s: %w", path, err)
+	}
+	update.Changed = true
+	return update, nil
+}
+
+// removeManagedEntries deletes, from each group's array, any entry that is either
+// byte-identical to one of group.Entries or shares its managed identity (so an
+// entry a person hand-edited (a different timeout, an added statusMessage) is
+// still recognized as OURS and removed, exactly as ensureManagedEntries still
+// recognizes it as ours to replace). Anything else in the array is left in place:
+// remove's whole point is to undo this descriptor without undoing entries magus
+// never wrote.
+func removeManagedEntries(config map[string]any, groups []HarnessEntries) (bool, error) {
+	changed := false
+	for _, group := range groups {
+		entries, err := pathEntries(config, group.Path)
+		if err != nil {
+			return false, err
+		}
+		if len(entries) == 0 {
+			continue
+		}
+		kept := make([]any, 0, len(entries))
+		groupChanged := false
+		for _, raw := range entries {
+			entry, ok := raw.(map[string]any)
+			if !ok {
+				kept = append(kept, raw)
+				continue
+			}
+			ours := false
+			for _, wanted := range group.Entries {
+				exact, err := containsExactEntry([]any{raw}, wanted)
+				if err != nil {
+					return false, err
+				}
+				if exact || sameManagedIdentity(entry, wanted) {
+					ours = true
+					break
+				}
+			}
+			if ours {
+				groupChanged = true
+				continue
+			}
+			kept = append(kept, raw)
+		}
+		if groupChanged {
+			setDescriptorEntries(config, group.Path, kept)
+			changed = true
+		}
+	}
+	return changed, nil
+}
+
+// removeConfigDefaults deletes a config_defaults key only when the file still
+// holds exactly the value apply wrote. A key a person changed since is theirs
+// now, not magus's to touch.
+func removeConfigDefaults(config map[string]any, defaults map[string]any) bool {
+	changed := false
+	for key, want := range defaults {
+		got, present := config[key]
+		if !present {
+			continue
+		}
+		gotJSON, err := json.Marshal(got)
+		if err != nil {
+			continue
+		}
+		wantJSON, err := json.Marshal(want)
+		if err != nil {
+			continue
+		}
+		if !bytes.Equal(gotJSON, wantJSON) {
+			continue
+		}
+		delete(config, key)
+		changed = true
+	}
+	return changed
+}
+
 // VerifyHarness validates both the descriptor and the concrete harness config.
 // It reports an explicit status so callers cannot mistake an absent hook for a
 // healthy one. Coverage is a config that still carries the declared fragments
@@ -481,7 +674,13 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	}
 	result := HarnessVerification{ID: d.ID, Descriptor: source}
 	if d.Config.Path == "" {
-		result.Status = HarnessVerified
+		// A descriptor that names no config.path (skills-only) has wired no guard
+		// at all: validateHarnessDescriptor already refuses managed_entries
+		// without a config.path, so there is nothing here to have run. Reporting this as
+		// HarnessVerified was the exact bug: every deny and advise rule is unenforced for
+		// this collaborator, and "verified" is the one word that says otherwise.
+		result.Status = HarnessSkillsOnly
+		result.Reason = "descriptor declares no guard config (skills-only): nothing is wired to invoke magus, so there is nothing to cover"
 		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
@@ -531,8 +730,11 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
-	result.Guarded = true
-	result.Status = HarnessVerified
+	// Presence is not proof: a config that carries the declared fragments verbatim
+	// still needs the wired command to actually answer. probeHarnessCommands runs it
+	// for real, against a synthetic event, and only THAT earns HarnessVerified.
+	result.Status, result.Reason = probeHarnessCommands(ctx, root, config)
+	result.Guarded = result.Status == HarnessVerified
 	verifyHarnessMCP(d, &result)
 	return result, nil
 }

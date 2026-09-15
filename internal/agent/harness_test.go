@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,6 +150,10 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 
 	_, err = ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
 	require.NoError(t, err)
+	// The wired commands now have to actually answer, not merely be present: give
+	// them something real to run.
+	writeStubGuardScript(t, root, "magus-guard-command.sh", "deny")
+	writeStubGuardScript(t, root, "magus-guard-path.sh", "advise")
 	result, err = VerifyHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -183,6 +188,10 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	assert.Contains(t, string(body), `"beforeShell"`)
 	assert.NotContains(t, string(body), `"hooks": [`)
 
+	// cursor-guard.sh's reply dialect is self-contained (see probeEventFor), so the
+	// probe only checks that it answers something; magus-checkpoint.sh renders no
+	// verdict at all and is never probed.
+	writeStubGuardScript(t, root, "cursor-guard.sh", "ok")
 	result, err := VerifyHarness(context.Background(), root, "flat")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -209,7 +218,7 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
     },
     {
       "path": ["hooks", "Stop"],
-      "entries": [{"hooks": [{"type": "command", "command": "magus session checkpoint"}]}]
+      "entries": [{"hooks": [{"type": "command", "command": "sh magus-checkpoint.sh"}]}]
     }
   ]
 }`), 0o644))
@@ -218,6 +227,9 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, update.Changed)
 
+	// magus-checkpoint.sh renders no verdict and is never probed; magus-guard-command.sh
+	// is, so it needs something real behind it now.
+	writeStubGuardScript(t, root, "magus-guard-command.sh", "deny")
 	result, err := VerifyHarness(context.Background(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -287,7 +299,13 @@ func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
 	assert.Contains(t, err.Error(), "does not invoke magus")
 }
 
-func TestSkillsOnlyHarnessVerifiesWithoutAConfig(t *testing.T) {
+// TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified pins the opencode.json defect:
+// a descriptor with no config.path at all wires no guard, and reporting that as
+// HarnessVerified (the behavior this test used to assert) is the single most
+// misleading verdict this surface could give: every deny and advise rule reads
+// as enforced when nothing here can enforce anything. It must read as its own,
+// distinct status instead.
+func TestSkillsOnlyHarnessReportsSkillsOnlyNotVerified(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "harnesses")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
@@ -300,9 +318,11 @@ func TestSkillsOnlyHarnessVerifiesWithoutAConfig(t *testing.T) {
 
 	result, err := VerifyHarness(context.Background(), root, "skills-only")
 	require.NoError(t, err)
-	assert.Equal(t, HarnessVerified, result.Status)
+	assert.Equal(t, HarnessSkillsOnly, result.Status)
+	assert.NotEqual(t, HarnessVerified, result.Status)
 	assert.False(t, result.Guarded)
 	assert.Empty(t, result.Path)
+	assert.NotEmpty(t, result.Reason)
 
 	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "skills-only"})
 	require.NoError(t, err)
@@ -464,6 +484,19 @@ func TestOneBadDescriptorDisqualifiesOnlyItself(t *testing.T) {
 	assert.Equal(t, []string{"test-host"}, ids)
 }
 
+// writeStubGuardScript drops a trivial POSIX sh script at root/name that drains
+// stdin and prints output verbatim, standing in for a shipped guard script so
+// VerifyHarness's probe (harness_probe.go) has something real to execute. Tests
+// that only exercise ApplyHarness's own file-merge mechanics do not need this;
+// only a test that calls VerifyHarness against a command probeHarnessCommands
+// recognizes as guard-shaped does, now that presence alone no longer earns
+// HarnessVerified. See harness_probe_test.go for the probe's own tests.
+func writeStubGuardScript(t *testing.T, root, name, output string) {
+	t.Helper()
+	script := "#!/bin/sh\ncat >/dev/null\nprintf '%s' '" + output + "'\n"
+	require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(script), 0o755))
+}
+
 func writeTestHarness(t *testing.T, root string) {
 	t.Helper()
 	dir := filepath.Join(root, "harnesses")
@@ -482,4 +515,192 @@ func writeTestHarness(t *testing.T, root string) {
     ]
   }]
 }`), 0o644))
+}
+
+// TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults pins defect 1: before this,
+// there was no inverse of `harness apply` at all, so a descriptor that wires a
+// broken guard command could lock an agent out of editing the very file that is
+// denying it, with no command to recover short of hand-editing host config from
+// outside the session. This is the test apply's own existing suite never needed
+// and remove's whole reason to exist: it must undo EXACTLY what apply wrote, and
+// nothing a person added beside it.
+func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "harnesses")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "flat.json"), []byte(`{
+  "schema_version": 2,
+  "id": "flat",
+  "display": {"name": "Flat"},
+  "config": {"path": "flat/hooks.json"},
+  "config_defaults": {"version": 1},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-guard.sh"}]}
+  ]
+}`), 0o644))
+
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
+	require.NoError(t, err)
+
+	path := filepath.Join(root, "flat", "hooks.json")
+	// A person's own key beside magus's, added after apply ran. Neither belongs
+	// to this descriptor, and neither may be touched by remove.
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var config map[string]any
+	require.NoError(t, json.Unmarshal(body, &config))
+	config["mine"] = map[string]any{"kept": true}
+	config["userVersion"] = 7
+	encoded, err := json.MarshalIndent(config, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, encoded, 0o644))
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
+	require.NoError(t, err)
+	assert.True(t, update.Removed)
+	assert.True(t, update.Changed)
+	assert.False(t, update.Planned)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(after), "cursor-guard.sh", "magus's own managed entry must be gone")
+	assert.NotContains(t, string(after), `"version": 1`, "the config_default this descriptor wrote must be gone")
+	assert.Contains(t, string(after), `"kept": true`, "a user's own key must survive")
+	assert.Contains(t, string(after), `"userVersion": 7`, "a user's own key must survive")
+
+	// Verify now reports uncovered: apply's own fragments are gone.
+	result, err := VerifyHarness(context.Background(), root, "flat")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.Status)
+
+	// Idempotent: nothing left of ours to remove a second time.
+	second, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
+	require.NoError(t, err)
+	assert.False(t, second.Changed)
+}
+
+// TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone: a config_defaults key
+// only belongs to remove when the file still holds exactly the value apply wrote.
+// A value the user changed since is theirs now.
+func TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "harnesses")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "flat.json"), []byte(`{
+  "schema_version": 2,
+  "id": "flat",
+  "display": {"name": "Flat"},
+  "config": {"path": "flat/hooks.json"},
+  "config_defaults": {"version": 1},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-guard.sh"}]}
+  ]
+}`), 0o644))
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
+	require.NoError(t, err)
+
+	path := filepath.Join(root, "flat", "hooks.json")
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	// A user bumped "version" themselves after apply ran.
+	changed := strings.Replace(string(body), `"version": 1`, `"version": 2`, 1)
+	require.NoError(t, os.WriteFile(path, []byte(changed), 0o644))
+
+	_, err = RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "flat"})
+	require.NoError(t, err)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Contains(t, string(after), `"version": 2`, "a value the user changed since apply is theirs, not ours to delete")
+}
+
+// TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity mirrors apply's own
+// "same identity, different body" replace-in-place rule (sameManagedIdentity):
+// remove must still recognize an entry as OURS after a person tweaked its timeout
+// or statusMessage, or a stale edited copy of magus's hook survives every remove.
+func TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity(t *testing.T) {
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	path := filepath.Join(root, "test-host", "hooks.json")
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+
+	body, err := os.ReadFile(path)
+	require.NoError(t, err)
+	edited := strings.Replace(string(body), "magus guard: checking command", "a person's own status text", 1)
+	require.NoError(t, os.WriteFile(path, []byte(edited), 0o644))
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(after), "magus-guard-command.sh")
+}
+
+// TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp: apply never writes a fragment for
+// a skills-only descriptor (empty config.path), so remove has nothing to undo.
+func TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "harnesses")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "skills-only.json"), []byte(`{
+  "schema_version": 2,
+  "id": "skills-only",
+  "display": {"name": "Skills Only"},
+  "skills": {"paths": [".agents/skills"], "form": "both"}
+}`), 0o644))
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "skills-only"})
+	require.NoError(t, err)
+	assert.True(t, update.Removed)
+	assert.False(t, update.Changed)
+	assert.Empty(t, update.Path)
+}
+
+// TestRemoveHarnessOnMissingConfigIsANoOp: nothing was ever applied, so there is
+// no file to touch and no error to raise.
+func TestRemoveHarnessOnMissingConfigIsANoOp(t *testing.T) {
+	root := t.TempDir()
+	writeTestHarness(t, root)
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+	assert.False(t, update.Changed)
+	_, statErr := os.Stat(filepath.Join(root, "test-host", "hooks.json"))
+	assert.True(t, os.IsNotExist(statErr))
+}
+
+// TestRemoveHarnessRejectsBoundLease mirrors ApplyHarness's own rule: a bound job
+// cannot rewire a host harness, remove included.
+func TestRemoveHarnessRejectsBoundLease(t *testing.T) {
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	_, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host", ActingLease: "job-123"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bound job")
+}
+
+// TestRemoveHarnessDryRunPlansWithoutWriting mirrors ApplyHarness's own --dry-run
+// contract: report what would change, touch nothing.
+func TestRemoveHarnessDryRunPlansWithoutWriting(t *testing.T) {
+	root := t.TempDir()
+	writeTestHarness(t, root)
+	path := filepath.Join(root, "test-host", "hooks.json")
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
+	require.NoError(t, err)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "test-host", DryRun: true})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+	assert.True(t, update.Planned)
+
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "a dry run must not touch the file")
 }

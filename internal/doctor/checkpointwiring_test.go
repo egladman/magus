@@ -27,6 +27,20 @@ func writeDoctorHarness(t *testing.T, root string) {
     "entries": [{"match":"run", "commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]
   }]
 }`), 0o644))
+	// VerifyHarness now actually runs the wired command (see internal/agent's
+	// harness_probe.go), rather than trusting that "sh magus-guard-command.sh" is
+	// present in the config. This stub is what makes it answer for real: every
+	// caller of guardedHarnessConfig() references this exact script name.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-guard-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	// The probe also checks for AN executable magus before running anything (see
+	// checkProbeEnvironment), purely as a presence gate: it never actually
+	// invokes this file for a "sh magus-guard-command.sh" entry, which resolves
+	// against root on its own. Written only if a caller (writeGuardCanaryStub, for
+	// the real canary check) has not already planted a specific one here.
+	magusStub := filepath.Join(root, "magus")
+	if _, err := os.Stat(magusStub); os.IsNotExist(err) {
+		require.NoError(t, os.WriteFile(magusStub, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	}
 }
 
 func writeCheckpointHarness(t *testing.T, root, body string) {

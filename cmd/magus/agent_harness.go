@@ -25,13 +25,15 @@ func agentHarnessCmd(ctx context.Context, rootOverride string, args []string) er
 		return agentHarnessApplyCmd(ctx, rootOverride, args[1:])
 	case "install":
 		return agentHarnessInstallCmd(ctx, rootOverride, args[1:])
+	case "remove":
+		return agentHarnessRemoveCmd(ctx, rootOverride, args[1:])
 	case "verify":
 		return agentHarnessVerifyCmd(ctx, rootOverride, args[1:])
 	case "-h", "--help", "help":
 		agentHarnessUsage(os.Stdout)
 		return nil
 	default:
-		return usagef("magus agent harness: unknown subcommand %q (want apply, install, or verify)", args[0])
+		return usagef("magus agent harness: unknown subcommand %q (want apply, install, remove, or verify)", args[0])
 	}
 }
 
@@ -168,6 +170,48 @@ func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []strin
 	return nil
 }
 
+// agentHarnessRemoveCmd is ApplyHarness's inverse on the CLI: it deletes only the
+// managed entries and config_defaults values apply would have written, and never
+// asks for confirmation (see RemoveHarness's doc comment for why). It prints
+// exactly what changed the same way apply does, through writeHarnessOutput, and
+// honors --dry-run to preview a removal first.
+func agentHarnessRemoveCmd(ctx context.Context, rootOverride string, args []string) error {
+	fset := flag.NewFlagSet("agent harness remove", flag.ContinueOnError)
+	id := fset.String("id", "", "harness descriptor ID; omit to remove every magusfile-wired provider")
+	bindDisplayFlags(fset)
+	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
+	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
+		return err
+	}
+	if len(fset.Args()) != 0 {
+		return usagef("magus agent harness remove: positional arguments are not accepted")
+	}
+	root := resolveRootOrEmpty(rootOverride)
+	if root == "" {
+		return fmt.Errorf("magus agent harness remove: no workspace here: run it from inside one or pass --root <path>")
+	}
+	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
+	if err != nil {
+		return fmt.Errorf("magus agent harness remove: %w", err)
+	}
+	harnessProblemsFor(ctx, root)
+	for _, harnessID := range ids {
+		update, err := agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{
+			Root:        root,
+			ID:          harnessID,
+			DryRun:      globalCfg.DryRun,
+			ActingLease: proc.LeaseFromContext(ctx),
+		})
+		if err != nil {
+			return fmt.Errorf("magus agent harness remove: %w", err)
+		}
+		if err := writeHarnessOutput(os.Stdout, update); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []string) error {
 	fset := flag.NewFlagSet("agent harness verify", flag.ContinueOnError)
 	id := fset.String("id", "", "harness descriptor ID; omit to verify every magusfile-wired provider")
@@ -201,7 +245,11 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if err := writeHarnessOutput(os.Stdout, result); err != nil {
 			return err
 		}
-		if result.Status != agent.HarnessVerified && firstFail == nil {
+		// Skills-only is not a failure: a descriptor that wires no guard at all (an
+		// empty config.path) has nothing to be uncovered, and treating it as one
+		// would make every skills-only host block `magus agent harness verify`
+		// forever. It must still never print as "verified"; see writeHarnessOutput.
+		if result.Status != agent.HarnessVerified && result.Status != agent.HarnessSkillsOnly && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s (%s)", result.Status, result.Reason)
 		}
 	}
@@ -247,9 +295,16 @@ func writeHarnessOutput(w io.Writer, value any) error {
 	switch typed := value.(type) {
 	case agent.HarnessUpdate:
 		verb := "already current"
-		if typed.Planned {
+		switch {
+		case typed.Removed && typed.Planned:
+			verb = "would remove"
+		case typed.Removed && typed.Changed:
+			verb = "removed"
+		case typed.Removed:
+			verb = "nothing to remove for"
+		case typed.Planned:
 			verb = "would update"
-		} else if typed.Changed {
+		case typed.Changed:
 			verb = "updated"
 		}
 		path := typed.Path
@@ -283,9 +338,13 @@ func writeHarnessOutput(w io.Writer, value any) error {
 }
 
 func agentHarnessUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent harness <apply|install|verify> [--id <harness-id>] [flags]")
+	fmt.Fprintln(w, "Usage: magus agent harness <apply|install|remove|verify> [--id <harness-id>] [flags]")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Apply, install, or verify harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "Apply, install, remove, or verify harnesses selected with magus\\harness.provider(<spell>).")
+	fmt.Fprintln(w, "remove is apply's inverse: it deletes only the managed entries and config_defaults")
+	fmt.Fprintln(w, "values apply would have written, and leaves a user's own hooks beside them untouched.")
+	fmt.Fprintln(w, "It does not ask for confirmation; pass --dry-run to preview one first.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Omit --id to act on every wired provider (several hosts are fine when you bounce")
 	fmt.Fprintln(w, "between LLM tools). Or pass --id for one spell / JSON descriptor under harnesses/,")
 	fmt.Fprintln(w, ".magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses.")

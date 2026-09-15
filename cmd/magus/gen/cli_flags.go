@@ -67,6 +67,8 @@ const (
 	FlagAgentHarnessApplyID = "id"
 	// agent harness install: --id
 	FlagAgentHarnessInstallID = "id"
+	// agent harness remove: --id
+	FlagAgentHarnessRemoveID = "id"
 	// agent harness verify: --id
 	FlagAgentHarnessVerifyID = "id"
 	// agent improve: --all
@@ -1558,6 +1560,18 @@ type AgentHarnessApplyFlags struct {
 func BindAgentHarnessApply(fs *flag.FlagSet) *AgentHarnessApplyFlags {
 	var f AgentHarnessApplyFlags
 	fs.StringVar(&f.ID, FlagAgentHarnessApplyID, "", "Harness ID; omit to apply every magusfile-wired provider")
+	return &f
+}
+
+// AgentHarnessRemoveFlags are the flags declared for `magus agent harness remove`.
+type AgentHarnessRemoveFlags struct {
+	ID string // --id
+}
+
+// BindAgentHarnessRemove registers `magus agent harness remove`'s flags on fs and returns the destination.
+func BindAgentHarnessRemove(fs *flag.FlagSet) *AgentHarnessRemoveFlags {
+	var f AgentHarnessRemoveFlags
+	fs.StringVar(&f.ID, FlagAgentHarnessRemoveID, "", "Harness ID; omit to remove every magusfile-wired provider")
 	return &f
 }
 

@@ -113,7 +113,6 @@ func (u Job) EffectiveCompletionGates() []CompletionGate {
 	return gates
 }
 
-// String renders the check as the command that runs it.
 // String renders the check as a DECLARATION, the shape a person types and a row stores.
 // It is not the command to run: a check naming no charm means the charmless run, and
 // spelling that needs the --no-default-charms flag, which this package cannot render
