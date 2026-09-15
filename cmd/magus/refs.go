@@ -70,11 +70,10 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// it answers about the subset, not the workspace. The declared-index probe is the
 		// authority.
 		//
-		// indexOnly: this is the miss where a stale index IS the explanation. A name refs
-		// cannot resolve is exactly what a build older than the tree would hide, and until
-		// now this path reported it byte-identically to a typo for something that never
-		// existed.
-		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true, true))
+		// This is the miss where a stale index IS the explanation. A name refs cannot
+		// resolve is exactly what a build older than the tree would hide, and this path once
+		// reported it byte-identically to a typo for something that never existed.
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true))
 		// `absent` is true of SYMBOLS and says nothing about the tree. A string literal,
 		// a comment body or a config value is in no symbol index, so a bare absent here
 		// reads as "not in this repository" for exactly the names that are. Counting the
@@ -121,12 +120,10 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return exitForVerdict(ans.Verdict)
 	}
 	// A resolved symbol still carries the coverage verdict: an uncovered project could
-	// hold references this list does not show, whether or not it showed any.
-	//
-	// NOT indexOnly, unlike the unresolved branch above: the symbol resolved, so the index
-	// answered, and its age is a caveat on the rows rather than the reason there are none.
-	// It rides the answer as StaleIndexes either way, which is what -o json was missing.
-	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true, false))
+	// hold references this list does not show, whether or not it showed any. A stale index
+	// caveats a list that has rows and explains one that does not, so the age rides the
+	// answer as StaleIndexes either way and only downgrades the empty case.
+	out.Answer = knowledge.Answer(pos[0], len(out.Refs) > 0, symbolCoverage(ctx, root, pos[0], true))
 
 	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
@@ -156,7 +153,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
-		printIndexStaleness(ctx, os.Stdout, root)
+		printIndexStaleness(os.Stdout, out.Answer)
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
 		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
 		// here, unlike the unresolved branch above: the symbol resolved and its empty
@@ -172,7 +169,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
-	printIndexStaleness(ctx, os.Stdout, root)
+	printIndexStaleness(os.Stdout, out.Answer)
 	return nil
 }
 

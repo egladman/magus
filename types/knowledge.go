@@ -601,17 +601,17 @@ const (
 	// searched. Reporting this as `absent` would assert exactly the fact it failed to
 	// establish, which is the one outcome this whole verdict exists to prevent.
 	ReasonCoverageUnknown KnowledgeUnknownReason = "coverage-unknown"
-	// ReasonIndexStale: the symbol index was read, but it predates the sources it covers,
-	// so a definition added or moved since the build is not in it. Fix: rebuild the index.
-	// Only a lookup whose whole evidence base IS the index reports this: a miss there is
-	// unverifiable, while a general query reads layers the index has no bearing on.
+	// ReasonIndexStale: the symbol index was read, but the sources it covers have changed
+	// since, so a definition added or moved since the build is not in it. Fix: rebuild the
+	// index. Every miss against one reports this, and no hit does: the sites a lookup did
+	// return are still facts, and the ones it did not are unverifiable.
 	ReasonIndexStale KnowledgeUnknownReason = "index-stale"
 )
 
 // KnowledgeSymbolGap is one project whose declared symbol index magus could not read.
-// State reuses SymbolIndexFreshness so reporting staleness later is additive rather than
-// a second enum; today only SymbolIndexNotBuilt is emitted, because the read verbs
-// deliberately probe with a stat rather than opening the workspace's cache.
+// State reuses SymbolIndexFreshness so reporting staleness here later is additive rather
+// than a second enum; today only SymbolIndexNotBuilt is emitted, because a gap is an index
+// magus could not READ and staleness reaches the answer by its own route, as StaleIndexes.
 type KnowledgeSymbolGap struct {
 	Project ProjectRef           `json:"project"          yaml:"project"`
 	State   SymbolIndexFreshness `json:"state"            yaml:"state"`

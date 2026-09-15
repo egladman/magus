@@ -87,6 +87,12 @@ type Magus struct {
 
 	symbolStatus symbolStatusCache
 
+	// probeCache backs freshnessCache on an Inspect-constructed workspace, which has no
+	// cache of its own. Opened at most once, because the handle carries the mtime-keyed
+	// hash memo: a second probe in the same process re-stats rather than re-hashes.
+	probeCacheOnce sync.Once
+	probeCache     *cache.Cache
+
 	wsReg *WorkspaceRegistry
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level

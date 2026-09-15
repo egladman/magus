@@ -559,9 +559,9 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 // accumulation per lookup, and a never-built index is the case that actually occurs. A
 // present-but-corrupt index therefore reads as covered here; the graph build logs it.
 //
-// Freshness is out of scope for the same reason: deciding whether an index is merely STALE
-// needs a cache handle, and the read verbs that call this inspect the workspace rather
-// than opening it (opening writes).
+// Freshness is out of scope here, but no longer unreachable: an index that is merely STALE
+// is a different fact from one that could not be read, and SymbolIndexStatus answers it
+// from the cache. A gap says the evidence is missing; staleness says it is behind.
 func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config.Config, log *slog.Logger) (gaps []types.KnowledgeSymbolGap, ok bool) {
 	if log == nil {
 		log = slog.Default()

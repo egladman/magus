@@ -203,7 +203,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	out := g.Query(input, qf.Budget)
-	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer, false))
+	out.Answer = knowledge.Answer(input, out.MatchCount > 0, symbolCoverage(ctx, root, input, seedsLazyLayer))
 
 	nx := newNextGate(root)
 	next := nx.served(hint.NextForQuery(out))
@@ -229,7 +229,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if out.MatchCount == 0 {
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
 		emitNearest(os.Stdout, g.NearestNode(input))
-		printIndexStaleness(ctx, os.Stdout, root)
+		printIndexStaleness(os.Stdout, out.Answer)
 		// An empty result set is still a legitimate answer to a search, so this exits 0 on
 		// `absent` and only fails on `unknown`. See exitForQuery.
 		return exitForQuery(out)
@@ -247,7 +247,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	fmt.Printf("\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
 	fmt.Println("Run with -o json for the full subgraph.")
 	printNext(os.Stdout, nx, next)
-	printIndexStaleness(ctx, os.Stdout, root)
+	printIndexStaleness(os.Stdout, out.Answer)
 	return nil
 }
 
@@ -750,7 +750,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		// provably held no code symbols. Reporting that as "no node matches" is how a
 		// real symbol comes to look nonexistent, but only when the input could have
 		// named one, so a typo'd `kind:target` still gets the absent verdict it deserves.
-		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsLazyLayer, false))
+		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], seedsLazyLayer))
 		fmt.Fprintf(os.Stderr, "magus explain: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, hint.Refs.With(pos[0]))
 		emitNearest(os.Stderr, g.NearestNode(pos[0]))
@@ -782,7 +782,9 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 	printNext(os.Stdout, nx, next)
-	printIndexStaleness(ctx, os.Stdout, root)
+	// explain's output carries no answer record, so the found branch builds the one every
+	// other surface builds rather than reaching past it for the raw observation.
+	printIndexStaleness(os.Stdout, knowledge.Answer(pos[0], true, symbolCoverage(ctx, root, pos[0], seedsLazyLayer)))
 	return nil
 }
 

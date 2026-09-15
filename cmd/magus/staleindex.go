@@ -4,17 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	magus "github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/types"
 )
 
 // The staleness line refs, query and explain print under an answer drawn from a symbol
@@ -31,31 +26,40 @@ import (
 // the neighbouring case, an answer that found NOTHING; this one speaks under an answer
 // that found something and may be missing the rest.
 //
-// Freshness by MTIME, not through the cache. SymbolGaps records the reason it stops short
-// of freshness: deciding whether an index would replay needs a cache handle, and these
-// verbs INSPECT the workspace rather than opening it, because opening writes. A file newer
-// than the index that covers it is the same question answered with two stats, and it is
-// wrong only in the direction that stays quiet.
-
-// staleIndexScanLimit bounds the per-project walk. A tree past it is one where a banner is
-// not worth the stat calls, so the probe gives up and says nothing rather than slowing
-// every lookup down to answer a question about tidiness.
-const staleIndexScanLimit = 20000
+// Freshness is the CACHE's question, asked of the cache. It used to be two stats: any
+// source file with an mtime past the index's. That was not merely approximate, it was
+// unclearable. `format` and `generate` rewrite files with identical bytes, `go-build`
+// chains through `format`, and a scip run that replays does not rewrite the index, so
+// mtimes advanced while content did not and `magus graph build` could never clear the
+// staleness this banner reported. The cache compares content, so a rewrite that changes no
+// bytes is no longer a change, and the remedy the banner names is one that works.
 
 // printIndexStaleness writes the staleness line under an answer, or nothing when every
 // built index is current.
 //
+// It reads the ANSWER rather than probing again. Probing here printed the banner under
+// verdicts it had no bearing on: a `kind=author` lookup cannot reach the symbol layer, so
+// Answer drops staleness from its scope and says `absent`, and this line then contradicted
+// it in the next breath. One observation, two renderings.
+//
+// Silent when the verdict already IS the staleness: printVerdict's index-stale arm names
+// the same projects and the same refresh, and the same fact in two vocabularies teaches a
+// reader to skip both.
+//
 // Text only, and the callers are all inside their text arm already: a structured caller
 // reads coverage off the answer record, and a line appended to json would corrupt it.
-func printIndexStaleness(ctx context.Context, w io.Writer, root string) {
-	if notice := staleIndexNotice(staleIndexProjects(ctx, root)); notice != "" {
+func printIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) {
+	if ans.Reason == types.ReasonIndexStale {
+		return
+	}
+	if notice := staleIndexNotice(ans.StaleIndexes); notice != "" {
 		fmt.Fprint(w, notice)
 	}
 }
 
 // staleIndexNotice renders the line, or "" for an empty list. Split from the probe so the
-// two halves are testable apart: what is stale is a filesystem question, and what to say
-// about it is not.
+// two halves are testable apart: what is stale is the cache's answer, and what to say about
+// it is not.
 func staleIndexNotice(stale []string) string {
 	if len(stale) == 0 {
 		return ""
@@ -76,81 +80,39 @@ func plural(n int, one, many string) string {
 }
 
 // staleIndexProjects lists, workspace-relative and sorted, the projects whose built symbol
-// index predates a source file it covers.
+// index would be rebuilt for the current sources.
 //
 // Silent on every uncertainty, which is the same contract every other advisory on this
 // surface keeps. A project with NO index is deliberately not reported here: that is the
 // gap probe's answer, printVerdict already renders it as "outside coverage", and one fact
 // stated twice in two vocabularies teaches a reader to skip both.
+//
+// The verdict comes from SymbolIndexStatus, the same probe `magus status` prints, so the
+// banner and the status table cannot disagree about one index. The concrete type is what
+// carries it: Inspect returns a *magus.Magus behind the domain interface, and the freshness
+// question needs the cache, which no domain interface exposes.
 func staleIndexProjects(ctx context.Context, root string) []string {
 	ws, err := inspectWorkspace(ctx, root)
 	if err != nil || ws == nil {
 		return nil
 	}
-	projects, err := ws.ListProjects(ctx)
-	if err != nil {
-		return nil
-	}
-	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
-	if err != nil {
+	m, ok := ws.(*magus.Magus)
+	if !ok {
 		return nil
 	}
 	var stale []string
-	for _, p := range projects.Projects {
-		// IndexPath is the conventional location. A project that declared its index
-		// somewhere else through knowledge.symbols is not found here and draws silence,
-		// which is the right way to be wrong: an override reported as stale would be a
-		// banner nobody can clear.
-		info, serr := os.Stat(symbols.IndexPath(cacheDir, p.Dir))
-		if serr != nil {
+	for _, s := range m.SymbolIndexStatus(ctx) {
+		if s.Freshness != types.SymbolIndexStale {
 			continue
 		}
-		if sourceNewerThan(p.Dir, info.ModTime()) {
-			path := p.Path
-			if path == "" {
-				path = "."
-			}
-			stale = append(stale, path)
+		path := s.Project.Path
+		if path == "" {
+			path = "."
 		}
+		stale = append(stale, path)
 	}
 	slices.Sort(stale)
 	return stale
-}
-
-// sourceNewerThan reports whether any file under dir was modified after cutoff.
-//
-// It stops at the FIRST one. The question is whether the index is behind, not by how much
-// or because of what, so the walk is over the moment one file answers it, which is the
-// common case in a session that has been editing, and the case where the walk would
-// otherwise cost the most.
-func sourceNewerThan(dir string, cutoff time.Time) bool {
-	seen, newer := 0, false
-	// The error is swallowed at every level: an unreadable subtree means magus cannot
-	// establish staleness there, and a probe that cannot establish it says nothing.
-	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal
-		}
-		if d.IsDir() {
-			// The root itself is never pruned: a project directory whose own name looks
-			// ignorable is still the project being asked about.
-			if path != dir && project.IsIgnoreDir(d.Name()) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if seen++; seen > staleIndexScanLimit {
-			return fs.SkipAll
-		}
-		// An entry that vanished between the walk and the stat says nothing about
-		// freshness either way, so it is skipped rather than guessed at.
-		if info, ierr := d.Info(); ierr == nil && info.ModTime().After(cutoff) {
-			newer = true
-			return fs.SkipAll
-		}
-		return nil
-	})
-	return newer
 }
 
 // staleGraphAdvice is what the guard says to a graph read about to answer from an index

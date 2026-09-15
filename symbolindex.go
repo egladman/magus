@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
@@ -451,23 +452,28 @@ func (m *Magus) SymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus
 }
 
 // computeSymbolIndexStatus does the actual read-only work: an index-file existence check
-// plus a Cache.Fresh probe per symbol-capable project. Sorted by project.
+// plus a cache-freshness probe per symbol-capable project. Sorted by project.
 func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolIndexStatus {
+	capable, langs := m.symbolCapableWithLanguage()
+	if len(capable) == 0 {
+		return nil
+	}
 	cacheDir := resolveCacheDir(m.Root(), m.cfg)
-	var out []types.SymbolIndexStatus
-	for _, p := range m.All() {
-		lang, ok := symbolCapableLanguage(p)
-		if !ok {
-			continue
-		}
-		s := types.SymbolIndexStatus{Project: types.NewProjectRef(p.Path, p.Dir), Language: lang, Freshness: types.SymbolIndexNotBuilt}
+	// Probed once for the whole sweep, the way a run probes once per invocation: each
+	// tool version costs a subprocess spawn.
+	toolVersions := m.toolVersionsByProject(ctx, capable)
+	observations := m.probeObservations(ctx, capable)
+	c := m.freshnessCache(ctx)
+	out := make([]types.SymbolIndexStatus, 0, len(capable))
+	for _, p := range capable {
+		s := types.SymbolIndexStatus{Project: types.NewProjectRef(p.Path, p.Dir), Language: langs[p.Path], Freshness: types.SymbolIndexNotBuilt}
 		if _, err := os.Stat(symbols.IndexPath(cacheDir, p.Dir)); err == nil {
 			// The index exists; it is fresh only if the scip step would replay for the
 			// current sources (a cache hit means the op would not re-run, so the index
 			// is current).
 			s.Freshness = types.SymbolIndexStale
-			if m.cache != nil {
-				if fresh, ferr := m.cache.IsCached(ctx, m.buildStep(p, symbols.IndexOp)); ferr == nil && fresh {
+			if c != nil {
+				if fresh, ferr := c.IsCached(ctx, m.symbolIndexStep(p, toolVersions[p.Path], observations[p.Path])); ferr == nil && fresh {
 					s.Freshness = types.SymbolIndexFresh
 				}
 			}
@@ -476,6 +482,62 @@ func (m *Magus) computeSymbolIndexStatus(ctx context.Context) []types.SymbolInde
 	}
 	slices.SortFunc(out, func(a, b types.SymbolIndexStatus) int { return cmp.Compare(a.Project.Path, b.Project.Path) })
 	return out
+}
+
+// symbolCapableWithLanguage returns the symbol-capable projects and each one's language,
+// in workspace order. Same predicate symbolCapableProjects uses; this shape keeps the
+// *types.Project the cache step needs.
+func (m *Magus) symbolCapableWithLanguage() ([]*types.Project, map[string]string) {
+	var capable []*types.Project
+	langs := map[string]string{}
+	for _, p := range m.All() {
+		if lang, ok := symbolCapableLanguage(p); ok {
+			capable = append(capable, p)
+			langs[p.Path] = lang
+		}
+	}
+	return capable, langs
+}
+
+// symbolIndexStep is the cache step a scip run for p mints, so a freshness probe against
+// it finds the manifest that run wrote.
+//
+// applyRunKeying is the whole point. buildStep alone omits the tool versions and probed
+// observations the run scheduler stamps, so a probe that skipped it hashed a step no run
+// had ever minted: the lookup missed every time and every built index read as
+// out-of-date. Charmless because ReindexSymbols runs the op with no RunOptions.
+func (m *Magus) symbolIndexStep(p *types.Project, toolVersions []string, observations map[string]string) cache.Step {
+	step := m.buildStep(p, symbols.IndexOp)
+	applyRunKeying(&step, toolVersions, observationsForTarget(p, symbols.IndexOp, observations), nil)
+	return step
+}
+
+// freshnessCache is the handle a read-only freshness probe hashes against: the
+// workspace's own cache when it was opened, and a bare local one otherwise.
+//
+// An Inspect-constructed workspace has no cache on purpose, because Open also wires
+// telemetry, the remote backend and machine admission. A manifest lookup needs none of
+// those, and without this the verbs that only INSPECT could not ask the cache's question
+// at all: they compared mtimes instead, which `format` advances on a rewrite that changes
+// no bytes, so they reported a staleness `magus graph build` could not clear.
+//
+// cache.Open does touch the cache DIRECTORY (it creates it and writes a short-lived
+// mtime-resolution probe), which is why the inspect-only verbs avoided it. Nothing in the
+// working tree is written, and a lookup that cannot say whether its answer is complete was
+// the worse trade.
+func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
+	if m.cache != nil {
+		return m.cache
+	}
+	m.probeCacheOnce.Do(func() {
+		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
+		if err != nil {
+			slog.WarnContext(ctx, "magus: cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
+			return
+		}
+		m.probeCache = c
+	})
+	return m.probeCache
 }
 
 // ReindexSymbols runs the scip op for every symbol-capable project, refreshing each

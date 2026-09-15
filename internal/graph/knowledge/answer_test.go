@@ -102,27 +102,28 @@ func lazyNodes(g *Graph) []types.KnowledgeNode {
 // A probe that did not run outranks every other reason: magus cannot report what a layer
 // was missing when it could not establish what it had.
 func TestAnswerFailedProbeOutranksTheRest(t *testing.T) {
-	ans := Answer("Foo", false, Coverage{Seeded: false, Probed: false, Stale: []string{"."}, IndexOnly: true})
+	ans := Answer("Foo", false, Coverage{Seeded: false, Probed: false, Stale: []string{"."}})
 	assert.Equal(t, types.KnowledgeAnswer{
 		Verdict: types.VerdictUnknown, Reason: types.ReasonCoverageUnknown, StaleIndexes: []string{"."},
 	}, ans)
 }
 
-// A stale index downgrades only the verb whose whole evidence base IS the index, and only
-// on a miss. Anything wider would make the verdict noise in an actively edited tree.
-func TestAnswerIndexStaleOnlyForAnIndexOnlyMiss(t *testing.T) {
+// A stale index downgrades every miss and no hit. `absent` claims magus searched
+// everything it could reach, which a lookup answered from an index magus knows is behind
+// cannot say; query used to print that claim directly under its own "stale index" line.
+func TestAnswerIndexStaleDowngradesEveryMiss(t *testing.T) {
 	stale := Coverage{Seeded: true, Probed: true, Stale: []string{"pkg/a"}}
 
-	indexOnly := stale
-	indexOnly.IndexOnly = true
 	assert.Equal(t, types.KnowledgeAnswer{
 		Verdict: types.VerdictUnknown, Reason: types.ReasonIndexStale, StaleIndexes: []string{"pkg/a"},
-	}, Answer("Foo", false, indexOnly), "refs cannot verify a miss against an index older than the tree")
+	}, Answer("Foo", false, stale), "a miss against an index older than the tree is not a verified absence")
 
-	assert.Equal(t, types.KnowledgeAnswer{Verdict: types.VerdictAbsent, StaleIndexes: []string{"pkg/a"}},
-		Answer("Foo", false, stale), "a general query reads layers the index has no bearing on")
 	assert.Equal(t, types.KnowledgeAnswer{Verdict: types.VerdictFound, StaleIndexes: []string{"pkg/a"}},
-		Answer("Foo", true, indexOnly), "the sites it did return are still facts")
+		Answer("Foo", true, stale), "the sites it did return are still facts")
+
+	assert.Equal(t, types.KnowledgeAnswer{Verdict: types.VerdictAbsent},
+		Answer("Foo", false, Coverage{Seeded: true, Probed: true}),
+		"a current index still verifies an absence")
 }
 
 // The caveat has to ride the payload, not the console: -o json and MCP emitted a bare
