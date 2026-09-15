@@ -550,12 +550,12 @@ func TestGlobToRe(t *testing.T) {
 	}
 }
 
-// TestCorpusDistribution pins the aggregate behavior over a realistic command
-// corpus. The exact numbers are a snapshot: a change that starts
+// TestCommandDistribution pins the aggregate behavior over a realistic set of
+// recorded commands. The exact numbers are a snapshot: a change that starts
 // over-suggesting (or silently stops abstaining) moves them and must be seen
 // and re-justified here, not discovered in advisory noise later.
-func TestCorpusDistribution(t *testing.T) {
-	f, err := os.Open("testdata/corpus.txt")
+func TestCommandDistribution(t *testing.T) {
+	f, err := os.Open("testdata/commands.txt")
 	require.NoError(t, err)
 	defer f.Close()
 
@@ -568,7 +568,7 @@ func TestCorpusDistribution(t *testing.T) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		// The corpus is controlled (no spaces inside an argument), so a
+		// The command list is controlled (no spaces inside an argument), so a
 		// whitespace split plus quote-stripping stands in for a shell parser
 		// without depending on one.
 		fields := strings.Fields(line)

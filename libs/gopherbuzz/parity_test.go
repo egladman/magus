@@ -1638,7 +1638,7 @@ fun probe() > str {
 // gopherbuzz rejected. They are grouped because they share a failure MODE that the
 // allowlists cannot catch: a strictness check that over-claims rejects correct
 // source, and neither upstream suite contains the shape, so both stayed green while
-// magus's own corpus failed to load.
+// magus's own tree failed to load.
 
 // TestParity_WriteThroughANameJustifiesItsVar covers the var-not-assigned check's
 // blind spot. It fired only for an *ast.IdentExpr target, so `digests[p] = h` and
@@ -1730,11 +1730,11 @@ fun probe() > int {
 }
 
 // TestParity_MutatorThroughAnImmutableAnnotationIsRejected pins the rule that forced
-// magus's own 126-site migration, because the corpus was what was wrong. Upstream
+// magus's own 126-site migration, because the tree was what was wrong. Upstream
 // rejects this source in the same words ("Method `append` requires mutable list"):
 // the ANNOTATION narrows the type, so appending through it is a type error however
-// the value was built. Recorded as a test so nobody relaxes the rule to spare a
-// corpus again.
+// the value was built. Recorded as a test so nobody relaxes the rule to spare
+// another migration.
 func TestParity_MutatorThroughAnImmutableAnnotationIsRejected(t *testing.T) {
 	s := buzz.NewSession(context.Background())
 	t.Cleanup(func() { _ = s.Close() })

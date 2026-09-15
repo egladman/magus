@@ -2801,7 +2801,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     if (reports.len() == 0) {
         throw "buzz-test: no LCOV fragments under coverage/buzz/; --coverprofile did not write";
     }
-    // keep "" matches every SF: path (startsWith("") is true). The corpus is already
+    // keep "" matches every SF: path (startsWith("") is true). It is already
     // the files buzz-test ran; node_modules exclusion in lcov is a no-op here.
     final pct = lcov\mergePercent(reports, keep: "");
     final wanted = badge\coverage("buzz coverage", percent: pct, radius: 3);

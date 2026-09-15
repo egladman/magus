@@ -263,12 +263,12 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.outDir + "/site.css"]);
     // console.css: the console-app-only shell (app bar, launcher, status bar, full-height
     // layout), loaded by /dashboard/, /logs/, /graph/ and the playground status bar but NOT
-    // the docs corpus. Minified to gen root, enumerated in the precache/allowlist next to
+    // the docs pages. Minified to gen root, enumerated in the precache/allowlist next to
     // site.css.
     esbuild(["src/styles/console.css", "--minify", "--outfile=" + site.outDir + "/console.css"]);
     // ui-panels.css: the shared nav-triggered UI panels (settings gear dropdown + reference
     // drawer) used by BOTH docs pages and console apps. Separate from console.css so the docs
-    // corpus can load only this. Gen-root, precached like the others.
+    // pages can load only this. Gen-root, precached like the others.
     esbuild(["src/styles/ui-panels.css", "--minify", "--outfile=" + site.outDir + "/ui-panels.css"]);
     esbuild(["src/styles/theme.css", "--minify", "--outfile=" + site.outDir + "/theme.css"]);
     // The console surfaces (graph/logs/dashboard/activity) live in the standalone console/
@@ -286,7 +286,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // build-playground target, not copied from a committed vendor/ tree - see that
     // target for why they stopped being committed inputs. Nothing to copy here.
     // Gather every docs page's relatedness metadata BEFORE any page renders, so each page's
-    // "Related" cards resolve titles/URLs against the full corpus. collectDocPages reads only
+    // "Related" cards resolve titles/URLs against the full docPages set. collectDocPages reads only
     // frontmatter, so it is free of the render state below.
     site.collectDocPages("");
     // Parse the glossary vocabulary before the walk so every page can auto-link its terms.
@@ -343,7 +343,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // get stubs in the same pass.
     // After the walk: every child's title and description is known by now.
     renderSectionIndexes(site);
-    // After the section indexes: both index the same corpus, and a tag page's cards are drawn
+    // After the section indexes: both index the same page set, and a tag page's cards are drawn
     // from docPages, which the synthesized overviews have finished contributing to by here.
     // Which tags get a page was already decided pre-walk by collectTagIndex, so the chips
     // rendered during the walk and the pages written here cannot disagree.
@@ -371,7 +371,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     writeManifest(site);
 
     // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown
-    // at <url>index.md. A post-walk aggregate over the corpus, like search-index.json below.
+    // at <url>index.md. A post-walk aggregate over docPages, like search-index.json below.
     writeLLMsIndex(site);
 
     // Flat {url, title, text, tags, description?} record per page; search.js fetches it

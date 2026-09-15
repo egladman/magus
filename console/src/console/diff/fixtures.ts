@@ -13,7 +13,7 @@
 //
 // Two tests hold it there, because a rule that lives only in a comment is a rule with roughly
 // even odds. One fails if any non-test module imports this. The other parses demo.patch with
-// BOTH readers and compares the trees - that patch is the one corpus which exists in both
+// BOTH readers and compares the trees - that patch is the one fixture which exists in both
 // forms, since Go's output for it is committed to gen/demo.ts, so "these two could drift" is
 // answered on every run rather than promised in a header.
 

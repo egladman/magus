@@ -445,8 +445,8 @@ function describeQuery(raw: string): QueryPart[] {
 
 // runSearch scores a caller-supplied index against the raw query and returns matches sorted
 // by relevance (ties broken by shorter title). The index is INJECTED by the caller on every
-// call - the engine holds no corpus of its own. Needs at least one positive term (a bare
-// -exclusion or pure operators match nothing, avoiding a stray "-" dumping the corpus). The
+// call - the engine holds no index of its own. Needs at least one positive term (a bare
+// -exclusion or pure operators match nothing, avoiding a stray "-" dumping the index). The
 // caller's record type flows through the generic, so results carry the full records back.
 export function runSearch<E extends TextSearchEntry>(
   index: readonly E[],

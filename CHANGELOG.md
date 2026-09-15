@@ -1070,7 +1070,7 @@ https://github.com/egladman/magus/compare/v0.3.0...v0.4.2
   `magus notes promote` carries the excerpt into the note. Nothing is captured
   automatically and nothing gates on it.
 - **`magus agent adoption` measures whether agents actually use the knowledge graph.** It
-  reads a corpus of shell commands (stdin or `--commands`) and reports how often the graph
+  reads a set of recorded shell commands (stdin or `--commands`) and reports how often the graph
   (`query`/`refs`/`explain`/`path`) was reached versus a raw text search, the graph-to-grep
   ratio, and the top repo-wide greps whose pattern is a real identifier - each with the graph
   command to try for it. That command is routed by the pattern's shape through the same
@@ -1786,7 +1786,7 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   contract. Adding a decision kind or a guard surface without wiring every host now
   fails `go test`, as does a declaration that disagrees with the parity table in the
   agents guide. A declaration can also be sincere and wrong, so the templates are now
-  EXECUTED as well: a testscript corpus runs the three POSIX sh templates against real
+  EXECUTED as well: a testscript suite runs the three POSIX sh templates against real
   host events with a real binary, and the OpenCode plugin's transport cases run under
   node with `Bun.spawn` supplied by the test, leaving the shipped artifact untouched.
   Both are tied back to the contract - a new decision or surface fails until an

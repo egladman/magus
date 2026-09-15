@@ -143,14 +143,14 @@ It does not mean vendors expose the same tools, payloads, or lifecycle events.
 ## Manual host end-to-end harness
 
 The ordinary checks are deterministic: vendored schemas validate configuration
-and reply shapes, and the fixture-driven transport corpus executes every guard
+and reply shapes, and the fixture-driven transport cases execute every guard
 decision cell against the shipped adapters. That proves the guard's decision
 and adapter behavior for controlled events; it does not prove that a locally
 installed vendor client discovers configuration or dispatches a real hook.
 
 That separate, opt-in end-to-end check currently proves one narrow boundary:
 host discovery and delivery of a **denied command**. It is not a general host
-certification or a replacement for the deterministic corpus:
+certification or a replacement for the deterministic cases:
 
 ```sh
 MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \

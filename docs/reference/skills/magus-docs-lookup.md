@@ -3,8 +3,8 @@ title: magus-docs-lookup
 generated_from: internal/agent/skills/magus-docs-lookup/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs-lookup]
-skill_full_bytes: 4261
-skill_short_bytes: 3434
+skill_full_bytes: 4259
+skill_short_bytes: 3432
 ---
 
 # magus-docs-lookup
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `76` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `9d63308627a8` |
+| `skill-content` | `4acef032198f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -56,7 +56,7 @@ magus agent install --tar | tar -xO -f - magus-docs-lookup/SKILL.md
 ````markdown
 # Navigating the magus docs
 
-magus ships one official documentation corpus. Reach for it when a magus-domain fact
+magus ships one official documentation site. Reach for it when a magus-domain fact
 is not derivable from the workspace graph - they are the source of
 truth for magus's own behavior.
 
@@ -146,7 +146,7 @@ magus agent install --tar | tar -xO -f - magus-docs-lookup-full/SKILL.md
 ````markdown
 # Navigating the magus docs
 
-magus ships one official documentation corpus. It is a static site, so its
+magus ships one official documentation site. It is a static site, so its
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT. Reach for it when a magus-domain fact
 is not derivable from the workspace graph - the docs are the source of truth for

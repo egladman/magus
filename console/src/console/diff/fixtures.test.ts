@@ -39,7 +39,7 @@ test("the fixture reader never mints a hunk digest", () => {
 
 // The drift this file's header worries about, closed rather than merely disclaimed.
 //
-// demo.patch is the one corpus that exists in BOTH forms: as a patch, and as the Go reader's
+// demo.patch is the one fixture that exists in BOTH forms: as a patch, and as the Go reader's
 // output committed to gen/demo.ts. So the test-only reader can be held against the real one on
 // the same bytes, and the residual risk of "render tests exercise a tree production never
 // produces" goes away.

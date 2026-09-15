@@ -882,13 +882,13 @@ understands precisely.
 of a queryable, committable code knowledge graph with an honest audit trail,
 and its verb vocabulary was good enough that magus reuses it outright: query,
 explain, path. The two tools have different jobs, though. Graphify is a
-general corpus indexer - point it at any folder of code, docs, papers, or
+general document indexer - point it at any folder of code, docs, papers, or
 media and it extracts a graph, using an LLM pass for non-code content. magus
 only ever models its own domain, and its graph is assembled entirely from
 declarations it already verifies as a build tool (the project DAG, target
 sources and outputs, spell and module registries), so the build is
 deterministic, runs with zero LLM involvement, and stays cache-owned rather
-than committed. If you want a graph of an arbitrary corpus, Graphify is the
+than committed. If you want a graph of an arbitrary document set, Graphify is the
 right tool; the magus graph is narrower and, within its domain, checkable
 edge by edge.
 

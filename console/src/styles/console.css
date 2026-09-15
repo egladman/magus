@@ -2,7 +2,7 @@
    the fixed bottom status bar, the full-height (console-fill) layout, the console-app button
    contrast, and the small accent palette + layout custom properties they consume. Loaded by the
    daemon-facing app surfaces (/dashboard/, /logs/, /graph/) - and the playground, which borrows
-   the status bar - after site.css. It is deliberately NOT loaded on the documentation corpus:
+   the status bar - after site.css. It is deliberately NOT loaded on the documentation pages:
    that is the console-vs-docs distinction. The shared nav panels the docs pages DO need (the
    settings gear dropdown + the reference drawer) were split out into ui-panels.css, which every
    page loads; console.css holds only what is unique to the app surfaces. */

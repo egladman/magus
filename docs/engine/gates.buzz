@@ -469,7 +469,7 @@ fun pathExists(p: str) > bool !> any {
     return fs\exists(p);
 }
 
-// conventionsCheck holds the docs corpus to the conventions page it ships. It runs from
+// conventionsCheck holds every doc page to the conventions page it ships. It runs from
 // `lint`, NOT from the render, on purpose: a prose nit must not fail `build`. A gate that
 // fails the wrong target teaches people that the failing target is unreliable, and the next
 // real breakage in it gets waved through.
@@ -492,7 +492,7 @@ export fun conventionsCheck(root: str, docs: str) > void !> any {
     final violations: mut [str] = mut [<str>];
     var checked = 0;
 
-    // The docs corpus, addressed as docs/<rel> so a finding names a path you can open.
+    // The docs pages, addressed as docs/<rel> so a finding names a path you can open.
     foreach (rel in sorted) {
         checked = checked + 1;
         collectFindings(root, file: docs + "/" + rel, abs: root + "/" + docs + "/" + rel,

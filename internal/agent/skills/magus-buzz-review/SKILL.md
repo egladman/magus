@@ -264,7 +264,7 @@ were the language.{{end}}
   that was a bug, and it is fixed. Do not teach or flag the old first-only
   behavior as current.
 - **`test "..." {}` is genuine upstream syntax**, present in upstream's own
-  test corpus. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
+  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
   with `test` staying bindable as a name (Lens 1), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream
   counterpart.** Authority: PORTABILITY. They are gopherbuzz's own test

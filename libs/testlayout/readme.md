@@ -40,7 +40,7 @@ naming. The toolchain reads `_test.go`, ignores names starting with `_` or `.`,
 and treats a trailing `_GOOS`/`_GOARCH` as a build constraint. None of them
 mention pairing.
 
-That leaves the standard library as the only corpus, so the exemptions below come
+That leaves the standard library as the only sample, so the exemptions below come
 from counting it rather than from taste. Counts are occurrences in `$GOROOT/src`.
 
 | Pattern                                                   | Uses | Why it cannot pair                              |

@@ -3,7 +3,7 @@
 #
 # Called by setup.sh with (repo, base branch). Every task/<id> branch is created
 # here and nowhere else: the seed state is generated, never hand-applied to gen/, so
-# `rm -rf gen/ && ./setup.sh` reproduces the whole corpus. The task prompts, checks
+# `rm -rf gen/ && ./setup.sh` reproduces the whole task set. The task prompts, checks
 # and oracle solutions live in ../agent/tasks/<id>/.
 #
 # Interrogation and catch-up tasks need no source change, so their branch is the base

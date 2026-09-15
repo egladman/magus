@@ -1,4 +1,4 @@
-# Agent-benchmark task corpus
+# Agent-benchmark task set
 
 Eight tasks over the enriched `large-monorepo` fixture, one directory each:
 
@@ -15,7 +15,7 @@ worktree, apply a literal edit, grade an `ANSWER.md` bullet list as a set).
 
 Seed state lives on `task/<id>` branches of `benchmarks/large-monorepo/gen/repo`,
 cut by `benchmarks/large-monorepo/tasks.sh`, which `setup.sh` calls. Nothing here is
-hand-applied to `gen/`: `rm -rf gen/ && ./setup.sh` reproduces the whole corpus.
+hand-applied to `gen/`: `rm -rf gen/ && ./setup.sh` reproduces the whole task set.
 
 A run is a detached `git worktree add` of that clone, so several runs of one task can
 proceed at once and no run has `node_modules`. Every check is stdlib node plus git for
@@ -53,4 +53,4 @@ tree, so gutting the repo's tests is not a way through.
 
 The answer keys are fixed by `benchmarks/large-monorepo/enrich/bridges.tsv` and by the
 seed commits in `tasks.sh`. Editing either changes what a correct answer is, so treat
-the corpus as frozen once scored runs begin.
+the task set as frozen once scored runs begin.

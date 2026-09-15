@@ -64,7 +64,7 @@ magus\project({
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,
     // co-located with the markdown it renders, so the content and the generator share one
-    // tree. **/*.md is the local docs corpus this render reads; source expansion prunes any
+    // tree. **/*.md is the local docs tree this render reads; source expansion prunes any
     // dir named gen/ or node_modules/ (and the declared outputs) by name, so the generated
     // index.md files under gen/ and package READMEs under node_modules/ never leak in as
     // watched content. Both src/**/*.js AND src/**/*.ts are named: the client bundles are
@@ -493,7 +493,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
         "./setup/**/*.md"]});
 }
 
-// conventions holds the prose corpus to the conventions page it publishes: no shell prompt
+// conventions holds every doc page to the conventions page it publishes: no shell prompt
 // in a command block, no pinned version standing in for example output, no backticked path
 // that has since moved. See docs/conventions.md for what each rule means.
 //
@@ -527,7 +527,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // Same reasoning, one directory down: the guide embeds these templates, so their
     // type-check and biome gates are part of this project's lint.
     ctx.needs(agents\lint);
-    // The docs corpus is the largest prose surface in the workspace and had no spell
+    // The docs pages are the largest prose surface in the workspace and had no spell
     // check at all - the op was defined and never invoked from any target.
     markdown.typos(ctx);
     proc\exec("pnpm", ["run", "typecheck"], ".", {});

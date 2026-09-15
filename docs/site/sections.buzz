@@ -9,7 +9,7 @@
 // does - a directory listing wants names and sizes, a docs section wants titles
 // and descriptions.
 //
-// Two passes, because the corpus has to settle first:
+// Two passes, because docPages has to settle first:
 //   collectSectionIndexes  runs right after collectDocPages, so a synthesized
 //                          overview is in docPages before anything renders and
 //                          every page can link to, rank against, and nest under it.
@@ -62,7 +62,7 @@ export fun collectSectionIndexes(site: Site) > void {
     var have: mut {str: bool} = mut {};
     foreach (p in site.docPages) { have[p.url] = true; }
 
-    // Directories implied by the corpus, and how many pages sit beneath each.
+    // Directories implied by docPages, and how many pages sit beneath each.
     var implied: mut {str: bool} = mut {};
     foreach (p in site.docPages) {
         foreach (dir in parentPrefixes(p.url)) {

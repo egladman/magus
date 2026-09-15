@@ -220,8 +220,8 @@ as a panel below the paragraph instead. With JavaScript off, every one of them i
 an ordinary link to the page that defines the thing, so nothing is lost - only the
 shortcut is.
 
-The whole-corpus view runs the other direction: the glossary page lists, per term, every
-page that references it. That is an aggregate over the full corpus, so it is computed
+The whole-docs view runs the other direction: the glossary page lists, per term, every
+page that references it. That is an aggregate over every page, so it is computed
 after every page has been walked.
 
 ## What runs when

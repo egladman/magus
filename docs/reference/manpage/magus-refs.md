@@ -32,6 +32,9 @@ one for the other is how a wrong answer looks right.
 
 ## Options
 
+**--no-generated** *string*
+: In the fallback text search shown beside a symbol miss, exclude declared-output files entirely instead of searching them and marking the ones that match
+
 **--occurrences**
 : Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in
 

@@ -2382,11 +2382,11 @@ a code {
 }
 
 /* Glossary page: the "referenced on" set injected under each term by the render pass
-   (glossaryBacklinkFragments) from the whole-corpus cross-reference set. A collapsed
+   (glossaryBacklinkFragments) from the site-wide cross-reference set. A collapsed
    <details> whose summary carries the count, opening onto chips grouped by docs
    section - and each part of that answers a way the flat version failed.
 
-   Closed by default because the corpus links these terms 927 times across 40 of them:
+   Closed by default because the site links these terms 927 times across 40 of them:
    expanded inline, every one-line definition on the page sat under a slab of its own
    metadata, and the page ran to 17000px. The count lives in the summary because it is
    the part a reader wants without opening anything - it says how central the term is.

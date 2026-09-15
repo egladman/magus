@@ -349,6 +349,8 @@ const (
 	FlagQuerySecrets = "secrets"
 	// query: --url
 	FlagQueryURL = "url"
+	// refs: --no-generated
+	FlagRefsNoGenerated = "no-generated"
 	// refs: --occurrences
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
@@ -886,6 +888,9 @@ func BindPath(fs *flag.FlagSet) *PathFlags {
 }
 
 // RefsFlags are the flags declared for `magus refs`.
+//
+// It does NOT carry --no-generated: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type RefsFlags struct {
 	Refresh     bool // --refresh
 	Occurrences bool // --occurrences

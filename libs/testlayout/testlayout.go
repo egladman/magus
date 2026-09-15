@@ -53,7 +53,7 @@ naming the cycle rather than a silent convention.`
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
 // measured rather than assumed, because an exemption is a hole punched in the
-// rule and a hole nobody can point at a corpus for is a guess.
+// rule and a hole nobody can point at a sample for is a guess.
 var conventional = []string{
 	"export_test.go", "*_export_test.go", // 43 + 9: the hatch to an external test package
 	"example_test.go", "*_example_test.go", // 105: godoc renders examples from it

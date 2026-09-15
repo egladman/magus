@@ -12,7 +12,7 @@
 # a host would receive. `magus` here is the CLI under test, resolved off PATH the
 # same way the templates resolve it in a session.
 #
-# Every case is labeled `# case: <surface>/<decision>`; TestTransportCorpusCoversTheContract
+# Every case is labeled `# case: <surface>/<decision>`; TestTransportCasesCoverTheContract
 # in conventions_test.go fails when the guard contract grows a cell no case covers.
 
 # jq comes from the machine, not from mise, and that is deliberate: jq is a runtime
@@ -27,7 +27,7 @@
 env GUARD_AGENT_NAME=testscript
 
 # The shared templates serve these two hosts with the same documented envelope
-# fields and reply dialect. Keep the hosts explicit: TestShellTransportCorpusCovers-
+# fields and reply dialect. Keep the hosts explicit: TestShellTransportCasesCover-
 # TheHostContract reads this marker and refuses a coverage claim that no executed
 # fixture reaches. A shared fixture is intentional here; copying the identical
 # JSON would create two opportunities for the recorded contract to drift.
@@ -260,7 +260,7 @@ stdout '"permission":"allow"'
 # and was still broken, because nothing ran it. These cases run it.
 #
 # There is no `# case: <surface>/<decision>` label on purpose. An observation is
-# not a verdict on a surface, and labeling it would make TestTransportCorpusCovers-
+# not a verdict on a surface, and labeling it would make TestTransportCasesCover-
 # TheContract count a cell the guard contract does not have.
 
 # It records a read and says NOTHING to the host. A read is not a decision, so any

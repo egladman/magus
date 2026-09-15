@@ -58,7 +58,7 @@ fun cleanConventionDef(s: str) > str {
 }
 
 // conventionHint builds the "?" link for one convention anchor, or "" if that section is
-// absent from the corpus (so a missing section silently skips rather than links nowhere).
+// absent from the conventions (so a missing section silently skips rather than links nowhere).
 // The def is baked into data-def; data-kind lets the shared popover label it a Convention.
 // helpCircleSvg is the hint glyph: a crisp inline help-circle (a "?" in a circle) that
 // strokes with currentColor, so it stays theme-aware and sharp at any size without a font
@@ -82,7 +82,7 @@ fun conventionHint(conventions: [Convention], anchor: str, relToConventions: str
 // injectConventionHints adds a "?" hint into each rendered convention marker: an admonition
 // title and a code-block caption. It runs after the content transforms, so it sees the final
 // <p class="admonition-title"> / <figcaption> markup. The conventions page itself is skipped
-// by the caller (it defines these). A marker whose section is missing from the corpus is
+// by the caller (it defines these). A marker whose section is missing from the conventions is
 // left untouched.
 export fun injectConventionHints(html: str, conventions: [Convention], relToConventions: str) > str {
     var h = html;
@@ -122,7 +122,7 @@ fun injectFirstPlaceholderHint(html: str, hint: str) > str {
 }
 
 // insertBeforeClose inserts `ins` just before the first `close` following each `open` marker.
-// Returns html unchanged when ins is "" (the section was not in the corpus).
+// Returns html unchanged when ins is "" (the section was not among the conventions).
 fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
     if (ins == "") { return html; }
     final buf: mut [str] = mut [<str>];
@@ -143,7 +143,7 @@ fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
 
 // ---------------------------------------------------------------------------
 // The enforcement half. Above, conventions.md is parsed into hints the reader sees;
-// below, the corpus is checked AGAINST it, so a page cannot quietly stop following the
+// below, the docs are checked AGAINST it, so a page cannot quietly stop following the
 // rules the page it links to describes.
 //
 // Every rule here earned its place by catching a bug that shipped, and every one of them
@@ -153,7 +153,7 @@ fun insertBeforeClose(html: str, open: str, close: str, ins: str) > str {
 // and then the rules that matter go with it.
 //
 // Pure, like everything above: these take the Markdown and hand back findings. The
-// filesystem half (walking the corpus, deciding whether a path exists) lives in
+// filesystem half (walking the docs, deciding whether a path exists) lives in
 // engine/gates.buzz, which is the layer allowed to do IO.
 
 // ConventionFinding is one violation. `path` is set only by pathReferences, which reports
@@ -289,7 +289,7 @@ export fun lintMarkdown(file: str, md: str) > [ConventionFinding] {
 
 // looksLikeRepoPath reports whether an inline-code token is claiming a file in THIS
 // repository. The bar is deliberately high, and it was raised by running the rule over the
-// corpus: the first draft produced 67 hits of which about eight were real. Everything the
+// docs: the first draft produced 67 hits of which about eight were real. Everything the
 // exclusions below remove is a path this repo legitimately writes about without owning -
 // a reader's own workspace, their home directory, a cache tree that only exists at runtime.
 //
@@ -333,7 +333,7 @@ fun trimTrailingSlash(s: str) > str {
 // pathCheckApplies reports whether a page's inline paths and link targets are claims about
 // THIS repository. The diagnostic explainers under reference/codes/ are exempt because their
 // whole job is describing someone else's workspace (`api/`, `pkg/build.go`). Measuring the
-// old blanket docs/guides/ exemption against the corpus found exactly one guide that needs
+// old blanket docs/guides/ exemption against the docs found exactly one guide that needs
 // it: pr-advice.md names `refs/remotes/`, a git-internal path inside the READER's own clone,
 // not a claim about this repository. Every other guide's inline paths and links already
 // resolve on their own, so scoping this to the one page that needs it - rather than the
@@ -461,7 +461,7 @@ test "injectConventionHints links an admonition title and a code caption" {
 test "injectConventionHints leaves markers untouched when the section is absent" {
     final cs = mut [<Convention>];
     final html = "<p class=\"admonition-title\">Note</p>";
-    assert\equal(injectConventionHints(html, cs, "../conventions/"), html, "no corpus, no change");
+    assert\equal(injectConventionHints(html, cs, "../conventions/"), html, "no conventions, no change");
 }
 
 test "the placeholder hint lands on the first inline placeholder only, never a fenced block" {
@@ -525,7 +525,7 @@ test "looksLikeRepoPath accepts real path claims and rejects the lookalikes" {
 }
 
 test "looksLikeRepoPath declines the cases no lexical rule can settle" {
-    // Each of these was a false positive in the first run over the real corpus. They are
+    // Each of these was a false positive in the first run over the real docs. They are
     // documented as limits rather than fixed, because the fix would cost more than the rule.
     assert\equal(looksLikeRepoPath("gopherbuzz/"), false,
         "one segment: indistinguishable from an illustrative dist/ or cas/");

@@ -3,8 +3,8 @@ title: magus-buzz-review
 generated_from: internal/agent/skills/magus-buzz-review/SKILL.md
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20279
-skill_short_bytes: 15155
+skill_full_bytes: 20278
+skill_short_bytes: 15154
 ---
 
 # magus-buzz-review
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `76` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `752d9e3b9c1e` |
+| `skill-content` | `607be9055653` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -261,7 +261,7 @@ That is the fixture doing its job.
   that was a bug, and it is fixed. Do not teach or flag the old first-only
   behavior as current.
 - **`test "..." {}` is genuine upstream syntax**, present in upstream's own
-  test corpus. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
+  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
   with `test` staying bindable as a name (Lens 1), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream
   counterpart.** Authority: PORTABILITY. They are gopherbuzz's own test
@@ -592,7 +592,7 @@ were the language.
   that was a bug, and it is fixed. Do not teach or flag the old first-only
   behavior as current.
 - **`test "..." {}` is genuine upstream syntax**, present in upstream's own
-  test corpus. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
+  test suite. Authority: UPSTREAM. It is not a gopherbuzz invention - contrast
   with `test` staying bindable as a name (Lens 1), which IS gopherbuzz-only.
 - **`assert`, `suite`, `testing`, and `assertcore` have no upstream
   counterpart.** Authority: PORTABILITY. They are gopherbuzz's own test

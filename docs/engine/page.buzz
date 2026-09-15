@@ -519,7 +519,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
   <link rel="stylesheet" href="{{root}}assets/pico.min.css">
   <link rel="stylesheet" href="{{root}}theme.css">
   <link rel="stylesheet" href="{{root}}site.css">
-  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs corpus loads this and
+  <!-- ui-panels.css: the shared settings gear + reference drawer. The docs pages load this and
        NOT console.css (that is the console-app-only shell). -->
   <link rel="stylesheet" href="{{root}}ui-panels.css">
   <script src="{{root}}theme.js"></script>
@@ -610,7 +610,7 @@ export fun renderRoot(site: Site) > void !> any {
     // This was a client-side patch (src/site/home-heading.ts) for as long as the README was
     // the site root: it rewrote the heading's textContent after load. That left the heading
     // wrong with JavaScript off and wrong for anything reading the HTML rather than the DOM
-    // - a crawler, a feed reader, the llms.txt corpus. renderRoot already synthesizes this
+    // - a crawler, a feed reader, the llms.txt index. renderRoot already synthesizes this
     // page's frontmatter, so the rename belongs in the same pass, in the bytes.
     html = html.split("<h1 id=\"magus\">magus</h1>").join("<h1 id=\"development\">Development</h1>");
     // The page's own clean directory is README_URL minus its trailing slash, which is what

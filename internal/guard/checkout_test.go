@@ -156,7 +156,7 @@ func TestDenySiblingCheckoutIgnoresAPathInsideAQuotedArgument(t *testing.T) {
 }
 
 // Shared with magusInThrowawayCopy rather than reimplemented, so the variable
-// expansion that rule needed works here for free. The observed corpus chains a
+// expansion that rule needed works here for free. The observed sample chains a
 // whole pipeline onto an assignment.
 func TestDenySiblingCheckoutResolvesAnAssignedPath(t *testing.T) {
 	main, wt := twoCheckouts(t)

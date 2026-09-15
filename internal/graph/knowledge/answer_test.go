@@ -9,11 +9,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// verdictCorpus spans every shape the grammar routes differently: bare text, each matcher
+// verdictCases spans every shape the grammar routes differently: bare text, each matcher
 // operator, wildcards, and a kind on either side of the lazy layer. The invariants below
 // are asserted over all of it rather than over a hand-picked case, because both bugs this
 // file pins were a shape nobody thought to list.
-var verdictCorpus = []string{
+var verdictCases = []string{
 	"", "guard_shell.go", "kind=file guard_shell.go", "kind=symbol Foo", "kind=dir cmd/magus",
 	"kind=target build", "kind=author eli", "kind=spell", "kind=file kind=symbol x",
 	"kind=fil*", "kind=tar*", "kind=~^fi", "kind=~^tar", "id=~guard", "id=target:*",
@@ -25,7 +25,7 @@ var verdictCorpus = []string{
 // could not have held, which is the state that lets a skipped shard set report a verified
 // absence.
 func TestSeedsLazyLayerImpliesCouldMatchLazyLayer(t *testing.T) {
-	for _, in := range verdictCorpus {
+	for _, in := range verdictCases {
 		if SeedsLazyLayer(in) {
 			assert.Truef(t, CouldMatchLazyLayer(in), "%q seeds the lazy layer, so it must be allowed to caveat it", in)
 		}
@@ -35,7 +35,7 @@ func TestSeedsLazyLayerImpliesCouldMatchLazyLayer(t *testing.T) {
 // The bug this file exists for, stated as a rule rather than as one query: a lookup that
 // did not load a layer it could have matched must never claim it searched everywhere.
 func TestAnswerNeverAbsentWhenARelevantLayerWasSkipped(t *testing.T) {
-	for _, in := range verdictCorpus {
+	for _, in := range verdictCases {
 		// Gated on EITHER predicate, deliberately: keyed on CouldMatchLazyLayer alone, a
 		// regression that shrank it below SeedsLazyLayer would silently drop the offending
 		// query out of the loop and leave this test green while shipping the bug.

@@ -251,7 +251,7 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 // depends on: a breadcrumb is a complete argv, not a form to fill in.
 //
 // A placeholder passes every rule above and then fails in the shell, which is the failure
-// mode measured across the corpus on 2026-09-11: 30 of 30 templates cleared the guard and
+// mode measured across the templates on 2026-09-11: 30 of 30 templates cleared the guard and
 // the ones carrying `<path>` broke on the reader's own redirect.
 func TestServedNextTemplatesAreRunnable(t *testing.T) {
 	for id, run := range servedNextTemplates(t) {

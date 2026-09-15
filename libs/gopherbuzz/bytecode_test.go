@@ -1835,7 +1835,7 @@ func TestJITBackendPresence(t *testing.T) {
 //     depths()' opcode whitelist, so `var s = -5;` is declined outright and the JIT
 //     never runs; the differential test then compares the interpreter with itself
 //     and proves nothing. Negatives are spelled `(0 - n)`, which is exactly why the
-//     fixed corpus above spells them that way too.
+//     fixed cases above spell them that way too.
 //   - A VARIABLE'S NUMERIC TYPE IS FIXED. Assigning a double into an int local is a
 //     runtime type error, so each program picks int or float mode and stays in it.
 //     Mixed int/float promotion is still covered, in the one shape the language
@@ -1927,14 +1927,14 @@ func randJITProgram(rng *rand.Rand) string {
 
 // TestJITMatchesInterpreterRandomized is the property the whole JIT design rests
 // on: for ANY program, native and interpreted execution agree: same value, or the
-// same error. The fixed corpus above pins the shapes someone thought to write down;
+// same error. The fixed cases above pin the shapes someone thought to write down;
 // this explores the combinations nobody did, which is where a codegen defect
 // actually lives (an operand order, a sign, a promotion, or a comparison sense that
 // only misbehaves on one arch with one mix of types).
 //
 // Deterministic by construction (fixed seed), so a failure reproduces and a green
 // run means the same thing on every machine. The failure prints the generating
-// source, so a counterexample can be pasted straight into the fixed corpus.
+// source, so a counterexample can be pasted straight into the fixed cases.
 func TestJITMatchesInterpreterRandomized(t *testing.T) {
 	if !vmpackage.JITAvailable() {
 		t.Skip("no native JIT backend on this arch")

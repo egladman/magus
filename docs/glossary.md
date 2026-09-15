@@ -359,7 +359,7 @@ another one. Each is single-instance - opening one you already have focuses it
 instead of duplicating it.
 
 The glossary term is two words on purpose. As a bare "App" the auto-linker
-matched every unrelated "app" in the corpus - a ChatGPT desktop app, a Postgres
+matched every unrelated "app" in the docs - a ChatGPT desktop app, a Postgres
 app - and pointed each at this definition. See
 [reference/console.md](reference/console.md).
 

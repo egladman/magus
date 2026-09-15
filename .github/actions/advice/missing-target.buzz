@@ -2,7 +2,7 @@
 // has, by adding the project without one or by removing the one it had.
 //
 // The sibling of conformance.buzz and the same inversion: the norm is derived from the
-// corpus, never declared. Nobody writes down "every Go service shall expose a test
+// tree, never declared. Nobody writes down "every Go service shall expose a test
 // target"; the graph observes that 11 of 12 already do, and the 12th is the finding.
 //
 // WHY THIS IS A SEPARATE ADVISOR RATHER THAN A FLAG ON conformance.buzz. It groups on a
@@ -16,7 +16,7 @@
 //     toolchains are still both Go services, and an exact op-set key would put them in
 //     different cohorts and see nothing.
 //
-// Same corpus, opposite direction, because they ask different questions of it.
+// Same tree, opposite direction, because they ask different questions of it.
 //
 // THE COHORT IS THE WHOLE POINT. Comparing each project against the WHOLE workspace was
 // measured first and every finding it produced was a false positive: `proto` is a schema

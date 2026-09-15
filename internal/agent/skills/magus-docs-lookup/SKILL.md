@@ -1,6 +1,6 @@
 # Navigating the magus docs
 
-magus ships one official documentation corpus.{{if .Full}} It is a static site, so its
+magus ships one official documentation site.{{if .Full}} It is a static site, so its
 structure is fixed and machine-readable: this skill teaches HOW to move through
 it; the pages themselves carry the WHAT.{{end}} Reach for it when a magus-domain fact
 is not derivable from the workspace graph{{if .Full}} - the docs are the source of truth for
