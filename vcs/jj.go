@@ -239,8 +239,16 @@ func (v jjVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 // which is that the a/ and b/ headers otherwise name paths relative to a subdirectory nobody is
 // standing in.
 //
-// jj has no three-dot spelling and needs none: --from is the merge base of the two revisions
-// already, which is the symmetric difference git's three dots have to ask for.
+// --from is NOT base itself: `jj diff --from X --to Y` is a plain two-tree diff, the same
+// naive form git's three dots and hg's ancestor() revset both exist to avoid. Measured with
+// a fork of a single file: `--from base --to head` reported base's own new file as a
+// deletion from head, the naive two-point failure git's RangeDiff doc describes.
+// `heads(::base & ::head)` is jj's spelling of the merge base (the head of the revisions
+// that are ancestors of BOTH base and head), the same computation git's three-dot form and
+// hg's ancestor() perform; diffing from there to head is what makes the answer symmetric.
+// Verified against jj 0.44.0, including the fast-forward case (base is itself the fork
+// point, so the revset resolves to base unchanged) and an unresolvable base (still an
+// error, not an empty diff).
 func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
 	if err := checkRef(base); err != nil {
 		return "", err
@@ -252,7 +260,8 @@ func (v jjVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []st
 	if err != nil {
 		return "", err
 	}
-	args := []string{"diff", "--git", "--from", base, "--to", head}
+	forkPoint := "heads(::" + base + " & ::" + head + ")"
+	args := []string{"diff", "--git", "--from", forkPoint, "--to", head}
 	if len(paths) > 0 {
 		// Prefixed for the reason DirtyDiff prefixes: the command runs from the workspace root,
 		// so a path relative to the caller's directory would name the wrong file.
@@ -405,9 +414,10 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 	return map[string]bool{}, nil
 }
 
-// The capability ladder below. jj implements six of the ten optional interfaces; the three
-// it does NOT implement are absent on purpose, and each is argued where a reader looking
-// for it would go:
+// The capability ladder below. jj implements ten of the sixteen optional VCSDriver
+// capabilities: ConflictResolver (asserted separately above) plus the nine listed in the
+// var block. The six it does NOT implement are absent on purpose, and each is argued here so
+// a reader looking for one finds the reason rather than a silent gap:
 //
 //   - MergeDriverInstaller: the interface takes the workspace's declared output GLOBS, and
 //     jj has nowhere to put them. git maps a pattern to a driver in .gitattributes and hg
@@ -425,14 +435,29 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 //     not an option. A jj repo is simply uncovered by this notice, by jj's own design.
 //   - IgnoredFileReporter: jj exposes no ignore-RULES query; see IgnoredPaths above, which
 //     is the same gap reached from the other interface.
+//   - BranchChangeReporter: git's exclusion rule is "not the branch this checkout is on",
+//     which assumes one branch owns the working copy. jj's working-copy commit is usually
+//     anonymous (Metadata's Ref above is often ""), so there is ordinarily no branch to
+//     exclude, and every bookmark would report as "other", including the one the reader is
+//     themselves advancing. Not implemented rather than answered wrong; the caller
+//     (Magus.BranchChanges) reports a named types.VCSCapabilityMissing diagnostic for
+//     exactly this reason rather than an empty, falsely reassuring list.
+//   - PushStatusReporter: hg and Sapling answer this from a phase recorded on the commit
+//     itself (see hgFamilyCommitPushed); jj records no such fact. The nearest analogue,
+//     asking whether id is an ancestor of some bookmark's `@<remote>` tracking ref, is a
+//     git-shaped answer that resolves only for a git-backed jj repo, and jj runs on its own
+//     native backend too. Not implemented rather than answered only for the colocated case.
 //
 // Verified against jj 0.44.0.
 var (
 	_ types.RemoteReporter      = jjVCS{}
 	_ types.DefaultRefReporter  = jjVCS{}
+	_ types.RevTimeReporter     = jjVCS{}
 	_ types.TrackedFileReporter = jjVCS{}
 	_ types.ChurnReporter       = jjVCS{}
+	_ types.RangeDiffReporter   = jjVCS{}
 	_ types.RevisionExporter    = jjVCS{}
+	_ types.RevisionFileReader  = jjVCS{}
 	_ types.MergeStarter        = jjVCS{}
 )
 
@@ -479,6 +504,28 @@ func (v jjVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 		return "", types.ErrVCSUnsupported
 	}
 	return name, nil
+}
+
+// RevTime implements types.RevTimeReporter with the same committer timestamp
+// jjCommitTemplate already carries for FindCommit's Date field, parsed by the same
+// parseWhen commit.go uses; verified live against jj 0.44.0.
+//
+// The lookup error is discarded, mirroring git's and hg's RevTime: `jj log -r <rev>` for a
+// revision this clone lacks (or an unresolvable revset) exits non-zero with nothing on
+// stdout (jj writes "Revision `...` doesn't exist" to stderr), which is the ordinary "you
+// have never fetched this" answer, not a probe failure. The one error left is a date jj
+// printed that did not parse.
+func (v jjVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "jj", "log", "-r", rev, "--no-graph", "-T",
+		`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z")`)
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	t := parseWhen(out)
+	if t.IsZero() {
+		return time.Time{}, false, fmt.Errorf("jj log -r %s: parse %q: unrecognized date format", rev, out)
+	}
+	return t, true, nil
 }
 
 // TrackedFiles implements types.TrackedFileReporter, listing the paths recorded in the

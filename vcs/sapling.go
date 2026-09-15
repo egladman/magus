@@ -228,6 +228,34 @@ func (v saplingVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (
 	return out, nil
 }
 
+// RangeDiff implements types.RangeDiffReporter via `sl diff -r "ancestor(base,head)" -r
+// head`, the same Mercurial-inherited ancestor() revset hg's RangeDiff uses. Verified
+// separately against Sapling 0.2.20260811-150444, per this file's own rule about verifying
+// the two backends independently rather than porting one to the other: a repository forked
+// into two single-file branches showed the same failure mode hg's does, where diffing base
+// directly against head (the naive two-point form) reported base's own new file as a
+// deletion, and the ancestor-based form did not.
+//
+// No --git flag: Sapling already emits a git-style diff by default (see DirtyDiff).
+func (v saplingVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	args := []string{"diff", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, hgFamilyGlobs(paths)...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "sl", args...)
+	if err != nil {
+		return "", fmt.Errorf("sl diff ancestor(%s,%s)-%s: %w", base, head, head, err)
+	}
+	return out, nil
+}
+
 // Describe reports "": Sapling has no tags to describe from. See Tags.
 func (v saplingVCS) Describe(_ context.Context, _ string) (string, error) {
 	return "", nil
@@ -376,6 +404,26 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 		}
 	}
 	return "", types.ErrVCSUnsupported
+}
+
+// RevTime implements types.RevTimeReporter with hgCommitTemplate's {date|rfc3339date}
+// filter, parsed by the same parseWhen commit.go uses; verified live against Sapling
+// 0.2.20260811-150444.
+//
+// The lookup error is discarded, mirroring git's and hg's RevTime: `sl log -r <rev>` for a
+// revision this clone lacks aborts non-zero with nothing on stdout, the ordinary "you have
+// never fetched this" answer, not a probe failure. The one error left is a date sl printed
+// that did not parse.
+func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "sl", "log", "-r", rev, "--template", "{date|rfc3339date}")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	t := parseWhen(out)
+	if t.IsZero() {
+		return time.Time{}, false, fmt.Errorf("sl log -r %s: parse %q: unrecognized date format", rev, out)
+	}
+	return t, true, nil
 }
 
 // saplingChurnTemplate opens each commit with its NUL-separated hash, author and record
@@ -766,13 +814,32 @@ func (v saplingVCS) InstallDriftHook(_ context.Context, root, command string) ([
 // so the mapping is close, but two behaviors differ from hg and the methods below note
 // where they bite.
 //
-// The assertions are compile-time on purpose: both interfaces are reached by type assertion
-// at the call site, so dropping a method would not fail the build, it would silently demote
-// Sapling to "resolve this merge by hand".
+// The assertions below cover every optional capability Sapling implements. They are
+// compile-time on purpose: each interface is reached by type assertion at its call site, so
+// dropping a method would not fail the build, it would silently demote Sapling to whatever
+// the caller's fallback answers ("resolve this merge by hand" for ConflictResolver, "assume
+// pushed" for PushStatusReporter, and so on).
+//
+// BranchChangeReporter is the one optional capability Sapling does not implement. As with
+// hg, that is not a technical wall: nothing here suggests a bookmark or ChangedFiles could
+// not answer it. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
+// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason.
 var (
-	_ types.ConflictResolver   = saplingVCS{}
-	_ types.MergeStarter       = saplingVCS{}
-	_ types.PushStatusReporter = saplingVCS{}
+	_ types.MergeDriverInstaller = saplingVCS{}
+	_ types.RefreshHookInstaller = saplingVCS{}
+	_ types.DriftHookInstaller   = saplingVCS{}
+	_ types.RemoteReporter       = saplingVCS{}
+	_ types.DefaultRefReporter   = saplingVCS{}
+	_ types.PushStatusReporter   = saplingVCS{}
+	_ types.RevTimeReporter      = saplingVCS{}
+	_ types.TrackedFileReporter  = saplingVCS{}
+	_ types.IgnoredFileReporter  = saplingVCS{}
+	_ types.ChurnReporter        = saplingVCS{}
+	_ types.RangeDiffReporter    = saplingVCS{}
+	_ types.ConflictResolver     = saplingVCS{}
+	_ types.RevisionFileReader   = saplingVCS{}
+	_ types.RevisionExporter     = saplingVCS{}
+	_ types.MergeStarter         = saplingVCS{}
 )
 
 func runSaplingBatched(ctx context.Context, root string, args []string, paths []string) error {
