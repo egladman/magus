@@ -294,7 +294,7 @@ func TestCheckGuardWiring(t *testing.T) {
 	t.Run("no binary resolves at all -> fail", func(t *testing.T) {
 		root := t.TempDir()
 		t.Setenv("PATH", t.TempDir()) // empty: no magus anywhere
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
+		c := checkGuardWiring(context.Background(), root, testCanaryBudget)
 		require.Equal(t, types.DoctorFail, c.Status)
 		assert.Contains(t, c.Message, "no ./magus and no magus on PATH")
 	})
@@ -303,7 +303,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, "#!/bin/sh\nexit 0\n")
 
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
+		c := checkGuardWiring(context.Background(), root, testCanaryBudget)
 		require.Equal(t, types.DoctorFail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
@@ -314,7 +314,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
 
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
+		c := checkGuardWiring(context.Background(), root, testCanaryBudget)
 		require.Equal(t, types.DoctorAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "harnesses/")
@@ -323,9 +323,9 @@ func TestCheckGuardWiring(t *testing.T) {
 	t.Run("canary passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
 		root := t.TempDir()
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
-		writeCheckpointHarness(t, root, guardedHarnessConfig)
+		writeCheckpointHarness(t, root, guardedHarnessConfig())
 
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
+		c := checkGuardWiring(context.Background(), root, testCanaryBudget)
 		require.Equal(t, types.DoctorOK, c.Status)
 		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
 	})
@@ -335,11 +335,11 @@ func TestCheckGuardWiring(t *testing.T) {
 		writeGuardCanaryStub(t, root, denyingCanaryStub)
 		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
-		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
+		c := checkGuardWiring(context.Background(), root, testCanaryBudget)
 		require.Equal(t, types.DoctorFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
-		assert.Contains(t, joined, "missing Magus adapter")
+		assert.Contains(t, joined, "missing managed entry")
 	})
 }
 
@@ -662,7 +662,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		got := r.checkAgentSkills()
 
 		require.Equal(t, types.DoctorFail, got.Status)
-		assert.Equal(t, []string{"agent", "harness", "install", "--host", "test-host"}, got.Fix)
+		assert.Equal(t, []string{"agent", "harness", "install", "--id", "test-host"}, got.Fix)
 	})
 }
 
@@ -761,16 +761,16 @@ func TestCheckSessionLoadStates(t *testing.T) {
 // nothing about whether the next clone of this repository is wired.
 func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
 	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig)
+	writeCheckpointHarness(t, root, guardedHarnessConfig())
 	wired := filepath.Join(root, "host", "hooks.json")
 
-	assert.Equal(t, []string{wired}, HookConfigs(root))
+	assert.Equal(t, []string{wired}, HookConfigs(context.Background(), root))
 
 	// A config that names magus without running a hook of its own is not wiring: the
 	// same two markers the guard-wiring check reads, so neither can count a file the
 	// other would not.
 	require.NoError(t, os.WriteFile(wired, []byte(`{"note":"magus lives here"}`), 0o644))
-	assert.Empty(t, HookConfigs(root))
+	assert.Empty(t, HookConfigs(context.Background(), root))
 }
 
 // sameStepFixture is the 2026-09-10 gate stall as a workspace declares it: `ci` composes a

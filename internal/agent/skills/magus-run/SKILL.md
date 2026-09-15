@@ -206,11 +206,12 @@ Each target's result line mints an output reference id (`out1a2b3c`).
 
 ## When a target is waiting on another magus process
 
-Do not write `sleep`/`ps` polling loops or invent a second waiter. The lock
-message already names the holder, and `magus status --watch=15s` reads that same
-lock state continuously: holder PID, command, directory, age, and waiters.
+Do not write `sleep`/`ps`/`pgrep` polling loops or invent a second waiter. The
+lock message already names the holder, and `magus status --watch=15s` reads that
+same lock state continuously: holder PID, command, directory, age, and waiters.
 Keep the status watch attached until the lock releases, then let the queued
 target continue. A long-running target is not evidence of a hang by itself.
+The guard denies `pgrep`, `pidof`, and `ps` for this reason.
 
 ```sh
 magus status --watch=15s

@@ -175,7 +175,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	}
 	brief.Leases = briefLeases(root)
 	brief.Failures = lastRunFailures(root)
-	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(root))
+	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(root)
 	brief.PromptCache = promptCacheForCheckout(root, time.Now())
 	if base, err := rootmagus.ResolveCacheDir(root, rootmagus.WithLoadedConfig(globalCfg)); err == nil {
@@ -322,9 +322,13 @@ func ruleLocations(root string) []string {
 	if _, err := os.Stat(filepath.Join(root, agent.AgentsFile)); err == nil {
 		out = append(out, agent.AgentsFile)
 	}
-	for _, dir := range agent.HarnessSkillDirs(root) {
-		if info, err := os.Stat(filepath.Join(root, dir)); err == nil && info.IsDir() {
-			out = append(out, dir)
+	// Best-effort display: omit skill dirs when descriptors fail to load rather
+	// than inventing Installed state from an empty list.
+	if dirs, err := agent.HarnessSkillDirs(root); err == nil {
+		for _, dir := range dirs {
+			if info, err := os.Stat(filepath.Join(root, dir)); err == nil && info.IsDir() {
+				out = append(out, dir)
+			}
 		}
 	}
 	return out

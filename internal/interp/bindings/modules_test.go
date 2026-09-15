@@ -151,6 +151,9 @@ func TestScriptWithholdsDeclaringMembers(t *testing.T) {
 		`magus\project({})`,
 		`magus\cache.remote({"name": "s3"})`,
 		`magus\ci.provider({"name": "actions"})`,
+		`magus\guard.shell({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
+		`magus\guard.bash({"name": "x", "decision": "deny", "program": "curl", "reason": "r"})`,
+		`magus\harness.provider({"name": "cursor"})`,
 	} {
 		t.Run(call, func(t *testing.T) {
 			sess := scriptSession(t)
@@ -183,7 +186,7 @@ main();
 }
 
 // TestMagusSurfacesExposeSameMembers is the lock-step guard between the two
-// surfaces buildMagusNS serves. They must carry the SAME member names (a script
+// surfaces buildMagus serves. They must carry the SAME member names (a script
 // that cannot see a member has no way to learn it exists), so the surfaces differ
 // only in what a member does when called, which is what MGS1022 reports.
 func TestMagusSurfacesExposeSameMembers(t *testing.T) {

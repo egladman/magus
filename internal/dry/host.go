@@ -129,6 +129,16 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	ci.MapSet("provider", fn("magus.ci.provider", retNull))
 	m.MapSet("ci", ci)
 
+	// magus.guard / magus.harness: additive bash rules and harness-spell selection
+	// at magusfile top level. Stubbed no-ops like cache.remote.
+	guard := vm.NewMap()
+	guard.MapSet("shell", fn("magus.guard.shell", retNull))
+	guard.MapSet("bash", fn("magus.guard.bash", retNull))
+	m.MapSet("guard", guard)
+	harness := vm.NewMap()
+	harness.MapSet("provider", fn("magus.harness.provider", retNull))
+	m.MapSet("harness", harness)
+
 	// magus.review.<...>: selects the spell that connects this workspace to wherever its
 	// changes are discussed. Stubbed for the same reason as the two above: a magusfile calls
 	// it at top level, and the playground has no VM able to resolve a spell handle.
@@ -146,13 +156,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// feeds the result straight into a string, so null would make the trace die on a
 	// concat rather than on anything real. The placeholder is deliberately not
 	// credential-shaped, so a dry run that leaks it into output leaks nothing.
-	secretNS := vm.NewMap()
-	// Argument validation MATCHES the real namespace, unlike the cache/ci stubs above.
+	secret := vm.NewMap()
+	// Argument validation MATCHES the real nested object, unlike the cache/ci stubs above.
 	// A dry run exists to catch structural mistakes before they cost a build, so a stub
 	// that accepts what the real call rejects inverts its whole point: `read()` with no
 	// reference, or `provider("onepassword")` passing a string where a spell handle
 	// belongs, would pass the dry run and fail the real one.
-	secretNS.MapSet("provider", fn("magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	secret.MapSet("provider", fn("magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
 		}
@@ -161,7 +171,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	secretNS.MapSet("read", fn("magus.secret.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	secret.MapSet("read", fn("magus.secret.read", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
 		}
@@ -176,13 +186,13 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// make a trace die on the string concat a magusfile does with it (ctx.with_env),
 	// and a real listener has no business existing in a dry run; port 0 cannot be
 	// connected to, so a trace that leaks this into a command leaks nothing that works.
-	secretNS.MapSet("endpoint", fn("magus.secret.endpoint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	secret.MapSet("endpoint", fn("magus.secret.endpoint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if err := secretGrantStubArg("endpoint", args); err != nil {
 			return vm.Null, err
 		}
 		return vm.StrValue("http://127.0.0.1:0"), nil
 	}))
-	m.MapSet("secret", secretNS)
+	m.MapSet("secret", secret)
 
 	// magus.workspace.<...>: wires a workspace-provider spell in the real module.
 	// Stubbed no-op for the same reason as the two above; the playground has no
@@ -199,9 +209,9 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// magus.log.*: the emitting members, grouped as they are in the real bindings.
 	// hint rides along here rather than with the runtime-only stubs below because it
 	// emits, and a dry run should show it in target order like any other message.
-	logNS := vm.NewMap()
+	logLevels := vm.NewMap()
 	for _, level := range []string{"info", "warn", "error", "debug", "hint"} {
-		logNS.MapSet(level, fn("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
+		logLevels.MapSet(level, fn("magus.log."+level, func(_ context.Context, args []vm.Value) (vm.Value, error) {
 			// Traced as a per-target op (attributed to tr.cur) so a dry-run shows
 			// each target's logs in order; writing to the shared output buffer would
 			// mix every probed target's logs together.
@@ -209,7 +219,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 			return vm.Null, nil
 		}))
 	}
-	m.MapSet("log", logNS)
+	m.MapSet("log", logLevels)
 
 	// magus.raise(code, message, cause?, url?) fails with a coded diagnostic. A dry run
 	// must not actually fail, so it traces the code and message and returns; the point
@@ -392,14 +402,14 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// writes the real job store file, so list() reports it empty and put() echoes a
 	// shaped-but-zero row rather than the one a script asked to record, the same "no
 	// real effect" rule diagnoseDrift documents above.
-	jobNS := vm.NewMap()
-	jobNS.MapSet("list", fn("magus.job.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job := vm.NewMap()
+	job.MapSet("list", fn("magus.job.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("units", vm.ListValue(nil))
 		res.MapSet("overlaps", vm.ListValue(nil))
 		return res, nil
 	}))
-	jobNS.MapSet("put", fn("magus.job.put", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("put", fn("magus.job.put", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("id", vm.StrValue(""))
 		res.MapSet("parent", vm.StrValue(""))
@@ -418,10 +428,10 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("updated", vm.IntValue(0))
 		return res, nil
 	}))
-	jobNS.MapSet("clear", fn("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("clear", fn("magus.job.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		return vm.IntValue(0), nil
 	}))
-	m.MapSet("job", jobNS)
+	m.MapSet("job", job)
 
 	addPureMagus(m)
 

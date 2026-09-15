@@ -53,7 +53,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// A native module, not a global: `magus` is reached by `import "magus"` like fs,
 	// vcs and every other host module, so its declarations attach the way theirs do
 	// and a file that never imports it fails to resolve the name.
-	sess.SetNativeModule("magus", buildMagusNS(ctx, sess, obs, parseMode, magusfileSurface))
+	sess.SetNativeModule("magus", buildMagus(ctx, sess, obs, parseMode, magusfileSurface))
 
 	// A target declares its dependencies and cache footprint through the magus.Context
 	// it receives as its first argument (ctx.needs/glob/inputs/outputs), NOT a floating
@@ -106,7 +106,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 
 // magusSurface names the two places the magus.* namespace is installed. They share
 // every member: a member reachable from a magusfile is reachable from a `magus buzz`
-// script, and only the ones listed in buildMagusNS's withhold block differ.
+// script, and only the ones listed in buildMagus's withhold block differ.
 type magusSurface int
 
 const (
@@ -126,26 +126,30 @@ const (
 //
 // It is a SEPARATE call from RegisterModuleSurface rather than part of it, because
 // the magusfile engine installs its own richer namespace (registerAllBuzz) and must
-// not have this one layered over it. The two are built by the same buildMagusNS, so
+// not have this one layered over it. The two are built by the same buildMagus, so
 // they cannot drift.
 func RegisterMagusNamespace(ctx context.Context, sess *buzz.Session) {
-	sess.SetNativeModule("magus", buildMagusNS(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
+	sess.SetNativeModule("magus", buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, scriptSurface))
 }
 
-// buildMagusNS assembles the magus.* namespace object for one surface. The
+// buildMagus assembles the magus.* namespace object for one surface. The
 // magusfile engine and `magus buzz` share it so the surfaces stay in lock-step, the
 // same reason RegisterModuleSurface is shared for the host modules.
-func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface) vm.Value {
+func buildMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserver, parseMode bool, surface magusSurface) vm.Value {
 	magus := vm.NewMap()
-	cacheNS := buildCacheNS(ctx, obs)
-	ciNS := buildCINS(ctx, obs)
+	cache := buildCache(ctx, obs)
+	ci := buildCI(ctx, obs)
 	magus.MapSet("project", buildProject(ctx, obs))
-	magus.MapSet("cache", cacheNS)
-	magus.MapSet("ci", ciNS)
-	magus.MapSet("secret", buildSecretNS(ctx, obs))
-	magus.MapSet("review", buildReviewNS(ctx, obs))
-	magus.MapSet("workspace", buildWorkspaceNS(ctx, obs))
-	magus.MapSet("job", buildJobNS(obs))
+	magus.MapSet("cache", cache)
+	magus.MapSet("ci", ci)
+	magus.MapSet("secret", buildSecret(ctx, obs))
+	magus.MapSet("review", buildReview(ctx, obs))
+	magus.MapSet("workspace", buildWorkspace(ctx, obs))
+	magus.MapSet("job", buildJob(obs))
+	guard := buildGuard(ctx, obs)
+	harness := buildHarness(ctx, obs)
+	magus.MapSet("guard", guard)
+	magus.MapSet("harness", harness)
 	magus.MapSet("pry", directVal(obs, "magus.pry", buildBuzzPry(sess, parseMode)))
 
 	// The host-declarable subset (magus.cmd/run/describe/insight/doctor,
@@ -204,21 +208,21 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// Grouped, and grouped by BEHAVIOR: everything here emits and returns. fatal and
 	// raise stay on magus itself because they end the run, and a namespace that mixed
 	// the two would let `magus\log.fatal(...)` read like one more level.
-	logNS := vm.NewMap()
-	logNS.MapSet("info", directVal(obs, "magus.log.info", buzzLogFn(slog.LevelInfo)))
-	logNS.MapSet("debug", directVal(obs, "magus.log.debug", buzzLogFn(slog.LevelDebug)))
-	logNS.MapSet("warn", directVal(obs, "magus.log.warn", buzzLogFn(slog.LevelWarn)))
-	logNS.MapSet("error", directVal(obs, "magus.log.error", buzzLogFn(slog.LevelError)))
+	logLevels := vm.NewMap()
+	logLevels.MapSet("info", directVal(obs, "magus.log.info", buzzLogFn(slog.LevelInfo)))
+	logLevels.MapSet("debug", directVal(obs, "magus.log.debug", buzzLogFn(slog.LevelDebug)))
+	logLevels.MapSet("warn", directVal(obs, "magus.log.warn", buzzLogFn(slog.LevelWarn)))
+	logLevels.MapSet("error", directVal(obs, "magus.log.error", buzzLogFn(slog.LevelError)))
 	// hint(msg): advisory nudge (see emitMagusHint), non-fatal, deduped, honors the
 	// hints toggle. Not a level, but it emits and returns, which is the line this
-	// namespace is drawn on.
-	logNS.MapSet("hint", directVal(obs, "magus.log.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	// nested object is drawn on.
+	logLevels.MapSet("hint", directVal(obs, "magus.log.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsStr() {
 			emitMagusHint(args[0].AsString())
 		}
 		return vm.Null, nil
 	}))
-	magus.MapSet("log", logNS)
+	magus.MapSet("log", logLevels)
 	// magus.fatal(msg): log at error level, then abort with exit 1 via a typed
 	// ExitError (the CLI/daemon map it to the exit status).
 	magus.MapSet("fatal", directVal(obs, "magus.fatal", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
@@ -236,8 +240,11 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// as "the module does not exist".
 	if surface == scriptSurface {
 		magus.MapSet("project", magusfileOnly(obs, `magus\project`))
-		cacheNS.MapSet("remote", magusfileOnly(obs, `magus\cache.remote`))
-		ciNS.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
+		cache.MapSet("remote", magusfileOnly(obs, `magus\cache.remote`))
+		ci.MapSet("provider", magusfileOnly(obs, `magus\ci.provider`))
+		guard.MapSet("shell", magusfileOnly(obs, `magus\guard.shell`))
+		guard.MapSet("bash", magusfileOnly(obs, `magus\guard.bash`))
+		harness.MapSet("provider", magusfileOnly(obs, `magus\harness.provider`))
 	}
 	return magus
 }

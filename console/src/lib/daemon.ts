@@ -278,12 +278,12 @@ export function resolveDaemonHost(params: HashParams = parseHash()): string | nu
 export type ProbeResult = { ok: true; url: string } | { ok: false; reason: string };
 
 // probeDaemon answers "is anything listening at this host:port?" for the Settings test-connection
-// control. /livez is the daemon's only tokenless route (health checks are mounted unguarded so a kubelet
-// can reach them), but it carries no CORS headers, so its RESPONSE is unreadable from another origin. A
-// no-cors request still gets sent, and resolve-vs-reject reports whether the connection was answered -
-// which is the question being asked. Success therefore means "a server answered", NOT "magus is healthy":
-// the body, and even the status code, are opaque. The browser also refuses to distinguish a refused
-// connection from a CORS/mixed-content block, so those collapse into one honest message.
+// control. /livez is the daemon's only tokenless route (health checks are mounted unguarded so a
+// kubelet can reach them). Current daemons also wrap /livez and /readyz in the same CORSAllow
+// list as the console bridge, but this probe still uses mode: "no-cors": resolve-vs-reject is
+// enough for "a server answered", and the body/status stay opaque by design. Success therefore
+// means "a server answered", NOT "magus is healthy". The browser also refuses to distinguish a
+// refused connection from a CORS/mixed-content block, so those collapse into one honest message.
 export async function probeDaemon(hostPort: string, timeoutMs = 3000): Promise<ProbeResult> {
   const host = normalizeDaemonHost(hostPort);
   if (!host) {

@@ -1,0 +1,104 @@
+// OpenCode agent-host harness. Skills-only: OpenCode has no shell-command hook
+// config file Magus can merge. The guard rides a TypeScript plugin
+// (docs/guides/integrations/agents/opencode-plugin.ts), not harness apply.
+//
+//   import "spells/harness/opencode" as opencode
+//   magus\harness.provider(opencode)
+//
+// To adapt without modifying Magus source: copy this spell into the workspace,
+// change only the import path (keep provider), edit Buzz. Apply writes nothing
+// when config path is empty; verify does not claim guard coverage from a missing
+// config. See magus-workspace-rules "Adapting a Buzz harness".
+
+import "magus/spell";
+import "assert";
+
+export fun mgs_getName() > str { return "opencode"; }
+
+fun opencode_skills_form() > str { return "both"; }
+
+fun opencode_skills_paths() > [str] {
+    return [".opencode/skills"];
+}
+
+fun opencode_config() > {str: any} {
+    return {
+        "path": "",
+    };
+}
+
+fun opencode_skills() > {str: any} {
+    return {
+        "paths": opencode_skills_paths(),
+        "form": opencode_skills_form(),
+    };
+}
+
+fun opencode_entries() > [any] {
+    return [];
+}
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return opencode_config();
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return opencode_skills();
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return opencode_entries();
+}
+
+fun opencode_mcp() > {str: any} {
+    // User owns OpenCode MCP client settings. Magus points at docs only.
+    // Guard remains the TypeScript plugin.
+    return {
+        "token_ref": "MAGUS_MCP_TOKEN",
+        "url": "http://127.0.0.1:7391/mcp",
+        "hint": "Configure Magus MCP in OpenCode's host client at __URL__ with Authorization from secret ref __TOKEN_REF__. Magus does not write OpenCode MCP config.",
+        "docs": "docs/guides/integrations/mcp.md",
+    };
+}
+
+export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
+    return opencode_mcp();
+}
+
+test "mgs_getName is the harness id apply and verify look up" {
+    assert\equal(mgs_getName(), "opencode", "id must match magus\\harness.provider wiring and --id");
+}
+
+test "harness_config is skills-only empty path" {
+    final cfg = opencode_config();
+    assert\equal("{cfg["path"]}", "", "no host JSON for Magus to merge");
+}
+
+test "harness_skills installs both forms under .opencode/skills" {
+    assert\equal(opencode_skills_form(), "both", "matches the JSON descriptor");
+    final skills = opencode_skills();
+    assert\equal("{skills["form"]}", "both", "skills map carries the form");
+    final paths = skills["paths"] as [str];
+    assert\equal(paths.len(), 1, "one skills install path");
+    assert\equal(paths[0], ".opencode/skills", "OpenCode reads .opencode/skills");
+}
+
+test "harness_entries is empty because apply writes nothing" {
+    assert\equal(opencode_entries().len(), 0, "guard is the TypeScript plugin not managed_entries");
+}
+
+test "harness_mcp points OpenCode at docs only" {
+    final mcp = opencode_mcp();
+    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
+    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
+    assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus write");
+}
+
+test "harness_* contract wrappers return the same pure helpers" {
+    final t = null;
+    final cb = fun(_: any) > void {};
+    assert\equal("{harness_config(t, cb)["path"]}", "", "config path");
+    assert\equal("{harness_skills(t, cb)["form"]}", opencode_skills_form(), "skills form");
+    assert\equal(harness_entries(t, cb).len(), 0, "entries length");
+    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+}

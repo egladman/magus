@@ -10,7 +10,7 @@ import (
 	"connectrpc.com/connect"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/job"
-	jobcatalog "github.com/egladman/magus/internal/jobs"
+	jobcatalog "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
@@ -236,12 +236,65 @@ func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 	}
 	exited := invoke(map[string]any{"op": "exit", "id": "evidence", "result": result}).Data.(types.Job)
 	assert.Equal(t, types.StateExited, exited.State)
-	status := invoke(map[string]any{"op": "wait", "id": "evidence"}).Data.(types.JobStatus)
+	status := invoke(map[string]any{"op": "wait", "id": "evidence", "result": result}).Data.(types.JobStatus)
 	assert.True(t, status.Verified, status.Violations)
 
 	_, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "exit", "id": "evidence", "result": "not-an-object"}})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "result must be an object")
+}
+
+// TestJobToolCompletionGatesRoundTripThroughMCP pins that fork accepts
+// completion_gates the same way CLI --stdin and Buzz put do, and that wait
+// verifies every declared gate against gate_evidence.
+func TestJobToolCompletionGatesRoundTripThroughMCP(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]types.JobAttempt{
+		"unit-ref": {Found: true, Ref: "unit-ref", Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999},
+		"docs-ref": {Found: true, Ref: "docs-ref", Project: "docs", Target: "test", TimestampMs: 9_999_999_999_999},
+	}
+	tool := &jobTool{
+		store: tmpJobStore(t, t.TempDir()),
+		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
+			return attempts[ref], nil
+		},
+	}
+	invoke := func(params map[string]any) spells.InvokeResponse {
+		t.Helper()
+		response, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: params})
+		require.NoError(t, err)
+		return response
+	}
+
+	forked := invoke(map[string]any{
+		"op": "fork", "id": "gated", "state": "running", "write_paths": "internal/job",
+		"completion_gates": []any{
+			map[string]any{"id": "unit", "check": map[string]any{"target": "go::go-test", "project": "."}},
+			map[string]any{"id": "docs", "check": map[string]any{"target": "test", "project": "docs"}, "depends_on": []any{"unit"}},
+		},
+	}).Data.(types.Job)
+	require.Len(t, forked.CompletionGates, 2)
+	assert.Equal(t, "unit", forked.CompletionGates[0].ID)
+	assert.Equal(t, "docs", forked.CompletionGates[1].ID)
+
+	result := map[string]any{
+		"schema_version": job.ResultSchemaVersion,
+		"job":            "gated",
+		"changed_paths":  []any{"internal/job/verify.go"},
+		"gate_evidence": []any{
+			map[string]any{"gate_id": "unit", "output_ref": "unit-ref"},
+			map[string]any{"gate_id": "docs", "output_ref": "docs-ref"},
+		},
+		"unresolved_risks": []any{},
+	}
+	exited := invoke(map[string]any{"op": "exit", "id": "gated", "result": result}).Data.(types.Job)
+	assert.Equal(t, types.StateExited, exited.State)
+	require.Len(t, exited.GateAttempts, 2)
+
+	status := invoke(map[string]any{"op": "wait", "id": "gated", "result": result}).Data.(types.JobStatus)
+	assert.True(t, status.Verified, status.Violations)
+	require.Len(t, status.Gates, 2)
 }
 
 // TestJobToolListAnswersOverlapsAndReleases covers what a list is FOR beyond the

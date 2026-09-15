@@ -51,7 +51,7 @@ import (
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/jobs"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
@@ -341,7 +341,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace to make that promise is work nobody asked for, and it breaks the
 		// promise out loud: a checkout carrying one unparsable local spell logs the load
 		// error on every hook. It resolves the daemon socket itself, exactly as
-		// `server job` did before this verb replaced it. Every other job verb reads the
+		// `magus job run` did before this verb replaced it. Every other job verb reads the
 		// workspace and takes the default.
 		if len(subArgs) > 0 && subArgs[0] == hint.JobRun.Leaf() {
 			return dispatchProfile{needsConfig: true}
@@ -1031,7 +1031,7 @@ func dispatchAdopted(ctx context.Context, root string, rc runConfig, args []stri
 // dispatch half that makes `graph build`, `clean --cache`, and the rotate workers actually run
 // as jobs; without it they returned ErrNotAdoptable and the submitted job was a silent no-op.
 func dispatchJob(ctx context.Context, root string, rc runConfig, args []string) error {
-	if !jobs.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
+	if !job.IsWorkerArgv(args) && !isDeclaredRun(ctx, args) {
 		return fmt.Errorf("%w: %q is not a registered job worker", proc.ErrNotAdoptable, strings.Join(args, " "))
 	}
 	return dispatchSub(ctx, root, rc, args[0], args[1:])

@@ -41,7 +41,7 @@ PY`,
 		`awk '{print > "internal/ledger/store.go"}' f`,
 		"cat f | python3 - <<'PY'\nopen('internal/ledger/store.go','w').write(out)\nPY",
 	} {
-		assert.NotEmpty(t, denyInterpreterRewrite(at, command), "%q rewrites a tracked file", command)
+		assert.NotEmpty(t, denyInterpreterRewrite(at, command, DialectBash), "%q rewrites a tracked file", command)
 	}
 }
 
@@ -69,12 +69,12 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 		// A quoted mention of the act is not the act.
 		`echo "python3 -c \"open('internal/ledger/store.go','w')\""`,
 	} {
-		assert.Empty(t, denyInterpreterRewrite(at, command), "%q", command)
+		assert.Empty(t, denyInterpreterRewrite(at, command, DialectBash), "%q", command)
 	}
 
 	t.Run("no workspace", func(t *testing.T) {
 		assert.Empty(t, denyInterpreterRewrite(location{},
-			"python3 -c \"open('internal/ledger/store.go','w').write(x)\""))
+			"python3 -c \"open('internal/ledger/store.go','w').write(x)\"", DialectBash))
 	})
 }
 
@@ -82,10 +82,10 @@ func TestDenyInterpreterRewriteStaysQuiet(t *testing.T) {
 // substitute-then-write rule refuse the same act in their own words, and a reader who got
 // one of those must not get this one instead.
 func TestRankInterpreterRewriteNeverReplacesADeny(t *testing.T) {
-	stood := BashVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
+	stood := ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}
 	assert.Equal(t, stood, rankInterpreterRewrite(stood, "a rewrite reason"))
 
-	advisory := BashVerdict{Context: "something milder"}
+	advisory := ShellVerdict{Context: "something milder"}
 	got := rankInterpreterRewrite(advisory, "a rewrite reason")
 	assert.Equal(t, "a rewrite reason", got.Deny)
 	assert.Equal(t, denyRuleInterpreterRewrite, got.Rule.Name)

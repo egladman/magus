@@ -653,6 +653,24 @@ func (m *Magus) All() []*types.Project          { return m.ws.All() }
 func (m *Magus) Get(path string) *types.Project { return m.ws.Get(path) }
 func (m *Magus) Graph() (*types.Graph, error)   { return dependency.Build(m.ws) }
 
+// ShellRules returns additive agent-guard rules the root magusfile declared via
+// magus\guard.shell, or nil. The session hook reads these after Inspect.
+func (m *Magus) ShellRules() []workspace.ShellRule {
+	if m.wsReg == nil {
+		return nil
+	}
+	return m.wsReg.ShellRules()
+}
+
+// Harnesses returns agent-harness spell names the root magusfile wired via
+// magus\harness.provider, or nil.
+func (m *Magus) Harnesses() []string {
+	if m.wsReg == nil {
+		return nil
+	}
+	return m.wsReg.Harnesses()
+}
+
 // SetGraphObserver installs an observer on the workspace; pass nil to clear.
 func (m *Magus) SetGraphObserver(o types.Observer) {
 	m.ws.SetGraphObserver(o)

@@ -363,6 +363,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Guard advises unbounded source dumps toward SCIP/`magus refs`.** `cat`/`head`/`less`
+  of source extensions (and Cursor `Read` without a limit, restated as `cat` on
+  `postToolUse`) get the same once-per-session advisory family as code-search; a
+  Read that already carries `limit` is restated as `sed -n` and stays quiet.
+- **Guard denies process-table polling** (`pgrep`/`pidof`/`ps`). Agents waiting
+  on a magus run must use `magus status --watch` instead of inventing a second
+  waiter. Doctor `checkpoint-wiring` follows named `.sh` hook scripts so Cursor's
+  embedded `session checkpoint` counts. MCP `magus_job` documents
+  `completion_gates` on fork (same contract as CLI `--stdin` and `magus\job.put`).
+  Skill v75.
+
+
+- **Claude Code and OpenCode harnesses are Buzz spells**
+  (`spells/harness/claude-code`, `spells/harness/opencode`), wired with Cursor
+  and Codex (skill v73). OpenCode stays skills-only; its guard remains the
+  TypeScript plugin. JSON under `harnesses/` remains the unwired fallback.
+
+- **Codex harness is a Buzz spell** (`spells/harness/codex`), wired beside Cursor
+  with `magus\harness.provider` (skill v72 example). Same import-path ownership
+  switch as Cursor; `harnesses/codex.json` remains the unwired fallback.
+
+- **Document adapting a Buzz harness by changing the magusfile import path** (skill
+  v71). Fork the shipped spell into the workspace, point `import "..."` at that
+  path, keep `magus\harness.provider`, edit Buzz, then `magus agent harness apply`.
+  No Magus source edits. The magus-workspace-rules skill and the agents/guard docs
+  spell the loop; JSON `improve --apply` remains for descriptor hosts.
+
 - **`magus ledger accept` grades evidence, not what the report claims.** The `passed` field
   is GONE from the report schema: the outcome is read from the stored run behind the
   `output_ref`, and that ref must resolve to a run of the row's own `validation` (compared

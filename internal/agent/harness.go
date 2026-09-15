@@ -2,13 +2,13 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
-	"text/template"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
@@ -19,24 +19,36 @@ const (
 	harnessDirName       = "harnesses"
 )
 
-var harnessIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+// HarnessStatus is the explicit verification outcome for a harness config.
+type HarnessStatus string
 
-// HarnessDescriptor is a user-owned contract between an agent host and
-// the provider-neutral Magus guard. Descriptors are loaded from
-// $XDG_CONFIG_HOME/magus/harnesses, harnesses, and .magus/harnesses; later
-// workspace-local sources override a user descriptor with the same ID.
-//
-// Magus owns the command injected into every declared hook. A descriptor can
-// choose host storage and event shape, but it cannot replace the adapter with
-// an arbitrary command and claim guard coverage.
+const (
+	HarnessVerified  HarnessStatus = "verified"
+	HarnessUncovered HarnessStatus = "uncovered"
+	HarnessInvalid   HarnessStatus = "invalid"
+)
+
+var (
+	harnessIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	// magusSessionInvocation requires magus as a program token before session,
+	// so `echo session hook` and similar do not count as coverage.
+	magusSessionInvocation = regexp.MustCompile(`(?:^|[^\w.-])magus(?:\s+|$)[^;\n]*\bsession(?:\s+hook\b|\b)`)
+)
+
+// HarnessDescriptor is a user-owned collaborator contract. Magus merges the
+// opaque config fragments a descriptor declares; it does not inject a command
+// or a reply codec. Transport lives in host-native glue (shipped scripts or a
+// plugin) that already names session hook. Optional MCP client wiring is a
+// separate document (or register hint), always bound to a secret ref.
 type HarnessDescriptor struct {
-	SchemaVersion  int               `json:"schema_version"`
-	ID             string            `json:"id"`
-	Display        HarnessDisplay    `json:"display"`
-	Config         HarnessConfig     `json:"config"`
-	Skills         HarnessSkills     `json:"skills"`
-	PreToolUse     HarnessPreToolUse `json:"pre_tool_use"`
-	ManagedEntries []HarnessEntries  `json:"managed_entries,omitempty"`
+	SchemaVersion  int              `json:"schema_version"`
+	ID             string           `json:"id"`
+	Display        HarnessDisplay   `json:"display"`
+	Config         HarnessConfig    `json:"config"`
+	ConfigDefaults map[string]any   `json:"config_defaults,omitempty"`
+	Skills         HarnessSkills    `json:"skills"`
+	ManagedEntries []HarnessEntries `json:"managed_entries,omitempty"`
+	MCP            *HarnessMCP      `json:"mcp,omitempty"`
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -48,9 +60,9 @@ type HarnessDisplay struct {
 }
 
 // HarnessConfig identifies the workspace-local JSON document maintained by a
-// descriptor. Path must be relative to the workspace, so an imported
-// descriptor cannot silently redirect an apply to another checkout or a user
-// configuration file.
+// descriptor. Path must be relative to the workspace when set. Empty Path is
+// skills-only: apply has nothing to write, and verify does not claim guard
+// coverage from a missing config.
 type HarnessConfig struct {
 	Path string `json:"path"`
 }
@@ -61,29 +73,8 @@ type HarnessSkills struct {
 	Form  Form     `json:"form"`
 }
 
-// HarnessPreToolUse describes how a host persists pre-tool adapters. Path
-// selects the array inside Config.Path; MatcherKey and HooksKey name the host
-// entry fields rather than assuming a particular provider's JSON shape.
-type HarnessPreToolUse struct {
-	Path             []string           `json:"path"`
-	MatcherKey       string             `json:"matcher_key"`
-	HooksKey         string             `json:"hooks_key"`
-	Entries          []HarnessHookEntry `json:"entries"`
-	ResponseTemplate string             `json:"response_template"`
-}
-
-// HarnessHookEntry is one host tool matcher. Hook carries only host-specific
-// fields such as timeouts or labels; command is deliberately reserved for the
-// generic Magus adapter.
-type HarnessHookEntry struct {
-	Matcher string         `json:"matcher"`
-	Hook    map[string]any `json:"hook"`
-	Observe bool           `json:"observe,omitempty"`
-}
-
-// HarnessEntries declares exact entries in another host hook event. These
-// entries are user-owned configuration; unlike PreToolUse, they carry no guard
-// response contract.
+// HarnessEntries declares exact host-config fragments to merge. Each entry is
+// opaque host JSON: Magus does not rewrite a command field.
 type HarnessEntries struct {
 	Path    []string         `json:"path"`
 	Entries []map[string]any `json:"entries"`
@@ -91,10 +82,11 @@ type HarnessEntries struct {
 
 // HarnessUpdate records an explicit, narrow harness mutation.
 type HarnessUpdate struct {
-	Host    string `json:"host"`
-	Path    string `json:"path"`
-	Changed bool   `json:"changed"`
-	Planned bool   `json:"planned,omitempty"`
+	ID         string `json:"id"`
+	Path       string `json:"path"`
+	Changed    bool   `json:"changed"`
+	Planned    bool   `json:"planned,omitempty"`
+	MCPHint string `json:"mcp_hint,omitempty"`
 }
 
 // HarnessApplyOptions contains the sole authority needed to mutate a harness.
@@ -102,7 +94,7 @@ type HarnessUpdate struct {
 // read in a nested process.
 type HarnessApplyOptions struct {
 	Root        string
-	Host        string
+	ID          string
 	DryRun      bool
 	ActingLease string
 }
@@ -111,33 +103,95 @@ type HarnessApplyOptions struct {
 // descriptor is not coverage; neither is a configuration that merely contains
 // a string resembling Magus.
 type HarnessVerification struct {
-	Host       string `json:"host"`
-	Descriptor string `json:"descriptor"`
-	Path       string `json:"path"`
-	Status     string `json:"status"`
-	Reason     string `json:"reason,omitempty"`
-	Guarded    bool   `json:"guarded,omitempty"`
+	ID         string        `json:"id"`
+	Descriptor string        `json:"descriptor"`
+	Path       string        `json:"path"`
+	Status     HarnessStatus `json:"status"`
+	Reason     string        `json:"reason,omitempty"`
+	Guarded   bool          `json:"guarded,omitempty"`
+	MCPStatus HarnessStatus `json:"mcp_status,omitempty"`
+	MCPReason string        `json:"mcp_reason,omitempty"`
 }
 
-// LoadHarness resolves one validated descriptor. Workspace-owned descriptors
-// take precedence over user-global ones, allowing a repository to pin its
-// harness contract without recompiling Magus.
-func LoadHarness(root, host string) (HarnessDescriptor, string, error) {
+// HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
+// harness spell (magus\harness.provider). Registered by the bindings layer so agent
+// stays free of the Buzz VM. A miss (false) falls through to JSON descriptors.
+type HarnessSpellLoader func(ctx context.Context, id string) (HarnessDescriptor, string, bool, error)
+
+var harnessSpellLoader HarnessSpellLoader
+
+// RegisterHarnessSpellLoader installs the spell-backed harness resolver. Called
+// once from bindings init.
+func RegisterHarnessSpellLoader(fn HarnessSpellLoader) {
+	harnessSpellLoader = fn
+}
+
+type wiredHarnessesKey struct{}
+
+// ContextWithWiredHarnesses attaches magusfile-selected harness IDs so
+// LoadHarness prefers a harness spell only when that id was wired via
+// magus\harness.provider. Callers that omit this keep the prior behavior
+// (any registered harness spell wins), which unit tests that load JSON only rely on.
+func ContextWithWiredHarnesses(ctx context.Context, ids []string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, wiredHarnessesKey{}, slices.Clone(ids))
+}
+
+func wiredHarnessesFromContext(ctx context.Context) (ids []string, ok bool) {
+	ids, ok = ctx.Value(wiredHarnessesKey{}).([]string)
+	return ids, ok
+}
+
+// LoadHarness resolves one validated descriptor. When the context carries
+// ContextWithWiredHarnesses, a harness spell wins only if that id is wired;
+// otherwise any registered harness spell that exports harness_config still
+// wins over JSON (tests and callers that have not inspected the magusfile).
+// Workspace-owned JSON still outranks user-global JSON when no spell applies.
+func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescriptor, source string, err error) {
+	if err = ctx.Err(); err != nil {
+		return
+	}
 	if root == "" {
-		return HarnessDescriptor{}, "", fmt.Errorf("workspace root is required to load a harness")
+		err = fmt.Errorf("workspace root is required to load a harness")
+		return
 	}
-	if !harnessIDPattern.MatchString(host) {
-		return HarnessDescriptor{}, "", fmt.Errorf("invalid harness ID %q", host)
+	if !harnessIDPattern.MatchString(id) {
+		err = fmt.Errorf("invalid harness ID %q", id)
+		return
 	}
-	descriptors, err := loadHarnesses(root)
-	if err != nil {
-		return HarnessDescriptor{}, "", err
+	trySpell := true
+	if wired, set := wiredHarnessesFromContext(ctx); set {
+		trySpell = slices.Contains(wired, id)
 	}
-	d, ok := descriptors[host]
+	if trySpell && harnessSpellLoader != nil {
+		d, src, ok, loadErr := harnessSpellLoader(ctx, id)
+		if loadErr != nil {
+			err = loadErr
+			return
+		}
+		if ok {
+			if verr := validateHarnessDescriptor(d); verr != nil {
+				err = fmt.Errorf("agent: invalid harness spell %q: %w", id, verr)
+				return
+			}
+			descriptor, source = d, src
+			return
+		}
+	}
+	descriptors, loadErr := loadHarnesses(root)
+	if loadErr != nil {
+		err = loadErr
+		return
+	}
+	d, ok := descriptors[id]
 	if !ok {
-		return HarnessDescriptor{}, "", fmt.Errorf("no harness descriptor named %q (install one in harnesses, .magus/harnesses, or $XDG_CONFIG_HOME/magus/harnesses)", host)
+		err = fmt.Errorf("no harness named %q (wire magus\\harness.provider(<spell>), or install a descriptor in harnesses/, .magus/harnesses/, or $XDG_CONFIG_HOME/magus/harnesses)", id)
+		return
 	}
-	return d.descriptor, d.source, nil
+	descriptor, source = d.descriptor, d.source
+	return
 }
 
 type loadedHarness struct {
@@ -161,7 +215,7 @@ func loadHarnesses(root string) (map[string]loadedHarness, error) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read harness descriptors in %s: %w", dir, err)
+			return nil, fmt.Errorf("agent: read harness descriptors in %s: %w", dir, err)
 		}
 		seen := map[string]bool{}
 		for _, entry := range entries {
@@ -171,7 +225,7 @@ func loadHarnesses(root string) (map[string]loadedHarness, error) {
 			source := filepath.Join(dir, entry.Name())
 			body, err := os.ReadFile(source)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("agent: read harness descriptor %s: %w", source, err)
 			}
 			var d HarnessDescriptor
 			if err := decodeHarnessJSON(body, &d); err != nil {
@@ -200,55 +254,32 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 	if d.Display.Name == "" {
 		return fmt.Errorf("display.name is required")
 	}
-	if d.Config.Path == "" || filepath.IsAbs(d.Config.Path) || !isSafeRelativePath(d.Config.Path) {
-		return fmt.Errorf("config.path must be a workspace-relative path")
-	}
-	if len(d.Skills.Paths) == 0 {
-		return fmt.Errorf("skills.paths is required")
+	if d.Config.Path != "" {
+		if filepath.IsAbs(d.Config.Path) || !isSafeRelativePath(d.Config.Path) {
+			return fmt.Errorf("config.path must be a workspace-relative path")
+		}
+		if strings.EqualFold(filepath.Base(d.Config.Path), "mcp.json") {
+			return fmt.Errorf("config.path %q looks like host MCP client config; Magus does not write MCP registration (use harness_mcp setup guidance instead)", d.Config.Path)
+		}
+	} else if len(d.ManagedEntries) > 0 {
+		return fmt.Errorf("config.path is required when managed_entries is set")
 	}
 	if _, err := ParseForm(string(d.Skills.Form)); err != nil {
 		return fmt.Errorf("skills.form: %w", err)
 	}
+	// Empty skills.paths is allowed when the collaborator reads only AGENTS.md.
 	for _, path := range d.Skills.Paths {
 		if path == "" || filepath.IsAbs(path) || !isSafeRelativePath(path) {
 			return fmt.Errorf("skills.paths must contain workspace-relative paths")
-		}
-	}
-	p := d.PreToolUse
-	if len(p.Path) == 0 || p.MatcherKey == "" || p.HooksKey == "" {
-		return fmt.Errorf("pre_tool_use.path, matcher_key, and hooks_key are required")
-	}
-	for _, key := range append(append([]string{}, p.Path...), p.MatcherKey, p.HooksKey) {
-		if key == "" || key == "." || key == ".." {
-			return fmt.Errorf("pre_tool_use field names must be non-empty object keys")
-		}
-	}
-	if p.ResponseTemplate == "" {
-		return fmt.Errorf("pre_tool_use.response_template is required")
-	}
-	if _, err := template.New("harness-response").Funcs(template.FuncMap{
-		"toJson": func(any) string { return "" },
-	}).Option("missingkey=error").Parse(p.ResponseTemplate); err != nil {
-		return fmt.Errorf("pre_tool_use.response_template: %w", err)
-	}
-	if len(p.Entries) == 0 {
-		return fmt.Errorf("pre_tool_use.entries is required")
-	}
-	for i, entry := range p.Entries {
-		if entry.Matcher == "" {
-			return fmt.Errorf("pre_tool_use.entries[%d].matcher is required", i)
-		}
-		if entry.Hook == nil || entry.Hook["type"] != "command" {
-			return fmt.Errorf("pre_tool_use.entries[%d].hook.type must be command", i)
-		}
-		if _, claimed := entry.Hook["command"]; claimed {
-			return fmt.Errorf("pre_tool_use.entries[%d].hook.command is reserved for Magus", i)
 		}
 	}
 	for i, group := range d.ManagedEntries {
 		if err := validateHarnessEntries(group); err != nil {
 			return fmt.Errorf("managed_entries[%d]: %w", i, err)
 		}
+	}
+	if err := validateHarnessMCP(d.MCP); err != nil {
+		return err
 	}
 	return nil
 }
@@ -265,9 +296,19 @@ func validateHarnessEntries(group HarnessEntries) error {
 	if len(group.Entries) == 0 {
 		return fmt.Errorf("entries are required")
 	}
+	var commands []string
 	for i, entry := range group.Entries {
 		if len(entry) == 0 {
 			return fmt.Errorf("entries[%d] must be an object", i)
+		}
+		collectCommands(entry, &commands)
+	}
+	if len(commands) == 0 {
+		return fmt.Errorf("entries must include at least one command that invokes magus")
+	}
+	for _, command := range commands {
+		if !invokesMagus(command) {
+			return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, session hook, or magus session)", command)
 		}
 	}
 	return nil
@@ -278,58 +319,86 @@ func isSafeRelativePath(path string) bool {
 	return clean != "." && clean != ".." && !strings.HasPrefix(clean, ".."+string(filepath.Separator))
 }
 
-// ApplyHarness atomically merges exactly the descriptor-declared Magus adapter
-// entries. User hooks with the same matcher remain untouched beside Magus's
-// entry, and duplicate JSON keys are refused before a document is re-encoded.
-func ApplyHarness(opts HarnessApplyOptions) (HarnessUpdate, error) {
+// ApplyHarness atomically merges the descriptor-declared opaque fragments.
+// User entries that are not an exact match remain untouched beside them.
+// When the spell declares MCP setup guidance, apply records a hint for the
+// CLI to print. Magus never writes host MCP client config and never resolves
+// the MCP secret ref.
+func ApplyHarness(ctx context.Context, opts HarnessApplyOptions) (HarnessUpdate, error) {
+	if err := ctx.Err(); err != nil {
+		return HarnessUpdate{}, err
+	}
 	if opts.Root == "" {
 		return HarnessUpdate{}, fmt.Errorf("workspace root is required")
 	}
 	if opts.ActingLease != "" {
 		return HarnessUpdate{}, fmt.Errorf("a bound job (%s) cannot rewire a host harness; have its unbound orchestrator run the explicit apply", opts.ActingLease)
 	}
-	d, _, err := LoadHarness(opts.Root, opts.Host)
+	d, _, err := LoadHarness(ctx, opts.Root, opts.ID)
 	if err != nil {
 		return HarnessUpdate{}, err
 	}
-	path, err := harnessConfigPath(opts.Root, d.Config.Path)
-	if err != nil {
-		return HarnessUpdate{}, err
-	}
-	update := HarnessUpdate{Host: d.ID, Path: path}
-	config := map[string]any{}
-	if body, err := os.ReadFile(path); err == nil {
-		if err := decodeHarnessJSON(body, &config); err != nil {
-			return update, fmt.Errorf("parse existing JSON: %w", err)
+	update := HarnessUpdate{ID: d.ID}
+
+	if d.Config.Path != "" {
+		path, err := harnessConfigPath(opts.Root, d.Config.Path)
+		if err != nil {
+			return HarnessUpdate{}, err
 		}
-	} else if !os.IsNotExist(err) {
-		return update, err
+		update.Path = path
+		config := map[string]any{}
+		existing := false
+		if body, err := os.ReadFile(path); err == nil {
+			existing = true
+			if err := decodeHarnessJSON(body, &config); err != nil {
+				return update, fmt.Errorf("parse existing JSON: %w", err)
+			}
+		} else if !os.IsNotExist(err) {
+			return update, fmt.Errorf("agent: read harness config %s: %w", path, err)
+		}
+		changed := false
+		for key, value := range d.ConfigDefaults {
+			if _, present := config[key]; present {
+				continue
+			}
+			config[key] = value
+			changed = true
+		}
+		managedChanged, err := ensureManagedEntries(config, d.ManagedEntries)
+		if err != nil {
+			return update, err
+		}
+		changed = changed || managedChanged
+		if changed {
+			if opts.DryRun {
+				update.Changed = true
+				update.Planned = true
+			} else {
+				encoded, err := json.MarshalIndent(config, "", "  ")
+				if err != nil {
+					return update, fmt.Errorf("encode merged JSON: %w", err)
+				}
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					return update, fmt.Errorf("agent: mkdir harness config dir: %w", err)
+				}
+				if _, err := harnessConfigPath(opts.Root, d.Config.Path); err != nil {
+					return update, err
+				}
+				if err := writeHarnessAtomically(path, append(encoded, '\n')); err != nil {
+					return update, fmt.Errorf("agent: write harness config %s: %w", path, err)
+				}
+				update.Changed = true
+			}
+		} else if !existing {
+			if len(d.ManagedEntries) > 0 || len(d.ConfigDefaults) > 0 {
+				return update, fmt.Errorf("descriptor %q declares no harness fragments to write", d.ID)
+			}
+		} else if len(d.ManagedEntries) > 0 && !configInvokesMagus(config) {
+			return update, fmt.Errorf("config does not invoke magus")
+		}
 	}
-	changed, err := ensureDescriptorPreToolUse(config, d)
-	if err != nil {
-		return update, err
-	}
-	managedChanged, err := ensureManagedEntries(config, d.ManagedEntries)
-	if err != nil {
-		return update, err
-	}
-	changed = changed || managedChanged
-	if !changed {
-		return update, nil
-	}
-	update.Changed = true
-	if opts.DryRun {
-		update.Planned = true
-		return update, nil
-	}
-	encoded, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return update, fmt.Errorf("encode merged JSON: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return update, err
-	}
-	if err := writeHarnessAtomically(path, append(encoded, '\n')); err != nil {
+
+	if err := applyHarnessMCP(d, &update); err != nil {
 		return update, err
 	}
 	return update, nil
@@ -337,160 +406,144 @@ func ApplyHarness(opts HarnessApplyOptions) (HarnessUpdate, error) {
 
 // VerifyHarness validates both the descriptor and the concrete harness config.
 // It reports an explicit status so callers cannot mistake an absent hook for a
-// healthy one.
-func VerifyHarness(root, host string) (HarnessVerification, error) {
-	d, source, loadErr := LoadHarness(root, host)
+// healthy one. Coverage is a config that still carries the declared fragments
+// and invokes magus somehow (a shipped script basename, session hook, or
+// magus session). A skills-only descriptor has nothing to wire.
+func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, error) {
+	if err := ctx.Err(); err != nil {
+		return HarnessVerification{}, err
+	}
+	d, source, loadErr := LoadHarness(ctx, root, id)
 	if loadErr != nil {
-		return HarnessVerification{Host: host, Status: "uncovered", Reason: loadErr.Error()}, nil
+		return HarnessVerification{ID: id, Status: HarnessUncovered, Reason: loadErr.Error()}, nil
+	}
+	result := HarnessVerification{ID: d.ID, Descriptor: source}
+	if d.Config.Path == "" {
+		result.Status = HarnessVerified
+		verifyHarnessMCP(d, &result)
+		return result, nil
 	}
 	path, pathErr := harnessConfigPath(root, d.Config.Path)
 	if pathErr != nil {
 		return HarnessVerification{}, pathErr
 	}
-	result := HarnessVerification{Host: d.ID, Descriptor: source, Path: path}
+	result.Path = path
 	body, readErr := os.ReadFile(path)
 	if os.IsNotExist(readErr) {
-		result.Status, result.Reason = "uncovered", "harness config does not exist"
+		result.Status, result.Reason = HarnessUncovered, "harness config does not exist"
+		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
 	if readErr != nil {
-		return HarnessVerification{}, readErr
+		return HarnessVerification{}, fmt.Errorf("agent: read harness config %s: %w", path, readErr)
 	}
 	config := map[string]any{}
 	if decodeErr := decodeHarnessJSON(body, &config); decodeErr != nil {
-		result.Status, result.Reason = "invalid", "parse existing JSON: "+decodeErr.Error()
+		result.Status, result.Reason = HarnessInvalid, "parse existing JSON: "+decodeErr.Error()
+		verifyHarnessMCP(d, &result)
 		return result, nil
 	}
-	entries, entriesErr := descriptorEntries(config, d.PreToolUse)
-	if entriesErr != nil {
-		result.Status, result.Reason = "invalid", entriesErr.Error()
-		return result, nil
-	}
-	for _, wanted := range d.PreToolUse.Entries {
-		wantedHook := descriptorHook(d.ID, wanted)
-		found := false
-		for _, entry := range matchingDescriptorEntries(entries, d.PreToolUse.MatcherKey, wanted.Matcher) {
-			hooks, ok := entry[d.PreToolUse.HooksKey].([]any)
-			if !ok && entry[d.PreToolUse.HooksKey] != nil {
-				result.Status, result.Reason = "invalid", fmt.Sprintf("existing hook entry %q is not an array", d.PreToolUse.HooksKey)
-				return result, nil
-			}
-			if containsExactEntry(hooks, wantedHook) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			result.Status, result.Reason = "uncovered", fmt.Sprintf("missing Magus adapter for matcher %q", wanted.Matcher)
-			return result, nil
-		}
-	}
-	result.Guarded = true
 	for _, group := range d.ManagedEntries {
-		entries, err := managedEntries(config, group)
+		entries, err := pathEntries(config, group.Path)
 		if err != nil {
-			result.Status, result.Reason = "invalid", err.Error()
+			result.Status, result.Reason = HarnessInvalid, err.Error()
+			verifyHarnessMCP(d, &result)
 			return result, nil
 		}
 		for _, wanted := range group.Entries {
-			if !containsExactEntry(entries, wanted) {
-				result.Status, result.Reason = "uncovered", fmt.Sprintf("missing managed entry at %q", strings.Join(group.Path, "."))
+			found, err := containsExactEntry(entries, wanted)
+			if err != nil {
+				return HarnessVerification{}, err
+			}
+			if !found {
+				result.Status, result.Reason = HarnessUncovered, fmt.Sprintf("missing managed entry at %q", strings.Join(group.Path, "."))
+				verifyHarnessMCP(d, &result)
 				return result, nil
 			}
 		}
 	}
-	result.Status = "verified"
+	if !configInvokesMagus(config) {
+		result.Status, result.Reason = HarnessUncovered, "config does not invoke magus"
+		verifyHarnessMCP(d, &result)
+		return result, nil
+	}
+	result.Guarded = true
+	result.Status = HarnessVerified
+	verifyHarnessMCP(d, &result)
 	return result, nil
 }
 
-// HarnessResponseTemplate returns the host response template belonging to a
-// loaded collaborator. The adapter still supplies the host label to the
-// canonical session hook; only response encoding is delegated.
-func HarnessResponseTemplate(root, host string) (string, error) {
-	d, _, err := LoadHarness(root, host)
-	if err != nil {
-		return "", err
+func HarnessSkillsFor(ctx context.Context, root, id string) (HarnessSkills, error) {
+	if err := ctx.Err(); err != nil {
+		return HarnessSkills{}, err
 	}
-	return d.PreToolUse.ResponseTemplate, nil
-}
-
-// HarnessSkillsFor returns the selected form and locations for one harness.
-func HarnessSkillsFor(root, host string) (HarnessSkills, error) {
-	d, _, err := LoadHarness(root, host)
+	d, _, err := LoadHarness(ctx, root, id)
 	if err != nil {
 		return HarnessSkills{}, err
 	}
 	return d.Skills, nil
 }
 
-func ensureDescriptorPreToolUse(config map[string]any, d HarnessDescriptor) (bool, error) {
-	entries, err := descriptorEntries(config, d.PreToolUse)
-	if err != nil {
-		return false, err
-	}
-	changed := false
-	for _, wanted := range d.PreToolUse.Entries {
-		matches := matchingDescriptorEntries(entries, d.PreToolUse.MatcherKey, wanted.Matcher)
-		wantedHook := descriptorHook(d.ID, wanted)
-		found := false
-		for _, match := range matches {
-			hooks, _ := match[d.PreToolUse.HooksKey].([]any)
-			filtered := make([]any, 0, len(hooks))
-			for _, raw := range hooks {
-				hook, ok := raw.(map[string]any)
-				if !ok {
-					filtered = append(filtered, raw)
-					continue
-				}
-				if containsExactEntry([]any{hook}, wantedHook) {
-					found = true
-					filtered = append(filtered, raw)
-					continue
-				}
-				if command, ok := hook["command"].(string); ok && isHarnessHookCommand(d.ID, command) {
-					changed = true
-					continue
-				}
-				filtered = append(filtered, raw)
+func pathEntries(config map[string]any, path []string) ([]any, error) {
+	current := config
+	for i, key := range path {
+		last := i == len(path)-1
+		value, present := current[key]
+		if last {
+			if !present || value == nil {
+				return []any{}, nil
 			}
-			match[d.PreToolUse.HooksKey] = filtered
+			entries, ok := value.([]any)
+			if !ok {
+				return nil, fmt.Errorf("existing path %q is not an array", strings.Join(path, "."))
+			}
+			return entries, nil
 		}
-		if found {
-			continue
+		if !present || value == nil {
+			return []any{}, nil
 		}
-		if len(matches) == 0 {
-			entries = append(entries, map[string]any{
-				d.PreToolUse.MatcherKey: wanted.Matcher,
-				d.PreToolUse.HooksKey:   []any{wantedHook},
-			})
-			changed = true
-			continue
+		next, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("existing path %q is not an object", strings.Join(path[:i+1], "."))
 		}
-		first := matches[0]
-		hooks, _ := first[d.PreToolUse.HooksKey].([]any)
-		first[d.PreToolUse.HooksKey] = append(hooks, wantedHook)
-		changed = true
+		current = next
 	}
-	if changed {
-		setDescriptorEntries(config, d.PreToolUse.Path, entries)
-	}
-	return changed, nil
+	return nil, fmt.Errorf("empty path")
 }
 
 func ensureManagedEntries(config map[string]any, groups []HarnessEntries) (bool, error) {
 	changed := false
 	for _, group := range groups {
-		entries, err := managedEntries(config, group)
+		entries, err := pathEntries(config, group.Path)
 		if err != nil {
 			return false, err
 		}
 		groupChanged := false
 		for _, wanted := range group.Entries {
-			if containsExactEntry(entries, wanted) {
+			exact, err := containsExactEntry(entries, wanted)
+			if err != nil {
+				return false, err
+			}
+			if exact {
 				continue
 			}
-			entries = append(entries, wanted)
-			groupChanged = true
+			replaced := false
+			for i, raw := range entries {
+				entry, ok := raw.(map[string]any)
+				if !ok {
+					continue
+				}
+				if sameManagedIdentity(entry, wanted) {
+					entries[i] = wanted
+					groupChanged = true
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				entries = append(entries, wanted)
+				groupChanged = true
+			}
 		}
 		if groupChanged {
 			setDescriptorEntries(config, group.Path, entries)
@@ -498,60 +551,6 @@ func ensureManagedEntries(config map[string]any, groups []HarnessEntries) (bool,
 		}
 	}
 	return changed, nil
-}
-
-func descriptorEntries(config map[string]any, p HarnessPreToolUse) ([]any, error) {
-	current := config
-	for i, key := range p.Path {
-		last := i == len(p.Path)-1
-		value, present := current[key]
-		if last {
-			if !present || value == nil {
-				return []any{}, nil
-			}
-			entries, ok := value.([]any)
-			if !ok {
-				return nil, fmt.Errorf("existing pre_tool_use path %q is not an array", strings.Join(p.Path, "."))
-			}
-			return entries, nil
-		}
-		if !present || value == nil {
-			return []any{}, nil
-		}
-		next, ok := value.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("existing pre_tool_use path %q is not an object", strings.Join(p.Path[:i+1], "."))
-		}
-		current = next
-	}
-	return nil, fmt.Errorf("empty pre_tool_use path")
-}
-
-func managedEntries(config map[string]any, group HarnessEntries) ([]any, error) {
-	current := config
-	for i, key := range group.Path {
-		last := i == len(group.Path)-1
-		value, present := current[key]
-		if last {
-			if !present || value == nil {
-				return []any{}, nil
-			}
-			entries, ok := value.([]any)
-			if !ok {
-				return nil, fmt.Errorf("existing managed path %q is not an array", strings.Join(group.Path, "."))
-			}
-			return entries, nil
-		}
-		if !present || value == nil {
-			return []any{}, nil
-		}
-		next, ok := value.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("existing managed path %q is not an object", strings.Join(group.Path[:i+1], "."))
-		}
-		current = next
-	}
-	return nil, fmt.Errorf("empty managed path")
 }
 
 func setDescriptorEntries(config map[string]any, path []string, entries []any) {
@@ -570,49 +569,10 @@ func setDescriptorEntries(config map[string]any, path []string, entries []any) {
 	}
 }
 
-func matchingDescriptorEntries(entries []any, matcherKey, matcher string) []map[string]any {
-	var matches []map[string]any
-	for _, raw := range entries {
-		entry, ok := raw.(map[string]any)
-		if ok && entry[matcherKey] == matcher {
-			matches = append(matches, entry)
-		}
-	}
-	return matches
-}
-
-func descriptorHook(host string, entry HarnessHookEntry) map[string]any {
-	extra := entry.Hook
-	hook := make(map[string]any, len(extra)+1)
-	for key, value := range extra {
-		hook[key] = value
-	}
-	hook["command"] = HarnessHookCommand(host, entry.Observe)
-	return hook
-}
-
-// HarnessHookCommand is the Magus-owned adapter command injected into host hook
-// configs. It prefers the workspace binary found by walking up to magusfile.buzz,
-// then falls back to PATH for installs without a checked-out binary.
-func HarnessHookCommand(host string, observe bool) string {
-	args := "agent hook --host " + host
-	if observe {
-		args += " --observe"
-	}
-	return `guard_root=$PWD; while [ -n "$guard_root" ]; do if [ -f "$guard_root/magusfile.buzz" ]; then if [ -x "$guard_root/magus" ]; then exec "$guard_root/magus" ` + args + `; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus ` + args
-}
-
-func isHarnessHookCommand(host, command string) bool {
-	return command == "magus agent hook --host "+host ||
-		command == "magus agent hook --host "+host+" --observe" ||
-		command == HarnessHookCommand(host, false) ||
-		command == HarnessHookCommand(host, true)
-}
-
-func containsExactEntry(entries []any, wanted map[string]any) bool {
+func containsExactEntry(entries []any, wanted map[string]any) (bool, error) {
 	want, err := json.Marshal(wanted)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("agent: marshal managed entry: %w", err)
 	}
 	for _, raw := range entries {
 		entry, ok := raw.(map[string]any)
@@ -620,17 +580,99 @@ func containsExactEntry(entries []any, wanted map[string]any) bool {
 			continue
 		}
 		got, err := json.Marshal(entry)
-		if err == nil && bytes.Equal(got, want) {
+		if err != nil {
+			return false, fmt.Errorf("agent: marshal existing harness entry: %w", err)
+		}
+		if bytes.Equal(got, want) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// sameManagedIdentity treats matcher/match (when present) plus collected command
+// strings as the stable key so a statusMessage or timeout edit replaces in place
+// instead of appending a duplicate hook.
+func sameManagedIdentity(existing, wanted map[string]any) bool {
+	return managedIdentityKey(existing) == managedIdentityKey(wanted)
+}
+
+func managedIdentityKey(entry map[string]any) string {
+	var b strings.Builder
+	switch {
+	case stringField(entry, "matcher") != "":
+		b.WriteString("matcher=")
+		b.WriteString(stringField(entry, "matcher"))
+	case stringField(entry, "match") != "":
+		b.WriteString("match=")
+		b.WriteString(stringField(entry, "match"))
+	}
+	var commands []string
+	collectCommands(entry, &commands)
+	sorted := slices.Clone(commands)
+	slices.Sort(sorted)
+	b.WriteByte('|')
+	b.WriteString(strings.Join(sorted, "\x00"))
+	return b.String()
+}
+
+func stringField(entry map[string]any, key string) string {
+	v, _ := entry[key].(string)
+	return v
+}
+
+func collectCommands(v any, out *[]string) {
+	switch t := v.(type) {
+	case map[string]any:
+		if command, ok := t["command"].(string); ok && command != "" {
+			*out = append(*out, command)
+		}
+		for _, child := range t {
+			collectCommands(child, out)
+		}
+	case []any:
+		for _, child := range t {
+			collectCommands(child, out)
+		}
+	}
+}
+
+func configInvokesMagus(config map[string]any) bool {
+	var commands []string
+	collectCommands(config, &commands)
+	for _, command := range commands {
+		if invokesMagus(command) {
 			return true
 		}
 	}
 	return false
 }
 
+// invokesMagus reports whether a host hook command actually calls Magus.
+// Coverage is transport-shaped: shipped script basenames (aligned with
+// doctor's guardTemplateBasenames plus magus-guard-observe), or a magus
+// session/session-hook invocation. A generic *-guard.sh does not count.
+func invokesMagus(command string) bool {
+	switch {
+	case strings.Contains(command, "magus-guard-"):
+		return true
+	case strings.Contains(command, "cursor-guard.sh"):
+		return true
+	case strings.Contains(command, "magus-checkpoint"):
+		return true
+	case strings.Contains(command, "magus-rehydrate"):
+		return true
+	case magusSessionInvocation.MatchString(command):
+		return true
+	default:
+		return false
+	}
+}
+
 func harnessConfigPath(root, rel string) (string, error) {
 	workspace, err := filepath.Abs(root)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("agent: resolve workspace root: %w", err)
 	}
 	path := filepath.Join(workspace, rel)
 	inside, err := filepath.Rel(workspace, path)
@@ -645,7 +687,7 @@ func harnessConfigPath(root, rel string) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("agent: stat harness config path %s: %w", current, err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			return "", fmt.Errorf("harness config path contains symlink %q", current)
@@ -665,43 +707,72 @@ func writeHarnessAtomically(path string, body []byte) error {
 	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode().Perm()
 	} else if !os.IsNotExist(err) {
-		return err
+		return fmt.Errorf("agent: stat harness config %s: %w", path, err)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
 	if err != nil {
-		return err
+		return fmt.Errorf("agent: create temp harness config: %w", err)
 	}
 	tmpPath := tmp.Name()
 	defer os.Remove(tmpPath)
 	if err := tmp.Chmod(mode); err != nil {
 		tmp.Close()
-		return err
+		return fmt.Errorf("agent: chmod temp harness config: %w", err)
 	}
 	if _, err := tmp.Write(body); err != nil {
 		tmp.Close()
-		return err
+		return fmt.Errorf("agent: write temp harness config: %w", err)
 	}
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
-		return err
+		return fmt.Errorf("agent: sync temp harness config: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return fmt.Errorf("agent: close temp harness config: %w", err)
 	}
-	return os.Rename(tmpPath, path)
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("agent: rename harness config into place: %w", err)
+	}
+	return nil
 }
 
 // KnownHarnesses is useful to generic UIs and tests without leaking a fixed
 // provider list into the binary. It returns IDs in deterministic order.
-func KnownHarnesses(root string) ([]string, error) {
+//
+// wired are magusfile-selected harness spell names (Magus.Harnesses()). They are
+// unioned with JSON descriptors so a spell-only host still appears in
+// doctor/improve without a harnesses/*.json file. A workspace may wire several
+// hosts; bouncing between LLM providers is the intended case.
+//
+// Omitting wired (or passing a nil/empty slice) means no magusfile providers to
+// union - that is fine. A blank entry inside wired is not: empty and whitespace-
+// only names are rejected rather than skipped, so a bad AddHarness cannot
+// disappear into the union.
+func KnownHarnesses(ctx context.Context, root string, wired ...string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	descriptors, err := loadHarnesses(root)
 	if err != nil {
 		return nil, err
 	}
-	ids := make([]string, 0, len(descriptors))
+	seen := make(map[string]struct{}, len(descriptors)+len(wired))
+	ids := make([]string, 0, len(descriptors)+len(wired))
 	for id := range descriptors {
+		seen[id] = struct{}{}
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	for _, id := range wired {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return nil, fmt.Errorf("agent: wired harness id is empty")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
 	return ids, nil
 }

@@ -21,7 +21,7 @@ func init() {
 	workspace.RegisterProviderRunner(runWorkspaceProvider)
 }
 
-// buildWorkspaceNS assembles magus.workspace for a magusfile. Today it exposes
+// buildWorkspace assembles magus.workspace for a magusfile. Today it exposes
 // provider(), which wires an imported spell as a workspace provider: a spell that
 // supplies the workspace's project set because another tool already owns it:
 //
@@ -40,9 +40,9 @@ func init() {
 //
 // Several providers may be wired; they run in wiring order and the first to report a
 // path owns it.
-func buildWorkspaceNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("provider", directVal(obs, "magus.workspace.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildWorkspace(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	workspaceObj := vm.NewMap()
+	workspaceObj.MapSet("provider", directVal(obs, "magus.workspace.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\workspace.provider: expected an imported spell handle`)
 		}
@@ -55,7 +55,7 @@ func buildWorkspaceNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	return ns
+	return workspaceObj
 }
 
 // providerDeadline bounds one list_projects invocation. A provider shells out to a

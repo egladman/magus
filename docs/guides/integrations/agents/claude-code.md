@@ -39,26 +39,44 @@ surface, the two forms, and the drift check.
 
 ## MCP
 
-Configure MCP for Claude Code as a host-level integration; [MCP](../mcp.md) has
-the connection and token setup. Tools are discovered at launch, so restart a
-client after changing its MCP configuration. An agent that finds MCP unavailable
-uses the CLI fallback; it does not manually start Magus solely to obtain tools.
+Configure MCP for Claude Code yourself. `magus agent harness apply --id
+claude-code` prints the `claude mcp add` sketch only. Resolve secret ref
+`MAGUS_MCP_TOKEN` (env provider by default) for the bearer header; [MCP](../mcp.md)
+has the full token setup. Tools are discovered at launch, so restart a client
+after changing its MCP configuration. An agent that finds MCP unavailable uses
+the CLI fallback; it does not manually start Magus solely to obtain tools.
 
 ## Guard hook
 
-The shipped `claude-code` harness descriptor owns the `PreToolUse` entries: its
-matchers, reply template, and `.claude/settings.json` path are data in
-`harnesses/claude-code.json`, not a provider-specific branch in Magus. Apply it
-from the workspace root:
+Prefer wiring the Claude Code harness from the root magusfile when you bounce
+between hosts; apply then covers every wired provider:
 
-```sh
-magus agent harness apply --host claude-code
-magus agent harness verify --host claude-code
+```buzz
+import "spells/harness/claude-code" as claude
+magus\harness.provider(claude)
 ```
 
-The current descriptor installs entries for commands, file edits, and Magus MCP
-tool calls. Each calls a root-aware adapter that prefers this checkout's
-`./magus` before falling back to `PATH`:
+```sh
+magus agent harness apply
+magus agent harness verify
+```
+
+To adapt that Buzz harness without modifying Magus source: copy the spell into
+the workspace, change only the import path (for example
+`import "harness/claude-code" as claude`), edit the workspace Buzz, then re-run
+apply and verify. Details:
+[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Improving recurring friction](guard.md#improving-recurring-friction).
+
+Or target Claude Code alone (spell or `harnesses/claude-code.json` fallback):
+
+```sh
+magus agent harness apply --id claude-code
+magus agent harness verify --id claude-code
+```
+
+The spell installs entries for commands, file edits, Magus MCP tool calls, and
+read observation. Each runs a shipped script that talks to `magus session hook`:
 
 ```json
 {
@@ -66,58 +84,49 @@ tool calls. Each calls a root-aware adapter that prefers this checkout's
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-guard-path.sh", "timeout": 10 }]
       }
     ]
   }
 }
 ```
 
-This repository's own `.claude/settings.json` uses that same root-aware command.
-It replaces the `magus-guard-command.sh` and `magus-guard-path.sh` templates.
-Use the [guard templates](guard-templates.md) where a host cannot run shell
-adapters from the workspace.
-
-`magus agent hook --host claude-code` reads Claude Code's event JSON directly:
-`tool_input.command`, `tool_input.file_path`, `session_id` and `hook_event_name`
-are the fields it knows, and a payload carrying a file path is judged as a write
-without `--path`. The adapter supplies the host response format and suppresses
-the internal shell-oriented denial status, so one command serves both matchers
-with no `jq` and no script:
-
-```sh
-magus agent hook --host claude-code
-```
-
-The generated harness command tries the workspace binary first. The templates
-retain the more verbose missing-or-broken-binary notice and remain the fallback
-when a host cannot use the descriptor adapter.
+This repository's own `.claude/settings.json` invokes those same files. The
+scripts are the glue; harness apply only merges the fragments that name them.
+See [guard templates](guard-templates.md) for the files and the variables that
+adapt them.
 
 ### Maintaining the workspace harness
 
-When repeated guard evidence identifies an outdated Claude Code harness, review
-the proposal with `magus agent improve`, then explicitly apply it:
+This host is a Buzz harness spell. Adapt without Magus source edits by forking
+the spell and changing only the import path; then `magus agent harness apply`
+and `verify`. See
+[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Improving recurring friction](guard.md#improving-recurring-friction).
+
+`harnesses/claude-code.json` remains as a fallback when the magusfile does not
+wire the spell. Recurring Magus-owned fragment merges for that JSON path still
+use:
 
 ```sh
-magus agent improve --apply --host claude-code
+magus agent improve --apply --id claude-code
 ```
 
-That command delegates the write to the `claude-code` descriptor. It updates
-only its Magus-owned host `PreToolUse` entries in the descriptor's workspace
-configuration path, preserves unrelated settings, and does not touch user-level
-configuration, templates, compiled guard rules, skills, memory, or `AGENTS.md`.
-Review the normal JSON diff before committing it, then run `magus agent harness
-verify --host claude-code`.
+That writes only Magus-owned native `PreToolUse` entries in the workspace-local
+JSON configuration and preserves every other setting. It never writes
+user-level configuration, templates, compiled guard rules, skills, memory, or
+`AGENTS.md`. Review the JSON diff, then `magus agent harness verify --id
+claude-code`.
 
 ## MCP tool calls
 
 Claude Code's `PreToolUse` also fires for a tool served over MCP, matching
 `mcp__<server>__<tool>`. The shipped descriptor includes a Magus-MCP matcher,
-so `magus agent harness apply --host claude-code` installs this entry alongside
+so `magus agent harness apply --id claude-code` installs this entry alongside
 the command and file surfaces:
 
 ```json
@@ -127,7 +136,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code", "timeout": 10 }
+          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }
         ]
       }
     ]
@@ -135,8 +144,8 @@ the command and file surfaces:
 }
 ```
 
-Same adapter, same reply shape. An MCP call carries no `tool_input.command`,
-only a tool name and a params object, so the adapter forwards the event whole
+Same script, same reply shape. An MCP call carries no `tool_input.command`,
+only a tool name and a params object, so `HOST_EVENT_RAW=1` forwards the event whole
 instead of extracting one field. `magus session hook` already parses that whole envelope;
 today it recognizes the tool name and params only well enough to say there is
 nothing here it can judge, so this wiring passes every MCP call rather than

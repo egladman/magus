@@ -253,13 +253,13 @@ func magusSurfaceNames(t *testing.T) []string {
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	t.Cleanup(func() { _ = sess.Close() })
 
-	ns := buildMagusNS(ctx, sess, interp.NewHostCallObserver(ctx), false, magusfileSurface)
-	require.True(t, ns.IsMap(), "the magus namespace is a map")
+	magus := buildMagus(ctx, sess, interp.NewHostCallObserver(ctx), false, magusfileSurface)
+	require.True(t, magus.IsMap(), "the magus module is a map")
 
 	var out []string
-	for _, k := range ns.MapKeys() {
+	for _, k := range magus.MapKeys() {
 		out = append(out, k)
-		v, ok := ns.MapGet(k)
+		v, ok := magus.MapGet(k)
 		if !ok || !v.IsMap() {
 			continue
 		}
@@ -338,12 +338,12 @@ func TestMagusSurfaceIsDeclared(t *testing.T) {
 	for _, m := range std.Magus.Methods {
 		declared[std.BuzzMethodName(m)] = true
 	}
-	for _, ns := range std.Magus.Namespaces {
-		declared[ns.Name] = true
+	for _, namespace := range std.Magus.Namespaces {
+		declared[namespace.Name] = true
 		// A nested member is declared under its namespace: magus\review.provider is
 		// the shape that went missing when only the namespace names were compared.
-		for _, m := range ns.Methods {
-			declared[ns.Name+"."+std.BuzzMethodName(m)] = true
+		for _, m := range namespace.Methods {
+			declared[namespace.Name+"."+std.BuzzMethodName(m)] = true
 		}
 	}
 	// The magus.Context builder and the target registry are not members of this

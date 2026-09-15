@@ -37,6 +37,6 @@ magus.project({"sources": ["*.md"]});
 
 The workspace's own instructions live here.
 -- harnesses/brief-host.json --
-{"schema_version":2,"id":"brief-host","display":{"name":"Brief Host"},"config":{"path":"host/hooks.json"},"skills":{"paths":[".agents/skills"],"form":"both"},"pre_tool_use":{"path":["hooks","before"],"matcher_key":"match","hooks_key":"commands","response_template":"{{toJson .}}","entries":[{"matcher":"run","hook":{"type":"command"}}]}}
+{"schema_version":2,"id":"brief-host","display":{"name":"Brief Host"},"config":{"path":"host/hooks.json"},"skills":{"paths":[".agents/skills"],"form":"both"},"managed_entries":[{"path":["hooks","before"],"entries":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]}]}
 -- host/hooks.json --
-{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host brief-host"}]}]}}
+{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]}}

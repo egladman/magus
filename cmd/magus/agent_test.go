@@ -2,8 +2,6 @@ package main
 
 import (
 	"archive/tar"
-	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,8 +10,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/guard"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -32,51 +28,6 @@ func TestEmbeddedSkillsAreWellFormed(t *testing.T) {
 			require.LessOrEqual(t, r, byte(127), "%s must be plain ASCII", skill.Name)
 		}
 	}
-}
-
-func TestAgentHookRequiresARuntimeLoadedHarness(t *testing.T) {
-	err := agentHookCmd(context.Background(), t.TempDir(), strings.NewReader("{}"), io.Discard, []string{"--host", "missing-host"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no harness descriptor")
-}
-
-func TestNativeAgentHookTreatsDeliveredDenyAsSuccess(t *testing.T) {
-	assert.NoError(t, agentHookDeliveryResult(errSilent{exitCode: guardDenyExitCode}))
-
-	sentinel := errors.New("could not parse host event")
-	assert.ErrorIs(t, agentHookDeliveryResult(sentinel), sentinel)
-}
-
-func TestNativeAgentHookCanObserveReads(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	global = globalFlags{}
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "reader.json"), []byte(`{
-  "schema_version": 2,
-  "id": "reader",
-  "display": {"name": "Reader"},
-  "config": {"path": "reader/hooks.json"},
-  "skills": {"paths": [".agents/skills"], "form": "full"},
-  "pre_tool_use": {
-    "path": ["hooks", "PreToolUse"], "matcher_key": "matcher", "hooks_key": "hooks",
-    "response_template": "{{if .decision}}{{.decision}}{{end}}",
-    "entries": [{"matcher": "Read", "observe": true, "hook": {"type": "command"}}]
-  }
-}`), 0o644))
-	ctx := guard.WithLocation(context.Background(), root, root, "")
-	var out strings.Builder
-
-	require.NoError(t, agentHookCmd(ctx, root, strings.NewReader(`{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"file_path":"AGENTS.md"}}`), &out, []string{"--host", "reader", "--observe"}))
-
-	assert.Empty(t, out.String())
-	events, err := trail.ReadRecent(root, 1)
-	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, trail.KindAgentCommand, events[0].Kind)
-	assert.Equal(t, "reader", events[0].Host)
-	assert.Equal(t, "file.read", events[0].Action)
-	assert.Equal(t, "observed", events[0].Preview)
 }
 
 func TestRenderAgentSkill(t *testing.T) {
@@ -336,7 +287,7 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 func writeStatusHarness(t *testing.T, root, skillsDir string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "harnesses"), 0o755))
-	const descriptor = `{"schema_version":2,"id":"status-test","display":{"name":"Status test"},"skills":{"paths":[%q],"form":"full"},"config":{"path":".status-test/config.json"},"pre_tool_use":{"path":["hooks","PreToolUse"],"matcher_key":"matcher","hooks_key":"hooks","response_template":"{{toJson .reason}}","entries":[{"matcher":"Bash","hook":{"type":"command"}}]}}`
+	const descriptor = `{"schema_version":2,"id":"status-test","display":{"name":"Status test"},"skills":{"paths":[%q],"form":"full"},"config":{"path":".status-test/config.json"}}`
 	require.NoError(t, os.WriteFile(filepath.Join(root, "harnesses", "status-test.json"), []byte(fmt.Sprintf(descriptor, skillsDir)), 0o644))
 }
 

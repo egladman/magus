@@ -77,6 +77,7 @@ var cursorReplySchema = map[string]string{
 var hostConfigFile = map[string][]string{
 	"claude-code": {".claude/settings.json"},
 	"codex":       {filepath.Join(hookTemplateDir, "codex-hooks.json")},
+	"cursor":      {".cursor/hooks.json"},
 }
 
 // hostGuidePage names the page whose embedded JSON configures each host.

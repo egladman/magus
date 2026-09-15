@@ -13,7 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
@@ -112,7 +111,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	s := newTestService(fakeWS{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}
 
-	j, ok := jobs.Lookup("rotate-activities")
+	j, ok := jobstore.Lookup("rotate-activities")
 	require.True(t, ok)
 	got := s.job(j, running, types.Job{})
 
@@ -277,7 +276,7 @@ func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
 	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Jobs)
-	require.Len(t, resp.Msg.Jobs, len(jobs.All()), "an unwritten store handed the listing a row")
+	require.Len(t, resp.Msg.Jobs, len(jobstore.All()), "an unwritten store handed the listing a row")
 	require.NotNil(t, resp.Msg.Overlaps)
 	require.Empty(t, resp.Msg.Overlaps)
 }

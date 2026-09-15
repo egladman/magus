@@ -1,0 +1,220 @@
+// Cursor agent-host harness. A fifth provider-style spell contract beside cache /
+// CI / secret / review: selected from a magusfile with magus\harness.provider, not a
+// JSON file under harnesses/.
+//
+//   import "spells/harness/cursor" as cursor
+//   magus\harness.provider(cursor)
+//
+// To adapt without modifying Magus source: copy this spell into the workspace,
+// change only the import path (keep provider), edit Buzz, then
+// `magus agent harness apply`. See magus-workspace-rules "Adapting a Buzz harness".
+//
+// Magus invokes the reserved harness_* names on apply/verify. The fragments are
+// opaque host JSON; Magus merges them and does not rewrite command fields.
+
+import "magus/spell";
+import "assert";
+
+export fun mgs_getName() > str { return "cursor"; }
+
+// Pure helpers below are what the tests pin. The harness_* exports wrap them so
+// Magus can invoke the reserved contract names with the usual (target, cb) shape.
+
+fun cursor_config_path() > str { return ".cursor/hooks.json"; }
+
+fun cursor_config_defaults() > {str: int} {
+    return {"version": 1};
+}
+
+fun cursor_skills_form() > str { return "short"; }
+
+fun cursor_guard_command() > str {
+    return "sh docs/guides/integrations/agents/cursor-guard.sh";
+}
+
+fun cursor_event_names() > [str] {
+    return [
+        "beforeShellExecution",
+        "preToolUse",
+        "postToolUse",
+        "subagentStart",
+        "sessionEnd",
+    ];
+}
+
+fun cursor_pretool_matcher() > str {
+    return "Write|StrReplace|Delete|Edit|NotebookEdit";
+}
+
+fun cursor_posttool_matcher() > str {
+    return "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|WebSearch|WebFetch";
+}
+
+// cursor_entries is the managed_entries list merged into .cursor/hooks.json.
+fun cursor_entries() > [any] {
+    final cmd = cursor_guard_command();
+    return [
+        {
+            "path": ["hooks", "beforeShellExecution"],
+            "entries": [{"command": cmd}],
+        },
+        {
+            "path": ["hooks", "preToolUse"],
+            "entries": [{
+                "matcher": cursor_pretool_matcher(),
+                "command": cmd,
+            }],
+        },
+        {
+            "path": ["hooks", "postToolUse"],
+            "entries": [{
+                "matcher": cursor_posttool_matcher(),
+                "command": cmd,
+            }],
+        },
+        {
+            "path": ["hooks", "subagentStart"],
+            "entries": [{"command": cmd}],
+        },
+        {
+            "path": ["hooks", "sessionEnd"],
+            "entries": [{"command": cmd}],
+        },
+    ];
+}
+
+fun cursor_config() > {str: any} {
+    return {
+        "path": cursor_config_path(),
+        "defaults": cursor_config_defaults(),
+    };
+}
+
+fun cursor_skills() > {str: any} {
+    return {
+        "paths": [],
+        "form": cursor_skills_form(),
+    };
+}
+
+// harness_config returns the workspace-local host JSON path and optional defaults
+// merged when the file is first created.
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return cursor_config();
+}
+
+// harness_skills: Cursor reads skills from the install directories agent install
+// already knows; form "short" matches the other Cursor wiring.
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return cursor_skills();
+}
+
+// harness_entries is the managed_entries list merged into the host config.
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return cursor_entries();
+}
+
+fun cursor_mcp() > {str: any} {
+    // User owns Cursor MCP client config. Magus only prints setup guidance.
+    return {
+        "token_ref": "MAGUS_MCP_TOKEN",
+        "url": "http://127.0.0.1:7391/mcp",
+        "hint": "Wire Magus MCP yourself in Cursor (Settings -> Tools & MCP, or .cursor/mcp.json / ~/.cursor/mcp.json). Endpoint __URL__; export secret ref __TOKEN_REF__ (built-in env provider). Magus does not write mcp.json.",
+        "docs": "docs/guides/integrations/mcp.md",
+    };
+}
+
+export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
+    return cursor_mcp();
+}
+
+fun list_contains(hay: [str], needle: str) > bool {
+    foreach (item in hay) {
+        if (item == needle) { return true; }
+    }
+    return false;
+}
+
+test "mgs_getName is the harness id apply and verify look up" {
+    assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
+}
+
+test "harness_config names the Cursor hooks file and seeds version 1" {
+    assert\equal(cursor_config_path(), ".cursor/hooks.json", "workspace-relative host config path");
+    assert\equal(cursor_config_defaults()["version"], 1, "defaults merge on first create");
+    final cfg = cursor_config();
+    assert\equal("{cfg["path"]}", ".cursor/hooks.json", "config map carries the same path");
+}
+
+test "harness_skills is skills-empty short form for Cursor" {
+    assert\equal(cursor_skills_form(), "short", "matches the other Cursor wiring");
+    final skills = cursor_skills();
+    assert\equal("{skills["form"]}", "short", "skills map carries the form");
+}
+
+test "guard command is the shipped Cursor script, not agent hook" {
+    final cmd = cursor_guard_command();
+    assert\isTrue(cmd.startsWith("sh "), "host runs the script via sh");
+    assert\isTrue(cmd.indexOf("cursor-guard.sh") != null, "names the Cursor guard template");
+    assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
+}
+
+test "harness_entries covers every Cursor event magus uses" {
+    final names = cursor_event_names();
+    assert\equal(names.len(), 5, "beforeShell, preToolUse, postToolUse, subagentStart, sessionEnd");
+    assert\isTrue(list_contains(names, "beforeShellExecution"), "command guard");
+    assert\isTrue(list_contains(names, "preToolUse"), "write guard");
+    assert\isTrue(list_contains(names, "postToolUse"), "advise delivery");
+    assert\isTrue(list_contains(names, "subagentStart"), "lease provenance");
+    assert\isTrue(list_contains(names, "sessionEnd"), "checkpoint");
+
+    final entries = cursor_entries();
+    assert\equal(entries.len(), names.len(), "one managed block per event");
+    foreach (i in 0..names.len()) {
+        final block = entries[i];
+        final path = block["path"] as [str];
+        assert\equal(path.len(), 2, "path is [\"hooks\", <event>]");
+        assert\equal(path[0], "hooks", "Cursor nests events under hooks");
+        assert\equal(path[1], names[i], "event order matches cursor_event_names");
+        final block_entries = block["entries"] as [any];
+        assert\isTrue(block_entries.len() > 0, "each event has at least one entry");
+        foreach (entry in block_entries) {
+            assert\equal("{entry["command"]}", cursor_guard_command(), "every entry names the same guard script");
+        }
+    }
+}
+
+test "preToolUse matcher covers edit tools Cursor exposes" {
+    final matcher = cursor_pretool_matcher();
+    assert\isTrue(matcher.indexOf("Write") != null, "Write");
+    assert\isTrue(matcher.indexOf("StrReplace") != null, "StrReplace");
+    assert\isTrue(matcher.indexOf("Delete") != null, "Delete");
+    assert\isTrue(matcher.indexOf("Edit") != null, "Edit");
+    assert\isTrue(matcher.indexOf("NotebookEdit") != null, "NotebookEdit");
+}
+
+test "postToolUse matcher covers shell and search tools for advise" {
+    final matcher = cursor_posttool_matcher();
+    assert\isTrue(matcher.indexOf("Shell") != null, "Shell");
+    assert\isTrue(matcher.indexOf("Grep") != null, "Grep");
+    assert\isTrue(matcher.indexOf("Glob") != null, "Glob");
+    assert\isTrue(matcher.indexOf("WebSearch") != null, "WebSearch");
+    assert\isTrue(matcher.indexOf("WebFetch") != null, "WebFetch");
+}
+
+test "harness_mcp prints Cursor setup guidance only" {
+    final mcp = cursor_mcp();
+    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref / env var");
+    assert\isTrue("{mcp["hint"]}".indexOf("Tools & MCP") != null, "points at Cursor UI");
+    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
+    assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus mcp.json write");
+}
+
+test "harness_* contract wrappers return the same pure helpers" {
+    final t = null;
+    final cb = fun(_: any) > void {};
+    assert\equal("{harness_config(t, cb)["path"]}", cursor_config_path(), "config path");
+    assert\equal("{harness_skills(t, cb)["form"]}", cursor_skills_form(), "skills form");
+    assert\equal(harness_entries(t, cb).len(), cursor_entries().len(), "entries length");
+    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+}

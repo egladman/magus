@@ -618,6 +618,17 @@ export object ci {
     static extern fun provider(spell: {str: any}) > void;
 }
 
+// Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.
+export object guard {
+    static extern fun bash(rule: {str: any}) > void;
+    static extern fun shell(rule: {str: any}) > void;
+}
+
+// Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.
+export object harness {
+    static extern fun provider(spell: {str: any}) > void;
+}
+
 // Secret provider selection, and the credentials read through it.
 export object secret {
     static extern fun endpoint(grant: any) > str !> any;
@@ -635,7 +646,7 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+// The declared job store: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS: this store gates no run and blocks no write to the tree; the agent guard is what reads them to grade a write, and register's verdict is a fact it returns rather than a gate. The one thing the store DOES refuse is a write to a row the caller does not own. See the field docs on types.Job. This namespace, the magus_job MCP tool and `magus job` (fork, exec, exit, wait) are the three WRITE doors onto it. Bound by hand in internal/interp/bindings (buildJob), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
 export object job {
     static extern fun clear() > int !> any;
     static extern fun exit(id: str, result: {str: any} = {<str: any>}) > Job !> any;

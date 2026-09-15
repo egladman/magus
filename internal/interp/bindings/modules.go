@@ -279,13 +279,13 @@ func magusNativeModule(sess *buzz.Session) vm.Value {
 //
 // Same role as MagusModuleKeys one level down: std declares these as a Namespace
 // rendering to an object with static extern methods, and nothing but a test connects
-// that declaration to the map buildMagusNS actually assembles.
+// that declaration to the map buildMagus actually assembles.
 func MagusNamespaceKeys(name string) []string {
 	sess := buzz.NewSession(context.Background(), buzz.WithEmbedded())
 	registerAllBuzz(context.Background(), sess, map[string]vm.Callable{}, map[string]vm.Value{}, true)
-	ns, ok := magusNativeModule(sess).MapGet(name)
-	if !ok || !ns.IsMap() {
+	nested, ok := magusNativeModule(sess).MapGet(name)
+	if !ok || !nested.IsMap() {
 		return nil
 	}
-	return ns.MapKeys()
+	return nested.MapKeys()
 }

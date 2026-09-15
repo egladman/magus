@@ -31,6 +31,25 @@ type WorkspaceRegistry struct {
 	// providers that report the same path must resolve deterministically: the first
 	// one wired owns it.
 	providers []string
+	// shellRules are additive agent-guard rules a magusfile declared via
+	// magus\guard.shell, in declaration order. They strengthen only: the guard
+	// merges them after compiled built-ins.
+	shellRules []ShellRule
+	// harnesses are the spell names a magusfile wired as agent harnesses (via
+	// magus\harness.provider), in wiring order. Many hosts, like workspace.provider;
+	// unlike cache.remote's one.
+	harnesses []string
+}
+
+// ShellRule is one additive shell rule declared by magus\guard.shell. Fields match
+// the authored map one for one. Decision is "deny" or "advise".
+type ShellRule struct {
+	Name     string
+	Decision string
+	Program  string
+	Args     []string
+	Reason   string
+	Dialect  string
 }
 
 // NewWorkspaceRegistry returns an empty WorkspaceRegistry.
@@ -112,6 +131,44 @@ func (r *WorkspaceRegistry) Providers() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.providers)
+}
+
+// AddShellRule appends an additive shell-guard rule. Safe to call concurrently.
+func (r *WorkspaceRegistry) AddShellRule(rule ShellRule) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shellRules = append(r.shellRules, rule)
+}
+
+// ShellRules returns the additive shell-guard rules in declaration order, or nil.
+func (r *WorkspaceRegistry) ShellRules() []ShellRule {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.shellRules)
+}
+
+// AddHarness records a spell name a magusfile wired as an agent harness,
+// ignoring a repeat so a double wire does not apply twice. Safe to call concurrently.
+// Empty names are ignored: magus\harness.provider already rejects them, and
+// KnownHarnesses errors if an empty id still reaches the union.
+func (r *WorkspaceRegistry) AddHarness(spellName string) {
+	spellName = strings.TrimSpace(spellName)
+	if spellName == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if slices.Contains(r.harnesses, spellName) {
+		return
+	}
+	r.harnesses = append(r.harnesses, spellName)
+}
+
+// Harnesses returns the agent-harness spell names in wiring order, or nil.
+func (r *WorkspaceRegistry) Harnesses() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.harnesses)
 }
 
 // ProjectPaths returns the registered project paths in sorted order.

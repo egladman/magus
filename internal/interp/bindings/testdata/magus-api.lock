@@ -15,6 +15,11 @@ diagnoseDrift
 diff
 doctor
 fatal
+guard
+guard.bash
+guard.shell
+harness
+harness.provider
 hasCharm
 insight
 job

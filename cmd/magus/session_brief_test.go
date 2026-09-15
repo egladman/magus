@@ -133,17 +133,14 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
   "display": {"name": "Brief Host"},
   "config": {"path": "host/hooks.json"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
-  "pre_tool_use": {
+  "managed_entries": [{
     "path": ["hooks", "before"],
-    "matcher_key": "match",
-    "hooks_key": "commands",
-    "response_template": "{{toJson .}}",
-    "entries": [{"matcher":"run","hook":{"type":"command"}}]
-  }
+    "entries": [{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]
+  }]
 }`), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus agent hook --host brief-host"}]}]}}`), 0o644))
+		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]}}`), 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

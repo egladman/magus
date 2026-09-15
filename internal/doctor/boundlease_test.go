@@ -43,27 +43,27 @@ func wireGuardHook(t *testing.T, root string) {
 	writeCheckpointHarness(t, root, guardedHarnessConfig())
 }
 
-func TestLeaseBindingPassesWithNoLeaseBound(t *testing.T) {
+func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorOK,
 		Message: "no lease bound; the guard advises only",
 	}, got)
 }
 
-func TestLeaseBindingFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
+func TestBoundLeaseFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
 	require.NoError(t, job.BindLease(cacheDir, "adj/marker"))
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=adj/from-env")
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorFail,
 		Message: `this session acts as lease "adj/from-env" while this checkout's marker binds "adj/marker"`,
 		Details: []string{
@@ -73,7 +73,7 @@ func TestLeaseBindingFailsWhenTheMarkerAndTheEnvironmentDisagree(t *testing.T) {
 	}, got)
 }
 
-func TestLeaseBindingReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
+func TestBoundLeaseReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
 	path, err := store.Path()
@@ -81,21 +81,21 @@ func TestLeaseBindingReportsAnUnreadableLedgerAsUnknown(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	require.NoError(t, os.WriteFile(path, []byte("{not json"), 0o644))
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorFail, got.Status)
 	require.Equal(t, types.EvidenceUnknown, got.Evidence)
 	require.Contains(t, got.Message, "could not read the job store")
 }
 
-func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
+func TestBoundLeaseFailsOnAnUnknownBoundID(t *testing.T) {
 	cacheDir, root, _ := tmpLedger(t)
 	require.NoError(t, job.BindLease(cacheDir, "adj/no-such-lease"))
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/no-such-lease" is bound here, and no row declares it`,
 		Details: []string{
@@ -105,72 +105,72 @@ func TestLeaseBindingFailsOnAnUnknownBoundID(t *testing.T) {
 	}, got)
 }
 
-func TestLeaseBindingFailsOnATerminalBoundRow(t *testing.T) {
+func TestBoundLeaseFailsOnATerminalBoundRow(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/done", State: types.StatePass})
 	require.NoError(t, job.BindLease(cacheDir, "adj/done"))
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/done" is bound here and not live (pass), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
 }
 
-func TestLeaseBindingFailsOnARowWithNoState(t *testing.T) {
+func TestBoundLeaseFailsOnARowWithNoState(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/stateless"})
 	require.NoError(t, job.BindLease(cacheDir, "adj/stateless"))
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/stateless" is bound here and not live (no state), so its lease-scoped rules are inert`,
 		Details: []string{"every write here grades as an unattributed edit until this checkout binds a live lease"},
 	}, got)
 }
 
-func TestLeaseBindingFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
+func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 	cacheDir, root, store := tmpLedger(t)
 	seed(t, store, types.Job{ID: "adj/live", State: types.StateRunning})
 	require.NoError(t, job.BindLease(cacheDir, "adj/live"))
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorFail,
 		Message: `lease "adj/live" is bound here and live, but has no registered base, so the guard denies every write until one is recorded`,
 		Details: []string{"record one: " + hint.VCSCheckpoint.With("-o", "name") + ", then exec it on this lease"},
 	}, got)
 }
 
-func TestLeaseBindingAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
+func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 	cacheDir, root := registeredLease(t, "adj/unwired")
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorAdvice,
 		Message: `lease "adj/unwired" is bound here, live and registered, but no host hook config in this checkout invokes the guard`,
 		Details: []string{"the guard-wiring check names what is missing; the MCP surface is not checked here"},
 	}, got)
 }
 
-func TestLeaseBindingPassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
+func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 	cacheDir, root := registeredLease(t, "adj/enforcing")
 	wireGuardHook(t, root)
 
-	got := checkLeaseBinding(cacheDir, root, "")
+	got := checkBoundLease(context.Background(), cacheDir, root)
 
 	require.Equal(t, types.DoctorCheck{
-		Name:    "lease-binding",
+		Name:    "bound-lease",
 		Status:  types.DoctorOK,
 		Message: `lease "adj/enforcing" is bound here, live, registered, and a host hook is wired to judge it`,
 	}, got)

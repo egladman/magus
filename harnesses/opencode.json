@@ -1,0 +1,12 @@
+{
+  "schema_version": 2,
+  "id": "opencode",
+  "display": {
+    "name": "OpenCode"
+  },
+  "config": {},
+  "skills": {
+    "paths": [".opencode/skills"],
+    "form": "both"
+  }
+}

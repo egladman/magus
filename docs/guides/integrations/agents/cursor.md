@@ -39,24 +39,65 @@ same belt-and-braces every host gets, not a substitute for it.
 
 ## MCP
 
-Configure MCP for Cursor as a host-level integration; see [MCP](../mcp.md) for
-the client configuration and token. An agent uses the CLI fallback when MCP is
-unavailable; it does not manually start Magus solely to obtain tools.
+MCP client config is yours. Harness apply only prints a short hint (and a docs
+pointer); Magus does not write `.cursor/mcp.json`.
+
+```sh
+magus server start
+export MAGUS_MCP_TOKEN="$(magus config token print)"   # or a connector token
+magus agent harness apply --id cursor   # prints setup hint; wires hooks only
+```
+
+Then register Magus under Cursor Settings -> Tools & MCP (or hand-write
+`.cursor/mcp.json` / `~/.cursor/mcp.json`). Endpoint
+`http://127.0.0.1:7391/mcp`; bind the token with `${env:MAGUS_MCP_TOKEN}` if you
+prefer env interpolation. Restart Cursor after changing the client config.
+`magus status --probe=mcp` must report serving. Full notes: [MCP](../mcp.md).
+An agent uses the CLI fallback when MCP is unavailable; it does not manually
+start Magus solely to obtain tools.
+
 
 ## Guard hook
 
-Save the script below as `.cursor/hooks/cursor-guard.sh`, make it executable,
-and point every event at it:
+Prefer wiring the Cursor harness from the root magusfile when you bounce between
+hosts; apply then covers every wired provider:
+
+```buzz
+import "spells/harness/cursor" as cursor
+magus\harness.provider(cursor)
+```
+
+```sh
+magus agent harness apply
+magus agent harness verify
+```
+
+To adapt that Buzz harness without modifying Magus source: copy the spell into
+the workspace, change only the import path (for example
+`import "harness/cursor" as cursor`), edit the workspace Buzz, then re-run apply
+and verify. Details:
+[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Improving recurring friction](guard.md#improving-recurring-friction).
+
+Or target Cursor alone (spell or `harnesses/cursor.json`):
+
+```sh
+magus agent harness apply --id cursor
+magus agent harness verify --id cursor
+```
+
+That writes opaque fragments naming `sh docs/guides/integrations/agents/cursor-guard.sh`.
+A portable install copies the script to `.cursor/hooks/cursor-guard.sh`, makes it
+executable, and points every event at that copy:
 
 ```json
 {
   "version": 1,
   "hooks": {
     "beforeShellExecution": [{ "command": "./.cursor/hooks/cursor-guard.sh" }],
-    "preToolUse": [{ "matcher": "Write", "command": "./.cursor/hooks/cursor-guard.sh" }],
+    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-guard.sh" }],
     "postToolUse": [
-      { "matcher": "Shell", "command": "./.cursor/hooks/cursor-guard.sh" },
-      { "matcher": "Write", "command": "./.cursor/hooks/cursor-guard.sh" }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-guard.sh" }
     ],
     "subagentStart": [{ "command": "./.cursor/hooks/cursor-guard.sh" }],
     "sessionEnd": [{ "command": "./.cursor/hooks/cursor-guard.sh" }]
@@ -77,10 +118,19 @@ no channel there and needs `postToolUse.additional_context`, which arrives after
 the call. So a judged call runs magus twice on this host and leaves two rows in
 the activity trail, where every other host leaves one.
 
-The `matcher` values scope each entry to the tools that carry something to judge.
-They are a bound on cost, not on correctness: the script answers on the SHAPE of
-the payload, so a preToolUse event with no `tool_input.file_path` allows and a
-postToolUse event with neither field returns `{}`.
+The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
+the string must compile). One entry per event is enough: the script is the same
+file on every arm by design, and it branches on payload shape. Scope the regex
+to tools that carry a command, a path, a Grep/Glob pattern, a Read path, or a
+WebSearch / WebFetch query; a postToolUse with none of those returns `{}`. Grep,
+Glob, and Read never reach `beforeShellExecution`, so they ride `postToolUse`
+and are restated as the shell shapes those rules already know (`rg …`,
+`find . -name …`, `cat …` for an unbounded Read, `sed -n 'a,bp'` when Read
+already carries a limit). WebSearch and WebFetch also ride `postToolUse`: when
+`kind=link` has citations matching the query, the script injects those URLs as
+`additional_context` so the next open-web look prefers package/docs hosts this
+tree already depends on. Cursor Agent tools spell the path field `path`; the
+script also accepts `file_path`.
 
 ```sh
 #!/usr/bin/env sh
@@ -91,7 +141,7 @@ postToolUse event with neither field returns `{}`.
 # hook_event_name every one of them carries:
 #
 #   beforeShellExecution  {"command": "...", "cwd": "...", "sandbox": false}
-#   preToolUse            {"tool_name": "...", "tool_input": {"file_path": "..."}}
+#   preToolUse            {"tool_name": "...", "tool_input": {"path": "..."}}
 #   postToolUse           the same, plus tool_output
 #   subagentStart         {"subagent_type": "...", "task": "...", ...}
 #   sessionEnd            {"session_id": "...", "reason": "..."}
@@ -100,9 +150,8 @@ postToolUse event with neither field returns `{}`.
 #
 #   {"version": 1, "hooks": {
 #     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "preToolUse":   [{"matcher": "Write", "command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "postToolUse":  [{"matcher": "Shell", "command": "./.cursor/hooks/cursor-guard.sh"},
-#                      {"matcher": "Write", "command": "./.cursor/hooks/cursor-guard.sh"}],
+#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-guard.sh"}],
+#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-guard.sh"}],
 #     "subagentStart": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
 #     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-guard.sh"}]}}
 #
@@ -136,7 +185,7 @@ postToolUse event with neither field returns `{}`.
 # note in magus-guard-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none
@@ -182,7 +231,48 @@ session=$(printf '%s' "$event" | jq -r '.session_id // .conversation_id // empty
 transcript=$(printf '%s' "$event" | jq -r '.transcript_path // empty' 2>/dev/null)
 shell_command=$(printf '%s' "$event" | jq -r '.command // empty' 2>/dev/null)
 tool_command=$(printf '%s' "$event" | jq -r '.tool_input.command // empty' 2>/dev/null)
-path=$(printf '%s' "$event" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+path=$(printf '%s' "$event" | jq -r '.tool_input.file_path // .tool_input.path // empty' 2>/dev/null)
+# Cursor's Grep/Glob/Read tools never reach beforeShellExecution, so the search-
+# and source-read family guard rules would miss them unless we restate them as the
+# shell shapes those rules already judge. Scoped Grep stays a narrow read
+# (rg pattern file); a workspace-wide Grep becomes bare rg. An unbounded Read
+# becomes cat; a Read that already carries a limit becomes sed -n so the
+# source-read advisory stays quiet for a bounded range.
+# Cursor Agent tools spell the path field `path`; older hook docs said file_path.
+search_command=$(printf '%s' "$event" | jq -r '
+  if .tool_name == "Grep" and (.tool_input.pattern // "") != "" then
+    ( .tool_input.path // .tool_input.file_path // "" ) as $p |
+    if $p != "" and $p != "." then
+      "rg \(.tool_input.pattern | @sh) \($p | @sh)"
+    else
+      "rg \(.tool_input.pattern | @sh)"
+    end
+  elif .tool_name == "Glob" and ((.tool_input.glob_pattern // .tool_input.glob // "") != "") then
+    "find . -name \((.tool_input.glob_pattern // .tool_input.glob) | @sh)"
+  elif .tool_name == "Read" and ((.tool_input.path // .tool_input.file_path // "") != "") then
+    ( .tool_input.path // .tool_input.file_path ) as $p |
+    ( .tool_input.offset // 0 | tonumber ) as $o |
+    ( .tool_input.limit // 0 | tonumber ) as $l |
+    if $l > 0 then
+      (if $o > 0 then $o else 1 end) as $start |
+      ($start + $l - 1) as $end |
+      "sed -n \("\($start),\($end)p" | @sh) \($p | @sh)"
+    else
+      "cat \($p | @sh)"
+    end
+  else empty end
+' 2>/dev/null)
+# WebSearch/WebFetch: bias the NEXT open-web look toward kind=link citations this
+# workspace already depends on (package docs URLs, upstream references). Not a
+# deny and not magus's own site: prefer site:<host> / those URLs so results stay
+# on packages the tree cites. Empty match stays silent.
+link_bias_query=$(printf '%s' "$event" | jq -r '
+  if .tool_name == "WebSearch" then
+    (.tool_input.search_term // .tool_input.query // .tool_input.search_query // empty)
+  elif .tool_name == "WebFetch" then
+    (.tool_input.url // empty)
+  else empty end
+' 2>/dev/null)
 
 # A payload naming no event is judged by SHAPE instead. Branching on the name is
 # what lets one file serve five events, and a Cursor that stopped sending the field
@@ -232,6 +322,31 @@ guard() {
   shift
   printf '%s' "$guard_input" | "$GUARD_MAGUS_BIN" session hook --agent-name cursor \
     --session "$session" --transcript "$transcript" "$@"
+}
+
+# link_bias_context prints a Cursor additional_context JSON object when kind=link
+# has citations matching $1, or prints nothing and fails when it does not. Caps
+# at eight URLs so a broad query does not dump the whole citation index.
+link_bias_context() {
+  terms=$1
+  [ -n "$terms" ] || return 1
+  [ -n "$GUARD_MAGUS_BIN" ] && [ -x "$GUARD_MAGUS_BIN" ] || return 1
+  links=$("$GUARD_MAGUS_BIN" query kind=link "$terms" -o name 2>/dev/null) || return 1
+  [ -n "$links" ] || return 1
+  printf '%s\n' "$links" | jq -R -s -c --arg q "$terms" '
+    (split("\n") | map(select(length > 0) | sub("^link:"; "")) | .[0:8]) as $urls
+    | if ($urls | length) == 0 then empty else
+      {
+        additional_context: (
+          "This workspace already cites related docs (kind=link). Prefer these over a broad web search so results stay on packages and references this tree depends on:\n"
+          + ($urls | map("  - " + .) | join("\n"))
+          + "\nRefine the next search with site:<host> from those URLs, or WebFetch one directly. List them again: ./magus query kind=link "
+          + ($q | @sh)
+          + " -o name"
+        )
+      }
+    end
+  ' 2>/dev/null
 }
 
 # guard_failure_notice states WHICH binary went silent, what version it is, and what it
@@ -308,12 +423,23 @@ subagentStart)
 postToolUse)
   # The advise channel, for whichever surface the payload names. It renders {} on
   # anything that is not an advise, so Cursor always gets a reply it can parse.
+  # Grep/Glob/Read land here (not beforeShellExecution): see search_command above.
+  # WebSearch/WebFetch land here too: see link_bias_query above.
   if [ -n "$tool_command" ]; then
     verdict=$(guard "$tool_command" -o "template=$advise_template" 2>/dev/null)
     if [ -z "$verdict" ]; then
       guard_failure_notice "$tool_command"
       verdict='{}'
     fi
+  elif [ -n "$search_command" ]; then
+    verdict=$(guard "$search_command" -o "template=$advise_template" 2>/dev/null)
+    if [ -z "$verdict" ]; then
+      guard_failure_notice "$search_command"
+      verdict='{}'
+    fi
+  elif [ -n "$link_bias_query" ]; then
+    verdict=$(link_bias_context "$link_bias_query")
+    [ -n "$verdict" ] || verdict='{}'
   elif [ -n "$path" ]; then
     verdict=$(guard "$path" --path -o "template=$advise_template" 2>/dev/null)
     if [ -z "$verdict" ]; then

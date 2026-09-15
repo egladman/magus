@@ -36,6 +36,7 @@ const pluginDescriptor = parseDescriptor(
   }),
 );
 const descriptorDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "host-e2e");
+const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
 test("requires explicit descriptor paths and deduplicates them", () => {
   assert.throws(() => selectedDescriptorPaths([]), /supply one or more/);
@@ -75,22 +76,51 @@ test("validates every packaged descriptor without maintaining a provider registr
 });
 
 test("runtime harness descriptors cover read observation and checkpoints", () => {
-  const runtimeHarnesses = ["codex.json", "claude-code.json"].map((name) =>
-    JSON.parse(readFileSync(path.join(repository, "harnesses", name), "utf8")),
-  );
-  for (const harness of runtimeHarnesses) {
-    const entries = harness.pre_tool_use.entries as Array<Record<string, unknown>>;
-    const managed = harness.managed_entries as Array<Record<string, unknown>>;
+  // Discrete-script hosts: JSON under harnesses/ is still the apply SoT, and each
+  // one must wire both the Read observer and the stop checkpoint by name.
+  for (const name of ["codex.json", "claude-code.json"]) {
+    const harness = JSON.parse(
+      readFileSync(path.join(repository, "harnesses", name), "utf8"),
+    ) as { id: string; managed_entries: Array<Record<string, unknown>> };
+    const managed = JSON.stringify(harness.managed_entries);
     assert.ok(
-      entries.some((entry) => entry.matcher === "Read" && entry.observe === true) ||
-        managed.some((group) => JSON.stringify(group).includes("magus-guard-observe.sh")),
+      managed.includes("magus-guard-observe.sh"),
       `${harness.id} must record read observations`,
     );
     assert.ok(
-      managed.some((group) => JSON.stringify(group).includes("magus-checkpoint.sh")),
+      managed.includes("magus-checkpoint.sh"),
       `${harness.id} must record stop checkpoints`,
     );
   }
+
+  // Cursor: the harness spell is the magusfile SoT; harnesses/cursor.json stays
+  // for --id without a wire. Both point at the unified cursor-guard.sh, which
+  // covers command/path/observe/checkpoint in one script (sessionEnd = checkpoint).
+  const cursorSpell = readFileSync(
+    path.join(repository, "spells/harness/cursor/spell.buzz"),
+    "utf8",
+  );
+  assert.match(cursorSpell, /cursor-guard\.sh/, "cursor spell names the Cursor guard script");
+  assert.match(cursorSpell, /sessionEnd/, "cursor spell wires sessionEnd for checkpoints");
+  assert.match(cursorSpell, /beforeShellExecution/, "cursor spell wires the shell guard");
+  assert.match(cursorSpell, /preToolUse/, "cursor spell wires the write guard");
+
+  const cursorJson = JSON.parse(
+    readFileSync(path.join(repository, "harnesses", "cursor.json"), "utf8"),
+  ) as { id: string; managed_entries: Array<Record<string, unknown>> };
+  const cursorManaged = JSON.stringify(cursorJson.managed_entries);
+  assert.equal(cursorJson.id, "cursor");
+  assert.ok(cursorManaged.includes("cursor-guard.sh"), "cursor JSON stays in lockstep with the spell");
+  assert.ok(cursorManaged.includes("sessionEnd"), "cursor JSON wires sessionEnd for checkpoints");
+
+  // OpenCode: plugin transport, not managed shell entries. Skills install paths
+  // are the only apply surface; the plugin calls magus directly.
+  const opencode = JSON.parse(
+    readFileSync(path.join(repository, "harnesses", "opencode.json"), "utf8"),
+  ) as { id: string; managed_entries?: unknown; skills: { paths: string[] } };
+  assert.equal(opencode.id, "opencode");
+  assert.equal(opencode.managed_entries, undefined);
+  assert.ok(opencode.skills.paths.some((p) => p.includes(".opencode")), "opencode installs skills");
 });
 
 test("selects the named VCS-neutral command-deny scenario", () => {

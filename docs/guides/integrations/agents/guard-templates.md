@@ -19,9 +19,10 @@ the same gates as the rest of the workspace
 and shellcheck).
 
 Two hosts run these files: [Claude Code](claude-code.md) and [Codex](codex.md).
-[Cursor](cursor.md) and [OpenCode](opencode.md) each ship one self-contained file
-instead, on their own pages, because a host that needs five downloads to install a
-guard ends up without one.
+Harness apply merges opaque fragments that already name the scripts; Magus does
+not inject a reserved command. [Cursor](cursor.md) and [OpenCode](opencode.md)
+each ship one self-contained file instead, on their own pages, because a host
+that needs five downloads to install a guard ends up without one.
 
 ## Checking whether your copy is current
 
@@ -130,7 +131,7 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none
@@ -359,7 +360,7 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=model pass=none
 
@@ -502,7 +503,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 13
+# magus-guard-template: 14
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -680,7 +681,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
 #
-# magus-guard-template: 13
+# magus-guard-template: 14
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to observe, and a record
@@ -799,7 +800,7 @@ It declares no `magus-guard-coverage` line, for the reason
 # carries no verdict on no surface. It never denies, never advises, and cannot
 # change what your host does next.
 #
-# magus-guard-template: 13
+# magus-guard-template: 14
 
 # NO `set -e`, deliberately, matching every template beside it. A hook that can
 # fail is a hook that can break the session it was meant to help.

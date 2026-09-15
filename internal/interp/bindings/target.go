@@ -57,7 +57,7 @@ func (e *externalHandles) lookup(v vm.Value) (externalTarget, bool) {
 	return externalTarget{}, false
 }
 
-// buildCacheNS assembles magus.cache for a magusfile. Today it exposes remote(),
+// buildCache assembles magus.cache for a magusfile. Today it exposes remote(),
 // which wires an imported spell as the cross-shard remote cache backend:
 //
 //	import "spells/github/actions" as github
@@ -67,9 +67,9 @@ func (e *externalHandles) lookup(v vm.Value) (externalTarget, bool) {
 // spell); remote() just records its name on the per-Open workspace registry, and
 // magus.Open resolves it by name once the magusfile has been evaluated. The spell
 // must expose get_artifact/put_artifact handler ops (and optionally enabled()).
-func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("remote", directVal(obs, "magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildCache(ctx context.Context, obs buzz.DirectObserver) vm.Value {
+	cache := vm.NewMap()
+	cache.MapSet("remote", directVal(obs, "magus.cache.remote", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\cache.remote: expected an imported spell handle`)
 		}
@@ -82,10 +82,10 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 		}
 		return vm.Null, nil
 	}))
-	return ns
+	return cache
 }
 
-// buildCINS assembles magus.ci for a magusfile. It exposes provider(),
+// buildCI assembles magus.ci for a magusfile. It exposes provider(),
 // which wires an imported spell as this workspace's CI provider:
 //
 //	import "spells/github/actions" as github
@@ -96,9 +96,9 @@ func buildCacheNS(ctx context.Context, obs buzz.DirectObserver) vm.Value {
 // optional, because providers differ in what they support at all.
 //
 // A declared provider wins over magus's built-ins.
-func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("provider", directVal(obs, "magus.ci.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildCI(_ context.Context, obs buzz.DirectObserver) vm.Value {
+	ci := vm.NewMap()
+	ci.MapSet("provider", directVal(obs, "magus.ci.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\ci.provider: expected an imported spell handle`)
 		}
@@ -109,10 +109,10 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 		SetCIProvider(nv.AsString())
 		return vm.Null, nil
 	}))
-	return ns
+	return ci
 }
 
-// buildReviewNS assembles magus\review for a magusfile. provider() wires an imported spell as
+// buildReview assembles magus\review for a magusfile. provider() wires an imported spell as
 // the place this workspace's changes are discussed:
 //
 //	import "spells/github" as github
@@ -124,9 +124,9 @@ func buildCINS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 //
 // Wiring none is the ordinary state and never an error: the workspace reviews locally, and
 // nothing about the diff surface changes.
-func buildReviewNS(_ context.Context, obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("provider", directVal(obs, "magus.review.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildReview(_ context.Context, obs buzz.DirectObserver) vm.Value {
+	review := vm.NewMap()
+	review.MapSet("provider", directVal(obs, "magus.review.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\review.provider: expected an imported spell handle`)
 		}
@@ -137,10 +137,10 @@ func buildReviewNS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 		SetReviewProvider(nv.AsString())
 		return vm.Null, nil
 	}))
-	return ns
+	return review
 }
 
-// buildSecretNS assembles magus\secret for a magusfile. provider() wires an imported
+// buildSecret assembles magus\secret for a magusfile. provider() wires an imported
 // spell as this workspace's secret backend; read() reads one credential through it:
 //
 //	import "spells/onepassword" as secrets
@@ -154,11 +154,11 @@ func buildReviewNS(_ context.Context, obs buzz.DirectObserver) vm.Value {
 // read here, not off the reference looking credential-shaped. Reading the same variable
 // with os\env gets a plain string magus has no reason to protect: the documented seam,
 // not a gap.
-func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("provider", directVal(obs, "magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+func buildSecret(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
+	secretObj := vm.NewMap()
+	secretObj.MapSet("provider", directVal(obs, "magus.secret.provider", func(_ context.Context, args []vm.Value) (vm.Value, error) {
 		// Records onto the resolver captured at construction, the same way
-		// buildCacheNS records onto the registry it captured.
+		// buildCache records onto the registry it captured.
 		if len(args) == 0 || !args[0].IsMap() {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: expected an imported spell handle`)
 		}
@@ -166,7 +166,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		if !ok || !nv.IsStr() || nv.AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.provider: argument is not a spell handle (no name)`)
 		}
-		// Records onto the resolver captured at construction, the same way buildCacheNS
+		// Records onto the resolver captured at construction, the same way buildCache
 		// records onto the registry it captured.
 		//
 		// ERRORS when there is no resolver rather than no-opping. A silently dropped
@@ -181,7 +181,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		r.SetProviderName(nv.AsString())
 		return vm.Null, nil
 	}))
-	ns.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	secretObj.MapSet("read", directVal(obs, "magus.secret.read", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) == 0 || !args[0].IsStr() || args[0].AsString() == "" {
 			return vm.Null, fmt.Errorf(`magus\secret.read: expected a non-empty reference string`)
 		}
@@ -236,7 +236,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 	//
 	// Binding a socket resolves nothing either: the provider is invoked on the first
 	// request the child actually sends through it.
-	ns.MapSet("endpoint", directVal(obs, "magus.secret.endpoint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	secretObj.MapSet("endpoint", directVal(obs, "magus.secret.endpoint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		g, err := secretGrantArg("endpoint", args)
 		if err != nil {
 			return vm.Null, err
@@ -262,7 +262,7 @@ func buildSecretNS(runCtx context.Context, obs buzz.DirectObserver) vm.Value {
 		recordCredentialGrant(ctx, g, "secret.endpoint")
 		return vm.StrValue(url), nil
 	}))
-	return ns
+	return secretObj
 }
 
 // recordCredentialGrant writes the governance half of a credential declaration to the

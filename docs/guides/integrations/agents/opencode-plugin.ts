@@ -26,7 +26,7 @@
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 13
+// magus-guard-template: 14
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none

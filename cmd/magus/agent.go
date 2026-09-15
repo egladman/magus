@@ -35,8 +35,6 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
-	case "hook":
-		return agentHookCmd(ctx, root, os.Stdin, os.Stdout, args[1:])
 	case "improve":
 		return agentImproveCmd(ctx, root, args[1:])
 	case "harness":
@@ -49,19 +47,17 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, hook, harness, improve, starter, or adoption)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, harness, improve, starter, or adoption)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|hook|harness|improve|starter|adoption> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|harness|improve|starter|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	tty.ProseItem(w, tty.SystemProbe, "  install            ",
 		"render the embedded skills and write or stream them into named destinations",
 		"(<skills-dir>, ...)")
-	tty.ProseItem(w, tty.SystemProbe, "  hook               ",
-		"translate a descriptor-defined guard event without a copied shell wrapper")
 	tty.ProseItem(w, tty.SystemProbe, "  harness            ",
 		"apply or verify a user-owned harness descriptor in this workspace")
 	tty.ProseItem(w, tty.SystemProbe, "  improve            ",

@@ -8,42 +8,40 @@
     "path": ".claude/settings.json"
   },
   "skills": {"paths": [".claude/skills"], "form": "both"},
-  "pre_tool_use": {
-    "path": [
-      "hooks",
-      "PreToolUse"
-    ],
-    "matcher_key": "matcher",
-    "hooks_key": "hooks",
-    "response_template": "{{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}",
-    "entries": [
-      {
-        "matcher": "Bash",
-        "hook": {
-          "type": "command",
-          "timeout": 10
-        }
-      },
-      {
-        "matcher": "Edit|Write|NotebookEdit",
-        "hook": {
-          "type": "command",
-          "timeout": 10
-        }
-      },
-      {
-        "matcher": "^mcp__magus__",
-        "hook": {
-          "type": "command",
-          "timeout": 10
-        }
-      }
-    ]
-  },
   "managed_entries": [
     {
       "path": ["hooks", "PreToolUse"],
       "entries": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+              "timeout": 10
+            }
+          ]
+        },
+        {
+          "matcher": "Edit|Write|NotebookEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+              "timeout": 10
+            }
+          ]
+        },
+        {
+          "matcher": "^mcp__magus__",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+              "timeout": 10
+            }
+          ]
+        },
         {
           "matcher": "Read",
           "hooks": [

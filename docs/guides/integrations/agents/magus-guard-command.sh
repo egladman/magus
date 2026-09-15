@@ -49,7 +49,7 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 13
+# magus-guard-template: 14
 # magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none

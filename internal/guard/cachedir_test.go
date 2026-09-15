@@ -109,7 +109,7 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"awk '{print > \".magus/lease\"}' f",
 		"cd sub && rm ../.magus/lease",
 	} {
-		assert.NotEmpty(t, denyCacheDirCommand(at, command), "%q writes into the cache dir", command)
+		assert.NotEmpty(t, denyCacheDirCommand(at, command, DialectBash), "%q writes into the cache dir", command)
 	}
 
 	for _, command := range []string{
@@ -130,7 +130,7 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		"head -n 5 .magus/lease",
 		"jq . .magus/advisories/anon.served-next",
 	} {
-		assert.Empty(t, denyCacheDirCommand(at, command), "%q does not write into the cache dir", command)
+		assert.Empty(t, denyCacheDirCommand(at, command, DialectBash), "%q does not write into the cache dir", command)
 	}
 }
 
@@ -159,7 +159,7 @@ func TestWritesToFileClassifiesEveryRedirectOperator(t *testing.T) {
 // the reader to an editor tool, which is the surface that would refuse the same bytes
 // again.
 func TestRankCacheDirWriteOutranksEveryOtherDeny(t *testing.T) {
-	existing := BashVerdict{Deny: "sed -i is imprecise", Rule: denyRule{Name: denyRuleSedInPlace}}
+	existing := ShellVerdict{Deny: "sed -i is imprecise", Rule: denyRule{Name: denyRuleSedInPlace}}
 
 	got := rankCacheDirWrite(existing, "magus cache dir")
 	assert.Equal(t, denyRuleCacheDirWrite, got.Rule.Name)

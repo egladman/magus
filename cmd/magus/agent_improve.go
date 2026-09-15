@@ -16,15 +16,15 @@ import (
 const agentImproveLimit = 2000
 
 // agentImproveCmd owns command-line parsing and presentation. The review
-// policy and provider-harness mutation live in internal/agent so other entry
-// points cannot bypass their evidence and lease checks.
+// policy lives in internal/agent; harness mutation stays on this ingress so
+// Improve remains read-only.
 func agentImproveCmd(ctx context.Context, rootOverride string, args []string) error {
 	fset := flag.NewFlagSet("agent improve", flag.ContinueOnError)
 	session := fset.String("session", "", "only evidence from this host session")
 	limit := fset.Int("limit", agentImproveLimit, "maximum recent activity events to inspect")
 	all := fset.Bool("all", false, "include one-off feedback that has not reached the review threshold")
-	apply := fset.Bool("apply", false, "write the selected host's Magus-owned hook entries into this workspace")
-	host := fset.String("host", "", "harness descriptor to update with --apply")
+	apply := fset.Bool("apply", false, "write the selected harness descriptor's Magus-owned hook entries into this workspace")
+	id := fset.String("id", "", "harness descriptor to update with --apply")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentImproveUsage(fset) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
@@ -32,6 +32,9 @@ func agentImproveCmd(ctx context.Context, rootOverride string, args []string) er
 	}
 	if len(fset.Args()) != 0 {
 		return usagef("magus agent improve: takes no positional arguments")
+	}
+	if *apply && *id == "" {
+		return usagef("magus agent improve: --id <harness-id> is required with --apply")
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
@@ -41,19 +44,51 @@ func agentImproveCmd(ctx context.Context, rootOverride string, args []string) er
 	if err != nil {
 		return fmt.Errorf("magus agent improve: resolve activity store: %w", err)
 	}
-	report, err := agent.Improve(agent.ImproveOptions{
-		Root:        root,
-		CacheDir:    base,
-		Session:     *session,
-		Limit:       *limit,
-		IncludeAll:  *all,
-		Apply:       *apply,
-		Host:        *host,
-		DryRun:      globalCfg.DryRun,
-		ActingLease: proc.LeaseFromContext(ctx),
+	ws, err := inspectWorkspace(ctx, rootOverride)
+	if err != nil {
+		return fmt.Errorf("magus agent improve: %w", err)
+	}
+	wired := workspaceHarnessNames(ws)
+	ctx = agent.ContextWithWiredHarnesses(ctx, wired)
+	report, err := agent.Improve(ctx, agent.ImproveOptions{
+		Root:           root,
+		CacheDir:       base,
+		Session:        *session,
+		Limit:          *limit,
+		IncludeAll:     *all,
+		WiredHarnesses: wired,
 	})
 	if err != nil {
 		return fmt.Errorf("magus agent improve: %w", err)
+	}
+	if *apply {
+		update, err := agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
+			Root:        root,
+			ID:          *id,
+			DryRun:      globalCfg.DryRun,
+			ActingLease: proc.LeaseFromContext(ctx),
+		})
+		if err != nil {
+			return fmt.Errorf("magus agent improve: update %s harness: %w", *id, err)
+		}
+		report.HarnessUpdates = []agent.HarnessUpdate{update}
+		if !globalCfg.DryRun {
+			coverage, err := agent.VerifyHarness(ctx, root, *id)
+			if err != nil {
+				return fmt.Errorf("magus agent improve: verify %s harness after apply: %w", *id, err)
+			}
+			replaced := false
+			for i, existing := range report.HarnessCoverage {
+				if existing.ID == *id {
+					report.HarnessCoverage[i] = coverage
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				report.HarnessCoverage = append(report.HarnessCoverage, coverage)
+			}
+		}
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
@@ -82,7 +117,7 @@ func renderAgentImprove(w io.Writer, report agent.ImproveReport) {
 		fmt.Fprintf(w, "  next: %s\n", candidate.Next)
 	}
 	for _, coverage := range report.HarnessCoverage {
-		fmt.Fprintf(w, "\n%s %s harness coverage: %s", coverage.Status, coverage.Host, coverage.Path)
+		fmt.Fprintf(w, "\n%s %s harness coverage: %s", coverage.Status, coverage.ID, coverage.Path)
 		if coverage.Reason != "" {
 			fmt.Fprintf(w, " (%s)", coverage.Reason)
 		}
@@ -95,7 +130,7 @@ func renderAgentImprove(w io.Writer, report agent.ImproveReport) {
 		} else if update.Changed {
 			verb = "updated"
 		}
-		fmt.Fprintf(w, "\n%s %s harness: %s\n", verb, update.Host, update.Path)
+		fmt.Fprintf(w, "\n%s %s harness: %s\n", verb, update.ID, update.Path)
 	}
 	if len(report.HarnessUpdates) == 0 {
 		fmt.Fprintln(w, "\nAfter a human decision, record it deliberately with `magus memory put` and draft any local rule in magus-local-development. This command made no changes.")
@@ -103,10 +138,10 @@ func renderAgentImprove(w io.Writer, report agent.ImproveReport) {
 }
 
 func agentImproveUsage(fs *flag.FlagSet) {
-	fmt.Fprintln(os.Stderr, "Usage: magus agent improve [--session <id>] [--all] [--apply --host <host>] [flags]")
+	fmt.Fprintln(os.Stderr, "Usage: magus agent improve [--session <id>] [--all] [--apply --id <harness-id>] [flags]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Review recurring guard feedback from the activity trail and propose a deliberate next step.")
-	fmt.Fprintln(os.Stderr, "With --apply --host <harness-id>, write only descriptor-declared Magus adapter entries into the local harness.")
+	fmt.Fprintln(os.Stderr, "With --apply --id <harness-id>, write only descriptor-declared Magus-owned hook entries into the local harness.")
 	fmt.Fprintln(os.Stderr, "It never writes memory, skills, AGENTS.md, or guard rules.")
 	fmt.Fprintln(os.Stderr, "")
 	fs.PrintDefaults()

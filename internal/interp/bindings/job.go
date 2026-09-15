@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// buildJobNS assembles magus\job for a magusfile or `magus buzz` script:
+// buildJob assembles magus\job for a magusfile or `magus buzz` script:
 // list/put/register/exit/wait/clear over the job store (see internal/job,
 // types.Job).
 //
@@ -27,16 +27,16 @@ import (
 // (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
 // one; handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
-func buildJobNS(obs buzz.DirectObserver) vm.Value {
-	ns := vm.NewMap()
-	ns.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+func buildJob(obs buzz.DirectObserver) vm.Value {
+	job := vm.NewMap()
+	job.MapSet("list", directVal(obs, "magus.job.list", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		report, err := std.MagusListJob(ctx)
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
 		return bindinggen.AnyMapVal(report.BuzzObject()), nil
 	}))
-	ns.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	job.MapSet("put", directVal(obs, "magus.job.put", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		id := bindinggen.Str(args, 0)
 		opts := bindinggen.AnyMap(args, 1)
 		row, err := std.MagusPutJob(ctx, id, opts)
@@ -49,14 +49,14 @@ func buildJobNS(obs buzz.DirectObserver) vm.Value {
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
 	// (see job.BaseAdvice), so folding it in beside the row's own keys would put a
 	// rendering where a caller reads facts; "job" and "advice" keep the two apart.
-	ns.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	job.MapSet("register", directVal(obs, "magus.job.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		row, advice, err := std.MagusRegisterJob(ctx, bindinggen.Str(args, 0), bindinggen.Str(args, 1))
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
 		return bindinggen.AnyMapVal(map[string]any{"job": row.BuzzObject(), "advice": advice}), nil
 	}))
-	ns.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	job.MapSet("exit", directVal(obs, "magus.job.exit", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var (
 			row types.Job
 			err error
@@ -71,7 +71,7 @@ func buildJobNS(obs buzz.DirectObserver) vm.Value {
 		}
 		return bindinggen.AnyMapVal(row.BuzzObject()), nil
 	}))
-	ns.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+	job.MapSet("wait", directVal(obs, "magus.job.wait", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		var result map[string]any
 		if !omittedOptionalMap(args, 1) {
 			result = bindinggen.AnyMap(args, 1)
@@ -82,14 +82,14 @@ func buildJobNS(obs buzz.DirectObserver) vm.Value {
 		}
 		return bindinggen.AnyMapVal(status.BuzzObject()), nil
 	}))
-	ns.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
+	job.MapSet("clear", directVal(obs, "magus.job.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearJob(ctx)
 		if err != nil {
 			return vm.Null, bindinggen.HostError(err)
 		}
 		return bindinggen.IntVal(n), nil
 	}))
-	return ns
+	return job
 }
 
 // omittedOptionalMap is the cross-boundary meaning of an optional map. Buzz

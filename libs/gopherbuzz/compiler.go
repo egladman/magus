@@ -43,6 +43,12 @@ type CompileOptions struct {
 	// the fields it sets and leaves the rest null — upstream Buzz applies the
 	// defaults, so this is a parity fix, not an extension.
 	ImportedTypes []ast.Node
+
+	// SourceFile stamps Chunk.SourceFile on every chunk this compile emits
+	// (top-level and nested). Empty leaves SourceFile unset. Session.Compile
+	// passes the entry file under test so line coverage and DebugFrame.Source
+	// attribute hits to a path rather than a function name.
+	SourceFile string
 }
 
 // CompileWith compiles prog under opts. See CompileOptions. Pass the zero
@@ -52,6 +58,7 @@ type CompileOptions struct {
 // compiles source against a session's shared scope.)
 func CompileWith(prog *ast.Program, opts CompileOptions) (*vmpackage.Chunk, error) {
 	c := newCompiler(nil, "<main>", nil)
+	c.chunk.SourceFile = opts.SourceFile
 	c.useSlots = !opts.SharedGlobals
 	c.debugLines = opts.DebugLines
 	// Top-level slots can be captured too (a closure defined at top level closing over
@@ -1526,7 +1533,12 @@ func (c *compiler) compileTestDecl(v *ast.TestDecl) error {
 // for an object method's direct body, enabling this.field slot access there.
 func (c *compiler) compileFunChunkThis(name, doc string, params []string, stmts []ast.Node, thisFields map[string]int32) (int32, error) {
 	fc := &compiler{
-		chunk:      &vmpackage.Chunk{Name: name, Doc: doc, Params: params},
+		chunk: &vmpackage.Chunk{
+			Name:       name,
+			Doc:        doc,
+			Params:     params,
+			SourceFile: c.chunk.SourceFile,
+		},
 		parent:     c,
 		typeDecls:  make(map[string]*ast.ObjectDecl),
 		useSlots:   true,

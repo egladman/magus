@@ -15,6 +15,7 @@ const (
 	advisoryStaleBinary   hint.MarkerKind = "stale-binary"
 	advisoryCodeSearch    hint.MarkerKind = "code-search"
 	advisoryDocSearch     hint.MarkerKind = "doc-search"
+	advisorySourceRead    hint.MarkerKind = "source-read"
 	advisoryPrecedent     hint.MarkerKind = "precedent-search"
 	advisoryStageClassify hint.MarkerKind = "stage-classify"
 	advisoryUnleasedWrite hint.MarkerKind = "unleased-write"

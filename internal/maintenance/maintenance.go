@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/jobs"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -78,15 +78,15 @@ func buildSchedule(m config.Maintenance) []scheduledJob {
 		if interval <= 0 {
 			return
 		}
-		if j, ok := jobs.Lookup(name); ok {
-			out = append(out, scheduledJob{argv: j.Argv, interval: interval, action: jobs.ActionString(j.Argv)})
+		if j, ok := job.Lookup(name); ok {
+			out = append(out, scheduledJob{argv: j.Argv, interval: interval, action: job.ActionString(j.Argv)})
 		}
 	}
-	add(jobs.NameRotateActivities, m.RotateActivities)
-	add(jobs.NameRotateLogs, m.RotateLogs)
-	add(jobs.NamePrunePreserved, m.PrunePreserved)
-	add(jobs.NameSyncGraph, m.SyncGraph)
-	add(jobs.NameCheckReview, m.CheckReview)
+	add(job.NameRotateActivities, m.RotateActivities)
+	add(job.NameRotateLogs, m.RotateLogs)
+	add(job.NamePrunePreserved, m.PrunePreserved)
+	add(job.NameSyncGraph, m.SyncGraph)
+	add(job.NameCheckReview, m.CheckReview)
 	return out
 }
 

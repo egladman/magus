@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code",
+            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code",
+            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -34,7 +34,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host claude-code; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host claude-code",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
             "timeout": 10,
             "type": "command"
           }

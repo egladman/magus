@@ -2015,8 +2015,10 @@ engine needs --embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 
 -t runs a file's test blocks and reports pass or fail, which is how Buzz
-code in this ecosystem is tested. The lsp subcommand speaks the Language
-Server Protocol over stdio for an editor integration.`,
+code in this ecosystem is tested. --coverprofile writes an LCOV report for
+the file under -t (entry file only; imports are measured when they are the
+-t subject). The lsp subcommand speaks the Language Server Protocol over
+stdio for an editor integration.`,
 	Flags: []Flag{
 		// Backticks are load-bearing: flag.UnquoteUsage reads the quoted word as the
 		// value's name, so this renders `-e code` rather than `-e string`. The
@@ -2025,6 +2027,7 @@ Server Protocol over stdio for an editor integration.`,
 		{Name: "e", Kind: FlagString, Doc: "Execute `code` given on the command line instead of a file"},
 		{Name: "t", Kind: FlagBool, Doc: `Run the file's test "..." {} blocks and report pass/fail`},
 		{Name: "test", Kind: FlagBool, AliasOf: "t", Doc: "Alias for -t"},
+		{Name: "coverprofile", Kind: FlagString, Doc: "Write an LCOV coverprofile for the file under `-t` (requires `-t`)"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},
@@ -2039,6 +2042,7 @@ Server Protocol over stdio for an editor integration.`,
 		{"Run an inline snippet", `magus buzz -e 'import "std"; fun main() > void { std\print("hi"); } main();'`},
 		{"Run a file's test blocks", "magus buzz -t scripts/report.buzz"},
 		{"Run a magusfile-style file", "magus buzz --embedded scripts/target.buzz"},
+		{"Write an LCOV coverprofile while testing", "magus buzz -t --coverprofile=out.lcov scripts/report.buzz"},
 	},
 }
 
@@ -2046,7 +2050,7 @@ var agentCommand = Command{
 	Name:        "agent",
 	Short:       "Manage skills, harnesses, and agent feedback",
 	Description: "Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.",
-	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install", "harness", "hook", "improve"},
+	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install", "harness", "improve"},
 	Long: `Render the agent skills embedded in this binary and write or stream them
 into named destinations (<skills-dir>).
 
@@ -2056,9 +2060,12 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
-hook translates a descriptor-defined host event into the response format its host expects.
-harness applies or verifies a user-owned descriptor. improve reviews recurring
-guard feedback and can explicitly update descriptor-managed entries.
+harness applies or verifies harnesses selected with magus\harness.provider
+(several hosts are fine when you bounce between LLM tools) or a JSON descriptor:
+it merges opaque host-config fragments the descriptor already names, and does
+not inject a reserved command. Omit --id to act on every magusfile-wired
+provider. improve reviews recurring guard feedback and can explicitly update
+those fragments.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -2076,21 +2083,19 @@ shape: magus query for a diagnostic code or a Buzz op, which magus refs
 (compiled-language symbols only) would miss, and magus refs otherwise. The
 text report prints the same command after each pattern, and run is empty for
 a pattern no graph verb fits.`,
-	Usage: "magus agent <install|hook|harness|improve|starter|adoption> [flags]",
+	Usage: "magus agent <install|harness|improve|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
-		{Name: "hook", Short: "Translate a descriptor-defined guard event into a host response", Flags: []Flag{
-			{Name: "host", Kind: FlagString, Doc: "Harness descriptor receiving the guard response"},
-		}},
-		{Name: "harness", Short: "Apply or verify a user-owned harness descriptor", Children: []Command{
-			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "host", Kind: FlagString, Doc: "Harness descriptor ID"}}},
-			{Name: "verify", Short: "Verify a descriptor and its configured hook file", Flags: []Flag{{Name: "host", Kind: FlagString, Doc: "Harness descriptor ID"}}},
+		{Name: "harness", Short: "Apply or verify harnesses wired in the magusfile or JSON descriptors", Children: []Command{
+			{Name: "apply", Short: "Write descriptor-managed hook entries", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to apply every magusfile-wired provider"}}},
+			{Name: "verify", Short: "Verify a descriptor and its configured hook file", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
+			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
 		}},
 		{Name: "improve", Short: "Review recurring guard feedback and propose a harness update", Flags: []Flag{
 			{Name: "session", Kind: FlagString, Doc: "Only evidence from this host session"},
 			{Name: "all", Kind: FlagBool, Doc: "Include one-off feedback"},
 			{Name: "apply", Kind: FlagBool, Doc: "Apply one descriptor-managed harness update"},
-			{Name: "host", Kind: FlagString, Doc: "Harness descriptor to update with --apply"},
+			{Name: "id", Kind: FlagString, Doc: "Harness descriptor to update with --apply"},
 		}},
 		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{

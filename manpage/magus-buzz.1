@@ -22,13 +22,18 @@ engine needs \-\-embedded, or it fails on rules upstream Buzz enforces and
 magus does not. The most common one is "argument N must be labeled".
 .PP
 \-t runs a file's test blocks and reports pass or fail, which is how Buzz
-code in this ecosystem is tested. The lsp subcommand speaks the Language
-Server Protocol over stdio for an editor integration.
+code in this ecosystem is tested. \-\-coverprofile writes an LCOV report for
+the file under \-t (entry file only; imports are measured when they are the
+\-t subject). The lsp subcommand speaks the Language Server Protocol over
+stdio for an editor integration.
 .SH OPTIONS
 .RS
 .TP
 \fB\-C\fR \fIstring\fR
 Working directory for the REPL's import resolution (default: cwd)
+.TP
+\fB\-\-coverprofile\fR \fI-t\fR
+Write an LCOV coverprofile for the file under `\-t` (requires `\-t`)
 .TP
 \fB\-e\fR \fIcode\fR
 Execute `code` given on the command line instead of a file
@@ -80,6 +85,12 @@ magus buzz -t scripts/report.buzz
 .PP
 .EX
 magus buzz --embedded scripts/target.buzz
+.EE
+.PP
+\fIWrite an LCOV coverprofile while testing\fR
+.PP
+.EX
+magus buzz -t --coverprofile=out.lcov scripts/report.buzz
 .EE
 .PP
 .SH SEE ALSO

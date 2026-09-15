@@ -63,18 +63,18 @@ const (
 	FlagAffectedWait = "wait"
 	// agent adoption: --commands
 	FlagAgentAdoptionCommands = "commands"
-	// agent harness apply: --host
-	FlagAgentHarnessApplyHost = "host"
-	// agent harness verify: --host
-	FlagAgentHarnessVerifyHost = "host"
-	// agent hook: --host
-	FlagAgentHookHost = "host"
+	// agent harness apply: --id
+	FlagAgentHarnessApplyID = "id"
+	// agent harness install: --id
+	FlagAgentHarnessInstallID = "id"
+	// agent harness verify: --id
+	FlagAgentHarnessVerifyID = "id"
 	// agent improve: --all
 	FlagAgentImproveAll = "all"
 	// agent improve: --apply
 	FlagAgentImproveApply = "apply"
-	// agent improve: --host
-	FlagAgentImproveHost = "host"
+	// agent improve: --id
+	FlagAgentImproveID = "id"
 	// agent improve: --session
 	FlagAgentImproveSession = "session"
 	// agent: --dir
@@ -93,6 +93,8 @@ const (
 	FlagAgentTar = "tar"
 	// buzz: --C
 	FlagBuzzC = "C"
+	// buzz: --coverprofile
+	FlagBuzzCoverprofile = "coverprofile"
 	// buzz: --e
 	FlagBuzzE = "e"
 	// buzz: --embedded
@@ -1455,11 +1457,12 @@ func BindServerReload(fs *flag.FlagSet) *ServerReloadFlags {
 
 // BuzzFlags are the flags declared for `magus buzz`.
 type BuzzFlags struct {
-	E          string // -e
-	Test       bool   // -t, --test
-	Embedded   bool   // --embedded
-	NoAutoload bool   // --no-autoload
-	C          string // -C
+	E            string // -e
+	Test         bool   // -t, --test
+	Coverprofile string // --coverprofile
+	Embedded     bool   // --embedded
+	NoAutoload   bool   // --no-autoload
+	C            string // -C
 }
 
 // BindBuzz registers `magus buzz`'s flags on fs and returns the destination.
@@ -1468,6 +1471,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
 	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
+	fs.StringVar(&f.Coverprofile, FlagBuzzCoverprofile, "", "Write an LCOV coverprofile for the file under `-t` (requires `-t`)")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
 	fs.StringVar(&f.C, FlagBuzzC, "", "Working directory for the REPL's import resolution (default: cwd)")
@@ -1532,39 +1536,39 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	return &f
 }
 
-// AgentHookFlags are the flags declared for `magus agent hook`.
-type AgentHookFlags struct {
-	Host string // --host
-}
-
-// BindAgentHook registers `magus agent hook`'s flags on fs and returns the destination.
-func BindAgentHook(fs *flag.FlagSet) *AgentHookFlags {
-	var f AgentHookFlags
-	fs.StringVar(&f.Host, FlagAgentHookHost, "", "Harness descriptor receiving the guard response")
-	return &f
-}
-
 // AgentHarnessApplyFlags are the flags declared for `magus agent harness apply`.
 type AgentHarnessApplyFlags struct {
-	Host string // --host
+	ID string // --id
 }
 
 // BindAgentHarnessApply registers `magus agent harness apply`'s flags on fs and returns the destination.
 func BindAgentHarnessApply(fs *flag.FlagSet) *AgentHarnessApplyFlags {
 	var f AgentHarnessApplyFlags
-	fs.StringVar(&f.Host, FlagAgentHarnessApplyHost, "", "Harness descriptor ID")
+	fs.StringVar(&f.ID, FlagAgentHarnessApplyID, "", "Harness ID; omit to apply every magusfile-wired provider")
 	return &f
 }
 
 // AgentHarnessVerifyFlags are the flags declared for `magus agent harness verify`.
 type AgentHarnessVerifyFlags struct {
-	Host string // --host
+	ID string // --id
 }
 
 // BindAgentHarnessVerify registers `magus agent harness verify`'s flags on fs and returns the destination.
 func BindAgentHarnessVerify(fs *flag.FlagSet) *AgentHarnessVerifyFlags {
 	var f AgentHarnessVerifyFlags
-	fs.StringVar(&f.Host, FlagAgentHarnessVerifyHost, "", "Harness descriptor ID")
+	fs.StringVar(&f.ID, FlagAgentHarnessVerifyID, "", "Harness ID; omit to verify every magusfile-wired provider")
+	return &f
+}
+
+// AgentHarnessInstallFlags are the flags declared for `magus agent harness install`.
+type AgentHarnessInstallFlags struct {
+	ID string // --id
+}
+
+// BindAgentHarnessInstall registers `magus agent harness install`'s flags on fs and returns the destination.
+func BindAgentHarnessInstall(fs *flag.FlagSet) *AgentHarnessInstallFlags {
+	var f AgentHarnessInstallFlags
+	fs.StringVar(&f.ID, FlagAgentHarnessInstallID, "", "Harness ID; omit to install every magusfile-wired provider")
 	return &f
 }
 
@@ -1573,7 +1577,7 @@ type AgentImproveFlags struct {
 	Session string // --session
 	All     bool   // --all
 	Apply   bool   // --apply
-	Host    string // --host
+	ID      string // --id
 }
 
 // BindAgentImprove registers `magus agent improve`'s flags on fs and returns the destination.
@@ -1582,7 +1586,7 @@ func BindAgentImprove(fs *flag.FlagSet) *AgentImproveFlags {
 	fs.StringVar(&f.Session, FlagAgentImproveSession, "", "Only evidence from this host session")
 	fs.BoolVar(&f.All, FlagAgentImproveAll, false, "Include one-off feedback")
 	fs.BoolVar(&f.Apply, FlagAgentImproveApply, false, "Apply one descriptor-managed harness update")
-	fs.StringVar(&f.Host, FlagAgentImproveHost, "", "Harness descriptor to update with --apply")
+	fs.StringVar(&f.ID, FlagAgentImproveID, "", "Harness descriptor to update with --apply")
 	return &f
 }
 

@@ -220,6 +220,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 		fmt.Sprintf("http://localhost:%d", port),
 		fmt.Sprintf("http://127.0.0.1:%d", port),
 	)
+	// siteAllowed widens the DNS-rebind accept-list for console browser routes so the
+	// hosted PWA Origin (eli.gladman.cc) is not 403'd before CORS can answer. /mcp keeps
+	// the loopback-only set below.
+	siteAllowed := allowed
+	if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
+		siteAllowed = allowed.Allow(u.Host)
+	}
 	for path, h := range opts.HealthRoutes {
 		httpServer.Handle(path, cors(h))
 	}
@@ -370,8 +377,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// share subset below: a share link is handed to a phone, and disposing a request
 			// is exactly the judgment a link cannot be trusted with.
 			bridgeMux.Handle("/api/v1/attention", cors(attentionH))
-			// Wrap every /api/ route with rebind + header-only bearer auth.
-			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleBearer, bridgeMux)))
+			// Wrap every /api/ route with rebind + CORS + header-only bearer auth.
+			// CORS sits outside BearerGuard so a tokenless OPTIONS preflight from the
+			// hosted PWA is answered here rather than 401'd; siteAllowed admits that
+			// Origin past the rebind check. Inner cors() on each bridgeMux handler is
+			// redundant for responses that reach the mux and harmless if both fire.
+			httpServer.Handle("/api/", httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, bridgeMux))))
 
 			// shareGuarded is the exact read surface the LAN share listener exposes,
 			// each entry guarded per-session by the share token (share.Manager wraps
@@ -396,17 +407,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				metricsSvc.Start(ctx)
 				mPath, mHandler := metricsv1alpha1connect.NewMetricsServiceHandler(metricsSvc, connectReadMax)
 
-				// The dashboard is a cross-origin browser client (served from the hosted site),
-				// so the DNS-rebind accept-list must include the site origin, not just loopback.
-				// Widen a COPY of allowed for this route only; /mcp and /api keep their loopback
-				// posture. CORS wraps BearerGuard (not the reverse) so the browser's tokenless
-				// OPTIONS preflight is answered here rather than 401'd by the bearer check; the
-				// actual POST still carries and is verified against the bearer token.
-				metricsAllowed := allowed
-				if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
-					metricsAllowed = allowed.Allow(u.Host)
-				}
-				httpServer.Handle(mPath, httpx.GuardRebind(metricsAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, mHandler))))
+				// The dashboard is a cross-origin browser client (served from the hosted site).
+				// CORS wraps BearerGuard (not the reverse) so the browser's tokenless OPTIONS
+				// preflight is answered here rather than 401'd by the bearer check; the actual
+				// POST still carries and is verified against the bearer token. /mcp stays on
+				// the loopback-only accept-list.
+				httpServer.Handle(mPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, mHandler))))
 				// MetricsService is a read-only stream, so it joins the share read surface.
 				shareGuarded[mPath] = mHandler
 				log.InfoContext(ctx, "[BRIDGE] metrics service mounted", slog.String("path", mPath))
@@ -419,11 +425,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
 			// browser client) and unconditionally: the trail is readable even when metrics are off.
 			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()), connectReadMax)
-			activityAllowed := allowed
-			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
-				activityAllowed = allowed.Allow(u.Host)
-			}
-			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, activityHandler))))
+			httpServer.Handle(activityPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, activityHandler))))
 			// ActivityService.ListActivityEvents is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = activityHandler
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
@@ -434,7 +436,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
 			// browser client) and read-only, so it joins the share read surface too.
 			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log), connectReadMax)
-			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, statusConnectHandler))))
+			httpServer.Handle(statusPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, statusConnectHandler))))
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
 
@@ -448,7 +450,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// processes on the operator's machine. The console reaches it over the
 			// authenticated loopback route.
 			toolPath, toolConnectHandler := toolv1alpha1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus), connectReadMax)
-			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, toolConnectHandler))))
+			httpServer.Handle(toolPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, toolConnectHandler))))
 			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
 
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
@@ -458,7 +460,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// share read surface too: the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
-			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, insightConnectHandler))))
+			httpServer.Handle(insightPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, insightConnectHandler))))
 			shareGuarded[insightPath] = insightConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
 
@@ -470,7 +472,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// retired JSON twins did: a shared phone renders the run browser, and it must keep
 			// reaching the same runs whichever route the page settles on.
 			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore), connectReadMax)
-			httpServer.Handle(viewerPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
+			httpServer.Handle(viewerPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
 			shareGuarded[viewerPath] = viewerConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
 
@@ -483,11 +485,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			//
 			// They are the SAME handlers shareGuarded hands the LAN listener, so "what a viewer
 			// may see" has one definition and cannot drift between a phone and a loopback tab.
+			// siteAllowed + cors outside bearer matches the /api/ mount: a hosted-PWA Origin
+			// must clear rebind, and OPTIONS must not hit the bearer check first.
 			for path, h := range map[string]http.Handler{
 				"/api/v1/events":  eventsH,
 				"/api/v1/insight": insightH,
 			} {
-				httpServer.Handle(path, httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleReadBearer, h)))
+				httpServer.Handle(path, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, h))))
 			}
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
@@ -495,7 +499,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// cross-origin allowance as the read services (never unauthenticated), so a browser
 			// client can trigger maintenance without the daemon exposing an open action endpoint.
 			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version, opts.Jobs), connectReadMax)
-			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, jobHandler))))
+			httpServer.Handle(jobPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, jobHandler))))
 			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
@@ -517,7 +521,9 @@ func (s *Daemon) Serve(ctx context.Context) error {
 					slog.String("root", opts.Magus.Root()))
 			}
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, log)
-			httpServer.Handle("/api/v1/share", httpx.GuardRebind(allowed, cors(httpx.RequireLoopbackPeer(httpx.BearerGuard(auth.VerifyConsoleBearer, shareH)))))
+			// siteAllowed so a hosted-PWA Origin clears rebind; RequireLoopbackPeer still
+			// keeps the peer on loopback so only the local browser can open a share.
+			httpServer.Handle("/api/v1/share", httpx.GuardRebind(siteAllowed, cors(httpx.RequireLoopbackPeer(httpx.BearerGuard(auth.VerifyConsoleBearer, shareH)))))
 			log.InfoContext(ctx, "[SHARE] share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
 
 			// Static console on loopback: serve the built PWA at /console/ from the SAME
@@ -557,12 +563,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			//   - share token (read-only viewer): only ever valid on the LAN share listener; this
 			//     service is deliberately NOT in shareGuarded, so a shared phone can never reach
 			//     the token-management surface.
-			// It also uses the LOOPBACK accept-list (`allowed`, not the site-widened
-			// `activityAllowed`): token management is sensitive and local-only. The operator/built-in
-			// token is additionally unreachable through the handler itself: it is bootstrap-only,
-			// managed SOLELY by the CLI, and structurally invisible+immutable to this service (it
-			// lives in a store the handler never opens, so it is neither listed, mintable, nor
-			// revocable here), preventing lockout.
+			// siteAllowed admits the hosted PWA Origin past rebind (Settings runs from
+			// eli.gladman.cc against the local daemon). VerifyCLIBearer still refuses every
+			// non-operator credential. The operator/built-in token is additionally unreachable
+			// through the handler itself: it is bootstrap-only, managed SOLELY by the CLI, and
+			// structurally invisible+immutable to this service (it lives in a store the handler
+			// never opens, so it is neither listed, mintable, nor revocable here), preventing
+			// lockout.
 			// The audit interceptor classifies every RPC on this service by its leading verb
 			// (internal/handler/trailrpc) and records the mutating ones (CreateToken and
 			// RevokeToken today) to the trail, so a browser-reachable mint or revoke is always
@@ -572,7 +579,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// that keeps it honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
-			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
+			httpServer.Handle(tokenPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
 			// Memory management service: the typed surface the console Settings UI uses to LIST,
@@ -590,7 +597,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// caller-supplied. The agent/MCP door onto the same files is audited separately.
 			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindMemory, trailrpc.WithAuditReads()))
 			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit, connectReadMax)
-			httpServer.Handle(memoryPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, memoryHandler))))
+			httpServer.Handle(memoryPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, memoryHandler))))
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
 			// Notes service: the typed surface the console's Notes view uses to READ the
@@ -608,7 +615,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
-			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, notesHandler))))
+			httpServer.Handle(notesPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, notesHandler))))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
 			// Graph service: the typed surface for the knowledge graph's own verbs (query,
@@ -629,7 +636,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// route, which is a hole rather than a convenience. The tiers move together or the
 			// weaker one decides.
 			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus), connectReadMax)
-			httpServer.Handle(graphPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, graphServiceHandler))))
+			httpServer.Handle(graphPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, graphServiceHandler))))
 			log.InfoContext(ctx, "[BRIDGE] graph service mounted", slog.String("path", graphPath))
 
 			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))

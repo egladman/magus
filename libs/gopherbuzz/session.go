@@ -54,6 +54,14 @@ type Session struct {
 	curVM    *vmpackage.VM
 	stepHook func(vmpackage.StepEvent, vmpackage.DebugFrame)
 	stepMask vmpackage.StepMask
+	// sourceFile is stamped onto Chunk.SourceFile by compileShared. Set by the
+	// host (magus buzz -t --coverprofile) to the entry file under test. Cleared
+	// for the duration of execImport so imported modules do not dilute an
+	// entry-file coverprofile — they are measured when THEY are the -t subject.
+	sourceFile string
+	// lineCover, when set, observes every compiled chunk and receives line hits
+	// via the step hook EnableLineCoverage installs. nil in normal runs.
+	lineCover *LineCoverage
 	// compileObserver, if set, is notified of this session's compile phase timings
 	// (parse/check/compile) and import resolutions. nil in normal runs; the
 	// per-phase fire is guarded by a nil check, so an unobserved session compiles
@@ -543,10 +551,17 @@ func (s *Session) exec(ctx context.Context, code string) ([]string, error) {
 // hidden from the importer's checker (exports-only visibility). The flag is
 // save-and-restored so a nested import (a module importing another) still
 // collects. It returns the chunk's exported names for the namespace-object bind.
+//
+// sourceFile is cleared for the duration: an entry-file coverprofile must not
+// attribute an import's lines to the file under test (those lines are measured
+// when that import is itself the -t subject).
 func (s *Session) execImport(ctx context.Context, code string) ([]string, error) {
 	prev := s.collectImportPrivate
 	s.collectImportPrivate = true
 	defer func() { s.collectImportPrivate = prev }()
+	prevSF := s.sourceFile
+	s.sourceFile = ""
+	defer func() { s.sourceFile = prevSF }()
 	return s.exec(ctx, code)
 }
 
@@ -569,6 +584,24 @@ func (s *Session) enter(vm *vmpackage.VM) func() {
 // (parse/check/compile phase timings) and resolves imports. Pass nil to detach.
 // With none set the session compiles unchanged, adding no cost.
 func (s *Session) SetCompileObserver(obs CompileObserver) { s.compileObserver = obs }
+
+// SetSourceFile stamps path onto Chunk.SourceFile for subsequent compiles.
+// Pass "" to clear. magus buzz -t --coverprofile sets this to the entry file
+// before Exec so DebugFrame.Source and line coverage attribute hits correctly.
+func (s *Session) SetSourceFile(path string) { s.sourceFile = path }
+
+// EnableLineCoverage observes every compiled chunk and installs a line step
+// hook that records hits into lc. Pass nil to detach both. Requires DebugLines,
+// which session compiles already enable.
+func (s *Session) EnableLineCoverage(lc *LineCoverage) {
+	s.lineCover = lc
+	if lc == nil {
+		s.ClearStepHook()
+		return
+	}
+	mask, hook := lc.StepHook()
+	s.SetStepHook(mask, hook)
+}
 
 // SetFaultHook installs cb to fire when a VM executing this session's code faults
 // (see vm.FaultKind: a recovered internal panic, or a host callable error raised
@@ -659,9 +692,13 @@ func (s *Session) compileShared(ctx context.Context, code string) (*vmpackage.Ch
 		DebugLines:      true,
 		PromoteTopLevel: s.promoteTopLevel,
 		ImportedTypes:   s.importedTypes,
+		SourceFile:      s.sourceFile,
 	})
 	if obs := s.compileObserver; obs != nil {
 		obs.Phase(PhaseCompile, time.Since(compileStart), err)
+	}
+	if err == nil && s.lineCover != nil {
+		s.lineCover.ObserveChunk(chunk)
 	}
 	return chunk, err
 }

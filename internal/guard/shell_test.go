@@ -195,7 +195,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
 		// Still caught in every real command position.
-		{command: "cd /repo && go test ./...", rule: rawTool(`go test ./...`)},
+		{command: "cd /repo && go test ./...", rule: denyRule{Name: denyRuleCd}},
 		{command: "make lint; pytest tests/"},
 		{command: "go build ./... | tee log", rule: rawTool(`go build ./...`)},
 		// A READ-ONLY rendering is covered too. It used to be exempt on the reading that
@@ -323,9 +323,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// Only run and affected carry the flag, so nothing else is advised toward it.
 		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
-		// A cd WITHIN the workspace stays an advisory: naming the project is the
-		// fix, and the run still describes the tree that ships.
-		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},
+		// A cd WITHIN the workspace is denied: name the project instead. A cd into
+		// a temp or scratchpad copy is the throwaway rule above (more specific).
+		{command: "cd libs/gopherbuzz && magus run test .", rule: denyRule{Name: denyRuleCd}},
+		{command: "cd libs/diagnostics", rule: denyRule{Name: denyRuleCd}},
+		{command: "bash -c 'cd /tmp && ls'", rule: denyRule{Name: denyRuleCd}},
+		{command: "(cd libs/diagnostics && ls)", rule: denyRule{Name: denyRuleCd}},
 		// --root is the sanctioned way to mean a different workspace, and a temp
 		// path merely MENTIONED is not a relocation.
 		{command: "magus run test . --root /tmp/other-workspace"},
@@ -396,12 +399,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// A find feeding a grep is a CONTENT question, so the search-family
 		// suggestion leads, not the file listing.
 		{command: `find . -name '*.go' | xargs grep -l HandleFoo`, context: "magus refs HandleFoo"},
-		// magus is CWD-relative, so cd-then-magus is how the right command lands
-		// on the wrong project. The project is an argument; only a different
-		// WORKSPACE needs --root.
-		{command: "cd libs/diagnostics && magus run test", context: "CWD-relative"},
+		// magus is CWD-relative, so cd-then-magus is denied: the project is an
+		// argument; only a different WORKSPACE needs --root.
+		{command: "cd libs/diagnostics && magus run test", rule: denyRule{Name: denyRuleCd}},
 		{command: "magus run test libs/diagnostics"},
-		{command: "cd libs/diagnostics"},
 		{command: "grep pattern onefile.txt"},
 		{command: "grep -n x file.go"},
 		{command: "cat x | grep y"},
@@ -436,7 +437,11 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "rg wiring notes.md", context: "docsection"},
 		{command: "head -50 README.md", context: "docsection"},
 		// A code file is not prose; the doc-section advisory must not fire on it.
-		{command: "cat cmd/magus/main.go"},
+		// An unbounded source dump routes to SCIP/refs instead.
+		{command: "cat cmd/magus/main.go", context: "refs"},
+		{command: "head -50 internal/guard/shell.go", context: "refs"},
+		// A line-bounded read already has a range; refs is not the next step.
+		{command: "sed -n '10,40p' cmd/magus/main.go"},
 	}
 	for _, tt := range tests {
 		v := Evaluate(testDependencies(), tt.command)
@@ -1061,12 +1066,13 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git rev-parse @",
 		"git describe",
 		"git stash create",
-		"cd libs/foo && git rev-parse HEAD",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
 		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
 	}
+	// A leading cd is refused on its own; the checkpoint advise is never reached.
+	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && git rev-parse HEAD").Rule.Name)
 
 	for _, cmd := range []string{
 		"git rev-parse --show-toplevel",
@@ -1114,12 +1120,13 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 		"uv lock",
 		"poetry update",
 		"pip-compile",
-		"cd libs/foo && pnpm add lodash",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
 		assert.Contains(t, v.Context, ":update", "%q must name the charm that makes the write legal", cmd)
 	}
+	// A leading cd is refused on its own; the update advise is never reached.
+	assert.Equal(t, denyRuleCd, Evaluate(testDependencies(), "cd libs/foo && pnpm add lodash").Rule.Name)
 
 	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
 	// spell op and a dependency refresh, and the deny answers first, so without this
@@ -1306,6 +1313,33 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
 		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+	}
+}
+
+// Agents poll with pgrep/ps when a magus run is slow; status --watch already
+// names the lock holder. Measured 2026-09-15: pgrep -fl 'magus|go-build'.
+func TestGuardDeniesProcessPoll(t *testing.T) {
+	for _, cmd := range []string{
+		`pgrep -fl magus`,
+		`pgrep -fl 'magus|go-build|go build'`,
+		`ps -p 85665`,
+		`ps -p 85665 -o pid,etime,command`,
+		`pidof magus`,
+		`bash -c 'pgrep -fl magus'`,
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
+		assert.Equal(t, denyRuleProcessPoll, v.Rule.Name, cmd)
+		assert.Contains(t, v.Deny, "status --watch", cmd)
+	}
+}
+
+func TestGuardAllowsMentioningProcessPollWithoutRunningIt(t *testing.T) {
+	for _, cmd := range []string{
+		`echo 'pgrep -fl magus'`,
+		`./magus status --watch=15s`,
+	} {
+		assert.NotEqual(t, denyRuleProcessPoll, Evaluate(testDependencies(), cmd).Rule.Name, "should not fire: %s", cmd)
 	}
 }
 

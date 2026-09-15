@@ -39,11 +39,13 @@ var Magus = Module{
 	// derives the page's frontmatter description from the doc's first sentence, and a
 	// second sentence up here would drag a paragraph break into the YAML.
 	Doc: "Magus core primitives.\n\n" +
-		"Three provider namespaces are wired by the runtime rather than declared here, so " +
+		"Provider namespaces are wired by the runtime rather than declared here, so " +
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
-		"a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, and " +
+		"a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, " +
 		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and " +
-		"the credentials read through it. Each takes an imported spell handle. " +
+		"the credentials read through it, `magus\\harness.provider(<spell>)` an agent-host harness " +
+		"(many hosts; like workspace.provider, unlike cache.remote's one), and `magus\\guard.shell(<rule>)` an additive " +
+		"shell-guard rule (strengthen-only; `magus\\guard.bash` is a deprecated alias). Each provider takes an imported spell handle. " +
 		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
 		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
 		"credential on the way upstream and the child never holds it. It takes an object with " +
@@ -264,7 +266,7 @@ var Magus = Module{
 		// internal/interp/bindings/buzz.go via MapSet onto the magus namespace at run
 		// time. They are here so the checker knows they exist: without a declaration a
 		// namespace member is unknown, and an unknown member used to type-check as
-		// `any` rather than being reported. Keep this set in step with buildMagusNS;
+		// `any` rather than being reported. Keep this set in step with buildMagus;
 		// TestMagusExternsMatchBindings holds the two together.
 		{
 			Name: "project",
@@ -388,6 +390,34 @@ var Magus = Module{
 			}},
 		},
 		{
+			Name: "guard",
+			Doc:  "Additive agent-guard rules for this workspace. Strengthen only: they cannot disable a compiled built-in.",
+			Methods: []Method{
+				{
+					Name:   "shell",
+					Doc:    "Declare one additive shell rule matched on a resolved program name and optional arg subset. Declared at the top level of the root magusfile. decision is deny or advise; optional dialect selects the parser (posix, bash, mksh, zsh, bats).",
+					Args:   []Arg{{Name: "rule", Type: TypeAnyMap}},
+					Extern: true,
+				},
+				{
+					Name:   "bash",
+					Doc:    "Deprecated alias for guard.shell that defaults dialect to bash.",
+					Args:   []Arg{{Name: "rule", Type: TypeAnyMap}},
+					Extern: true,
+				},
+			},
+		},
+		{
+			Name: "harness",
+			Doc:  "Agent-host harness selection. A harness is a spell that exports the harness_config / harness_skills / harness_entries contract, the same family as cache.remote and ci.provider.",
+			Methods: []Method{{
+				Name:   "provider",
+				Doc:    "Wire an imported harness spell for this workspace. A workspace may use several (one per agent host), same append-on-repeat shape as workspace.provider. Declared at the top level of the root magusfile.",
+				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
+				Extern: true,
+			}},
+		},
+		{
 			Name: "secret",
 			Doc:  "Secret provider selection, and the credentials read through it.",
 			Methods: []Method{
@@ -455,7 +485,7 @@ var Magus = Module{
 				"row the caller does not own. See the field docs on " +
 				"types.Job. This namespace, the magus_job MCP tool and `magus job` " +
 				"(fork, exec, exit, wait) are the three WRITE doors onto it. Bound by " +
-				"hand in internal/interp/bindings (buildJobNS), not generated: a Namespace's " +
+				"hand in internal/interp/bindings (buildJob), not generated: a Namespace's " +
 				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
 				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
 			Methods: []Method{

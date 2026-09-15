@@ -9,7 +9,7 @@
 
 <!-- The Go badge is refreshed on a developer machine by `magus run coverage-badge:rw .` and committed with coverage/, the per-platform record it renders from (Go toolchain only, no third-party service). CI only re-derives the badge from that record and fails when the two disagree; it never runs a platform suite to judge it. -->
 
-<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="TypeScript coverage" src="./console/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
+<a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="Buzz coverage" src="./assets/buzz-coverage.svg"> <img alt="TypeScript coverage" src="./console/coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
 A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
 

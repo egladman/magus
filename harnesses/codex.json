@@ -8,47 +8,52 @@
     "path": ".codex/hooks.json"
   },
   "skills": {"paths": [".agents/skills"], "form": "both"},
-  "pre_tool_use": {
-    "path": [
-      "hooks",
-      "PreToolUse"
-    ],
-    "matcher_key": "matcher",
-    "hooks_key": "hooks",
-    "response_template": "{{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}",
-    "entries": [
-      {
-        "matcher": "Bash",
-        "hook": {
-          "type": "command",
-          "statusMessage": "magus guard: checking command"
-        }
-      },
-      {
-        "matcher": "Edit|Write",
-        "hook": {
-          "type": "command",
-          "statusMessage": "magus guard: checking file"
-        }
-      },
-      {
-        "matcher": "Read",
-        "observe": true,
-        "hook": {
-          "type": "command",
-          "statusMessage": "magus: recording read"
-        }
-      },
-      {
-        "matcher": "mcp__.*",
-        "hook": {
-          "type": "command",
-          "statusMessage": "magus guard: checking MCP tool call"
-        }
-      }
-    ]
-  },
   "managed_entries": [
+    {
+      "path": ["hooks", "PreToolUse"],
+      "entries": [
+        {
+          "matcher": "Bash",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
+              "statusMessage": "magus guard: checking command"
+            }
+          ]
+        },
+        {
+          "matcher": "Edit|Write",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
+              "statusMessage": "magus guard: checking file"
+            }
+          ]
+        },
+        {
+          "matcher": "Read",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-observe.sh",
+              "statusMessage": "magus: recording read"
+            }
+          ]
+        },
+        {
+          "matcher": "mcp__.*",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "GUARD_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+              "statusMessage": "magus guard: checking MCP tool call"
+            }
+          ]
+        }
+      ]
+    },
     {
       "path": ["hooks", "SessionStart"],
       "entries": [
@@ -57,7 +62,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-rehydrate.sh\"",
+              "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
               "statusMessage": "magus: restating this checkout's rules"
             }
           ]
@@ -71,7 +76,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+              "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
               "statusMessage": "magus: recording where the work stands"
             }
           ]

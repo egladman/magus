@@ -1,0 +1,212 @@
+// Claude Code agent-host harness. Same provider-style spell contract as
+// spells/harness/cursor and spells/harness/codex: selected from a magusfile
+// with magus\harness.provider, not a JSON file under harnesses/.
+//
+//   import "spells/harness/claude-code" as claude
+//   magus\harness.provider(claude)
+//
+// To adapt without modifying Magus source: copy this spell into the workspace,
+// change only the import path (keep provider), edit Buzz, then
+// `magus agent harness apply`. See magus-workspace-rules "Adapting a Buzz harness".
+//
+// Magus invokes the reserved harness_* names on apply/verify. The fragments are
+// opaque host JSON; Magus merges them and does not rewrite command fields.
+
+import "magus/spell";
+import "assert";
+
+export fun mgs_getName() > str { return "claude-code"; }
+
+fun claude_config_path() > str { return ".claude/settings.json"; }
+
+fun claude_skills_form() > str { return "both"; }
+
+fun claude_skills_paths() > [str] {
+    return [".claude/skills"];
+}
+
+fun claude_guard_command() > str {
+    return "sh docs/guides/integrations/agents/magus-guard-command.sh";
+}
+
+fun claude_path_command() > str {
+    return "sh docs/guides/integrations/agents/magus-guard-path.sh";
+}
+
+fun claude_observe_command() > str {
+    return "sh docs/guides/integrations/agents/magus-guard-observe.sh";
+}
+
+fun claude_mcp_command() > str {
+    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
+}
+
+fun claude_rehydrate_command() > str {
+    return "sh docs/guides/integrations/agents/magus-rehydrate.sh";
+}
+
+fun claude_checkpoint_command() > str {
+    return "sh docs/guides/integrations/agents/magus-checkpoint.sh";
+}
+
+fun claude_command_hook(cmd: str) > {str: any} {
+    return {
+        "type": "command",
+        "command": cmd,
+        "timeout": 10,
+    };
+}
+
+fun claude_pretool_entry(matcher: str, cmd: str) > {str: any} {
+    return {
+        "matcher": matcher,
+        "hooks": [claude_command_hook(cmd)],
+    };
+}
+
+fun claude_entries() > [any] {
+    return [
+        {
+            "path": ["hooks", "PreToolUse"],
+            "entries": [
+                claude_pretool_entry("Bash", claude_guard_command()),
+                claude_pretool_entry("Edit|Write|NotebookEdit", claude_path_command()),
+                claude_pretool_entry("^mcp__magus__", claude_mcp_command()),
+                claude_pretool_entry("Read", claude_observe_command()),
+            ],
+        },
+        {
+            "path": ["hooks", "SessionStart"],
+            "entries": [
+                {
+                    "matcher": "compact",
+                    "hooks": [claude_command_hook(claude_rehydrate_command())],
+                },
+            ],
+        },
+        {
+            "path": ["hooks", "Stop"],
+            "entries": [
+                {
+                    "hooks": [claude_command_hook(claude_checkpoint_command())],
+                },
+            ],
+        },
+    ];
+}
+
+fun claude_config() > {str: any} {
+    return {
+        "path": claude_config_path(),
+    };
+}
+
+fun claude_skills() > {str: any} {
+    return {
+        "paths": claude_skills_paths(),
+        "form": claude_skills_form(),
+    };
+}
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return claude_config();
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return claude_skills();
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return claude_entries();
+}
+
+fun claude_mcp() > {str: any} {
+    // User owns Claude Code MCP registration. Magus prints the host CLI sketch.
+    final hint = "Resolve secret ref __TOKEN_REF__, then register Magus MCP (user scope):\n"
+        + "  claude mcp add --transport http --scope user magus __URL__ --header \"Authorization: Bearer <token>\"\n"
+        + "Restart the Claude Code session afterward.";
+    return {
+        "token_ref": "MAGUS_MCP_TOKEN",
+        "url": "http://127.0.0.1:7391/mcp",
+        "hint": hint,
+        "docs": "docs/guides/integrations/mcp.md",
+        "register": [
+            "claude", "mcp", "add",
+            "--transport", "http",
+            "--scope", "user",
+            "magus", "__URL__",
+            "--header", "Authorization: Bearer <resolve:__TOKEN_REF__>",
+        ],
+    };
+}
+
+export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
+    return claude_mcp();
+}
+
+test "mgs_getName is the harness id apply and verify look up" {
+    assert\equal(mgs_getName(), "claude-code", "id must match magus\\harness.provider wiring and --id");
+}
+
+test "harness_config names Claude Code settings" {
+    assert\equal(claude_config_path(), ".claude/settings.json", "workspace-relative host config path");
+    final cfg = claude_config();
+    assert\equal("{cfg["path"]}", ".claude/settings.json", "config map carries the same path");
+}
+
+test "harness_skills installs both forms under .claude/skills" {
+    assert\equal(claude_skills_form(), "both", "matches the JSON descriptor");
+    final skills = claude_skills();
+    assert\equal("{skills["form"]}", "both", "skills map carries the form");
+    final paths = skills["paths"] as [str];
+    assert\equal(paths.len(), 1, "one skills install path");
+    assert\equal(paths[0], ".claude/skills", "Claude Code reads .claude/skills");
+}
+
+test "guard commands name the shared templates" {
+    assert\isTrue(claude_guard_command().indexOf("magus-guard-command.sh") != null, "command surface");
+    assert\isTrue(claude_path_command().indexOf("magus-guard-path.sh") != null, "path surface");
+    assert\isTrue(claude_observe_command().indexOf("magus-guard-observe.sh") != null, "read observe");
+    assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
+    assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.sh") != null, "SessionStart rehydrate");
+    assert\isTrue(claude_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
+}
+
+test "harness_entries covers PreToolUse SessionStart and Stop" {
+    final entries = claude_entries();
+    assert\equal(entries.len(), 3, "three managed path blocks");
+    final pre = entries[0];
+    final pre_path = pre["path"] as [str];
+    assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
+    final pre_entries = pre["entries"] as [any];
+    assert\equal(pre_entries.len(), 4, "Bash path mcp and Read matchers");
+    foreach (entry in pre_entries) {
+        final hooks = entry["hooks"] as [any];
+        assert\equal(hooks.len(), 1, "one command hook per matcher");
+        assert\equal("{hooks[0]["type"]}", "command", "Claude Code hook type");
+        assert\equal(hooks[0]["timeout"] as int, 10, "timeout seconds");
+        assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
+    }
+    final start = entries[1];
+    final start_path = start["path"] as [str];
+    assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
+    final stop = entries[2];
+    final stop_path = stop["path"] as [str];
+    assert\equal(stop_path[1], "Stop", "checkpoint");
+}
+
+test "harness_mcp prints Claude Code host CLI guidance" {
+    final mcp = claude_mcp();
+    assert\equal("{mcp["token_ref"]}", "MAGUS_MCP_TOKEN", "secret provider ref");
+    assert\isTrue("{mcp["hint"]}".indexOf("claude mcp add") != null, "names the host CLI");
+    assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
+}
+
+test "harness_* contract wrappers return the same pure helpers" {
+    final t = null;
+    final cb = fun(_: any) > void {};
+    assert\equal("{harness_config(t, cb)["path"]}", claude_config_path(), "config path");
+    assert\equal("{harness_skills(t, cb)["form"]}", claude_skills_form(), "skills form");
+    assert\equal(harness_entries(t, cb).len(), claude_entries().len(), "entries length");
+    assert\equal("{harness_mcp(t, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
+}

@@ -61,11 +61,11 @@ func scriptWrites(name, script string, args []string) bool {
 // It walks the AST itself rather than reading writeTargetCandidates, because it needs the
 // SCRIPT as one text to ask whether it writes at all, and the heredoc body is a redirect
 // rather than an argument.
-func denyInterpreterRewrite(location location, command string) string {
+func denyInterpreterRewrite(location location, command string, d Dialect) string {
 	if location.workspace == "" {
 		return ""
 	}
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	f, err := parseFile(command, d)
 	if err != nil {
 		return ""
 	}
@@ -82,7 +82,7 @@ func denyInterpreterRewrite(location location, command string) string {
 		if !ok {
 			return true
 		}
-		for _, c := range peelWrappers(literalWords(call.Args)) {
+		for _, c := range peelWrappers(literalWords(call.Args), d) {
 			name := path.Base(c.Name)
 			if !scriptedRewriteInterpreters[name] && name != "awk" {
 				continue
@@ -143,9 +143,9 @@ func interpreterRewriteDenial(rel string) string {
 // rankInterpreterRewrite ranks this reason against the verdict the other command rules
 // reached. It fills a silence and outranks an advisory, but never replaces a deny: `sed -i`
 // and the substitute-then-write rule both refuse the same act in their own words.
-func rankInterpreterRewrite(v BashVerdict, reason string) BashVerdict {
+func rankInterpreterRewrite(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" || v.Deny != "" {
 		return v
 	}
-	return BashVerdict{Deny: reason, Rule: denyRule{Name: denyRuleInterpreterRewrite}}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleInterpreterRewrite}}
 }

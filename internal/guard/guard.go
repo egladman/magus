@@ -46,6 +46,15 @@ type Dependencies struct {
 	CacheDir func(root string) (string, error)
 	// NotesShared is the workspace's declared shared notes store, empty when it declares none.
 	NotesShared string
+	// ShellRules are workspace-declared additive shell rules from
+	// magus\guard.shell. Empty means only the compiled built-ins apply. They
+	// strengthen only: a built-in deny always wins; a workspace deny may
+	// escalate a built-in advise or a pass; a workspace advise fills silence
+	// only.
+	ShellRules []WorkspaceShellRule
+	// ShellDialect is the outer-parse dialect for Evaluate when a workspace
+	// declared one on its shell rules. Empty means bash.
+	ShellDialect Dialect
 	// GraphStaleAdvice is what to say to a graph read about to answer from an index older
 	// than the tree, or "" when every built index is current.
 	GraphStaleAdvice func(ctx context.Context) string
@@ -340,9 +349,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// live inside Evaluate's pure rule set; ranking them is pure, and is
 		// where the ordering is tested. The cache dir is outermost: what it refuses
 		// outranks every other deny on the line (internal/guard/cachedir.go).
-		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input))
-		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input))
-		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input)); {
+		shellD := effectiveDialect(deps.ShellDialect)
+		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input, shellD))
+		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
+		switch v = rankCacheDirWrite(v, denyCacheDirCommand(location, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw
@@ -470,6 +480,19 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
+	// ConversationID is an alternate session pointer some hosts put on the envelope
+	// instead of session_id. HostAttribution prefers session_id when both are set.
+	ConversationID string `json:"conversation_id"`
+	// ParentConversationID is the orchestrator session on a spawn event. When set,
+	// a spawn is attributed to the parent rather than the child conversation.
+	ParentConversationID string `json:"parent_conversation_id"`
+	// Command is a shell line at the envelope root. The tool_input.command spelling
+	// is preferred when both are present.
+	Command string `json:"command"`
+	// Task is a spawn prompt at the envelope root. tool_input.prompt is preferred
+	// when both are present.
+	Task         string `json:"task"`
+	SubagentType string `json:"subagent_type"`
 	// Cwd is the directory the host reports the tool call runs in. It is what locates the
 	// WORKER's checkout when the host runs its hooks somewhere else, such as the
 	// orchestrator's directory, and with it the lease marker bound there.
@@ -563,7 +586,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		return hookRequest{}, false
 	}
 	req := hookRequest{Cwd: env.Cwd, Who: hookAttribution{
-		Session:    env.SessionID,
+		Session:    envelopeSession(env),
 		Transcript: env.TranscriptPath,
 		Event:      env.HookEventName,
 	}}
@@ -579,16 +602,27 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = renderMCPCall(tool, env.ToolInput)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
+	case env.Command != "":
+		req.Value = env.Command
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
-	case envelopeString(env.ToolInput, "prompt") != "":
-		req.Value, req.IsSpawn = envelopeString(env.ToolInput, "prompt"), true
+	case envelopeString(env.ToolInput, "prompt") != "" || env.Task != "":
+		if p := envelopeString(env.ToolInput, "prompt"); p != "" {
+			req.Value = p
+		} else {
+			req.Value = env.Task
+		}
+		req.IsSpawn = true
 		req.Tool = env.ToolName
+		if env.ParentConversationID != "" {
+			req.Who.Session = env.ParentConversationID
+		}
 		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
 		// across spawns, so it groups a spawn feed; a description is per-spawn prose; the
 		// tool name is the last resort that at least says a spawn happened.
 		for _, label := range []string{
 			envelopeString(env.ToolInput, "subagent_type"),
+			env.SubagentType,
 			envelopeString(env.ToolInput, "description"),
 			env.ToolName,
 		} {
@@ -605,12 +639,21 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		//
 		// Keyed on the envelope's OWN fields, so a bare `{"tool_input":{}}` (which names no
 		// host event and could be anything) still falls through to the literal form.
-		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" {
+		if env.HookEventName == "" && env.ToolName == "" && env.SessionID == "" && env.ConversationID == "" {
 			return hookRequest{}, false
 		}
 		req.NothingToJudge = true
 	}
 	return req, true
+}
+
+// envelopeSession picks the session pointer from the fields a host may send.
+// session_id wins when both it and conversation_id are present.
+func envelopeSession(env hookEnvelope) string {
+	if env.SessionID != "" {
+		return env.SessionID
+	}
+	return env.ConversationID
 }
 
 // HostAttribution reads the two pointers only a host knows out of its hook payload: its
@@ -629,7 +672,10 @@ func HostAttribution(raw string) (session, transcript string) {
 	if json.Unmarshal([]byte(raw), &env) != nil {
 		return "", ""
 	}
-	return env.SessionID, env.TranscriptPath
+	if env.SessionID != "" {
+		return env.SessionID, env.TranscriptPath
+	}
+	return env.ConversationID, env.TranscriptPath
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a

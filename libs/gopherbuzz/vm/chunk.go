@@ -34,6 +34,12 @@ type UpvalInfo struct {
 // exist for the compiler and VM in this package, not for external mutation.
 type Chunk struct {
 	Name string
+	// SourceFile is the workspace-relative path of the .buzz file this chunk was
+	// compiled from, or "" when unknown (one-shot Compile, -e, stdin, import
+	// bodies cleared for entry-file coverprofiles). In-memory only, like Doc: it
+	// is not part of the serialized .bo format. DebugFrame.Source and line
+	// coverage read it so a hit attributes to a file rather than a function name.
+	SourceFile string
 	// Doc is the documentation comment block of the source `fun` declaration this
 	// chunk compiles, or "" when undocumented. In-memory only: it is not part of the
 	// serialized .bo format (see marshal.go), so a chunk recovered from bytecode

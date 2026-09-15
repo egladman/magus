@@ -1,4 +1,4 @@
-package jobs
+package job
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 func TestLookup_KnownJobReturnsWholeEntry(t *testing.T) {
 	got, ok := Lookup("rotate-activities")
 	require.True(t, ok)
-	require.Equal(t, Job{
+	require.Equal(t, CatalogEntry{
 		Name: "rotate-activities",
 		Desc: "trim the activity trail back to its cap and drop orphaned payload blobs",
 		Argv: []string{"server", "rotate-activities"},
@@ -19,11 +19,11 @@ func TestLookup_KnownJobReturnsWholeEntry(t *testing.T) {
 func TestLookup_UnknownJobIsZeroValue(t *testing.T) {
 	got, ok := Lookup("no-such-job")
 	require.False(t, ok)
-	require.Equal(t, Job{}, got)
+	require.Equal(t, CatalogEntry{}, got)
 }
 
 func TestAll_IsTheRegistryInOrder(t *testing.T) {
-	require.Equal(t, []Job{
+	require.Equal(t, []CatalogEntry{
 		{Name: "sync-graph", Desc: "reconcile the knowledge graph to current source (rebuild and reindex)", Argv: []string{"graph", "build"}},
 		{Name: "rotate-activities", Desc: "trim the activity trail back to its cap and drop orphaned payload blobs", Argv: []string{"server", "rotate-activities"}},
 		{Name: "rotate-logs", Desc: "trim the invocation run-log journals back to their cap", Argv: []string{"server", "rotate-logs"}},

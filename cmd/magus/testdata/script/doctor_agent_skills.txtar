@@ -22,18 +22,13 @@ cp stdout AGENTS.md
 stdout 'agent-skills: 2 install location\(s\) current'
 
 # A stale install fails, and unlike the verb this replaced it carries a remedy magus
-# can run. The remedy names the RESOLVED workspace root: install resolves a
-# destination against the caller's directory, so an unpinned --dir would write a
-# second skill tree wherever doctor happened to be invoked from.
+# can run. When a harness descriptor owns the skills path, the Fix goes through
+# harness install --id rather than a bare agent install --dir.
 cp stale.md .claude/skills/magus-query/SKILL.md
 ! exec magus doctor
 stdout 'agent-skills: installed skills are behind this binary: \.claude/skills'
-#
-# The path itself is not asserted - the root resolves through symlinks, so it is
-# /private/var where $WORK is /var - only that an ABSOLUTE one is there at all. The
-# spelling this pins is the one that shipped a bare `--dir` with nothing after it.
 exec magus doctor --fix --dry-run
-stdout 'would fix agent-skills: magus agent install \.claude/skills --force --dir /'
+stdout 'would fix agent-skills: magus agent harness install --id script-host'
 
 # A skill a RENAME orphaned is different, and the difference is the whole reason this
 # check declares no Fix for it. magus wrote the file, so it is graded; but --force
@@ -71,14 +66,7 @@ concurrency: 2
   "id": "script-host",
   "display": {"name": "Script Host"},
   "config": {"path": "hooks.json"},
-  "skills": {"paths": [".claude/skills"], "form": "both"},
-  "pre_tool_use": {
-    "path": ["hooks", "before"],
-    "matcher_key": "match",
-    "hooks_key": "commands",
-    "response_template": "{{toJson .}}",
-    "entries": [{"matcher": "run", "hook": {"type": "command"}}]
-  }
+  "skills": {"paths": [".claude/skills"], "form": "both"}
 }
 -- magusfile.buzz --
 import "magus";

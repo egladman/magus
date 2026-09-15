@@ -29,15 +29,34 @@ window. One file carries all of it.
 magus agent install .opencode/skills
 ```
 
+Prefer wiring the OpenCode harness from the root magusfile so skills install
+and multi-host apply see it beside the other hosts:
+
+```buzz
+import "spells/harness/opencode" as opencode
+magus\harness.provider(opencode)
+```
+
+The spell is skills-only (empty config path): `magus agent harness apply` writes
+nothing for OpenCode, and verify does not invent a stamp JSON for Magus to check.
+The guard is the TypeScript plugin, not managed hook fragments. To adapt without
+Magus source edits, fork the spell and change only the import path; see
+[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md).
+
+`harnesses/opencode.json` remains the unwired fallback so
+`magus agent harness install --id opencode` can still refresh `.opencode/skills`.
+OpenCode has no shell-command hook config, so that descriptor is skills-only too.
+
 If you already installed into `.claude/skills` for Claude Code, OpenCode reads
 those too and this step is optional. [Skills](skills.md) covers the rest of the
 install surface.
 
 ## MCP
 
-Configure MCP for OpenCode as a host-level integration; see [MCP](../mcp.md)
-for the client configuration and token. An agent uses the CLI fallback when MCP
-is unavailable; it does not manually start Magus solely to obtain tools.
+Configure MCP for OpenCode yourself. `magus agent harness apply --id opencode`
+prints a short secret-ref hint and a docs pointer; Magus does not write OpenCode
+MCP config. See [MCP](../mcp.md). An agent uses the CLI fallback when MCP is
+unavailable.
 
 ## Guard hook
 
@@ -81,7 +100,7 @@ other templates.
 // handed this checkout back through the compaction prompt, and a checkpoint is
 // recorded when the session goes idle, since OpenCode has no session-end event and
 // idle is the proxy its own docs name.
-// magus-guard-template: 13
+// magus-guard-template: 14
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=model pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=mcp deny=none advise=none pass=none

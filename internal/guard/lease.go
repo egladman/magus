@@ -770,7 +770,7 @@ func denyLeaseScopedLaneWrite(ctx context.Context, deps Dependencies, actingLeas
 	if len(live) == 0 {
 		return ""
 	}
-	for _, candidate := range writeTargetCandidates(command, 0) {
+	for _, candidate := range writeTargetCandidates(command, 0, effectiveDialect(deps.ShellDialect)) {
 		rel, inside := workspaceRelative(location.workspace, candidate)
 		if !inside || !declaredPath(live, rel) {
 			continue

@@ -3,11 +3,9 @@ package doctor
 import (
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,13 +22,10 @@ func writeDoctorHarness(t *testing.T, root string) {
   "display": {"name": "Test Host"},
   "config": {"path": "host/hooks.json"},
   "skills": {"paths": [".agents/skills"], "form": "both"},
-  "pre_tool_use": {
+  "managed_entries": [{
     "path": ["hooks", "before"],
-    "matcher_key": "match",
-    "hooks_key": "commands",
-    "response_template": "{{toJson .}}",
-    "entries": [{"matcher":"run", "hook":{"type":"command"}}]
-  }
+    "entries": [{"match":"run", "commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]
+  }]
 }`), 0o644))
 }
 
@@ -41,7 +36,7 @@ func writeCheckpointHarness(t *testing.T, root, body string) {
 }
 
 func guardedHarnessConfig() string {
-	return `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":` + strconv.Quote(agent.HarnessHookCommand("test-host", false)) + `}]}]}}`
+	return `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]}}`
 }
 
 // The case this check exists for: a host wired for the guard months ago, judging
@@ -102,6 +97,18 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 
 // A config that never mentions magus is somebody else's, and reading it as an unrecording
 // magus host would advise every repository with a Claude Code settings file.
+func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
+	root := t.TempDir()
+	writeDoctorHarness(t, root)
+	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}],"stop":[{"commands":[{"type":"command","command":"sh docs/agents/cursor-guard.sh"}]}]}}`)
+	plant(t, root, "docs/agents/cursor-guard.sh", "#!/bin/sh\n$MAGUS session checkpoint --agent-name cursor\n")
+
+	got := checkCheckpointWiring(root)
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Contains(t, got.Message, "1 of 1")
+}
+
 func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 	root := t.TempDir()
 	writeDoctorHarness(t, root)
@@ -112,3 +119,4 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 	require.Equal(t, types.DoctorOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")
 }
+

@@ -127,7 +127,13 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // predates this has no HOST_EVENT_RAW arm at all, so a host that tries to wire an
 // mcp__magus__* matcher through it ships the literal string "null" as the command to
 // judge rather than the envelope the guard can at least recognize and pass through.
-const GuardTemplateVersion = 13
+//
+// 14: Cursor's self-contained guard now matches WebSearch/WebFetch and injects
+// workspace kind=link citations into additional_context so the next open-web
+// search is biased toward package/docs URLs this tree already depends on. A copy
+// that predates this lets WebSearch run unbound against the open web with no
+// pointer at the citation index.
+const GuardTemplateVersion = 14
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

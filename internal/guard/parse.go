@@ -44,7 +44,12 @@ var wrappers = map[string]bool{
 // raw-tool rules rather than guessing: less of a bypass than it looks, since
 // shell that does not parse does not run either.
 func ParseCommands(command string) ([]hint.Invocation, bool) {
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	return ParseCommandsDialect(command, DialectBash)
+}
+
+// ParseCommandsDialect is ParseCommands with an explicit outer dialect.
+func ParseCommandsDialect(command string, d Dialect) ([]hint.Invocation, bool) {
+	f, err := parseFile(command, d)
 	if err != nil {
 		return nil, false
 	}
@@ -54,7 +59,7 @@ func ParseCommands(command string) ([]hint.Invocation, bool) {
 			// Assigns are deliberately not consulted: the parser has already
 			// separated the VAR=value prefix from the command, which is the
 			// entire reason for parsing.
-			out = append(out, peelWrappers(literalWords(call.Args))...)
+			out = append(out, peelWrappers(literalWords(call.Args), d)...)
 		}
 		return true
 	})
@@ -93,7 +98,7 @@ func literalWord(parts []syntax.WordPart) string {
 // so a stack of them reduces to the program that will actually run. A -c payload
 // is parsed as its own script, so it contributes the commands it contains rather
 // than one opaque string.
-func peelWrappers(words []string) []hint.Invocation {
+func peelWrappers(words []string, d Dialect) []hint.Invocation {
 	for len(words) > 0 {
 		name := path.Base(words[0])
 		switch {
@@ -101,7 +106,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			// find is not a wrapper (it still runs find) but -exec/-execdir
 			// launches a command find never reparses through a shell, so the
 			// payload has to be judged on its own. Keep find itself too.
-			return append([]hint.Invocation{{Name: name, Args: words[1:]}}, findExecCommands(words[1:])...)
+			return append([]hint.Invocation{{Name: name, Args: words[1:]}}, findExecCommands(words[1:], d)...)
 
 		case !wrappers[name]:
 			return []hint.Invocation{{Name: name, Args: words[1:]}}
@@ -111,7 +116,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			// unlike sh -c, never reparses it, so it is peeled like -c: the
 			// remainder is parsed and the full ruleset runs over what it contains.
 			if script, ok := envSplitString(words[1:]); ok {
-				inner, _ := ParseCommands(script)
+				inner, _ := ParseCommandsDialect(script, d)
 				return inner
 			}
 			rest := skipWrapperArgs(name, words[1:])
@@ -136,7 +141,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			if !ok {
 				return []hint.Invocation{{Name: name, Args: words[1:]}}
 			}
-			inner, _ := ParseCommands(script)
+			inner, _ := ParseCommandsDialect(script, wrapperShellDialect(name, d))
 			return inner
 
 		case name == "eval":
@@ -145,7 +150,7 @@ func peelWrappers(words []string) []hint.Invocation {
 			// literal it is an exact synonym for running them directly. When they
 			// come from a variable, literalWord already rendered them empty and
 			// the reparse finds nothing, which is the honest answer.
-			inner, _ := ParseCommands(strings.Join(words[1:], " "))
+			inner, _ := ParseCommandsDialect(strings.Join(words[1:], " "), d)
 			return inner
 
 		default:
@@ -283,11 +288,11 @@ const writeScanDepth = 4
 // Any `sh -c` or `eval` payload is scanned on its own afterwards: peelWrappers hands back
 // the commands inside one, but a redirect there belongs to the inner parse tree and is
 // invisible to a walk of the outer one.
-func writeTargetCandidates(command string, depth int) []string {
+func writeTargetCandidates(command string, depth int, d Dialect) []string {
 	if depth > writeScanDepth {
 		return nil
 	}
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	f, err := parseFile(command, d)
 	if err != nil {
 		return nil
 	}
@@ -307,13 +312,13 @@ func writeTargetCandidates(command string, depth int) []string {
 				nested = append(nested, script)
 			}
 		}
-		for _, c := range stmtCommands(stmt) {
+		for _, c := range stmtCommands(stmt, d) {
 			out = append(out, commandWriteCandidates(c, heredocText(stmt))...)
 		}
 		return true
 	})
 	for _, script := range nested {
-		out = append(out, writeTargetCandidates(script, depth+1)...)
+		out = append(out, writeTargetCandidates(script, depth+1, d)...)
 	}
 	return out
 }
@@ -459,7 +464,7 @@ func envSplitString(words []string) (string, bool) {
 // argv from after the flag up to the terminating `;` or `+`; find execs it
 // directly with no shell, so the argv is peeled as its own command rather than
 // reparsed as a script, which still unwraps an inner `sh -c` payload.
-func findExecCommands(args []string) []hint.Invocation {
+func findExecCommands(args []string, d Dialect) []hint.Invocation {
 	var out []hint.Invocation
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -473,7 +478,7 @@ func findExecCommands(args []string) []hint.Invocation {
 				argv = append(argv, args[j])
 			}
 			if len(argv) > 0 {
-				out = append(out, peelWrappers(argv)...)
+				out = append(out, peelWrappers(argv, d)...)
 			}
 			i = j
 		}
@@ -498,26 +503,26 @@ func shellDashC(args []string) (string, bool) {
 
 // lastOfPipeline and firstOfPipeline resolve the commands immediately either
 // side of one pipe, descending through a longer pipeline to reach them.
-func lastOfPipeline(s *syntax.Stmt) []hint.Invocation {
+func lastOfPipeline(s *syntax.Stmt, d Dialect) []hint.Invocation {
 	if bc, ok := s.Cmd.(*syntax.BinaryCmd); ok && bc.Op == syntax.Pipe {
-		return lastOfPipeline(bc.Y)
+		return lastOfPipeline(bc.Y, d)
 	}
-	return stmtCommands(s)
+	return stmtCommands(s, d)
 }
 
-func firstOfPipeline(s *syntax.Stmt) []hint.Invocation {
+func firstOfPipeline(s *syntax.Stmt, d Dialect) []hint.Invocation {
 	if bc, ok := s.Cmd.(*syntax.BinaryCmd); ok && bc.Op == syntax.Pipe {
-		return firstOfPipeline(bc.X)
+		return firstOfPipeline(bc.X, d)
 	}
-	return stmtCommands(s)
+	return stmtCommands(s, d)
 }
 
-func stmtCommands(s *syntax.Stmt) []hint.Invocation {
+func stmtCommands(s *syntax.Stmt, d Dialect) []hint.Invocation {
 	call, ok := s.Cmd.(*syntax.CallExpr)
 	if !ok {
 		return nil
 	}
-	return peelWrappers(literalWords(call.Args))
+	return peelWrappers(literalWords(call.Args), d)
 }
 
 // busyWaitFires reports whether the line contains a loop whose body only sleeps.
@@ -527,8 +532,8 @@ func stmtCommands(s *syntax.Stmt) []hint.Invocation {
 // 'until grep -q x f; do sleep 1; done'`, a quoted string that runs no loop, and then
 // denied a heredoc that merely quoted the rule's own test cases. An AST knows a
 // WhileClause from a word that looks like one.
-func busyWaitFires(command string) bool {
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+func busyWaitFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
 	if err != nil {
 		return false
 	}
@@ -537,7 +542,7 @@ func busyWaitFires(command string) bool {
 		if found {
 			return false
 		}
-		if loop, ok := n.(*syntax.WhileClause); ok && bodyOnlySleeps(loop.Do) {
+		if loop, ok := n.(*syntax.WhileClause); ok && bodyOnlySleeps(loop.Do, d) {
 			found = true
 			return false
 		}
@@ -550,10 +555,10 @@ func busyWaitFires(command string) bool {
 // separates polling from work. A loop that builds, tests or prints each pass is doing
 // something however long it runs; one that only sleeps is waiting, and the host already
 // waits for free.
-func bodyOnlySleeps(body []*syntax.Stmt) bool {
+func bodyOnlySleeps(body []*syntax.Stmt, d Dialect) bool {
 	sleeps := 0
 	for _, s := range body {
-		for _, c := range stmtCommands(s) {
+		for _, c := range stmtCommands(s, d) {
 			if path.Base(c.Name) != "sleep" {
 				return false
 			}
@@ -561,6 +566,19 @@ func bodyOnlySleeps(body []*syntax.Stmt) bool {
 		}
 	}
 	return sleeps > 0
+}
+
+// processPollFires reports a command that hunts processes instead of asking magus
+// about the work it already tracks. Agents reach for pgrep/ps when a run is slow;
+// the lock message and status --watch already name the holder.
+func processPollFires(cmds []hint.Invocation) bool {
+	for _, c := range cmds {
+		switch path.Base(c.Name) {
+		case "pgrep", "pidof", "ps":
+			return true
+		}
+	}
+	return false
 }
 
 // The rules below answer "which program runs, with what arguments", which is what the
@@ -642,8 +660,8 @@ var scriptedRewriteInterpreters = map[string]bool{
 // deliberately the only rule that reads heredoc text: for this rule the heredoc IS the
 // program, while for every other rule it is data, and folding it into the shared command
 // words would make a heredoc that merely quotes `sed -i` a refused edit.
-func scriptedRewriteFires(command string) bool {
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+func scriptedRewriteFires(command string, d Dialect) bool {
+	f, err := parseFile(command, d)
 	if err != nil {
 		return scriptedRewriteRe.MatchString(command)
 	}
@@ -660,7 +678,7 @@ func scriptedRewriteFires(command string) bool {
 		if !ok {
 			return true
 		}
-		for _, c := range peelWrappers(literalWords(call.Args)) {
+		for _, c := range peelWrappers(literalWords(call.Args), d) {
 			if !scriptedRewriteInterpreters[path.Base(c.Name)] {
 				continue
 			}
@@ -764,6 +782,22 @@ var docReaders = map[string]bool{
 	"grep": true, "egrep": true, "fgrep": true, "rg": true, "ag": true,
 }
 
+// sourceReaders dump a whole file into context. Grep/rg are the code-search family
+// instead: those already route to refs when they look like a symbol hunt.
+var sourceReaders = map[string]bool{
+	"cat": true, "bat": true, "head": true, "tail": true, "less": true, "more": true,
+}
+
+// sourceExt is the set of suffixes whose definition/use sites SCIP indexes answer
+// better than an unbounded read. Markdown is intentionally absent: docSearchFires
+// owns prose. A path that merely CONTAINS one of these strings in a flag value
+// does not count; only operands do.
+var sourceExt = map[string]bool{
+	".go": true, ".buzz": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true,
+	".rs": true, ".py": true, ".c": true, ".h": true, ".cc": true, ".cpp": true,
+	".java": true, ".kt": true, ".swift": true, ".rb": true, ".cs": true, ".zig": true,
+}
+
 // docSearchFires reports a read or search pointed at a markdown file. Markdown headings are
 // indexed as doc-section nodes, so the answer is a section query rather than a whole-file
 // scan. It asks whether an OPERAND is markdown, so a pattern that merely contains ".md"
@@ -776,6 +810,22 @@ func docSearchFires(cmds []hint.Invocation) bool {
 		// grep's -e/-f take a value, so a pattern file is not read as the target.
 		return slices.ContainsFunc(operands(c.Args, "ef"), func(a string) bool {
 			return strings.HasSuffix(a, ".md")
+		})
+	})
+}
+
+// sourceReadFires reports an unbounded dump of a source file (cat/head/less of a
+// .go/.buzz/... path). SCIP/`magus refs` already names definition and use sites;
+// reading the whole file first is the waste this advisory exists to stop. A
+// line-bounded sed -n 'a,bp' is not in sourceReaders and stays silent so a
+// Cursor Read that already carries offset/limit is not scolded.
+func sourceReadFires(cmds []hint.Invocation) bool {
+	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
+		if !sourceReaders[path.Base(c.Name)] {
+			return false
+		}
+		return slices.ContainsFunc(operands(c.Args, ""), func(a string) bool {
+			return sourceExt[strings.ToLower(path.Ext(a))]
 		})
 	})
 }

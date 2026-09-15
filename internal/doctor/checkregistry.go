@@ -57,6 +57,13 @@ var allChecks = []checkDef{
 		run:      func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMCPTokens() },
 	},
 	{
+		Name:           "mcp-client",
+		Doc:            "wired harness spells that declare user-owned MCP setup hints (Magus does not write host MCP config)",
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkMCPClient() },
+	},
+	{
 		Name:     "terminal-capabilities",
 		Doc:      "what the terminal in front of magus can render",
 		Evidence: types.EvidenceMeasured,
@@ -253,11 +260,11 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkCheckpointWiring() },
 	},
 	{
-		Name:           "lease-binding",
+		Name:           "bound-lease",
 		Doc:            "whether the lease this checkout is bound to is a live, registered row, and whether a host hook is wired to judge it",
 		Evidence:       types.EvidenceMeasured,
 		NeedsWorkspace: true,
-		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkLeaseBinding() },
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkBoundLease() },
 	},
 	{
 		Name:     "daemon-version",

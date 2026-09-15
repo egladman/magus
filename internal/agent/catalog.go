@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -164,7 +165,7 @@ import (
 // a person or unbound orchestrator may explicitly refresh only the Magus-owned
 // host hook entries, while the rule engine, installed skills, memory,
 // and repository instructions remain outside that write set.
-const SkillVersion = 70
+const SkillVersion = 75
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -394,7 +395,7 @@ func tidyBlankLines(s string) string {
 // Status is the verification verdict for one installed skill location.
 type Status struct {
 	Location  string
-	Host      string
+	ID        string
 	Installed bool
 	Stale     bool
 	Detail    string
@@ -907,7 +908,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 	var out []Status
 	locations, err := HarnessSkillLocations(dir)
 	if err != nil {
-		out = append(out, Status{Location: harnessDirName, Installed: true, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
+		out = append(out, Status{Location: harnessDirName, Installed: false, Stale: true, Detail: "cannot load harness descriptors: " + err.Error()})
 	}
 	for _, location := range locations {
 		// The anchor decides only whether magus is installed HERE; grading is
@@ -920,15 +921,15 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 					if !c.hasMagusOwnedSkill(dir, location.Path) {
 						continue
 					}
-					out = append(out, Status{Location: location.Path, Host: location.Host, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --host " + location.Host})
+					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --id " + location.ID})
 				}
 				continue
 			}
-			out = append(out, Status{Location: location.Path, Host: location.Host, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
+			out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
 		st := c.gradeDest(dir, location)
-		st.Host = location.Host
+		st.ID = location.ID
 		out = append(out, st)
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, AgentsFile)); err == nil {
@@ -966,7 +967,7 @@ func (c *Catalog) hasMagusOwnedSkill(dir, dest string) bool {
 // HarnessSkillLocation is one descriptor-declared skill tree and the one form
 // it is allowed to contain.
 type HarnessSkillLocation struct {
-	Host string
+	ID   string
 	Path string
 	Form Form
 }
@@ -978,13 +979,24 @@ func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
 	if err != nil {
 		return nil, err
 	}
+	ids := make([]string, 0, len(descriptors))
+	for id := range descriptors {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
 	seen := map[string]HarnessSkillLocation{}
-	for _, loaded := range descriptors {
+	for _, id := range ids {
+		loaded := descriptors[id]
 		for _, path := range loaded.descriptor.Skills.Paths {
-			location := HarnessSkillLocation{Host: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
+			location := HarnessSkillLocation{ID: loaded.descriptor.ID, Path: path, Form: loaded.descriptor.Skills.Form}
 			if prior, exists := seen[path]; exists {
 				if prior.Form != location.Form {
-					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.Host, location.Host, path)
+					return nil, fmt.Errorf("harnesses %q and %q declare different skill forms for %q", prior.ID, location.ID, path)
+				}
+				// Shared path: keep the lexicographically smaller harness ID so
+				// doctor Fix strings stay deterministic across runs.
+				if location.ID < prior.ID {
+					seen[path] = location
 				}
 				continue
 			}
@@ -995,21 +1007,23 @@ func HarnessSkillLocations(root string) ([]HarnessSkillLocation, error) {
 	for _, location := range seen {
 		locations = append(locations, location)
 	}
-	sort.Slice(locations, func(i, j int) bool { return locations[i].Path < locations[j].Path })
+	slices.SortFunc(locations, func(a, b HarnessSkillLocation) int {
+		return strings.Compare(a.Path, b.Path)
+	})
 	return locations, nil
 }
 
 // HarnessSkillDirs returns descriptor-declared locations for display-only callers.
-func HarnessSkillDirs(root string) []string {
+func HarnessSkillDirs(root string) ([]string, error) {
 	locations, err := HarnessSkillLocations(root)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	paths := make([]string, 0, len(locations))
 	for _, location := range locations {
 		paths = append(paths, location.Path)
 	}
-	return paths
+	return paths, nil
 }
 
 // gradeDest grades every magus skill installed under dest, not just the anchor.
@@ -1018,7 +1032,7 @@ func HarnessSkillDirs(root string) []string {
 // a per-skill digest that shortcut goes blind: a stale magus-run reads as current
 // when magus-query happens not to have changed.
 func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
-	reinstall := "magus agent harness install --host " + location.Host
+	reinstall := "magus agent harness install --id " + location.ID
 	dest := location.Path
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a

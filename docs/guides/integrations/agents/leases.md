@@ -299,7 +299,7 @@ None of that table is visible from the verdict a worker sees, which is exactly
 what makes a wrong lease dangerous: a checkout holding an unknown id, a terminal
 row, or a live row whose base was never recorded all render as an ordinary
 advisory, indistinguishable from a session these rules are actually enforcing
-on. `magus doctor`'s **lease-binding** check is the other end of that gap. It
+on. `magus doctor`'s **bound-lease** check is the other end of that gap. It
 reads the same row the guard would and says, in one line, whether this
 checkout's lease is live and therefore actually judged, or names why it is not.
 

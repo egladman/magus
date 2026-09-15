@@ -2,7 +2,7 @@
 title: magus agent
 generated_from: internal/cli/registry.go
 description: Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.
-tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness, hook, improve]
+tags: [cli, magus agent, skills, agents, AGENTS.md, install, harness, improve]
 ---
 
 # magus-agent
@@ -11,7 +11,7 @@ Manage skills, harnesses, and agent feedback
 
 ## Synopsis
 
-**magus** agent \<install|hook|harness|improve|starter|adoption\> [flags]
+**magus** agent \<install|harness|improve|starter|adoption\> [flags]
 
 ## Description
 
@@ -24,9 +24,12 @@ install PRINTS the managed magus block for you to paste, and only when your
 AGENTS.md is missing it or is carrying a stale one. sample prints a starter
 AGENTS.md to stdout for you to own and tweak, and never writes a file.
 
-hook translates a descriptor-defined host event into the response format its host expects.
-harness applies or verifies a user-owned descriptor. improve reviews recurring
-guard feedback and can explicitly update descriptor-managed entries.
+harness applies or verifies harnesses selected with magus\\harness.provider
+(several hosts are fine when you bounce between LLM tools) or a JSON descriptor:
+it merges opaque host-config fragments the descriptor already names, and does
+not inject a reserved command. Omit --id to act on every magusfile-wired
+provider. improve reviews recurring guard feedback and can explicitly update
+those fragments.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -68,20 +71,20 @@ a pattern no graph verb fits.
 **--tar**
 : Stream a tar archive to stdout instead of writing files (agent install)
 
-### agent hook options
-
-**--host** *string*
-: Harness descriptor receiving the guard response
-
 ### agent harness apply options
 
-**--host** *string*
-: Harness descriptor ID
+**--id** *string*
+: Harness ID; omit to apply every magusfile-wired provider
 
 ### agent harness verify options
 
-**--host** *string*
-: Harness descriptor ID
+**--id** *string*
+: Harness ID; omit to verify every magusfile-wired provider
+
+### agent harness install options
+
+**--id** *string*
+: Harness ID; omit to install every magusfile-wired provider
 
 ### agent improve options
 
@@ -91,7 +94,7 @@ a pattern no graph verb fits.
 **--apply**
 : Apply one descriptor-managed harness update
 
-**--host** *string*
+**--id** *string*
 : Harness descriptor to update with --apply
 
 **--session** *string*
@@ -107,11 +110,8 @@ a pattern no graph verb fits.
 **install**
 : Render the embedded skills and write or stream them into named destinations
 
-**hook**
-: Translate a descriptor-defined guard event into a host response
-
 **harness**
-: Apply or verify a user-owned harness descriptor
+: Apply or verify harnesses wired in the magusfile or JSON descriptors
 
 **improve**
 : Review recurring guard feedback and propose a harness update

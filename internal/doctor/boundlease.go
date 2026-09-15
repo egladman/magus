@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -10,11 +11,11 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-func (r *runner) checkLeaseBinding() types.DoctorCheck {
-	return checkLeaseBinding(r.cacheDir(), r.ws.Root(), "")
+func (r *runner) checkBoundLease() types.DoctorCheck {
+	return checkBoundLease(r.runCtx(), r.cacheDir(), r.ws.Root(), workspaceHarnesses(r.ws)...)
 }
 
-// checkLeaseBinding grades the lease this checkout is bound to: an unknown id, a
+// checkBoundLease grades the lease this checkout is bound to: an unknown id, a
 // job that is not live and a live job with no registered base each grade a write
 // differently from a normal lease, and all three render exactly like a guarded
 // session in the verdict itself (see leases.md#what-the-guard-enforces-under-a-lease).
@@ -22,8 +23,11 @@ func (r *runner) checkLeaseBinding() types.DoctorCheck {
 // It reads the job store through Root alone, so a diagnostic never adopts a legacy
 // cache-dir store on the way past. The MCP surface is outside what it can see: no leg
 // here says anything about whether a magus tool call is judged.
-func checkLeaseBinding(cacheDir, root, _ string) types.DoctorCheck {
-	const name = "lease-binding"
+//
+// Named for the subject (the bound lease), not "binding": that word rhymes with
+// guard-wiring / checkpoint-wiring and suggests a wiring check, which this is not.
+func checkBoundLease(ctx context.Context, cacheDir, root string, wired ...string) types.DoctorCheck {
+	const name = "bound-lease"
 
 	id := job.ActingLease(cacheDir)
 	if id == "" {
@@ -93,7 +97,7 @@ func checkLeaseBinding(cacheDir, root, _ string) types.DoctorCheck {
 		}
 	}
 
-	if len(guardHookConfigs(root)) == 0 {
+	if len(guardHookConfigs(ctx, root, wired...)) == 0 {
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorAdvice,

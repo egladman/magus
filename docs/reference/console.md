@@ -175,9 +175,13 @@ magus config token print
 
 The token is stored on disk (`~/.config/magus/mcp-token`) and never logged.
 
-**DNS-rebind guard.** The console shares the MCP server's host-header check.
-A request whose `Host` header does not resolve to the loopback range is
-rejected with 403 before the bearer token is examined.
+**DNS-rebind guard.** Every console route validates `Host` and, when present,
+`Origin`. Loopback hosts are always accepted. For the `/api/` bridge and the
+Connect services the hosted console reaches, the accept-list also includes the
+hosted site host (`eli.gladman.cc`), so a page at `https://eli.gladman.cc` can
+talk to the local daemon. `/mcp` stays loopback-only: a site Origin there is
+still 403. A non-loopback `Host` that is not otherwise allow-listed is rejected
+with 403 before the bearer token is examined.
 
 **CORS.** `Access-Control-Allow-Origin` is set only for:
 

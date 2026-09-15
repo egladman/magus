@@ -624,7 +624,7 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 	require.NoError(t, os.Chmod(blocked, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o644) })
 
-	got := catalog.gradeDest(dir, HarnessSkillLocation{Host: "test", Path: dest, Form: FormBoth})
+	got := catalog.gradeDest(dir, HarnessSkillLocation{ID: "test", Path: dest, Form: FormBoth})
 
 	assert.True(t, got.Stale, "an unreadable installed skill graded as current")
 	assert.Contains(t, got.Detail, "magus-run")

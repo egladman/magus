@@ -102,7 +102,7 @@ func readServedNextFile(journal string) []hint.ServedNextEntry {
 // running as root, and a redirect the guard's peeling ignores turns a read into a
 // write of the reader's choosing. Both have to miss.
 func servedArgv(command string) []string {
-	f, err := syntax.NewParser().Parse(strings.NewReader(command), "")
+	f, err := parseFile(command, DialectBash)
 	if err != nil || len(f.Stmts) != 1 {
 		return nil
 	}

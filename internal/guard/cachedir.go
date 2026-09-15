@@ -118,8 +118,8 @@ func denyCacheDirPath(location location, writePath string) string {
 // as an operand. Both are read off the parsed line rather than matched as text, for the
 // reason internal/guard/parse.go's doc gives: a quoted string that merely NAMES the marker is
 // not a write to it.
-func denyCacheDirCommand(location location, command string) string {
-	for _, candidate := range writeTargetCandidates(command, 0) {
+func denyCacheDirCommand(location location, command string, d Dialect) string {
+	for _, candidate := range writeTargetCandidates(command, 0, d) {
 		if namesWorkspaceCacheDir(location, candidate) {
 			return cacheDirDenial(candidate)
 		}
@@ -133,9 +133,9 @@ func denyCacheDirCommand(location location, command string) string {
 // It OUTRANKS an existing deny, which no other rule here does. `sed -i .magus/lease` earns
 // the in-place refusal too, and that text sends the reader to an editor tool, which is the
 // same write through the surface that would refuse it again.
-func rankCacheDirWrite(v BashVerdict, reason string) BashVerdict {
+func rankCacheDirWrite(v ShellVerdict, reason string) ShellVerdict {
 	if reason == "" {
 		return v
 	}
-	return BashVerdict{Deny: reason, Rule: denyRule{Name: denyRuleCacheDirWrite}}
+	return ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleCacheDirWrite}}
 }

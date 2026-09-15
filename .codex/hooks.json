@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking command",
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
             "statusMessage": "magus guard: checking file",
             "type": "command"
           }
@@ -24,7 +24,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex",
+            "command": "GUARD_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking MCP tool call",
             "type": "command"
           }
@@ -34,7 +34,7 @@
       {
         "hooks": [
           {
-            "command": "guard_root=$PWD; while [ -n \"$guard_root\" ]; do if [ -f \"$guard_root/magusfile.buzz\" ]; then if [ -x \"$guard_root/magus\" ]; then exec \"$guard_root/magus\" agent hook --host codex --observe; fi; break; fi; guard_root=${guard_root%/*}; done; exec magus agent hook --host codex --observe",
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-observe.sh",
             "statusMessage": "magus: recording read",
             "type": "command"
           }
@@ -52,6 +52,16 @@
           }
         ],
         "matcher": "compact"
+      },
+      {
+        "hooks": [
+          {
+            "command": "REHYDRATE_FORMAT=json REHYDRATE_RULES=AGENTS.md sh docs/guides/integrations/agents/magus-rehydrate.sh",
+            "statusMessage": "magus: restating this checkout's rules",
+            "type": "command"
+          }
+        ],
+        "matcher": "compact"
       }
     ],
     "Stop": [
@@ -59,6 +69,15 @@
         "hooks": [
           {
             "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "statusMessage": "magus: recording where the work stands",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
             "statusMessage": "magus: recording where the work stands",
             "type": "command"
           }

@@ -156,6 +156,7 @@ func hookCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Wr
 // themselves: the memoized inspect, this process's loaded config, the index-staleness
 // advice, and the spell catalog, all of which live in the CLI rather than in the rules.
 func hookDependencies() guard.Dependencies {
+	shellRules, shellDialect := loadWorkspaceShellRules(context.Background())
 	return guard.Dependencies{
 		Inspect: func(ctx context.Context, root string) (types.WorkspaceRepository, error) {
 			if root == "" {
@@ -175,9 +176,46 @@ func hookDependencies() guard.Dependencies {
 			return magus.ResolveCacheDir(found, magus.WithLoadedConfig(globalCfg))
 		},
 		NotesShared:      globalCfg.Knowledge.Notes.Shared,
+		ShellRules:       shellRules,
+		ShellDialect:     shellDialect,
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
 	}
+}
+
+// loadWorkspaceShellRules returns additive rules the root magusfile declared via
+// magus\guard.shell, and the last non-empty dialect among them for outer parse.
+// Missing or unloadable is empty so a magusfile typo cannot take down every
+// shell hook (built-ins still apply).
+func loadWorkspaceShellRules(ctx context.Context) ([]guard.WorkspaceShellRule, guard.Dialect) {
+	ws, err := inspectWorkspace(ctx, "")
+	if err != nil {
+		return nil, ""
+	}
+	m, ok := ws.(*magus.Magus)
+	if !ok {
+		return nil, ""
+	}
+	src := m.ShellRules()
+	if len(src) == 0 {
+		return nil, ""
+	}
+	out := make([]guard.WorkspaceShellRule, len(src))
+	var dialect guard.Dialect
+	for i, r := range src {
+		out[i] = guard.WorkspaceShellRule{
+			Name:     r.Name,
+			Decision: r.Decision,
+			Program:  r.Program,
+			Args:     r.Args,
+			Reason:   r.Reason,
+			Dialect:  r.Dialect,
+		}
+		if r.Dialect != "" {
+			dialect = guard.Dialect(r.Dialect)
+		}
+	}
+	return out, dialect
 }
 
 // guardDenyExitCode is what a denied command exits with.

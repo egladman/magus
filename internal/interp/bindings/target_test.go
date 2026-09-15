@@ -45,9 +45,9 @@ func noop(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, nil }
 // accessor is unexported, and Session.CallValue discards a DirectValue's pushed result
 // because no frame is created); value-returning builtins are exercised end to end
 // through the interpreter instead.
-func requireDirect(t *testing.T, ns vm.Value, name string) vm.Value {
+func requireDirect(t *testing.T, obj vm.Value, name string) vm.Value {
 	t.Helper()
-	fn, ok := ns.MapGet(name)
+	fn, ok := obj.MapGet(name)
 	require.Truef(t, ok, "namespace missing %q", name)
 	require.Truef(t, fn.IsDirect(), "%q is not a DirectValue", name)
 	return fn
@@ -293,38 +293,38 @@ func TestBuildBuzzGlob(t *testing.T) {
 	})
 }
 
-func TestBuildCacheNS(t *testing.T) {
+func TestBuildCache(t *testing.T) {
 	t.Run("valid spell handle records the remote backend", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()
-		// buildCacheNS captures the ctx at construction; remote() records onto that
+		// buildCache captures the ctx at construction; remote() records onto that
 		// registry regardless of the call-time ctx.
-		ns := buildCacheNS(workspace.ContextWithRegistry(context.Background(), reg), nil)
+		cache := buildCache(workspace.ContextWithRegistry(context.Background(), reg), nil)
 
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StrValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "remote"), handle))
+		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
 		assert.Equal(t, "aws-s3", reg.RemoteBackend())
 	})
 
 	t.Run("no registry in context is a silent no-op", func(t *testing.T) {
 		// describe/parse runs have no per-Open registry; remote() must not panic and
 		// simply records nothing.
-		ns := buildCacheNS(context.Background(), nil)
+		cache := buildCache(context.Background(), nil)
 		handle := vm.NewMap()
 		handle.MapSet("name", vm.StrValue("aws-s3"))
-		require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "remote"), handle))
+		require.NoError(t, callVoidDirect(t, requireDirect(t, cache, "remote"), handle))
 	})
 
 	t.Run("non-map argument is rejected", func(t *testing.T) {
-		ns := buildCacheNS(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.StrValue("aws-s3"))
+		cache := buildCache(context.Background(), nil)
+		err := callVoidDirect(t, requireDirect(t, cache, "remote"), vm.StrValue("aws-s3"))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "imported spell handle")
 	})
 
 	t.Run("map without a name is rejected", func(t *testing.T) {
-		ns := buildCacheNS(context.Background(), nil)
-		err := callVoidDirect(t, requireDirect(t, ns, "remote"), vm.NewMap())
+		cache := buildCache(context.Background(), nil)
+		err := callVoidDirect(t, requireDirect(t, cache, "remote"), vm.NewMap())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no name")
 	})
@@ -460,67 +460,67 @@ type stubErr struct{}
 
 func (stubErr) Error() string { return "boom" }
 
-// callSecretNS invokes one function on the magus\secret namespace through the same
+// callSecret invokes one function on magus\secret through the same
 // Session CallValue path host code uses, returning the error.
 //
 // It discards the value deliberately: a DirectValue's non-Null result cannot be read back
 // this way (see callVoidDirect). For read() that costs nothing, because the assertion
 // worth making is a SIDE EFFECT (reading registers the value for redaction) which
 // Resolver.Redact observes directly.
-func callSecretNS(t *testing.T, ns vm.Value, name string, args ...vm.Value) error {
+func callSecret(t *testing.T, secretObj vm.Value, name string, args ...vm.Value) error {
 	t.Helper()
-	return callVoidDirect(t, requireDirect(t, ns, name), args...)
+	return callVoidDirect(t, requireDirect(t, secretObj, name), args...)
 }
 
-func TestSecretNSProviderRecordsSpellHandle(t *testing.T) {
+func TestSecretProviderRecordsSpellHandle(t *testing.T) {
 	r := secret.New()
-	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
 
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StrValue("onepassword"))
-	require.NoError(t, callSecretNS(t, ns, "provider", handle))
+	require.NoError(t, callSecret(t, secretObj, "provider", handle))
 	assert.Equal(t, "onepassword", r.ProviderName())
 }
 
-func TestSecretNSProviderRejectsNonHandles(t *testing.T) {
+func TestSecretProviderRejectsNonHandles(t *testing.T) {
 	r := secret.New()
-	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
 
-	err := callSecretNS(t, ns, "provider")
+	err := callSecret(t, secretObj, "provider")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "expected an imported spell handle")
 
 	// A map with no name is a map, not a spell handle: catching it here beats a lookup
 	// failure later with nothing to point at.
-	err = callSecretNS(t, ns, "provider", vm.NewMap())
+	err = callSecret(t, secretObj, "provider", vm.NewMap())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a spell handle")
 	assert.Empty(t, r.ProviderName(), "a rejected handle must not be recorded")
 }
 
-func TestSecretNSReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
+func TestSecretReadResolvesThroughTheBuiltinEnvProvider(t *testing.T) {
 	r := secret.New()
 	t.Setenv("MAGUS_TEST_NS_TOKEN", "ns-token-value")
-	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), r), nil)
+	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), r), nil)
 
-	require.NoError(t, callSecretNS(t, ns, "read", vm.StrValue("MAGUS_TEST_NS_TOKEN")))
+	require.NoError(t, callSecret(t, secretObj, "read", vm.StrValue("MAGUS_TEST_NS_TOKEN")))
 
 	// Reading through the namespace is what registers the value, so redaction is live
 	// from this point on. That the read happened at all is what this masking proves.
 	assert.Equal(t, "tok=***", string(r.Redact([]byte("tok=ns-token-value"))))
 }
 
-func TestSecretNSReadRejectsEmptyReference(t *testing.T) {
-	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+func TestSecretReadRejectsEmptyReference(t *testing.T) {
+	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
 
-	require.ErrorContains(t, callSecretNS(t, ns, "read"), "non-empty reference string")
-	require.ErrorContains(t, callSecretNS(t, ns, "read", vm.StrValue("")), "non-empty reference string")
+	require.ErrorContains(t, callSecret(t, secretObj, "read"), "non-empty reference string")
+	require.ErrorContains(t, callSecret(t, secretObj, "read", vm.StrValue("")), "non-empty reference string")
 }
 
-func TestSecretNSReadSurfacesAnUnsetVariableByName(t *testing.T) {
-	ns := buildSecretNS(secret.ContextWithResolver(context.Background(), secret.New()), nil)
+func TestSecretReadSurfacesAnUnsetVariableByName(t *testing.T) {
+	secretObj := buildSecret(secret.ContextWithResolver(context.Background(), secret.New()), nil)
 
-	err := callSecretNS(t, ns, "read", vm.StrValue("MAGUS_TEST_NS_ABSENT"))
+	err := callSecret(t, secretObj, "read", vm.StrValue("MAGUS_TEST_NS_ABSENT"))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "MAGUS_TEST_NS_ABSENT",
 		"the error must name the variable, so the fix is obvious without reading the magusfile")
@@ -547,13 +547,13 @@ func (h *eventRecorder) Handle(_ context.Context, r slog.Record) error {
 func (h *eventRecorder) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *eventRecorder) WithGroup(string) slog.Handler      { return h }
 
-// TestSecretNSReadIsAudited pins that reading a credential lands in the invocation
+// TestSecretReadIsAudited pins that reading a credential lands in the invocation
 // journal: the durable activity trail. A secret read is the moment a build reaches for
 // something privileged, which is exactly the question an audit answers.
 //
 // The event carries the REFERENCE and the PROVIDER, never the value. journal.Emit
 // redacts Text as a backstop, so this asserts the value is absent on both counts.
-func TestSecretNSReadIsAudited(t *testing.T) {
+func TestSecretReadIsAudited(t *testing.T) {
 	rec := &eventRecorder{}
 	t.Setenv("MAGUS_TEST_AUDIT_TOKEN", "ghp_audit_me_never")
 
@@ -561,14 +561,14 @@ func TestSecretNSReadIsAudited(t *testing.T) {
 	ctx = journal.WithLogger(ctx, slog.New(rec))
 	ctx = journal.WithStep(ctx, "demo", "publish")
 
-	ns := buildSecretNS(ctx, nil)
-	// Called with the run ctx rather than through callSecretNS, which uses
+	secretObj := buildSecret(ctx, nil)
+	// Called with the run ctx rather than through callSecret, which uses
 	// context.Background(): the audit event needs the step and the journal logger, and
 	// in production both ride the ctx the VM hands a host call (the same ctx run.Exec
 	// reads its step from).
 	sess := buzz.NewSession(ctx, buzz.WithEmbedded())
 	defer sess.Close()
-	_, err := sess.CallValue(ctx, requireDirect(t, ns, "read"), []vm.Value{vm.StrValue("MAGUS_TEST_AUDIT_TOKEN")})
+	_, err := sess.CallValue(ctx, requireDirect(t, secretObj, "read"), []vm.Value{vm.StrValue("MAGUS_TEST_AUDIT_TOKEN")})
 	require.NoError(t, err)
 
 	rec.mu.Lock()
@@ -608,18 +608,18 @@ func TestSecretGrantArgRejectsNoArguments(t *testing.T) {
 // a reserved name on the spell rather than a member here.
 func TestReviewProviderTakesASpellHandle(t *testing.T) {
 	t.Cleanup(func() { SetReviewProvider("") })
-	ns := buildReviewNS(t.Context(), nil)
+	review := buildReview(t.Context(), nil)
 
 	handle := vm.NewMap()
 	handle.MapSet("name", vm.StrValue("github"))
-	require.NoError(t, callVoidDirect(t, requireDirect(t, ns, "provider"), handle))
+	require.NoError(t, callVoidDirect(t, requireDirect(t, review, "provider"), handle))
 	assert.Equal(t, "github", ReviewProvider())
 
 	// A bare string is the mistake worth naming: it looks like it should work, and accepting
 	// it would select a provider that never resolves to a spell.
-	assert.Error(t, callVoidDirect(t, requireDirect(t, ns, "provider"), vm.StrValue("github")))
+	assert.Error(t, callVoidDirect(t, requireDirect(t, review, "provider"), vm.StrValue("github")))
 	// A map that is not a spell handle carries no name to select by.
-	assert.Error(t, callVoidDirect(t, requireDirect(t, ns, "provider"), vm.NewMap()))
+	assert.Error(t, callVoidDirect(t, requireDirect(t, review, "provider"), vm.NewMap()))
 }
 
 // No provider is the ORDINARY state, not a failure: a workspace that never wires one reviews
@@ -633,7 +633,7 @@ func TestNoReviewProviderIsEmptyRatherThanAnError(t *testing.T) {
 
 // TestMagusExternsAreBound holds the two halves of an Extern member together.
 //
-// An Extern is DECLARED in std/magus.go and BOUND here, by buildMagusNS. Nothing
+// An Extern is DECLARED in std/magus.go and BOUND here, by buildMagus. Nothing
 // else connects them: the declaration generates no trampoline, so the compiler
 // cannot notice when one side moves. Both directions are failures, and they fail
 // differently:
@@ -669,7 +669,7 @@ func TestMagusExternsAreBound(t *testing.T) {
 			}
 			declared[key] = true
 			assert.Truef(t, bound[key],
-				"magus\\%s is declared Extern in std/magus.go but nothing binds it in buildMagusNS;\n"+
+				"magus\\%s is declared Extern in std/magus.go but nothing binds it in buildMagus;\n"+
 					"a call to it type-checks and then fails at run time with 'null is not callable'", key)
 		}
 	}
@@ -694,22 +694,22 @@ func TestMagusNamespacesAreBound(t *testing.T) {
 		if m.Name != "magus" {
 			continue
 		}
-		for _, ns := range m.Namespaces {
-			if !assert.Truef(t, top[ns.Name], "magus\\%s is declared as a Namespace but nothing binds it", ns.Name) {
+		for _, namespace := range m.Namespaces {
+			if !assert.Truef(t, top[namespace.Name], "magus\\%s is declared as a Namespace but nothing binds it", namespace.Name) {
 				continue
 			}
 			bound := map[string]bool{}
-			for _, k := range MagusNamespaceKeys(ns.Name) {
+			for _, k := range MagusNamespaceKeys(namespace.Name) {
 				bound[k] = true
 			}
-			for _, meth := range ns.Methods {
+			for _, meth := range namespace.Methods {
 				key := std.CamelCase(meth.Name)
 				if meth.BuzzName != "" {
 					key = meth.BuzzName
 				}
 				assert.Truef(t, bound[key],
 					"magus\\%s.%s is declared but not bound; a call to it type-checks and then\n"+
-						"fails at run time with 'null is not callable'", ns.Name, key)
+						"fails at run time with 'null is not callable'", namespace.Name, key)
 				checked++
 			}
 		}

@@ -1179,6 +1179,9 @@
           "name": "buzz-test",
           "declared": "buzz_test",
           "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.",
+          "charms": [
+            "rw"
+          ],
           "reads_files": [
             {
               "project": ".",
@@ -1207,9 +1210,21 @@
             {
               "project": ".",
               "glob": "tools/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "assets/buzz-coverage.svg"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "assets/buzz-coverage.svg"
+            },
+            {
+              "glob": "coverage/buzz/*.lcov"
+            }
+          ]
         },
         {
           "name": "build",

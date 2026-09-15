@@ -455,12 +455,7 @@ var hookConfigPage = map[string]string{
 // hookConfigExemptions records a template one config deliberately does not run,
 // with the reason it does not. An exemption is the sanctioned way to differ; the
 // unsanctioned way is to differ silently, which is what the gate refuses.
-var hookConfigExemptions = map[string]map[string]string{
-	"codex": {
-		"magus-guard-observe.sh": "the read surface records a path for the activity trail and changes no verdict, " +
-			"so it earns one host's wiring rather than four; nothing in the hook contract prevents it",
-	},
-}
+var hookConfigExemptions = map[string]map[string]string{}
 
 // mcpToolMatcherPrefix is how a host config selects magus's own MCP tools. A job
 // wired under it guards a different surface from the same template, so the name
@@ -497,17 +492,6 @@ func configJobs(t *testing.T, path string) map[string]bool {
 	for _, entries := range cfg.Hooks {
 		for _, entry := range entries {
 			for _, h := range entry.Hooks {
-				if nativeAgentHookFor(h.Command, "claude-code") || nativeAgentHookFor(h.Command, "codex") {
-					name := "magus-guard-command.sh"
-					if strings.Contains(entry.Matcher, "Edit") || strings.Contains(entry.Matcher, "Write") {
-						name = "magus-guard-path.sh"
-					}
-					if strings.Contains(entry.Matcher, "mcp__") {
-						name += " on " + mcpToolMatcherPrefix
-					}
-					found[name] = true
-					continue
-				}
 				for _, template := range hookTemplates {
 					if filepath.Ext(template) != ".sh" || !strings.Contains(h.Command, template) {
 						continue
@@ -629,11 +613,6 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 		for _, entry := range entries {
 			require.NotEmpty(t, entry.Hooks, "%s matcher %q has no hooks", event, entry.Matcher)
 			for _, h := range entry.Hooks {
-				if nativeAgentHookFor(h.Command, "claude-code") {
-					assert.Equal(t, "PreToolUse", event,
-						"the native guard adapter is only a PreToolUse transport; lifecycle hooks need their own commands")
-					continue
-				}
 				assert.Contains(t, h.Command, hookTemplateDir,
 					"the %s %q hook must invoke a template under %s rather than inline its own copy, "+
 						"so dogfooding exercises the file readers download", event, entry.Matcher, hookTemplateDir)
@@ -848,19 +827,12 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		}
 	}
 
-	// Codex either points at the generic templates or at the native adapter.
-	// The adapter covers every guard surface session hook understands, so it is
-	// a checkable replacement for copied shell glue, not an untested shortcut.
-	//
-	// The claim is read off the GUARD declaration rather than off the file's text.
-	// A session-load adapter names the same host on a contract this config has
-	// nothing to do with, and matching that would demand a hook wiring for a file
-	// nobody wires to a hook.
+	// Codex points at the generic templates. The claim is read off the GUARD
+	// declaration rather than off the file's text: a session-load adapter names
+	// the same host on a contract this config has nothing to do with, and matching
+	// that would demand a hook wiring for a file nobody wires to a hook.
 	wiring, err := os.ReadFile(filepath.Join(hookTemplateDir, "codex-hooks.json"))
 	require.NoError(t, err)
-	if nativeAgentHookFor(string(wiring), "codex") {
-		return
-	}
 	for _, name := range hookTemplates {
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err)
@@ -870,10 +842,6 @@ func TestHostGluesCoverTheGuardContract(t *testing.T) {
 		assert.Contains(t, string(wiring), name,
 			"%s claims to cover the codex host, but codex-hooks.json never invokes it", name)
 	}
-}
-
-func nativeAgentHookFor(command, host string) bool {
-	return strings.Contains(command, "magus agent hook --host "+host)
 }
 
 // claimsGuardHost reports whether a template names host in one of its guard
