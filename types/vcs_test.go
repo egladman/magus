@@ -37,7 +37,6 @@ func TestCommitBuzzObjectZeroDate(t *testing.T) {
 	assert.Equal(t, "", got["date"])
 }
 
-
 func TestVCSErrorSentinels(t *testing.T) {
 	for _, sentinel := range []error{ErrVCSUnsupported, ErrVCSUnknown} {
 		assert.NotNil(t, sentinel)
@@ -114,7 +113,7 @@ func TestStaleSourceProjects(t *testing.T) {
 
 	t.Run("output moved with no source: not this function's question", func(t *testing.T) {
 		// This is SplitExplainedOutputs' unexplained case (MGS4005/MGS4003), not a stale
-		// source - there is no source project to report as stale here.
+		// source: there is no source project to report as stale here.
 		files := []FileEntry{
 			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
 		}

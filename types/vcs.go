@@ -377,7 +377,7 @@ type DefaultRefReporter interface {
 // rebasing a commit already pushed rewrites published history. Callers type-assert for
 // it; ok=false means the backend could not determine an answer (no remote/upstream
 // configured, or the question does not resolve here), and a caller must treat that the
-// same as "pushed" - the safe direction, since the one unrecoverable mistake is treating
+// same as "pushed": the safe direction, since the one unrecoverable mistake is treating
 // a published commit as safe to rewrite.
 type PushStatusReporter interface {
 	// CommitPushed reports whether id is reachable from the repository's

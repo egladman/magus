@@ -281,6 +281,30 @@ func TestCommitPushed(t *testing.T) {
 	assert.False(t, ok, "no upstream configured means unknown, not a guess")
 }
 
+// TestCommitPushedRefusesToAnswerFromAnAbsentHistory pins the shallow-clone case, where
+// merge-base exits 128 rather than 1: the history that would decide is not in the object
+// store. Reading that as merge-base's "not an ancestor" answer is what makes the drift
+// notice offer --amend on a commit the remote already carries.
+func TestCommitPushedRefusesToAnswerFromAnAbsentHistory(t *testing.T) {
+	remote := t.TempDir()
+	gitRun(t, remote, "init", "-q", "--bare")
+
+	origin := t.TempDir()
+	gitInitRepo(t, origin, map[string]string{"a.txt": "a\n"})
+	firstSHA := gitRun2(t, origin, "rev-parse", "HEAD")
+	gitRun(t, origin, "commit", "-q", "--allow-empty", "-m", "second")
+	gitRun(t, origin, "remote", "add", "origin", remote)
+	gitRun(t, origin, "push", "-q", "-u", "origin", "HEAD")
+
+	shallow := t.TempDir()
+	gitRun(t, shallow, "clone", "-q", "--depth", "1", "file://"+remote, ".")
+
+	pushed, ok, err := gitVCS{}.CommitPushed(t.Context(), shallow, firstSHA)
+	require.Error(t, err, "a history that cannot decide must surface as an error, never as an answer")
+	assert.False(t, ok)
+	assert.False(t, pushed)
+}
+
 // gitRun2 is gitRun for the one case that needs the command's stdout back.
 func gitRun2(t *testing.T, dir string, args ...string) string {
 	t.Helper()

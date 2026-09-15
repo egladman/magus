@@ -700,6 +700,7 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 var (
 	_ types.RemoteReporter      = hgVCS{}
 	_ types.DefaultRefReporter  = hgVCS{}
+	_ types.PushStatusReporter  = hgVCS{}
 	_ types.TrackedFileReporter = hgVCS{}
 	_ types.IgnoredFileReporter = hgVCS{}
 	_ types.ChurnReporter       = hgVCS{}
@@ -1092,4 +1093,11 @@ func hgShelfListing(out string) map[string]string {
 		}
 	}
 	return shelves
+}
+
+// CommitPushed implements types.PushStatusReporter via Mercurial's phases; see
+// hgFamilyCommitPushed for why a phase answers this question exactly where git's
+// reachability walk only approximates it.
+func (v hgVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
+	return hgFamilyCommitPushed(ctx, "hg", dir, id)
 }

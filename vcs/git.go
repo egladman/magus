@@ -769,23 +769,32 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
+// Compile-time on purpose: the caller reaches this by type assertion, so dropping the
+// method would not fail the build, it would silently demote git to "assume pushed" and
+// take the amend command out of the drift notice with nothing to show for it.
+var _ types.PushStatusReporter = gitVCS{}
+
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of
 // the current branch's upstream ("@{upstream}"), the same tracking ref `git status` and a
 // plain `git push` compare against. ok=false when no upstream is configured (a branch
-// that has never been pushed, or one left explicitly untracked) - the caller treats that
+// that has never been pushed, or one left explicitly untracked): the caller treats that
 // as "assume pushed" rather than this driver claiming an answer it does not have.
 func (v gitVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
 	upstream, uerr := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
 	if uerr != nil || upstream == "" {
+		//nolint:nilerr // an unset upstream is a tree with no answer, not a failed lookup; ok=false already reports it
 		return false, false, nil
 	}
 	cmd := gitExec(ctx, "merge-base", "--is-ancestor", id, upstream)
 	cmd.Dir = dir
 	if runErr := cmd.Run(); runErr != nil {
+		// Exit 1 is merge-base's ANSWER: id is not an ancestor of upstream, so it has not
+		// reached the remote by this branch. Every other code is merge-base declining to
+		// answer, and a shallow clone is the ordinary case (git exits 128 because the
+		// history that would decide is not in the object store). Reading those as "not
+		// pushed" is what offers --amend on a commit the remote already carries.
 		var exitErr *exec.ExitError
-		if errors.As(runErr, &exitErr) {
-			// A clean non-zero exit is merge-base's answer, not a failure: id is not an
-			// ancestor of upstream, so it has not reached the remote by this branch.
+		if errors.As(runErr, &exitErr) && exitErr.ExitCode() == 1 {
 			return false, true, nil
 		}
 		return false, false, fmt.Errorf("git merge-base --is-ancestor: %w", runErr)
@@ -1444,7 +1453,7 @@ func writeManagedHook(path, body string) (bool, error) {
 
 // writeManagedHookSection inserts or updates the section named by begin/end in the hook
 // at path, giving a new file a POSIX-sh shebang and preserving any existing user body (and
-// any OTHER managed section already there, since two magus hooks - refresh and drift -
+// any OTHER managed section already there, since two magus hooks, refresh and drift,
 // can share one file). It reports whether the file changed and keeps the hook executable.
 func writeManagedHookSection(path, body, beginLine, begin, end string) (bool, error) {
 	section := beginLine + "\n" + body + end + "\n"

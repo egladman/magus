@@ -770,8 +770,9 @@ func (v saplingVCS) InstallDriftHook(_ context.Context, root, command string) ([
 // at the call site, so dropping a method would not fail the build, it would silently demote
 // Sapling to "resolve this merge by hand".
 var (
-	_ types.ConflictResolver = saplingVCS{}
-	_ types.MergeStarter     = saplingVCS{}
+	_ types.ConflictResolver   = saplingVCS{}
+	_ types.MergeStarter       = saplingVCS{}
+	_ types.PushStatusReporter = saplingVCS{}
 )
 
 func runSaplingBatched(ctx context.Context, root string, args []string, paths []string) error {
@@ -1122,4 +1123,10 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 // touching the working copy; the check is that the log above comes back empty after it.
 func (v saplingVCS) PrunePreserved(context.Context, string, time.Time) ([]string, error) {
 	return nil, nil
+}
+
+// CommitPushed implements types.PushStatusReporter via Sapling's phases, which it
+// inherits from Mercurial; see hgFamilyCommitPushed.
+func (v saplingVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
+	return hgFamilyCommitPushed(ctx, "sl", dir, id)
 }

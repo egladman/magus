@@ -528,3 +528,31 @@ func hgFamilyRun(ctx context.Context, prog, dir string, args []string) error {
 	}
 	return nil
 }
+
+// hgFamilyCommitPushed answers types.PushStatusReporter for Mercurial and Sapling, which
+// share a phase model: a changeset is "public" once it has been exchanged with a
+// publishing remote, and "draft" or "secret" while it is still local. That is a recorded
+// fact about the changeset rather than git's reachability question, so there is no
+// ancestor walk here and no shallow-history case to misread.
+//
+// A repository with no default path answers ok=false, matching git's no-upstream case:
+// everything is draft in a repo that has never had a remote, and reporting that as "not
+// pushed" would offer a rewrite on the strength of a remote nobody configured.
+func hgFamilyCommitPushed(ctx context.Context, prog, dir, id string) (pushed, ok bool, err error) {
+	if remote, rerr := vcsOutput(ctx, dir, prog, "paths", "default"); rerr != nil || remote == "" {
+		//nolint:nilerr // an unset default path is a repo with no answer, not a failed lookup; ok=false already reports it
+		return false, false, nil
+	}
+	phase, err := vcsOutput(ctx, dir, prog, "log", "-r", id, "-T", "{phase}")
+	if err != nil {
+		return false, false, fmt.Errorf("%s log -T {phase}: %w", prog, err)
+	}
+	switch phase {
+	case "public":
+		return true, true, nil
+	case "draft", "secret":
+		return false, true, nil
+	default:
+		return false, false, fmt.Errorf("%s log -T {phase}: unknown phase %q for %s", prog, phase, id)
+	}
+}
