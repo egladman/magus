@@ -1266,14 +1266,18 @@ func failureCauses(cause string) []string {
 	return out
 }
 
-// printRef prints a successful target's output reference id, labeled, after a
-// blank line.
+// printRef prints a successful target's output reference id, labeled, followed by
+// a blank line.
 //
 // The id stays the LAST token on its own line, which is what makes a double-click
 // select exactly it: the property that matters most, because a ref's whole job is
 // to be copied into `magus x <ref>` or `magus query output <ref>`. The label is
-// what makes it findable in a wall of build output; the blank line is what stops it
-// reading as stray output from the target above.
+// what makes it findable in a wall of build output.
+//
+// The blank line trails rather than leads so the ref stays visually attached to the
+// target and reproduce line it belongs to. Leading, it separated the ref from its
+// own result and clumped it with the next target's lines, reading as that block's
+// header.
 //
 // Bare rather than wrapped in a command: a passing target prints one of these EACH,
 // so spelling the retrieval out per line would add a line per target. The summary
@@ -1283,7 +1287,7 @@ func (h *PrettyHandler) printRef(ref string) {
 		return
 	}
 	h.mintedRef = true
-	h.printf("\nref  %s\n", ref)
+	h.printf("ref  %s\n\n", ref)
 }
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.
