@@ -55590,7 +55590,7 @@
       "attrs": {
         "indirect": "true",
         "manager": "gomod",
-        "version": "v1.82.1"
+        "version": "v1.83.1"
       }
     },
     {
