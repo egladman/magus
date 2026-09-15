@@ -114,6 +114,11 @@ func (u Job) EffectiveCompletionGates() []CompletionGate {
 }
 
 // String renders the check as the command that runs it.
+// String renders the check as a DECLARATION, the shape a person types and a row stores.
+// It is not the command to run: a check naming no charm means the charmless run, and
+// spelling that needs the --no-default-charms flag, which this package cannot render
+// because types imports no CLI surface. internal/job renders the runnable form through
+// the hint command builder; see gateCommand.
 func (c LeaseCheck) String() string {
 	project := c.Project
 	if project == "" {
@@ -124,6 +129,18 @@ func (c LeaseCheck) String() string {
 		line += " -- " + strings.Join(c.Args, " ")
 	}
 	return line
+}
+
+// NamesCharm reports whether the check pins a charm on its target, which is what decides
+// whether the runnable form needs --no-default-charms. Asked here rather than re-parsed
+// at each renderer: the charm is part of the target's identity (see internal/job.bindsTo)
+// and only this type knows how a target is spelled.
+func (c LeaseCheck) NamesCharm() bool {
+	_, target, _ := strings.Cut(c.Target, "::")
+	if target == "" {
+		target = c.Target
+	}
+	return strings.Contains(target, ":")
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the

@@ -225,6 +225,14 @@ func verifyGate(row types.Job, gate types.CompletionGate, ref string, attempt ty
 // selected two ways, and rejecting that pair would make the rule fire on spelling rather
 // than on identity. Target and project are compared always: those are what a run IS.
 //
+// A CHARM is part of that identity, so `generate` and `generate:rw` are two checks, not
+// one spelled twice. They are different runs: charmless `generate` gates drift and fails
+// on it, while `generate:rw` writes the output and cannot fail. Treating them as one
+// identity made the drift gate satisfiable by the very run that produces the drift. The
+// store records what was invoked (cache.reproTarget renders `name:charm`), so a check
+// that means the written form says so in its target, `generate:rw`, and one that names no
+// charm means the charmless run.
+//
 // The args past `--` are NOT compared: the output store records a run by spell, target and
 // project and holds no argv, so a rule keyed on them would reject every ref there is.
 func bindsTo(c types.LeaseCheck, a types.JobAttempt) bool {
@@ -232,9 +240,6 @@ func bindsTo(c types.LeaseCheck, a types.JobAttempt) bool {
 	if target == "" {
 		spell, target = "", spell
 	}
-	// A charm is a way of running the target, not another target: `generate:rw` and
-	// `generate` are one identity to the output store.
-	target, _, _ = strings.Cut(target, ":")
 	if target != a.Target || path.Clean(c.Project) != path.Clean(a.Project) {
 		return false
 	}

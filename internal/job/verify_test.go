@@ -236,15 +236,15 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	assert.Contains(t, v.Violations[0], "declares no completion gate")
 }
 
-// A charm, the binary's spelling and the args after `--` are all ways of running one
-// target, so none of them may decide whether the evidence binds.
+// The binary's spelling and the args after `--` are ways of running one target, so
+// neither may decide whether the evidence binds.
 func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	t.Parallel()
 
 	att := types.JobAttempt{Found: true, Project: "internal/ledger", Target: "test"}
 	for _, line := range []string{
 		"magus run test internal/ledger",
-		"./magus run test:rw internal/ledger",
+		"./magus run test internal/ledger",
 		"magus run test internal/ledger -- -run Ledger",
 	} {
 		c, err := types.ParseLeaseRunLine(line)
@@ -255,6 +255,28 @@ func TestCheckBindsOnIdentityNotSpelling(t *testing.T) {
 	c, err := types.ParseLeaseRunLine("magus run test cmd/magus")
 	require.NoError(t, err)
 	assert.False(t, bindsTo(c, att), "another project is another run")
+}
+
+// A CHARM is part of a run's identity, not a spelling of it. The store records what was
+// invoked, so the charmless `generate` that GATES drift and the `generate:rw` that WRITES
+// it are two runs; accepting either for the other made a drift gate satisfiable by the
+// run that produces the drift. This workspace sets default_charms, so `test:rw` is what
+// an ordinary run records and a check meaning that form has to say so.
+func TestCheckBindsOnCharm(t *testing.T) {
+	t.Parallel()
+
+	written := types.JobAttempt{Found: true, Project: ".", Target: "generate:rw"}
+	gated := types.JobAttempt{Found: true, Project: ".", Target: "generate"}
+
+	charmless, err := types.ParseLeaseRunLine("magus run generate .")
+	require.NoError(t, err)
+	assert.False(t, bindsTo(charmless, written), "a written run is not evidence of a gated one")
+	assert.True(t, bindsTo(charmless, gated))
+
+	rw, err := types.ParseLeaseRunLine("magus run generate:rw .")
+	require.NoError(t, err)
+	assert.True(t, bindsTo(rw, written))
+	assert.False(t, bindsTo(rw, gated), "a gated run is not evidence of a written one")
 }
 
 // A directory declaration covers what is under it and a glob covers only what it matches.
