@@ -203,6 +203,12 @@ const (
 	FlagExplainRefresh = "refresh"
 	// graph build: --no-symbols
 	FlagGraphBuildNoSymbols = "no-symbols"
+	// graph build: --push
+	FlagGraphBuildPush = "push"
+	// graph build: --ref
+	FlagGraphBuildRef = "ref"
+	// graph build: --tag
+	FlagGraphBuildTag = "tag"
 	// graph deps: --depth
 	FlagGraphDepsDepth = "depth"
 	// graph deps: --spell
@@ -241,6 +247,16 @@ const (
 	FlagGraphExportTargets = "targets"
 	// graph export: --url
 	FlagGraphExportURL = "url"
+	// graph pull: --out
+	FlagGraphPullOut = "out"
+	// graph pull: --ref
+	FlagGraphPullRef = "ref"
+	// graph push: --ref
+	FlagGraphPushRef = "ref"
+	// graph push: --refresh
+	FlagGraphPushRefresh = "refresh"
+	// graph push: --tag
+	FlagGraphPushTag = "tag"
 	// graph stats: --global
 	FlagGraphStatsGlobal = "global"
 	// graph stats: --kind
@@ -722,13 +738,49 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 
 // GraphBuildFlags are the flags declared for `magus graph build`.
 type GraphBuildFlags struct {
-	NoSymbols bool // --no-symbols
+	NoSymbols bool   // --no-symbols
+	Push      bool   // --push
+	Ref       string // --ref
+	Tag       string // --tag
 }
 
 // BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
 func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
 	var f GraphBuildFlags
 	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
+	fs.BoolVar(&f.Push, FlagGraphBuildPush, false, "Push the rebuilt graph to the registry afterwards (see magus graph push)")
+	fs.StringVar(&f.Ref, FlagGraphBuildRef, "", "With --push: the artifact to push to (default: derived from the repository's origin remote)")
+	fs.StringVar(&f.Tag, FlagGraphBuildTag, "", "With --push: an extra tag to write beside latest, repeatable or comma-separated")
+	return &f
+}
+
+// GraphPushFlags are the flags declared for `magus graph push`.
+type GraphPushFlags struct {
+	Ref     string // --ref
+	Tag     string // --tag
+	Refresh bool   // --refresh
+}
+
+// BindGraphPush registers `magus graph push`'s flags on fs and returns the destination.
+func BindGraphPush(fs *flag.FlagSet) *GraphPushFlags {
+	var f GraphPushFlags
+	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to (default: derived from the repository's origin remote)")
+	fs.StringVar(&f.Tag, FlagGraphPushTag, "", "An extra tag to write beside latest, repeatable or comma-separated")
+	fs.BoolVar(&f.Refresh, FlagGraphPushRefresh, false, "Rebuild the graph before pushing instead of exporting what is cached")
+	return &f
+}
+
+// GraphPullFlags are the flags declared for `magus graph pull`.
+type GraphPullFlags struct {
+	Ref string // --ref
+	Out string // --out
+}
+
+// BindGraphPull registers `magus graph pull`'s flags on fs and returns the destination.
+func BindGraphPull(fs *flag.FlagSet) *GraphPullFlags {
+	var f GraphPullFlags
+	fs.StringVar(&f.Ref, FlagGraphPullRef, "", "The artifact to pull (default: derived from the repository's origin remote)")
+	fs.StringVar(&f.Out, FlagGraphPullOut, "", "Write the graph here instead of stdout")
 	return &f
 }
 
