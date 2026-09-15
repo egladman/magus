@@ -197,6 +197,36 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	return out, nil
 }
 
+// RangeDiff implements types.RangeDiffReporter via `hg diff -r "ancestor(base,head)" -r
+// head`. Mercurial's ancestor() revset function is the two revisions' merge base, so
+// diffing FROM there TO head is the symmetric difference the interface promises: what head
+// added since it diverged, never base's own changes since the fork. Verified against
+// Mercurial 7.2.3 with a repository forked into two single-file branches: `hg diff -r base
+// -r head` (the naive two-point form) reported base's own new file as a deletion, and the
+// ancestor-based form did not.
+//
+// --git for the reason DirtyDiff sets it. No -U flag, unlike DirtyDiff's -U1: this is a
+// reviewed range rather than a diff squeezed into a CI log, so Mercurial's default context
+// applies, matching git's and jj's RangeDiff.
+func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
+	if err := checkRef(base); err != nil {
+		return "", err
+	}
+	if err := checkRef(head); err != nil {
+		return "", err
+	}
+	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, hgFamilyGlobs(paths)...)
+	}
+	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
+	if err != nil {
+		return "", fmt.Errorf("hg diff ancestor(%s,%s)-%s: %w", base, head, head, err)
+	}
+	return out, nil
+}
+
 // Describe returns the working revision's latest reachable tag (Mercurial's
 // {latesttag}), with a -dirty suffix for a modified tree. A repo with no tags
 // reports "" (Mercurial's "null" sentinel is normalized away), matching the
@@ -697,15 +727,32 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 // against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
 // keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
 // notes on the individual methods say where.
+//
+// BranchChangeReporter is the one optional capability hg does not implement. It is not a
+// technical wall the way jj's gaps are (see vcs/jj.go): a bookmark could stand in for git's
+// "other branch", and ChangedFiles already shows how to diff one hg revision against
+// another. It is simply unbuilt, and the caller (Magus.BranchChanges) reports a named
+// types.VCSCapabilityMissing diagnostic rather than silence for exactly this reason, so an
+// hg repository is told the report is missing rather than shown an empty one.
+//
+// Every assertion below is compile-time on purpose: each interface is reached by type
+// assertion at its call site, so dropping a method would not fail the build, it would
+// silently demote hg to whatever the caller's fallback answers.
 var (
-	_ types.RemoteReporter      = hgVCS{}
-	_ types.DefaultRefReporter  = hgVCS{}
-	_ types.PushStatusReporter  = hgVCS{}
-	_ types.TrackedFileReporter = hgVCS{}
-	_ types.IgnoredFileReporter = hgVCS{}
-	_ types.ChurnReporter       = hgVCS{}
-	_ types.RevisionExporter    = hgVCS{}
-	_ types.MergeStarter        = hgVCS{}
+	_ types.MergeDriverInstaller = hgVCS{}
+	_ types.RefreshHookInstaller = hgVCS{}
+	_ types.DriftHookInstaller   = hgVCS{}
+	_ types.RemoteReporter       = hgVCS{}
+	_ types.DefaultRefReporter   = hgVCS{}
+	_ types.PushStatusReporter   = hgVCS{}
+	_ types.RevTimeReporter      = hgVCS{}
+	_ types.TrackedFileReporter  = hgVCS{}
+	_ types.IgnoredFileReporter  = hgVCS{}
+	_ types.ChurnReporter        = hgVCS{}
+	_ types.RangeDiffReporter    = hgVCS{}
+	_ types.RevisionExporter     = hgVCS{}
+	_ types.RevisionFileReader   = hgVCS{}
+	_ types.MergeStarter         = hgVCS{}
 )
 
 // RemoteURL implements types.RemoteReporter. `hg paths default` prints the default
@@ -730,6 +777,28 @@ func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 		return "", types.ErrVCSUnsupported
 	}
 	return "default", nil
+}
+
+// RevTime implements types.RevTimeReporter with the same {date|rfc3339date} filter
+// hgCommitTemplate already carries for FindCommit's Date field, parsed by the same
+// parseWhen commit.go uses; verified live against Mercurial 7.2.3 rather than assumed from
+// that shared template.
+//
+// The lookup error is discarded, mirroring git's RevTime: `hg log -r <rev>` for a revision
+// this clone lacks aborts non-zero with nothing on stdout (Mercurial writes "abort: unknown
+// revision" to stderr), which is the ordinary "you have never fetched this" answer a base
+// branch gives in a fresh clone, not a probe failure. The one error left is a date hg
+// printed that did not parse.
+func (v hgVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "hg", "log", "-r", rev, "--template", "{date|rfc3339date}")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	t := parseWhen(out)
+	if t.IsZero() {
+		return time.Time{}, false, fmt.Errorf("hg log -r %s: parse %q: unrecognized date format", rev, out)
+	}
+	return t, true, nil
 }
 
 // TrackedFiles implements types.TrackedFileReporter. `hg files -- <paths>` prints the

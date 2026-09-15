@@ -769,10 +769,31 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
-// Compile-time on purpose: the caller reaches this by type assertion, so dropping the
-// method would not fail the build, it would silently demote git to "assume pushed" and
-// take the amend command out of the drift notice with nothing to show for it.
-var _ types.PushStatusReporter = gitVCS{}
+// Compile-time on purpose: every one of these interfaces is reached by type assertion at
+// its call site, so dropping a method would not fail the build, it would silently demote
+// git to whatever the caller's fallback answers ("assume pushed" and no amend command from
+// the drift notice, a named diagnostic instead of a branch-competition report, and so on).
+// git implements all sixteen optional VCSDriver capabilities, so asserting the full set
+// here is what turns losing one of them into a build failure instead of a regression nobody
+// notices until a caller's fallback quietly fires.
+var (
+	_ types.MergeDriverInstaller = gitVCS{}
+	_ types.RefreshHookInstaller = gitVCS{}
+	_ types.DriftHookInstaller   = gitVCS{}
+	_ types.RemoteReporter       = gitVCS{}
+	_ types.DefaultRefReporter   = gitVCS{}
+	_ types.PushStatusReporter   = gitVCS{}
+	_ types.RevTimeReporter      = gitVCS{}
+	_ types.TrackedFileReporter  = gitVCS{}
+	_ types.IgnoredFileReporter  = gitVCS{}
+	_ types.ChurnReporter        = gitVCS{}
+	_ types.BranchChangeReporter = gitVCS{}
+	_ types.RangeDiffReporter    = gitVCS{}
+	_ types.ConflictResolver     = gitVCS{}
+	_ types.RevisionFileReader   = gitVCS{}
+	_ types.RevisionExporter     = gitVCS{}
+	_ types.MergeStarter         = gitVCS{}
+)
 
 // CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of
 // the current branch's upstream ("@{upstream}"), the same tracking ref `git status` and a

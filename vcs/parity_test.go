@@ -956,3 +956,146 @@ func TestParityReviewCommandIsTheBackendsOwn(t *testing.T) {
 		seen[cmd] = b.name
 	}
 }
+
+// RevTime is what cmd/magus/diff.go's impactAdvisorBaseOf reads to date a base ref: a
+// backend that satisfies types.RevTimeReporter but reports a bogus or zero time would leave
+// the "BASE:" line silently wrong instead of silently absent, which is worse. All four
+// backends implement it as of this test.
+func TestParityRevTimeReportsCommitDate(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		timer, ok := b.drv.(types.RevTimeReporter)
+		require.Truef(t, ok, "%s does not implement RevTimeReporter", b.name)
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+		commit, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoErrorf(t, err, "%s FindCommit", b.name)
+
+		got, found, err := timer.RevTime(t.Context(), dir, commit.ID)
+		require.NoErrorf(t, err, "%s RevTime", b.name)
+		assert.Truef(t, found, "%s reported not-found for a revision it just committed", b.name)
+		assert.WithinDurationf(t, time.Now(), got, time.Hour,
+			"%s RevTime %v is not close to now", b.name, got)
+	})
+}
+
+// A revision this clone does not have answers found=false, not an error: the ordinary shape
+// a fresh clone gives for a base branch it has never fetched. impactAdvisorBaseOf treats an
+// error the same as "no VCS" and drops the BASE: line entirely, so a backend that returned
+// one here instead of found=false would make "never fetched" indistinguishable from "this
+// backend is broken".
+func TestParityRevTimeUnresolvableRevisionIsNotFoundNotError(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		timer, ok := b.drv.(types.RevTimeReporter)
+		require.Truef(t, ok, "%s does not implement RevTimeReporter", b.name)
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+
+		_, found, err := timer.RevTime(t.Context(), dir, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+		require.NoErrorf(t, err, "%s RevTime on an unresolvable revision", b.name)
+		assert.Falsef(t, found, "%s reported found=true for a revision that does not exist", b.name)
+	})
+}
+
+// checkoutRev moves dir's working copy onto rev, so a test can fork a second line of
+// history from a known point. Backend-specific like commitAll and addPath above, because
+// each speaks its own checkout verb.
+func checkoutRev(t *testing.T, b parityBackend, dir, rev string) {
+	t.Helper()
+	switch b.name {
+	case "git":
+		vcsTestRun(t, dir, "git", "checkout", "-q", rev)
+	case "hg":
+		vcsTestRun(t, dir, "hg", "update", "-r", rev)
+	case "sl":
+		vcsTestRun(t, dir, "sl", "goto", "-r", rev)
+	case "jj":
+		// `jj new <rev>` starts a fresh child of rev as the working-copy commit, jj's
+		// equivalent of checking it out to build on top of.
+		vcsTestRun(t, dir, "jj", "new", rev)
+	}
+}
+
+// initialCommitID returns the identifier of the commit b.init produced. Every backend
+// except jj answers with a plain FindCommit(dir, ""): the working copy IS that commit right
+// after init. jj's init additionally runs `jj new` to reach its own equivalent of a clean
+// tree (see jjInitRepo), which advances @ past it, so jj is asked about @- instead.
+func initialCommitID(t *testing.T, b parityBackend, dir string) string {
+	t.Helper()
+	rev := ""
+	if b.name == "jj" {
+		rev = "@-"
+	}
+	c, err := b.drv.FindCommit(t.Context(), dir, rev)
+	require.NoErrorf(t, err, "%s FindCommit(root)", b.name)
+	return c.ID
+}
+
+// RangeDiff must answer the SYMMETRIC difference: what head added since it diverged from
+// base, never base's own changes made after the fork. A naive two-point diff (base vs
+// head) charges the reader for both sides; hg's and sl's ancestor()-based revset was
+// verified against real binaries specifically because only the merge base, not either
+// endpoint alone, gives the right answer.
+func TestParityRangeDiffIsSymmetricDifference(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		differ, ok := b.drv.(types.RangeDiffReporter)
+		if !ok {
+			t.Skipf("%s does not implement RangeDiffReporter", b.name)
+		}
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"root.txt": "r\n"})
+		root := initialCommitID(t, b, dir)
+
+		writeRepoFile(t, dir, "base-only.txt", "base\n")
+		addPath(t, b, dir, "base-only.txt")
+		commitAll(t, b, dir, "base moves on")
+		base, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoErrorf(t, err, "%s FindCommit(base)", b.name)
+
+		checkoutRev(t, b, dir, root)
+		writeRepoFile(t, dir, "head-only.txt", "head\n")
+		addPath(t, b, dir, "head-only.txt")
+		commitAll(t, b, dir, "head diverges")
+		head, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoErrorf(t, err, "%s FindCommit(head)", b.name)
+
+		diff, err := differ.RangeDiff(t.Context(), dir, base.ID, head.ID, nil)
+		require.NoErrorf(t, err, "%s RangeDiff", b.name)
+		assert.Containsf(t, diff, "head-only.txt",
+			"%s RangeDiff did not report head's own new file", b.name)
+		assert.NotContainsf(t, diff, "base-only.txt",
+			"%s RangeDiff reported base's own change since the fork; not the symmetric difference", b.name)
+	})
+}
+
+// paths, when given, scope RangeDiff to those repo-relative pathspecs the same way
+// DirtyFiles and ChangedFiles are scoped: at the source, so a caller never re-filters a
+// patch it already asked to be narrowed.
+func TestParityRangeDiffScopesToPaths(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		differ, ok := b.drv.(types.RangeDiffReporter)
+		if !ok {
+			t.Skipf("%s does not implement RangeDiffReporter", b.name)
+		}
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"root.txt": "r\n"})
+		base, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoErrorf(t, err, "%s FindCommit(base)", b.name)
+
+		writeRepoFile(t, dir, "keep.txt", "k\n")
+		addPath(t, b, dir, "keep.txt")
+		writeRepoFile(t, dir, "drop.txt", "d\n")
+		addPath(t, b, dir, "drop.txt")
+		commitAll(t, b, dir, "two new files")
+		head, err := b.drv.FindCommit(t.Context(), dir, "")
+		require.NoErrorf(t, err, "%s FindCommit(head)", b.name)
+
+		diff, err := differ.RangeDiff(t.Context(), dir, base.ID, head.ID, []string{"keep.txt"})
+		require.NoErrorf(t, err, "%s scoped RangeDiff", b.name)
+		assert.Containsf(t, diff, "keep.txt", "%s scoped RangeDiff dropped the requested path", b.name)
+		assert.NotContainsf(t, diff, "drop.txt", "%s scoped RangeDiff did not narrow to the given path", b.name)
+	})
+}
