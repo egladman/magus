@@ -63,9 +63,18 @@ func Build(paths []string, read ReadFunc) (*Index, error) {
 		return nil, fmt.Errorf("textindex: a ReadFunc is required")
 	}
 	ix := &Index{paths: make([]string, 0, len(paths)), post: make(map[uint32][]uint32), read: read}
-	// Reused across files so the per-file trigram set costs no allocation after the
-	// first file large enough to size it.
-	seen := make(map[uint32]struct{}, 1<<12)
+	// optimization: direct-mapped seen[] indexed by trigram, replacing a map dedupe.
+	//   measured: BenchmarkTextIndexBuild 119.6ms -> 72.9ms at 4MB of corpus, -39% ns/op
+	//             (n=50). The map cost one hash per BYTE of corpus.
+	//   trade-off: B/op 47MB -> 114MB, a flat 64 MiB scratch per Build whatever the corpus
+	//             size, and the "is this a set" reading is gone. Sorting a per-file slice
+	//             was tried instead and measured 69% SLOWER (120ms -> 202ms).
+	//   assumes:  nothing platform-specific; 1<<24 covers every 3-byte key exactly.
+	//
+	// seen holds fileID+1 rather than a bool, so one allocation serves every file: a
+	// stale entry from an earlier file simply does not equal this file's mark, which is
+	// what makes clearing between files unnecessary.
+	seen := make([]uint32, 1<<24)
 	for _, p := range paths {
 		body, err := read(p)
 		if err != nil {
@@ -73,13 +82,17 @@ func Build(paths []string, read ReadFunc) (*Index, error) {
 		}
 		id := uint32(len(ix.paths))
 		ix.paths = append(ix.paths, p)
-		clear(seen)
+		mark := id + 1
 		for i := 0; i+2 < len(body); i++ {
 			g := trigram(body[i], body[i+1], body[i+2])
-			if _, dup := seen[g]; dup {
+			if seen[g] == mark {
 				continue
 			}
-			seen[g] = struct{}{}
+			seen[g] = mark
+			// TODO: this append is the build's whole allocation cost (175k allocs, 47MB at
+			// 4MB of corpus): ~22k posting lists each doubling their way to ~1k entries. A
+			// flat arena sliced per gram would make it ~30 allocations. Measure before
+			// landing; the sort attempt above looked equally obvious and lost.
 			ix.post[g] = append(ix.post[g], id)
 		}
 	}
@@ -187,6 +200,62 @@ func (ix *Index) SearchLiteral(pattern string) ([]Match, error) {
 		out = append(out, matchesIn(path, body, pat)...)
 	}
 	return out, nil
+}
+
+// Scan searches paths for pattern with no index at all.
+//
+// The index is an accelerator, never a precondition. A text search that required one
+// could answer "unknown, build an index and ask again", and a search that can say that
+// is one a reader stops trusting: raw text needs no index, only bytes. So this path is
+// the primary and Index.SearchLiteral is the fast case layered over it.
+//
+// fold lowercases both sides. It allocates a copy per file, which is why it is a
+// parameter rather than the default.
+func Scan(paths []string, read ReadFunc, pattern string, fold bool) ([]Match, error) {
+	if pattern == "" {
+		return nil, fmt.Errorf("textindex: an empty pattern matches everything; say what you are looking for")
+	}
+	pat := []byte(pattern)
+	if fold {
+		pat = bytes.ToLower(pat)
+	}
+	var out []Match
+	for _, p := range paths {
+		body, err := read(p)
+		if err != nil {
+			continue
+		}
+		hay := body
+		if fold {
+			hay = bytes.ToLower(body)
+		}
+		for _, m := range matchesIn(p, hay, pat) {
+			// The line is reported from the ORIGINAL bytes: a reader acting on this needs
+			// the text as it is written, not as it was folded for comparison.
+			if fold {
+				m.Text = lineAt(body, m.Line)
+			}
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+// lineAt returns the 1-based line of body, without its newline.
+func lineAt(body []byte, line int) string {
+	start := 0
+	for n := 1; n < line; n++ {
+		nl := bytes.IndexByte(body[start:], '\n')
+		if nl < 0 {
+			return ""
+		}
+		start += nl + 1
+	}
+	end := bytes.IndexByte(body[start:], '\n')
+	if end < 0 {
+		return string(body[start:])
+	}
+	return string(body[start : start+end])
 }
 
 // matchesIn walks one file's occurrences, carrying the line number forward rather than

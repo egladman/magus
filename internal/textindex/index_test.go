@@ -3,6 +3,7 @@ package textindex
 import (
 	"fmt"
 	"math/rand"
+	"os"
 	"strings"
 	"testing"
 
@@ -191,6 +192,82 @@ func BenchmarkTextIndexSearchBruteForce(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		scanAll(c, "HandleRequestPayload")
+	}
+}
+
+// writeCorpus lays a corpus on disk with files ABOVE mmapFloor, which is the only size
+// where the mapping path is exercised at all.
+func writeCorpus(tb testing.TB, files, size int) []string {
+	tb.Helper()
+	dir := tb.TempDir()
+	rng := rand.New(rand.NewSource(11))
+	alphabet := "abcdefghijklmnopqrstuvwxyz \n"
+	paths := make([]string, 0, files)
+	for f := range files {
+		body := make([]byte, size)
+		for i := range body {
+			body[i] = alphabet[rng.Intn(len(alphabet))]
+		}
+		p := fmt.Sprintf("%s/f%04d.txt", dir, f)
+		require.NoError(tb, os.WriteFile(p, body, 0o644))
+		paths = append(paths, p)
+	}
+	return paths
+}
+
+// readFileOnly is the copying baseline the mapping path is measured against.
+func readFileOnly(path string) ([]byte, error) { return os.ReadFile(path) }
+
+// TestReaderAgreesWithACopyingRead pins the mapping against the read it replaces. A
+// reader that returns different bytes is not an optimization.
+func TestReaderAgreesWithACopyingRead(t *testing.T) {
+	paths := writeCorpus(t, 3, mmapFloor*2)
+
+	r := NewReader()
+	defer func() { assert.NoError(t, r.Close()) }()
+	for _, p := range paths {
+		mapped, err := r.Read(p)
+		require.NoError(t, err)
+		copied, err := readFileOnly(p)
+		require.NoError(t, err)
+		assert.Equal(t, copied, mapped, "%s", p)
+	}
+}
+
+// TestReaderHandlesAnEmptyFile covers the size-zero case, which cannot be mapped at all.
+func TestReaderHandlesAnEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	p := dir + "/empty.txt"
+	require.NoError(t, os.WriteFile(p, nil, 0o644))
+
+	r := NewReader()
+	defer func() { assert.NoError(t, r.Close()) }()
+	body, err := r.Read(p)
+	require.NoError(t, err, "an empty file is searchable, and finds nothing")
+	assert.Empty(t, body)
+}
+
+func BenchmarkTextIndexBuildFromDiskMapped(b *testing.B) {
+	paths := writeCorpus(b, 200, 64<<10)
+	b.ResetTimer()
+	for b.Loop() {
+		r := NewReader()
+		if _, err := Build(paths, r.Read); err != nil {
+			b.Fatal(err)
+		}
+		if err := r.Close(); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkTextIndexBuildFromDiskCopied(b *testing.B) {
+	paths := writeCorpus(b, 200, 64<<10)
+	b.ResetTimer()
+	for b.Loop() {
+		if _, err := Build(paths, readFileOnly); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
