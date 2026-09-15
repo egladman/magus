@@ -17,6 +17,23 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
 project (`magus run test web`), or let `magus affected` compute it from the diff.
 `magus where <name>` resolves a name. MCP tools ignore the CWD.{{end}}
 
+`--root <path>`, or `-C` after make's idiom, sets where that walk STARTS. Its argument
+is a plain path and nothing more: any directory, one file in it or none, nested or not.
+It is not a workspace and not a checkout, and calling it either is how a reader
+concludes it must be one.
+
+What the walk FINDS is separate: the nearest `magus.yaml` wins, and absent any, the
+outermost CONTIGUOUS run of `magusfiles/`, `magusfile.buzz` or `go.mod`. It can resolve
+somewhere other than the path you passed, and it can resolve nothing at all.
+
+{{if .Full}}Two consequences worth knowing before you debug one. Running a binary by
+absolute path does NOT set its working directory, so `/elsewhere/magus run build .`
+still walks up from YOUR cwd and can act on a tree you never named. And nearest-wins
+means a directory holding its own `magus.yaml` inside a larger checkout resolves to
+itself, so where a command lands is a question about markers on disk, never about the
+VCS.{{else}}Running a binary by absolute path does NOT set its working directory: it
+still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
+
 ## Rules
 
 1. Prefer the MCP tools{{if .Full}}; they return structured content with nothing to silence{{end}}.
