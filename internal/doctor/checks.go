@@ -2460,17 +2460,12 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		}
 		// One check carries one remedy, so two stale locations need --fix twice; the
 		// message lists them all.
-		//
-		// --dir pins the base, because install resolves a destination against the
-		// CALLER's directory and doctor runs from anywhere. It must be the RESOLVED
-		// root: r.root is the root as asked for, and is empty whenever the caller let
-		// magus discover it.
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
 			Message: "installed skills are behind this binary: " + strings.Join(stale, ", "),
 			Details: details,
-			Fix:     skillInstallFix(root, staleStatuses[0]),
+			Fix:     skillInstallFix(staleStatuses[0]),
 		}
 	case pastedStale:
 		return types.DoctorCheck{
@@ -2488,11 +2483,14 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 	}
 }
 
-func skillInstallFix(root string, st agent.Status) []string {
-	if st.ID != "" {
-		return []string{"agent", "harness", "install", "--id", st.ID}
-	}
-	return []string{"agent", "install", st.Location, "--force", "--dir", root}
+// skillInstallFix is doctor's half of the ONE remedy for a stale skill install:
+// every location checkAgentSkills grades comes from a harness descriptor (see
+// agent.HarnessSkillLocations), whose ID is validated non-empty at load, so
+// st.ID is always in hand here. It defers to agent.ReinstallCommand so this
+// structured --fix and the free-text Detail strings for the same condition
+// read as one command, not two that can drift apart.
+func skillInstallFix(st agent.Status) []string {
+	return agent.ReinstallCommand(st.ID)
 }
 
 // orphanedSkillDirs returns the installed skill directories this binary no longer ships,

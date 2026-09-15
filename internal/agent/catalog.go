@@ -169,6 +169,13 @@ const SkillVersion = 76
 
 const skillLicense = "GPL-3.0-or-later"
 
+// unreadableDigest is what SkillDigest and computeContentDigest report when
+// this binary could not read or hash its own embedded source. It is a failure
+// marker, not a content fingerprint, so gradeStamp refuses to let it satisfy
+// an equality check: two catalogs that both failed to hash their sources would
+// otherwise report equal "unreadable" digests and grade each other current.
+const unreadableDigest = "unreadable"
+
 const anchorSkillRel = "magus-query/SKILL.md"
 
 // AgentsFile is the repo-root instruction file magus prints a managed block for but never
@@ -487,7 +494,7 @@ func (c *Catalog) SkillDigest(name string) string {
 	if d, ok := c.skillDigests[baseSkillName(name)]; ok {
 		return d
 	}
-	return "unreadable"
+	return unreadableDigest
 }
 
 func (c *Catalog) computeSkillDigests() map[string]string {
@@ -495,18 +502,18 @@ func (c *Catalog) computeSkillDigests() map[string]string {
 	for _, source := range skillSources {
 		body, err := fs.ReadFile(c.sourceFS, source.bodyPath)
 		if err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		h := sha256.New()
 		// The name and description are stamped alongside the body and are what a
 		// host lists a skill by, so a description edit has to move the digest too.
 		if _, err := fmt.Fprintf(h, "%s\n%s\n", source.name, source.description); err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		if _, err := h.Write(body); err != nil {
-			out[source.name] = "unreadable"
+			out[source.name] = unreadableDigest
 			continue
 		}
 		out[source.name] = hex.EncodeToString(h.Sum(nil))[:12]
@@ -851,30 +858,30 @@ func (c *Catalog) computeContentDigest() string {
 	h := sha256.New()
 	paths, err := c.skillSourceFiles()
 	if err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	for _, p := range paths {
 		body, err := fs.ReadFile(c.sourceFS, p)
 		if err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 		if _, err := fmt.Fprintf(h, "%d:%s\n", len(p), p); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 		if _, err := h.Write(body); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 	}
 	for _, source := range skillSources {
 		if _, err := fmt.Fprintf(h, "%s\n%s\n", source.name, source.description); err != nil {
-			return "unreadable"
+			return unreadableDigest
 		}
 	}
 	if _, err := fmt.Fprintf(h, "%d:agents-section.md\n", len(c.agentsSection)); err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	if _, err := h.Write([]byte(c.agentsSection)); err != nil {
-		return "unreadable"
+		return unreadableDigest
 	}
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
@@ -900,7 +907,25 @@ func (c *Catalog) skillSourceFiles() ([]string, error) {
 }
 
 var footerVersionRe = regexp.MustCompile(`agent-skill-version: (\d+); knowledge-schema-version: (\d+)`)
-var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
+var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|` + unreadableDigest + `)`)
+
+// ReinstallCommand is the ONE remedy for a skill install location CheckStatuses
+// grades stale or missing: every location it discovers comes from a harness
+// descriptor (see HarnessSkillLocations), whose ID is validated non-empty at
+// load, so "harness install --id" always clears the finding. Doctor's
+// structured --fix (internal/doctor's checkAgentSkills) calls this directly,
+// and the free-text Detail sentences below go through ReinstallHint rather
+// than building their own copy, so the printed remedy and the one --fix runs
+// are always the same command.
+func ReinstallCommand(id string) []string {
+	return []string{"agent", "harness", "install", "--id", id}
+}
+
+// ReinstallHint renders ReinstallCommand as the sentence embedded in a Status
+// Detail.
+func ReinstallHint(id string) string {
+	return "magus " + strings.Join(ReinstallCommand(id), " ")
+}
 
 // CheckStatuses inspects descriptor-declared skill locations plus AGENTS.md, returning only
 // locations with a Magus install. The result order is deterministic.
@@ -921,7 +946,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 					if !c.hasMagusOwnedSkill(dir, location.Path) {
 						continue
 					}
-					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: magus agent harness install --id " + location.ID})
+					out = append(out, Status{Location: location.Path, ID: location.ID, Installed: true, Stale: true, Detail: "missing " + anchorSkillRel + "; re-run: " + ReinstallHint(location.ID)})
 				}
 				continue
 			}
@@ -1031,8 +1056,18 @@ func HarnessSkillDirs(root string) ([]string, error) {
 // Reading one skill worked only while the digest covered the whole catalog. With
 // a per-skill digest that shortcut goes blind: a stale magus-run reads as current
 // when magus-query happens not to have changed.
+//
+// Every problem found is collected rather than returned on the first one. This
+// used to return as soon as ANY installed skill turned up one offense (an
+// unreadable file, a name outside the descriptor's form, a missing skill), which
+// meant an alphabetically-earlier, cosmetic finding silently hid a later skill's
+// real version/schema mismatch: the operator saw "magus-aaa is not part of the
+// form" and never learned that magus-query was 50 releases behind. Collecting
+// lets every offender surface in one Status, and sortReasons keeps a
+// version/schema mismatch first among them, since that is the one reason that
+// must never go unseen.
 func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
-	reinstall := "magus agent harness install --id " + location.ID
+	reinstall := ReinstallHint(location.ID)
 	dest := location.Path
 	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
 	// reads an unknown name as "not magus's", which would silently drop a
@@ -1045,16 +1080,17 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 	if expectedErr != nil {
 		return Status{Location: dest, Installed: true, Stale: true, Detail: expectedErr.Error()}
 	}
+	var reasons []string
 	seen := make(map[string]bool, len(expected))
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
-			// A skill magus cannot READ is not a skill magus can vouch for. Continuing here
-			// graded the location up to date while an installed file sat unreadable, which
-			// is the one answer that stops a reader looking. The anchor path already reports
-			// this; the per-skill loop was the half that stayed quiet.
-			return Status{Location: dest, Installed: true, Stale: true,
-				Detail: name + ": cannot read it (" + err.Error() + "), so its provenance cannot be checked; " + reinstall}
+			// A skill magus cannot READ is not a skill magus can vouch for; record it and
+			// move on rather than silently dropping it, which is the one answer that stops
+			// a reader looking. The anchor path already reports this; the per-skill loop
+			// was the half that stayed quiet.
+			reasons = append(reasons, name+": cannot read it ("+err.Error()+"), so its provenance cannot be checked; "+reinstall)
+			continue
 		}
 		// Not ours to grade: a workspace's own skill sits here by design, and grading it
 		// reported drift no reinstall could clear, since install writes only the names
@@ -1067,19 +1103,43 @@ func (c *Catalog) gradeDest(dir string, location HarnessSkillLocation) Status {
 			continue
 		}
 		if !expected[name] {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: name + " is not part of the descriptor's " + string(location.Form) + " form; re-run: " + reinstall}
+			reasons = append(reasons, name+" is not part of the descriptor's "+string(location.Form)+" form; re-run: "+reinstall)
+			continue
 		}
 		seen[name] = true
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: name + ": " + st.Detail}
+			reasons = append(reasons, name+": "+st.Detail)
 		}
 	}
+	var missing []string
 	for name := range expected {
 		if !seen[name] {
-			return Status{Location: dest, Installed: true, Stale: true, Detail: "missing " + name + "; re-run: " + reinstall}
+			missing = append(missing, name)
 		}
 	}
-	return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+	sort.Strings(missing) // map iteration order would otherwise make Detail nondeterministic
+	for _, name := range missing {
+		reasons = append(reasons, "missing "+name+"; re-run: "+reinstall)
+	}
+	if len(reasons) == 0 {
+		return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+	}
+	sortReasons(reasons)
+	return Status{Location: dest, Installed: true, Stale: true, Detail: strings.Join(reasons, "; ")}
+}
+
+// sortReasons orders gradeDest's collected reasons so a version/schema mismatch
+// (gradeStamp's "stale (skill vX/schema vY; ...)" wording) is never buried
+// behind a lesser finding like an unreadable file or an orphaned name. Stable,
+// so reasons that are equally severe keep the order they were found in.
+func sortReasons(reasons []string) {
+	sort.SliceStable(reasons, func(i, j int) bool {
+		return isVersionMismatch(reasons[i]) && !isVersionMismatch(reasons[j])
+	})
+}
+
+func isVersionMismatch(reason string) bool {
+	return strings.Contains(reason, "stale (skill v")
 }
 
 // installedSkillNames lists the magus skill directories under path, sorted. One
@@ -1146,6 +1206,14 @@ func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Statu
 	d := footerDigestRe.FindStringSubmatch(body)
 	if d == nil {
 		return Status{Location: location, Installed: true, Stale: true, Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
+	}
+	// unreadableDigest marks a hash this binary (or the one that stamped the
+	// installed file) could not compute; it is a failure, not a content value, so
+	// it must never satisfy the equality check below. Without this, two catalogs
+	// that both failed to hash their sources would produce equal "unreadable"
+	// digests and grade the pair current, each vouching for content it never read.
+	if d[1] == unreadableDigest || wantDigest == unreadableDigest {
+		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content fingerprint unreadable (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
 	}
 	if d[1] != wantDigest {
 		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
