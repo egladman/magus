@@ -74,6 +74,7 @@ const (
 	denyRuleStageAll          denyRuleName = "stage-all"
 	denyRuleCacheDirWrite     denyRuleName = "cache-dir-write"
 	denyRuleCd                denyRuleName = "cd"
+	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 )
@@ -1218,6 +1219,19 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	case precedentIdent(cmds) != "":
 		ident := precedentIdent(cmds)
+		// An indexed symbol is the one search shape with an EXACT replacement, which is
+		// what makes denying it free: refs returns the same sites, column-precise and
+		// checked against the tree, plus the generated and cross-language ones a pattern
+		// cannot reach. Anything the index cannot vouch for stays an advisory, because a
+		// deny that routes nowhere takes a capability away. Raw text is the standing case
+		// there: a string literal or a comment body is not a symbol, so no index holds it.
+		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
+			return ShellVerdict{
+				Deny: "`" + hint.Refs.With(ident, "--occurrences") + "` answers this exactly, and is checked against the tree rather than matched against it.\n" +
+					ident + " is an indexed symbol here, so the graph knows every definition and reference including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
+				Rule: denyRule{Name: denyRuleSymbolSearch, Arg: ident},
+			}
+		}
 		return ShellVerdict{
 			Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
 			Kind:    advisoryPrecedent,

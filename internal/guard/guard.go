@@ -65,6 +65,11 @@ type Dependencies struct {
 	// and says so to nobody. What is injected is the CATALOG, not a list of tools, so a
 	// newly registered spell op still needs no guard edit.
 	Spells func() []*spells.Spell
+	// SymbolDefined reports whether ident is a symbol the workspace has indexed, and
+	// whether that answer is DEFINITIVE. A stale index answers "unknown, not absent",
+	// which is not proof of anything: the guard may only deny a search when it can
+	// show the replacement returns the same sites.
+	SymbolDefined func(ident string) (defined, definitive bool)
 }
 
 // errNoDependency is what an unset Dependencies member answers with, so a rule takes the same silent
@@ -97,6 +102,15 @@ func (d Dependencies) spells() []*spells.Spell {
 		return nil
 	}
 	return d.Spells()
+}
+
+// symbolDefined answers false for an unset resolver, so a caller that supplies none
+// keeps the advisory it had rather than gaining a deny nothing can substantiate.
+func (d Dependencies) symbolDefined(ident string) (defined, definitive bool) {
+	if d.SymbolDefined == nil {
+		return false, false
+	}
+	return d.SymbolDefined(ident)
 }
 
 // Request is one call the guard was asked to judge: the payload, plus what the caller's

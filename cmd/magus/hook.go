@@ -180,7 +180,30 @@ func hookDependencies() guard.Dependencies {
 		ShellDialect:     shellDialect,
 		GraphStaleAdvice: staleGraphAdvice,
 		Spells:           project.DefaultSpellRegistry().All,
+		SymbolDefined:    symbolDefinedForGuard,
 	}
+}
+
+// symbolDefinedForGuard answers the one question that lets the guard deny a symbol
+// search: does refs return the same sites this grep is reaching for.
+//
+// Definitive only when no project's index is older than its sources. A stale index
+// makes refs answer "unknown, not absent", and a deny resting on that would take grep
+// away on the strength of a lookup that admits it may be wrong.
+//
+// Reached only after precedentIdent has already matched, which the transcript mining
+// tuned to fire rarely, so the graph load stays off the path of an ordinary tool call.
+// The empty rootOverride is load-bearing: inspectWorkspace is memoized per process and
+// panics when a second call names a different root, and every other hook dependency
+// resolves through the same empty spelling.
+func symbolDefinedForGuard(ident string) (defined, definitive bool) {
+	ctx := context.Background()
+	g, err := loadKnowledgeGraphForRefs(ctx, "", false, ident)
+	if err != nil {
+		return false, false
+	}
+	_, ok := g.Refs(ident)
+	return ok, staleGraphAdvice(ctx) == ""
 }
 
 // loadWorkspaceShellRules returns additive rules the root magusfile declared via
