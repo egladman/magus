@@ -47,6 +47,8 @@ require (
 
 require (
 	github.com/gofrs/flock v0.13.0
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	mvdan.cc/sh/v3 v3.13.1
 )
 
