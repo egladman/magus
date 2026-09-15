@@ -107,6 +107,11 @@ func TestDenyCacheDirCommandReadsTheParsedLine(t *testing.T) {
 		`python3 -c "open('.magus/advisories/anon.served-next','a').write(line)"`,
 		"sort -o .magus/lease f",
 		"awk '{print > \".magus/lease\"}' f",
+		// The program can arrive entirely in the heredoc, and then nothing on the argv
+		// carries the redirect. Scanning only the argv let this through the boundary
+		// checks completely, because reading it as a pure read is what stops any write
+		// target being offered at all.
+		"awk -f /dev/stdin f <<'EOF'\n{ print $0 > \".magus/lease\" }\nEOF",
 		"cd sub && rm ../.magus/lease",
 	} {
 		assert.NotEmpty(t, denyCacheDirCommand(at, command, DialectBash), "%q writes into the cache dir", command)

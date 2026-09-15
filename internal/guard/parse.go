@@ -252,7 +252,7 @@ var writeReaders = map[string]bool{
 // onlyReads reports a command that only reads what it was pointed at. Four of the readers
 // carry one spelling that turns them into writers, and a list that ignored those would be
 // the writer allowlist again with the sides swapped.
-func onlyReads(name string, args []string) bool {
+func onlyReads(name string, args []string, heredoc string) bool {
 	if !writeReaders[name] {
 		return false
 	}
@@ -267,7 +267,13 @@ func onlyReads(name string, args []string) bool {
 		// rewrite.go rather than a second copy of the pattern: a bare `>` also reads as
 		// a numeric/string comparison (`NR>=1`), so only a `>`/`>>` following print or
 		// printf counts as a write.
-		return !awkRedirectRe.MatchString(strings.Join(args, "\n"))
+		//
+		// The heredoc is part of the program, not data, whenever awk reads its script
+		// from stdin (`awk -f /dev/stdin <<EOF`). Scanning only the argv missed a write
+		// spelled entirely inside the body, and a miss HERE is a write that never
+		// reaches the cache-dir or lease-lane boundary at all, because this returning
+		// true is what stops commandWriteCandidates from offering any target.
+		return !awkRedirectRe.MatchString(strings.Join(append(slices.Clone(args), heredoc), "\n"))
 	case "find":
 		return !slices.ContainsFunc(args, func(a string) bool {
 			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
@@ -336,7 +342,7 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 // data, and folding it in would read `cat > f <<EOF` prose as a list of write targets.
 func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	name := path.Base(c.Name)
-	if onlyReads(name, c.Args) {
+	if onlyReads(name, c.Args, heredoc) {
 		return nil
 	}
 	words := c.Args
