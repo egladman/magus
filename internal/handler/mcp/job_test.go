@@ -10,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	jobhandler "github.com/egladman/magus/internal/handler/job"
 	"github.com/egladman/magus/internal/job"
-	jobcatalog "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/spells"
@@ -412,6 +411,6 @@ func TestJobDoorsAgreeOnAnEmptyStore(t *testing.T) {
 	listed, err := svc.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
 	require.NoError(t, err)
 	require.NotNil(t, listed.Msg.Jobs)
-	assert.Len(t, listed.Msg.Jobs, len(jobcatalog.All()), "an unwritten store handed the listing a row")
+	assert.Len(t, listed.Msg.Jobs, len(job.All()), "an unwritten store handed the listing a row")
 	assert.Empty(t, listed.Msg.Overlaps)
 }

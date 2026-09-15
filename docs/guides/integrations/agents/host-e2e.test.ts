@@ -79,9 +79,10 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   // Discrete-script hosts: JSON under harnesses/ is still the apply SoT, and each
   // one must wire both the Read observer and the stop checkpoint by name.
   for (const name of ["codex.json", "claude-code.json"]) {
-    const harness = JSON.parse(
-      readFileSync(path.join(repository, "harnesses", name), "utf8"),
-    ) as { id: string; managed_entries: Array<Record<string, unknown>> };
+    const harness = JSON.parse(readFileSync(path.join(repository, "harnesses", name), "utf8")) as {
+      id: string;
+      managed_entries: Array<Record<string, unknown>>;
+    };
     const managed = JSON.stringify(harness.managed_entries);
     assert.ok(
       managed.includes("magus-guard-observe.sh"),
@@ -110,7 +111,10 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   ) as { id: string; managed_entries: Array<Record<string, unknown>> };
   const cursorManaged = JSON.stringify(cursorJson.managed_entries);
   assert.equal(cursorJson.id, "cursor");
-  assert.ok(cursorManaged.includes("cursor-guard.sh"), "cursor JSON stays in lockstep with the spell");
+  assert.ok(
+    cursorManaged.includes("cursor-guard.sh"),
+    "cursor JSON stays in lockstep with the spell",
+  );
   assert.ok(cursorManaged.includes("sessionEnd"), "cursor JSON wires sessionEnd for checkpoints");
 
   // OpenCode: plugin transport, not managed shell entries. Skills install paths
@@ -120,7 +124,10 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   ) as { id: string; managed_entries?: unknown; skills: { paths: string[] } };
   assert.equal(opencode.id, "opencode");
   assert.equal(opencode.managed_entries, undefined);
-  assert.ok(opencode.skills.paths.some((p) => p.includes(".opencode")), "opencode installs skills");
+  assert.ok(
+    opencode.skills.paths.some((p) => p.includes(".opencode")),
+    "opencode installs skills",
+  );
 });
 
 test("selects the named VCS-neutral command-deny scenario", () => {

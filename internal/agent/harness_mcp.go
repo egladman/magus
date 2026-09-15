@@ -7,8 +7,10 @@ import (
 )
 
 // DefaultHarnessMCPTokenRef is the secret-provider ref shipped spells name in
-// setup hints. Under the built-in environment provider it is the env var name hosts
-// already document (Codex bearer_token_env_var, Cursor ${env:...}).
+// setup hints. Under the built-in environment provider it resolves to an env var,
+// which is the form a host's own MCP client configuration already expects.
+//
+//nolint:gosec // G101: an env var NAME, not a credential; the value it refers to never appears here
 const DefaultHarnessMCPTokenRef = "MAGUS_MCP_TOKEN"
 
 // DefaultHarnessMCPURL is the loopback Streamable HTTP endpoint when a spell
@@ -20,9 +22,9 @@ const DefaultHarnessMCPURL = "http://127.0.0.1:7391/mcp"
 // Apply only records Hint (and optional Register argv sketch / Docs link)
 // for the CLI to print.
 type HarnessMCP struct {
-	Enabled  *bool   `json:"enabled,omitempty"`
-	TokenRef string  `json:"token_ref,omitempty"`
-	URL      string  `json:"url,omitempty"`
+	Enabled  *bool  `json:"enabled,omitempty"`
+	TokenRef string `json:"token_ref,omitempty"`
+	URL      string `json:"url,omitempty"`
 	// Hint is the short instruction recorded for apply (host CLI command, paste
 	// fragment, or "see docs"). Must not contain a resolved secret.
 	Hint string `json:"hint,omitempty"`

@@ -56,7 +56,6 @@ prefer env interpolation. Restart Cursor after changing the client config.
 An agent uses the CLI fallback when MCP is unavailable; it does not manually
 start Magus solely to obtain tools.
 
-
 ## Guard hook
 
 Prefer wiring the Cursor harness from the root magusfile when you bounce between

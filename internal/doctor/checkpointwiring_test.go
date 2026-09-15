@@ -119,4 +119,3 @@ func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
 	require.Equal(t, types.DoctorOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")
 }
-

@@ -78,7 +78,7 @@ func parseShellRule(m vm.Value, apiName, defaultDialect string) (workspace.Shell
 				return rule, fmt.Errorf(`magus\guard.%s: "dialect" must be a non-empty string`, apiName)
 			}
 			if _, err := parseShellDialect(v.AsString()); err != nil {
-				return rule, fmt.Errorf(`magus\guard.%s: %s`, apiName, err)
+				return rule, fmt.Errorf(`magus\guard.%s: %w`, apiName, err)
 			}
 			rule.Dialect = strings.ToLower(strings.TrimSpace(v.AsString()))
 		case "args":

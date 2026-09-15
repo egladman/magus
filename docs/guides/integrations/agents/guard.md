@@ -202,13 +202,13 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   for outer parse when judging rules; the last declared non-empty dialect wins.
   `magus\guard.bash` remains as a deprecated alias that defaults dialect to bash.
 
-| dialect | parser |
-| --- | --- |
-| `posix` | POSIX shell |
-| `bash` | GNU Bash (default) |
-| `mksh` | MirBSD Korn shell |
-| `zsh` | Z shell |
-| `bats` | Bash Automated Testing System |
+| dialect | parser                        |
+| ------- | ----------------------------- |
+| `posix` | POSIX shell                   |
+| `bash`  | GNU Bash (default)            |
+| `mksh`  | MirBSD Korn shell             |
+| `zsh`   | Z shell                       |
+| `bats`  | Bash Automated Testing System |
 
 Example:
 
@@ -238,6 +238,7 @@ magus\harness.provider(opencode)
 ```
 
 Then `magus agent harness apply` (no `--id`) writes every wired host's fragments.
+
 - **Writing into the workspace's magus cache dir** (`.magus/` by default), on
   either surface and under every role, unbound sessions included. That directory
   holds the files the guard's own verdicts are computed from: the `lease` marker

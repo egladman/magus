@@ -59,7 +59,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 	if err != nil {
 		// Optional contract: a missing op is fine; only a failed invoke of a
 		// present op should fail the load. Spell drivers return err when the
-		// target is unknown - treat that as absent.
+		// target is unknown, so treat that as absent.
 		if !isMissingHarnessOp(err) {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessMCPContract, err)
 		}
