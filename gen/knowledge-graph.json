@@ -48765,6 +48765,16 @@
       }
     },
     {
+      "id": "function:spells/golang/spell.buzz:mgs_getSymbolIndexer",
+      "kind": "function",
+      "label": "mgs_getSymbolIndexer",
+      "doc": "magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-go writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
+      "source": "spells/golang/spell.buzz:193",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/golang/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
@@ -48807,16 +48817,10 @@
       "id": "function:spells/golang/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/golang/spell.buzz:194",
+      "source": "spells/golang/spell.buzz:200",
       "attrs": {
         "exported": "true"
       }
-    },
-    {
-      "id": "function:spells/golang/spell.buzz:scipGo",
-      "kind": "function",
-      "label": "scipGo",
-      "source": "spells/golang/spell.buzz:190"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
@@ -49469,6 +49473,16 @@
       }
     },
     {
+      "id": "function:spells/python/spell.buzz:mgs_getSymbolIndexer",
+      "kind": "function",
+      "label": "mgs_getSymbolIndexer",
+      "doc": "The indexer is a PATH binary (install it with mise, not as a project dep), so it is forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
+      "source": "spells/python/spell.buzz:96",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/python/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
@@ -49510,7 +49524,7 @@
       "id": "function:spells/python/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/python/spell.buzz:97",
+      "source": "spells/python/spell.buzz:87",
       "attrs": {
         "exported": "true"
       }
@@ -49532,13 +49546,6 @@
       "kind": "function",
       "label": "ruffFormat",
       "source": "spells/python/spell.buzz:81"
-    },
-    {
-      "id": "function:spells/python/spell.buzz:scip",
-      "kind": "function",
-      "label": "scip",
-      "doc": "scip is the reserved op that runs the Python SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-python writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/python/spell.buzz:93"
     },
     {
       "id": "function:spells/python/spell.buzz:uvBuild",
@@ -49602,6 +49609,16 @@
       }
     },
     {
+      "id": "function:spells/rust/spell.buzz:mgs_getSymbolIndexer",
+      "kind": "function",
+      "label": "mgs_getSymbolIndexer",
+      "doc": "magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
+      "source": "spells/rust/spell.buzz:83",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/rust/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
@@ -49644,17 +49661,10 @@
       "id": "function:spells/rust/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/rust/spell.buzz:84",
+      "source": "spells/rust/spell.buzz:75",
       "attrs": {
         "exported": "true"
       }
-    },
-    {
-      "id": "function:spells/rust/spell.buzz:scip",
-      "kind": "function",
-      "label": "scip",
-      "doc": "scip is the reserved op that runs the Rust SCIP indexer for the knowledge graph. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; rust-analyzer's scip subcommand writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/rust/spell.buzz:80"
     },
     {
       "id": "function:spells/system-keychain/spell.buzz:from_secret_tool",
@@ -49754,6 +49764,16 @@
       }
     },
     {
+      "id": "function:spells/typescript/spell.buzz:mgs_getSymbolIndexer",
+      "kind": "function",
+      "label": "mgs_getSymbolIndexer",
+      "doc": "The indexer is a PATH binary (install it with mise, not as a project dep), so it is forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
+      "source": "spells/typescript/spell.buzz:240",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:spells/typescript/spell.buzz:mgs_getTools",
       "kind": "function",
       "label": "mgs_getTools",
@@ -49816,7 +49836,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:238",
+      "source": "spells/typescript/spell.buzz:228",
       "attrs": {
         "exported": "true"
       }
@@ -49833,13 +49853,6 @@
       "kind": "function",
       "label": "prettier",
       "source": "spells/typescript/spell.buzz:198"
-    },
-    {
-      "id": "function:spells/typescript/spell.buzz:scip",
-      "kind": "function",
-      "label": "scip",
-      "doc": "scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/typescript/spell.buzz:232"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
@@ -125297,6 +125310,14 @@
     },
     {
       "source": "file:spells/golang/spell.buzz",
+      "target": "function:spells/golang/spell.buzz:mgs_getSymbolIndexer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/golang/spell.buzz"
+    },
+    {
+      "source": "file:spells/golang/spell.buzz",
       "target": "function:spells/golang/spell.buzz:mgs_getTools",
       "relation": "contains",
       "confidence": "extracted",
@@ -125330,14 +125351,6 @@
     {
       "source": "file:spells/golang/spell.buzz",
       "target": "function:spells/golang/spell.buzz:mgs_listTargets",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/golang/spell.buzz"
-    },
-    {
-      "source": "file:spells/golang/spell.buzz",
-      "target": "function:spells/golang/spell.buzz:scipGo",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -126209,6 +126222,14 @@
     },
     {
       "source": "file:spells/python/spell.buzz",
+      "target": "function:spells/python/spell.buzz:mgs_getSymbolIndexer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/python/spell.buzz"
+    },
+    {
+      "source": "file:spells/python/spell.buzz",
       "target": "function:spells/python/spell.buzz:mgs_getTools",
       "relation": "contains",
       "confidence": "extracted",
@@ -126266,14 +126287,6 @@
     {
       "source": "file:spells/python/spell.buzz",
       "target": "function:spells/python/spell.buzz:ruffFormat",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/python/spell.buzz"
-    },
-    {
-      "source": "file:spells/python/spell.buzz",
-      "target": "function:spells/python/spell.buzz:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -126369,6 +126382,14 @@
     },
     {
       "source": "file:spells/rust/spell.buzz",
+      "target": "function:spells/rust/spell.buzz:mgs_getSymbolIndexer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/rust/spell.buzz"
+    },
+    {
+      "source": "file:spells/rust/spell.buzz",
       "target": "function:spells/rust/spell.buzz:mgs_getTools",
       "relation": "contains",
       "confidence": "extracted",
@@ -126402,14 +126423,6 @@
     {
       "source": "file:spells/rust/spell.buzz",
       "target": "function:spells/rust/spell.buzz:mgs_listTargets",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/rust/spell.buzz"
-    },
-    {
-      "source": "file:spells/rust/spell.buzz",
-      "target": "function:spells/rust/spell.buzz:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -126553,6 +126566,14 @@
     },
     {
       "source": "file:spells/typescript/spell.buzz",
+      "target": "function:spells/typescript/spell.buzz:mgs_getSymbolIndexer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/typescript/spell.buzz"
+    },
+    {
+      "source": "file:spells/typescript/spell.buzz",
       "target": "function:spells/typescript/spell.buzz:mgs_getTools",
       "relation": "contains",
       "confidence": "extracted",
@@ -126618,14 +126639,6 @@
     {
       "source": "file:spells/typescript/spell.buzz",
       "target": "function:spells/typescript/spell.buzz:prettier",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "spells/typescript/spell.buzz"
-    },
-    {
-      "source": "file:spells/typescript/spell.buzz",
-      "target": "function:spells/typescript/spell.buzz:scip",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

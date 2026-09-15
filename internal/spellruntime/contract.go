@@ -65,6 +65,7 @@ var OptionalContract = []contractEntry{
 	{Name: "mgs_listManifests", Field: "manifests", Shape: ShapeManifests},
 	{Name: "mgs_getTools", Field: "tools"},
 	{Name: "mgs_getLanguage", Field: "language"},
+	{Name: "mgs_getSymbolIndexer", Field: "symbol_indexer"},
 	{Name: "mgs_isOpaque", Field: "opaque"},
 	{Name: "mgs_listTargets", Field: "ops"},
 }

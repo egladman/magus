@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -339,7 +340,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 		state:          map[string]*projIndexState{},
 		projectForPath: func(abs string) (string, bool) { return matchProject(abs, capable) },
 		runIndex: func(ctx context.Context, project string) error {
-			err := m.Run(ctx, []types.Target{{Path: project, Name: symbols.IndexOp}})
+			err := m.Run(ctx, []types.Target{{Path: project, Name: spells.SymbolIndexOp}})
 			if err == nil || ctx.Err() != nil {
 				return err // a clean run, or a yield-cancel that carries no useful hint
 			}
@@ -375,12 +376,12 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 }
 
 // symbolCapableLanguage reports whether a project is symbol-capable (bound to a spell
-// that exposes the reserved scip op) and the language of that spell. The single source
-// of truth for "which projects get indexed", so the auto-indexer, ReindexSymbols, and
+// that declares a symbol indexer) and the language of that spell. The single source of
+// truth for "which projects get indexed", so the auto-indexer, ReindexSymbols, and
 // status reporting cannot disagree.
 func symbolCapableLanguage(p *types.Project) (string, bool) {
 	for _, sp := range p.ResolvedSpells {
-		if slices.Contains(sp.Targets(), symbols.IndexOp) {
+		if sp.SymbolIndexer() != nil {
 			return sp.Language(), true
 		}
 	}
@@ -515,8 +516,8 @@ func (m *Magus) symbolCapableWithLanguage() ([]*types.Project, map[string]string
 // had ever minted: the lookup missed every time and every built index read as
 // out-of-date. Charmless because ReindexSymbols runs the op with no RunOptions.
 func (m *Magus) symbolIndexStep(p *types.Project, toolVersions []string, observations map[string]string) cache.Step {
-	step := m.buildStep(p, symbols.IndexOp)
-	applyRunKeying(&step, toolVersions, observationsForTarget(p, symbols.IndexOp, observations), nil)
+	step := m.buildStep(p, spells.SymbolIndexOp)
+	applyRunKeying(&step, toolVersions, observationsForTarget(p, spells.SymbolIndexOp, observations), nil)
 	return step
 }
 
@@ -558,7 +559,7 @@ func (m *Magus) ReindexSymbols(ctx context.Context) (int, error) {
 	var errs []error
 	done := 0
 	for _, c := range capable {
-		if err := m.Run(ctx, []types.Target{{Path: c.path, Name: symbols.IndexOp}}); err != nil {
+		if err := m.Run(ctx, []types.Target{{Path: c.path, Name: spells.SymbolIndexOp}}); err != nil {
 			errs = append(errs, symbolRunError(types.NewProjectRef(c.path, c.dir), c.language, err))
 			continue
 		}

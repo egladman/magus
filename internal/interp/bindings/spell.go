@@ -44,7 +44,7 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 			spells.WithOutputs(spec.Provides...),
 			spells.WithTargets(spec.OpNames()...),
 			spells.WithServiceTargets(spec.ServiceOpNames()...),
-			spells.WithInvoker(newSpellInvoker(spec.Ops, spec.Tools, spec.IgnoreDirs)),
+			spells.WithInvoker(newSpellInvoker(spec)),
 			spells.WithOps(spec.Ops),
 			spells.WithTools(spec.Tools),
 			spells.WithVersionProber(versionProber),
@@ -67,6 +67,9 @@ var ensureSpellsRegistered = sync.OnceFunc(func() {
 		}
 		if spec.Comments != nil {
 			opts = append(opts, spells.WithComments(spec.Comments))
+		}
+		if spec.SymbolIndexer != nil {
+			opts = append(opts, spells.WithSymbolIndexer(spec.SymbolIndexer))
 		}
 		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spec.Name, opts...))
 	}
@@ -382,7 +385,8 @@ func probeUntilReady(ctx context.Context, probe spells.Command, tool, dir string
 	}
 }
 
-func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string, req spells.InvokeRequest) (any, error) {
+func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRequest) (any, error) {
+	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
 	op, ok := ops[req.Target]
 	if !ok {
 		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
@@ -396,23 +400,44 @@ func dispatchOp(ctx context.Context, ops map[string]spells.Op, tools map[string]
 		return nil, err
 	}
 	opts := commandOpts{op: req.Target, cwd: req.Dir, args: project.ExtraArgs(ctx), ignoreDirs: ignoreDirs}
-	// The reserved `scip` op writes its index into the cache, not the tree: magus
-	// hands it the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
+	// A symbol indexer writes its index into the cache, not the tree: magus hands it
+	// the destination via MAGUS_SYMBOL_INDEX so the spell command (a bare
 	// "$MAGUS_SYMBOL_INDEX" arg token, resolved by resolveRunnerRefs) needs no
 	// knowledge of where the cache is. Set on both opts.refs (what a spell's Args
-	// token resolves against) and opts.env (the process environment), so a
-	// workspace-local scip spell that still shells out (the doc comment on
-	// symbols.IndexEnvVar promises the env var is set) keeps working.
-	if req.Target == symbols.IndexOp {
-		env, err := symbolIndexEnv(ctx, req.Dir)
-		if err != nil {
-			return nil, err
-		}
-		opts.env = env
-		opts.refs = env
+	// token resolves against) and opts.env (the process environment), so an indexer
+	// that shells out (the doc comment on symbols.IndexEnvVar promises the env var is
+	// set) keeps working.
+	//
+	// Keyed on the op's KIND, which magus stamped when it synthesized the op from
+	// mgs_getSymbolIndexer. Matching the op's name instead made the capability a
+	// reserved string any spell could claim by spelling it.
+	if op.Kind != spells.OpKindSymbolIndex {
+		_, err := runCommand(ctx, op, opts)
+		return nil, err
 	}
-	_, err := runCommand(ctx, op, opts)
-	return nil, err
+	indexPath, err := symbolIndexEnv(ctx, req.Dir)
+	if err != nil {
+		return nil, err
+	}
+	env := map[string]string{symbols.IndexEnvVar: indexPath}
+	opts.env = env
+	opts.refs = env
+	if _, err := runCommand(ctx, op, opts); err != nil {
+		return nil, err
+	}
+	// Checked HERE because this is the site that made the promise: it handed the
+	// indexer a destination, so it is the one place that knows what was supposed to
+	// appear and can still name the op that failed to write it.
+	//
+	// Without it an indexer could exit 0 having written nothing and the project still
+	// read as symbol-capable with no index, while `graph build` reported it reindexed
+	// and meant it. Ingestion cannot raise this: a missing index there is
+	// indistinguishable from one never built.
+	if _, err := os.Stat(indexPath); err != nil {
+		return nil, fmt.Errorf("spell %q declares a %s symbol indexer, but %q exited 0 and wrote no index to %s; the indexer must write to the path magus passes in %s",
+			spec.Name, spec.SymbolIndexer.Format, op.Bin, indexPath, symbols.IndexEnvVar)
+	}
+	return noResult()
 }
 
 // resolveSecretEnv resolves a command's declared secrets (env var name -> provider
@@ -458,38 +483,44 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 	return env, nil
 }
 
-// symbolIndexEnv resolves the cache destination for a `scip` op run and returns it as
-// the MAGUS_SYMBOL_INDEX environment binding, having created the containing dir. It
-// requires the active cache (the op runs inside a cached target), so the index lands
-// where ingestion later looks; run outside that path it errors rather than emit an
-// index the graph will never find.
-func symbolIndexEnv(ctx context.Context, projectDir string) (map[string]string, error) {
+// symbolIndexEnv resolves the cache destination for a symbol-index run, having created
+// the containing dir. It requires the active cache (the op runs inside a cached
+// target), so the index lands where ingestion later looks; run outside that path it
+// errors rather than emit an index the graph will never find.
+//
+// The cache check STAYS after the move to a declared capability. The indexer is still
+// registered as an ordinary target, which is what gives it cache keying and the
+// freshness probe SymbolIndexStatus reads, so `magus run scip <project>` remains
+// reachable and a magusfile can still compose the op into a body that runs outside a
+// cached target. Only the authoring hack went away, not the path this defends.
+func symbolIndexEnv(ctx context.Context, projectDir string) (string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
-		return nil, fmt.Errorf("spell: the %q op must run as a magus target so its index lands in the cache", symbols.IndexOp)
+		return "", fmt.Errorf("spell: a symbol indexer must run as a magus target so its index lands in the cache")
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("spell: resolve %q op dir: %w", symbols.IndexOp, err)
+			return "", fmt.Errorf("spell: resolve symbol index dir: %w", err)
 		}
 		abs = filepath.Join(cwd, abs)
 	}
 	path := symbols.IndexPath(c.Dir(), abs)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return "", fmt.Errorf("spell: prepare symbol index dir: %w", err)
 	}
-	return map[string]string{symbols.IndexEnvVar: path}, nil
+	return path, nil
 }
 
 // newSpellInvoker returns an invoker closure for a built-in spell. Built-in ops
-// are command-only (cmd/args/charms data, no script body). ignoreDirs is the
-// spell's own declared mgs_listIgnoreDirs, carried through to dispatchOp so a
-// Command.Sources op inherits it (see commandOpts.ignoreDirs).
-func newSpellInvoker(targets map[string]spells.Op, tools map[string]spells.Tool, ignoreDirs []string) func(context.Context, spells.InvokeRequest) (any, error) {
+// are command-only (cmd/args/charms data, no script body). The whole descriptor is
+// carried rather than a projection of it: dispatchOp reads the ops, the tools, the
+// declared ignore dirs (so a Command.Sources op inherits them, see
+// commandOpts.ignoreDirs) and the declared symbol indexer.
+func newSpellInvoker(spec spells.Descriptor) func(context.Context, spells.InvokeRequest) (any, error) {
 	return func(ctx context.Context, req spells.InvokeRequest) (any, error) {
-		return dispatchOp(ctx, targets, tools, ignoreDirs, req)
+		return dispatchOp(ctx, spec, req)
 	}
 }
 
@@ -600,7 +631,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
 func registerLocalSpell(m spells.Descriptor) {
-	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m.Ops, m.Tools, m.IgnoreDirs)))
+	opts := append(localSpellBaseOptions(m), spells.WithInvoker(newSpellInvoker(m)))
 	project.DefaultSpellRegistry().RegisterIfAbsent(spells.NewSpell(m.Name, opts...))
 }
 

@@ -223,21 +223,23 @@ fun vitest(target: Target) > Command {
 fun devServer(target: Target) > Service {
     return Service{command = Command{bin = "pnpm", args = ["run", "dev"]}};
 }
-// scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge
-// graph. The indexer is a PATH binary (install it with mise, not as a project dep), so
-// the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination,
-// so the index never lands in the tree; scip-typescript writes there via --output. The
-// runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no
-// shell is needed to expand it.
-fun scip(target: Target) > Command {
-    return Command{bin = "scip-typescript", args = ["index", "--output", "$MAGUS_SYMBOL_INDEX"]};
-}
-
 // mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because
 // dev-server mixes in a Service-returning op alongside the Command-returning ones.
 export fun mgs_listTargets() > any {
     return {"biome-check": biomeCheck, "biome-format": biomeFormat,
             "eslint": eslint, "preflight": preflight, "prettier": prettier, "tsc": tsc,
             "tsc-build": tscBuild, "tsc-clean": tscClean, "vitest": vitest,
-            "dev-server": devServer, "scip": scip};
+            "dev-server": devServer};
+}
+
+// The indexer is a PATH binary (install it with mise, not as a project dep), so it is
+// forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
+// index never lands in the tree; scip-typescript writes there via --output. The runner
+// resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is
+// needed to expand it.
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "scip-typescript", args = ["index", "--output", "$MAGUS_SYMBOL_INDEX"]},
+    };
 }

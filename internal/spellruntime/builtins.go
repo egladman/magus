@@ -33,6 +33,7 @@ import (
 //go:generate go run ../../cmd/magus-utils types -type Hint -out gen/types/hint.buzz
 //go:generate go run ../../cmd/magus-utils types -type Command -out gen/types/command.buzz
 //go:generate go run ../../cmd/magus-utils types -type Service -out gen/types/service.buzz
+//go:generate go run ../../cmd/magus-utils types -type SymbolIndexer -out gen/types/symbolindexer.buzz
 //go:generate go run ../../cmd/magus-utils types -type Project -out gen/types/project.buzz
 //go:generate go run ../../cmd/magus-utils spells -spells ../../spells -out gen
 

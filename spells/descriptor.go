@@ -165,6 +165,14 @@ type Descriptor struct {
 	// record; nil for a spell that declares none. The gate's comment-only
 	// classifier is the consumer.
 	Comments *CommentSyntax `json:"comments,omitempty"`
+	// SymbolIndexer is the spell's declared symbol-indexing capability, from
+	// mgs_getSymbolIndexer; nil for a spell that declares none. Its presence is the
+	// whole capability test, replacing a string match against the op list.
+	//
+	// The indexer also appears in Ops under the reserved index op name, synthesized at
+	// decode so the run, cache and freshness machinery reach it the way they reach any
+	// other command op. Both views come from this one declaration.
+	SymbolIndexer *SymbolIndexer `json:"symbol_indexer,omitempty"`
 	// DocOps names the ops authored as function handlers (sorted) — as opposed to
 	// plain {cmd,args} record ops. `magus doctor` requires a doc comment on each of
 	// these for a workspace-local Buzz spell. Not serialized: it is a resolution-path
