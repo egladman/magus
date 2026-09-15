@@ -307,6 +307,37 @@ func TestBindLeaseIsOneWay(t *testing.T) {
 	assert.NoError(t, BindLease(cacheDir, "adj/store"), "a worker running its bootstrap twice is not refused")
 }
 
+// TestVacateLeaseClearsTheMarkerAndReopensBinding pins the file half of the fix for a
+// checkout stuck bound forever: BindLease refuses to name anything else while a marker
+// is set, whatever state the row behind it is in, so the only way back was deleting the
+// file by hand until this existed. Vacating is idempotent - a no-op on an unbound
+// checkout, and clearing a marker twice is not an error - so a caller never has to check
+// before calling it.
+func TestVacateLeaseClearsTheMarkerAndReopensBinding(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+
+	id, err := VacateLease(cacheDir)
+	require.NoError(t, err, "no marker at all is a no-op, not an error")
+	assert.Empty(t, id)
+
+	require.NoError(t, BindLease(cacheDir, "adj/store"))
+	id, err = VacateLease(cacheDir)
+	require.NoError(t, err)
+	assert.Equal(t, "adj/store", id, "reports what it cleared")
+	assert.Empty(t, LeaseFromMarker(cacheDir))
+
+	id, err = VacateLease(cacheDir)
+	require.NoError(t, err, "vacating an already-unbound checkout is still a no-op")
+	assert.Empty(t, id)
+
+	// BindLease's one-way refusal is gone once vacated: the checkout can take a
+	// DIFFERENT lease, which it could not do while the marker still named the first one.
+	require.NoError(t, BindLease(cacheDir, "adj/other"))
+	assert.Equal(t, "adj/other", LeaseFromMarker(cacheDir))
+}
+
 // An unattributed write is an OBSERVATION the guard makes about somebody else's row, so
 // it is the one write the boundary does not apply to: grading it would discard the notice
 // exactly when it matters.

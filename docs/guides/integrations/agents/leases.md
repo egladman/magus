@@ -145,6 +145,16 @@ a different job is refused. Retaking is how a holder would be graded against
 another job's paths, and it costs nothing to a holder that runs its bootstrap
 twice: taking the lease it already holds is allowed and does nothing.
 
+**`magus job exec --vacate` gives the binding up.** One-way means one-way until
+something releases it, and nothing did: the marker outlives the job it names,
+so a checkout bound to one that finished (exited, passed, failed, or was never
+returned) stayed stuck until a person deleted the file by hand. `--vacate`
+clears it instead, refusing only while the job is still `declared` or
+`running` - walking away from those two would leave the checkout's next write
+ungraded. A job already exited, one the store no longer carries, or no binding
+at all all vacate cleanly, and a checkout with nothing bound reports that
+rather than erroring.
+
 **A declared boundary is enforced elsewhere.** Beyond the row ownership above,
 this store gates nothing: it records the text an orchestrator put in a holder's
 prompt, where a human can read it. The [agent guard](guard.md) is the one reader

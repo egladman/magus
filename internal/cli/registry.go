@@ -1721,6 +1721,13 @@ the checkpoint the job was handed, with the divergence between them as a fact
 rather than a refusal. Two acts under one verb, because splitting them left the
 base unrecorded on every job anybody took by hand.
 
+exec --vacate gives that marker up instead of writing one, so the checkout can
+exec a different job. Refused while the job is still declared or running, since
+walking away mid-flight would leave the checkout's next write ungraded; a job
+already exited, one the store no longer carries, or no binding at all, all
+vacate cleanly, which is what a checkout stuck on a lease nobody will ever wait
+on needs.
+
 exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
 reads the same record from any checkout. The run behind the result's output ref is
 resolved in the holder's own checkout and its record filed alongside, because an
@@ -1770,9 +1777,10 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. With no job, print the one this checkout holds.",
+			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
 			Flags: []Flag{
 				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
+				{Name: "vacate", Kind: FlagBool, Doc: "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running"},
 			},
 		},
 		{
@@ -1797,6 +1805,7 @@ them and magus describe job prints one job's terms.`,
 		{"Declare a job", "magus job fork session-load/core --write-paths internal/sessions --check 'test internal/sessions'"},
 		{"Declare it from a record", "magus job fork --stdin < job.json"},
 		{"Take it in this checkout", "magus job exec session-load/core"},
+		{"Give up this checkout's binding", "magus job exec --vacate"},
 		{"Return it with its result", "magus job exit session-load/core --stdin < result.json"},
 		{"Verify what came back", "magus job wait session-load/core"},
 		{"Print the result schema", "magus job exit --schema"},

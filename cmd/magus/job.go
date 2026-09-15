@@ -71,7 +71,8 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  fork  declare a job, from flags or a JSON record on stdin")
-	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on")
+	fmt.Fprintln(os.Stderr, "  exec  take the lease on a job here, and record the base this checkout landed on;")
+	fmt.Fprintln(os.Stderr, "        --vacate gives it up instead")
 	fmt.Fprintln(os.Stderr, "  exit  return a job with its result, or abandon it")
 	fmt.Fprintln(os.Stderr, "  wait  collect a returned job's result and verify it")
 	fmt.Fprintln(os.Stderr, "  run   submit one of the daemon's own jobs and return")
@@ -470,10 +471,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 // worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
 	var base string
+	var vacate bool
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+		fs.BoolVar(&vacate, "vacate", false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none.")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus job exec --vacate")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Take the lease on a job here. Every lease-scoped guard and sandbox rule then")
 			fmt.Fprintln(os.Stderr, "reads that job's lanes in this checkout, and the base this tree is on is")
@@ -482,12 +486,35 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no job, it prints the one this checkout holds.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
+			fmt.Fprintln(os.Stderr, "different job (or the daemon's next assignment). Refused while the job is still")
+			fmt.Fprintln(os.Stderr, "declared or running: walking away from those two would leave the checkout's next")
+			fmt.Fprintln(os.Stderr, "write ungraded. A job this checkout already exited, one the store no longer")
+			fmt.Fprintln(os.Stderr, "carries, or no binding at all, all vacate cleanly.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
 	})
 	if err != nil {
 		return err
+	}
+	if vacate {
+		if len(pos) > 0 {
+			return usagef("magus job exec --vacate: takes no job; it gives up whichever this checkout holds")
+		}
+		if strings.TrimSpace(base) != "" {
+			return usagef("magus job exec --vacate: --base names nothing to record when there is no job to exec")
+		}
+		root = resolveRootOrEmpty(root)
+		if root == "" {
+			return errors.New("magus job exec --vacate: no workspace here: the lease marker lives in a checkout's cache dir, so run from inside one or pass --root <path>")
+		}
+		cacheDir, cerr := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		if cerr != nil {
+			return fmt.Errorf("magus job exec --vacate: %w", cerr)
+		}
+		return jobExecVacate(root, cacheDir)
 	}
 	if len(pos) > 1 {
 		return usagef("magus job exec: takes at most one job")
@@ -545,6 +572,44 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	default:
 		return emitFormatted(opts, stored)
 	}
+}
+
+// jobExecVacate gives up the lease this checkout holds, so a later exec can take a
+// different one (or the same one again, which BindLease already permitted).
+//
+// Refused only while the row says work is still IN FLIGHT (declared or running): a
+// holder that walks away from those two leaves its next write ungraded from here on,
+// the same escape denyLeaseScopedRebind already closes for rebinding outright. Once a
+// holder has exited, there is no more of ITS OWN work left to protect against: exited
+// counts as live elsewhere (types.JobState.Live) so a rejected wait can send work back
+// to the same lanes, but nobody is required to ever run that wait, and a checkout stuck
+// on a lease nobody will collect is exactly the bug this flag exists to fix. A row the
+// store cannot find or read is treated the same permissive way: nothing here declares a
+// boundary left to protect, the same fail-open reading the guard gives an unreadable
+// ledger.
+func jobExecVacate(root, cacheDir string) error {
+	id := job.LeaseFromMarker(cacheDir)
+	if id == "" {
+		fmt.Println("this checkout holds no job; nothing to vacate")
+		return nil
+	}
+	if store, serr := openJobs(root); serr == nil {
+		if rows, lerr := store.List(); lerr == nil {
+			if i := slices.IndexFunc(rows, func(j types.Job) bool { return j.ID == id }); i >= 0 {
+				if state := rows[i].State; state == types.StateDeclared || state == types.StateRunning {
+					return fmt.Errorf("magus job exec --vacate: this checkout holds the lease on %s, and it is still %s."+
+						" Exit it first with `%s`, or leave it to the orchestrator: vacating mid-flight would leave your next write ungraded",
+						id, state, hint.JobExit.With(id))
+				}
+			}
+		}
+	}
+	cleared, err := job.VacateLease(cacheDir)
+	if err != nil {
+		return fmt.Errorf("magus job exec --vacate: %w", err)
+	}
+	fmt.Printf("vacated the lease on %s\n", cleared)
+	return nil
 }
 
 // ledgerAccept grades one worker's report against its row and records the verdict.

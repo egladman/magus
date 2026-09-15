@@ -867,3 +867,22 @@ func BindLease(cacheDir, id string) error {
 	}
 	return nil
 }
+
+// VacateLease clears the marker binding a lease to the checkout whose cache dir is
+// cacheDir, so a later BindLease can take a different one (or the same one again,
+// which it already permitted). Returns the lease it cleared, or "" when the checkout
+// held none.
+//
+// Idempotent by construction: a checkout with no marker already reads back "" from
+// LeaseFromMarker, and removing a file that is already gone is not an error here, so a
+// repeated vacate, or one racing a sibling process clearing the same marker, is a no-op
+// rather than a failure. This is the file half only; whether the lease it named is one a
+// caller SHOULD be giving up is judged by the caller (see `magus job exec --vacate`),
+// which reads the row before calling this.
+func VacateLease(cacheDir string) (string, error) {
+	id := LeaseFromMarker(cacheDir)
+	if err := os.Remove(filepath.Join(cacheDir, LeaseMarkerName)); err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("job: vacate lease: %w", err)
+	}
+	return id, nil
+}

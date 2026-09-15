@@ -32,6 +32,13 @@ the checkpoint the job was handed, with the divergence between them as a fact
 rather than a refusal. Two acts under one verb, because splitting them left the
 base unrecorded on every job anybody took by hand.
 .PP
+exec \-\-vacate gives that marker up instead of writing one, so the checkout can
+exec a different job. Refused while the job is still declared or running, since
+walking away mid\-flight would leave the checkout's next write ungraded; a job
+already exited, one the store no longer carries, or no binding at all, all
+vacate cleanly, which is what a checkout stuck on a lease nobody will ever wait
+on needs.
+.PP
 exit returns a job with its result, FILED ONTO THE JOB so whoever waits on it
 reads the same record from any checkout. The run behind the result's output ref is
 resolved in the holder's own checkout and its record filed alongside, because an
@@ -102,6 +109,9 @@ A path this job may write; repeatable or comma\-separated
 .TP
 \fB\-\-base\fR \fImagus vcs checkpoint -o name\fR
 The base this checkout landed on, as `magus vcs checkpoint \-o name` prints it (default: read from this checkout)
+.TP
+\fB\-\-vacate\fR
+Give up the lease this checkout holds, so a later exec can take a different one. A no\-op if it holds none; refused while the job is declared or running
 .RE
 .SS job exit options
 .RS
@@ -156,6 +166,12 @@ magus job fork --stdin < job.json
 .PP
 .EX
 magus job exec session-load/core
+.EE
+.PP
+\fIGive up this checkout's binding\fR
+.PP
+.EX
+magus job exec --vacate
 .EE
 .PP
 \fIReturn it with its result\fR

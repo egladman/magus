@@ -259,6 +259,8 @@ const (
 	FlagInitVCS = "vcs"
 	// job exec: --base
 	FlagJobExecBase = "base"
+	// job exec: --vacate
+	FlagJobExecVacate = "vacate"
 	// job exit: --schema
 	FlagJobExitSchema = "schema"
 	// job exit: --stdin
@@ -1306,13 +1308,15 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 
 // JobExecFlags are the flags declared for `magus job exec`.
 type JobExecFlags struct {
-	Base string // --base
+	Base   string // --base
+	Vacate bool   // --vacate
 }
 
 // BindJobExec registers `magus job exec`'s flags on fs and returns the destination.
 func BindJobExec(fs *flag.FlagSet) *JobExecFlags {
 	var f JobExecFlags
 	fs.StringVar(&f.Base, FlagJobExecBase, "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+	fs.BoolVar(&f.Vacate, FlagJobExecVacate, false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running")
 	return &f
 }
 
