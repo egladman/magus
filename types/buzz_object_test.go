@@ -31,4 +31,3 @@ func TestSemverVersionStringNotOriginal(t *testing.T) {
 	assert.Equal(t, "v1.2.3", v.String())
 	assert.NotEqual(t, v.Original, v.String())
 }
-

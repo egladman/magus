@@ -362,7 +362,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// The sibling-checkout and cache-dir rules read the FILESYSTEM, so neither can
 		// live inside Evaluate's pure rule set; ranking them is pure, and is
 		// where the ordering is tested. The cache dir is outermost: what it refuses
-		// outranks every other deny on the line (internal/guard/cachedir.go).
+		// outranks every other deny on the line (internal/guard/cache.go).
 		shellD := effectiveDialect(deps.ShellDialect)
 		v := rankSiblingCheckout(evaluateWith(deps, input, hookSearchHints(location.cacheDir)), denySiblingCheckout(input, shellD))
 		v = rankInterpreterRewrite(v, denyInterpreterRewrite(location, input, shellD))
@@ -630,7 +630,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Tool = env.ToolName
 		// The caller's own model choice, when it named one. Absent when the spawn
 		// inherits the parent's model, which is a legitimate choice this guard
-		// takes no position on - it is recorded so the question can be asked at
+		// takes no position on: it is recorded so the question can be asked at
 		// all, not so an answer can be graded.
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		if env.ParentConversationID != "" {

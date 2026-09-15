@@ -267,7 +267,7 @@ func TestJobExecVacateRefusesAnInFlightJob(t *testing.T) {
 // TestJobExecVacateAllowsAJobThatAlreadyExited is the exact shape of the four-day bug
 // this verb exists to fix: a checkout bound to a job that returned its result (exited)
 // and that nobody will ever wait on. types.JobState.Live counts exited as live, on
-// purpose, so a rejected wait can send work back to the same lanes - but that is a
+// purpose, so a rejected wait can send work back to the same lanes; but that is a
 // property of grading writes against a LIVE lease, not a reason to keep a checkout
 // hostage to a lease its own holder is done with. Every later state (pass, fail,
 // no_return) vacates the same way, and so does every state the store never declared at

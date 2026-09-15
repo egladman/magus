@@ -54,7 +54,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	if rf.Text {
-		// Computed here, once, and passed down - the same shape the symbol-miss
+		// Computed here, once, and passed down: the same shape the symbol-miss
 		// branch below uses classify in. inspectWorkspace memoizes globally per
 		// process (see helpers.go), so it belongs at the call site that runs once
 		// per invocation, not inside a function a test may call several times
@@ -103,7 +103,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if searchRoot := resolveRootOrEmpty(root); searchRoot != "" {
 			// The same workspace loadKnowledgeGraphForRefs already opened above (memoized
 			// by inspectWorkspace), so this costs nothing extra when it is available, and
-			// a failure here just means classification degrades to "unavailable" below -
+			// a failure here just means classification degrades to "unavailable" below:
 			// the search itself must never fail because classification did.
 			var classify classifyFunc
 			if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
@@ -192,8 +192,8 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 
 // refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
 // PRINTS matching lines, the shape a guard pipe deny routes a recursive grep to (see
-// internal/guard's trimmableMagus). It runs textScan directly - no symbol index, no
-// knowledge graph - so it answers on a cold worktree with no index built, which is the
+// internal/guard's trimmableMagus). It runs textScan directly (no symbol index, no
+// knowledge graph) so it answers on a cold worktree with no index built, which is the
 // one thing a grep replacement may never fail to do: textindex.Scan is index-free by
 // design for exactly this reason.
 //
@@ -210,8 +210,8 @@ func refsTextCmd(ctx context.Context, root, pattern string, noGenerated bool, cl
 		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
 		return errSilent{exitCode: 2}
 	}
-	// A root that cannot be listed at all - missing, not a directory, permission
-	// denied - is a search that never ran, and must not read as "ran and found
+	// A root that cannot be listed at all (missing, not a directory, permission
+	// denied) is a search that never ran, and must not read as "ran and found
 	// nothing" (exit 1). searchableFiles skips an individual entry that vanishes
 	// mid-walk (a live checkout's ordinary churn); this is the coarser check that
 	// the walk never had anything to do in the first place.

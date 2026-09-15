@@ -315,7 +315,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // a denied command in its instructions.
 //
 // DeclaredModel is what the spawning tool_input claimed about which model the child runs as,
-// or "" when the caller named none - the same trust tier as [BaggageSpawner]: the spawning
+// or "" when the caller named none; the same trust tier as [BaggageSpawner]: the spawning
 // process's own assertion about itself, recorded verbatim and corroborated by nothing. NO
 // verdict may key on it; a spawn stays outside the guard whatever it claims. Named
 // DeclaredModel rather than Model because "model" already names the guard's reply CHANNEL in
@@ -346,7 +346,7 @@ type agentSpawnRequest struct {
 	Context       string `json:"context"`
 	// DeclaredModel is additive: an older reader ignores a field it does not know, and one
 	// reading a record written before this field existed gets "" for it, which is exactly
-	// "no model declared" - the same fact a genuinely undeclared spawn reports. No schema
+	// "no model declared": the same fact a genuinely undeclared spawn reports. No schema
 	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
 	DeclaredModel string `json:"declared_model,omitempty"`
 }

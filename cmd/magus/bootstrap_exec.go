@@ -14,7 +14,7 @@ import (
 //
 // Distinct from run.AncestorsEnvVar / MAGUS_LEVEL (internal/proc/run/exec.go): those
 // describe a magus process spawning ANOTHER magus as a child invocation, i.e.
-// recursion depth. This is not that - the exec below replaces THIS process's image
+// recursion depth. This is not that: the exec below replaces THIS process's image
 // with the same argv, stdio and exit code, so it is one invocation continuing under a
 // different binary, not a new, nested one. Reusing MAGUS_LEVEL would misreport a
 // straight-line bootstrap substitution as recursion to everything keyed on depth
@@ -29,7 +29,7 @@ const bootstrapExecOptOutVar = "MAGUS_NO_BOOTSTRAP_EXEC"
 // maybeBootstrapExec looks for a workspace-local ./magus and, when one is found and
 // is not the binary already running, replaces this process with it before ANYTHING
 // else happens: argv is not yet parsed, no config is loaded, and no workspace has
-// been opened. That ordering is the entire point - the released magus on PATH can sit
+// been opened. That ordering is the entire point: the released magus on PATH can sit
 // below a workspace's required_version floor, which means it cannot load the
 // workspace far enough to even discover its own floor problem, so the escape has to
 // work on nothing but a directory walk.
@@ -41,8 +41,8 @@ func maybeBootstrapExec(argv []string) {
 	// testing.Testing() is true for the go-test-compiled binary AND for every copy
 	// testscript.Main spawns as a script subprocess (copyBinary duplicates the same
 	// test binary bytes, which keep the linked-in test flag). That one guard keeps
-	// every existing runCLI()-driven test - the in-process runCLIQuietly helper in
-	// globals_test.go and testscript's own subprocess "exec magus" alike - unaffected
+	// every existing runCLI()-driven test (the in-process runCLIQuietly helper in
+	// globals_test.go and testscript's own subprocess "exec magus" alike) unaffected
 	// by this worktree's own real ./magus sitting a few directories up. Without it,
 	// running the test suite from inside this tree would replace the test process
 	// itself with that binary. bootstrap_exec_test.go exercises the real mechanism
@@ -66,8 +66,8 @@ func maybeBootstrapExec(argv []string) {
 
 // bootstrapExecDecision is maybeBootstrapExec's decision logic without its test-binary
 // guard or side effects (the stderr line, the actual exec), so bootstrap_exec_test.go
-// can drive every branch - the opt-out, the sentinel, --root vs $PWD, no magusfile.buzz
-// anywhere above - directly, without needing a real, non-test process to do it in.
+// can drive every branch (the opt-out, the sentinel, --root vs $PWD, no magusfile.buzz
+// anywhere above) directly, without needing a real, non-test process to do it in.
 func bootstrapExecDecision(argv []string, self string) (target string, ok bool) {
 	if truthyEnv(os.Getenv(bootstrapExecOptOutVar)) {
 		return "", false
@@ -93,9 +93,9 @@ func bootstrapExecDecision(argv []string, self string) (target string, ok bool) 
 }
 
 // resolveBootstrapExecTarget walks up from start looking for the nearest ancestor
-// directory that declares magusfile.buzz - exactly what the shell guard template at
+// directory that declares magusfile.buzz (exactly what the shell guard template at
 // docs/guides/integrations/agents/guard-templates.md does, matched deliberately
-// rather than reinvented - and stops at the FIRST one found.
+// rather than reinvented) and stops at the FIRST one found.
 //
 // Stopping there, rather than continuing further up, is what keeps this from ever
 // crossing out of the tree start is already inside: a nested worktree (this

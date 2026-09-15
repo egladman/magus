@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -120,9 +121,9 @@ func TestBootstrapExecIntoHelperProcess(t *testing.T) {
 }
 
 // Exercises the real syscall.Exec call end to end, against a small fixture script
-// rather than a real magus binary (a fixture script proves the mechanism - argv,
-// stdio, exit code - identically well, without the cost or risk of shelling out to an
-// actual magus build from inside a test).
+// rather than a real magus binary (a fixture script proves the mechanism, namely
+// argv, stdio, and exit code, identically well, without the cost or risk of
+// shelling out to an actual magus build from inside a test).
 func TestBootstrapExecIntoReplacesProcess(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture is a POSIX shell script; the windows exec path is a separate implementation, reviewed rather than run here")
@@ -138,8 +139,8 @@ func TestBootstrapExecIntoReplacesProcess(t *testing.T) {
 	cmd.Env = append(os.Environ(), bootstrapExecIntoHelperTargetVar+"="+fixture)
 	out, runErr := cmd.CombinedOutput()
 
-	exitErr, ok := runErr.(*exec.ExitError)
-	require.True(t, ok, "expected the helper process to exit non-zero via the fixture; output:\n%s", out)
+	var exitErr *exec.ExitError
+	require.True(t, errors.As(runErr, &exitErr), "expected the helper process to exit non-zero via the fixture; output:\n%s", out)
 	assert.Equal(t, 7, exitErr.ExitCode())
 	assert.Contains(t, string(out), "fixture ran: hello world")
 }

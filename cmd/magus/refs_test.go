@@ -13,7 +13,7 @@ import (
 
 // TestRefsTextPrintsMatchingLines pins the output shape: path:line:text, the one
 // every grep-shaped tool and every agent already parses. classify is nil (the
-// cold-worktree case: no workspace, no graph, no symbol index) - refsTextCmd
+// cold-worktree case: no workspace, no graph, no symbol index); refsTextCmd
 // must still answer, which is the whole reason it runs textScan directly
 // instead of going through refs' usual symbol-graph path.
 func TestRefsTextPrintsMatchingLines(t *testing.T) {
@@ -48,7 +48,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 // TestRefsTextUnreadableRootExitsTwo pins the distinction a bare walk cannot make
 // on its own: searchableFiles SKIPS a file that vanishes mid-walk (a live
 // checkout's ordinary churn), but a root that never existed, or cannot be listed
-// at all, is a search that never ran - conflating that with "ran and found
+// at all, is a search that never ran: conflating that with "ran and found
 // nothing" (exit 1) is the one thing worse than the grep this replaces.
 func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")

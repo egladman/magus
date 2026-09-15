@@ -310,8 +310,8 @@ func TestBindLeaseIsOneWay(t *testing.T) {
 // TestVacateLeaseClearsTheMarkerAndReopensBinding pins the file half of the fix for a
 // checkout stuck bound forever: BindLease refuses to name anything else while a marker
 // is set, whatever state the row behind it is in, so the only way back was deleting the
-// file by hand until this existed. Vacating is idempotent - a no-op on an unbound
-// checkout, and clearing a marker twice is not an error - so a caller never has to check
+// file by hand until this existed. Vacating is idempotent (a no-op on an unbound
+// checkout, and clearing a marker twice is not an error), so a caller never has to check
 // before calling it.
 func TestVacateLeaseClearsTheMarkerAndReopensBinding(t *testing.T) {
 	t.Parallel()

@@ -354,12 +354,12 @@ const (
 	// The same-step case is the one magus must not schedule around. Across steps the
 	// engine derives writer-before-reader ordering itself; within one step the sequencing
 	// is the composing body's own, and only ctx.needs can express it.
-	UnorderedSameStepWrite   DiagnosticCode = "MGS4008"
+	UnorderedSameStepWrite DiagnosticCode = "MGS4008"
 	// UnformattedCommit is a commit that changed a Go file without leaving it correctly
 	// formatted (gofmt -l still names it). A COMMIT-TIME question, not "is this file
 	// formatted right now": golangci-lint's formatters already answer that one, against
 	// the whole tree, on demand. This fires once per commit, scoped to the files that
-	// commit touched, from the drift-notice hooks (post-commit, pre-push) - see
+	// commit touched, from the drift-notice hooks (post-commit, pre-push); see
 	// checkDriftForCommit in cmd/magus. Sibling of MGS4006 (generated-output drift, the
 	// other class the same notice carries) and distinct from MGS4007 (a target rewriting
 	// an undeclared source, checked after a target runs, not after a commit is made).

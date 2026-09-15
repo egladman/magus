@@ -540,7 +540,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 //
 // It also pins two things that must NOT happen. The prompt below quotes `git stash`, which the
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
-// spawn is recorded rather than blocked for describing a denied command - and that stays true
+// spawn is recorded rather than blocked for describing a denied command; and that stays true
 // whether or not the caller named a model, which is a claim this guard grades nothing on.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
@@ -584,7 +584,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 // TestHookCmd_SpawnWithoutMarkerOrLabel holds three parts of the cooperative contract: an
 // orchestrator that writes no marker still gets an audited spawn record, just an uncorrelated
 // one; a host whose payload names no callee still records a spawn; and a spawn that names no
-// model records the absence distinguishably from one that never named the field at all - both
+// model records the absence distinguishably from one that never named the field at all; both
 // read back as "" here, and it is [renderSessionShow]'s job to word that as "none declared"
 // rather than let it read as blank-looks-fine.
 func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
@@ -840,7 +840,7 @@ func TestHookCmdJudgesTheCacheDirOnBothSurfaces(t *testing.T) {
 		// Spelled bare, so it resolves inside this package's own directory: a path
 		// naming a directory that does not exist yet draws the new-directory advisory,
 		// which is a different rule answering and would say nothing about this one.
-		"a source file":           {input: "guard_cachedir.go", path: true, want: "pass\n"},
+		"a source file":           {input: "guard_cache.go", path: true, want: "pass\n"},
 		"a sibling directory":     {input: ".magus-notes/a.md", path: true, want: "pass\n"},
 		"appending to a journal":  {input: "echo x >> .magus/advisories/anon.served-next", want: "deny\n"},
 		"removing the whole dir":  {input: "rm -rf .magus", want: "deny\n"},

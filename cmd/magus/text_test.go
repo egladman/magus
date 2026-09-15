@@ -37,7 +37,7 @@ func TestTextPresenceCountsOccurrencesAndFiles(t *testing.T) {
 // TestTextPresenceMarksGeneratedFilesByDefault pins the DEFAULT policy: a needle that
 // lives only in a declared-output file must still be found, so the default includes
 // generated files in the search and only marks how many of the matched files are
-// generated, rather than hiding them - the one thing a raw grep cannot tell you.
+// generated, rather than hiding them: the one thing a raw grep cannot tell you.
 func TestTextPresenceMarksGeneratedFilesByDefault(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	w.WriteTree(map[string]string{
@@ -50,7 +50,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 
 	// Resolved, not w.Root() verbatim: on macOS TMPDIR is under /var, a symlink to
-	// /private/var, and magus.Open resolves it while the raw path would not - the
+	// /private/var, and magus.Open resolves it while the raw path would not; the
 	// mismatch reads every file as escaping the workspace and classifies nothing.
 	root, err := filepath.EvalSymlinks(w.Root())
 	require.NoError(t, err)
@@ -105,7 +105,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 // TestTextPresenceNeverSilentlyDropsGeneratedFilesWithoutAWorkspace is the fallback the
 // task exists to guarantee: --no-generated with no workspace to classify against must
 // not quietly search everything as if nothing had been asked, nor quietly search
-// nothing - it must search everything and say classification could not run, so the
+// nothing: it must search everything and say classification could not run, so the
 // caller can tell "nothing was generated" apart from "nothing could be told".
 func TestTextPresenceNeverSilentlyDropsGeneratedFilesWithoutAWorkspace(t *testing.T) {
 	w := testkit.NewWorkspace(t)

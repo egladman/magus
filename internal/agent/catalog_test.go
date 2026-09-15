@@ -669,7 +669,7 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 // TestGradeDestReportsEveryReasonNotJustTheFirst pins the fix for gradeDest
 // returning on the first offender. An orphaned directory that sorts before
 // magus-query alphabetically used to short-circuit the loop and hide the
-// version/schema mismatch on magus-query entirely - the reason an operator
+// version/schema mismatch on magus-query entirely: the reason an operator
 // actually needs, since "not part of the form" tells them nothing about how
 // stale the binary is.
 func TestGradeDestReportsEveryReasonNotJustTheFirst(t *testing.T) {
@@ -706,7 +706,7 @@ func TestGradeDestReportsEveryReasonNotJustTheFirst(t *testing.T) {
 // it must never satisfy gradeStamp's equality check. Before this fix, an
 // installed file stamped by an equally broken magus (skill-content: unreadable)
 // compared equal to a currently-broken binary's own unreadable digest and graded
-// the pair up to date - two catalogs that both failed to hash their content,
+// the pair up to date: two catalogs that both failed to hash their content,
 // each vouching for the other.
 func TestGradeStampNeverMatchesTwoUnreadableDigests(t *testing.T) {
 	catalog := testCatalog(t)

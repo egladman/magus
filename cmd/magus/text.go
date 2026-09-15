@@ -17,7 +17,7 @@ import (
 // files are generated, without this file depending on how a workspace gets
 // loaded: refs.go supplies the real one (types.WorkspaceRepository.ClassifyFiles),
 // a test supplies a fake, and a nil classify degrades to "unknown" rather than
-// failing the search - see textPresence's classified return.
+// failing the search; see textPresence's classified return.
 type classifyFunc func(ctx context.Context, paths []string) ([]types.FileEntry, error)
 
 // maxSearchableFile is the size past which a file is skipped rather than searched.
@@ -103,7 +103,7 @@ func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
 //
 // classify is how a caller with a loaded workspace tells searched files apart from
 // generated ones (nil, or an error from it, degrades to "classification unavailable"
-// rather than failing the search - a text search must never answer unknown). Whether
+// rather than failing the search; a text search must never answer unknown). Whether
 // that fact SUPPRESSES a generated file or only MARKS it is noGenerated's call: a
 // caller after a needle that lives only in generated output must still find it, so
 // the default (noGenerated=false) counts a generated hit rather than hiding it, and
@@ -113,7 +113,7 @@ func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
 // generated files never reached the scanner, and generated is how many were removed;
 // without it, they were searched like any other file, and generated is how many of
 // the matched files (of the returned files count) are declared output. classified
-// reports whether that count means anything at all - false means no workspace could
+// reports whether that count means anything at all: false means no workspace could
 // classify these paths, and the caller must say so rather than imply zero generated
 // files exist.
 func textPresence(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) (hits, files, searched, skipped, generated int, classified bool, err error) {
