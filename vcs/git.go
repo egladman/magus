@@ -769,6 +769,30 @@ func (v gitVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
 	return strings.TrimPrefix(out, "origin/"), nil
 }
 
+// CommitPushed implements types.PushStatusReporter: it asks whether id is an ancestor of
+// the current branch's upstream ("@{upstream}"), the same tracking ref `git status` and a
+// plain `git push` compare against. ok=false when no upstream is configured (a branch
+// that has never been pushed, or one left explicitly untracked) - the caller treats that
+// as "assume pushed" rather than this driver claiming an answer it does not have.
+func (v gitVCS) CommitPushed(ctx context.Context, dir, id string) (pushed, ok bool, err error) {
+	upstream, uerr := vcsOutput(ctx, dir, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+	if uerr != nil || upstream == "" {
+		return false, false, nil
+	}
+	cmd := gitExec(ctx, "merge-base", "--is-ancestor", id, upstream)
+	cmd.Dir = dir
+	if runErr := cmd.Run(); runErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(runErr, &exitErr) {
+			// A clean non-zero exit is merge-base's answer, not a failure: id is not an
+			// ancestor of upstream, so it has not reached the remote by this branch.
+			return false, true, nil
+		}
+		return false, false, fmt.Errorf("git merge-base --is-ancestor: %w", runErr)
+	}
+	return true, true, nil
+}
+
 // gitCommitFormat emits the NUL-delimited fields parseCommit expects: id, short,
 // author name/email, the commit (record) date as strict ISO 8601 / RFC 3339 (%cI),
 // parents, and the raw message (%B).
@@ -925,11 +949,21 @@ const (
 	gitHookBegin     = "# BEGIN magus-refresh"
 	gitHookBeginLine = gitHookBegin + " - do not edit this section manually"
 	gitHookEnd       = "# END magus-refresh"
+
+	gitDriftHookBegin     = "# BEGIN magus-drift-notice"
+	gitDriftHookBeginLine = gitDriftHookBegin + " - do not edit this section manually"
+	gitDriftHookEnd       = "# END magus-drift-notice"
 )
 
 // gitRefreshHooks fire on a history-changing event that can stale the knowledge graph /
 // symbol index: a branch switch, a merge/pull, and a rebase/amend.
 var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
+
+// gitDriftHooks fire around the two events that can leave generated output stale in
+// committed history: the commit itself, and the push that publishes it. Neither hook may
+// block (see types.DriftHookInstaller): both bodies are the same fail-open one-liner as
+// gitRefreshHooks, just addressed to a different job.
+var gitDriftHooks = []string{"post-commit", "pre-push"}
 
 // InstallMergeDriver writes .gitattributes entries and registers the magus merge driver.
 func (v gitVCS) InstallMergeDriver(ctx context.Context, root string, outputGlobs []string) error {
@@ -1368,11 +1402,52 @@ func gitHookBody(name, command string) string {
 	return guard + command + " >/dev/null 2>&1 || true\n"
 }
 
-// writeManagedHook inserts or updates the managed magus section in the hook at path,
-// giving a new file a POSIX-sh shebang and preserving any existing user body. It reports
-// whether the file changed and keeps the hook executable.
+// InstallDriftHook implements types.DriftHookInstaller: it writes (or refreshes) the
+// managed magus section into each of gitDriftHooks so a commit and the push that follows
+// it both poke this daemon to check for stale generated output, in the background. It
+// reuses writeManagedHookSection under its own markers (gitDriftHookBegin/End) so the
+// drift section and the refresh section coexist in a hook file neither owns exclusively.
+// A non-git tree yields no error and no installs.
+func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
+	hooksDir, err := vcsOutput(ctx, root, "git", "rev-parse", "--git-path", "hooks")
+	if err != nil {
+		return nil, nil //nolint:nilerr // not a git repo (or git unavailable): nothing to install
+	}
+	if !filepath.IsAbs(hooksDir) {
+		hooksDir = filepath.Join(root, hooksDir)
+	}
+	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
+		return nil, fmt.Errorf("vcs: mkdir %s: %w", hooksDir, err)
+	}
+	var installed []string
+	for _, name := range gitDriftHooks {
+		// Neither hook needs a guard: post-commit fires only on a real commit, and
+		// pre-push fires only on a real push, unlike post-checkout's dual meaning.
+		body := command + " >/dev/null 2>&1 || true\n"
+		changed, err := writeManagedHookSection(filepath.Join(hooksDir, name), body, gitDriftHookBeginLine, gitDriftHookBegin, gitDriftHookEnd)
+		if err != nil {
+			return installed, err
+		}
+		if changed {
+			installed = append(installed, name)
+		}
+	}
+	return installed, nil
+}
+
+// writeManagedHook is writeManagedHookSection fixed to the refresh-hook markers, kept as
+// its own name because it is the one call site (and test subject) that predates the
+// drift hook needing a second managed section in the same file.
 func writeManagedHook(path, body string) (bool, error) {
-	section := gitHookBeginLine + "\n" + body + gitHookEnd + "\n"
+	return writeManagedHookSection(path, body, gitHookBeginLine, gitHookBegin, gitHookEnd)
+}
+
+// writeManagedHookSection inserts or updates the section named by begin/end in the hook
+// at path, giving a new file a POSIX-sh shebang and preserving any existing user body (and
+// any OTHER managed section already there, since two magus hooks - refresh and drift -
+// can share one file). It reports whether the file changed and keeps the hook executable.
+func writeManagedHookSection(path, body, beginLine, begin, end string) (bool, error) {
+	section := beginLine + "\n" + body + end + "\n"
 	existing, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return false, fmt.Errorf("vcs: read %s: %w", path, err)
@@ -1383,7 +1458,7 @@ func writeManagedHook(path, body string) (bool, error) {
 		// file written without it differs from itself on the next install, forever.
 		next = "#!/bin/sh\n\n" + section
 	} else {
-		next = replaceManagedSection(string(existing), section, gitHookBegin, gitHookEnd)
+		next = replaceManagedSection(string(existing), section, begin, end)
 	}
 	if next == string(existing) {
 		return false, nil

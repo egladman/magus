@@ -375,7 +375,19 @@ const (
 	hgHookBegin     = "# BEGIN magus-refresh"
 	hgHookBeginLine = hgHookBegin + " - do not edit this section manually"
 	hgHookEnd       = "# END magus-refresh"
+
+	hgDriftHookBegin     = "# BEGIN magus-drift-notice"
+	hgDriftHookBeginLine = hgDriftHookBegin + " - do not edit this section manually"
+	hgDriftHookEnd       = "# END magus-drift-notice"
 )
+
+// hgDriftHooks: "commit" fires right after a local commit is created; "outgoing" fires
+// in the source repo once a push (or pull/bundle) has determined which changesets are
+// leaving it, the closest hg has to git's pre-push. Verified against hg 6.x: both fire
+// with a plain shell hook value and neither can block (a non-zero "commit" hook cannot
+// undo the commit; "outgoing" firing after the changeset set is already decided is why
+// it, not "preoutgoing", is the one used here).
+var hgDriftHooks = []string{"commit", "outgoing"}
 
 // InstallMergeDriver writes [merge-patterns] and [merge-tools] to .hg/hgrc.
 func (v hgVCS) InstallMergeDriver(_ context.Context, root string, outputGlobs []string) error {
@@ -441,6 +453,33 @@ func (v hgVCS) InstallRefreshHook(_ context.Context, root, command string) ([]st
 		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
 	}
 	return []string{"update"}, nil
+}
+
+// InstallDriftHook implements types.DriftHookInstaller: it registers hg's `commit` and
+// `outgoing` hooks (see hgDriftHooks) to run command. It shares replaceManagedSection
+// with the merge-driver and refresh-hook installs, under its own markers so all three
+// managed sections coexist in .hg/hgrc. Returns the labels of the hooks it installed.
+func (v hgVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
+	hgrcPath := filepath.Join(root, ".hg", "hgrc")
+	var section strings.Builder
+	section.WriteString(hgDriftHookBeginLine + "\n")
+	section.WriteString("[hooks]\n")
+	for _, name := range hgDriftHooks {
+		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+	}
+	section.WriteString(hgDriftHookEnd + "\n")
+	existing, err := os.ReadFile(hgrcPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("vcs: read %s: %w", hgrcPath, err)
+	}
+	updated := replaceManagedSection(string(existing), section.String(), hgDriftHookBegin, hgDriftHookEnd)
+	if updated == string(existing) {
+		return nil, nil
+	}
+	if err := os.WriteFile(hgrcPath, []byte(updated), 0o644); err != nil {
+		return nil, fmt.Errorf("vcs: write %s: %w", hgrcPath, err)
+	}
+	return slices.Clone(hgDriftHooks), nil
 }
 
 // ConflictResolver (below) is implemented for hg so `magus vcs resolve` is not a

@@ -77,9 +77,13 @@ The paths above are user-global. Each repository you ran magus in also holds:
 | `.gitattributes`                                         | the block between `# BEGIN magus-generated` and `# END magus-generated`      |
 | `.git/config`                                            | `git config --unset merge.magus.driver`                                      |
 | `.git/hooks/post-checkout`, `post-merge`, `post-rewrite` | the block between `# BEGIN magus-refresh` and `# END magus-refresh`, in each |
+| `.git/hooks/post-commit`, `pre-push`                     | the block between `# BEGIN magus-drift-notice` and `# END magus-drift-notice`, in each |
 
 You can leave these. git treats a merge driver it cannot execute as a plain conflict,
-and the hooks end in `|| true`, so a missing `magus` never fails a git operation.
+and the hooks end in `|| true`, so a missing `magus` never fails a git operation. The
+drift-notice hooks are the same shape: delete the block (or the whole hook file, if
+nothing else uses it) to stop the automatic notice, or run `magus server start` again
+after removing it to have it reinstalled.
 
 ## Shell setup
 

@@ -16,6 +16,7 @@ const (
 	NamePrunePreserved   = "prune-preserved"
 	NameClearCache       = "clear-cache"
 	NameCheckReview      = "check-review"
+	NameCheckDrift       = "check-drift"
 )
 
 // CatalogEntry is one named background maintenance job: a stable Name (the CLI leaf and
@@ -68,6 +69,11 @@ var catalog = []CatalogEntry{
 		Name: NameCheckReview,
 		Desc: "note when a review this tree took part in has merged",
 		Argv: []string{"server", NameCheckReview},
+	},
+	{
+		Name: NameCheckDrift,
+		Desc: "notice, without blocking, when the last commit left generated output stale",
+		Argv: []string{"server", NameCheckDrift},
 	},
 }
 

@@ -57,6 +57,8 @@ func serverCmd(ctx context.Context, root string, args []string) error {
 		return serverPrunePreserved(ctx, root, rest)
 	case job.NameCheckReview:
 		return serverCheckReview(ctx, root, rest)
+	case job.NameCheckDrift:
+		return serverCheckDrift(ctx, root, rest)
 	default:
 		return usagef("magus server: unknown target %q (want start, stop, status, or reload)", sub)
 	}
@@ -210,6 +212,7 @@ func serverStart(ctx context.Context, args []string) error {
 	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down\n", hint.ServerStop)
 
 	installRefreshHooks(ctx)
+	installDriftHooks(ctx)
 
 	// Start the MCP HTTP server alongside the daemon so MCP clients can
 	// connect without a separate process. No-op when mcp.enabled=false.
@@ -970,6 +973,38 @@ func installRefreshHooks(ctx context.Context) {
 	}
 	if len(installed) > 0 {
 		fmt.Fprintf(os.Stderr, "magus: installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically\n", res.Name, strings.Join(installed, ", "))
+	}
+}
+
+// installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
+// commit and the push that follows it each poke this daemon to check, in the background,
+// whether the commit left generated output stale. Same shape and same guarantees as
+// installRefreshHooks: best-effort, never fatal to starting the daemon, and a no-op on a
+// non-git tree or a VCS with no hook support (jj).
+func installDriftHooks(ctx context.Context) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	res, err := vcs.Resolve(ctx, cwd, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return
+	}
+	installer, ok := res.VCS.(types.DriftHookInstaller)
+	if !ok {
+		return // this VCS has no hook support
+	}
+	root, err := res.VCS.Root(ctx, cwd)
+	if err != nil {
+		root = cwd
+	}
+	installed, err := installer.InstallDriftHook(ctx, root, hint.JobRun.With(job.NameCheckDrift))
+	if err != nil {
+		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
+		return
+	}
+	if len(installed) > 0 {
+		fmt.Fprintf(os.Stderr, "magus: installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically\n", res.Name, strings.Join(installed, ", "))
 	}
 }
 

@@ -649,7 +649,16 @@ const (
 	slHookBegin     = "# BEGIN magus-refresh"
 	slHookBeginLine = slHookBegin + " - do not edit this section manually"
 	slHookEnd       = "# END magus-refresh"
+
+	slDriftHookBegin     = "# BEGIN magus-drift-notice"
+	slDriftHookBeginLine = slDriftHookBegin + " - do not edit this section manually"
+	slDriftHookEnd       = "# END magus-drift-notice"
 )
+
+// slDriftHooks mirrors hgDriftHooks: Sapling is a Mercurial-compatible fork and accepts
+// the same hook names in the same [hooks] section. Verified directly (sl 0.2.x): a
+// commit.NAME hook fired on `sl commit`, and an outgoing.NAME hook fired on `sl push`.
+var slDriftHooks = []string{"commit", "outgoing"}
 
 // slConfigPath is Sapling's per-repository config file, the counterpart of .hg/hgrc.
 func slConfigPath(root string) string { return filepath.Join(root, ".sl", "config") }
@@ -724,6 +733,33 @@ func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) 
 		return nil, fmt.Errorf("vcs: write %s: %w", path, err)
 	}
 	return []string{"update"}, nil
+}
+
+// InstallDriftHook implements types.DriftHookInstaller: it registers Sapling's `commit`
+// and `outgoing` hooks (see slDriftHooks) to run command. It shares replaceManagedSection
+// with the merge-driver and refresh-hook installs, under its own markers so all three
+// managed sections coexist in .sl/config. Returns the labels of the hooks it installed.
+func (v saplingVCS) InstallDriftHook(_ context.Context, root, command string) ([]string, error) {
+	path := slConfigPath(root)
+	var section strings.Builder
+	section.WriteString(slDriftHookBeginLine + "\n")
+	section.WriteString("[hooks]\n")
+	for _, name := range slDriftHooks {
+		fmt.Fprintf(&section, "%s.magus-drift-notice = %s >/dev/null 2>&1 || true\n", name, command)
+	}
+	section.WriteString(slDriftHookEnd + "\n")
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("vcs: read %s: %w", path, err)
+	}
+	updated := replaceManagedSection(string(existing), section.String(), slDriftHookBegin, slDriftHookEnd)
+	if updated == string(existing) {
+		return nil, nil
+	}
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return nil, fmt.Errorf("vcs: write %s: %w", path, err)
+	}
+	return append([]string(nil), slDriftHooks...), nil
 }
 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,

@@ -93,3 +93,50 @@ func TestClassifyDrift(t *testing.T) {
 	code, _ = ClassifyDrift(false, "v0.3.0")
 	assert.Equal(t, NondeterministicOutput, code)
 }
+
+// TestStaleSourceProjects pins the complement SplitExplainedOutputs does not answer: a
+// project whose source changed but whose output did not move AT ALL in the same files.
+func TestStaleSourceProjects(t *testing.T) {
+	t.Run("source and output both moved: not stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+		}
+		assert.Empty(t, StaleSourceProjects(files))
+	})
+
+	t.Run("source moved with no matching output: stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+		}
+		assert.Equal(t, []string{"api"}, StaleSourceProjects(files))
+	})
+
+	t.Run("output moved with no source: not this function's question", func(t *testing.T) {
+		// This is SplitExplainedOutputs' unexplained case (MGS4005/MGS4003), not a stale
+		// source - there is no source project to report as stale here.
+		files := []FileEntry{
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+		}
+		assert.Empty(t, StaleSourceProjects(files))
+	})
+
+	t.Run("one project regenerated, a sibling did not: only the sibling is stale", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+			{Path: "api/gen/schema.pb.go", Role: "output", OutputOf: []string{"api"}},
+			{Path: "web/schema.graphql", Role: "source", SourceOf: []string{"web"}},
+		}
+		assert.Equal(t, []string{"web"}, StaleSourceProjects(files))
+	})
+
+	t.Run("multiple stale projects come back sorted", func(t *testing.T) {
+		files := []FileEntry{
+			{Path: "web/schema.graphql", Role: "source", SourceOf: []string{"web"}},
+			{Path: "api/schema.proto", Role: "source", SourceOf: []string{"api"}},
+		}
+		assert.Equal(t, []string{"api", "web"}, StaleSourceProjects(files))
+	})
+
+	assert.Empty(t, StaleSourceProjects(nil))
+}

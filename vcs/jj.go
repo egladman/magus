@@ -419,7 +419,10 @@ func (v jjVCS) IgnoredPaths(_ context.Context, _ string, _ []string) (map[string
 //     than the caller made. jj's supported path is the bulk one: ConflictResolver IS
 //     implemented, so `magus vcs resolve` settles a jj workspace with no driver at all.
 //   - RefreshHookInstaller: jj has no native hook mechanism, as types.RefreshHookInstaller
-//     itself records.
+//     itself records. types.DriftHookInstaller is the same gap for the same reason: there
+//     is nowhere in jj to register a post-commit/pre-push equivalent, and `jj git push`
+//     passes --no-verify deliberately, so even riding git's own hooks under the hood is
+//     not an option. A jj repo is simply uncovered by this notice, by jj's own design.
 //   - IgnoredFileReporter: jj exposes no ignore-RULES query; see IgnoredPaths above, which
 //     is the same gap reached from the other interface.
 //

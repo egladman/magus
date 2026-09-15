@@ -30,6 +30,7 @@ func TestAll_IsTheRegistryInOrder(t *testing.T) {
 		{Name: "prune-preserved", Desc: "drop the working-copy captures vcs checkpoint --preserve minted past their retention", Argv: []string{"server", "prune-preserved"}},
 		{Name: "clear-cache", Desc: "invalidate cached build entries for the workspace", Argv: []string{"clean", "--cache"}},
 		{Name: "check-review", Desc: "note when a review this tree took part in has merged", Argv: []string{"server", "check-review"}},
+		{Name: "check-drift", Desc: "notice, without blocking, when the last commit left generated output stale", Argv: []string{"server", "check-drift"}},
 	}, All())
 }
 
