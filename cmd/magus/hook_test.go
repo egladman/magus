@@ -538,16 +538,17 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
 // blob and the cooperative lease marker stamped onto the event.
 //
-// It also pins the thing that must NOT happen. The prompt below quotes `git stash`, which the
+// It also pins two things that must NOT happen. The prompt below quotes `git stash`, which the
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
-// spawn is recorded rather than blocked for describing a denied command.
+// spawn is recorded rather than blocked for describing a denied command - and that stays true
+// whether or not the caller named a model, which is a claim this guard grades nothing on.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
-		`"tool_input":{"description":"audit the store","subagent_type":"Explore",` +
+		`"tool_input":{"description":"audit the store","subagent_type":"Explore","model":"opus",` +
 		`"prompt":"lease: notes-store-6b\nDo not run git stash anywhere."}}`
 
 	var out bytes.Buffer
@@ -576,13 +577,16 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
-		`"tool":"Task","child":"Explore","lease":"notes-store-6b",`+
+		`"tool":"Task","child":"Explore","lease":"notes-store-6b","declared_model":"opus",`+
 		`"context":"lease: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
 }
 
-// TestHookCmd_SpawnWithoutMarkerOrLabel holds the two halves of the cooperative contract: an
-// orchestrator that writes no marker still gets an audited spawn record, just an uncorrelated one,
-// and a host whose payload names no callee still records a spawn.
+// TestHookCmd_SpawnWithoutMarkerOrLabel holds three parts of the cooperative contract: an
+// orchestrator that writes no marker still gets an audited spawn record, just an uncorrelated
+// one; a host whose payload names no callee still records a spawn; and a spawn that names no
+// model records the absence distinguishably from one that never named the field at all - both
+// read back as "" here, and it is [renderSessionShow]'s job to word that as "none declared"
+// rather than let it read as blank-looks-fine.
 func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
@@ -600,6 +604,10 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
 	assert.Equal(t, "agent.spawn", events[0].Action)
 	assert.Empty(t, events[0].Lease)
+
+	body, err := trail.ReadBlob(dir, events[0].RequestRef)
+	require.NoError(t, err)
+	assert.NotContains(t, string(body), "declared_model")
 }
 
 // TestHookPathMode covers --path, the definitive (non-heuristic) arm: a

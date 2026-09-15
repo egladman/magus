@@ -1020,6 +1020,13 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 			if sp.Lease != "" {
 				fmt.Fprintf(w, " (lease %s)", sp.Lease)
 			}
+			// "none declared" reads as a fact about the spawn; a blank field here
+			// would read as a producer that forgot to fill it in.
+			model := sp.DeclaredModel
+			if model == "" {
+				model = "none declared"
+			}
+			fmt.Fprintf(w, "  model %s", model)
 			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
 		}
 	}

@@ -313,15 +313,24 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 // There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed
 // context is prose, not a command line, and judging it as one would deny a lease for quoting
 // a denied command in its instructions.
+//
+// DeclaredModel is what the spawning tool_input claimed about which model the child runs as,
+// or "" when the caller named none - the same trust tier as [BaggageSpawner]: the spawning
+// process's own assertion about itself, recorded verbatim and corroborated by nothing. NO
+// verdict may key on it; a spawn stays outside the guard whatever it claims. Named
+// DeclaredModel rather than Model because "model" already names the guard's reply CHANNEL in
+// its coverage vocabulary (deny=model, advise=model, pass=none), and a bare Model field here
+// would read as one more of those instead of a spawn's own claim.
 type AgentSpawn struct {
-	Actor     string
-	Workspace string
-	Host      string
-	Session   string
-	Event     string
-	Tool      string
-	Child     string
-	Context   string
+	Actor         string
+	Workspace     string
+	Host          string
+	Session       string
+	Event         string
+	Tool          string
+	Child         string
+	Context       string
+	DeclaredModel string
 }
 
 const agentSpawnSchemaVersion = 1
@@ -335,6 +344,11 @@ type agentSpawnRequest struct {
 	Child         string `json:"child,omitempty"`
 	Lease         string `json:"lease,omitempty"`
 	Context       string `json:"context"`
+	// DeclaredModel is additive: an older reader ignores a field it does not know, and one
+	// reading a record written before this field existed gets "" for it, which is exactly
+	// "no model declared" - the same fact a genuinely undeclared spawn reports. No schema
+	// bump, for the reason agentCommandResponse.PreauthorizedBy already documents.
+	DeclaredModel string `json:"declared_model,omitempty"`
 }
 
 // AppendAgentSpawn records one spawn and stores the context it was given as a blob.
@@ -356,6 +370,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// invent or destroy a lease id after the fact.
 	spawn.Context = secret.RedactString(ctx, spawn.Context)
 	spawn.Child = secret.RedactString(ctx, spawn.Child)
+	// Clamped like the magus.spawner claim it sits beside (see MaxSpawnerLen): a model
+	// name is short, and an unbounded claim is a cost every later read of the
+	// repository would pay for one bad payload.
+	spawn.DeclaredModel = clampRunes(spawn.DeclaredModel, MaxSpawnerLen)
 	lease := leaseFromContext(spawn.Context)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
@@ -366,6 +384,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Child:         spawn.Child,
 		Lease:         lease,
 		Context:       spawn.Context,
+		DeclaredModel: spawn.DeclaredModel,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
 

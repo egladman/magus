@@ -41,6 +41,13 @@ fun claude_mcp_command() > str {
     return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
 }
 
+fun claude_agent_command() > str {
+    // Same script and HOST_EVENT_RAW as the MCP surface: a spawn's payload is a
+    // prompt and a subagent_type, not one string, so the whole event has to
+    // reach `magus session hook` for it to be recognized as a spawn at all.
+    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
+}
+
 fun claude_rehydrate_command() > str {
     return "sh docs/guides/integrations/agents/magus-rehydrate.sh";
 }
@@ -73,6 +80,7 @@ fun claude_entries() > [any] {
                 claude_pretool_entry("Edit|Write|NotebookEdit", claude_path_command()),
                 claude_pretool_entry("^mcp__magus__", claude_mcp_command()),
                 claude_pretool_entry("Read", claude_observe_command()),
+                claude_pretool_entry("Agent|Task", claude_agent_command()),
             ],
         },
         {
@@ -168,6 +176,7 @@ test "guard commands name the shared templates" {
     assert\isTrue(claude_path_command().indexOf("magus-guard-path.sh") != null, "path surface");
     assert\isTrue(claude_observe_command().indexOf("magus-guard-observe.sh") != null, "read observe");
     assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
+    assert\isTrue(claude_agent_command().indexOf("HOST_EVENT_RAW=1") != null, "spawn forwards the whole event");
     assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.sh") != null, "SessionStart rehydrate");
     assert\isTrue(claude_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
 }
@@ -179,7 +188,7 @@ test "harness_entries covers PreToolUse SessionStart and Stop" {
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 4, "Bash path mcp and Read matchers");
+    assert\equal(pre_entries.len(), 5, "Bash path mcp Read and spawn matchers");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

@@ -25,6 +25,7 @@ event.
 | checkpoint       | `Stop`                                 |
 | rehydration      | `SessionStart` (`compact`, `resume`)   |
 | lease            | `PreToolUse` on the sub-agent tool     |
+| declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
 
 ## Skills
 
@@ -75,8 +76,9 @@ magus agent harness apply --id claude-code
 magus agent harness verify --id claude-code
 ```
 
-The spell installs entries for commands, file edits, Magus MCP tool calls, and
-read observation. Each runs a shipped script that talks to `magus session hook`:
+The spell installs entries for commands, file edits, Magus MCP tool calls, read
+observation, and sub-agent spawns. Each runs a shipped script that talks to
+`magus session hook`:
 
 ```json
 {
@@ -187,22 +189,19 @@ detail in a trail rather than enforcement.
 
 When Claude Code hands work to a sub-agent it does so through a tool call, and
 that call fires `PreToolUse` like any other - carrying the whole prompt the
-orchestrator is handing over in `tool_input.prompt`. Neither guard matcher above
-selects it, so by default magus never sees a lease. Add a third entry to
-record one:
+orchestrator is handing over in `tool_input.prompt`, the callee's declared
+`subagent_type`, and, when the caller named one, `tool_input.model`. The shipped
+descriptor includes a matcher for it, so `magus agent harness apply --id
+claude-code` installs this entry alongside the surfaces above:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Task",
+        "matcher": "Agent|Task",
         "hooks": [
-          {
-            "type": "command",
-            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; GUARD_MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" session hook --agent-name claude-code >/dev/null 2>&1; exit 0",
-            "timeout": 10
-          }
+          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }
         ]
       }
     ]
@@ -210,26 +209,28 @@ record one:
 }
 ```
 
-No `jq` and no template: the whole event goes in unchanged, and magus reads
+Same script as the MCP surface and for the same reason: a spawn's payload is a
+prompt, a `subagent_type`, and an optional `model`, not one string, so
+`HOST_EVENT_RAW=1` forwards the event whole. `magus session hook` reads
 `tool_input.prompt` for the context, `tool_input.subagent_type` (then
-`description`, then `tool_name`) for the callee's label, and `session_id` for the
-parent's session. The result is one `agent_spawn` event per lease, with the
-handed context stored as a payload blob you fetch by ref.
+`description`, then `tool_name`) for the callee's label, `tool_input.model` for
+the model the caller claimed, and `session_id` for the parent's session. The
+result is one `agent_spawn` event per lease, with the handed context and the
+declared model stored as a payload blob you fetch by ref - `magus session show
+<id>` renders each spawn's model claim, wording an absent one as "none
+declared" rather than leaving it blank.
 
-The `while` loop at the front is how it finds magus, and it is doing the same job
-as the templates' longer version: walk up from the hook's working directory to
-the nearest `magusfile.buzz`, prefer that workspace's own `./magus`, and fall
-back to `PATH`. A hook runs in the SESSION's directory, which is not always the
-workspace root - open a session one level down and a plain `./magus` is not
-there. It falls through to `PATH` silently, and where the `PATH` copy cannot load
-the workspace, the event is simply never recorded. Nothing surfaces that: an
-audit trail with holes reads exactly like one nobody wrote to.
+The matcher covers both names Claude Code has used for the spawn tool across
+releases (`Task` historically, `Agent` currently); a release that emits neither
+records nothing here; nothing else in the contract depends on the spelling.
 
 It records; it does not judge. A lease prompt is prose, so the command rules
 never run against it and the verdict is always a pass - a prompt that mentions a
-denied command describes it rather than runs it. Output is discarded and the exit
-status is forced to 0 for the same reason the notification hook does it: an audit
-step must not be able to break the session it observes.
+denied command describes it rather than runs it, and that holds whether or not
+the caller named a model: magus asks the question, it does not grade the
+answer. A later decision may add an advisory or a deny keyed on the declared
+model; recording it here is what would make that decision possible, not itself
+one.
 
 To join those events to a job, write the marker line documented in
 [Any other host](any-host.md#lease-capture) at the top of the prompt you

@@ -628,6 +628,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		}
 		req.IsSpawn = true
 		req.Tool = env.ToolName
+		// The caller's own model choice, when it named one. Absent when the spawn
+		// inherits the parent's model, which is a legitimate choice this guard
+		// takes no position on - it is recorded so the question can be asked at
+		// all, not so an answer can be graded.
+		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		if env.ParentConversationID != "" {
 			req.Who.Session = env.ParentConversationID
 		}
@@ -706,7 +711,12 @@ type hookRequest struct {
 	IsSpawn        bool
 	Tool           string
 	Child          string
-	Who            hookAttribution
+	// DeclaredModel is the model the spawning tool_input named, or "" when it named
+	// none. Not called Model: that word already means the reply CHANNEL in this
+	// guard's coverage vocabulary (deny=model, advise=model), so a bare Model field
+	// here would read as a verdict channel rather than a spawn's own claim.
+	DeclaredModel string
+	Who           hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -826,14 +836,15 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
-		Actor:     "agent",
-		Workspace: location.workspace,
-		Host:      who.Host,
-		Session:   who.Session,
-		Event:     who.Event,
-		Tool:      req.Tool,
-		Child:     req.Child,
-		Context:   req.Value,
+		Actor:         "agent",
+		Workspace:     location.workspace,
+		Host:          who.Host,
+		Session:       who.Session,
+		Event:         who.Event,
+		Tool:          req.Tool,
+		Child:         req.Child,
+		Context:       req.Value,
+		DeclaredModel: req.DeclaredModel,
 	})
 }
 
