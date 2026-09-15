@@ -147,6 +147,7 @@ flag query/publish
 flag query/refresh
 flag query/secrets
 flag query/url
+flag refs/no-generated
 flag refs/occurrences
 flag refs/refresh
 flag run/depth

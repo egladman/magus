@@ -1184,6 +1184,9 @@ one for the other is how a wrong answer looks right.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
+		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
+		// same reason watch's --ignore is (see that entry above).
+		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, exclude declared-output files entirely instead of searching them and marking the ones that match"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{

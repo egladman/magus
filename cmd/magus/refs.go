@@ -22,8 +22,14 @@ import (
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
 	var rf *gen.RefsFlags
+	// --no-generated stays hand-bound, like watch's --ignore: it is declared in
+	// internal/cli/registry.go (Kind: FlagCustom) for the man page, but bound here
+	// directly rather than through gen.RefsFlags.
+	var noGenerated bool
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
 		rf = gen.BindRefs(fs)
+		fs.BoolVar(&noGenerated, "no-generated", false,
+			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -76,10 +82,19 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// still classifies the symbol lookup, and this rides beside it.
 		// The resolved root, not the --root override: that argument is empty unless the
 		// caller passed one, and walking "" searches nothing while reporting nothing.
-		var searched, skipped int
+		var searched, skipped, generated int
+		var classifiedFiles bool
 		if searchRoot := resolveRootOrEmpty(root); searchRoot != "" {
-			hits, files, n, s, textErr := textPresence(searchRoot, pos[0])
-			searched, skipped = n, s
+			// The same workspace loadKnowledgeGraphForRefs already opened above (memoized
+			// by inspectWorkspace), so this costs nothing extra when it is available, and
+			// a failure here just means classification degrades to "unavailable" below -
+			// the search itself must never fail because classification did.
+			var classify classifyFunc
+			if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
+				classify = ws.ClassifyFiles
+			}
+			hits, files, n, s, g, cls, textErr := textPresence(ctx, searchRoot, pos[0], noGenerated, classify)
+			searched, skipped, generated, classifiedFiles = n, s, g, cls
 			if textErr == nil && hits > 0 {
 				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
 			}
@@ -89,10 +104,12 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if ans.Text != nil {
 			fmt.Fprintf(os.Stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
 				ans.Text.Hits, ans.Text.Files, searched)
-			if skipped > 0 {
-				// Named rather than swallowed: a count that does not say what it declined
-				// to read is one a reader cannot tell from a small answer.
-				fmt.Fprintf(os.Stderr, " (%d skipped: binary, empty, or over %d bytes)", skipped, maxSearchableFile)
+			// One parenthetical, not a second line: a count that does not say what it
+			// declined to read, or declined to exclude, is one a reader cannot tell from
+			// a small or an unfiltered answer.
+			notes := textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
+			if len(notes) > 0 {
+				fmt.Fprintf(os.Stderr, " (%s)", strings.Join(notes, "; "))
 			}
 			fmt.Fprintln(os.Stderr)
 			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")

@@ -2,12 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/egladman/magus/internal/textindex"
+	"github.com/egladman/magus/types"
 )
+
+// classifyFunc classifies workspace-relative (or absolute, in-workspace) paths
+// against declared project globs. It is how textPresence learns which searched
+// files are generated, without this file depending on how a workspace gets
+// loaded: refs.go supplies the real one (types.WorkspaceRepository.ClassifyFiles),
+// a test supplies a fake, and a nil classify degrades to "unknown" rather than
+// failing the search - see textPresence's classified return.
+type classifyFunc func(ctx context.Context, paths []string) ([]types.FileEntry, error)
 
 // maxSearchableFile is the size past which a file is skipped rather than searched.
 //
@@ -89,21 +100,96 @@ func refusingBinary(read textindex.ReadFunc) textindex.ReadFunc {
 // It exists to qualify a SYMBOL verdict, not to replace a search: refs reporting
 // `absent` for a string that is in the tree twelve times states something false about
 // the workspace, and this is the fact that corrects it.
-func textPresence(root, pattern string) (hits, files, searched, skipped int, err error) {
+//
+// classify is how a caller with a loaded workspace tells searched files apart from
+// generated ones (nil, or an error from it, degrades to "classification unavailable"
+// rather than failing the search - a text search must never answer unknown). Whether
+// that fact SUPPRESSES a generated file or only MARKS it is noGenerated's call: a
+// caller after a needle that lives only in generated output must still find it, so
+// the default (noGenerated=false) counts a generated hit rather than hiding it, and
+// only an explicit --no-generated removes those files from the search entirely.
+//
+// generated means different things depending on noGenerated: with it set, the
+// generated files never reached the scanner, and generated is how many were removed;
+// without it, they were searched like any other file, and generated is how many of
+// the matched files (of the returned files count) are declared output. classified
+// reports whether that count means anything at all - false means no workspace could
+// classify these paths, and the caller must say so rather than imply zero generated
+// files exist.
+func textPresence(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) (hits, files, searched, skipped, generated int, classified bool, err error) {
 	paths, skipped, err := searchableFiles(root)
 	if err != nil {
-		return 0, 0, 0, skipped, err
+		return 0, 0, 0, skipped, 0, false, err
 	}
+
+	genSet := map[string]bool{}
+	if classify != nil {
+		if entries, clsErr := classify(ctx, paths); clsErr == nil && len(entries) == len(paths) {
+			classified = true
+			for i, e := range entries {
+				if e.Role == "output" {
+					genSet[paths[i]] = true
+				}
+			}
+		}
+	}
+
+	// Exclusion happens before the scan, not after: an excluded file must never be
+	// read, or "excluded" would just mean "read but not counted".
+	if noGenerated && classified {
+		kept := paths[:0:0]
+		for _, p := range paths {
+			if !genSet[p] {
+				kept = append(kept, p)
+			}
+		}
+		generated = len(paths) - len(kept)
+		paths = kept
+	}
+
 	r := textindex.NewReader()
 	defer func() { _ = r.Close() }()
 
 	matches, err := textindex.Scan(paths, refusingBinary(r.Read), pattern, false)
 	if err != nil {
-		return 0, 0, len(paths), skipped, err
+		return 0, 0, len(paths), skipped, generated, classified, err
 	}
 	seen := map[string]bool{}
 	for _, m := range matches {
 		seen[m.Path] = true
 	}
-	return len(matches), len(seen), len(paths), skipped, nil
+	if !noGenerated && classified {
+		for p := range seen {
+			if genSet[p] {
+				generated++
+			}
+		}
+	}
+	return len(matches), len(seen), len(paths), skipped, generated, classified, nil
+}
+
+// textPresenceNotes renders the parenthetical that extends refs' text-presence line:
+// what a search declined to read (skipped) and what it declined to search or chose to
+// mark (generated), so the accounting stays one clause added to the existing line
+// rather than a second line a reader could miss.
+//
+// matchedFiles is only used to phrase the "marked" case ("N of M generated"); it is
+// meaningless, and unused, in every other case.
+func textPresenceNotes(skipped, generated, matchedFiles int, classified, noGenerated bool) []string {
+	var notes []string
+	if skipped > 0 {
+		notes = append(notes, fmt.Sprintf("%d skipped: binary, empty, or over %d bytes", skipped, maxSearchableFile))
+	}
+	switch {
+	case noGenerated && !classified:
+		// The flag asked for exclusion and got none: saying nothing here would read as
+		// "nothing was generated", which is the under-report this accounting exists to
+		// rule out.
+		notes = append(notes, "generated-file exclusion unavailable: no workspace loaded, nothing excluded")
+	case noGenerated && generated > 0:
+		notes = append(notes, fmt.Sprintf("%d generated file(s) excluded: declared output", generated))
+	case !noGenerated && classified && generated > 0:
+		notes = append(notes, fmt.Sprintf("%d of %d generated: declared output, not hand-edited", generated, matchedFiles))
+	}
+	return notes
 }
