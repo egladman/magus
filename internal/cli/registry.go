@@ -582,13 +582,33 @@ Subcommands (the first argument):
   diff     Nodes and edges added, removed, or changed relative to a baseline
            export or a git revision (--rev): the PR-review blast-radius
            artifact, emit as json or markdown for a CI comment.`,
-	Usage: "magus graph <build|deps|export|stats|diff> [flags]",
+	Usage: "magus graph <build|push|pull|deps|export|stats|diff> [flags]",
 	Children: []Command{
 		{
 			Name:  "build",
 			Short: "Rebuild the knowledge graph now, reindexing code symbols first",
 			Flags: []Flag{
 				{Name: "no-symbols", Kind: FlagBool, Doc: "Rebuild the domain graph only; do not reindex code symbols"},
+				{Name: "push", Kind: FlagBool, Doc: "Push the rebuilt graph to the registry afterwards (see magus graph push)"},
+				{Name: "ref", Kind: FlagString, Doc: "With --push: the artifact to push to (default: derived from the repository's origin remote)"},
+				{Name: "tag", Kind: FlagString, Doc: "With --push: an extra tag to write beside latest, repeatable or comma-separated"},
+			},
+		},
+		{
+			Name:  "push",
+			Short: "Push the knowledge graph to a container registry as an OCI artifact",
+			Flags: []Flag{
+				{Name: "ref", Kind: FlagString, Doc: "The artifact to push to (default: derived from the repository's origin remote)"},
+				{Name: "tag", Kind: FlagString, Doc: "An extra tag to write beside latest, repeatable or comma-separated"},
+				{Name: "refresh", Kind: FlagBool, Doc: "Rebuild the graph before pushing instead of exporting what is cached"},
+			},
+		},
+		{
+			Name:  "pull",
+			Short: "Fetch a published knowledge graph; reads public artifacts with no credentials",
+			Flags: []Flag{
+				{Name: "ref", Kind: FlagString, Doc: "The artifact to pull (default: derived from the repository's origin remote)"},
+				{Name: "out", Kind: FlagString, Doc: "Write the graph here instead of stdout"},
 			},
 		},
 		{Name: "deps", Short: "Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)", Flags: []Flag{

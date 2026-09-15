@@ -36,7 +36,7 @@ import (
 // merged knowledge graph for external tools (export), and report its shape
 // (stats). One home instead of surfaces scattered across describe and insight.
 
-var graphSubs = []string{"build", "deps", "export", "stats", "diff"}
+var graphSubs = []string{"build", "push", "pull", "deps", "export", "stats", "diff"}
 
 func graphCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -47,6 +47,10 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 	switch sub {
 	case "build":
 		return graphBuild(ctx, root, rest)
+	case "push":
+		return graphPush(ctx, root, rest)
+	case "pull":
+		return graphPull(ctx, root, rest)
 	case "deps":
 		return graphDeps(ctx, root, rest)
 	case "export":
@@ -82,6 +86,8 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
 	fmt.Fprintln(os.Stderr, "  build    rebuild the knowledge graph now, reindexing code symbols (runs each project's scip op)")
+	fmt.Fprintln(os.Stderr, "  push     publish the graph to a container registry as an OCI artifact")
+	fmt.Fprintln(os.Stderr, "  pull     fetch a published graph; a public one needs no credentials")
 	fmt.Fprintln(os.Stderr, "  deps     project dependency DAG (-o text|json|yaml|dot|mermaid|tree)")
 	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
@@ -98,9 +104,14 @@ func graphUsage() {
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
-	var skipSymbols bool
+	var skipSymbols, push bool
+	var ref, tag, user string
 	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
+		fs.BoolVar(&push, "push", false, "push the rebuilt graph to the registry afterwards")
+		fs.StringVar(&ref, "ref", "", "with --push: the artifact to push to, as <registry>/<repository>:<tag>")
+		fs.StringVar(&user, "username", "", "with --push: the registry username; the token is read from stdin")
+		fs.StringVar(&tag, "tag", "", "with --push: an extra tag to write beside the commit and latest")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -139,7 +150,12 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	}
 	out := g.Output()
 	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
-	return nil
+	if !push {
+		return nil
+	}
+	// The rebuild above already refreshed everything, so the push exports what is now
+	// cached rather than paying for a second one.
+	return graphPushTo(ctx, root, ref, tag, user, false /* refresh */)
 }
 
 // graphDeps emits the project dependency DAG, the standalone home of the view
