@@ -71,6 +71,12 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// Ahead of everything, including log setup: a binary below the workspace's
+	// required_version floor cannot get far enough into startup to discover that on
+	// its own, so this has to work on nothing but os.Args and a directory walk. See
+	// bootstrap_exec.go.
+	maybeBootstrapExec(os.Args)
+
 	log.SetFlags(0)
 	log.SetPrefix("magus: ")
 

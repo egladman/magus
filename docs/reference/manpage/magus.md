@@ -273,6 +273,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **MAGUS_NO_WAIT**
 : Env-only, no magus.yaml equivalent: when 1, true or yes, a run that finds a project's workspace lock held by another magus process fails immediately instead of queuing behind it, naming the holder and exiting 75 (EX_TEMPFAIL) so a caller can tell a busy machine from a broken build (default: false)
 
+**MAGUS_NO_BOOTSTRAP_EXEC**
+: Env-only, no magus.yaml equivalent: when 1, true or yes, disable the pre-workspace-load check that replaces this process with a workspace-local ./magus found by walking up from the working directory (or --root); set it to force the binary actually invoked to run instead, e.g. while debugging that binary itself (default: false)
+
 ## Files
 
 **magus.yaml**, **.magus.yaml**
