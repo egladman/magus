@@ -234,17 +234,20 @@
         {
           "name": "types-generate",
           "declared": "types_generate",
-          "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding.",
+          "doc": "Regenerates everything derived from the boundary registry: the enum helpers (Values/Valid/String for each boundaryEnum), the runtime boundary list, and the Go-to-Buzz encoders.",
           "reads_secrets": false,
           "writes_files": [
-            {
-              "glob": "types/buzzobject_gen.go"
-            },
             {
               "glob": "types/enum_gen.go"
             },
             {
               "glob": "spells/enum_gen.go"
+            },
+            {
+              "glob": "internal/interp/bindings/gen/boundary_list.go"
+            },
+            {
+              "glob": "internal/interp/bindings/gen/boundary_objects.go"
             }
           ]
         },
@@ -2327,7 +2330,7 @@
         },
         {
           "name": "conventions",
-          "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
+          "doc": "conventions holds every doc page to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved.",
           "reads_files": [
             {
               "project": "docs",
