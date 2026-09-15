@@ -102,6 +102,10 @@ func Decode(src obj) (spells.Descriptor, error) {
 	if err != nil {
 		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
 	}
+	indexer, err := decodeSymbolIndexer(name, src)
+	if err != nil {
+		return spells.Descriptor{}, fmt.Errorf("spell %q: %w", name, err)
+	}
 	m := spells.Descriptor{
 		Name:               name,
 		IgnoreDirs:         ignoreDirs,
@@ -110,6 +114,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 		Language:           language,
 		LanguageExtensions: langExts,
 		Comments:           comments,
+		SymbolIndexer:      indexer,
 		Opaque:             src.Bool("opaque"),
 	}
 
@@ -261,6 +266,26 @@ func Decode(src obj) (spells.Descriptor, error) {
 			slices.Sort(docOps)
 			m.DocOps = docOps
 		}
+	}
+	// An AUTHORED op under the reserved name is refused, whether or not the spell also
+	// declares an indexer. magus owns the name (it registers the declared indexer under
+	// it), so the op would collide; and before mgs_getSymbolIndexer existed, declaring
+	// `scip` in mgs_listTargets WAS how a spell claimed the capability. Refusing loudly
+	// is the migration path: accepting it would leave such a spell running its indexer
+	// with an unresolved $MAGUS_SYMBOL_INDEX and dropping out of the symbol graph, with
+	// nothing said. There is no compat shim because the condition to retire one is
+	// "no spell anywhere still declares the op", which magus cannot observe.
+	if _, authored := m.Ops[spells.SymbolIndexOp]; authored {
+		return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, spells.SymbolIndexOp)
+	}
+	if indexer != nil {
+		if m.Ops == nil {
+			m.Ops = map[string]spells.Op{}
+		}
+		// Synthesized rather than authored, so the run, cache and freshness paths reach
+		// the indexer as an ordinary command op while the spell declares it once, by
+		// name. The kind is what the runner matches on; nothing keys on the op's name.
+		m.Ops[spells.SymbolIndexOp] = spells.Op{Kind: spells.OpKindSymbolIndex, Command: indexer.Command}
 	}
 	// Checked here rather than at probe time: an unusable component is a declaration
 	// bug knowable without running anything, and discovering it from a cache that
@@ -475,6 +500,37 @@ func decodeLanguage(src obj) (string, []string, *spells.CommentSyntax, error) {
 		return "", nil, nil, fmt.Errorf("language: comments without extensions covers no files; declare the extensions that are this language")
 	}
 	return name, exts, syn, nil
+}
+
+// decodeSymbolIndexer reads mgs_getSymbolIndexer's typed answer: a SymbolIndexer
+// record naming the index format and the command that writes it. Absent means the
+// spell is not symbol-capable, which is the whole capability test.
+//
+// The format is required. A declaration that names no format would leave ingestion
+// guessing which reader to use, and guessing is what this export exists to end; the
+// message lists the formats magus reads so a spell author fixes it in one edit.
+func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, error) {
+	rec, ok := src.Obj("symbol_indexer")
+	if !ok {
+		return nil, nil //nolint:nilnil // a spell that declares no indexer is not an error; nil is that answer
+	}
+	format, _ := rec.Str("format")
+	f := spells.SymbolFormat(format)
+	if !f.Valid() || f == spells.SymbolFormatNone {
+		return nil, fmt.Errorf("symbol indexer: format is %s; want one of %s", f, strings.Join(f.Values(), ", "))
+	}
+	cmdRec, ok := rec.Obj("command")
+	if !ok {
+		return nil, fmt.Errorf("symbol indexer: command is required")
+	}
+	cmd, err := decodeCommand(spellName, spells.SymbolIndexOp, cmdRec)
+	if err != nil {
+		return nil, err
+	}
+	if cmd.Bin == "" {
+		return nil, fmt.Errorf("symbol indexer: command.bin is required")
+	}
+	return &spells.SymbolIndexer{Format: f, Command: cmd}, nil
 }
 
 // decodeComments reads the comment/string syntax inside a Language record,

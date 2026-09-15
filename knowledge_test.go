@@ -96,14 +96,14 @@ func writeSCIP(t *testing.T, path string) {
 	require.NoError(t, os.WriteFile(path, data, 0o644))
 }
 
-// goWorkspace describes a workspace whose "go" spell is symbol-capable (it exposes the
-// reserved scip op) and one project bound to it: the auto-enable inputs, no config.
+// goWorkspace describes a workspace whose "go" spell is symbol-capable (it declares a
+// symbol indexer) and one project bound to it: the auto-enable inputs, no config.
 func goWorkspace(project string) (types.ProjectsOutput, []types.Spell) {
 	projects := types.ProjectsOutput{Projects: []types.ProjectEntry{
 		{Path: project, Spell: "go", Spells: []string{"go"}},
 	}}
 	spells := []types.Spell{
-		{Name: "go", Targets: []string{"go-build", symbols.IndexOp}},
+		{Name: "go", Targets: []string{"go-build"}, SymbolFormat: "scip"},
 	}
 	return projects, spells
 }
@@ -214,7 +214,7 @@ func TestLoadKnowledgeSymbolsCarriesDeclaredLanguage(t *testing.T) {
 		{Path: "web", Spell: "typescript", Spells: []string{"typescript"}},
 	}}
 	spells := []types.Spell{
-		{Name: "typescript", Language: "typescript", Targets: []string{symbols.IndexOp}},
+		{Name: "typescript", Language: "typescript", SymbolFormat: "scip"},
 	}
 	got := loadKnowledgeSymbols(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells))
 

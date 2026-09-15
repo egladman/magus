@@ -28,6 +28,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
 	{Name: "Command", Type: reflect.TypeFor[spells.Command]()},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
+	// Must follow Command: SymbolIndexer.command is one.
+	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer]()},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
@@ -273,6 +275,11 @@ var boundaryEnums = []boundaryEnum{
 		Name:  "DiagnosticFormat",
 		Type:  reflect.TypeFor[spells.DiagnosticFormat](),
 		Cases: []enumCase{{"none", ""}, {"gnu", "gnu"}},
+	},
+	{
+		Name:  "SymbolFormat",
+		Type:  reflect.TypeFor[spells.SymbolFormat](),
+		Cases: []enumCase{{"none", ""}, {"scip", "scip"}},
 	},
 	{
 		Name:  "External",

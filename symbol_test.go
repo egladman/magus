@@ -204,8 +204,8 @@ func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 	assert.True(t, st.backoffTill.IsZero(), "yielding sets no backoff")
 }
 
-// freshnessWorkspace builds a one-project workspace bound to a spell that exposes the
-// reserved scip op, runs that op once so the cache holds its manifest, and writes an index
+// freshnessWorkspace builds a one-project workspace bound to a spell that declares a
+// symbol indexer, runs that op once so the cache holds its manifest, and writes an index
 // where ingestion looks for one. It returns the workspace and the single source file the
 // index's key covers.
 //
@@ -216,7 +216,8 @@ func freshnessWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
 	const spellName = "zzz-scip-freshness-test-spell"
 	spell := spells.NewSpell(spellName,
-		spells.WithTargets(symbols.IndexOp),
+		spells.WithTargets(spells.SymbolIndexOp),
+		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
 		// A probed tool is not decoration: its version is a key input the run scheduler
 		// stamps and buildStep does not, so without one every assertion here would hold
@@ -242,7 +243,7 @@ func freshnessWorkspace(t *testing.T) (*Magus, string) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	ctx := context.Background()
-	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: symbols.IndexOp}}), "scip run")
+	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: spells.SymbolIndexOp}}), "scip run")
 
 	index := symbols.IndexPath(resolveCacheDir(m.Root(), m.cfg), m.Root())
 	require.NoError(t, os.MkdirAll(filepath.Dir(index), 0o755))
@@ -319,14 +320,14 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	require.NoError(t, err)
 
 	// ReindexSymbols runs the op with no RunOptions, so the key it mints is the charmless one.
-	runKey, _, err := m.ComputeTargetKey(ctx, ".", symbols.IndexOp, nil)
+	runKey, _, err := m.ComputeTargetKey(ctx, ".", spells.SymbolIndexOp, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, runKey, probeKey)
 
 	// And the shape the probe used to have, so a revert to it fails here rather than
 	// quietly reporting every index out-of-date.
-	bare := m.buildStep(p, symbols.IndexOp)
+	bare := m.buildStep(p, spells.SymbolIndexOp)
 	bareKey, _, err := m.cache.StepKey(ctx, &bare)
 	require.NoError(t, err)
 	assert.NotEqual(t, runKey, bareKey, "buildStep alone is not the key any run mints")

@@ -84,16 +84,18 @@ fun ruffFormat(target: Target) > Command {
         "rw": drop(args, "--check"),
     }};
 }
-// scip is the reserved op that runs the Python SCIP indexer for the knowledge graph.
-// The indexer is a PATH binary (install it with mise, not as a project dep), so the op
-// forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat};
+}
+
+// The indexer is a PATH binary (install it with mise, not as a project dep), so it is
+// forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the
 // index never lands in the tree; scip-python writes there via --output. The runner
 // resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell
 // is needed to expand it.
-fun scip(target: Target) > Command {
-    return Command{bin = "scip-python", args = ["index", ".", "--output", "$MAGUS_SYMBOL_INDEX"]};
-}
-
-export fun mgs_listTargets() > {str: fun(Target) Command} {
-    return {"uv-build": uvBuild, "uv-clean": uvClean, "pytest": pytest, "ruff-check": ruffCheck, "ruff-format": ruffFormat, "scip": scip};
+export fun mgs_getSymbolIndexer() > SymbolIndexer {
+    return SymbolIndexer{
+        format = SymbolFormat.scip,
+        command = Command{bin = "scip-python", args = ["index", ".", "--output", "$MAGUS_SYMBOL_INDEX"]},
+    };
 }

@@ -813,8 +813,8 @@ type symbolIngestInputs struct {
 
 // symbolIndexDeclarations resolves which SCIP indexes to ingest, keyed by project so a
 // derived entry and an explicit override for the same project cannot both fire. It
-// derives one for every project bound to a symbol-capable spell (one exposing the
-// reserved `scip` op), pointing at that project's cached index (symbols.IndexPath, the
+// derives one for every project bound to a symbol-capable spell (one declaring a
+// symbol indexer), pointing at that project's cached index (symbols.IndexPath, the
 // same location the op writes to), the zero-config path. Explicit knowledge.symbols
 // entries are then merged in and win on the same project, pointing instead at a
 // workspace-relative path in the tree for a project whose indexer writes somewhere
@@ -824,7 +824,7 @@ func symbolIndexDeclarations(ctx context.Context, in symbolIngestInputs) []resol
 	langBySpell := map[string]string{}
 	for _, sp := range in.spells {
 		langBySpell[sp.Name] = sp.Language
-		if slices.Contains(sp.Targets, symbols.IndexOp) {
+		if sp.SymbolFormat != "" {
 			capable[sp.Name] = true
 		}
 	}

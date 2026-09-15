@@ -688,7 +688,7 @@ func TestDispatchOpInjectsDeclaredSecrets(t *testing.T) {
 		}},
 	}
 
-	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: dir})
+	_, err := dispatchOp(ctx, spells.Descriptor{Ops: ops}, spells.InvokeRequest{Target: "publish", Dir: dir})
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(filepath.Join(dir, "out.txt"))
@@ -706,7 +706,7 @@ func TestDispatchOpSecretsRequireAResolver(t *testing.T) {
 			Secrets: map[string]string{"NPM_TOKEN": "NPM_TOKEN"},
 		}},
 	}
-	_, err := dispatchOp(context.Background(), ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(context.Background(), spells.Descriptor{Ops: ops}, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), "no secret resolver is on this run")
@@ -725,7 +725,7 @@ func TestDispatchOpSecretsPropagateResolverError(t *testing.T) {
 			Secrets: map[string]string{"TOKEN": "NOT_SET_ANYWHERE"},
 		}},
 	}
-	_, err := dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
+	_, err := dispatchOp(ctx, spells.Descriptor{Ops: ops}, spells.InvokeRequest{Target: "publish", Dir: t.TempDir()})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), `"publish"`)
 	assert.Contains(t, err.Error(), `"TOKEN"`)
@@ -780,14 +780,14 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 
 	projDir := t.TempDir()
 	argvFile := filepath.Join(projDir, "argv.txt")
-	ops := map[string]spells.Op{
-		"scip": {Command: spells.Command{
-			Bin:  "sh",
-			Args: []string{"-c", `printf '%s' "$1" > "$2"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
-		}},
-	}
+	// Writes the destination it was handed BOTH to argvFile (what this test reads) and
+	// to the destination itself, since dispatch now refuses an indexer that wrote no index.
+	spec := symbolIndexerSpec(spells.Command{
+		Bin:  "sh",
+		Args: []string{"-c", `printf '%s' "$1" > "$2"; printf '%s' "$1" > "$1"`, "sh", "$MAGUS_SYMBOL_INDEX", argvFile},
+	})
 
-	_, err = dispatchOp(ctx, ops, nil, nil, spells.InvokeRequest{Target: symbols.IndexOp, Dir: projDir})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.SymbolIndexOp, Dir: projDir})
 	require.NoError(t, err)
 
 	got, err := os.ReadFile(argvFile)
@@ -795,6 +795,39 @@ func TestDispatchOpResolvesSymbolIndexRefInArgs(t *testing.T) {
 	want := symbols.IndexPath(c.Dir(), projDir)
 	assert.Equal(t, want, string(got), "the resolved arg must be the real index path")
 	assert.NotContains(t, string(got), "$MAGUS_SYMBOL_INDEX", "the literal reference token must never reach the child's argv")
+}
+
+// symbolIndexerSpec builds the descriptor a declared symbol indexer produces: the
+// capability on the descriptor, and the op magus synthesizes from it, tagged with the
+// kind dispatch matches on.
+func symbolIndexerSpec(cmd spells.Command) spells.Descriptor {
+	return spells.Descriptor{
+		Name:          "fake",
+		SymbolIndexer: &spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: cmd},
+		Ops: map[string]spells.Op{
+			spells.SymbolIndexOp: {Kind: spells.OpKindSymbolIndex, Command: cmd},
+		},
+	}
+}
+
+// TestDispatchOpRejectsAnIndexerThatWroteNothing proves the contract a declared
+// indexer signs is CHECKED: a command that exits 0 without writing to the
+// destination magus handed it is an error naming the spell and the format it
+// declared, not a silent success. Before the capability was declared, this spell
+// left the project reading as symbol-capable with no index while `graph build`
+// reported it reindexed.
+func TestDispatchOpRejectsAnIndexerThatWroteNothing(t *testing.T) {
+	ctx := context.Background()
+	c, err := cache.Open(ctx, t.TempDir(), cache.WithMutable(true))
+	require.NoError(t, err)
+	ctx = cache.NewContext(ctx, c)
+
+	spec := symbolIndexerSpec(spells.Command{Bin: "true"})
+	_, err = dispatchOp(ctx, spec, spells.InvokeRequest{Target: spells.SymbolIndexOp, Dir: t.TempDir()})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "wrote no index")
+	assert.Contains(t, err.Error(), "scip", "the error must name the format the spell declared")
+	assert.Contains(t, err.Error(), symbols.IndexEnvVar)
 }
 
 // alwaysTerminalProbe reports every fd as a terminal, so probeUntilReady takes its

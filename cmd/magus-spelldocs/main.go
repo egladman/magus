@@ -428,6 +428,12 @@ func parseOpDocs(dir string) map[string]string {
 			out[op] = doc
 		}
 	}
+	// The symbol indexer has no entry in mgs_listTargets to walk: magus synthesizes its
+	// op from mgs_getSymbolIndexer, so that export's own comment is the prose describing
+	// it, and without this the page renders the indexer's argv with nothing said about it.
+	if doc := funcDoc["mgs_getSymbolIndexer"]; doc != "" {
+		out[spells.SymbolIndexOp] = doc
+	}
 	return out
 }
 

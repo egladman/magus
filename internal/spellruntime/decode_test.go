@@ -148,6 +148,55 @@ func TestDecode_CommandOp(t *testing.T) {
 	assert.Equal(t, []string{"build", "./..."}, tgt.Args)
 }
 
+// TestDecode_SymbolIndexer verifies mgs_getSymbolIndexer decodes onto the descriptor
+// AND synthesizes the op the run path dispatches, tagged with the kind the runner
+// matches on rather than recognized by its name.
+func TestDecode_SymbolIndexer(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"symbol_indexer": map[string]any{
+			"format":  "scip",
+			"command": map[string]any{"bin": "scip-go", "args": []string{"--output", "$MAGUS_SYMBOL_INDEX"}},
+		},
+	}
+	m, err := Decode(src)
+	require.NoError(t, err)
+	require.NotNil(t, m.SymbolIndexer)
+	assert.Equal(t, spells.SymbolFormatSCIP, m.SymbolIndexer.Format)
+	assert.Equal(t, "scip-go", m.SymbolIndexer.Command.Bin)
+
+	op, ok := m.Ops[spells.SymbolIndexOp]
+	require.True(t, ok, "the declared indexer must reach the op table")
+	assert.Equal(t, spells.OpKindSymbolIndex, op.Kind)
+	assert.Equal(t, []string{"--output", "$MAGUS_SYMBOL_INDEX"}, op.Args)
+}
+
+// TestDecode_SymbolIndexerRequiresAFormat proves the format is required rather than
+// defaulted to SCIP: the whole point of naming it is that ingestion no longer assumes.
+func TestDecode_SymbolIndexerRequiresAFormat(t *testing.T) {
+	src := mapObj{
+		"name":           "myspell",
+		"symbol_indexer": map[string]any{"command": map[string]any{"bin": "scip-go"}},
+	}
+	_, err := Decode(src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "format")
+}
+
+// TestDecode_ReservedSymbolIndexOpIsRefused proves the pre-declaration spelling (a
+// `scip` entry in mgs_listTargets) fails at load naming the export to move to, rather
+// than decoding as an ordinary op that would run with an unresolved destination and
+// silently drop the project out of the symbol graph.
+func TestDecode_ReservedSymbolIndexOpIsRefused(t *testing.T) {
+	src := mapObj{
+		"name": "myspell",
+		"ops":  map[string]any{spells.SymbolIndexOp: map[string]any{"bin": "scip-go"}},
+	}
+	_, err := Decode(src)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mgs_getSymbolIndexer")
+}
+
 // TestDecode_CommandDefaultArgs verifies `defaultArgs` decodes onto Op.DefaultArgs,
 // distinct from Args, and that an absent key decodes to nil.
 func TestDecode_CommandDefaultArgs(t *testing.T) {

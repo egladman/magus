@@ -80,6 +80,7 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 			Opaque:       p.Opaque(),
 			Language:     p.Language(),
 			VersionProbe: p.HasVersionProbe(),
+			SymbolFormat: symbolFormatOf(p),
 			TargetDocs:   docs,
 			OpCommands:   opCommands,
 			Toolchains:   spellToolchains(opCommands),
@@ -89,6 +90,17 @@ func ListSpells(ctx context.Context) ([]types.Spell, error) {
 		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries, nil
+}
+
+// symbolFormatOf returns the index format the spell's declared symbol indexer emits,
+// or "" when it declares none. The one place the descriptor's declaration becomes the
+// describe record's field, so the two views cannot disagree about which spells index.
+func symbolFormatOf(p *spells.Spell) string {
+	si := p.SymbolIndexer()
+	if si == nil {
+		return ""
+	}
+	return string(si.Format)
 }
 
 func spellToolchains(opCommands map[string][]string) []types.SpellToolchain {

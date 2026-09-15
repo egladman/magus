@@ -128,6 +128,13 @@ var LanguageSource string
 //go:embed gen/types/service.buzz
 var ServiceSource string
 
+// SymbolIndexerSource is the generated Buzz `object SymbolIndexer` mirror of
+// spells.SymbolIndexer: the {format, command} a spell's mgs_getSymbolIndexer returns.
+// It must follow CommandSource in the bundle (its command field is typed Command).
+//
+//go:embed gen/types/symbolindexer.buzz
+var SymbolIndexerSource string
+
 // ProjectSource is the generated Buzz `object Project` mirror of spells.Project: one
 // project a workspace-provider spell's list_projects contract returns. It ships in
 // the magus/spell bundle beside the other shapes a spell AUTHORS; it references no
@@ -152,10 +159,11 @@ var CharmModuleSource string
 
 // SpellModuleSource is the magus/spell bundle: the spell-authored value types in
 // their declare-before-use order (PatchOp before Charm before Command before
-// Service, each referencing the prior; Target and Project have no cross-references
-// so their position is free). Shared by the runtime registration (modules.go) and
-// the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, ManifestSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
+// Service and SymbolIndexer, each referencing the prior; Target and Project have no
+// cross-references so their position is free). Shared by the runtime registration
+// (modules.go) and the built-in inliner (builtinModuleSources) below, so the two
+// can't drift apart.
+var SpellModuleSource = strings.Join([]string{PathSource, ManifestSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, SymbolIndexerSource, VersionKeySource, VersionBoundsSource, ToolSource, CommentBlockSource, QuoteSource, CommentSyntaxSource, LanguageSource, ProjectSource, SecretSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an
