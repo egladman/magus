@@ -21,7 +21,6 @@ magus ships these spells. Import each with `import "magus/spell/<name>"`; follow
 | ------------------------------------ | -------------- | --- | ------------------------------------------------------------------------------------------------------ |
 | [`bash`](spells/bash.md)             | Shell          | 1   | Bash spell: shellcheck linting for shell scripts.                                                      |
 | [`buf`](spells/buf.md)               | Protobuf       | 5   | Buf spell: protobuf build, lint, format, and code generation.                                          |
-| [`buzz`](spells/buzz.md)             | Buzz           | 3   | Buzz spell: check and test .buzz sources, plus run them through the magus interpreter.                 |
 | [`cosign`](spells/cosign.md)         | -              | 3   | Cosign spell: keyless sign, attest, and verify for container artifacts.                                |
 | [`docker`](spells/docker.md)         | Docker         | 6   | Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting.                       |
 | [`go`](spells/go.md)                 | Go             | 13  | Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.      |

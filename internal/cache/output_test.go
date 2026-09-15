@@ -178,7 +178,7 @@ func TestRotateRunsKeepsNewestAndReportsFreed(t *testing.T) {
 		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
 	}
 
-	removed, freed := s.RotateRuns(2, 0) // keep inv4, inv3; no byte cap
+	removed, freed := s.RotateRuns(2, 0, 0) // keep inv4, inv3; no byte or age cap
 	require.Equal(t, 3, removed)
 	require.Equal(t, int64(3*len(body)), freed)
 
@@ -198,11 +198,11 @@ func TestRotateRunsUnderCapAndZeroAreNoops(t *testing.T) {
 	require.NoError(t, os.MkdirAll(runs, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runs, "inv0.jsonl"), []byte("x\n"), 0o644))
 
-	removed, freed := s.RotateRuns(10, 0) // under cap
+	removed, freed := s.RotateRuns(10, 0, 0) // under cap
 	require.Equal(t, 0, removed)
 	require.Zero(t, freed)
 
-	removed, _ = s.RotateRuns(0, 0) // never wipe the whole dir
+	removed, _ = s.RotateRuns(0, 0, 0) // never wipe the whole dir
 	require.Equal(t, 0, removed)
 
 	got, _ := os.ReadDir(runs)
@@ -1205,7 +1205,7 @@ func TestRotateRunsBoundsBytesNotJustCount(t *testing.T) {
 
 	// Well under the count cap, so only the byte budget can bite: 250 bytes holds two 100-byte
 	// journals and not the third.
-	removed, freed := s.RotateRuns(100, 250)
+	removed, freed := s.RotateRuns(100, 250, 0)
 
 	require.Equal(t, 3, removed)
 	require.Equal(t, int64(300), freed)
@@ -1233,13 +1233,68 @@ func TestRotateRunsKeepsTheNewestEvenWhenItAloneBustsTheBudget(t *testing.T) {
 		require.NoError(t, os.Chtimes(p, base.Add(time.Duration(i)*time.Minute), base.Add(time.Duration(i)*time.Minute)))
 	}
 
-	removed, _ := s.RotateRuns(100, 10) // every journal is 100x the budget
+	removed, _ := s.RotateRuns(100, 10, 0) // every journal is 100x the budget
 
 	require.Equal(t, 2, removed)
 	got, err := os.ReadDir(runs)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "the newest is kept whatever it weighs")
 	require.Equal(t, "inv2.jsonl", got[0].Name())
+}
+
+// TestRotateRunsAgeCapDropsOlderThanMaxAge pins the third cap: an age-based cutoff drops a
+// journal regardless of how far under the count and byte caps the directory is, and the
+// newest journal always survives even if it is itself past maxAge.
+func TestRotateRunsAgeCapDropsOlderThanMaxAge(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	now := time.Now()
+	ages := map[string]time.Duration{
+		"inv-old":   48 * time.Hour,
+		"inv-newer": 20 * time.Hour,
+		"inv-fresh": time.Hour,
+	}
+	for name, age := range ages {
+		p := filepath.Join(runs, name+".jsonl")
+		require.NoError(t, os.WriteFile(p, []byte("x\n"), 0o644))
+		require.NoError(t, os.Chtimes(p, now.Add(-age), now.Add(-age)))
+	}
+
+	// Count and byte caps are wide open; only the 24h age cap should bite.
+	removed, _ := s.RotateRuns(100, 0, 24*time.Hour)
+
+	require.Equal(t, 1, removed)
+	got, err := os.ReadDir(runs)
+	require.NoError(t, err)
+	names := make([]string, 0, len(got))
+	for _, e := range got {
+		names = append(names, e.Name())
+	}
+	require.ElementsMatch(t, []string{"inv-newer.jsonl", "inv-fresh.jsonl"}, names)
+}
+
+// TestRotateRunsAgeCapKeepsNewestEvenPastMaxAge mirrors the byte-cap floor: a lone journal
+// older than maxAge still survives, since a quiet project's last run may be all there is.
+func TestRotateRunsAgeCapKeepsNewestEvenPastMaxAge(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	p := filepath.Join(runs, "inv0.jsonl")
+	require.NoError(t, os.WriteFile(p, []byte("x\n"), 0o644))
+	old := time.Now().Add(-30 * 24 * time.Hour)
+	require.NoError(t, os.Chtimes(p, old, old))
+
+	removed, _ := s.RotateRuns(100, 0, time.Hour)
+
+	require.Equal(t, 0, removed)
+	got, err := os.ReadDir(runs)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
 }
 
 // The outputs store is shared machine-wide, so two adopters of one imported key run

@@ -881,8 +881,9 @@ func serverRotateActivities(ctx context.Context, root string, args []string) err
 }
 
 // serverRotateLogs is the worker for the rotate-logs job: it trims the invocation run-log
-// journals (<cacheDir>/runs/<inv>.jsonl) back to their cap, keeping the most recent ones. It runs
-// inside the daemon when dispatched as a job and works standalone too. Normally reached via
+// journals (<cacheDir>/runs/<inv>.jsonl) to the count and byte caps and drops anything older
+// than config.Maintenance.RotateLogs, keeping the most recent ones. It runs inside the daemon
+// when dispatched as a job and works standalone too. Normally reached via
 // `magus job run rotate-logs`.
 func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server rotate-logs", args, func(fs *flag.FlagSet) {
@@ -899,7 +900,7 @@ func serverRotateLogs(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("server rotate-logs: %w", err)
 	}
-	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes)
+	removed, freed := cache.NewOutputStore(m.CacheDir()).RotateRuns(cache.DefaultMaxRuns, cache.DefaultMaxRunBytes, globalCfg.Daemon.Maintenance.RotateLogs)
 	slog.InfoContext(ctx, "rotated run-logs", slog.Int("removed", removed), slog.Int64("bytes_freed", freed))
 	return nil
 }

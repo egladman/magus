@@ -688,14 +688,15 @@ func (s *OutputStore) runsDir() string { return filepath.Join(s.cacheDir, RunsDi
 // invocation, not keyed like outputs/), so this is a single keep-last over the whole directory:
 // the run-log analogue of pruneKey, and the worker behind the rotate-logs job.
 //
-// TWO caps, and the tighter one wins. keepLast bounds the COUNT; keepBytes bounds the total on
-// disk. Count alone does not bound anything: a journal holds every output line of its run, so its
-// size is whatever the subprocess printed, and 500 of them is 500 times an unbounded number. A run
-// that emits a gigabyte earns a gigabyte.
+// THREE caps, and the tightest one wins. keepLast bounds the COUNT; keepBytes bounds the total on
+// disk; maxAge bounds how OLD a kept journal may be. Count alone does not bound anything: a
+// journal holds every output line of its run, so its size is whatever the subprocess printed, and
+// 500 of them is 500 times an unbounded number. A run that emits a gigabyte earns a gigabyte.
 //
 // Best-effort: an unreadable dir or a failed remove is skipped, never fatal. keepLast <= 0 is a
-// no-op (never wipe the whole dir by accident), and keepBytes <= 0 means no size cap.
-func (s *OutputStore) RotateRuns(keepLast int, keepBytes int64) (removed int, bytesFreed int64) {
+// no-op (never wipe the whole dir by accident); keepBytes <= 0 means no size cap; maxAge <= 0
+// means no age cap.
+func (s *OutputStore) RotateRuns(keepLast int, keepBytes int64, maxAge time.Duration) (removed int, bytesFreed int64) {
 	if keepLast <= 0 {
 		return 0, 0
 	}
@@ -731,6 +732,17 @@ func (s *OutputStore) RotateRuns(keepLast int, keepBytes int64) (removed int, by
 				// it, unless it is the newest, which is always kept. A single run bigger than
 				// the whole budget is a reason to raise the budget, never a reason to delete
 				// the run somebody just did and is most likely about to read.
+				keep = max(i, 1)
+				break
+			}
+		}
+	}
+	if maxAge > 0 {
+		cutoff := time.Now().Add(-maxAge)
+		for i, e := range entries[:keep] {
+			if e.mod.Before(cutoff) {
+				// Same floor as the byte cap above: the newest run survives even if it is
+				// itself past maxAge, since a quiet project's last run may be the only one.
 				keep = max(i, 1)
 				break
 			}

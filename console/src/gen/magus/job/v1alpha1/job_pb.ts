@@ -28,8 +28,8 @@ export const file_magus_job_v1alpha1_job: GenFile = /*@__PURE__*/
 
 /**
  * RunJobResponse reports what the submission did: whether the job started or coalesced, the
- * invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
- * caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
+ * invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated
+ * 3m ago, trail 2.1 MB" without a follow-up call.
  *
  * @generated from message magus.job.v1alpha1.RunJobResponse
  */
@@ -47,7 +47,7 @@ export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   invocationId: string;
 
   /**
-   * deep-link to this invocation's live log; empty when no console is mounted
+   * always empty today; TODO: deep-link once the /logs page accepts an invocation fragment
    *
    * @generated from field: string console_url = 3;
    */
