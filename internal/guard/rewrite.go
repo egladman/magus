@@ -42,6 +42,16 @@ var openWriteRe = regexp.MustCompile(`open\s*\([^)]*['"][rbt+]*[wa][rbt+]*['"]`)
 // those two keywords, so requiring it is what tells a range selection from a write.
 var awkRedirectRe = regexp.MustCompile(`\b(?:print|printf)\b[^;{}\n]*>`)
 
+// interpreterScript is the program text an interpreter runs: its arguments, plus the
+// heredoc body when the program is read from stdin (`awk -f /dev/stdin <<EOF`).
+//
+// One assembly, used by every caller. Two call sites building this differently is exactly
+// how a redirect spelled only inside a heredoc reached no boundary check at all: the
+// rewrite rule included the body and the write-candidate scan did not.
+func interpreterScript(args []string, heredoc string) string {
+	return strings.Join(args, "\n") + "\n" + heredoc
+}
+
 // scriptWrites reports a program that would write a file, in the spelling name uses.
 func scriptWrites(name, script string, args []string) bool {
 	switch name {
@@ -93,7 +103,7 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 			if !scriptedRewriteInterpreters[name] && name != "awk" {
 				continue
 			}
-			script := strings.Join(c.Args, "\n") + "\n" + heredocText(st)
+			script := interpreterScript(c.Args, heredocText(st))
 			if !scriptWrites(name, script, c.Args) {
 				continue
 			}

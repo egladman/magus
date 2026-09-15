@@ -252,7 +252,7 @@ var writeReaders = map[string]bool{
 // onlyReads reports a command that only reads what it was pointed at. Four of the readers
 // carry one spelling that turns them into writers, and a list that ignored those would be
 // the writer allowlist again with the sides swapped.
-func onlyReads(name string, args []string, heredoc string) bool {
+func onlyReads(name, script string, args []string) bool {
 	if !writeReaders[name] {
 		return false
 	}
@@ -262,18 +262,12 @@ func onlyReads(name string, args []string, heredoc string) bool {
 	case "sort":
 		return !hasFlag(args, 'o', "output-file")
 	case "awk":
-		// awk's own language redirects, so the write is inside the program text rather
-		// than on the shell line the parser walked. Shared with scriptWrites in
-		// rewrite.go rather than a second copy of the pattern: a bare `>` also reads as
-		// a numeric/string comparison (`NR>=1`), so only a `>`/`>>` following print or
-		// printf counts as a write.
-		//
-		// The heredoc is part of the program, not data, whenever awk reads its script
-		// from stdin (`awk -f /dev/stdin <<EOF`). Scanning only the argv missed a write
-		// spelled entirely inside the body, and a miss HERE is a write that never
-		// reaches the cache-dir or lease-lane boundary at all, because this returning
-		// true is what stops commandWriteCandidates from offering any target.
-		return !awkRedirectRe.MatchString(strings.Join(append(slices.Clone(args), heredoc), "\n"))
+		// awk redirects in its own language, so the write is inside the program text
+		// rather than on the shell line the parser walked. Asking scriptWrites rather
+		// than re-deriving it: "does this program write" has one answer, and this
+		// returning true is what stops commandWriteCandidates offering any target at
+		// all, so a second answer here is a boundary check that never runs.
+		return !scriptWrites(name, script, args)
 	case "find":
 		return !slices.ContainsFunc(args, func(a string) bool {
 			return a == "-delete" || a == "-exec" || a == "-execdir" || a == "-ok" || a == "-okdir"
@@ -342,7 +336,7 @@ func writeTargetCandidates(command string, depth int, d Dialect) []string {
 // data, and folding it in would read `cat > f <<EOF` prose as a list of write targets.
 func commandWriteCandidates(c hint.Invocation, heredoc string) []string {
 	name := path.Base(c.Name)
-	if onlyReads(name, c.Args, heredoc) {
+	if onlyReads(name, interpreterScript(c.Args, heredoc), c.Args) {
 		return nil
 	}
 	words := c.Args
