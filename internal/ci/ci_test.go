@@ -3,19 +3,14 @@ package ci
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // makeProjects builds a []*types.Project from paths for use in Build calls.
-func makeProjects(paths ...string) []*types.Project {
-	ps := make([]*types.Project, len(paths))
-	for i, p := range paths {
-		ps[i] = &types.Project{Path: p}
-	}
-	return ps
-}
+var makeProjects = testkit.Projects
 
 func shardSizes(shards []Shard) []int {
 	sizes := make([]int, len(shards))

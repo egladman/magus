@@ -7,19 +7,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-func makeProjects(paths ...string) []*types.Project {
-	out := make([]*types.Project, len(paths))
-	for i, p := range paths {
-		out[i] = &types.Project{Path: p}
-	}
-	return out
-}
+var makeProjects = testkit.Projects
 
 func TestScoreProjectsNoFilter(t *testing.T) {
 	t.Parallel()
