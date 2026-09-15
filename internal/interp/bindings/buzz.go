@@ -38,7 +38,7 @@ func init() {
 // path; it is not used here.
 //
 // The namespace builders this calls live alongside, one file per concern:
-// project_ns.go (magus.project), target.go (the magus.Context builder and its
+// project.go (magus.project), target.go (the magus.Context builder and its
 // ctx.needs/glob dependency primitives, plus cross-project handles),
 // spell_object.go (imported spell handles), modules.go (the host module surface),
 // imports.go (project/spell import resolution), and pry.go (magus.pry).

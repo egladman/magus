@@ -21,17 +21,21 @@ package oci
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	specs "github.com/opencontainers/image-spec/specs-go"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
+
+// registryReplyLimit bounds a manifest or token response read into memory. A registry
+// answering either with megabytes is one to stop reading, not to trust.
+const registryReplyLimit = 4 << 20
 
 // emptyConfigPayload is the config blob's content, the two bytes
 // ocispec.DescriptorEmptyJSON describes. Registries require the blob to EXIST even though
@@ -48,16 +52,28 @@ type Reference struct {
 // ParseReference reads "ghcr.io/owner/name/artifact:tag". The tag is required rather than
 // defaulted to "latest": a publish that silently retagged latest because someone omitted
 // a tag is the kind of mistake a registry cannot undo.
+//
+// The tag separator is the last colon AFTER the last path separator, because a registry
+// may carry a port. Cutting on the first colon reads localhost:5000/team/graph:v1 as host
+// "localhost" with the rest as a tag, so a ported registry cannot be addressed at all.
 func ParseReference(s string) (Reference, error) {
-	name, tag, ok := strings.Cut(s, ":")
-	if !ok || tag == "" {
+	colon := strings.LastIndex(s, ":")
+	if colon < 0 || colon < strings.LastIndex(s, "/") || colon == len(s)-1 {
 		return Reference{}, fmt.Errorf("oci: %q names no tag; write <registry>/<repository>:<tag>", s)
 	}
+	name, tag := s[:colon], s[colon+1:]
 	host, repo, ok := strings.Cut(name, "/")
-	if !ok || host == "" || repo == "" || !strings.Contains(host, ".") {
+	if !ok || host == "" || repo == "" || !isRegistryHost(host) {
 		return Reference{}, fmt.Errorf("oci: %q names no registry host; write <registry>/<repository>:<tag>", s)
 	}
 	return Reference{Registry: host, Repository: repo, Tag: tag}, nil
+}
+
+// isRegistryHost distinguishes a registry from the first segment of a bare repository
+// path, the way a container runtime does: a dot, a port, or the literal "localhost".
+// Without it "egladman/magus:v1" would read as a host named "egladman".
+func isRegistryHost(host string) bool {
+	return strings.Contains(host, ".") || strings.Contains(host, ":") || host == "localhost"
 }
 
 func (r Reference) String() string {
@@ -108,11 +124,15 @@ func (c *Client) token(ctx context.Context, ref Reference, actions string) (stri
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("oci: token for %s: %s", ref.Repository, statusLine(resp))
 	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
+	if err != nil {
+		return "", fmt.Errorf("oci: token for %s: %w", ref.Repository, err)
+	}
 	var body struct {
 		Token       string `json:"token"`
 		AccessToken string `json:"access_token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		return "", fmt.Errorf("oci: token for %s: %w", ref.Repository, err)
 	}
 	if body.Token != "" {
@@ -145,11 +165,11 @@ func (c *Client) Pull(ctx context.Context, ref Reference, wantArtifactType strin
 	if len(m.Layers) != 1 {
 		return nil, fmt.Errorf("oci: %s has %d layers, wanted exactly 1", ref, len(m.Layers))
 	}
-	want := m.Layers[0].Digest
-	blob, err := c.blob(ctx, ref, tok, want)
+	blob, err := c.blob(ctx, ref, tok, m.Layers[0])
 	if err != nil {
 		return nil, err
 	}
+	want := m.Layers[0].Digest
 	// The digest is the registry's contract, so verifying it is what makes a pull over a
 	// plain HTTP hop trustworthy without signing anything. Verifier reports a mismatch
 	// rather than panicking on a malformed digest the manifest supplied.
@@ -177,15 +197,22 @@ func (c *Client) manifest(ctx context.Context, ref Reference, tok string) (ocisp
 	if resp.StatusCode != http.StatusOK {
 		return ocispec.Manifest{}, fmt.Errorf("oci: fetch %s: %s", ref, statusLine(resp))
 	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, registryReplyLimit))
+	if err != nil {
+		return ocispec.Manifest{}, fmt.Errorf("oci: fetch %s: %w", ref, err)
+	}
 	var m ocispec.Manifest
-	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+	if err := json.Unmarshal(raw, &m); err != nil {
 		return ocispec.Manifest{}, fmt.Errorf("oci: decode %s manifest: %w", ref, err)
 	}
 	return m, nil
 }
 
-func (c *Client) blob(ctx context.Context, ref Reference, tok string, d digest.Digest) ([]byte, error) {
-	req, err := c.get(ctx, ref, tok, "/blobs/"+d.String())
+// blob fetches one layer, bounded by the size its own descriptor declares. The bound is
+// free (the manifest already stated it) and without it a registry answering a small
+// descriptor with an endless body reads until the process dies.
+func (c *Client) blob(ctx context.Context, ref Reference, tok string, want ocispec.Descriptor) ([]byte, error) {
+	req, err := c.newGetRequest(ctx, ref, tok, "/blobs/"+want.Digest.String())
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +224,16 @@ func (c *Client) blob(ctx context.Context, ref Reference, tok string, d digest.D
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("oci: fetch %s blob: %s", ref, statusLine(resp))
 	}
-	return io.ReadAll(resp.Body)
+	// One byte past the declared size, so an overlong body is caught rather than silently
+	// truncated into a digest mismatch that blames the wrong thing.
+	blob, err := io.ReadAll(io.LimitReader(resp.Body, want.Size+1))
+	if err != nil {
+		return nil, fmt.Errorf("oci: fetch %s blob: %w", ref, err)
+	}
+	if int64(len(blob)) != want.Size {
+		return nil, fmt.Errorf("oci: %s layer is %d bytes, manifest declared %d", ref, len(blob), want.Size)
+	}
+	return blob, nil
 }
 
 func (c *Client) get(ctx context.Context, ref Reference, tok, path string) (*http.Request, error) {
@@ -268,11 +304,14 @@ func (c *Client) putBlob(ctx context.Context, ref Reference, tok string, payload
 	if err != nil {
 		return fmt.Errorf("oci: start upload to %s: %w", ref.Repository, err)
 	}
-	location := resp.Header.Get("Location")
-	resp.Body.Close()
+	// Closed AFTER the status check, not before: statusLine reads the body for whatever
+	// the registry said, and closing first discards the explanation of the very first
+	// error a misconfigured push hits.
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("oci: start upload to %s: %s", ref.Repository, statusLine(resp))
 	}
+	location := resp.Header.Get("Location")
 	if location == "" {
 		return fmt.Errorf("oci: start upload to %s: the registry returned no upload location", ref.Repository)
 	}

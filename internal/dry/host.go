@@ -581,7 +581,7 @@ func captureConfigure(args []vm.Value) (string, vm.Value) {
 }
 
 // dryKnownProjectOptionKeys / dryKnownTargetPolicyKeys / dryKnownToolBoundKeys are the
-// SAME tables the real binding (internal/interp/bindings/project_ns.go) rejects
+// SAME tables the real binding (internal/interp/bindings/project.go) rejects
 // against, so the playground/dry path rejects the same typos the real engine does
 // instead of silently dropping them.
 //
@@ -667,7 +667,7 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 					return err
 				}
 				name := types.Normalize(rawName)
-				// Per-target policy mirrors the real binding (project_ns.go):
+				// Per-target policy mirrors the real binding (project.go):
 				// skip_cache opts the target out of the cache; exclusive runs it
 				// alone against the batch.
 				//
