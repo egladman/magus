@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// memCorpus is a corpus held in memory, so every test below is a pure function of its
+// memTree is a tree held in memory, so every test below is a pure function of its
 // fixture and needs no filesystem.
-type memCorpus map[string][]byte
+type memTree map[string][]byte
 
-func (c memCorpus) read(path string) ([]byte, error) {
+func (c memTree) read(path string) ([]byte, error) {
 	body, ok := c[path]
 	if !ok {
 		return nil, fmt.Errorf("no such file: %s", path)
@@ -23,7 +23,7 @@ func (c memCorpus) read(path string) ([]byte, error) {
 	return body, nil
 }
 
-func (c memCorpus) paths() []string {
+func (c memTree) paths() []string {
 	out := make([]string, 0, len(c))
 	for p := range c {
 		out = append(out, p)
@@ -39,7 +39,7 @@ func (c memCorpus) paths() []string {
 	return out
 }
 
-func buildFrom(t *testing.T, c memCorpus) *Index {
+func buildFrom(t *testing.T, c memTree) *Index {
 	t.Helper()
 	ix, err := Build(c.paths(), c.read)
 	require.NoError(t, err)
@@ -48,7 +48,7 @@ func buildFrom(t *testing.T, c memCorpus) *Index {
 
 // scanAll is the reference implementation: no index, every file, same match shape. The
 // index is only ever allowed to be FASTER than this, never different.
-func scanAll(c memCorpus, pattern string) []Match {
+func scanAll(c memTree, pattern string) []Match {
 	var out []Match
 	for _, p := range c.paths() {
 		out = append(out, matchesIn(p, c[p], []byte(pattern))...)
@@ -63,22 +63,22 @@ func scanAll(c memCorpus, pattern string) []Match {
 func TestSearchAgreesWithABruteForceScan(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
 	alphabet := "abcdefg \n{}();"
-	corpus := memCorpus{}
+	tree := memTree{}
 	for f := range 40 {
 		var sb strings.Builder
 		for range 400 + rng.Intn(400) {
 			sb.WriteByte(alphabet[rng.Intn(len(alphabet))])
 		}
-		corpus[fmt.Sprintf("file%02d.txt", f)] = []byte(sb.String())
+		tree[fmt.Sprintf("file%02d.txt", f)] = []byte(sb.String())
 	}
-	// A planted needle proves the index finds what a random corpus would rarely contain.
-	corpus["file07.txt"] = append(corpus["file07.txt"], []byte("\nplanted_needle_value\n")...)
+	// A planted needle proves the index finds what a random tree would rarely contain.
+	tree["file07.txt"] = append(tree["file07.txt"], []byte("\nplanted_needle_value\n")...)
 
-	ix := buildFrom(t, corpus)
+	ix := buildFrom(t, tree)
 
 	patterns := []string{"planted_needle_value", "abc", "a", "ab", "zzz", "();", "\n{", "gfedcba"}
 	for f := range 25 {
-		body := corpus[fmt.Sprintf("file%02d.txt", f)]
+		body := tree[fmt.Sprintf("file%02d.txt", f)]
 		start := rng.Intn(len(body) - 12)
 		patterns = append(patterns, string(body[start:start+3+rng.Intn(9)]))
 	}
@@ -86,7 +86,7 @@ func TestSearchAgreesWithABruteForceScan(t *testing.T) {
 	for _, p := range patterns {
 		got, err := ix.SearchLiteral(p)
 		require.NoError(t, err, "pattern %q", p)
-		assert.Equal(t, scanAll(corpus, p), got,
+		assert.Equal(t, scanAll(tree, p), got,
 			"the index must return exactly what a full scan returns, for pattern %q", p)
 	}
 }
@@ -94,8 +94,8 @@ func TestSearchAgreesWithABruteForceScan(t *testing.T) {
 // TestSearchReportsLineAndColumn pins the coordinates a reader acts on. An off-by-one
 // here sends someone to the wrong line, which is worse than no answer.
 func TestSearchReportsLineAndColumn(t *testing.T) {
-	corpus := memCorpus{"a.go": []byte("package a\n\nfunc Target() {}\nvar x = Target\n")}
-	ix := buildFrom(t, corpus)
+	tree := memTree{"a.go": []byte("package a\n\nfunc Target() {}\nvar x = Target\n")}
+	ix := buildFrom(t, tree)
 
 	got, err := ix.SearchLiteral("Target")
 	require.NoError(t, err)
@@ -108,8 +108,8 @@ func TestSearchReportsLineAndColumn(t *testing.T) {
 // TestShortPatternStillSearches covers the shape with no trigram to look up. Returning
 // nothing there would be a silent wrong answer: the pattern is unindexable, not absent.
 func TestShortPatternStillSearches(t *testing.T) {
-	corpus := memCorpus{"a.txt": []byte("xy\nzy\n")}
-	ix := buildFrom(t, corpus)
+	tree := memTree{"a.txt": []byte("xy\nzy\n")}
+	ix := buildFrom(t, tree)
 
 	got, err := ix.SearchLiteral("y")
 	require.NoError(t, err)
@@ -119,13 +119,13 @@ func TestShortPatternStillSearches(t *testing.T) {
 // TestAbsentTrigramEndsTheQuery is the property the index exists for: one trigram no
 // file holds settles the whole question without reading a single file.
 func TestAbsentTrigramEndsTheQuery(t *testing.T) {
-	corpus := memCorpus{"a.txt": []byte("hello world\n")}
+	tree := memTree{"a.txt": []byte("hello world\n")}
 	reads := 0
 	counting := func(p string) ([]byte, error) {
 		reads++
-		return corpus.read(p)
+		return tree.read(p)
 	}
-	ix, err := Build(corpus.paths(), counting)
+	ix, err := Build(tree.paths(), counting)
 	require.NoError(t, err)
 
 	before := reads
@@ -137,7 +137,7 @@ func TestAbsentTrigramEndsTheQuery(t *testing.T) {
 
 // TestEmptyPatternIsRefused keeps the surface honest: everything is not an answer.
 func TestEmptyPatternIsRefused(t *testing.T) {
-	ix := buildFrom(t, memCorpus{"a.txt": []byte("x")})
+	ix := buildFrom(t, memTree{"a.txt": []byte("x")})
 	_, err := ix.SearchLiteral("")
 	require.Error(t, err)
 }
@@ -145,8 +145,8 @@ func TestEmptyPatternIsRefused(t *testing.T) {
 // TestBuildSkipsAnUnreadableFile pins the live-tree case: a file can vanish between the
 // walk and the read, and one such file must not cost the whole index.
 func TestBuildSkipsAnUnreadableFile(t *testing.T) {
-	corpus := memCorpus{"a.txt": []byte("findme here\n")}
-	ix, err := Build([]string{"a.txt", "gone.txt"}, corpus.read)
+	tree := memTree{"a.txt": []byte("findme here\n")}
+	ix, err := Build([]string{"a.txt", "gone.txt"}, tree.read)
 	require.NoError(t, err)
 	assert.Equal(t, 1, ix.Len())
 
@@ -155,12 +155,12 @@ func TestBuildSkipsAnUnreadableFile(t *testing.T) {
 	assert.Len(t, got, 1)
 }
 
-// benchCorpus is sized to make the candidate-narrowing visible: many files, one holding
+// benchTree is sized to make the candidate-narrowing visible: many files, one holding
 // the needle. That is the shape of a real precedent hunt.
-func benchCorpus(files, size int) memCorpus {
+func benchTree(files, size int) memTree {
 	rng := rand.New(rand.NewSource(7))
 	alphabet := "abcdefghijklmnopqrstuvwxyz \n"
-	c := memCorpus{}
+	c := memTree{}
 	for f := range files {
 		b := make([]byte, size)
 		for i := range b {
@@ -176,7 +176,7 @@ func benchCorpus(files, size int) memCorpus {
 // run: a bare BenchmarkBuild here also selects the graph packages' own, and the tree-wide
 // run that produces is what a scoped-looking invocation actually launches.
 func BenchmarkTextIndexSearchIndexed(b *testing.B) {
-	c := benchCorpus(1000, 4096)
+	c := benchTree(1000, 4096)
 	ix, err := Build(c.paths(), c.read)
 	require.NoError(b, err)
 	b.ResetTimer()
@@ -188,16 +188,16 @@ func BenchmarkTextIndexSearchIndexed(b *testing.B) {
 }
 
 func BenchmarkTextIndexSearchBruteForce(b *testing.B) {
-	c := benchCorpus(1000, 4096)
+	c := benchTree(1000, 4096)
 	b.ResetTimer()
 	for b.Loop() {
 		scanAll(c, "HandleRequestPayload")
 	}
 }
 
-// writeCorpus lays a corpus on disk with files ABOVE mmapFloor, which is the only size
+// writeTree lays a tree on disk with files ABOVE mmapFloor, which is the only size
 // where the mapping path is exercised at all.
-func writeCorpus(tb testing.TB, files, size int) []string {
+func writeTree(tb testing.TB, files, size int) []string {
 	tb.Helper()
 	dir := tb.TempDir()
 	rng := rand.New(rand.NewSource(11))
@@ -221,7 +221,7 @@ func readFileOnly(path string) ([]byte, error) { return os.ReadFile(path) }
 // TestReaderAgreesWithACopyingRead pins the mapping against the read it replaces. A
 // reader that returns different bytes is not an optimization.
 func TestReaderAgreesWithACopyingRead(t *testing.T) {
-	paths := writeCorpus(t, 3, mmapFloor*2)
+	paths := writeTree(t, 3, mmapFloor*2)
 
 	r := NewReader()
 	defer func() { assert.NoError(t, r.Close()) }()
@@ -248,7 +248,7 @@ func TestReaderHandlesAnEmptyFile(t *testing.T) {
 }
 
 func BenchmarkTextIndexBuildFromDiskMapped(b *testing.B) {
-	paths := writeCorpus(b, 200, 64<<10)
+	paths := writeTree(b, 200, 64<<10)
 	b.ResetTimer()
 	for b.Loop() {
 		r := NewReader()
@@ -262,7 +262,7 @@ func BenchmarkTextIndexBuildFromDiskMapped(b *testing.B) {
 }
 
 func BenchmarkTextIndexBuildFromDiskCopied(b *testing.B) {
-	paths := writeCorpus(b, 200, 64<<10)
+	paths := writeTree(b, 200, 64<<10)
 	b.ResetTimer()
 	for b.Loop() {
 		if _, err := Build(paths, readFileOnly); err != nil {
@@ -272,7 +272,7 @@ func BenchmarkTextIndexBuildFromDiskCopied(b *testing.B) {
 }
 
 func BenchmarkTextIndexBuild(b *testing.B) {
-	c := benchCorpus(1000, 4096)
+	c := benchTree(1000, 4096)
 	paths := c.paths()
 	b.ResetTimer()
 	for b.Loop() {

@@ -1,5 +1,5 @@
 // Package textindex answers the text half of a lookup: is this string present in the
-// corpus, and where. It is the missing counterpart to the symbol index, which can only
+// tree, and where. It is the missing counterpart to the symbol index, which can only
 // report that a name is not a SYMBOL and has no basis for the stronger claim that it is
 // not in the tree.
 //
@@ -10,7 +10,7 @@
 // cannot possibly match, which is where the time goes.
 //
 // Not a competitor to ripgrep at scanning. rg wins a cold byte-for-byte scan and always
-// will. What this can do is scan a smaller corpus (declared sources, never generated
+// will. What this can do is scan fewer files (declared sources, never generated
 // output), skip files whose content hash has not moved, and answer from a warm process
 // rather than a directory walk.
 package textindex
@@ -55,7 +55,7 @@ func trigram(a, b, c byte) uint32 {
 
 // Build indexes paths, reading each through read.
 //
-// A file that cannot be read is skipped rather than failing the build: a corpus is
+// A file that cannot be read is skipped rather than failing the build: the file set is
 // routinely a live working tree, where a file can vanish between the walk and the read,
 // and one such file must not cost the whole index.
 func Build(paths []string, read ReadFunc) (*Index, error) {
@@ -64,9 +64,9 @@ func Build(paths []string, read ReadFunc) (*Index, error) {
 	}
 	ix := &Index{paths: make([]string, 0, len(paths)), post: make(map[uint32][]uint32), read: read}
 	// optimization: direct-mapped seen[] indexed by trigram, replacing a map dedupe.
-	//   measured: BenchmarkTextIndexBuild 119.6ms -> 72.9ms at 4MB of corpus, -39% ns/op
-	//             (n=50). The map cost one hash per BYTE of corpus.
-	//   trade-off: B/op 47MB -> 114MB, a flat 64 MiB scratch per Build whatever the corpus
+	//   measured: BenchmarkTextIndexBuild 119.6ms -> 72.9ms over 4MB of files, -39% ns/op
+	//             (n=50). The map cost one hash per BYTE read.
+	//   trade-off: B/op 47MB -> 114MB, a flat 64 MiB scratch per Build whatever the input
 	//             size, and the "is this a set" reading is gone. Sorting a per-file slice
 	//             was tried instead and measured 69% SLOWER (120ms -> 202ms).
 	//   assumes:  nothing platform-specific; 1<<24 covers every 3-byte key exactly.
@@ -90,7 +90,7 @@ func Build(paths []string, read ReadFunc) (*Index, error) {
 			}
 			seen[g] = mark
 			// TODO: this append is the build's whole allocation cost (175k allocs, 47MB at
-			// 4MB of corpus): ~22k posting lists each doubling their way to ~1k entries. A
+			// 4MB of files): ~22k posting lists each doubling their way to ~1k entries. A
 			// flat arena sliced per gram would make it ~30 allocations. Measure before
 			// landing; the sort attempt above looked equally obvious and lost.
 			ix.post[g] = append(ix.post[g], id)

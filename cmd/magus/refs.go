@@ -69,8 +69,34 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		// now this path reported it byte-identically to a typo for something that never
 		// existed.
 		ans := knowledge.Answer(pos[0], false, symbolCoverage(ctx, root, pos[0], true, true))
+		// `absent` is true of SYMBOLS and says nothing about the tree. A string literal,
+		// a comment body or a config value is in no symbol index, so a bare absent here
+		// reads as "not in this repository" for exactly the names that are. Counting the
+		// text occurrences corrects that without minting a fourth verdict: the verdict
+		// still classifies the symbol lookup, and this rides beside it.
+		// The resolved root, not the --root override: that argument is empty unless the
+		// caller passed one, and walking "" searches nothing while reporting nothing.
+		var searched, skipped int
+		if searchRoot := resolveRootOrEmpty(root); searchRoot != "" {
+			hits, files, n, s, textErr := textPresence(searchRoot, pos[0])
+			searched, skipped = n, s
+			if textErr == nil && hits > 0 {
+				ans.Text = &types.KnowledgeTextPresence{Hits: hits, Files: files}
+			}
+		}
 		fmt.Fprintf(os.Stderr, "magus refs: no node matches %q\n", pos[0])
 		printVerdict(os.Stderr, ans, "")
+		if ans.Text != nil {
+			fmt.Fprintf(os.Stderr, "  not a symbol, but present as TEXT: %d occurrence(s) in %d file(s) of %d searched",
+				ans.Text.Hits, ans.Text.Files, searched)
+			if skipped > 0 {
+				// Named rather than swallowed: a count that does not say what it declined
+				// to read is one a reader cannot tell from a small answer.
+				fmt.Fprintf(os.Stderr, " (%d skipped: binary, empty, or over %d bytes)", skipped, maxSearchableFile)
+			}
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "  magus indexes symbols, not text; grep is the tool for a string literal or a comment")
+		}
 		if len(ans.Gaps) > 0 {
 			fmt.Fprintf(os.Stderr, "  the daemon's auto-indexer also keeps indexes current while `%s` runs\n", hint.ServerStart)
 		}

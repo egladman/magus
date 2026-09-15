@@ -330,11 +330,17 @@ export object KnowledgeSymbolGap {
     detail: str = "",
 }
 
+export object KnowledgeTextPresence {
+    hits: int = 0,
+    files: int = 0,
+}
+
 export object KnowledgeAnswer {
     verdict: str = "",
     reason: str = "",
     gaps: [KnowledgeSymbolGap] = [],
     staleIndexes: [str] = [],
+    text: KnowledgeTextPresence? = null,
 }
 
 export object Unreferenced {

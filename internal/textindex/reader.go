@@ -16,14 +16,14 @@ const mmapFloor = 16 << 10
 // Reader serves file bytes to Build and Scan, mapping rather than copying where that is
 // cheaper.
 //
-// A scan reads the whole corpus once and keeps none of it, which is exactly the shape
+// A scan reads every searched file once and keeps none of them, which is the shape
 // mmap exists for: the kernel already holds these pages in its page cache, and a copying
 // read asks it to duplicate every one of them into the Go heap.
 //
 // optimization: map the file instead of copying it into the heap.
 //
 //	measured: BenchmarkTextIndexBuildFromDisk{Mapped,Copied} at 200x64KB: B/op 129.3MB ->
-//	          114.6MB (-11%, exactly the corpus), ns/op unchanged within noise (n=20).
+//	          114.6MB (-11%, exactly the bytes read), ns/op unchanged within noise (n=20).
 //	trade-off: the returned bytes are the mapping and die at Close, so no consumer may
 //	          retain them; and the win is memory only. Build is dominated by the trigram
 //	          loop, not the read, so do not expect time back here. The scan path, which

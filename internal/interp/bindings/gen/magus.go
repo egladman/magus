@@ -646,6 +646,13 @@ func buzzValueMagusKnowledgeSymbolGap(v types.KnowledgeSymbolGap) vm.Value {
 	return out
 }
 
+func buzzValueMagusKnowledgeTextPresence(v types.KnowledgeTextPresence) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("hits", vm.IntValue(int64(v.Hits)))
+	out.MapSet("files", vm.IntValue(int64(v.Files)))
+	return out
+}
+
 func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("verdict", vm.StrValue(string(v.Verdict)))
@@ -660,6 +667,11 @@ func buzzValueMagusKnowledgeAnswer(v types.KnowledgeAnswer) vm.Value {
 		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
 	}
 	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
+	optText := vm.Null
+	if v.Text != nil {
+		optText = buzzValueMagusKnowledgeTextPresence((*v.Text))
+	}
+	out.MapSet("text", optText)
 	return out
 }
 

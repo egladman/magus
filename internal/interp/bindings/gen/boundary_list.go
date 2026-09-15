@@ -59,6 +59,7 @@ var RuntimeBoundaryTypes = []any{
 	types.JobUnattributedWrite{},
 	types.KnowledgeAnswer{},
 	types.KnowledgeSymbolGap{},
+	types.KnowledgeTextPresence{},
 	types.LeaseCheck{},
 	types.ModuleEntry{},
 	types.ModuleFieldEntry{},

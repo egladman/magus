@@ -647,11 +647,35 @@ func DescribeGaps(gaps []KnowledgeSymbolGap) string {
 // symbol index predates the sources it covers. It rides the answer rather than the console
 // so `-o json` and MCP cannot lose it: a machine consumer reading only stdout got an
 // unqualified `absent` where a human reading the same lookup was told the index was behind.
+//
+// Text rides the answer for the same reason and corrects a sharper misreading. A symbol
+// lookup that finds nothing reports `absent`, which is TRUE of symbols and false of the
+// tree: MAGUS_MCP_TOKEN is a string literal in twelve files and no symbol anywhere, so
+// the honest answer is "not a symbol, and here is how many times it appears as text".
+// Deliberately NOT a fourth verdict: a verdict classifies an answer that came back
+// empty, and this is a non-empty answer to a different question from a different
+// evidence base.
+//
+// A POINTER, not two ints: this package's JSON encoder keeps numeric values exact and
+// therefore does not drop a zero int under omitempty, so plain counters would put
+// `"text_hits": 0` on every answer magus has ever rendered. Nil means the text half was
+// not consulted, which is a different fact from consulting it and finding nothing.
 type KnowledgeAnswer struct {
 	Verdict      KnowledgeVerdict       `json:"verdict"                 yaml:"verdict"`
 	Reason       KnowledgeUnknownReason `json:"reason,omitempty"        yaml:"reason,omitempty"`
 	Gaps         []KnowledgeSymbolGap   `json:"gaps,omitempty"          yaml:"gaps,omitempty"`
 	StaleIndexes []string               `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
+	Text         *KnowledgeTextPresence `json:"text,omitempty"          yaml:"text,omitempty"`
+}
+
+// KnowledgeTextPresence is what a raw-text search found for a name no symbol index
+// holds: how many occurrences, across how many files.
+//
+// It answers the question `absent` cannot, and it is reported beside the verdict rather
+// than replacing it, because "no symbol by that name" stays true either way.
+type KnowledgeTextPresence struct {
+	Hits  int `json:"hits"  yaml:"hits"`
+	Files int `json:"files" yaml:"files"`
 }
 
 // ClassifyAnswer classifies a lookup's result against what magus was actually able to search.

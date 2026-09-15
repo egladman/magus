@@ -744,16 +744,28 @@ func (v KnowledgeSymbolGap) BuzzObject() BuzzObject {
 	}
 }
 
+func (v KnowledgeTextPresence) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"hits":  v.Hits,
+		"files": v.Files,
+	}
+}
+
 func (v KnowledgeAnswer) BuzzObject() BuzzObject {
 	itemsGaps := make([]any, len(v.Gaps))
 	for indexGaps := range v.Gaps {
 		itemsGaps[indexGaps] = v.Gaps[indexGaps].BuzzObject()
+	}
+	var optText any
+	if v.Text != nil {
+		optText = (*v.Text).BuzzObject()
 	}
 	return BuzzObject{
 		"verdict":      string(v.Verdict),
 		"reason":       string(v.Reason),
 		"gaps":         itemsGaps,
 		"staleIndexes": v.StaleIndexes,
+		"text":         optText,
 	}
 }
 
