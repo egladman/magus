@@ -104,11 +104,12 @@ const (
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
 
-	// Not a shell rule: it fires on a SPAWN, which reaches no shell parser. It lives in
-	// this block because denyRuleName is the one namespace every verdict's Rule field is
-	// drawn from, and the catalog test reads this block to find what must be documented.
-	// See internal/guard/spawn.go.
+	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a
+	// shell parser. They live in this block because denyRuleName is the one namespace every
+	// verdict's Rule field is drawn from, and the catalog test reads this block to find what
+	// must be documented. See internal/guard/spawn.go and internal/guard/buzz.go.
 	denySpawnUnbriefed denyRuleName = "spawn-unbriefed"
+	denyBuzzUnbriefed  denyRuleName = "buzz-unbriefed"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a
@@ -852,9 +853,17 @@ var (
 		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
 		"If it genuinely belongs in the notes, say so and let the person run it."
 
-	denyScriptedRewrite = "Use your editor tool for a few sites. For a whole-tree rename: `" + hint.Refs.With("<symbol>", "--occurrences") + "` for verified sites, then edit those.\n" +
-		"Run `" + hint.GraphBuild.String() + "` first if refs reports not-indexed; that verdict means unknown, not absent.\n" +
-		"A regex cannot tell your `.Sum` from the OTel SDK's, and it writes before anyone reads a diff. Raw TEXT (prose, a config value) has no graph equivalent: use your editor tool."
+	// LEADS with the editor tool, because that is the answer for most of what trips this:
+	// changing a string, a literal or a few lines in one file. The rename branch is named
+	// second and marked as a branch.
+	//
+	// It used to lead with `refs --occurrences` and the `.Sum` argument, which is advice
+	// about renaming a SYMBOL across a tree. Read while replacing a literal in one test
+	// file, it names a tool that takes a symbol the reader does not have, and a correct
+	// deny whose remediation does not fit is one the reader learns to route around.
+	denyScriptedRewrite = "Use your editor tool: it reads the file first and reports what it changed.\n" +
+		"Renaming a symbol across the tree instead? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives verified, column-precise sites to edit; run `" + hint.GraphBuild.String() + "` first if it reports not-indexed, which means unknown rather than absent.\n" +
+		"A regex writes before anyone reads a diff, and it cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
 
 	denySedInPlace = "Use your editor tool: it reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
 		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed is untouched."

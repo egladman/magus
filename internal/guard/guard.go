@@ -343,6 +343,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				}
 			}
 		}
+		// Last of the denies and first thing a Buzz write meets, in that order for a
+		// reason: the two above answer whether this agent may touch the file at all, and
+		// there is nothing to learn before a write that is refused anyway.
+		if verdict.Decision != "deny" {
+			if reason := denyBuzzWriteWithoutSkill(markers, req.ObservesSkillLoads, input); reason != "" {
+				verdict.Decision, verdict.Reason = "deny", reason
+				verdict.Rule = string(denyBuzzUnbriefed)
+			}
+		}
 		// The generated-output rule is definitive (it reads declared globs), so it
 		// outranks the heuristics below; the memory nudge is a heuristic on the
 		// filename and only fills the silence it leaves.

@@ -76,12 +76,21 @@ var denyRuleDocs = []RuleDoc{
 			"It is also the second half of a duplicate, since a gate already run locally is the same command on the same tree, and waiting for CI to agree pays twice for one answer. " +
 			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
 			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
-	{Name: string(denyRuleInterpreterRewrite), Decision: "deny", Catches: "an inline interpreter rewriting a file this tree already carries"},
+	{Name: string(denyRuleInterpreterRewrite), Decision: "deny",
+		Catches: "an inline interpreter rewriting a file this tree already carries",
+		Why: "A `python -c` or `node -e` that reads a tracked file, substitutes, and writes it back is an edit nobody reviewed: it lands before a diff exists, and the script that produced it is gone the moment the line ends. " +
+			"The editor tool reads the file first and reports what it changed, which is the same edit with a record of itself. " +
+			"It fires on the WRITE, not the interpreter: a one-liner that computes something, prints it, or creates a file the tree does not carry is untouched, and so is anything under a scratch path."},
 	{Name: string(denySpawnUnbriefed), Decision: "deny",
 		Catches: "a subagent spawned before the multi-agent skill loaded",
 		Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +
 			"Measured across 2,147 session transcripts: zero loads, under every name and every variant, while the two skills a hook DEMANDS loaded 415 times. A skill nobody is required to read is a skill nobody reads, and this workspace had already written that down before measuring it again here. " +
 			"It grades the session, never the prompt: it asks whether a marker file exists, so a handed-over prompt that merely mentions a denied command is untouched. Load Skill(magus-multi-agent) once and every later spawn in the session passes."},
+	{Name: string(denyBuzzUnbriefed), Decision: "deny",
+		Catches: "the first write to a .buzz file in a session that has not read the Buzz skill",
+		Why: "Buzz is in no model's training data, so what gets written is Go or TypeScript with the serial numbers filed off, and enough of it parses to reach review. " +
+			"Six errors in one session, by an agent with this repository open throughout: fs\\glob indexed as strings when it returns [Path]; .append on a list declared without mut; the ternary form, which upstream-strict parsing rejects outside --embedded; archive\\extract, which does not exist; a missing `import \"fs\"`; and .sub sliced by character on BYTE-indexed strings. Reading first supplies every one of them. " +
+			"It grades the session, not the file: one Skill(magus-buzz-write) and every later Buzz write passes. Reads are never gated, since reading is how the language gets learned."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +

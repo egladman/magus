@@ -3,8 +3,8 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-skill_full_bytes: 8416
-skill_short_bytes: 7018
+skill_full_bytes: 8668
+skill_short_bytes: 7270
 ---
 
 # magus-buzz-write
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `82` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `caa11a3f03cd` |
+| `skill-content` | `5dde5eee8b98` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -187,6 +187,9 @@ template\render(tpl, data: {"name": "world"});
 | typed binding | `final n: int = 1;` - type AFTER the name |
 | immutable / mutable | `final` / `var`; collections need `mut [1, 2]` to be mutated |
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
+| conditional value | `if`/`else` only; there is NO `a ? b : c` |
+| string offsets | BYTES, not characters: `s.sub(0, len: 8)` cuts a multi-byte rune in half |
+| a path from `fs\glob` | a `Path`, not a `str`; pass `p.value` to anything taking a path |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
 Reserved words that cannot be used as binding names (var/fun/param/field/...):
@@ -408,6 +411,9 @@ template\render(tpl, data: {"name": "world"});
 | typed binding | `final n: int = 1;` - type AFTER the name |
 | immutable / mutable | `final` / `var`; collections need `mut [1, 2]` to be mutated |
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
+| conditional value | `if`/`else` only; there is NO `a ? b : c` |
+| string offsets | BYTES, not characters: `s.sub(0, len: 8)` cuts a multi-byte rune in half |
+| a path from `fs\glob` | a `Path`, not a `str`; pass `p.value` to anything taking a path |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
 Reserved words that cannot be used as binding names (var/fun/param/field/...):

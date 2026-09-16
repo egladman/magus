@@ -140,6 +140,9 @@ template\render(tpl, data: {"name": "world"});
 | typed binding | `final n: int = 1;` - type AFTER the name |
 | immutable / mutable | `final` / `var`; collections need `mut [1, 2]` to be mutated |
 | optional | `int?`, unwrap with `??`, `?.`, or `!` |
+| conditional value | `if`/`else` only; there is NO `a ? b : c` |
+| string offsets | BYTES, not characters: `s.sub(0, len: 8)` cuts a multi-byte rune in half |
+| a path from `fs\glob` | a `Path`, not a `str`; pass `p.value` to anything taking a path |
 | errors | `fun f() > int !> str` declares what it throws; `try`/`catch`, or `expr catch fallback` inline |
 
 Reserved words that cannot be used as binding names (var/fun/param/field/...):

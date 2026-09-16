@@ -17,6 +17,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | Rule                                          | Catches                                                                            |
 | --------------------------------------------- | ---------------------------------------------------------------------------------- |
 | [busy-wait](busy-wait.md)                     | a loop polling for work you started, which announces its own completion            |
+| [buzz-unbriefed](buzz-unbriefed.md)           | the first write to a .buzz file in a session that has not read the Buzz skill      |
 | [cache-dir-write](cache-dir-write.md)         | a write into this checkout's magus cache dir, which magus alone owns               |
 | [capture-filter](capture-filter.md)           | a filter over a run capture or log, which cuts the failure block apart             |
 | [cd](cd.md)                                   | a `cd` before a magus command, when the project is an argument                     |
