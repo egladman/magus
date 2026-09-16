@@ -68,9 +68,9 @@ inherits it from the worker's environment, which the orchestrator that spawned
 the worker has to export - see
 [wiring a lease into a worker](leases.md#wiring-the-lease-into-a-worker).
 
-The fastest start is to copy [`magus-guard-command.sh`](guard-templates.md) and
+The fastest start is to copy [`magus-hook-command.sh`](guard-templates.md) and
 set its override variables: `HOST_EVENT_PATH`, `HOST_RESPONSE`,
-`GUARD_AGENT_NAME`, and the two unavailable-response variables. That gets you
+`__MAGUS_AGENT_NAME`, and the two unavailable-response variables. That gets you
 the missing-binary and broken-binary handling without writing it again.
 
 Three decisions are yours to make:
@@ -80,7 +80,7 @@ Three decisions are yours to make:
   gating event: a host that sends a message only with a denial has nothing to
   attach an advisory to, and its post-tool event is the channel instead, which
   lands after the call rather than before it. `HOST_ADVISE_BRANCH` reshapes the arm for
-  whatever your host takes. Reserve `GUARD_NO_ADVISE` for a host that does worse
+  whatever your host takes. Reserve `__MAGUS_NO_ADVISE` for a host that does worse
   than ignore a reply it does not know: one that treats an unsupported key as an
   error and then fails OPEN is disarmed by an advisory rather than merely deaf to
   it. Suppressed, an advise renders nothing at all. None of the four documented
@@ -178,7 +178,7 @@ Wire any event that means a human is needed to `magus session notify`; see [Atte
 
 Wire whatever event fires when a session ends to
 [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh), passing your
-host's name as `GUARD_AGENT_NAME`. `magus session` lists what it records.
+host's name as `__MAGUS_AGENT_NAME`. `magus session` lists what it records.
 
 The requirements are close to nothing, which is deliberate. magus reads the
 revision, branch and dirtiness from the tree itself, so a host that emits no

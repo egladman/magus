@@ -85,7 +85,7 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
     };
     const managed = JSON.stringify(harness.managed_entries);
     assert.ok(
-      managed.includes("magus-guard-observe.sh"),
+      managed.includes("magus-hook-observe.sh"),
       `${harness.id} must record read observations`,
     );
     assert.ok(
@@ -95,13 +95,13 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   }
 
   // Cursor: the harness spell is the magusfile SoT; harnesses/cursor.json stays
-  // for --id without a wire. Both point at the unified cursor-guard.sh, which
+  // for --id without a wire. Both point at the unified cursor-hook.sh, which
   // covers command/path/observe/checkpoint in one script (sessionEnd = checkpoint).
   const cursorSpell = readFileSync(
     path.join(repository, "spells/harness/cursor/spell.buzz"),
     "utf8",
   );
-  assert.match(cursorSpell, /cursor-guard\.sh/, "cursor spell names the Cursor guard script");
+  assert.match(cursorSpell, /cursor-hook\.sh/, "cursor spell names the Cursor hook script");
   assert.match(cursorSpell, /sessionEnd/, "cursor spell wires sessionEnd for checkpoints");
   assert.match(cursorSpell, /beforeShellExecution/, "cursor spell wires the shell guard");
   assert.match(cursorSpell, /preToolUse/, "cursor spell wires the write guard");
@@ -112,7 +112,7 @@ test("runtime harness descriptors cover read observation and checkpoints", () =>
   const cursorManaged = JSON.stringify(cursorJson.managed_entries);
   assert.equal(cursorJson.id, "cursor");
   assert.ok(
-    cursorManaged.includes("cursor-guard.sh"),
+    cursorManaged.includes("cursor-hook.sh"),
     "cursor JSON stays in lockstep with the spell",
   );
   assert.ok(cursorManaged.includes("sessionEnd"), "cursor JSON wires sessionEnd for checkpoints");

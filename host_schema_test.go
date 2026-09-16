@@ -59,7 +59,7 @@ var hostOutputSchema = map[string]string{
 	"cursor":      "cursor/hook-output.schema.json",
 }
 
-// cursorReplySchema maps a shell template variable in cursor-guard.sh to the schema for
+// cursorReplySchema maps a shell template variable in cursor-hook.sh to the schema for
 // the event that reads what it renders.
 //
 // One entry per host is enough everywhere else. Cursor validates each event's stdout
@@ -102,7 +102,7 @@ var coverageHost = regexp.MustCompile(`magus-guard-coverage:.*\bhost=(\S+)`)
 // HOST_RESPONSE is matched as two segments because the shell splices
 // "$HOST_ADVISE_BRANCH" between them. Composing it here rather than reading one string
 // is what lets the test render both supported arrangements. Claude Code and Codex
-// use the advise arm today; GUARD_NO_ADVISE remains an opt-in for a future host
+// use the advise arm today; __MAGUS_NO_ADVISE remains an opt-in for a future host
 // that rejects additionalContext rather than silently ignoring it.
 var (
 	adviseBranchAssign = regexp.MustCompile(`(?m)^\s*\[ -n "\$HOST_ADVISE_BRANCH" \] \|\| HOST_ADVISE_BRANCH='(.*)'$`)
@@ -266,7 +266,7 @@ func guardResponses(t *testing.T, name, body string) []string {
 		require.NotNil(t, advise,
 			"%s splices $HOST_ADVISE_BRANCH into HOST_RESPONSE but never assigns it a default", name)
 		// Both arrangements remain valid template behavior. The advise arm is what
-		// Claude Code and Codex render; GUARD_NO_ADVISE is a supported host override.
+		// Claude Code and Codex render; __MAGUS_NO_ADVISE is a supported host override.
 		bodies = append(bodies, segments[1]+advise[1]+segments[2], segments[1]+segments[2])
 	}
 	for _, match := range inlineTemplateArg.FindAllStringSubmatch(body, -1) {
@@ -391,7 +391,7 @@ func schemaPropertyNames(t *testing.T, rel string) map[string]any {
 	return schema.Properties
 }
 
-// TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem grades what cursor-guard.sh
+// TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem grades what cursor-hook.sh
 // answers, per event.
 //
 // The generic extraction above cannot reach these. The guard holds its two replies in
@@ -405,7 +405,7 @@ func schemaPropertyNames(t *testing.T, rel string) map[string]any {
 // rest, so a reply naming additional_context_v2 is accepted, ignored, and carries no
 // advisory at all.
 func TestCursorGuardRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
-	path := filepath.Join(hookTemplateDir, "cursor-guard.sh")
+	path := filepath.Join(hookTemplateDir, "cursor-hook.sh")
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err, "read %s", path)
 

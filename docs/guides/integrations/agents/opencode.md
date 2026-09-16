@@ -94,7 +94,7 @@ other templates.
 // belongs to by callID. That append is what replaced a console.warn, which reached
 // the person and never the model. The declarations below record it, and they
 // are machine-read by the host-parity gate; see the longer note in
-// magus-guard-command.sh.
+// magus-hook-command.sh.
 //
 // It also carries the two jobs that are not verdicts: a compacting session is
 // handed this checkout back through the compaction prompt, and a checkpoint is
@@ -115,7 +115,7 @@ other templates.
 //
 // PATH contract: this shells out to `magus` by name, inheriting PATH from the
 // opencode process. If magus lives in a prefix PATH does not include (mise,
-// brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
+// brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
 import { existsSync } from "node:fs";
@@ -190,9 +190,9 @@ function workspaceMagus(): string | null {
 
 export const MagusGuard: Plugin = async () => {
   // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
-  // magus-guard-command.sh: an older PATH binary does not fail when it lacks a rule, it
+  // magus-hook-command.sh: an older PATH binary does not fail when it lacks a rule, it
   // fails to recognize the config key that arms the rule and returns pass.
-  const magus = process.env.GUARD_MAGUS_BIN ?? workspaceMagus() ?? "magus";
+  const magus = process.env.__MAGUS_BIN ?? workspaceMagus() ?? "magus";
 
   // Said once per session. This plugin instance lives as long as the session does, so a
   // flag here IS the session and needs no marker on disk, unlike the sh templates whose
@@ -255,7 +255,7 @@ export const MagusGuard: Plugin = async () => {
    * empty and every verdict silently disappears. So: try as called, and on an
    * empty reply - which under `-o json` only happens when the call itself failed,
    * since even a pass renders `{"decision":"pass",...}` - retry with `--agent-name` and
-   * its value stripped out. Same shape as magus-guard-command.sh's `guard()`
+   * its value stripped out. Same shape as magus-hook-command.sh's `guard()`
    * fallback, fixed there after the same gap (memory:
    * agent-host-attribution-not-captured) and ported here so this plugin degrades
    * the same way.
@@ -266,7 +266,7 @@ export const MagusGuard: Plugin = async () => {
       saidUnguarded = true;
       console.warn(
         `[magus guard] could not run ${magus}; this call is UNGUARDED. ` +
-          "Install magus, or set GUARD_MAGUS_BIN to its path.",
+          "Install magus, or set __MAGUS_BIN to its path.",
       );
     };
 
@@ -388,7 +388,7 @@ positional arguments, and a plugin that passes the command as one does not get a
 wrong verdict - it gets no verdict, which fails open on every call.
 
 If magus lives in a prefix the OpenCode process does not have on PATH (mise,
-brew, asdf, `~/.local/bin`), set `GUARD_MAGUS_BIN` to an absolute path.
+brew, asdf, `~/.local/bin`), set `__MAGUS_BIN` to an absolute path.
 
 ## Notifications
 
@@ -421,7 +421,7 @@ hook produces on the hosts that have one, and the listing is ordered.
 
 If you would rather not have the plugin do it, running
 [`magus-checkpoint.sh`](guard-templates.md#magus-checkpointsh) with
-`GUARD_AGENT_NAME=opencode` records the identical row.
+`__MAGUS_AGENT_NAME=opencode` records the identical row.
 `magus session checkpoint --note "..."` writes it by hand.
 
 ## Coverage and limits

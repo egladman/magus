@@ -1957,9 +1957,9 @@ func newestGoSource(root string) (time.Time, string) {
 // pointed at by another config's text, is checked directly in the directory
 // branch of checkGuardWiring instead of appearing here.
 var guardTemplateBasenames = []string{
-	"magus-guard-command.sh",
-	"magus-guard-path.sh",
-	"cursor-guard.sh",
+	"magus-hook-command.sh",
+	"magus-hook-path.sh",
+	"cursor-hook.sh",
 	// Judges nothing, and is graded here anyway. A stale copy of it fails the way
 	// the observe template's did: silently, as a store that looks like a repository
 	// where nobody ever stopped mid-task.

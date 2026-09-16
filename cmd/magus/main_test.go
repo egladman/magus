@@ -711,7 +711,7 @@ func TestScripts(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			e.Setenv("GUARD_TEMPLATES", templates)
+			e.Setenv("__MAGUS_TEMPLATES", templates)
 			return nil
 		},
 	})

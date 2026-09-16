@@ -123,7 +123,7 @@ know which one is wrong.
 
 Do not add `.cursor/rules/*.mdc` for magus behavior. Cursor's always-on prose is
 `AGENTS.md`; enforcement is `harnesses/cursor.json` plus
-`docs/guides/integrations/agents/cursor-guard.sh`.
+`docs/guides/integrations/agents/cursor-hook.sh`.
 
 The guard already advises repo-wide `rg` / `grep -r` / `find -name` toward
 `magus refs` / `magus query`. Cursor's built-in Grep and Glob tools never hit

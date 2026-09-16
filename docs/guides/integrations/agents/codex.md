@@ -118,7 +118,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -128,7 +128,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]
@@ -138,7 +138,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking MCP tool call"
           }
         ]
@@ -148,7 +148,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh",
             "statusMessage": "magus: recording read"
           }
         ]
@@ -171,7 +171,7 @@ shown here:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "command": "__MAGUS_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
             "statusMessage": "magus: recording where the work stands"
           }
         ]
@@ -186,14 +186,14 @@ merges those opaque fragments into `.codex/hooks.json`; Magus does not inject a
 codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the repository,
 or apply the descriptor.
 
-The two `PreToolUse` entries used to carry `GUARD_NO_ADVISE=1`, which rendered
+The two `PreToolUse` entries used to carry `__MAGUS_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks
 reference contradicts: `additionalContext` is a supported `PreToolUse` field, and
 the response keys Codex rejects, the ones that make it mark a hook run failed and
 continue the call, are `continue`, `stopReason` and `suppressOutput`. Suppression
 cost this host every explanation the guard had to give while enforcing every deny,
 which is the half of the contract nothing in a session reports missing. If your own
-build behaves otherwise, `GUARD_NO_ADVISE=1` still suppresses the arm.
+build behaves otherwise, `__MAGUS_NO_ADVISE=1` still suppresses the arm.
 
 ### Maintaining the workspace harness
 

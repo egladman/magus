@@ -176,7 +176,7 @@ solution.
 The session is launched with `env -i` and a whitelist: `HOME`, `PATH`, the
 locale, the credential names, plus every name the worktree's
 `.benchmark/env.sh` exports. That file is how an arm sets its levers
-(`MAGUS_HINTS_ENABLED=false`, `GUARD_MAGUS_BIN`): `provision.sh` writes it per
+(`MAGUS_HINTS_ENABLED=false`, `__MAGUS_BIN`): `provision.sh` writes it per
 run through `arm_write_env` in `arms/lib.sh`, and `agent.sh` sources it before
 the scrub. cwd is the worktree and `--setting-sources project` limits settings
 to the worktree's own `.claude/settings.json`; `HOME` is kept, so whatever the

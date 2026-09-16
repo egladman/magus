@@ -59,11 +59,11 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the attribution flag, which no released binary accepts (v0.3.0 predates it):
 // an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
-// attribution on exactly this failure (magus-guard-command.sh's guard()); the
+// attribution on exactly this failure (magus-hook-command.sh's guard()); the
 // plugin now does the same.
 //
 // 3: that flag is now --agent-name (was --host, which read as a network host)
-// and the templates' variable is GUARD_AGENT_NAME (was GUARD_HOST). A copy
+// and the templates' variable is __MAGUS_AGENT_NAME (was __MAGUS_HOST). A copy
 // still passing the old spelling degrades rather than breaks (the retry that
 // version 2 added drops attribution and keeps the verdict), so an unbumped
 // copy loses the activity trail's host label, not its guard.
@@ -79,7 +79,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // the context key (treating it as an error and then failing OPEN) was not merely
 // ignoring an advisory, it was disarmed by one for that call. A copy that predates
 // this keeps sending it and keeps failing open, which no verdict anywhere reveals.
-// Suppression is opt-in per host (GUARD_NO_ADVISE), so the rendered response for a
+// Suppression is opt-in per host (__MAGUS_NO_ADVISE), so the rendered response for a
 // host that keeps the arm is byte-identical to version 6. Which hosts need it is
 // recorded in their own guide pages, not here.
 //
@@ -120,7 +120,7 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // compacted session is handed back renders as a JSON envelope on request, for a host that
 // parses a session-start hook's stdout as a reply rather than reading it as context.
 //
-// 13: the contract grew a third surface, MCP tool calls, and magus-guard-command.sh grew
+// 13: the contract grew a third surface, MCP tool calls, and magus-hook-command.sh grew
 // HOST_EVENT_RAW to carry it: an MCP call has no single string to select with
 // HOST_EVENT_PATH, only a tool name and a params object, so a host wiring this surface
 // forwards the whole event instead of reducing it to one jq extraction. A copy that

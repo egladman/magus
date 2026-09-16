@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "sh docs/guides/integrations/agents/magus-hook-command.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "sh docs/guides/integrations/agents/magus-hook-path.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -24,7 +24,7 @@
       {
         "hooks": [
           {
-            "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -34,7 +34,7 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -44,7 +44,7 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "timeout": 10,
             "type": "command"
           }
@@ -54,12 +54,22 @@
       {
         "hooks": [
           {
-            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "timeout": 10,
             "type": "command"
           }
         ],
         "matcher": "Skill"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads sh docs/guides/integrations/agents/magus-hook-command.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
       }
     ],
     "SessionStart": [

@@ -5,7 +5,7 @@
 # its host supplies and that the guide's table agrees. A declaration can be
 # sincere and still wrong, because nothing there runs the file: the OpenCode guard
 # plugin declared a correct stance for months while invoking a subcommand that no
-# longer existed. This runs the real file (GUARD_TEMPLATES is an absolute path to
+# longer existed. This runs the real file (__MAGUS_TEMPLATES is an absolute path to
 # docs/guides/integrations/agents, never a copy) and asserts the lines it emits.
 #
 # Every case is labeled `# kind: <kind>`; TestSessionAdapterCasesCoverEveryKind
@@ -21,7 +21,7 @@ env HOST_REPO_ROOT=/repo
 env HOST_PROJECT_DIRS=$WORK/transcripts
 env SESSION_STATE_DIR=$WORK/state
 
-exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
 
 # kind: skill.load
 # The skill NAME, not the tool call: what an audit counts is which skill loaded.
@@ -70,12 +70,12 @@ stdout '"exit":null'
 # A re-run reads only what is new. Without the checkpoint an audit re-loads the
 # whole store on every invocation, which is the cost that gets an adapter switched
 # off after the first week.
-exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
 ! stdout .
 
 # An appended record is picked up on the next run, and only that record.
 cp $WORK/appended.jsonl $WORK/transcripts/s1.jsonl
-exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
 stdout '"kind":"shell.command","ref":"t8"'
 ! stdout '"ref":"t1"'
 
@@ -86,7 +86,7 @@ stdout '"kind":"shell.command","ref":"t8"'
 
 env HOST_REPO_ROOT=
 cd $WORK/nogit
-exec sh $GUARD_TEMPLATES/magus-session-load-claude-code.sh --stdout
+exec sh $__MAGUS_TEMPLATES/magus-session-load-claude-code.sh --stdout
 ! stdout .
 stderr 'no Magus workspace here'
 cd $WORK

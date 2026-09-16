@@ -920,13 +920,13 @@ func configInvokesMagus(config map[string]any) bool {
 
 // invokesMagus reports whether a host hook command actually calls Magus.
 // Coverage is transport-shaped: shipped script basenames (aligned with
-// doctor's guardTemplateBasenames plus magus-guard-observe), or a magus
+// doctor's guardTemplateBasenames plus magus-hook-observe), or a magus
 // session/session-hook invocation. A generic *-guard.sh does not count.
 func invokesMagus(command string) bool {
 	switch {
-	case strings.Contains(command, "magus-guard-"):
+	case strings.Contains(command, "magus-hook-"):
 		return true
-	case strings.Contains(command, "cursor-guard.sh"):
+	case strings.Contains(command, "cursor-hook.sh"):
 		return true
 	case strings.Contains(command, "magus-checkpoint"):
 		return true

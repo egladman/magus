@@ -20,11 +20,11 @@
 #   HOST_EVENT_PATH  dot-path to the read path inside your host's event
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
-#   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
-#   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
+#   __MAGUS_BIN  path to the binary, when it is not on PATH
 #
 # The defaults are Claude Code's event shape, matching its two siblings. A
-# different host overrides the dot-paths and passes its own GUARD_AGENT_NAME,
+# different host overrides the dot-paths and passes its own __MAGUS_AGENT_NAME,
 # exactly as codex-hooks.json already does for the guard templates.
 #
 # NO magus-guard-coverage line, and that absence is deliberate rather than an
@@ -48,7 +48,7 @@
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
 # Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
 # this file needs it MORE than they do, because it is silent by design. An older PATH copy
 # does not know --observe at all: it rejects the flag, prints its usage to a stream this
@@ -61,14 +61,14 @@
 # host's session directory, which is not always the workspace root. The command template
 # carries the full reasoning.
 guard_root=$PWD
-while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
   if [ -f "$guard_root/magusfile.buzz" ]; then
-    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
     break
   fi
   guard_root=${guard_root%/*}
 done
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # An absent observer is SILENT, where an absent guard is loud.
 #
@@ -76,7 +76,7 @@ done
 # unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
 # here - there is no rule - so the same announcement would be a per-read
 # interruption reporting that an optional record was not written.
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
   exit 0
 fi
 
@@ -108,8 +108,8 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # missing from `magus session`, the binary is too old. Both streams are
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
-printf '%s' "$path" | "$GUARD_MAGUS_BIN" shell --observe \
-  --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
+printf '%s' "$path" | "$__MAGUS_BIN" shell --observe \
+  --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 
 exit 0

@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking command",
             "type": "command"
           }
@@ -14,7 +14,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-path.sh",
             "statusMessage": "magus guard: checking file",
             "type": "command"
           }
@@ -24,7 +24,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "__MAGUS_AGENT_NAME=codex HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh",
             "statusMessage": "magus guard: checking MCP tool call",
             "type": "command"
           }
@@ -34,7 +34,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-hook-observe.sh",
             "statusMessage": "magus: recording read",
             "type": "command"
           }
@@ -68,7 +68,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
+            "command": "__MAGUS_AGENT_NAME=codex sh \"$(magus describe projects -o 'template={{.workspace}}')/docs/guides/integrations/agents/magus-checkpoint.sh\"",
             "statusMessage": "magus: recording where the work stands",
             "type": "command"
           }
@@ -77,7 +77,7 @@
       {
         "hooks": [
           {
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
+            "command": "__MAGUS_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-checkpoint.sh",
             "statusMessage": "magus: recording where the work stands",
             "type": "command"
           }

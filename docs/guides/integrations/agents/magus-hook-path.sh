@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # magus guard hook: judges ONE file path an agent is about to write.
 #
-# Companion to magus-guard-command.sh, wired to your host's file-editing tool
+# Companion to magus-hook-command.sh, wired to your host's file-editing tool
 # rather than its shell tool. POSIX sh, no bashisms.
 #
 # The declared-output rule here is the one guard rule that is not a heuristic:
@@ -27,12 +27,12 @@
 # A host with no file-write hook still gets the command rules; it just misses
 # this one. That is a coverage difference to record, not a reason to skip it.
 #
-# GUARD_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
-# magus-guard-command.sh: attribution recorded on the activity event, never an
+# __MAGUS_AGENT_NAME and HOST_SESSION_PATH work exactly as they do in
+# magus-hook-command.sh: attribution recorded on the activity event, never an
 # input to the verdict.
 #
 # Coverage declaration, machine-read by the host-parity gate - see the longer
-# note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
+# note in magus-hook-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
 # magus-guard-template: 14
 # magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
@@ -43,13 +43,13 @@
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
-[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-# Same split, and the same reason, as in magus-guard-command.sh: a host that
+[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
+# Same split, and the same reason, as in magus-hook-command.sh: a host that
 # REJECTS the context key can mark the hook run failed and continue the call, so an
 # advisory it cannot take disarms that call rather than merely going unread. No
 # host wired to this file is in that position; the flag is there for the one you
 # may wire.
-if [ -n "$GUARD_NO_ADVISE" ]; then
+if [ -n "$__MAGUS_NO_ADVISE" ]; then
   HOST_ADVISE_BRANCH=''
 else
   [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
@@ -70,19 +70,19 @@ fi
 # piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
 # project root that every other ecosystem's runner does.
 guard_root=$PWD
-while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
   if [ -f "$guard_root/magusfile.buzz" ]; then
-    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
     break
   fi
   guard_root=${guard_root%/*}
 done
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
   # Prints nothing by default: for most hosts an empty response means "allow".
-  # Set GUARD_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
-  [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] && printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
+  # Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
+  [ -n "$__MAGUS_UNAVAILABLE_RESPONSE" ] && printf '%s' "$__MAGUS_UNAVAILABLE_RESPONSE"
   exit 0
 fi
 
@@ -98,28 +98,28 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell --path "$@" -o "template=$HOST_RESPONSE"
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$__MAGUS_BIN" shell --path "$@" -o "template=$HOST_RESPONSE"
 }
-# Same discrimination as magus-guard-command.sh, and for the same reason now that this
+# Same discrimination as magus-hook-command.sh, and for the same reason now that this
 # surface can render a deny: a DENY exits non-zero (2) with the verdict on stdout, so a
 # bare `||` retry would treat every blocked write as "this binary rejected the attribution
 # flags" and judge it a second time - unattributed, and recorded twice in the activity
 # trail. Emptiness alone cannot tell the cases apart either, because a pass renders empty
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
-verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)
   status=$?
 fi
 
-# A pass and a broken guard both render nothing; see magus-guard-command.sh for why
+# A pass and a broken guard both render nothing; see magus-hook-command.sh for why
 # telling them apart matters. Kept identical here so neither surface grows a behavior
 # the other lacks - the difference is only that this one has no default message,
 # because for most hosts an empty response on this surface already means "allow".
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
-  [ -n "$GUARD_FAILED_RESPONSE" ] && printf '%s' "$GUARD_FAILED_RESPONSE"
+  [ -n "$__MAGUS_FAILED_RESPONSE" ] && printf '%s' "$__MAGUS_FAILED_RESPONSE"
   exit 0
 fi
 printf '%s' "$verdict"

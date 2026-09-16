@@ -29,7 +29,7 @@ fun cursor_config_defaults() > {str: int} {
 fun cursor_skills_form() > str { return "short"; }
 
 fun cursor_guard_command() > str {
-    return "sh docs/guides/integrations/agents/cursor-guard.sh";
+    return "sh docs/guides/integrations/agents/cursor-hook.sh";
 }
 
 fun cursor_event_names() > [str] {
@@ -155,7 +155,7 @@ test "harness_skills is skills-empty short form for Cursor" {
 test "guard command is the shipped Cursor script, not agent hook" {
     final cmd = cursor_guard_command();
     assert\isTrue(cmd.startsWith("sh "), "host runs the script via sh");
-    assert\isTrue(cmd.indexOf("cursor-guard.sh") != null, "names the Cursor guard template");
+    assert\isTrue(cmd.indexOf("cursor-hook.sh") != null, "names the Cursor guard template");
     assert\isTrue(cmd.indexOf("docs/guides/integrations/agents/") != null, "lives with the other host glue");
 }
 

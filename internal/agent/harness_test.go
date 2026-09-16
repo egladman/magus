@@ -27,7 +27,7 @@ func TestApplyHarnessAddsOnlyMagusHookAlongsideUserHooks(t *testing.T) {
 	body, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "my-own-hook")
-	assert.Contains(t, string(body), "magus-guard-command.sh")
+	assert.Contains(t, string(body), "magus-hook-command.sh")
 	assert.Contains(t, string(body), `"other": {`)
 
 	second, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "test-host"})
@@ -64,7 +64,7 @@ func TestApplyHarnessPreservesCompetingAndLargeUserValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "9007199254740993")
 	assert.Contains(t, string(body), "my custom status")
-	assert.Contains(t, string(body), "magus-guard-command.sh")
+	assert.Contains(t, string(body), "magus-hook-command.sh")
 }
 
 func TestApplyHarnessCanWireReadObserver(t *testing.T) {
@@ -79,7 +79,7 @@ func TestApplyHarnessCanWireReadObserver(t *testing.T) {
   "skills": {"paths": [".agents/skills"], "form": "full"},
   "managed_entries": [{
     "path": ["hooks", "PreToolUse"],
-    "entries": [{"matcher": "Read", "hooks": [{"type": "command", "command": "sh magus-guard-observe.sh"}]}]
+    "entries": [{"matcher": "Read", "hooks": [{"type": "command", "command": "sh magus-hook-observe.sh"}]}]
   }]
 }`), 0o644))
 
@@ -89,7 +89,7 @@ func TestApplyHarnessCanWireReadObserver(t *testing.T) {
 
 	body, err := os.ReadFile(filepath.Join(root, "reader/hooks.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "magus-guard-observe.sh")
+	assert.Contains(t, string(body), "magus-hook-observe.sh")
 
 	result, err := VerifyHarness(context.Background(), root, "reader")
 	require.NoError(t, err)
@@ -152,8 +152,8 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	require.NoError(t, err)
 	// The wired commands now have to actually answer, not merely be present: give
 	// them something real to run.
-	writeStubGuardScript(t, root, "magus-guard-command.sh", "deny")
-	writeStubGuardScript(t, root, "magus-guard-path.sh", "advise")
+	writeStubGuardScript(t, root, "magus-hook-command.sh", "deny")
+	writeStubGuardScript(t, root, "magus-hook-path.sh", "advise")
 	result, err = VerifyHarness(context.Background(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -171,8 +171,8 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
   "config_defaults": {"version": 1},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-guard.sh"}]},
-    {"path": ["hooks", "afterTool"], "entries": [{"matcher": "Write", "command": "sh cursor-guard.sh"}]},
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]},
+    {"path": ["hooks", "afterTool"], "entries": [{"matcher": "Write", "command": "sh cursor-hook.sh"}]},
     {"path": ["hooks", "sessionStop"], "entries": [{"command": "sh magus-checkpoint.sh"}]}
   ]
 }`), 0o644))
@@ -184,14 +184,14 @@ func TestApplyHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join(root, "flat/hooks.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"version": 1`)
-	assert.Contains(t, string(body), "cursor-guard.sh")
+	assert.Contains(t, string(body), "cursor-hook.sh")
 	assert.Contains(t, string(body), `"beforeShell"`)
 	assert.NotContains(t, string(body), `"hooks": [`)
 
-	// cursor-guard.sh's reply dialect is self-contained (see probeEventFor), so the
+	// cursor-hook.sh's reply dialect is self-contained (see probeEventFor), so the
 	// probe only checks that it answers something; magus-checkpoint.sh renders no
 	// verdict at all and is never probed.
-	writeStubGuardScript(t, root, "cursor-guard.sh", "ok")
+	writeStubGuardScript(t, root, "cursor-hook.sh", "ok")
 	result, err := VerifyHarness(context.Background(), root, "flat")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -214,7 +214,7 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
   "managed_entries": [
     {
       "path": ["hooks", "PreToolUse"],
-      "entries": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "sh magus-guard-command.sh"}]}]
+      "entries": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "sh magus-hook-command.sh"}]}]
     },
     {
       "path": ["hooks", "Stop"],
@@ -227,9 +227,9 @@ func TestApplyHarnessOwnsManagedEntries(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, update.Changed)
 
-	// magus-checkpoint.sh renders no verdict and is never probed; magus-guard-command.sh
+	// magus-checkpoint.sh renders no verdict and is never probed; magus-hook-command.sh
 	// is, so it needs something real behind it now.
-	writeStubGuardScript(t, root, "magus-guard-command.sh", "deny")
+	writeStubGuardScript(t, root, "magus-hook-command.sh", "deny")
 	result, err := VerifyHarness(context.Background(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -248,7 +248,7 @@ func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
   "hooks": {
     "before": [{
       "match": "run",
-      "commands": [{"type": "command", "command": "sh magus-guard-command.sh", "statusMessage": "stale status"}]
+      "commands": [{"type": "command", "command": "sh magus-hook-command.sh", "statusMessage": "stale status"}]
     }]
   }
 }`), 0o644))
@@ -261,7 +261,7 @@ func TestApplyHarnessReplacesSameIdentityInPlace(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "magus guard: checking command")
 	assert.NotContains(t, string(body), "stale status")
-	assert.Equal(t, 1, strings.Count(string(body), "magus-guard-command.sh"), "identity match must replace, not append")
+	assert.Equal(t, 1, strings.Count(string(body), "magus-hook-command.sh"), "identity match must replace, not append")
 }
 
 func TestHarnessDescriptorRejectsEscapingPathAndNonMagusCommand(t *testing.T) {
@@ -356,7 +356,7 @@ func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 func TestInvokesMagusRejectsGenericGuardScripts(t *testing.T) {
 	assert.False(t, invokesMagus("sh host-guard.sh"))
 	assert.False(t, invokesMagus("echo shell"))
-	assert.True(t, invokesMagus("sh docs/guides/integrations/agents/cursor-guard.sh"))
+	assert.True(t, invokesMagus("sh docs/guides/integrations/agents/cursor-hook.sh"))
 	assert.True(t, invokesMagus("magus shell -o json"))
 	assert.True(t, invokesMagus("./magus session notify"))
 }
@@ -510,8 +510,8 @@ func writeTestHarness(t *testing.T, root string) {
   "managed_entries": [{
     "path": ["hooks", "before"],
     "entries": [
-      {"match": "run", "commands": [{"type": "command", "command": "sh magus-guard-command.sh", "statusMessage": "magus guard: checking command"}]},
-      {"match": "write", "commands": [{"type": "command", "command": "sh magus-guard-path.sh", "timeout": 10}]}
+      {"match": "run", "commands": [{"type": "command", "command": "sh magus-hook-command.sh", "statusMessage": "magus guard: checking command"}]},
+      {"match": "write", "commands": [{"type": "command", "command": "sh magus-hook-path.sh", "timeout": 10}]}
     ]
   }]
 }`), 0o644))
@@ -536,7 +536,7 @@ func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
   "config_defaults": {"version": 1},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-guard.sh"}]}
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
   ]
 }`), 0o644))
 
@@ -564,7 +564,7 @@ func TestRemoveHarnessDeletesOnlyItsOwnEntriesAndDefaults(t *testing.T) {
 
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.NotContains(t, string(after), "cursor-guard.sh", "magus's own managed entry must be gone")
+	assert.NotContains(t, string(after), "cursor-hook.sh", "magus's own managed entry must be gone")
 	assert.NotContains(t, string(after), `"version": 1`, "the config_default this descriptor wrote must be gone")
 	assert.Contains(t, string(after), `"kept": true`, "a user's own key must survive")
 	assert.Contains(t, string(after), `"userVersion": 7`, "a user's own key must survive")
@@ -595,7 +595,7 @@ func TestRemoveHarnessLeavesAUserModifiedConfigDefaultAlone(t *testing.T) {
   "config_defaults": {"version": 1},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
-    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-guard.sh"}]}
+    {"path": ["hooks", "beforeShell"], "entries": [{"command": "sh cursor-hook.sh"}]}
   ]
 }`), 0o644))
 	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "flat"})
@@ -638,7 +638,7 @@ func TestRemoveHarnessRecognizesAHandEditedManagedEntryByIdentity(t *testing.T) 
 
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
-	assert.NotContains(t, string(after), "magus-guard-command.sh")
+	assert.NotContains(t, string(after), "magus-hook-command.sh")
 }
 
 // TestRemoveHarnessOnSkillsOnlyDescriptorIsANoOp: apply never writes a fragment for

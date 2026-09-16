@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "codex",
   "binary": "codex",
-  "guardTemplate": "../magus-guard-command.sh",
+  "guardTemplate": "../magus-hook-command.sh",
   "setup": [{"kind": "json", "path": "codex-home/hooks.json", "value": {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "{{guard_command}}"}]}]}}}],
   "launch": {
     "args": ["exec", "--json", "--strict-config", "--dangerously-bypass-hook-trust", "--dangerously-bypass-approvals-and-sandbox", "--cd", "{{workspace}}", "Use the Bash tool once to run exactly go test ./.... Do not make any other change."],

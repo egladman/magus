@@ -79,7 +79,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
     // bashisms that would break on a host whose /bin/sh is dash.
     // GLOBBED, not enumerated. The hand-written list this replaced named six of the nine
-    // scripts here: magus-guard-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
+    // scripts here: magus-hook-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
     // were added later and never joined it, so the three that run on every Read, every
     // compaction and every Stop were the unchecked ones. A list that must be edited when a
     // file is added is a list that stops matching the directory.

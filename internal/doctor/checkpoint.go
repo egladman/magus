@@ -71,7 +71,7 @@ func checkCheckpointWiring(root string, wired ...string) types.DoctorCheck {
 
 // configRecordsCheckpoint reports whether a host hook config (or a workspace script
 // it names) actually records a session checkpoint. Cursor embeds the call inside
-// cursor-guard.sh rather than spelling "checkpoint" in hooks.json; looking only at
+// cursor-hook.sh rather than spelling "checkpoint" in hooks.json; looking only at
 // the JSON body falsely grades that host as silent.
 func configRecordsCheckpoint(root string, body []byte) bool {
 	if bytes.Contains(body, []byte("checkpoint")) {
@@ -120,7 +120,7 @@ func collectJSONStringFields(v any, key string) []string {
 }
 
 // shellScriptPaths returns workspace-relative .sh operands from a hook command line
-// (e.g. `sh docs/guides/integrations/agents/cursor-guard.sh`).
+// (e.g. `sh docs/guides/integrations/agents/cursor-hook.sh`).
 func shellScriptPaths(cmd string) []string {
 	var out []string
 	for _, field := range strings.Fields(cmd) {

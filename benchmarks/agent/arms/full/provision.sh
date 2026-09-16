@@ -16,11 +16,11 @@ TEMPLATES=$(arm_templates)
 
 arm_reset "$WT"
 
-# GUARD_MAGUS_BIN is what pins the hooks to the binary this arm was handed. The
+# __MAGUS_BIN is what pins the hooks to the binary this arm was handed. The
 # templates otherwise walk up to the magusfile and fall back to PATH, which
 # would let a magus installed on the benchmark machine judge the run.
 arm_write_env "$WT" "$BIN" <<ENV
-GUARD_MAGUS_BIN="$BIN"; export GUARD_MAGUS_BIN
+__MAGUS_BIN="$BIN"; export __MAGUS_BIN
 ENV
 
 # Hints are part of the arm, not of provisioning it: install's own hint block is
@@ -33,7 +33,7 @@ MAGUS_HINTS_ENABLED=false "$BIN" agent install --dir "$WT" .claude/skills --forc
 find "$WT/.claude/skills" -name SKILL.md | wc -l | tr -d ' ' > "$WT/.benchmark/skills.expected"
 
 mkdir -p "$WT/.claude/hooks"
-for t in magus-guard-command.sh magus-guard-path.sh magus-guard-observe.sh; do
+for t in magus-hook-command.sh magus-hook-path.sh magus-hook-observe.sh; do
     cp "$TEMPLATES/$t" "$WT/.claude/hooks/$t"
 done
 
@@ -43,15 +43,15 @@ cat > "$WT/.claude/settings.json" <<'JSON'
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-guard-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-command.sh", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-guard-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-path.sh", "timeout": 10 }]
       },
       {
         "matcher": "Read",
-        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-guard-observe.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh .claude/hooks/magus-hook-observe.sh", "timeout": 10 }]
       }
     ]
   }

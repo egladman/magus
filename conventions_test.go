@@ -379,14 +379,14 @@ func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 // The two generic sh templates share a page because two hosts share the files;
 // Cursor's and OpenCode's are self-contained and sit with their host.
 var templatePage = map[string]string{
-	"magus-guard-command.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-guard-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
-	"magus-checkpoint.sh":    "docs/guides/integrations/agents/guard-templates.md",
-	"magus-rehydrate.sh":     "docs/guides/integrations/agents/guard-templates.md",
-	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
-	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
-	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
+	"magus-hook-command.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-hook-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"magus-hook-observe.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-checkpoint.sh":   "docs/guides/integrations/agents/guard-templates.md",
+	"magus-rehydrate.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"codex-hooks.json":      "docs/guides/integrations/agents/codex.md",
+	"cursor-hook.sh":        "docs/guides/integrations/agents/cursor.md",
+	"opencode-plugin.ts":    "docs/guides/integrations/agents/opencode.md",
 	// The three session-load adapters share a page with the contract they emit and
 	// the coverage table that compares them, because choosing between hosts is
 	// exactly the question that page answers.
@@ -401,19 +401,19 @@ var templatePage = map[string]string{
 // something anyone copies into a host, so the list is explicit rather than a
 // directory walk that would drag all of it into the guide.
 var hookTemplates = []string{
-	"magus-guard-command.sh",
-	"magus-guard-path.sh",
+	"magus-hook-command.sh",
+	"magus-hook-path.sh",
 	// The two templates that carry no verdict: one records a path an agent reached,
 	// the other where the work stood when a session stopped, and neither judges
 	// anything. So they declare no guard coverage and owe no parity row. See the note
 	// at the top of each for why that absence is deliberate rather than a hole.
-	"magus-guard-observe.sh",
+	"magus-hook-observe.sh",
 	"magus-checkpoint.sh",
 	// The third of them: it reports where a checkout stands to a session that lost
 	// its history, and judges nothing either.
 	"magus-rehydrate.sh",
 	"codex-hooks.json",
-	"cursor-guard.sh",
+	"cursor-hook.sh",
 	"opencode-plugin.ts",
 	// The session-load adapters are shipped artifacts too: version-stamped, embedded
 	// in their page, and registered here so a new one cannot arrive unnoticed. They
@@ -501,7 +501,7 @@ func configTemplates(t *testing.T, path string) map[string]bool {
 // and, where the matcher selects magus's MCP tools, by that surface too.
 //
 // Keyed by job rather than by file because a template wired twice under different
-// matchers is two jobs: claude-code runs magus-guard-command.sh on Bash AND on the
+// matchers is two jobs: claude-code runs magus-hook-command.sh on Bash AND on the
 // MCP tool call, and a gate collecting basenames alone reads the second as nothing
 // new, which is the whole absence it exists to report.
 func configJobs(t *testing.T, path string) map[string]bool {
@@ -892,7 +892,7 @@ func claimsGuardHost(body, host string) bool {
 // failOpenArmRe matches the tests a shipped template makes before answering
 // WITHOUT a verdict from magus: the binary is missing or not executable, or it
 // ran and left nothing to report. Both spellings the templates use, sh and TS.
-var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|stdout === null`)
+var failOpenArmRe = regexp.MustCompile(`! -x "\$__MAGUS_BIN"|-z "\$verdict"|stdout === null`)
 
 // failOpenRetryRe marks a block that re-invokes magus rather than answering. Two
 // of the templates test the same `-z "$verdict"` condition twice (once to retry
@@ -901,16 +901,16 @@ var failOpenArmRe = regexp.MustCompile(`! -x "\$GUARD_MAGUS_BIN"|-z "\$verdict"|
 var failOpenRetryRe = regexp.MustCompile(`\$\(guard\b|runOnce\(`)
 
 // failOpenNoticeRe matches an arm SAYING it did not judge the call: prose on
-// stderr, a console warning, or one of the GUARD_*_RESPONSE envelopes.
-var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$GUARD_[A-Z_]+_RESPONSE`)
+// stderr, a console warning, or one of the __MAGUS_*_RESPONSE envelopes.
+var failOpenNoticeRe = regexp.MustCompile(`>&2|console\.warn|unguarded\(\)|\$__MAGUS_[A-Z_]+_RESPONSE`)
 
 // failOpenOptInRe matches the shape that makes a notice OPT-IN: the arm prints
 // only when the reader has set the variable, so by default it prints nothing.
-var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$GUARD_[A-Z_]+" \] &&`)
+var failOpenOptInRe = regexp.MustCompile(`^\[ -n "\$__MAGUS_[A-Z_]+" \] &&`)
 
 // failOpenDefaultRe extracts the variable an arm's notice comes from, so the
 // default assigned to it can be checked for emptiness.
-var failOpenDefaultRe = regexp.MustCompile(`\$(GUARD_[A-Z_]+_RESPONSE)`)
+var failOpenDefaultRe = regexp.MustCompile(`\$(__MAGUS_[A-Z_]+_RESPONSE)`)
 
 // failOpenComputedNoticeRe matches an arm that BUILDS its notice from what it observed
 // rather than printing a canned string. There is no variable to give a default to, and
@@ -928,7 +928,7 @@ var failOpenComputedNoticeRe = regexp.MustCompile(`(?m)^\s*guard_failure_notice\
 // worse noise. Overturning that is a decision for whoever made it; leaving it
 // undeclared here is what this table refuses.
 var failOpenSilentByDesign = map[string]string{
-	"magus-guard-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; GUARD_UNAVAILABLE_RESPONSE and GUARD_FAILED_RESPONSE are the opt-in",
+	"magus-hook-path.sh": "cmd/magus/testdata/script/guard_templates.txtar pins the silence; __MAGUS_UNAVAILABLE_RESPONSE and __MAGUS_FAILED_RESPONSE are the opt-in",
 }
 
 // TestFailOpenArmsAnnounceThemselves is the doctrine's enforcement point: a
@@ -942,7 +942,7 @@ var failOpenSilentByDesign = map[string]string{
 // Structural on purpose: it finds the arms by the conditions the templates test
 // and asks each one for an unconditional notice, so rewording a message costs
 // nothing and DELETING one fails. A template with no coverage declaration is not
-// asked, which is how magus-guard-observe.sh is exempt: it carries no verdict,
+// asked, which is how magus-hook-observe.sh is exempt: it carries no verdict,
 // so it has no fail-open to announce.
 func TestFailOpenArmsAnnounceThemselves(t *testing.T) {
 	for _, name := range hookTemplates {
@@ -1019,7 +1019,7 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 	assert.Fail(t, "fail-open arm says nothing",
 		"%s answers without a magus verdict at line %d and emits no default notice.\n"+
 			"A guard that stopped enforcing looks exactly like a clean session, so every fail-open arm\n"+
-			"announces itself (see magus-guard-command.sh's GUARD_UNAVAILABLE_RESPONSE). Add a notice,\n"+
+			"announces itself (see magus-hook-command.sh's __MAGUS_UNAVAILABLE_RESPONSE). Add a notice,\n"+
 			"or record the arm in failOpenSilentByDesign with where the decision to stay quiet is written.",
 		name, line)
 }
@@ -1032,7 +1032,7 @@ func assertFailOpenNotice(t *testing.T, name, doc string, block []string, line i
 // event reaches the default arm: exit 0, no reply, every deny rule off, and
 // nothing saying so, which is indistinguishable from a guarded session.
 func TestCursorGuardAnnouncesAMissingJq(t *testing.T) {
-	script, err := filepath.Abs(filepath.Join(hookTemplateDir, "cursor-guard.sh"))
+	script, err := filepath.Abs(filepath.Join(hookTemplateDir, "cursor-hook.sh"))
 	require.NoError(t, err)
 
 	// A PATH holding only what the template needs before it reads the event, plus
@@ -1977,7 +1977,7 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 		{`cursor := paramString(req.Params, "cursor", "")`, false},
 		{`// Cursor reports where the cursor is, in 1-based terminal coordinates.`, false},
 		{"\tCursor DiffCursor `json:\"cursor\" yaml:\"cursor\"`", false},
-		{`"cursor-guard.sh",`, false},
+		{`"cursor-hook.sh",`, false},
 		{`filepath.Join(root, ".cursor", "hooks.json"),`, false},
 		{`filepath.Join(root, ".claude", "settings.json"),`, false},
 	} {

@@ -11,17 +11,17 @@
 #   subagentStart         {"subagent_type": "...", "task": "...", ...}
 #   sessionEnd            {"session_id": "...", "reason": "..."}
 #
-# Save to .cursor/hooks/cursor-guard.sh, chmod +x, and point them at it:
+# Save to .cursor/hooks/cursor-hook.sh, chmod +x, and point them at it:
 #
 #   {"version": 1, "hooks": {
-#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "subagentStart": [{"command": "./.cursor/hooks/cursor-guard.sh"}],
-#     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-guard.sh"}]}}
+#     "beforeShellExecution": [{"command": "./.cursor/hooks/cursor-hook.sh"}],
+#     "preToolUse":   [{"matcher": "Write|StrReplace|Delete|Edit|NotebookEdit", "command": "./.cursor/hooks/cursor-hook.sh"}],
+#     "postToolUse":  [{"matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "./.cursor/hooks/cursor-hook.sh"}],
+#     "subagentStart": [{"command": "./.cursor/hooks/cursor-hook.sh"}],
+#     "sessionEnd":   [{"command": "./.cursor/hooks/cursor-hook.sh"}]}}
 #
 # Self-contained on purpose. The other hosts' templates delegate to
-# magus-guard-command.sh, but Cursor would then need three files downloaded to
+# magus-hook-command.sh, but Cursor would then need three files downloaded to
 # work, and a guard nobody finishes installing guards nothing.
 #
 # WHICH EVENT CARRIES WHICH HALF of a verdict is the thing to read here, because
@@ -47,7 +47,7 @@
 # the session ones, so the session is attributable too; neither can change a verdict.
 #
 # Coverage declarations, machine-read by the host-parity gate - see the longer
-# note in magus-guard-command.sh. Both surfaces now reach the model on both
+# note in magus-hook-command.sh. Both surfaces now reach the model on both
 # decisions, which is what moving the write gate to preToolUse and the advisory to
 # postToolUse bought; the two lines are what says so.
 # magus-guard-template: 14
@@ -78,14 +78,14 @@
 # piped `magus affected ci` that the rules DO deny ran unjudged. Same upward search for a
 # project root that every other ecosystem's runner does.
 guard_root=$PWD
-while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
   if [ -f "$guard_root/magusfile.buzz" ]; then
-    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
     break
   fi
   guard_root=${guard_root%/*}
 done
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # stdin is a pipe and drains once, so the event is read into a variable and every
 # field is selected from that. `// empty` keeps a hook without a field at the empty
@@ -159,13 +159,13 @@ advise_template='{{if eq .decision "advise"}}{"additional_context":{{toJson .con
 
 # guard_notice_once succeeds the first time $1 fires in this session and fails on every
 # repeat, so a caller writes `guard_notice_once <family> && printf ...`. See
-# magus-guard-command.sh for the full reasoning; the short version is that these notices
+# magus-hook-command.sh for the full reasoning; the short version is that these notices
 # report a broken installation, which is a fact for the person with nothing in it an agent
 # can act on, so a repeat is noise.
 #
 # The marker lives under TMPDIR because this runs when magus is missing or too broken to
 # judge, so it cannot ask magus for anything. An event that reports no session shares a
-# marker aged out after GUARD_NOTICE_WINDOW minutes rather than going quiet forever.
+# marker aged out after __MAGUS_NOTICE_WINDOW minutes rather than going quiet forever.
 guard_notice_once() {
   notice_dir=${TMPDIR:-/tmp}/magus-guard-notices
   notice_key=$(printf '%s' "${session:-anon}" | cksum | cut -d' ' -f1)
@@ -173,7 +173,7 @@ guard_notice_once() {
   mkdir -p "$notice_dir" 2>/dev/null || return 0
   if [ -f "$notice_marker" ]; then
     [ -n "$session" ] && return 1
-    find "$notice_marker" -mmin +"${GUARD_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
+    find "$notice_marker" -mmin +"${__MAGUS_NOTICE_WINDOW:-120}" 2>/dev/null | grep -q . || return 1
   fi
   : > "$notice_marker" 2>/dev/null
   return 0
@@ -185,7 +185,7 @@ guard_notice_once() {
 guard() {
   guard_input=$1
   shift
-  printf '%s' "$guard_input" | "$GUARD_MAGUS_BIN" shell --agent-name cursor \
+  printf '%s' "$guard_input" | "$__MAGUS_BIN" shell --agent-name cursor \
     --session "$session" --transcript "$transcript" "$@"
 }
 
@@ -195,8 +195,8 @@ guard() {
 link_bias_context() {
   terms=$1
   [ -n "$terms" ] || return 1
-  [ -n "$GUARD_MAGUS_BIN" ] && [ -x "$GUARD_MAGUS_BIN" ] || return 1
-  links=$("$GUARD_MAGUS_BIN" query kind=link "$terms" -o name 2>/dev/null) || return 1
+  [ -n "$__MAGUS_BIN" ] && [ -x "$__MAGUS_BIN" ] || return 1
+  links=$("$__MAGUS_BIN" query kind=link "$terms" -o name 2>/dev/null) || return 1
   [ -n "$links" ] || return 1
   printf '%s\n' "$links" | jq -R -s -c --arg q "$terms" '
     (split("\n") | map(select(length > 0) | sub("^link:"; "")) | .[0:8]) as $urls
@@ -225,12 +225,12 @@ link_bias_context() {
 # installation is a fact for the person, and there is nothing in it a model can act on.
 guard_failure_notice() {
   guard_notice_once failed || return 0
-  ver=$("$GUARD_MAGUS_BIN" version 2>/dev/null | head -n 1)
+  ver=$("$__MAGUS_BIN" version 2>/dev/null | head -n 1)
   [ -n "$ver" ] || ver='version unreadable'
   why=$(guard "$@" 2>&1 >/dev/null | grep -v 'WARN' | head -n 1)
   [ -n "$why" ] || why='it printed no error'
   printf 'magus guard is NOT running: %s (%s) could not judge this call, so its deny and advise rules are unenforced. It said: %s. Rebuild or update THAT binary to restore the guard.\n' \
-    "$GUARD_MAGUS_BIN" "$ver" "$why" >&2
+    "$__MAGUS_BIN" "$ver" "$why" >&2
 }
 
 # jq is the only reader of the event: without it every field selected above came back
@@ -250,8 +250,8 @@ fi
 # saying so: a silent fail-open is the one outcome nobody can tell from a guarded
 # session. The gating events need an explicit allow, and the rest read an empty reply
 # as no opinion.
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-  guard_notice_once unavailable && printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard." >&2
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
+  guard_notice_once unavailable && printf '%s\n' "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard." >&2
   case $event_name in
   beforeShellExecution | preToolUse | subagentStart)
     printf '%s' '{"permission":"allow"}'
@@ -276,7 +276,7 @@ sessionEnd)
   # Not a guard. It records the revision, branch and dirtiness of the tree when a
   # session ends, so whoever comes back reads `magus session` instead of
   # reconstructing where the work stopped. It prints nothing and judges nothing.
-  "$GUARD_MAGUS_BIN" session checkpoint --agent-name cursor \
+  "$__MAGUS_BIN" session checkpoint --agent-name cursor \
     --session "$session" --transcript "$transcript" >/dev/null 2>&1
   exit 0
   ;;
@@ -291,7 +291,7 @@ subagentStart)
       session_id: (.parent_conversation_id // .conversation_id // ""),
       transcript_path: (.transcript_path // ""),
       tool_input: {prompt: (.task // ""), subagent_type: (.subagent_type // "")}
-    }' 2>/dev/null | "$GUARD_MAGUS_BIN" shell --agent-name cursor >/dev/null 2>&1
+    }' 2>/dev/null | "$__MAGUS_BIN" shell --agent-name cursor >/dev/null 2>&1
   printf '%s' '{"permission":"allow"}'
   exit 0
   ;;

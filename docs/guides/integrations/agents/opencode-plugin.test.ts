@@ -20,7 +20,7 @@
 // proves the sh templates get the right answer from a real binary, and
 // opencode-plugin.live.test.ts proves THIS plugin does too (live = binary
 // interface) - it drives the same exported functions through a Bun.spawn shim
-// backed by a real child process instead of a canned reply. Set GUARD_MAGUS_BIN to
+// backed by a real child process instead of a canned reply. Set __MAGUS_BIN to
 // a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";

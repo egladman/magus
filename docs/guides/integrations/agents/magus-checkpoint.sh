@@ -18,8 +18,8 @@
 # the rest; nothing in the payload becomes the note, because a note is a sentence
 # a person writes. It prints NOTHING and always exits 0. Override:
 #
-#   GUARD_AGENT_NAME  the agent host name recorded alongside the checkpoint
-#   GUARD_MAGUS_BIN   path to the binary, when it is not on PATH
+#   __MAGUS_AGENT_NAME  the agent host name recorded alongside the checkpoint
+#   __MAGUS_BIN   path to the binary, when it is not on PATH
 #
 # A host whose envelope spells those fields differently passes them as flags
 # instead - `--session` and `--transcript` outrank the envelope - and a host that
@@ -30,7 +30,7 @@
 # parses the envelope itself, so a machine without jq records a checkpoint rather
 # than silently recording none.
 #
-# NO magus-guard-coverage line, for the same reason magus-guard-observe.sh has
+# NO magus-guard-coverage line, for the same reason magus-hook-observe.sh has
 # none: a coverage declaration states how much of a VERDICT a host can carry, and
 # this file carries no verdict on no surface. It never denies, never advises, and
 # cannot change what your host does next.
@@ -41,24 +41,24 @@
 # fail is a hook that can break the session it was meant to observe, and a record
 # of where the work stopped is worth strictly less than the work.
 
-[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$__MAGUS_AGENT_NAME" ] || __MAGUS_AGENT_NAME='claude-code'
 # Prefer the workspace's own ./magus over PATH, found by walking UP to the
 # magusfile: a hook runs in the host's session directory, which is not always the
 # workspace root. The command template carries the full reasoning.
 guard_root=$PWD
-while [ -n "$guard_root" ] && [ -z "$GUARD_MAGUS_BIN" ]; do
+while [ -n "$guard_root" ] && [ -z "$__MAGUS_BIN" ]; do
   if [ -f "$guard_root/magusfile.buzz" ]; then
-    [ -x "$guard_root/magus" ] && GUARD_MAGUS_BIN=$guard_root/magus
+    [ -x "$guard_root/magus" ] && __MAGUS_BIN=$guard_root/magus
     break
   fi
   guard_root=${guard_root%/*}
 done
-[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+[ -n "$__MAGUS_BIN" ] || __MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # An absent recorder is SILENT, where an absent guard is loud. Nothing here is
 # unenforced - there is no rule - so announcing it would interrupt the end of
 # every session to report that an optional record was not written.
-if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+if [ -z "$__MAGUS_BIN" ] || [ ! -x "$__MAGUS_BIN" ]; then
   exit 0
 fi
 
@@ -66,6 +66,6 @@ fi
 # usage, and that would otherwise reach the host as this hook's response every
 # time a session ends. The absence shows up where it is actionable instead - as
 # an empty checkpoint list in `magus session`.
-"$GUARD_MAGUS_BIN" session checkpoint --agent-name "$GUARD_AGENT_NAME" >/dev/null 2>&1
+"$__MAGUS_BIN" session checkpoint --agent-name "$__MAGUS_AGENT_NAME" >/dev/null 2>&1
 
 exit 0

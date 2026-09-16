@@ -19542,32 +19542,32 @@
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-commandsh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
       "kind": "docsection",
-      "label": "magus-guard-command.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-commandsh",
+      "label": "magus-hook-command.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
       "attrs": {
-        "anchor": "magus-guard-commandsh",
+        "anchor": "magus-hook-commandsh",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-observesh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
       "kind": "docsection",
-      "label": "magus-guard-observe.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-observesh",
+      "label": "magus-hook-observe.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
       "attrs": {
-        "anchor": "magus-guard-observesh",
+        "anchor": "magus-hook-observesh",
         "level": "2"
       }
     },
     {
-      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
+      "id": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
       "kind": "docsection",
-      "label": "magus-guard-path.sh",
-      "source": "docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
+      "label": "magus-hook-path.sh",
+      "source": "docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
       "attrs": {
-        "anchor": "magus-guard-pathsh",
+        "anchor": "magus-hook-pathsh",
         "level": "2"
       }
     },
@@ -105661,7 +105661,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-commandsh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-commandsh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -105669,7 +105669,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-observesh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-observesh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -105677,7 +105677,7 @@
     },
     {
       "source": "docsection:docs/guides/integrations/agents/guard-templates.md#guard-hook-templates",
-      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-guard-pathsh",
+      "target": "docsection:docs/guides/integrations/agents/guard-templates.md#magus-hook-pathsh",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,

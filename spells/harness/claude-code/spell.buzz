@@ -26,26 +26,26 @@ fun claude_skills_paths() > [str] {
 }
 
 fun claude_guard_command() > str {
-    return "sh docs/guides/integrations/agents/magus-guard-command.sh";
+    return "sh docs/guides/integrations/agents/magus-hook-command.sh";
 }
 
 fun claude_path_command() > str {
-    return "sh docs/guides/integrations/agents/magus-guard-path.sh";
+    return "sh docs/guides/integrations/agents/magus-hook-path.sh";
 }
 
 fun claude_observe_command() > str {
-    return "sh docs/guides/integrations/agents/magus-guard-observe.sh";
+    return "sh docs/guides/integrations/agents/magus-hook-observe.sh";
 }
 
 fun claude_mcp_command() > str {
-    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
+    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
 }
 
 fun claude_skill_command() > str {
     // The guard records which skill loaded so a later spawn can ask whether this session
     // read its brief; it judges nothing here. HOST_EVENT_RAW for the same reason the two
     // below use it: the payload is a named field, not a shell line.
-    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
+    return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh";
 }
 
 fun claude_agent_command() > str {
@@ -58,10 +58,10 @@ fun claude_agent_command() > str {
     // reported, so the wiring that reports them is what declares it; a harness without
     // that matcher passes nothing here and those rules stand down rather than denying
     // every spawn forever. Keep the two in step: drop the matcher and drop this.
-    // GUARD_ and not MAGUS_: the template reserves the whole MAGUS_* space for magus's
+    // __MAGUS_ and not MAGUS_: the template reserves the whole MAGUS_* space for magus's
     // own configuration, so a variable the template invents stays out of it.
-    return "HOST_EVENT_RAW=1 GUARD_SHELL_FLAGS=--observes-skill-loads "
-        + "sh docs/guides/integrations/agents/magus-guard-command.sh";
+    return "HOST_EVENT_RAW=1 __MAGUS_SHELL_FLAGS=--observes-skill-loads "
+        + "sh docs/guides/integrations/agents/magus-hook-command.sh";
 }
 
 fun claude_rehydrate_command() > str {
@@ -189,9 +189,9 @@ test "harness_skills installs both forms under .claude/skills" {
 }
 
 test "guard commands name the shared templates" {
-    assert\isTrue(claude_guard_command().indexOf("magus-guard-command.sh") != null, "command surface");
-    assert\isTrue(claude_path_command().indexOf("magus-guard-path.sh") != null, "path surface");
-    assert\isTrue(claude_observe_command().indexOf("magus-guard-observe.sh") != null, "read observe");
+    assert\isTrue(claude_guard_command().indexOf("magus-hook-command.sh") != null, "command surface");
+    assert\isTrue(claude_path_command().indexOf("magus-hook-path.sh") != null, "path surface");
+    assert\isTrue(claude_observe_command().indexOf("magus-hook-observe.sh") != null, "read observe");
     assert\isTrue(claude_mcp_command().indexOf("HOST_EVENT_RAW=1") != null, "MCP forwards the whole event");
     assert\isTrue(claude_agent_command().indexOf("HOST_EVENT_RAW=1") != null, "spawn forwards the whole event");
     assert\isTrue(claude_rehydrate_command().indexOf("magus-rehydrate.sh") != null, "SessionStart rehydrate");

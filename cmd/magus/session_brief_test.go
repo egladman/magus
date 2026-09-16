@@ -135,16 +135,16 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
   "skills": {"paths": [".agents/skills"], "form": "both"},
   "managed_entries": [{
     "path": ["hooks", "before"],
-    "entries": [{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]
+    "entries": [{"match":"run","commands":[{"type":"command","command":"sh magus-hook-command.sh"}]}]
   }]
 }`), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-guard-command.sh"}]}]}}`), 0o644))
+		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-hook-command.sh"}]}]}}`), 0o644))
 	// VerifyHarness now actually runs the wired command (internal/agent's
 	// harness_probe.go) instead of trusting its mere presence in the config, so
 	// the brief's guard-wiring section needs something real behind it.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-guard-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-hook-command.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
 
 	store, err := openJobs(root)

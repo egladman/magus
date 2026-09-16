@@ -86,11 +86,11 @@ observation, and sub-agent spawns. Each runs a shipped script that talks to
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }]
       },
       {
         "matcher": "Edit|Write|NotebookEdit",
-        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-guard-path.sh", "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "sh docs/guides/integrations/agents/magus-hook-path.sh", "timeout": 10 }]
       }
     ]
   }
@@ -138,7 +138,7 @@ the command and file surfaces:
       {
         "matcher": "mcp__magus__.*",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }
+          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }
         ]
       }
     ]
@@ -158,7 +158,7 @@ ships, with no new host wiring, because the transport is already here.
 ## Recording what was read
 
 A third `PreToolUse` entry, matching `Read`, runs
-[`magus-guard-observe.sh`](guard-templates.md#magus-guard-observesh). It judges
+[`magus-hook-observe.sh`](guard-templates.md#magus-hook-observesh). It judges
 nothing and prints nothing: it records the path on the activity trail so a later
 `magus session show` can say what a session looked at, not only what it changed.
 
@@ -171,7 +171,7 @@ nothing and prints nothing: it records the path on the activity trail so a later
         "hooks": [
           {
             "type": "command",
-            "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+            "command": "sh docs/guides/integrations/agents/magus-hook-observe.sh",
             "timeout": 10
           }
         ]
@@ -201,7 +201,7 @@ claude-code` installs this entry alongside the surfaces above:
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh", "timeout": 10 }
+          { "type": "command", "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-hook-command.sh", "timeout": 10 }
         ]
       }
     ]
@@ -251,7 +251,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
         "hooks": [
           {
             "type": "command",
-            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; GUARD_MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
+            "command": "d=$PWD; while [ -n \"$d\" ] && [ ! -f \"$d/magusfile.buzz\" ]; do d=${d%/*}; done; __MAGUS_BIN=$([ -x \"$d/magus\" ] && printf %s \"$d/magus\" || command -v magus 2>/dev/null); [ -n \"$__MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$__MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
           }
         ]
       }

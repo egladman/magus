@@ -50,14 +50,14 @@ function resolveOnPath(name: string): string | null {
 }
 
 /**
- * GUARD_MAGUS_BIN, else ./magus at the workspace root, else magus on PATH -
- * the same order docs/guides/integrations/agents.md documents for GUARD_MAGUS_BIN
+ * __MAGUS_BIN, else ./magus at the workspace root, else magus on PATH -
+ * the same order docs/guides/integrations/agents.md documents for __MAGUS_BIN
  * itself. Returns null when none resolves; every case below skips rather than
  * fails, because a fresh clone has no binary and a gate that needed one would
  * fail on checkout.
  */
 function resolveMagusBinary(): string | null {
-  const envBin = process.env.GUARD_MAGUS_BIN;
+  const envBin = process.env.__MAGUS_BIN;
   if (envBin && isExecutable(envBin)) return envBin;
   const rootBin = path.join(WORKSPACE_ROOT, "magus");
   if (isExecutable(rootBin)) return rootBin;
@@ -67,7 +67,7 @@ function resolveMagusBinary(): string | null {
 const magusBin = resolveMagusBinary();
 const skip =
   magusBin === null
-    ? "no magus binary found (set GUARD_MAGUS_BIN, build ./magus at the workspace root, or put magus on PATH)"
+    ? "no magus binary found (set __MAGUS_BIN, build ./magus at the workspace root, or put magus on PATH)"
     : false;
 if (magusBin === null) {
   console.warn(`[opencode-plugin.live.test] skipping: ${skip}`);
@@ -83,10 +83,10 @@ type SpawnCall = { bin: string; argv: string[]; stdin: string };
  * magus binary instead of a canned reply.
  */
 function stubBunWithRealChild(bin: string): SpawnCall[] {
-  // The plugin resolves its own binary (GUARD_MAGUS_BIN, ./magus from ITS cwd, PATH).
+  // The plugin resolves its own binary (__MAGUS_BIN, ./magus from ITS cwd, PATH).
   // Under the test runner the cwd is this directory, so without the env pin it falls
   // through to PATH - a released magus that may predate the subcommands under test.
-  process.env.GUARD_MAGUS_BIN = bin;
+  process.env.__MAGUS_BIN = bin;
   const calls: SpawnCall[] = [];
   const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
