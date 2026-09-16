@@ -170,7 +170,7 @@ final OUT  = "gen";         // generated site output, under this project
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
-// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
 // Always let pnpm validate the install. A canceled or interrupted install leaves a
 // node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))`
 // guard this replaced read that tree as ready and handed the missing packages to
@@ -567,7 +567,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 
 // security audits what actually ships against the npm advisory database. See
 // console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the
-// .npmrc cooling period is the stronger half of this.
+// pnpm-workspace.yaml cooling period is the stronger half of this.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     audit\audit();

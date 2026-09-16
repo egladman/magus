@@ -4,8 +4,8 @@
 // gate needs a different answer: "is there anything I can do about it right now?" Those
 // two come apart constantly:
 //
-//   - An advisory drops and the maintainer publishes a patch the same day. Every .npmrc
-//     here sets minimum-release-age, so that patch is NOT installable for ten days -
+//   - An advisory drops and the maintainer publishes a patch the same day. Every pnpm
+//     project here sets minimumReleaseAge, so that patch is NOT installable for ten days -
 //     deliberately, because "everyone rush to install the fix" is itself an attack shape.
 //     For those ten days the exit code says FAIL and no action clears it.
 //   - The advisory sits in a transitive dev dependency four levels down with no patched
@@ -33,8 +33,9 @@ import "time";
 // Used by the test blocks, which run under buzz_test now that it globs tools/.
 import "assert";
 
-// coolingHours mirrors minimum-release-age in each project's .npmrc (14400 minutes).
-// Restated as a duration because .npmrc is not a format Buzz reads. Drift is safe in the
+// coolingHours mirrors minimumReleaseAge in each project's pnpm-workspace.yaml (14400
+// minutes). Restated as a duration rather than read from there, because the value lives in
+// four files and this one number is what the advisory arithmetic needs. Drift is safe in the
 // direction that matters: a LONGER value here only defers more findings, and can never
 // fail a build over a patch the install would have refused anyway.
 final coolingHours = "-240h";

@@ -46,10 +46,6 @@ magus\project({
     "sources": ["*.ts", "*.sh", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
                 "host-e2e/*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
-                // pnpm reads it on every `install --frozen-lockfile` in preflight, so
-                // it decides what the gates below run against, exactly as the lockfile
-                // beside it does.
-                "pnpm-workspace.yaml",
                 "dprint.json"],
     "targets": {
     },
@@ -57,7 +53,7 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void !> any { install(); }
 
-// pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason.
+// pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason.
 // Always let pnpm validate the install. An interrupted install leaves a node_modules
 // that EXISTS but is incomplete, and the isDir guard this replaced read that as ready,
 // handing the missing packages straight to tsc/esbuild. Reached once per invocation

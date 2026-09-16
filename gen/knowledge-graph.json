@@ -44466,7 +44466,7 @@
       "id": "function:console/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
       "source": "console/magusfile.buzz:103"
     },
     {
@@ -45475,7 +45475,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:139",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:135",
       "attrs": {
         "exported": "true"
       }
@@ -45485,7 +45485,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:150",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:146",
       "attrs": {
         "exported": "true"
       }
@@ -45495,7 +45495,7 @@
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:122",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:118",
       "attrs": {
         "exported": "true"
       }
@@ -45504,15 +45504,15 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:66"
+      "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:62"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:74",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:70",
       "attrs": {
         "exported": "true"
       }
@@ -45521,7 +45521,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:58",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:54",
       "attrs": {
         "exported": "true"
       }
@@ -45531,7 +45531,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:104",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:100",
       "attrs": {
         "exported": "true"
       }
@@ -46606,7 +46606,7 @@
       "id": "function:docs/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled or interrupted install leaves a node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))` guard this replaced read that tree as ready and handed the missing packages to esbuild instead - surfacing as `Could not resolve \"@codemirror/view\"` from build-playground-editor, which reads like a source bug rather than a half-installed tree. On a warm tree --frozen-loc",
+      "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. A canceled or interrupted install leaves a node_modules directory that EXISTS but is incomplete, so the `if (!fs.isDir(...))` guard this replaced read that tree as ready and handed the missing packages to esbuild instead - surfacing as `Could not resolve \"@codemirror/view\"` from build-playground-editor, which reads like a source bug rather than a half-installed tree. On a warm tree -",
       "source": "docs/magusfile.buzz:182"
     },
     {
@@ -46662,7 +46662,7 @@
       "id": "function:docs/magusfile.buzz:security",
       "kind": "function",
       "label": "security",
-      "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
+      "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the pnpm-workspace.yaml cooling period is the stronger half of this.",
       "source": "docs/magusfile.buzz:571",
       "attrs": {
         "exported": "true"
@@ -49260,7 +49260,7 @@
       "id": "function:libs/textsearch/magusfile.buzz:install",
       "kind": "function",
       "label": "install",
-      "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
+      "doc": "pnpm, NOT npm: pnpm-workspace.yaml's minimumReleaseAge supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
       "source": "libs/textsearch/magusfile.buzz:77"
     },
     {
@@ -52779,35 +52779,35 @@
       "kind": "function",
       "label": "biomeCheck",
       "doc": "biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).",
-      "source": "spells/typescript/spell.buzz:169"
+      "source": "spells/typescript/spell.buzz:176"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeFormat",
       "kind": "function",
       "label": "biomeFormat",
       "doc": "biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.",
-      "source": "spells/typescript/spell.buzz:180"
+      "source": "spells/typescript/spell.buzz:187"
     },
     {
       "id": "function:spells/typescript/spell.buzz:devServer",
       "kind": "function",
       "label": "devServer",
       "doc": "dev-server runs the project's package.json \"dev\" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.",
-      "source": "spells/typescript/spell.buzz:223"
+      "source": "spells/typescript/spell.buzz:230"
     },
     {
       "id": "function:spells/typescript/spell.buzz:eslint",
       "kind": "function",
       "label": "eslint",
       "doc": "eslint has no built-in \"github\" formatter (unlike ruff's --output-format=github); \"unix\" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.",
-      "source": "spells/typescript/spell.buzz:189"
+      "source": "spells/typescript/spell.buzz:196"
     },
     {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
       "kind": "function",
       "label": "mgs_getLanguage",
       "doc": "The JavaScript flavors are claimed here too: one toolchain, one syntax.",
-      "source": "spells/typescript/spell.buzz:69",
+      "source": "spells/typescript/spell.buzz:76",
       "attrs": {
         "exported": "true"
       }
@@ -52826,7 +52826,7 @@
       "kind": "function",
       "label": "mgs_getSymbolIndexer",
       "doc": "The indexer is a PATH binary (install it with mise, not as a project dep), so it is forked directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/typescript/spell.buzz:240",
+      "source": "spells/typescript/spell.buzz:247",
       "attrs": {
         "exported": "true"
       }
@@ -52836,7 +52836,7 @@
       "kind": "function",
       "label": "mgs_getTools",
       "doc": "The three binaries this spell's ops actually depend on, not just the runtime.  tsc is the one that matters most and was missing longest: every op here runs it through `pnpm exec`, and a probe result is a CACHE-KEY INPUT, so while it went undeclared magus would replay a cached typecheck produced by a different compiler. A TypeScript major is exactly the kind of upgrade that changes what `tsc` accepts, which is the case the key exists to catch. Its probe forks pnpm rather than tsc directly because tsc is a lo",
-      "source": "spells/typescript/spell.buzz:58",
+      "source": "spells/typescript/spell.buzz:65",
       "attrs": {
         "exported": "true"
       }
@@ -52845,7 +52845,7 @@
       "id": "function:spells/typescript/spell.buzz:mgs_isOpaque",
       "kind": "function",
       "label": "mgs_isOpaque",
-      "source": "spells/typescript/spell.buzz:25",
+      "source": "spells/typescript/spell.buzz:32",
       "attrs": {
         "exported": "true"
       }
@@ -52855,7 +52855,7 @@
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
       "doc": "mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the input-hashing walk. dist is already excluded as a declared output.  The dot-dirs are NOT optional, whatever their leading dot suggests. Two ignore predicates exist and they disagree: project.IsIgnoreDir skips every dot-dir, but that one governs DISCOVERY and watch, and it cannot be reused here - .claude/skills/** and .github/** are declared sources in this workspace. The hashing walk uses cache.isIgnoreDir, which skips",
-      "source": "spells/typescript/spell.buzz:97",
+      "source": "spells/typescript/spell.buzz:104",
       "attrs": {
         "exported": "true"
       }
@@ -52865,7 +52865,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (package.json and every lockfile below are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A node project has exactly one manifest candidate and five LOCK candidates.  The five are alternatives, not a set: whichever package manager the project uses writes one of them and the others are absent. package.json alone cannot",
-      "source": "spells/typescript/spell.buzz:119",
+      "source": "spells/typescript/spell.buzz:126",
       "attrs": {
         "exported": "true"
       }
@@ -52875,7 +52875,7 @@
       "kind": "function",
       "label": "mgs_listProvidedGlobs",
       "doc": "Empty on purpose. Where tsc writes is decided by the project's tsconfig outDir, which this spell cannot read - so any glob here is a guess, and \"dist/**\" was the TS convention rather than a fact about your project.  A guess is not free. Provided globs are contributed to EVERY target on a project, so a target that declares no ctx.writesFiles of its own inherits them; on a cache miss its snapshot then has to satisfy a glob it never writes. That failure only appears on a cold cache, so it hid for a long time a",
-      "source": "spells/typescript/spell.buzz:38",
+      "source": "spells/typescript/spell.buzz:45",
       "attrs": {
         "exported": "true"
       }
@@ -52894,7 +52894,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:228",
+      "source": "spells/typescript/spell.buzz:235",
       "attrs": {
         "exported": "true"
       }
@@ -52904,39 +52904,39 @@
       "kind": "function",
       "label": "preflight",
       "doc": "preflight is a no-op marker op (no command).",
-      "source": "spells/typescript/spell.buzz:197"
+      "source": "spells/typescript/spell.buzz:204"
     },
     {
       "id": "function:spells/typescript/spell.buzz:prettier",
       "kind": "function",
       "label": "prettier",
-      "source": "spells/typescript/spell.buzz:198"
+      "source": "spells/typescript/spell.buzz:205"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
       "kind": "function",
       "label": "tsc",
-      "source": "spells/typescript/spell.buzz:204"
+      "source": "spells/typescript/spell.buzz:211"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscBuild",
       "kind": "function",
       "label": "tscBuild",
       "doc": "tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.",
-      "source": "spells/typescript/spell.buzz:208"
+      "source": "spells/typescript/spell.buzz:215"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscClean",
       "kind": "function",
       "label": "tscClean",
       "doc": "tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.",
-      "source": "spells/typescript/spell.buzz:211"
+      "source": "spells/typescript/spell.buzz:218"
     },
     {
       "id": "function:spells/typescript/spell.buzz:vitest",
       "kind": "function",
       "label": "vitest",
-      "source": "spells/typescript/spell.buzz:212"
+      "source": "spells/typescript/spell.buzz:219"
     },
     {
       "id": "function:std/examples/term/pick.buzz:choose",
@@ -52976,7 +52976,7 @@
       "kind": "function",
       "label": "audit",
       "doc": "audit scans the current project and fails ONLY on findings that are actionable today. Everything else is printed and carried. Throws to fail the calling target.",
-      "source": "tools/audit.buzz:156",
+      "source": "tools/audit.buzz:157",
       "attrs": {
         "exported": "true"
       }
@@ -52986,14 +52986,14 @@
       "kind": "function",
       "label": "hasInstallablePatch",
       "doc": "hasInstallablePatch reports whether any published version of pkg satisfies the advisory's patched range AND is old enough to clear the cooling period - that is, whether a fix could land today.  `pnpm view <pkg> time --json` returns a version -> ISO-8601 map plus the non-version keys \"created\" and \"modified\", which are skipped. A version that fails to parse is skipped rather than fatal: an odd tag upstream must not take a build down.",
-      "source": "tools/audit.buzz:78"
+      "source": "tools/audit.buzz:79"
     },
     {
       "id": "function:tools/audit.buzz:isBlockingSeverity",
       "kind": "function",
       "label": "isBlockingSeverity",
       "doc": "isBlockingSeverity reports whether a severity is worth failing over at all. moderate and low are reported and never fatal: the noise floor of a dependency tree lives there, and a gate that cries about it teaches people to stop reading it.",
-      "source": "tools/audit.buzz:45"
+      "source": "tools/audit.buzz:46"
     },
     {
       "id": "function:tools/drift.buzz:changedSince",

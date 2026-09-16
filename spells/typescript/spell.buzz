@@ -16,9 +16,16 @@ export fun mgs_getName() > str { return "typescript"; }
 export fun mgs_listRequiredGlobs() > [Path] {
     // tsconfig*.json is listed explicitly even though the broader **/*.json below
     // already matches it - self-documenting rather than riding along by accident.
+    //
+    // pnpm-workspace.yaml sits beside .npmrc because pnpm 10.16 moved settings into it,
+    // and those settings decide what an install DOES: the minimum-release-age gate this
+    // workspace relies on lives there now. A .yaml matches none of the globs above, so
+    // without this entry a project could move its supply-chain policy into that file and
+    // every target would keep replaying the verdict it reached under the old one.
     return [Path{value = "**/*.ts"}, Path{value = "**/*.tsx"}, Path{value = "**/*.mts"}, Path{value = "**/*.cts"}, Path{value = "**/*.js"}, Path{value = "**/*.jsx"},
             Path{value = "**/*.mjs"}, Path{value = "**/*.cjs"}, Path{value = "**/*.json"}, Path{value = "tsconfig*.json"}, Path{value = "package.json"},
-            Path{value = ".npmrc"}, Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
+            Path{value = ".npmrc"}, Path{value = "pnpm-workspace.yaml"},
+            Path{value = "pnpm-lock.yaml"}, Path{value = "package-lock.json"}, Path{value = "npm-shrinkwrap.json"},
             Path{value = "yarn.lock"}, Path{value = "bun.lockb"}];
 }
 
