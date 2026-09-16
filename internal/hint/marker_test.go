@@ -185,3 +185,53 @@ func TestAdvisoryGateRaceCostsBytesNotVerdicts(t *testing.T) {
 	assert.GreaterOrEqual(t, fulls, 1, "somebody has to be first")
 	assert.LessOrEqual(t, fulls, workers, "the race can duplicate the full text, which is the safe direction")
 }
+
+// TestSessionFromTerminalPrefersTheWindow pins what a person's session IS. They pass no
+// --session, and keying them on a clock made an advisory go quiet on a second deliberate
+// look and come back unbidden the next morning. A terminal window is what they mean.
+func TestSessionFromTerminalPrefersTheWindow(t *testing.T) {
+	t.Parallel()
+
+	env := func(vals map[string]string) func(string) string {
+		return func(k string) string { return vals[k] }
+	}
+
+	// The window outlives a shell restart inside it, so it beats the pid.
+	assert.Equal(t, "tty:abc-123",
+		SessionFromTerminal(env(map[string]string{"TERM_SESSION_ID": "abc-123"}), 4242, true))
+	assert.Equal(t, "tty:0x1400003",
+		SessionFromTerminal(env(map[string]string{"WINDOWID": "0x1400003"}), 4242, true))
+
+	// No window variable: the invoking shell is the next best thing.
+	assert.Equal(t, "ppid:4242", SessionFromTerminal(env(nil), 4242, true))
+
+	// Whitespace is an unset variable spelled differently.
+	assert.Equal(t, "ppid:4242",
+		SessionFromTerminal(env(map[string]string{"TERM_SESSION_ID": "  "}), 4242, true))
+}
+
+// TestSessionFromTerminalAbstainsWithoutATerminal keeps the derivation off the pipeline
+// and CI path. There the caller is not a person, nothing distinguishes one run from the
+// next, and anonWindow is the honest fallback rather than a pid that changes every run.
+func TestSessionFromTerminalAbstainsWithoutATerminal(t *testing.T) {
+	t.Parallel()
+	env := func(string) string { return "session-from-env" }
+
+	assert.Empty(t, SessionFromTerminal(env, 4242, false), "no terminal, no derived session")
+	// A reparented process (ppid 1) names nothing a later run would share.
+	assert.Empty(t, SessionFromTerminal(func(string) string { return "" }, 1, true))
+}
+
+// TestDerivedSessionsDoNotCollide is the property the whole change rests on: two terminal
+// windows are two sessions, so an advisory spent in one still fires in the other.
+func TestDerivedSessionsDoNotCollide(t *testing.T) {
+	t.Parallel()
+	base := t.TempDir()
+
+	first := NewGate(base, "ppid:1001")
+	second := NewGate(base, "ppid:1002")
+
+	assert.Equal(t, "full", first.Once(testKindA, "full"), "the first window is told")
+	assert.Empty(t, first.Once(testKindA, "full"), "and held on its repeat")
+	assert.Equal(t, "full", second.Once(testKindA, "full"), "a second window is a second session")
+}

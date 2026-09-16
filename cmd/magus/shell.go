@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -169,7 +170,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Observe:    sf.Observe,
 		Lease:      sf.Lease,
 		Host:       sf.AgentName,
-		Session:    sf.Session,
+		Session:    sessionOrTerminal(sf.Session),
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
 	})
@@ -185,6 +186,21 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		return err
 	}
 	return enforceVerdictTo(errOut, opts, verdict)
+}
+
+// sessionOrTerminal keeps the caller's --session when it named one, and otherwise derives
+// a session for a person from the terminal they are sitting at.
+//
+// The flag always wins: a host that reports a session id means it, and an id magus
+// invented would split that host's markers in two. Only the caller who named nothing
+// falls through, and for them the terminal is a better answer than the clock they used
+// to get, because a session is what they close the window on.
+func sessionOrTerminal(declared string) string {
+	if strings.TrimSpace(declared) != "" {
+		return declared
+	}
+	return hint.SessionFromTerminal(os.Getenv, os.Getppid(),
+		tty.IsTerminalWriter(os.Stdout, tty.SystemProbe))
 }
 
 // shellInput resolves the command from the operand a person typed, or from stdin when
