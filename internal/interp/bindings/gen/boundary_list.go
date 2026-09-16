@@ -4,6 +4,7 @@ package gen
 
 import (
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -15,6 +16,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
 	{Name: "ChainStep", Zero: types.ChainStep{}, Encode: func(v any) vm.Value { return ObjectChainStep(v.(types.ChainStep)) }},
 	{Name: "CoChange", Zero: types.CoChange{}, Encode: func(v any) vm.Value { return ObjectCoChange(v.(types.CoChange)) }},
+	{Name: "Command", Zero: spells.Command{}, Encode: func(v any) vm.Value { return ObjectCommand(v.(spells.Command)) }},
 	{Name: "Commit", Zero: types.CommitRecord{}, Encode: func(v any) vm.Value { return ObjectCommitRecord(v.(types.CommitRecord)) }},
 	{Name: "CommitAuthor", Zero: types.CommitAuthor{}, Encode: func(v any) vm.Value { return ObjectCommitAuthor(v.(types.CommitAuthor)) }},
 	{Name: "CompletionGate", Zero: types.CompletionGate{}, Encode: func(v any) vm.Value { return ObjectCompletionGate(v.(types.CompletionGate)) }},
@@ -79,6 +81,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "SemverVersion", Zero: types.SemverVersion{}, Encode: func(v any) vm.Value { return ObjectSemverVersion(v.(types.SemverVersion)) }},
 	{Name: "ShellCommand", Zero: types.ShellCommand{}, Encode: func(v any) vm.Value { return ObjectShellCommand(v.(types.ShellCommand)) }},
 	{Name: "Status", Zero: types.StatusRecord{}, Encode: func(v any) vm.Value { return ObjectStatusRecord(v.(types.StatusRecord)) }},
+	{Name: "SymbolIndexer", Zero: spells.SymbolIndexer{}, Encode: func(v any) vm.Value { return ObjectSymbolIndexer(v.(spells.SymbolIndexer)) }},
 	{Name: "Tag", Zero: types.VCSTag{}, Encode: func(v any) vm.Value { return ObjectVCSTag(v.(types.VCSTag)) }},
 	{Name: "TargetGraph", Zero: types.TargetGraphOutput{}, Encode: func(v any) vm.Value { return ObjectTargetGraphOutput(v.(types.TargetGraphOutput)) }},
 	{Name: "TargetGraphNode", Zero: types.TargetGraphNode{}, Encode: func(v any) vm.Value { return ObjectTargetGraphNode(v.(types.TargetGraphNode)) }},

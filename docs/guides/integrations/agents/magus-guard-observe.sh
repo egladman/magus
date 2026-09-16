@@ -108,7 +108,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # missing from `magus session`, the binary is too old. Both streams are
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
-printf '%s' "$path" | "$GUARD_MAGUS_BIN" session hook --observe \
+printf '%s' "$path" | "$GUARD_MAGUS_BIN" shell --observe \
   --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 

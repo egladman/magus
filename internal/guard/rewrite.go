@@ -150,10 +150,9 @@ func rewrittenWorkspaceFile(location location, script string, args []string) str
 // name a magus target: a refusal that does not hand back the verb it wanted is one the
 // reader routes around.
 func interpreterRewriteDenial(rel string) string {
-	return fmt.Sprintf("magus guard denied an inline interpreter rewriting %s, a file this tree already carries.\n\n"+
-		"Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. A script that rewrites a file it never read cannot tell a symbol from a word that looks like one, and what it mangles arrives with no record of what it matched. The heredoc spelling is the same act as `sed -i` and is refused for the same reason.\n"+
-		"For a whole-tree mechanical edit, `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites rather than a pattern that also matches the comment about it.\n"+
-		"Writing to a scratch or temp path is untouched, and so is a script that CREATES a file.", rel)
+	return fmt.Sprintf("Use your editor tool on %s: it reads the file first and reports what it changed.\n"+
+		"Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
+		"Scratch paths and scripts that CREATE a file are untouched.", rel)
 }
 
 // rankInterpreterRewrite ranks this reason against the verdict the other command rules

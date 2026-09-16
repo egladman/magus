@@ -72,11 +72,11 @@ The paths above are user-global. Each repository you ran magus in also holds:
 
 `magus init` also wires git, in three places a `rm` will not reach:
 
-| Where                                                    | What to remove                                                               |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `.gitattributes`                                         | the block between `# BEGIN magus-generated` and `# END magus-generated`      |
-| `.git/config`                                            | `git config --unset merge.magus.driver`                                      |
-| `.git/hooks/post-checkout`, `post-merge`, `post-rewrite` | the block between `# BEGIN magus-refresh` and `# END magus-refresh`, in each |
+| Where                                                    | What to remove                                                                         |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `.gitattributes`                                         | the block between `# BEGIN magus-generated` and `# END magus-generated`                |
+| `.git/config`                                            | `git config --unset merge.magus.driver`                                                |
+| `.git/hooks/post-checkout`, `post-merge`, `post-rewrite` | the block between `# BEGIN magus-refresh` and `# END magus-refresh`, in each           |
 | `.git/hooks/post-commit`, `pre-push`                     | the block between `# BEGIN magus-drift-notice` and `# END magus-drift-notice`, in each |
 
 You can leave these. git treats a merge driver it cannot execute as a plain conflict,

@@ -292,13 +292,13 @@ func recordJobActivity(ctx context.Context, args []string, dur time.Duration, er
 		root = resolved
 	}
 	ev := trail.Event{
-		Ts:        time.Now().Add(-dur).UnixMilli(),
-		Kind:      trail.KindJob,
-		Actor:     "daemon",
-		Workspace: root,
-		Action:    job.ActionString(args),
-		Outcome:   trail.OutcomeOK,
-		DurMs:     dur.Milliseconds(),
+		Ts:         time.Now().Add(-dur).UnixMilli(),
+		Kind:       trail.KindJob,
+		Actor:      "daemon",
+		Workspace:  root,
+		Action:     job.ActionString(args),
+		Outcome:    trail.OutcomeOK,
+		DurationMs: dur.Milliseconds(),
 	}
 	if err != nil {
 		ev.Outcome = trail.OutcomeError

@@ -49,7 +49,11 @@ enum SubmitState {
 message RunJobResponse {
   SubmitState state = 1;
   string invocation_id = 2; // the running job's invocation id (the new one, or the coalesced one)
-  string console_url = 3;   // always empty today; TODO: deep-link once the /logs page accepts an invocation fragment
+  // Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+  // not an absolute URL, because the reader is the console itself and resolves it against
+  // its own origin. Empty only when the daemon coalesced a submit it could not name, since
+  // a run with no invocation has nothing to link to.
+  string console_url = 3;
   Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
 }
 

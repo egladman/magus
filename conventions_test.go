@@ -1807,7 +1807,7 @@ var wholeTreeFootprints = map[string][]string{
 // ctx.readsFiles REPLACES a target's footprint rather than adding to it: buildStep keeps
 // the magusfiles and the target's spell sources, drops the project and spell globs, then
 // folds the declared refs in. So a call added to key four files the project does not
-// claim (the console palette that types/kindpalette_drift_test.go reads) silently
+// claim (the console palette that types/kind_palette_drift_test.go reads) silently
 // deleted **/*.go from the key of the target that runs every Go test. It held long enough
 // for ~8,400 new lines of *_test.go to land and replay against the cached verdict with the
 // coverage profile untouched; only --no-cache re-measured. `magus affected` still selected
@@ -1999,7 +1999,8 @@ func TestHostSpecificLineMatcher(t *testing.T) {
 // branch that is not deciding a verdict is not the failure this exists to prevent.
 var hostToolVocabularyScope = []string{
 	filepath.Join("internal", "guard", "*.go"),
-	filepath.Join("cmd", "magus", "hook*.go"),
+	filepath.Join("cmd", "magus", "shell*.go"),
+	filepath.Join("cmd", "magus", "guard_*.go"),
 	filepath.Join("internal", "agent", "*.go"),
 }
 
@@ -2089,14 +2090,14 @@ func TestGuardDoesNotBranchOnHostToolVocabulary(t *testing.T) {
 // literal carrying it is a RULE wherever it sits.
 const verdictTextPrefix = "magus workspace:"
 
-// TestTheHookCommandCarriesNoRuleText keeps the rules on the importable side of the
-// split. A rule written into cmd/magus/hook.go would work, and would be invisible to
+// TestTheShellCommandCarriesNoRuleText keeps the rules on the importable side of the
+// split. A rule written into cmd/magus/shell.go would work, and would be invisible to
 // both the rule suite and the replay path that re-grades a recorded command, because
 // neither can reach package main. Nothing else marks which side a new rule belongs on,
 // and a boundary that lives only in prose is one with roughly even odds.
-func TestTheHookCommandCarriesNoRuleText(t *testing.T) {
+func TestTheShellCommandCarriesNoRuleText(t *testing.T) {
 	fset := token.NewFileSet()
-	const path = "cmd/magus/hook.go"
+	const path = "cmd/magus/shell.go"
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	require.NoErrorf(t, err, "parse %s: the guard's CLI half moved and this gate stopped looking", path)
 
@@ -2223,7 +2224,7 @@ var nonASCIIGlyphs = map[rune]string{
 // reverting any one fix here fails it.
 var asciiScanFiles = []string{
 	"types/describe.go",
-	"internal/render/targetgraph.go",
+	"internal/render/target_graph.go",
 	"cmd/magus-docs/main.go",
 	"internal/observability/otlp/provider.go",
 	"internal/handler/mcp/registry.go",
@@ -2521,4 +2522,96 @@ func containsAny(haystack string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// TestTypesStaysPureDomain gives types/doc.go's contract an enforcement point. It said
+// "no filesystem, VCS, or process-execution dependencies" and nothing checked it, so the
+// rule lived on whoever last read the file.
+//
+// What it forbids is REACHING THE WORLD: opening a file, running a process, dialing a
+// host, asking a VCS. What it permits is string work over paths and host:port, which is
+// why path/filepath and net are here rather than banned. types.Path resolves and
+// relativizes (types/path.go:40) and types.SecretGrant splits a host (types/secret.go:138);
+// both are pure computation over values a caller already had, and banning them would push
+// path arithmetic into every caller that has a Path.
+//
+// magus's own packages are forbidden with one exception, internal/json, and the exception
+// is not a compromise: TestNoDirectEncodingJSONImport REQUIRES every package that encodes
+// JSON to use it, so banning it here would leave types unable to marshal at all. It is a
+// codec over encoding/json/v2 with no I/O of its own.
+//
+// CLAUDE.md says types imports "only spells and libs/diagnostics", which is stricter than
+// the contract and has been false since types learned to marshal. The doc comment is the
+// rule; this test is what makes it one.
+func TestTypesStaysPureDomain(t *testing.T) {
+	t.Parallel()
+	forbidden := []string{
+		"os", "os/exec", "io/fs", "net/http", "database/sql", "os/user",
+		"github.com/egladman/magus/vcs",
+		"github.com/egladman/magus/project",
+	}
+	allowedMagus := []string{
+		"github.com/egladman/magus/spells",
+		"github.com/egladman/magus/libs/diagnostics",
+		"github.com/egladman/magus/internal/json",
+	}
+
+	entries, err := os.ReadDir("types")
+	require.NoError(t, err)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join("types", e.Name())
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		require.NoError(t, err, "parsing %s", path)
+		for _, imp := range f.Imports {
+			p := strings.Trim(imp.Path.Value, `"`)
+			assert.NotContains(t, forbidden, p,
+				"%s imports %q: types is the near-leaf domain package and may not reach the world", path, p)
+			if strings.HasPrefix(p, "github.com/egladman/magus/") {
+				assert.Contains(t, allowedMagus, p,
+					"%s imports %q: types may depend on spells, libs/diagnostics and internal/json, nothing else in magus", path, p)
+			}
+		}
+	}
+}
+
+// cmdMagusInternalCeiling is the number of internal/ packages cmd/magus imports today.
+// It is a RATCHET: the number may fall, never rise.
+//
+// Measured over this repository's history, it was 25 in May, 36 in July, 48 in August and
+// 63 now, while cmd/magus's references to the root package rose 71 -> 189 over the same
+// span. Both doors into the engine are widening, and the cost is not abstract: the
+// concurrency clamp exists in cmd/magus/main.go AND magus.go, with a comment in the
+// former admitting the latter "never runs".
+//
+// This test decides nothing about which door is right. It only stops the drift being
+// invisible. Lowering the number is the win; raising it should be a sentence in a commit
+// message explaining why the composition root could not hold the new dependency.
+const cmdMagusInternalCeiling = 63
+
+func TestCmdMagusInternalImportsOnlyShrink(t *testing.T) {
+	t.Parallel()
+	entries, err := os.ReadDir(filepath.Join("cmd", "magus"))
+	require.NoError(t, err)
+
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join("cmd", "magus", e.Name())
+		f, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		require.NoError(t, err, "parsing %s", path)
+		for _, imp := range f.Imports {
+			if p := strings.Trim(imp.Path.Value, `"`); strings.HasPrefix(p, "github.com/egladman/magus/internal/") {
+				seen[p] = true
+			}
+		}
+	}
+
+	assert.LessOrEqual(t, len(seen), cmdMagusInternalCeiling,
+		"cmd/magus now imports %d internal packages, over the %d ceiling: put the new dependency behind the root package, "+
+			"or lower the ceiling deliberately and say why", len(seen), cmdMagusInternalCeiling)
 }

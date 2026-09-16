@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -180,7 +180,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 	// the same file, and without this the two would agree on a fingerprint whenever their
 	// declared globs matched the same files, so each would replay the other's project set.
 	_, _ = h.Write([]byte(spellName + "\n"))
-	_, _ = h.Write([]byte(spellruntime.BuiltinsHash() + "\n"))
+	_, _ = h.Write([]byte(spell.BuiltinsHash() + "\n"))
 	for _, g := range globs {
 		_, _ = h.Write([]byte(g + "\n"))
 	}

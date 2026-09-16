@@ -9,6 +9,23 @@ import (
 
 // Dialect names which mvdan/sh LangVariant parses a shell line as. Empty means
 // bash, the agent-host default.
+//
+// KEEP THE PARAMETER even while every workspace resolves to bash. Offering the other
+// dialects is the intended direction, and the threading is what a second one costs
+// nothing to turn on. A review that counts callers will read the Dialect argument on
+// parse.go's helpers as generality nobody uses and propose collapsing it; that has been
+// raised and DECLINED, so the reason lives here rather than in the reviewer's notes.
+//
+// It is also not idle today: wrapperShellDialect below is what parses a nested `bash -c`
+// script under the right variant, which is a distinction the outer dialect alone cannot
+// carry. What has no user yet is a workspace supplying a NON-DEFAULT value, not the
+// machinery that would carry it.
+//
+// One thing to resolve BEFORE a second dialect ships: WorkspaceShellRule.Dialect is
+// declared per rule, and shellDialectFromRules collapses the list to whichever rule
+// declared one last, applying it to the whole parse. With one dialect in play that is
+// invisible; with two it silently parses somebody's rule under the wrong grammar. Decide
+// then whether to honor it per rule or refuse a list that declares two.
 type Dialect string
 
 const (

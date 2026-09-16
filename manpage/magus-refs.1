@@ -40,7 +40,7 @@ Every exact source range, uncapped and verified against the tree \- the view a m
 Re\-ingest the SCIP index before answering
 .TP
 \fB\-\-text\fR
-Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no\-match/error (grep's contract, not refs' verdict exit codes)
+Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no\-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace
 .RE
 .SH EXAMPLES
 \fIEvery reference to a symbol\fR
@@ -83,6 +83,7 @@ magus refs TODO --text
 \fBmagus\-events\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),

@@ -11,7 +11,7 @@ import (
 // internal/interp/bindings/gen turns it into the map the VM reads. The Buzz `object`
 // mirrors are generated from these structs by cmd/magus-utils types (go:generate)
 // and shipped with the host module that returns each one (os, fs, http, encoding,
-// semver, vcs; see internal/spellruntime/hosttypes.go), so the Go struct stays the
+// semver, vcs; see internal/spell/host_types.go), so the Go struct stays the
 // single source of truth and struct, encoder, and mirror can't drift.
 
 // BuzzObject is the Buzz `object` a host method's return crosses the boundary

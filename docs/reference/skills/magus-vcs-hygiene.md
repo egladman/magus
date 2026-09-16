@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9788
-skill_short_bytes: 6950
+skill_full_bytes: 9855
+skill_short_bytes: 7017
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `77` |
+| `agent-skill-version` | `82` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `c68041ff00b7` |
+| `skill-content` | `c36be70dcba2` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -79,7 +79,7 @@ project and a role:
   output globs, so no project can claim it.
 - `unclaimed` - no project declares it and magus does not write it: it enters no
   cache key, but directory containment still seeds its owning project, so touching
-  it reruns targets whose answer cannot have changed (MGS1028). Declaring it in the
+  it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
   owning project's `sources` fixes both halves. Check the VCS ignore rules (`git check-ignore -v <path>`) - an unclaimed
   un-ignored file is at risk of being lost.
 
@@ -236,7 +236,7 @@ project and a role:
   rather than a wider glob somewhere.
 - `unclaimed` - no project declares it and magus does not write it: it enters no
   cache key, but directory containment still seeds its owning project, so touching
-  it reruns targets whose answer cannot have changed (MGS1028). Declaring it in the
+  it reruns targets whose answer cannot have changed ([MGS1028](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/)). Declaring it in the
   owning project's `sources` fixes both halves; leaving it undeclared is right when
   nothing reads it. Check the VCS ignore rules (`git check-ignore -v <path>`) - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost.

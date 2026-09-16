@@ -26,17 +26,16 @@ import (
 // without a manual `magus run ::scip`. It lives ONLY in the daemon (a one-shot CLI has
 // no long-lived loop to schedule it) and is deliberately unobtrusive: it never runs on
 // the query path, coalesces a burst of edits into one run (the quiet window), caps how
-// often a project re-indexes (the min interval), holds off while a user run is starved
-// for a slot, and cancels itself if one becomes starved mid-run. Each run goes through
-// the normal m.Run path, so it is cached and shows up as an ordinary journaled job:
-// transparent, not hidden background magic.
+// often a project re-indexes (the min interval), and runs one project at a time. Each run
+// goes through the normal m.Run path, so it is cached and shows up as an ordinary
+// journaled job: transparent, not hidden background magic.
 //
-// It waits for CONTENTION to clear, not for the machine to fall idle. An idle gate
-// (nothing running at all) reads as the safer choice and is in practice an off switch:
-// an agent session almost always has something running, so the index goes stale exactly
-// while it is being queried hardest, and every rule that needs a definitive index falls
-// silent. The limiter already bounds concurrency and execute already yields the moment a
-// user run queues, so the queue depth is the honest signal and idleness was never it.
+// Backpressure is the LIMITER's, not this scheduler's. An index run is one queued caller
+// against a FIFO-fair semaphore, so a user run behind it waits one scip op. Two attempts
+// to be cleverer than that both failed: an idle gate (dispatch only when nothing runs at
+// all) is an off switch in a session where something always runs, and a contention gate
+// that cancelled on a non-empty queue could not tell a waiting user from its own wait for
+// a slot, so on a busy pool it cancelled itself every tick and never finished an index.
 
 const (
 	// Tuned for an agent session, where a stale index is read within seconds of the edit
@@ -69,7 +68,6 @@ type symbolIndexer struct {
 
 	projectForPath func(absPath string) (string, bool)             // changed file -> owning symbol-capable project, ok
 	runIndex       func(ctx context.Context, project string) error // execute the scip op for a project
-	contended      func() bool                                     // true when a user run is starved (hold off, and cancel in flight)
 	onChange       func()                                          // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
 
 	busy  atomic.Bool // an auto-index run is in flight (only one at a time)
@@ -78,7 +76,7 @@ type symbolIndexer struct {
 }
 
 // loop runs the scheduler: it folds change batches into per-project state and, on each
-// tick, dispatches at most one due project when nothing is starved. It returns when
+// tick, dispatches at most one due project. It returns when
 // ctx is cancelled or the batch channel closes (the watcher stopped).
 func (si *symbolIndexer) loop(ctx context.Context, batches <-chan watch.Batch) {
 	ticker := time.NewTicker(symbolIndexTick)
@@ -138,7 +136,7 @@ func (si *symbolIndexer) fireChange() {
 // queued for a slot or an auto-index is in flight. One at a time keeps the auto-indexer
 // from ever being the reason the machine is busy.
 func (si *symbolIndexer) dispatchDue(ctx context.Context) {
-	if si.busy.Load() || si.contended() {
+	if si.busy.Load() {
 		return
 	}
 	proj, ok := si.pickDue()
@@ -163,10 +161,17 @@ func (si *symbolIndexer) pickDue() (string, bool) {
 	return "", false
 }
 
-// execute runs one project's scip op, cancelling if a user run becomes starved for a
-// slot while it runs. lastRun and dirty are updated up front so a change landing during
-// the run re-marks the project; a cancelled or failed run re-marks it dirty to retry.
-func (si *symbolIndexer) execute(parent context.Context, proj string) {
+// execute runs one project's scip op. lastRun and dirty are updated up front so a change
+// landing during the run re-marks the project; a failed run re-marks it dirty to retry.
+//
+// It does NOT watch for contention and cancel itself. The limiter is already a FIFO-fair
+// semaphore bounding concurrent work, so an index run is one queued caller among many and
+// a user run behind it waits one scip op, a few hundred milliseconds. A second layer of
+// backpressure on top of that read the pool's queue depth to decide whether to yield, and
+// could not tell a waiting user from its OWN wait for a slot: on a saturated pool it
+// dispatched, queued for itself, read that as contention, cancelled, and repeated every
+// tick without ever finishing an index.
+func (si *symbolIndexer) execute(ctx context.Context, proj string) {
 	defer si.busy.Store(false)
 	// Freshness may change once the run finishes (index rebuilt, or a failed attempt);
 	// deferred first so it fires after the state-update lock below is released.
@@ -175,19 +180,13 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 	si.mu.Lock()
 	if st := si.state[proj]; st != nil {
 		// Optimistically clear dirty; a change landing during the run re-marks it. lastRun
-		// is stamped only after a run that actually executes (below), NOT here: stamping
-		// up front would let a yield-cancelled run throttle its own retry by minInterval.
+		// is stamped only after the run below, NOT here: a run cancelled at shutdown would
+		// otherwise throttle its own retry by minInterval.
 		st.dirty = false
 	}
 	si.mu.Unlock()
 
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	stop := make(chan struct{})
-	defer close(stop)
-	go si.yieldWatch(ctx, cancel, stop, proj)
-
-	si.log.DebugContext(parent, "magus: background symbol index starting", slog.String("project", proj))
+	si.log.DebugContext(ctx, "magus: background symbol index starting", slog.String("project", proj))
 	err := si.runIndex(ctx, proj)
 
 	si.mu.Lock()
@@ -197,11 +196,9 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 		return
 	}
 	if err != nil && ctx.Err() != nil {
-		// Cancelled to yield to user work: the run never completed, so leave lastRun
-		// alone (minInterval measures from the last real run) and re-mark dirty to retry
-		// once the queue drains. Not a failure, no backoff.
+		// The daemon is shutting down, not a failure: leave lastRun alone and re-mark
+		// dirty so the next start picks it up. No backoff.
 		st.dirty = true
-		si.log.DebugContext(parent, "magus: background symbol index yielded to user work", slog.String("project", proj))
 		return
 	}
 	// A run that actually executed (completed or failed) stamps lastRun to throttle re-runs.
@@ -212,33 +209,11 @@ func (si *symbolIndexer) execute(parent context.Context, proj string) {
 		st.backoffTill = si.now().Add(backoffDuration(st.failures))
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
-		si.log.WarnContext(parent, "magus: background symbol index failed, backing off",
+		si.log.WarnContext(ctx, "magus: background symbol index failed, backing off",
 			slog.String("project", proj), slog.Int("failures", st.failures), slog.String("error", err.Error()))
 		return
 	}
 	st.failures = 0
-}
-
-// yieldWatch cancels an in-flight run as soon as a user run is starved for a slot, so
-// the auto-index never delays the user's own work. It exits when the run finishes
-// (stop) or the context is already done.
-func (si *symbolIndexer) yieldWatch(ctx context.Context, cancel context.CancelFunc, stop <-chan struct{}, proj string) {
-	t := time.NewTicker(time.Second)
-	defer t.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if si.contended() {
-				si.log.DebugContext(ctx, "magus: yielding background symbol index to user work", slog.String("project", proj))
-				cancel()
-				return
-			}
-		}
-	}
 }
 
 // dueToIndex is the pure scheduling decision: a project is due when it has unindexed
@@ -347,7 +322,6 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			c := byPath[project]
 			return symbolRunError(types.NewProjectRef(c.path, c.dir), c.language, err)
 		},
-		contended: func() bool { return m.limiter().Snapshot().Queued > 0 },
 		// This watcher is what makes the freshness memo trustworthy: it drops the memo
 		// whenever a capable project's sources change or an index run finishes.
 		onChange: m.symbolStatus.invalidate,

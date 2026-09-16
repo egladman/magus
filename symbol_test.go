@@ -82,7 +82,7 @@ func TestMatchProject(t *testing.T) {
 }
 
 // newTestIndexer builds a symbolIndexer with a controllable clock and a recording
-// runIndex, wired uncontended by default.
+// runIndex.
 func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 	t.Helper()
 	clock := time.Unix(2_000_000, 0)
@@ -101,7 +101,6 @@ func newTestIndexer(t *testing.T) (*symbolIndexer, *[]string, *time.Time) {
 			mu.Unlock()
 			return nil
 		},
-		contended: func() bool { return false },
 	}
 	return si, &runs, &clock
 }
@@ -204,7 +203,7 @@ func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 	assert.True(t, st.backoffTill.IsZero(), "yielding sets no backoff")
 }
 
-// freshnessWorkspace builds a one-project workspace bound to a spell that declares a
+// newIndexedWorkspace builds a one-project workspace bound to a spell that declares a
 // symbol indexer, runs that op once so the cache holds its manifest, and writes an index
 // where ingestion looks for one. It returns the workspace and the single source file the
 // index's key covers.
@@ -212,7 +211,7 @@ func TestSymbolIndexerExecuteYieldNoBackoff(t *testing.T) {
 // The op body is a no-op and the index is written by hand: what is under test is the
 // FRESHNESS question, which reads the cache manifest and the index's existence, and a real
 // indexer would only make the fixture depend on an installed binary.
-func freshnessWorkspace(t *testing.T) (*Magus, string) {
+func newIndexedWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
 	const spellName = "zzz-scip-freshness-test-spell"
 	spell := spells.NewSpell(spellName,
@@ -251,7 +250,7 @@ func freshnessWorkspace(t *testing.T) (*Magus, string) {
 	return m, src
 }
 
-func freshnessOf(t *testing.T, m *Magus) types.SymbolIndexFreshness {
+func freshness(t *testing.T, m *Magus) types.SymbolIndexFreshness {
 	t.Helper()
 	for _, s := range m.SymbolIndexStatus(context.Background()) {
 		if s.Project.Path == "." {
@@ -262,13 +261,13 @@ func freshnessOf(t *testing.T, m *Magus) types.SymbolIndexFreshness {
 	return ""
 }
 
-// The probe has to find the manifest the run in freshnessWorkspace just wrote. Nothing
+// The probe has to find the manifest the run in newIndexedWorkspace just wrote. Nothing
 // else asserted that, which is how the probe came to hash a step no run ever mints
 // (buildStep without applyRunKeying): the lookup missed every time, every built index read
 // as out-of-date, and `magus status` said so permanently with nothing to contradict it.
 func TestSymbolIndexFreshnessFindsTheManifestTheRunWrote(t *testing.T) {
-	m, _ := freshnessWorkspace(t)
-	assert.Equal(t, types.SymbolIndexFresh, freshnessOf(t, m),
+	m, _ := newIndexedWorkspace(t)
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m),
 		"an index built from the current sources is up to date")
 }
 
@@ -278,8 +277,8 @@ func TestSymbolIndexFreshnessFindsTheManifestTheRunWrote(t *testing.T) {
 // rewrite the index, so its mtime never caught up). The cache compares content, so a
 // rewrite that changes no bytes is not a change.
 func TestSymbolIndexFreshnessIgnoresAnIdenticalRewrite(t *testing.T) {
-	m, src := freshnessWorkspace(t)
-	require.Equal(t, types.SymbolIndexFresh, freshnessOf(t, m))
+	m, src := newIndexedWorkspace(t)
+	require.Equal(t, types.SymbolIndexFresh, freshness(t, m))
 
 	body, err := os.ReadFile(src)
 	require.NoError(t, err)
@@ -287,19 +286,19 @@ func TestSymbolIndexFreshnessIgnoresAnIdenticalRewrite(t *testing.T) {
 	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.Chtimes(src, later, later))
 
-	assert.Equal(t, types.SymbolIndexFresh, freshnessOf(t, m),
+	assert.Equal(t, types.SymbolIndexFresh, freshness(t, m),
 		"a file rewritten with identical bytes is not a source change")
 }
 
 // The other direction, so the probe is not merely always-fresh: real new bytes must still
 // report out-of-date, or the banner and the symbol-search deny that reads it are dead.
 func TestSymbolIndexFreshnessSeesChangedBytes(t *testing.T) {
-	m, src := freshnessWorkspace(t)
-	require.Equal(t, types.SymbolIndexFresh, freshnessOf(t, m))
+	m, src := newIndexedWorkspace(t)
+	require.Equal(t, types.SymbolIndexFresh, freshness(t, m))
 
 	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
 
-	assert.Equal(t, types.SymbolIndexStale, freshnessOf(t, m),
+	assert.Equal(t, types.SymbolIndexStale, freshness(t, m),
 		"a definition added since the index was built is not in it")
 }
 
@@ -308,7 +307,7 @@ func TestSymbolIndexFreshnessSeesChangedBytes(t *testing.T) {
 // inputs, so a probe that skipped applyRunKeying looked up a key no run had ever written
 // and reported every built index out-of-date forever.
 func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
-	m, _ := freshnessWorkspace(t)
+	m, _ := newIndexedWorkspace(t)
 	ctx := context.Background()
 
 	p := m.Get(".")
@@ -333,26 +332,22 @@ func TestSymbolIndexStepKeysLikeTheRunThatBuiltIt(t *testing.T) {
 	assert.NotEqual(t, runKey, bareKey, "buildStep alone is not the key any run mints")
 }
 
-// TestDispatchDueRunsWhileOtherWorkRuns pins the gate this scheduler actually wants. It
-// held off until the limiter was completely empty, which in a session with an agent in it
-// is never, so the index went stale exactly while it was being queried hardest and every
-// rule needing a definitive index fell silent. Contention, not idleness, is the signal.
-func TestDispatchDueRunsWhileOtherWorkRuns(t *testing.T) {
+// TestDispatchDueSkipsARunAlreadyInFlight is the one occupancy rule the scheduler still
+// keeps: its own. The pool's occupancy is the LIMITER's business, which is FIFO-fair and
+// needs no help; busy is only what stops a slow index run being dispatched twice.
+//
+// Synchronous on purpose. The behaviour is the early return, so asserting it against a
+// parked goroutine would let the test pass by winning a scheduling race instead.
+func TestDispatchDueSkipsARunAlreadyInFlight(t *testing.T) {
 	si, runs, clock := newTestIndexer(t)
-	starved := false
-	si.contended = func() bool { return starved }
+	si.busy.Store(true)
 
 	si.mark([]string{"/w/pkg/a/x.go"})
 	*clock = clock.Add(2 * si.quiet)
-
 	si.dispatchDue(t.Context())
-	require.Eventually(t, func() bool { return len(*runs) == 1 }, time.Second, 5*time.Millisecond,
-		"a busy machine with nothing starved must still re-index")
 
-	starved = true
-	si.busy.Store(false)
-	si.mark([]string{"/w/pkg/a/y.go"})
-	*clock = clock.Add(2 * si.minInterval)
-	si.dispatchDue(t.Context())
-	assert.Len(t, *runs, 1, "a starved user run still holds the auto-indexer off")
+	assert.Empty(t, *runs, "a run already in flight must not be dispatched again")
+	proj, due := si.pickDue()
+	assert.True(t, due, "and the project stays due, so the next tick picks it up")
+	assert.Equal(t, "pkg/a", proj)
 }

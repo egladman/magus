@@ -146,3 +146,101 @@ func TestSlowExecutionsSelectsOnlySlowRealRuns(t *testing.T) {
 }
 
 const slowThresholdForTest = 5_000
+
+func exec(project, target, text string) string {
+	return fmt.Sprintf(`{"kind":"exec","project":%q,"target":%q,"text":%q}`, project, target, text)
+}
+
+// TestStalledTargetsNeedsTheSameWorkTwice pins the condition the finding rests on. Never
+// replaying is evidence of a broken footprint only when the runs WERE the same work; a
+// different command is supposed to miss, and counting those as misses accuses a target of
+// a footprint the journal says nothing about.
+//
+// Measured on this repo: go-test reported 43 runs and 0 replays, which was twenty distinct
+// `-run` filters, most of them carrying `-count=1`.
+func TestStalledTargetsNeedsTheSameWorkTwice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one command run many times is still the finding", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		recs := repeatResult("docs", "generate", "pass", 80_000, MinRunsForYield)
+		recs = append(recs, exec("docs", "generate", "go test ./..."))
+		writeJournal(t, dir, "a.jsonl", recs...)
+
+		require.Len(t, StalledTargets(dir, nil), 1,
+			"identical work that never replays is what this check is for")
+	})
+
+	t.Run("two different commands are not evidence of anything", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		recs := repeatResult("docs", "generate", "pass", 80_000, MinRunsForYield)
+		recs = append(recs,
+			exec("docs", "generate", "go test ./... -run TestOne"),
+			exec("docs", "generate", "go test ./... -run TestTwo"))
+		writeJournal(t, dir, "a.jsonl", recs...)
+
+		require.Empty(t, StalledTargets(dir, nil),
+			"a different command SHOULD miss, so the misses say nothing about the footprint")
+	})
+
+	t.Run("a journal with no exec record still reports", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeJournal(t, dir, "a.jsonl", repeatResult("docs", "generate", "pass", 80_000, MinRunsForYield)...)
+
+		require.Len(t, StalledTargets(dir, nil), 1,
+			"a target that execs nothing observable must keep the behaviour it had")
+	})
+}
+
+func resultKeyed(project, target, status, key string, durMs int) string {
+	return fmt.Sprintf(`{"kind":"result","project":%q,"target":%q,"status":%q,"cache_key":%q,"dur_ms":%d}`,
+		project, target, status, key, durMs)
+}
+
+// TestStalledTargetsNeedsTheSameKeyTwice is the command test one level down. Runs under
+// DIFFERENT keys mean the inputs moved, so every miss was correct and the cache is working;
+// only a key that repeats and still never replays accuses the footprint of anything.
+//
+// Measured on this repo: two generators reported 10 runs and 0 replays across ten edits to
+// the Go sources they read, which is an ordinary edit-and-rebuild session.
+func TestStalledTargetsNeedsTheSameKeyTwice(t *testing.T) {
+	t.Parallel()
+
+	t.Run("one key run many times is still the finding", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		recs := make([]string, 0, MinRunsForYield)
+		for range MinRunsForYield {
+			recs = append(recs, resultKeyed("docs", "generate", "pass", "same-key", 80_000))
+		}
+		writeJournal(t, dir, "a.jsonl", recs...)
+
+		require.Len(t, StalledTargets(dir, nil), 1,
+			"identical inputs that never replay is exactly what this check is for")
+	})
+
+	t.Run("a key that moves every run is the cache working", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		recs := make([]string, 0, MinRunsForYield)
+		for i := range MinRunsForYield {
+			recs = append(recs, resultKeyed("docs", "generate", "pass", fmt.Sprintf("key-%d", i), 80_000))
+		}
+		writeJournal(t, dir, "a.jsonl", recs...)
+
+		require.Empty(t, StalledTargets(dir, nil),
+			"the inputs moved, so the misses were correct and say nothing about the footprint")
+	})
+
+	t.Run("a journal with no key recorded keeps the old behaviour", func(t *testing.T) {
+		t.Parallel()
+		dir := t.TempDir()
+		writeJournal(t, dir, "a.jsonl", repeatResult("docs", "generate", "pass", 80_000, MinRunsForYield)...)
+
+		require.Len(t, StalledTargets(dir, nil), 1,
+			"a journal written before results carried a key must not silently stop reporting")
+	})
+}

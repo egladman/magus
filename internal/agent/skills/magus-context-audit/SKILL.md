@@ -1,6 +1,6 @@
 # Auditing the instructions an agent was given
 
-This is a LENS, like `magus_insight`: it observes and ranks, it does not gate.
+This is a LENS, like `{{tool "insight"}}`: it observes and ranks, it does not gate.
 The output is a findings list a human decides on, never an automatic edit.
 
 What it looks at is not code. It is everything loaded into an agent's context as
@@ -41,7 +41,7 @@ not the exception - they were usually written in the same sitting by the same
 person.{{end}} So resolve every claim against something that executes.
 
 ```sh
-printf '%s' "<the exact command a document recommends>" | magus session hook
+magus shell "<the exact command a document recommends>"
 magus describe targets -o name        # does the target a doc names still exist
 magus describe file <path>            # is that file really source / output
 ```

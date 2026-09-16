@@ -27,7 +27,7 @@ func TestRunRegistryFoldsTargetLifecycle(t *testing.T) {
 
 	emit(reg, "inv1", journal.Event{Ts: start.UnixMilli(), Kind: journal.KindStarted, Command: &journal.Command{Trigger: journal.TriggerRun}})
 	emit(reg, "inv1", journal.Event{Ts: execAt.UnixMilli(), Kind: journal.KindExec, Project: "svc/api", Target: "build"})
-	emit(reg, "inv1", journal.Event{Ts: doneAt.UnixMilli(), Kind: journal.KindResult, Project: "svc/api", Target: "build", Status: journal.StatusPass, Ref: "out1a2b3c", DurMs: 3_000})
+	emit(reg, "inv1", journal.Event{Ts: doneAt.UnixMilli(), Kind: journal.KindResult, Project: "svc/api", Target: "build", Status: journal.StatusPass, Ref: "out1a2b3c", DurationMs: 3_000})
 
 	got := reg.Snapshot()
 	want := []types.StatusRun{{
@@ -72,7 +72,7 @@ func TestRunRegistryRunningTarget(t *testing.T) {
 func TestRunRegistryCachedResultAnchorsStart(t *testing.T) {
 	reg := NewRunRegistry()
 	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
-	emit(reg, "inv1", journal.Event{Ts: 4_000, Kind: journal.KindResult, Project: "svc/api", Target: "lint", Status: journal.StatusCached, Ref: "outcafe", DurMs: 0})
+	emit(reg, "inv1", journal.Event{Ts: 4_000, Kind: journal.KindResult, Project: "svc/api", Target: "lint", Status: journal.StatusCached, Ref: "outcafe", DurationMs: 0})
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)
@@ -90,7 +90,7 @@ func TestRunRegistryFailedResult(t *testing.T) {
 	reg := NewRunRegistry()
 	emit(reg, "inv1", journal.Event{Ts: 1_000, Kind: journal.KindStarted})
 	emit(reg, "inv1", journal.Event{Ts: 2_000, Kind: journal.KindExec, Project: "p", Target: "t"})
-	emit(reg, "inv1", journal.Event{Ts: 3_000, Kind: journal.KindResult, Project: "p", Target: "t", Status: journal.StatusFail, DurMs: 1_000})
+	emit(reg, "inv1", journal.Event{Ts: 3_000, Kind: journal.KindResult, Project: "p", Target: "t", Status: journal.StatusFail, DurationMs: 1_000})
 
 	got := reg.Snapshot()
 	require.Len(t, got, 1)

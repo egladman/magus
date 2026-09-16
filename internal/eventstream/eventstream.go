@@ -54,7 +54,7 @@ func fromJournal(workspace string, e journal.Event) (types.StreamEvent, bool) {
 			Status:     status,
 			CacheHit:   cached,
 			Ref:        e.Ref,
-			DurationMs: e.DurMs,
+			DurationMs: e.DurationMs,
 			// A failed result carries the run error in Text.
 			Error: e.Text,
 		}

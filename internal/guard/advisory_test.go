@@ -50,10 +50,19 @@ func TestSymbolSearchDeniesOnlyWhatRefsReplaces(t *testing.T) {
 	stale := verdict(true, false)
 	assert.Empty(t, stale.Deny, "a stale index answers unknown, which cannot justify taking grep away")
 	assert.Equal(t, advisoryPrecedent, stale.Kind)
+	// The brief is the only part read on every call, so it owes the reader the reason this
+	// was advice and the command that makes it a deny next time. Without them a stale index
+	// degrades the rule silently, on exactly the branch that is adding the symbols.
+	assert.Contains(t, stale.Brief, "cannot vouch for HandleRequest",
+		"the brief must say the index is behind, not merely prefer refs")
+	assert.Contains(t, stale.Brief, hint.GraphBuild.String(),
+		"an advisory naming a gap owes the command that closes it")
 
 	absent := verdict(false, true)
 	assert.Empty(t, absent.Deny, "nothing replaces a search for text no index holds")
 	assert.Equal(t, advisoryPrecedent, absent.Kind)
+	assert.NotContains(t, absent.Brief, "cannot vouch",
+		"a definitive not-a-symbol answer is not staleness; grep is simply right here")
 
 	unwired := Evaluate(Dependencies{}, "grep -r HandleRequest internal/")
 	assert.Empty(t, unwired.Deny, "a caller that supplies no resolver keeps the advisory it had")

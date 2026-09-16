@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -47,7 +47,7 @@ export fun helper() > str { return text.value(); }`)
 
 	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
 	_, _, err := loadBuzzSpell(ctx, path)
-	assert.ErrorIs(t, err, spellruntime.ErrNotASpell)
+	assert.ErrorIs(t, err, spell.ErrNotASpell)
 }
 
 // TestProjectImportFileResolver exercises the reserved `.file(rel)` member on a
@@ -373,7 +373,7 @@ export fun check(ctx: magus\Context, args: [str]) > void {
 
 // TestEngineDescriptorParity locks the engine-agnostic mgs_ contract: a Buzz spell
 // declaring every optional mgs_ function with record-shaped ops resolves to the
-// expected Descriptor. It guards the resolver (internal/spellruntime/resolve.go)
+// expected Descriptor. It guards the resolver (internal/spell/resolve.go)
 // against dropping fields.
 func TestEngineDescriptorParity(t *testing.T) {
 	buzzSrc := `import "magus/spell";

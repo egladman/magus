@@ -1,0 +1,42 @@
+// Buzz's language identity, and nothing else. magus writes its own magusfile and
+// spells in Buzz, so a workspace full of .buzz sources needs magus to know what a
+// Buzz file IS: which extension carries one, and how to tell code from a comment or
+// a string while scanning it.
+//
+// That identity feeds the surfaces that read source without running it - the
+// comment-aware scanner behind the knowledge graph and the symbol index, and the
+// extension map that binds a file to a project - so removing it does not remove
+// work, it makes those surfaces read Buzz as unstructured text.
+//
+// It declares NO ops on purpose. The three it used to carry (buzz-check, buzz-test,
+// magus-buzz) forked interpreters that know only the Buzz stdlib, so they could not
+// load a magusfile or a spell, which is every Buzz file in this repository. They
+// were checkable only against sources nobody had. `magus buzz -t <file>` runs the
+// in-file test blocks directly and needs no spell.
+//
+// No mgs_getTools either: `magus buzz` reports magus's own version, the upstream
+// `buzz` toolchain is not reliably on PATH, and a failed probe would warn on every
+// run touching a Buzz-bound project.
+
+import "magus/spell";
+
+export fun mgs_getName() > str { return "buzz"; }
+
+export fun mgs_getLanguage() > Language {
+    return Language{
+        name = "buzz",
+        extensions = [".buzz"],
+        comments = CommentSyntax{
+            lineComments = ["//"],
+            blockComments = [CommentBlock{open = "/*", close = "*/"}],
+            quotes = [
+                Quote{open = "`", close = "`", ignoreEscape = true},
+                Quote{open = "\"", close = "\""},
+            ],
+        },
+    };
+}
+
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "**/*.buzz"}];
+}

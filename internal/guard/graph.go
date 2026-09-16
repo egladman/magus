@@ -3,7 +3,7 @@ package guard
 import "slices"
 
 // The guard's half of the index-staleness fact. The load-bearing half rides the command's
-// own output (cmd/magus/staleindex.go): it works on every host with nothing wired. This one
+// own output (cmd/magus/stale_index.go): it works on every host with nothing wired. This one
 // reaches a host that runs a pre-tool hook, and it arrives one call EARLIER: before the
 // stale answer is read rather than under it.
 //

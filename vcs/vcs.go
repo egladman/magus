@@ -167,6 +167,27 @@ func checkRef(ref string) error {
 	return nil
 }
 
+// checkRevsetRef is checkRef plus the characters that would EXTEND the expression a ref is
+// placed INSIDE, rather than name a revision within it.
+//
+// hg, Sapling and jj compose revsets (ancestor(base,head), heads(::base & ::head)), so a
+// ref carrying a comma, a paren or a boolean operator rewrites the expression and the diff
+// silently covers a range nobody asked for. A wrong answer is worse here than an error,
+// because nothing downstream can tell it from a right one. git needs only checkRef: it
+// takes base...head as a single argv token and composes nothing.
+//
+// `~` and `^` are deliberately allowed: HEAD~1 and HEAD^ name revisions, and refusing them
+// would reject the ordinary way to say "one before".
+func checkRevsetRef(ref string) error {
+	if err := checkRef(ref); err != nil {
+		return err
+	}
+	if i := strings.IndexAny(ref, "(),&|! \t"); i >= 0 {
+		return fmt.Errorf("vcs: refusing ref %q: %q would extend the revset it sits in rather than name a revision", ref, ref[i:i+1])
+	}
+	return nil
+}
+
 // repoPathPrefix returns dir's path relative to the repository root, forward-slashed with
 // a trailing slash, or "" when dir IS the root.
 //

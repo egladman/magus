@@ -152,7 +152,7 @@ magus\project({
         // migrated to harness spells under spells/harness/.
         "harnesses/*.json",
         "spells/harness/**/*.buzz",
-        // The vendored agent-host schemas hostschema_test.go grades the hook configs
+        // The vendored agent-host schemas host_schema_test.go grades the hook configs
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
         // refresh would otherwise not invalidate the tests that read them.
         "testdata/hostschemas/**/*.json",
@@ -481,6 +481,18 @@ object Registry {
 final GHCR = Registry{
     host = "ghcr.io",
     repository = "ghcr.io/egladman/magus",
+    user_ref = "GHCR_USERNAME",
+    token_ref = "GHCR_TOKEN",
+};
+
+// The knowledge graph is published as an OCI artifact, not an image, so it takes its own
+// repository under the same account and the same credentials. Declared here for the reason
+// the image registries are: the destination a workspace publishes to is a decision, and
+// deriving it from the git remote would mean a fork silently publishing to its own
+// namespace, or a pull reading whatever sits at a host nobody chose.
+final GHCR_GRAPH = Registry{
+    host = "ghcr.io",
+    repository = "ghcr.io/egladman/magus/knowledge-graph",
     user_ref = "GHCR_USERNAME",
     token_ref = "GHCR_TOKEN",
 };
@@ -1004,7 +1016,7 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
 // reverse docs -> root output edge while letting docs publication depend on the same
 // execution stage.
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void !> any {
-    // This target COMPILES the module (`go run ./cmd/magus-utils`), and internal/spellruntime
+    // This target COMPILES the module (`go run ./cmd/magus-utils`), and internal/spell
     // go:embeds files spells-generate writes. Without the edge the two race inside generate's
     // fan-out and the compile fails with "pattern gen/types/<name>.buzz: no matching files
     // found" naming whichever file was mid-rewrite - a different one each run, and a message
@@ -1110,19 +1122,19 @@ export fun job_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-utils", "jobschema", "-out", "internal/job/gen"]);
 }
 
-// Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen),
-// the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module
-// host declarations (internal/spellruntime/gen/decls), all driven by the
-// go:generate directives in internal/spellruntime.
+// Regenerates the compiled built-in spell bytecode (internal/spell/gen),
+// the Buzz value-type mirrors (internal/spell/gen/types) and the per-module
+// host declarations (internal/spell/gen/decls), all driven by the
+// go:generate directives in internal/spell.
 //
 // Both trees are declared: undeclared, magus classified them as ordinary source,
 // so `magus describe file` told a reader a generated file was safe to hand-edit
 // and the agent guard's generated-file advisory stayed silent on every one of them.
 export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
-    ctx.writesFiles("internal/spellruntime/gen/*.bo", "internal/spellruntime/gen/types/*.buzz",
-                    "internal/spellruntime/gen/decls/*.buzz");
-    proc\exec("go", ["generate", "./internal/spellruntime/..."]);
+    ctx.writesFiles("internal/spell/gen/*.bo", "internal/spell/gen/types/*.buzz",
+                    "internal/spell/gen/decls/*.buzz");
+    proc\exec("go", ["generate", "./internal/spell/..."]);
 }
 
 // Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
@@ -1276,6 +1288,43 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
     final targets = magus\describe(["graph", "-o", "json"], {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
+    // Same shape as image_build: one target, and the cd charm is what turns generating
+    // into publishing. A separate graph-push target would be the same two operations in
+    // the other order, with its own flags to keep in step. ci strips cd, so the gate can
+    // never push.
+    if (ctx.hasCharm("cd")) {
+        publish_graph(ctx);
+    }
+}
+
+// publish_graph pushes the knowledge graph to GHCR as an OCI artifact, so a collaborator
+// or a later CI job can fetch it instead of paying for a full symbol reindex. The
+// published copy carries the SCIP shards, which are the expensive half and are never
+// committed; gen/knowledge-graph.json is already in the repository, so republishing that
+// alone would add nothing.
+//
+// The artifact is the knowledge store SHARD BY SHARD, one layer per shard titled with its
+// content fingerprint, plus the store's routing manifest. That is what lets a reader fetch
+// only the shards it is missing rather than a merged graph it would have to take whole.
+//
+// Tags come from channel(), so the graph and the image built from the same merge share one
+// string: the short commit on the commit channel, version plus latest on stable.
+//
+// The token is piped rather than passed as an argument, the way image_login pipes to
+// `docker login --password-stdin`, so it never reaches a process listing or a run log.
+fun publish_graph(ctx: magus\Context) > void !> any {
+    final reg = GHCR_GRAPH;
+    final user = magus\secret.read(reg.user_ref);
+    final token = magus\secret.read(reg.token_ref);
+    var tags = [commit()];
+    if (channel(ctx) != "commit") {
+        tags = [version(), "latest"];
+    }
+    foreach (tag in tags) {
+        magus\cmd("graph", args: ["push", "--ref", reg.repository + ":" + tag, "--username", user],
+            opts: {"stdin": token});
+    }
+    magus\log.info("graph-generate: published " + reg.repository + " as " + std\toString(tags.len()) + " tag(s)");
 }
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
@@ -1476,7 +1525,7 @@ fun refuse_overwrite(ctx: magus\Context, path: str) > void !> any {
 // build is limited to VFPv1 where v7 silicon offers VFPv3 (both are hardware float -
 // softfloat would be GOARM=5, which is not built). GOARCH stays "arm" for both; only
 // GOARM and the asset name differ. Go records GOARM in the binary's build info, which is
-// how `magus self update` picks the matching asset back out (see cmd/magus/selfupdate.go).
+// how `magus self update` picks the matching asset back out (see cmd/magus/self_update.go).
 // 32-bit ARM is a LINUX-ONLY asset here, and refused elsewhere rather than left merely
 // uninvoked. Go can target windows/arm, so without this the fold below would cheerfully
 // build `windows armv7` and name an archive after a platform nothing tests and no
@@ -1778,7 +1827,7 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     // command produces the marked archive. That is tolerable only because both archives are
     // now labeled at the point it matters - `_static` says what it is, and nothing has to
     // be inferred from a name's absence. Everything that fetches an archive by name asks
-    // for `_static` EXPLICITLY (cmd/magus/selfupdate.go, every download guide), so no
+    // for `_static` EXPLICITLY (cmd/magus/self_update.go, every download guide), so no
     // consumer depends on which variant happens to hold the bare name.
     //
     // The suffix names the PROPERTY, not the mechanism, and is a "_" field rather than "-"
@@ -2482,7 +2531,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "**/*.buzz", "mise.toml", "magus.yaml",
                    "docs/**/*.md", "internal/agent/skills/**",
                    "internal/agent/agents-section.md", "CHANGELOG.md");
-    // types/kindpalette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
+    // types/kind_palette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
     // green while the thing it measures drifts underneath it. Measured: deleting a palette
@@ -2632,14 +2681,21 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
     if (ctx.hasCharm("rw")) {
         ctx.needs(test, gopherbuzz\test, diagnostics\test, commentdash\test, testlayout\test);
     }
-    ctx.writesFiles("assets/coverage.svg", "coverage/*.json");
+    ctx.writesFiles("assets/coverage.svg");
+    // The per-platform records are MODIFIED, not owned (MGS1034). Each machine refreshes
+    // its own and they are all committed, so declaring them as outputs would let a cache
+    // snapshot taken on one platform replay over another's record, and `magus clean` delete
+    // records no run here can rebuild. An update is never replayed and never deleted, which
+    // is what leaves them free to stay an INPUT below: a teammate committing a record has
+    // to re-render the badge, and that only works while the records key this target.
+    ctx.modifiesExistingFiles("coverage/*.json");
     // The Go tree IS an input now, because the denominator is read from it. A footprint
     // REPLACES the project baseline rather than adding to it (see the note on `test`),
     // so everything the verdict reads is restated here: every module's sources and
-    // go.mod for the import paths, the committed records, the badge the check compares
-    // against, and the two Buzz modules that render and merge.
+    // go.mod for the import paths, the committed records, and the two Buzz modules that
+    // render and merge. NOT assets/coverage.svg: see the writesFiles note above.
     ctx.readsFiles("**/*.go", "**/go.mod", "coverage/*.json",
-                   "assets/coverage.svg", "badge.buzz", "coverage.buzz");
+                   "badge.buzz", "coverage.buzz");
     final tables = cov\staticBlockTables();
     if (ctx.hasCharm("rw")) {
         // This platform only. A Windows record can only come from a Windows machine;
@@ -2690,8 +2746,9 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
 // spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
-// magus's embedded engine. Also writes assets/buzz-coverage.svg: one language badge,
-// matching assets/coverage.svg (Go) and console/coverage.svg (TypeScript). Each -t
+// magus's embedded engine. Under `rw` it also refreshes assets/buzz-coverage.svg, one
+// language badge matching assets/coverage.svg (Go) and console/coverage.svg
+// (TypeScript); without it the badge is only COMPARED, as coverage-badge does. Each -t
 // invocation emits an LCOV fragment for the entry file only; imports are measured when
 // THEY are the -t subject. The fragments are throwaways under coverage/buzz/ (gitignored);
 // the badge is the committed figure.
@@ -2708,11 +2765,13 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
+    // The badge is an OUTPUT and not also an input (MGS1034): the cache restores an output
+    // before the target runs, so keying on it would hash the bytes the cache just wrote and
+    // the comparison below would check the cache against itself. Its content is a function
+    // of the sources named here, which is what makes it regenerate.
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
-        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz",
-        "assets/buzz-coverage.svg");
+        "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
     ctx.writesFiles("assets/buzz-coverage.svg", "coverage/buzz/*.lcov");
-    final before = drift\hashes(["assets/buzz-coverage.svg"]);
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
@@ -2814,9 +2873,15 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // the files buzz-test ran; node_modules exclusion in lcov is a no-op here.
     final pct = lcov\mergePercent(reports, keep: "");
     final wanted = badge\coverage("buzz coverage", percent: pct, radius: 3);
-    fs\writeFile("assets/buzz-coverage.svg", content: wanted);
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift\changedSince(before, ["assets/buzz-coverage.svg"]).len() > 0) {
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("assets/buzz-coverage.svg", content: wanted);
+        return;
+    }
+    // Compared, never written, the same way coverage-badge does it. Writing the badge and
+    // THEN noticing it changed leaves the check's own output in the tree, so the next
+    // drift gate reads it as an edit nobody made and the failure moves to a target that
+    // did nothing wrong.
+    if (fs\readFile("assets/buzz-coverage.svg") != wanted) {
         throw "buzz-test: assets/buzz-coverage.svg is stale; this run measured {pct}%; re-run `magus run buzz-test:rw .` and commit the badge";
     }
 }

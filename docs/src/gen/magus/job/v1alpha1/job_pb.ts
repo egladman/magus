@@ -47,7 +47,10 @@ export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   invocationId: string;
 
   /**
-   * always empty today; TODO: deep-link once the /logs page accepts an invocation fragment
+   * Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+   * not an absolute URL, because the reader is the console itself and resolves it against
+   * its own origin. Empty only when the daemon coalesced a submit it could not name, since
+   * a run with no invocation has nothing to link to.
    *
    * @generated from field: string console_url = 3;
    */

@@ -128,13 +128,41 @@ type SessionStart struct {
 // envelope, because a fact is routinely read on its own: the activity drawer joins one target
 // result to a lease without holding the session-start record that opened the file.
 type TargetResult struct {
-	Target   string `json:"target"`
-	Project  string `json:"project,omitempty"`
-	Outcome  string `json:"outcome"`
-	DurMs    int64  `json:"dur_ms,omitempty"`
-	Replayed bool   `json:"replayed,omitempty"`
-	Ref      string `json:"ref,omitempty"`
-	Lease    string `json:"lease,omitempty"`
+	Target     string `json:"target"`
+	Project    string `json:"project,omitempty"`
+	Outcome    string `json:"outcome"`
+	DurationMs int64  `json:"duration_ms,omitempty"`
+	Replayed   bool   `json:"replayed,omitempty"`
+	Ref        string `json:"ref,omitempty"`
+	Lease      string `json:"lease,omitempty"`
+}
+
+// UnmarshalJSON decodes a result, reading a duration written under either spelling.
+//
+// compat(until: no session file under the session store still carries "dur_ms"): the
+// duration was spelled `dur_ms` before [TargetResult.DurationMs] was. Session files are
+// append-only and rotate, so observing that dropping this is safe means finding none left:
+//
+//	grep -l '"dur_ms"' <[Dir]>/*.jsonl
+//
+// Dropping it early is silent rather than loud: a session summary reports every target it
+// recorded before the rename as instant, which reads as a session that replayed everything.
+func (r *TargetResult) UnmarshalJSON(b []byte) error {
+	type result TargetResult // no method set, so this does not recurse
+	var decoded result
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return err
+	}
+	*r = TargetResult(decoded)
+	if r.DurationMs == 0 {
+		var legacy struct {
+			DurMs int64 `json:"dur_ms"`
+		}
+		if json.Unmarshal(b, &legacy) == nil {
+			r.DurationMs = legacy.DurMs
+		}
+	}
+	return nil
 }
 
 // sessionRE is the session-id shape, which doubles as the session file's basename:

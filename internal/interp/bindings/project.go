@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -236,7 +236,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			name := nv.AsString()
 			if _, exists := project.DefaultSpellRegistry().Lookup(name); !exists {
-				m, err := spellruntime.DecodeHandle(item)
+				m, err := spell.DecodeHandle(item)
 				if err != nil {
 					return nil, fmt.Errorf("magus.project: spell %q: %w", name, err)
 				}

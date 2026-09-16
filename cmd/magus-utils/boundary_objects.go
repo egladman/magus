@@ -24,7 +24,7 @@ import (
 //
 // Emitting here rather than into types also ends a bootstrap deadlock that needed a
 // build tag to work around: a generator must not import the package it writes into
-// (cmd/magus-utils/jobschema.go states the rule), and the method half had to, since Go
+// (cmd/magus-utils/job_schema.go states the rule), and the method half had to, since Go
 // puts a method in its receiver's package.
 func runBoundaryObjects(args []string) error {
 	fs := flag.NewFlagSet("boundaryobjects", flag.ExitOnError)

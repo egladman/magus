@@ -22,7 +22,7 @@ const GuardSchemaVersion = 1
 var guardDecisions = []string{"pass", "advise", "deny"}
 
 // guardSurfaces is every input the guard judges: a shell command, a file path
-// an edit is about to write (`magus session hook --path`), or an MCP tool call
+// an edit is about to write (`magus shell --path`), or an MCP tool call
 // (a tool name plus a params object, forwarded whole rather than reduced to a
 // single string). A host wires each surface to a different one of its events,
 // and a host that cannot wire one covers less, which is a coverage difference

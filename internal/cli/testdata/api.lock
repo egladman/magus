@@ -28,6 +28,7 @@ config history_path
 config knowledge.max_size_mb
 config knowledge.notes.private
 config knowledge.notes.shared
+config knowledge.published_ref
 config knowledge.symbol_indexing.disabled
 config knowledge.symbol_indexing.min_interval_seconds
 config knowledge.symbol_indexing.quiet_seconds
@@ -170,6 +171,13 @@ flag run/wait
 flag session/brief
 flag session/limit
 flag session/since
+flag shell/agent-name
+flag shell/event
+flag shell/lease
+flag shell/observe
+flag shell/path
+flag shell/session
+flag shell/transcript
 flag status/W
 flag status/c
 flag status/compact
@@ -216,6 +224,7 @@ subcommand run
 subcommand self
 subcommand server
 subcommand session
+subcommand shell
 subcommand status
 subcommand vcs
 subcommand version

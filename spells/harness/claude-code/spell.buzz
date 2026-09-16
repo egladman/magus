@@ -44,7 +44,7 @@ fun claude_mcp_command() > str {
 fun claude_agent_command() > str {
     // Same script and HOST_EVENT_RAW as the MCP surface: a spawn's payload is a
     // prompt and a subagent_type, not one string, so the whole event has to
-    // reach `magus session hook` for it to be recognized as a spawn at all.
+    // reach `magus shell` for it to be recognized as a spawn at all.
     return "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh";
 }
 

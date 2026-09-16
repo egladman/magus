@@ -96,7 +96,7 @@ To adapt that Buzz harness without modifying Magus source: copy the spell into
 the workspace, change only the import path (for example
 `import "harness/codex" as codex`), edit the workspace Buzz, then re-run apply
 and verify. Details:
-[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
 
 Or target Codex alone (spell or `harnesses/codex.json` fallback):
@@ -183,7 +183,8 @@ shown here:
 
 The shipped scripts talk to `magus session hook`. The harness descriptor only
 merges those opaque fragments into `.codex/hooks.json`; Magus does not inject a
-codec. Copy [codex-hooks.json](codex-hooks.json) or apply the descriptor.
+codec. Copy `docs/guides/integrations/agents/codex-hooks.json` from the repository,
+or apply the descriptor.
 
 The two `PreToolUse` entries used to carry `GUARD_NO_ADVISE=1`, which rendered
 every advisory as nothing. That rested on a claim OpenAI's current hooks
@@ -199,7 +200,7 @@ build behaves otherwise, `GUARD_NO_ADVISE=1` still suppresses the arm.
 This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
-[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
 
 `harnesses/codex.json` remains as a fallback when the magusfile does not wire

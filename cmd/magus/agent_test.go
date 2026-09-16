@@ -46,7 +46,7 @@ func TestAgentsSectionIsPlainASCII(t *testing.T) {
 
 func TestInstallSkillTreeWritesStampedFiles(t *testing.T) {
 	dir := t.TempDir()
-	written, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	written, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 	require.NotEmpty(t, written)
 
@@ -75,7 +75,7 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 	dir := t.TempDir()
 	dests := []string{"first-harness/skills", "second-harness/skills"}
 	for _, dest := range dests {
-		_, err := agentSkills.WriteSkillTree(dir, dest, false, agent.FormFull)
+		_, _, err := agentSkills.WriteSkillTree(dir, dest, false, agent.FormFull)
 		require.NoError(t, err)
 	}
 	first, err := os.ReadFile(filepath.Join(dir, dests[0], "magus-query/SKILL.md"))
@@ -89,24 +89,24 @@ func TestInstallSkillTreeDestinationsShareBytes(t *testing.T) {
 
 func TestInstallSkillTreeRefusesThenForces(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.Error(t, err, "a second install without --force must refuse")
 	assert.Contains(t, err.Error(), "already exists")
 
-	_, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, ".claude/skills", true, agent.FormFull)
 	assert.NoError(t, err, "--force overwrites")
 }
 
 func TestInstallSkillTreeRefusesAbsoluteDestination(t *testing.T) {
 	dir := t.TempDir()
-	_, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, "/tmp/abs/skills", false, agent.FormFull)
 	require.Error(t, err, "an absolute destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 
-	_, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.FormFull)
+	_, _, err = agentSkills.WriteSkillTree(dir, "~/.config/skills", false, agent.FormFull)
 	require.Error(t, err, "a tilde-prefixed destination must be refused")
 	assert.Contains(t, err.Error(), "outside the working tree")
 }
@@ -144,12 +144,13 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 	path := filepath.Join(dir, "AGENTS.md")
 	const theirs = "# My agents notes\n\nkeep me\n"
 	require.NoError(t, os.WriteFile(path, []byte(theirs), 0o644))
-	_, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, ".claude/skills", false, agent.FormFull)
 	require.NoError(t, err)
 
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
-		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.FormFull, false)
+		written := []string{".claude/skills/magus-query/SKILL.md"}
+		printAgentInstallNextSteps(dir, written, written, nil, agent.FormFull, false)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")
@@ -244,7 +245,7 @@ func TestCheckSkillStatusesCurrent(t *testing.T) {
 	dir := t.TempDir()
 	const skillsDir = "harness-skills"
 	writeStatusHarness(t, dir, skillsDir)
-	_, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
+	_, _, err := agentSkills.WriteSkillTree(dir, skillsDir, false, agent.FormFull)
 	require.NoError(t, err)
 	// Pasted the way a developer would, since magus no longer writes this file.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "AGENTS.md"), []byte("# Their notes\n\n"+agentSkills.AgentsBlock()), 0o644))

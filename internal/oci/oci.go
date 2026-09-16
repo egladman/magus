@@ -1,10 +1,15 @@
-// Package oci publishes and fetches a single blob as an OCI artifact, over the registry
+// Package oci publishes and fetches named blobs as an OCI artifact, over the registry
 // v2 HTTP API.
 //
 // It exists so a workspace can hand its knowledge graph to everyone else who works on the
 // repository without anyone rebuilding it. A registry is the right store for that: it is
 // already content-addressed, it already has a public read path, and a team that can clone
 // the repository can already reach its packages.
+//
+// An artifact carries SEVERAL layers, each titled, so a reader fetches the one piece it
+// is missing rather than the whole. The title is the spec's own
+// org.opencontainers.image.title annotation, which is what other OCI tooling already
+// reads as a layer's filename.
 //
 // The SHAPES come from the spec (image-spec's own Manifest, Descriptor, media types and
 // DescriptorEmptyJSON; go-digest's Digest), so nothing here transcribes a constant the
@@ -21,6 +26,7 @@ package oci
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -144,13 +150,35 @@ func (c *Client) token(ctx context.Context, ref Reference, actions string) (stri
 	return "", fmt.Errorf("oci: token for %s: the registry returned no token", ref.Repository)
 }
 
-// Pull fetches the artifact's single layer and returns its bytes.
+// Artifact is one pull in progress: the manifest, plus the token that fetched it. A
+// reader that wants several layers holds one of these, so neither the token exchange nor
+// the manifest GET is repeated per layer.
 //
-// wantArtifactType, when non-empty, is checked against the manifest before the layer is
-// read: a tag someone else's tooling pushed to is the ordinary way to get bytes that
-// parse as JSON and mean something entirely different, and the artifact type is the only
-// field that says what the blob was meant to be.
-func (c *Client) Pull(ctx context.Context, ref Reference, wantArtifactType string) ([]byte, error) {
+// It is NOT safe for concurrent use. Nothing here mutates, but the token expires, and a
+// handle that outlives its lifetime returns 401 on the next Blob rather than refreshing.
+type Artifact struct {
+	// Manifest is the fetched manifest, exposed so a caller can walk descriptors that
+	// Layer's title lookup does not reach.
+	Manifest ocispec.Manifest
+
+	client *Client
+	ref    Reference
+	token  string
+}
+
+// ErrLayerMiss reports that the manifest carries no layer with the requested title. A
+// caller deciding between fetching and rebuilding needs this distinguishable from a
+// transport failure, so it is a sentinel rather than a formatted error.
+var ErrLayerMiss = errors.New("oci: no layer with that title")
+
+// Artifact fetches ref's manifest and returns a handle for reading its layers. It reads
+// no layer, so an artifact whose layers are large costs one manifest GET to inspect.
+//
+// wantArtifactType, when non-empty, is checked before the handle is returned: a tag
+// someone else's tooling pushed to is the ordinary way to get bytes that parse as JSON
+// and mean something entirely different, and the artifact type is the only field that
+// says what the blob was meant to be.
+func (c *Client) Artifact(ctx context.Context, ref Reference, wantArtifactType string) (*Artifact, error) {
 	tok, err := c.token(ctx, ref, "pull")
 	if err != nil {
 		return nil, err
@@ -162,29 +190,58 @@ func (c *Client) Pull(ctx context.Context, ref Reference, wantArtifactType strin
 	if wantArtifactType != "" && m.ArtifactType != wantArtifactType {
 		return nil, fmt.Errorf("oci: %s carries artifactType %q, wanted %q", ref, m.ArtifactType, wantArtifactType)
 	}
-	if len(m.Layers) != 1 {
-		return nil, fmt.Errorf("oci: %s has %d layers, wanted exactly 1", ref, len(m.Layers))
+	return &Artifact{Manifest: m, client: c, ref: ref, token: tok}, nil
+}
+
+// Find returns the descriptor of the layer titled name, and whether there is one. The
+// first match wins; a publisher that titled two layers alike has already lost the ability
+// to address either.
+func (a *Artifact) Find(name string) (ocispec.Descriptor, bool) {
+	for _, d := range a.Manifest.Layers {
+		if d.Annotations[ocispec.AnnotationTitle] == name {
+			return d, true
+		}
 	}
-	blob, err := c.blob(ctx, ref, tok, m.Layers[0])
+	return ocispec.Descriptor{}, false
+}
+
+// Layer fetches the layer titled name, or wraps ErrLayerMiss when the manifest has none.
+func (a *Artifact) Layer(ctx context.Context, name string) ([]byte, error) {
+	d, ok := a.Find(name)
+	if !ok {
+		return nil, fmt.Errorf("%w: %q in %s", ErrLayerMiss, name, a.ref)
+	}
+	return a.Blob(ctx, d)
+}
+
+// Blob fetches one layer by its descriptor, bounded by the size the descriptor declares
+// and verified against the digest it names. desc must come from this artifact's own
+// manifest: a descriptor from anywhere else names a blob this repository need not hold,
+// and the size bound would be whatever that other manifest claimed.
+func (a *Artifact) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, error) {
+	// Validated before Verifier, which panics on a digest whose algorithm this build has
+	// no hash for. The manifest is remote input, so that is a reachable panic.
+	if err := desc.Digest.Validate(); err != nil {
+		return nil, fmt.Errorf("oci: %s names an unusable layer digest %q: %w", a.ref, desc.Digest, err)
+	}
+	blob, err := a.client.blob(ctx, a.ref, a.token, desc)
 	if err != nil {
 		return nil, err
 	}
-	want := m.Layers[0].Digest
 	// The digest is the registry's contract, so verifying it is what makes a pull over a
-	// plain HTTP hop trustworthy without signing anything. Verifier reports a mismatch
-	// rather than panicking on a malformed digest the manifest supplied.
-	verifier := want.Verifier()
+	// plain HTTP hop trustworthy without signing anything.
+	verifier := desc.Digest.Verifier()
 	if _, err := verifier.Write(blob); err != nil {
-		return nil, fmt.Errorf("oci: verify %s layer: %w", ref, err)
+		return nil, fmt.Errorf("oci: verify %s layer: %w", a.ref, err)
 	}
 	if !verifier.Verified() {
-		return nil, fmt.Errorf("oci: %s layer does not match the digest its manifest names (%s)", ref, want)
+		return nil, fmt.Errorf("oci: %s layer does not match the digest its manifest names (%s)", a.ref, desc.Digest)
 	}
 	return blob, nil
 }
 
 func (c *Client) manifest(ctx context.Context, ref Reference, tok string) (ocispec.Manifest, error) {
-	req, err := c.get(ctx, ref, tok, "/manifests/"+ref.Tag)
+	req, err := c.newGetRequest(ctx, ref, tok, "/manifests/"+ref.Tag)
 	if err != nil {
 		return ocispec.Manifest{}, err
 	}
@@ -236,7 +293,10 @@ func (c *Client) blob(ctx context.Context, ref Reference, tok string, want ocisp
 	return blob, nil
 }
 
-func (c *Client) get(ctx context.Context, ref Reference, tok, path string) (*http.Request, error) {
+// newGetRequest BUILDS a request; it does not issue one. Named for that, because its
+// siblings putBlob and putManifest do perform their verb, and a `get` beside them teaches
+// a reader that all three round-trip.
+func (c *Client) newGetRequest(ctx context.Context, ref Reference, tok, path string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base(ref)+path, nil)
 	if err != nil {
 		return nil, err
@@ -249,35 +309,58 @@ func (c *Client) base(ref Reference) string {
 	return "https://" + ref.Registry + "/v2/" + ref.Repository
 }
 
-// Push uploads payload as the artifact's only layer and tags it.
+// Layer is one named payload in an artifact. Name becomes the layer descriptor's title
+// annotation, which is how a puller addresses it; an empty Name leaves the layer
+// unaddressable by title, which is only sensible for a single-layer artifact.
+type Layer struct {
+	Name      string
+	MediaType string
+	Payload   []byte
+}
+
+// Push uploads every layer and tags one manifest naming them, in the order given.
+//
+// This is the only way to publish: a registry has no per-blob append, so adding a layer
+// to an existing artifact means re-PUTting the manifest. A caller that accumulates layers
+// one at a time must batch them here rather than expect an incremental write.
 //
 // It is NOT idempotent in the way a content-addressed store is: pushing to a tag that
 // already exists moves the tag. That is the intent for a floating tag like "latest" and
 // is why the caller, not this package, decides which tags to write.
-func (c *Client) Push(ctx context.Context, ref Reference, payload []byte, artifactType, layerMediaType string) error {
+func (c *Client) Push(ctx context.Context, ref Reference, artifactType string, layers ...Layer) error {
+	if len(layers) == 0 {
+		return fmt.Errorf("oci: push %s: no layers; a manifest with none is not a valid artifact", ref)
+	}
 	tok, err := c.token(ctx, ref, "push,pull")
 	if err != nil {
 		return err
-	}
-	layer := ocispec.Descriptor{
-		MediaType: layerMediaType,
-		Digest:    digest.FromBytes(payload),
-		Size:      int64(len(payload)),
 	}
 	// The empty config blob must exist before a manifest may reference it, even though
 	// every artifact in every repository shares the same two bytes.
 	if err := c.putBlob(ctx, ref, tok, emptyConfigPayload); err != nil {
 		return err
 	}
-	if err := c.putBlob(ctx, ref, tok, payload); err != nil {
-		return err
+	descs := make([]ocispec.Descriptor, 0, len(layers))
+	for _, l := range layers {
+		if err := c.putBlob(ctx, ref, tok, l.Payload); err != nil {
+			return err
+		}
+		d := ocispec.Descriptor{
+			MediaType: l.MediaType,
+			Digest:    digest.FromBytes(l.Payload),
+			Size:      int64(len(l.Payload)),
+		}
+		if l.Name != "" {
+			d.Annotations = map[string]string{ocispec.AnnotationTitle: l.Name}
+		}
+		descs = append(descs, d)
 	}
 	m := ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
 		ArtifactType: artifactType,
 		Config:       ocispec.DescriptorEmptyJSON,
-		Layers:       []ocispec.Descriptor{layer},
+		Layers:       descs,
 	}
 	return c.putManifest(ctx, ref, tok, m)
 }

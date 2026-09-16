@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	jobstore "github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
@@ -183,7 +184,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	return connect.NewResponse(&jobv1.RunJobResponse{
 		State:        state,
 		InvocationId: inv,
-		ConsoleUrl:   "", // TODO: deep-link once the /logs page accepts an invocation fragment
+		ConsoleUrl:   consoleURL(inv),
 		Job:          info,
 	}), nil
 }
@@ -303,12 +304,12 @@ func storedRun(r *types.JobRun) *jobv1.JobRun {
 // so those fields stay zero, additive to fill in later.
 func lastRun(e trail.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
-		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
+		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurationMs)),
 		Ok:      e.Outcome == trail.OutcomeOK,
 		Error:   e.Error,
 	}
-	if e.DurMs > 0 {
-		run.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
+	if e.DurationMs > 0 {
+		run.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
 	}
 	return run
 }
@@ -348,3 +349,18 @@ func (s *Service) runningByArgv(ctx context.Context) map[string]string {
 // argvKey is a stable map key for a worker argv. \x00 cannot appear in a shell token, so joining
 // on it is collision-free where a space join would conflate ["a","b"] with ["a b"].
 func argvKey(argv []string) string { return strings.Join(argv, "\x00") }
+
+// consoleURL is where a caller watches the job it just submitted: the console's runs
+// surface, scoped to this invocation.
+//
+// Empty when there is no invocation, which is the one case the proto's "empty when no
+// console is mounted" covers: a submit the daemon could not name cannot be linked to. It
+// is a PATH rather than an absolute URL because the reader is the console, served from the
+// daemon it just called, so it resolves this against its own origin; see
+// console.SurfaceLink.
+func consoleURL(inv string) string {
+	if inv == "" {
+		return ""
+	}
+	return console.SurfaceLink("runs", console.FragmentParam{Key: "inv", Value: inv})
+}

@@ -32,7 +32,7 @@ func TestOpKind(t *testing.T) {
 
 // TestCommandSecretsJSONRoundTrip pins the descriptor cache-correctness contract: a
 // Command's Secrets field carries its own json tag ("secrets") through Marshal and
-// Unmarshal untouched, so BuiltinsHash (internal/spellruntime.BuiltinsHash, hashed
+// Unmarshal untouched, so BuiltinsHash (internal/spell.BuiltinsHash, hashed
 // from json.Marshal(Builtins())) and any other descriptor serialization move when a
 // declared ref changes: a spell editing which secret an op needs invalidates the
 // cache keys that depend on the spell's identity, the same as editing its Bin/Args

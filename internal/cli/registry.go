@@ -20,6 +20,7 @@ var All = []Command{
 	eventsCommand,
 	statusCommand,
 	cleanCommand,
+	shellCommand,
 	vcsCommand,
 	doctorCommand,
 	configCommand,
@@ -589,17 +590,14 @@ Subcommands (the first argument):
 			Short: "Rebuild the knowledge graph now, reindexing code symbols first",
 			Flags: []Flag{
 				{Name: "no-symbols", Kind: FlagBool, Doc: "Rebuild the domain graph only; do not reindex code symbols"},
-				{Name: "push", Kind: FlagBool, Doc: "Push the rebuilt graph to the registry afterwards (see magus graph push)"},
-				{Name: "ref", Kind: FlagString, Doc: "With --push: the artifact to push to (default: derived from the repository's origin remote)"},
-				{Name: "tag", Kind: FlagString, Doc: "With --push: an extra tag to write beside latest, repeatable or comma-separated"},
 			},
 		},
 		{
 			Name:  "push",
 			Short: "Push the knowledge graph to a container registry as an OCI artifact",
 			Flags: []Flag{
-				{Name: "ref", Kind: FlagString, Doc: "The artifact to push to (default: derived from the repository's origin remote)"},
-				{Name: "tag", Kind: FlagString, Doc: "An extra tag to write beside latest, repeatable or comma-separated"},
+				{Name: "ref", Kind: FlagString, Doc: "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived)"},
+				{Name: "username", Kind: FlagString, Doc: "The registry username; the token is read from stdin, the way docker login --password-stdin takes one"},
 				{Name: "refresh", Kind: FlagBool, Doc: "Rebuild the graph before pushing instead of exporting what is cached"},
 			},
 		},
@@ -676,7 +674,7 @@ another terminal shows up here. It needs no daemon, no token, and no loadable
 magusfile - an editor can attach to a repository whose magusfile is mid-edit.
 
 The stream is outbound only. Nothing a subscriber does can change a magus
-verdict; the inbound counterpart is the session hook.
+verdict; the inbound counterpart is magus shell.
 
 target.output is excluded unless named with --type: it is the one event type
 that scales with build size rather than project count. To read a target's full
@@ -1182,6 +1180,91 @@ renders no daemon), and an empty value means it ran and nothing answered.`,
 // A subcommand that reaches the dispatcher but not All is documented nowhere on the machine.
 // These eight were in that state; TestManpageCoversEverySubcommand now keeps them from being.
 
+var shellCommand = Command{
+	Name:        "shell",
+	Short:       "Check a command against this workspace's conventions before running it",
+	Description: "Read one shell command, or one path an edit is about to write, and report what this workspace would rather you ran.",
+	Tags:        []string{"cli", "magus shell", "guard", "conventions", "hook", "pre-tool-use"},
+	Long: `Check a shell command against this workspace's conventions, and name the
+better command when there is one.
+
+The rules are the workspace's own. A raw ` + "`go build`" + ` misses the cache and the
+affected set; a recursive grep misses what the symbol index already knows;
+` + "`git add -A`" + ` sweeps regenerated output into a commit about something else.
+None of that is a fact about who typed the command, which is why this is a
+plain subcommand rather than something under an agent namespace.
+
+Nothing is executed and nothing is prevented. This reports; you decide.
+
+THE INPUT ARRIVES TWO WAYS, and they are the same command either way. A person
+passes it as one quoted argument. A host pipes it on stdin, where it may be
+plain text or the JSON envelope the host already writes, so nothing has to
+survive being quoted through a shell twice. That is deliberate: an agent and a
+person get the same verdict from the same entry point, and neither reads
+documentation the other cannot.
+
+--path judges the input as a file path an edit is about to write, rather than
+as a shell command.
+
+--observe records a path the agent merely REACHED, without judging it. No rule
+applies to a read, so the verdict is always pass and the activity event
+previews as observed rather than as a guard decision. Which of a host's tools
+only look is the caller's knowledge, never magus's.
+
+--agent-name, --session, --transcript, and --event are attribution, not policy.
+They record who produced the observation on the activity event, and the verdict
+never reads them. All are optional and unvalidated, including the host name,
+which is an opaque label the caller chooses rather than a set magus knows: a
+magus that enumerated hosts would need a release per host, and a caller that
+cannot extract a session id must still be able to get a verdict.
+
+--lease is the exception: it IS policy. It names the lease the caller is acting
+as, and a write is then graded against that lease's declared write boundary in
+this workspace's lease ledger. Inside its write paths passes; inside its deny
+paths, or inside another live lease's write paths, is denied and the reason
+names the owning lease. It defaults to the magus.lease member of $BAGGAGE - the
+W3C baggage list a spawning tool exports - and the flag wins when both are set.
+
+A call that names no valid lease while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no lease id, and the guard is
+a seatbelt for callers that opt in rather than a sandbox. With no ledger, or
+with no lease in it declared or running, nothing is graded and nothing is read.
+
+EXIT CODES are the contract a host blocks on: 2 is a deny and everything else is
+allowed. An advisory exits 0 on purpose - it attaches context and does not block,
+and a suggestion that failed a script would not be a suggestion. Input that could
+not be READ is 2, so a host that blocks on 2 fails closed when bytes were lost on
+the way in; an EMPTY input passes, because a wrapper that hands this nothing must
+not block every tool call.`,
+	Usage: "magus shell '<command>' [flags]",
+	Flags: []Flag{
+		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
+		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
+		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
+		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
+		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
+		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
+	},
+	Examples: []Example{
+		{"Check one command", "magus shell 'go test ./...'"},
+		{"Check a search", "magus shell 'grep -rn HandleFoo internal/'"},
+		{"Judge a path an edit would write", "magus shell --path MAGUS.md"},
+		{"As a host's pre-tool-use hook", "printf '%s' 'go build ./...' | magus shell"},
+		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus shell --observe"},
+		{"Grade a write as a lease", "printf '%s' 'internal/job/store.go' | magus shell --path --lease f2-guard"},
+		{"The verdict as JSON", "magus shell 'git add -A' -o json"},
+	},
+	// The status IS the enforcement: a host that reads only the exit code blocks on 2
+	// and runs the command on 0, so a wrapper author has to be told that advise passes
+	// and that 2 is overloaded.
+	ExitStatus: []ExitCode{
+		{0, "The input is allowed: pass, or advise, which attaches context and does not block. --observe always lands here, because it judges nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call."},
+		{1, "Not returned by a verdict. A wrapper should treat anything other than 2 as allowed rather than enumerating codes, so that a future signal added here does not start blocking commands."},
+		{2, "A DENIED command or path, and also input that could not be READ - the two share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases. Misuse (an unquoted command, an unknown flag) is also 2."},
+	},
+}
+
 var refsCommand = Command{
 	Name:        "refs",
 	Short:       "List where an ingested code symbol is defined and referenced",
@@ -1212,7 +1295,7 @@ questions and are not meant to share a contract.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
 		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
-		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes)"},
+		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace"},
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
@@ -1374,11 +1457,12 @@ no expiry, no severity inference and no auto-dispose flag, because a request
 magus could answer by itself would not have needed a person - see the doctrine
 page.
 
-Agent hosts write it. Their hooks pipe every event through ` + "`session hook`" + `
-(one command or path, judged against the guard rules and recorded) and
-` + "`session notify`" + ` (one attention event, normalized; a waiting or permission
-outcome opens a durable request). No person types those two; they exist to be
-wired.
+Agent hosts write it. Their hooks pipe every judged command through ` + "`magus shell`" + `,
+which records what it judged, and every attention event through ` + "`session notify`" + `
+(normalized; a waiting or permission outcome opens a durable request). No person
+types notify; it exists to be wired. ` + "`magus shell`" + ` is the exception, and
+deliberately so: it is the same command a person runs to ask what this workspace
+would rather they ran.
 
 The store is keyed by repository identity rather than by checkout path, so
 every git worktree of one repo reads and writes the same records - what
@@ -1520,57 +1604,6 @@ block.`,
 			},
 		},
 		{
-			Name:        "hook",
-			Short:       "Evaluate one shell command or file path against the magus guard rules",
-			Description: "Read one shell command, or one path an edit is about to write, and report a deny, advise, or pass verdict for an agent host's pre-tool-use hook.",
-			Long: `Evaluate ONE shell command, or one file path an edit is about to write,
-against this workspace's guard rules, and report a deny, advise, or pass
-verdict.
-
-It is built for an agent host's pre-tool-use hook. The input arrives on
-stdin, so nothing has to survive being quoted through a shell twice.
-
-Two input shapes are accepted. Plain text is the command (or the path)
-itself. A JSON envelope from a host that writes one needs neither --path nor
-a JSON tool to unwrap it: the envelope already says what is about to run and
-whether it is a write. An explicit flag still wins, because a wrapper that
-passed one meant it.
-
---observe records a path the agent merely REACHED, without judging it. No rule
-applies to a read, so the verdict is always pass and the activity event
-previews as observed rather than as a guard decision. Which of a host's tools
-only look is the wrapper's knowledge, never magus's.
-
---agent-name, --session, --transcript, and --event are attribution, not policy.
-They record who produced the observation on the activity event, and the verdict
-never reads them. All are optional and unvalidated, including the host name,
-which is an opaque label the caller chooses rather than a set magus knows: a
-magus that enumerated hosts would need a release per host, and a wrapper that
-cannot extract a session id must still be able to get a verdict.
-
---lease is the exception: it IS policy. It names the lease the caller is
-acting as, and a write is then graded against that lease's declared write boundary
-in this workspace's lease ledger. Inside its write paths passes; inside its
-deny paths, or inside another live lease's write paths, is denied and the
-reason names the owning lease. It defaults to the magus.lease member of $BAGGAGE -
-the W3C baggage list a spawning tool exports - and the flag wins when both are set.
-
-A call that names no valid lease while a fleet is running is ADVISED and never
-blocked: a person editing their own repository has no lease id, and the guard is a
-seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
-no lease in it declared or running, nothing is graded and nothing is read.`,
-			Usage: "magus session hook [--path] [flags]",
-			Flags: []Flag{
-				{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
-				{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-				{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)"},
-				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
-				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
-				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
-				{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
-			},
-		},
-		{
 			Name:        "checkpoint",
 			Short:       "Record where the work stands, so it can be picked up later",
 			Description: "Record one checkpoint for this repository: the revision the work sits on, and a note saying where it stands.",
@@ -1645,18 +1678,12 @@ none. This is the only command that opens one.`,
 		{"List open attention requests", "magus session attention"},
 		{"Ask whether anyone is waiting", "magus session attention -q"},
 		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
-		{"Judge a shell command (host-wired)", "printf '%s' 'go build ./...' | magus session hook"},
-		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus session hook --observe"},
-		{"Grade a write as a lease", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --lease f2-guard"},
 		{"Raise a permission prompt on the desktop (host-wired)", "printf '%s\\n' 'needs approval' | magus session notify --outcome permission --desktop"},
 	},
-	// The status IS the enforcement for hook: a host that reads only the exit code
-	// blocks on 2 and runs the command on 0, so a wrapper author has to be told
-	// that advise passes and that 2 is overloaded.
 	ExitStatus: []ExitCode{
-		{0, "Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
+		{0, "Sessions or requests were listed, a request was disposed, or an event was normalized and emitted. A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
 		{1, "dispose: the request named is not in the store, or was already disposed; a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or watch loop can branch on status instead of parsing the listing. notify: stdin could not be read. Text that is not a complete event envelope becomes the event's message rather than an error. load: at least one line was rejected; usable lines are still loaded and the summary is printed, so fix the adapter and run it again. show: the session named has no loaded events."},
-		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
+		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id."},
 	},
 }
 
@@ -2092,7 +2119,7 @@ var agentCommand = Command{
 	Name:        "agent",
 	Short:       "Manage skills, harnesses, and agent feedback",
 	Description: "Render agent skills, adapt a user-owned harness, or review recurring guard feedback; it never writes the AGENTS.md you own.",
-	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install", "harness", "improve"},
+	Tags:        []string{"cli", "magus agent", "skills", "agents", "AGENTS.md", "install", "harness"},
 	Long: `Render the agent skills embedded in this binary and write or stream them
 into named destinations (<skills-dir>).
 
@@ -2109,8 +2136,8 @@ descriptor already names, remove deletes only those same fragments (a user's
 own hooks beside them are untouched, and nothing is asked for confirmation -
 pass --dry-run to preview one first), and verify actually runs the wired guard
 command against a synthetic event rather than trusting its mere presence in
-the config. Omit --id to act on every magusfile-wired provider. improve
-reviews recurring guard feedback and can explicitly update those fragments.
+the config. Omit --id to act on every magusfile-wired provider. Guard feedback
+that keeps recurring is doctor's recurring-guard-denials check, not a verb here.
 
 agent is a pure data generator, which is what makes --tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -2128,7 +2155,7 @@ shape: magus query for a diagnostic code or a Buzz op, which magus refs
 (compiled-language symbols only) would miss, and magus refs otherwise. The
 text report prints the same command after each pattern, and run is empty for
 a pattern no graph verb fits.`,
-	Usage: "magus agent <install|harness|improve|starter|adoption> [flags]",
+	Usage: "magus agent <install|harness|starter|adoption> [flags]",
 	Children: []Command{
 		{Name: "install", Short: "Render the embedded skills and write or stream them into named destinations"},
 		{Name: "harness", Short: "Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors", Children: []Command{
@@ -2136,12 +2163,6 @@ a pattern no graph verb fits.`,
 			{Name: "remove", Short: "Delete only the descriptor-managed hook entries apply would have written, leaving a user's own hooks untouched", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to remove every magusfile-wired provider"}}},
 			{Name: "verify", Short: "Verify a descriptor and its configured hook file by actually probing the wired guard command", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to verify every magusfile-wired provider"}}},
 			{Name: "install", Short: "Install skill trees declared by a harness", Flags: []Flag{{Name: "id", Kind: FlagString, Doc: "Harness ID; omit to install every magusfile-wired provider"}}},
-		}},
-		{Name: "improve", Short: "Review recurring guard feedback and propose a harness update", Flags: []Flag{
-			{Name: "session", Kind: FlagString, Doc: "Only evidence from this host session"},
-			{Name: "all", Kind: FlagBool, Doc: "Include one-off feedback"},
-			{Name: "apply", Kind: FlagBool, Doc: "Apply one descriptor-managed harness update"},
-			{Name: "id", Kind: FlagString, Doc: "Harness descriptor to update with --apply"},
 		}},
 		{Name: "starter", Short: "Print a starter AGENTS.md to stdout; never writes a file"},
 		{Name: "adoption", Short: "Report how often agents used the knowledge graph versus a raw text search", Flags: []Flag{

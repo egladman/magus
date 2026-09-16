@@ -253,7 +253,7 @@ func ServableTo(role Role, lane []string, next []Next) []Next {
 }
 
 // readCommands is every declared Command that cannot change the tree. It is the
-// ALLOWLIST mutatesTree grades against, so a verb added to clicommand.go and not
+// ALLOWLIST mutatesTree grades against, so a verb added to cli_command.go and not
 // added here reads as a write until somebody decides otherwise.
 //
 // `affected` is absent on purpose: it runs unless asked for one of its dry forms, so
@@ -271,7 +271,7 @@ var readCommands = []Command{
 	VCSCheckpoint,
 	ConfigView, ConfigToken, ConfigTokenPrint,
 	ConfigConsoleToken, ConfigMCPConnectorLs,
-	AgentStarter,
+	AgentStarter, AgentHarnessVerify,
 }
 
 // mutatesTree reports whether argv would change the tree, judged from the command

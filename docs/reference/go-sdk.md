@@ -227,7 +227,7 @@ a magusfile, using the exported wire API in the root package -
 `WithRegisteredSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
 a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
-`internal/spellruntime`, which the exported wrapper functions can reach on your
+`internal/spell`, which the exported wrapper functions can reach on your
 behalf even though you cannot import that package directly. This path gets
 you real spell execution without a magusfile; it does not get you
 arbitrary Buzz-authored targets.

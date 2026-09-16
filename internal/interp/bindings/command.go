@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -88,7 +88,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	}
 	args = append(args, opts.args...)
 	// A static op is resolved to {bin, args} ONCE, with no Target (see recordOp in
-	// internal/spellruntime/resolve.go), so it cannot compute a value only the
+	// internal/spell/resolve.go), so it cannot compute a value only the
 	// runner knows (its own binary path, a per-run cache destination), which is
 	// why a spell used to shell out to `sh -c` just to let the shell expand a
 	// variable magus itself set ($MAGUS et al). Resolving a bare $NAME token here,
@@ -336,7 +336,7 @@ func resolveCharmArgs(ctx context.Context, base []string, charms map[string]spel
 			activeNames = append(activeNames, name)
 		}
 	}
-	return spellruntime.ApplyCharms(base, charms, activeNames)
+	return spell.ApplyCharms(base, charms, activeNames)
 }
 
 // charmConflictWarned dedups the run-time conflict warning: the same overridden
@@ -356,7 +356,7 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 			activeNames = append(activeNames, name)
 		}
 	}
-	conflicts, err := spellruntime.Conflicts(base, charms, activeNames)
+	conflicts, err := spell.Conflicts(base, charms, activeNames)
 	if err != nil {
 		return
 	}

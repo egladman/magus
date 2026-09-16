@@ -162,7 +162,9 @@ func TestDispatcherChildrenAreDeclared(t *testing.T) {
 		{"memory", []string{"memory"}, "memory.go", "memoryCmd", []string{
 			"list", // renamed to ls in v0.4.0
 		}},
-		{"session", []string{"session"}, "session.go", "sessionCmd", nil},
+		{"session", []string{"session"}, "session.go", "sessionCmd", []string{
+			"hook", // moved: hard-redirects to `magus shell`, which is not session-scoped
+		}},
 	}
 
 	for _, tt := range tests {

@@ -39,7 +39,7 @@ Job is the full picture of one job: what it is, who holds it, whether an instanc
 
 ONE message for both kinds. A catalog job fills the description and target; a delegated one fills the lanes and the check it was given; both carry id, holder and state, which is what lets a client render the two in one list without branching on which it has.
 
-Source: [job.proto:70](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L70).
+Source: [job.proto:74](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L74).
 
 | Field         | Type                               | #  | Description                                                                                                                                                                                                                                |
 | ------------- | ---------------------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -73,7 +73,7 @@ JobOverlap is one pair of jobs whose declared write paths intersect. Derived on 
 
 Each side's intersecting declarations come separately, because the two are rarely the same string ("internal/job" and "internal/job/store.go" intersect) and a reader who cannot tell which job claimed which has nothing to act on.
 
-Source: [job.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L119).
+Source: [job.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L123).
 
 | Field     | Type            | # | Description |
 | --------- | --------------- | - | ----------- |
@@ -88,7 +88,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobRelease is a path a job gave up, and the version of it the next one inherits. The digest is the file's sha256 when there was a file; "absent" and "dir" are carried through as they are rather than turned into a hash-shaped lie.
 
-Source: [job.proto:106](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L106).
+Source: [job.proto:110](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L110).
 
 | Field         | Type   | # | Description  |
 | ------------- | ------ | - | ------------ |
@@ -102,7 +102,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobRun is one completed execution of a job.
 
-Source: [job.proto:127](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L127).
+Source: [job.proto:131](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L131).
 
 | Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
 | ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +120,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Paginated by contract so growth never forces a breaking change, though the registry is a fixed handful today and one page always holds it.
 
-Source: [job.proto:157](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L157).
+Source: [job.proto:161](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L161).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -131,7 +131,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:161](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L161).
+Source: [job.proto:165](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L165).
 
 | Field             | Type                               | # | Description                                                                             |
 | ----------------- | ---------------------------------- | - | --------------------------------------------------------------------------------------- |
@@ -145,7 +145,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 ResourceSize is the current magnitude of a job's target resource, for a caller to show how much there is to maintain (and to judge whether a rotate/clear is worth running).
 
-Source: [job.proto:143](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L143).
+Source: [job.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L147).
 
 | Field        | Type  | # | Description                                                 |
 | ------------ | ----- | - | ----------------------------------------------------------- |
@@ -156,7 +156,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### RunJobRequest
 
-Source: [job.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L148).
+Source: [job.proto:152](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L152).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
 | ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -166,16 +166,16 @@ Used by: [RunJob (request)](job.md#runjob).
 
 ### RunJobResponse
 
-RunJobResponse reports what the submission did: whether the job started or coalesced, the invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
+RunJobResponse reports what the submission did: whether the job started or coalesced, the invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
 
 Source: [job.proto:49](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L49).
 
-| Field           | Type                        | # | Description                                                               |
-| --------------- | --------------------------- | - | ------------------------------------------------------------------------- |
-| `state`         | [SubmitState](#submitstate) | 1 |                                                                           |
-| `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)       |
-| `console_url`   | string                      | 3 | deep-link to this invocation's live log; empty when no console is mounted |
-| `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata          |
+| Field           | Type                        | # | Description                                                                                                                                                                                                                                                                                                         |
+| --------------- | --------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`         | [SubmitState](#submitstate) | 1 |                                                                                                                                                                                                                                                                                                                     |
+| `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)                                                                                                                                                                                                                                                 |
+| `console_url`   | string                      | 3 | Where to watch this job: the console's runs surface scoped to invocation\_id. A PATH, not an absolute URL, because the reader is the console itself and resolves it against its own origin. Empty only when the daemon coalesced a submit it could not name, since a run with no invocation has nothing to link to. |
+| `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata                                                                                                                                                                                                                                                    |
 
 Used by: [RunJob (response)](job.md#runjob).
 
@@ -185,7 +185,7 @@ Used by: [RunJob (response)](job.md#runjob).
 
 JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the daemon's own housekeeping from work a session was handed without asking a second door.
 
-Source: [job.proto:58](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L58).
+Source: [job.proto:62](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L62).
 
 | Value                    | # | Description                                             |
 | ------------------------ | - | ------------------------------------------------------- |

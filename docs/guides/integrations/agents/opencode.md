@@ -41,7 +41,7 @@ The spell is skills-only (empty config path): `magus agent harness apply` writes
 nothing for OpenCode, and verify does not invent a stamp JSON for Magus to check.
 The guard is the TypeScript plugin, not managed hook fragments. To adapt without
 Magus source edits, fork the spell and change only the import path; see
-[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md).
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md).
 
 `harnesses/opencode.json` remains the unwired fallback so
 `magus agent harness install --id opencode` can still refresh `.opencode/skills`.
@@ -67,7 +67,7 @@ then confirm OpenCode loaded it:
 opencode debug config
 ```
 
-It encodes no magus rule. Every decision comes from `magus session hook`, which keeps it
+It encodes no magus rule. Every decision comes from `magus shell`, which keeps it
 host-only glue rather than a second rule set that drifts out of step with the
 other templates.
 
@@ -79,7 +79,7 @@ other templates.
 // This file is the source of truth. Copy it to ~/.config/opencode/plugins/ (or
 // .opencode/plugins/) and adjust to taste; nothing in it is magus-internal.
 //
-// It encodes no magus rule. Every decision comes from `magus session hook`, so
+// It encodes no magus rule. Every decision comes from `magus shell`, so
 // this stays host-only glue rather than a second rule set that drifts out of
 // step with the other hosts' templates. `--agent-name opencode` only labels the
 // observation magus records; it cannot change a verdict.
@@ -212,7 +212,7 @@ export const MagusGuard: Plugin = async () => {
   const pending = new Map<string, string>();
 
   /**
-   * Runs one `magus session hook` invocation and returns its raw stdout, or null when the
+   * Runs one `magus shell` invocation and returns its raw stdout, or null when the
    * binary could not be run at all (missing, not executable). An older binary that
    * rejects a flag still runs and exits, so that case comes back as "" here, not
    * null - the caller distinguishes them.
@@ -241,7 +241,7 @@ export const MagusGuard: Plugin = async () => {
    * call and make the session unusable - worse than no guard. The failure is
    * logged rather than swallowed, so an unguarded session stays visible.
    *
-   * The thing being judged goes in on STDIN, never in argv. `magus session hook` takes
+   * The thing being judged goes in on STDIN, never in argv. `magus shell` takes
    * no positional arguments at all, and that is not an incidental preference:
    * a command is arbitrary text, and a shell command passed as an argument is
    * one quoting mistake away from being re-parsed. Passing it in argv does not
@@ -334,7 +334,7 @@ export const MagusGuard: Plugin = async () => {
       if (input.tool === "bash") {
         const command = argString(output.args, ["command"]);
         if (command === "") return;
-        const args = ["session", "hook", "--agent-name", "opencode", "-o", "json"];
+        const args = ["shell", "--agent-name", "opencode", "-o", "json"];
         remember(input.callID, apply(await judge(args, command)));
         return;
       }
@@ -344,7 +344,7 @@ export const MagusGuard: Plugin = async () => {
         // plugin working if a future tool spells it differently.
         const path = argString(output.args, ["filePath", "file_path", "path"]);
         if (path === "") return;
-        const args = ["session", "hook", "--path", "--agent-name", "opencode", "-o", "json"];
+        const args = ["shell", "--path", "--agent-name", "opencode", "-o", "json"];
         remember(input.callID, apply(await judge(args, path)));
       }
     },
@@ -383,7 +383,7 @@ export const MagusGuard: Plugin = async () => {
 export default MagusGuard;
 ```
 
-The thing being judged goes in on stdin, never in argv. `magus session hook` takes no
+The thing being judged goes in on stdin, never in argv. `magus shell` takes no
 positional arguments, and a plugin that passes the command as one does not get a
 wrong verdict - it gets no verdict, which fails open on every call.
 
@@ -447,7 +447,7 @@ If you would rather not have the plugin do it, running
 - Lease capture is FEASIBLE but not wired. `tool.execute.before` fires for
   every tool and hands the plugin `input.tool` plus the call's arguments, so a
   branch alongside the `bash` and `edit`/`write` ones could pipe a sub-agent
-  tool's prompt to `magus session hook` and get the same `agent_spawn` event. Which tool
+  tool's prompt to `magus shell` and get the same `agent_spawn` event. Which tool
   identifier to match on has not been confirmed against an installed OpenCode,
   so the plugin above does not guess at one.
 - `shell.env` could export `BAGGAGE=magus.lease=<id>` into every shell the

@@ -28,7 +28,7 @@ func StitchDisplayEvents(output []byte, d cache.OutputDescriptor) []journal.Even
 	}
 	return append(events, journal.Event{
 		Kind: journal.KindResult, Project: d.Project, Target: d.Target,
-		Status: status, Ref: d.Ref, Inv: d.Inv, DurMs: d.DurationMs,
+		Status: status, Ref: d.Ref, Inv: d.Inv, DurationMs: d.DurationMs,
 		Ts: d.TimestampMs, Text: d.ErrMsg,
 	})
 }

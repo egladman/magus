@@ -165,9 +165,9 @@ fi
 # in a release.
 guard() {
   if [ -n "$HOST_EVENT_RAW" ]; then
-    printf '%s' "$event" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
   else
-    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
   fi
 }
 

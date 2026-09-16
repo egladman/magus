@@ -3,8 +3,8 @@ title: magus-buzz-write
 generated_from: internal/agent/skills/magus-buzz-write/SKILL.md
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
 tags: [agents, skills, magus-buzz-write]
-skill_full_bytes: 8349
-skill_short_bytes: 6951
+skill_full_bytes: 8416
+skill_short_bytes: 7018
 ---
 
 # magus-buzz-write
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `77` |
+| `agent-skill-version` | `82` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `d3a509f50f3e` |
+| `skill-content` | `caa11a3f03cd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -151,7 +151,7 @@ main();
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
-Members that need a magusfile raise MGS1022 naming the constraint: the ones
+Members that need a magusfile raise [MGS1022](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1022/) naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
 (`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the
@@ -372,7 +372,7 @@ main();
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
-Members that need a magusfile raise MGS1022 naming the constraint: the ones
+Members that need a magusfile raise [MGS1022](https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1022/) naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
 (`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the

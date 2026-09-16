@@ -43,7 +43,7 @@ func WatchInvalidate(ctx context.Context, w *watch.Watcher) <-chan struct{} {
 }
 
 // isGraphRelevant reports whether any changed path feeds the knowledge graph. Mirrors
-// magus.graphRelevant (warmgraph.go) without importing the root package to avoid an import
+// magus.graphRelevant (warm_graph.go) without importing the root package to avoid an import
 // cycle.
 func isGraphRelevant(paths []string) bool {
 	for _, p := range paths {

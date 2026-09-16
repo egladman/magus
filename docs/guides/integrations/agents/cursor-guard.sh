@@ -185,7 +185,7 @@ guard_notice_once() {
 guard() {
   guard_input=$1
   shift
-  printf '%s' "$guard_input" | "$GUARD_MAGUS_BIN" session hook --agent-name cursor \
+  printf '%s' "$guard_input" | "$GUARD_MAGUS_BIN" shell --agent-name cursor \
     --session "$session" --transcript "$transcript" "$@"
 }
 
@@ -291,7 +291,7 @@ subagentStart)
       session_id: (.parent_conversation_id // .conversation_id // ""),
       transcript_path: (.transcript_path // ""),
       tool_input: {prompt: (.task // ""), subagent_type: (.subagent_type // "")}
-    }' 2>/dev/null | "$GUARD_MAGUS_BIN" session hook --agent-name cursor >/dev/null 2>&1
+    }' 2>/dev/null | "$GUARD_MAGUS_BIN" shell --agent-name cursor >/dev/null 2>&1
   printf '%s' '{"permission":"allow"}'
   exit 0
   ;;

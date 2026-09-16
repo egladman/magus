@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -25,6 +25,18 @@ func spellHandleFromMeta(m spells.Descriptor) vm.Value {
 	h.MapSet("language", vm.StrValue(m.Language))
 	h.MapSet("opaque", vm.BoolValue(m.Opaque))
 	h.MapSet("ops", targetsToMap(m.Ops))
+	// The symbol indexer round-trips as the DECLARATION it was decoded from, not as the op
+	// magus synthesized out of it. targetsToMap cannot carry it: the synthesized op lands
+	// in m.Ops under the reserved name, and re-decoding that reads as a spell declaring
+	// the reserved op by hand, which Decode refuses and tells the author to use
+	// mgs_getSymbolIndexer, which is exactly what they did. Emitting the declaration lets
+	// DecodeHandle synthesize the op again on the other side.
+	if si := m.SymbolIndexer; si != nil {
+		rec := vm.NewMap()
+		rec.MapSet("format", vm.StrValue(string(si.Format)))
+		rec.MapSet("command", commandToMap(si.Command))
+		h.MapSet("symbol_indexer", rec)
+	}
 	bindBuzzTargetDispatch(h, m.Ops)
 	return h
 }
@@ -176,47 +188,56 @@ func spellOptsFromBuzz(args []vm.Value, idx int) (opts commandOpts, err error) {
 }
 
 // targetsToMap marshals resolved targets back to the nested ops map shape
-// spellruntime.Decode reads (a fork target unless it declares fn).
+// spell.Decode reads (a fork target unless it declares fn).
 func targetsToMap(targets map[string]spells.Op) vm.Value {
 	ops := vm.NewMap()
 	for name, t := range targets {
-		op := vm.NewMap()
-		if t.Bin != "" {
-			op.MapSet("bin", vm.StrValue(t.Bin))
+		// A synthesized op is magus's own product, not something the author wrote, and
+		// writing it back would re-present it to Decode as an authored declaration.
+		if t.Kind == spells.OpKindSymbolIndex {
+			continue
 		}
-		if len(t.Args) > 0 {
-			op.MapSet("args", strSliceToBuzzList(t.Args))
-		}
-		if len(t.DefaultArgs) > 0 {
-			op.MapSet("defaultArgs", strSliceToBuzzList(t.DefaultArgs))
-		}
-		if len(t.Charms) > 0 {
-			charms := vm.NewMap()
-			for cn, c := range t.Charms {
-				ce := vm.NewMap()
-				ce.MapSet("ops", patchOpsToBuzzList(c.Ops))
-				charms.MapSet(cn, ce)
-			}
-			op.MapSet("charms", charms)
-		}
-		if len(t.Secrets) > 0 {
-			// Every field Decode reads must be written back here, or the by-value
-			// handle round trip (DecodeHandle -> registerLocalSpell) silently drops
-			// it: the exact resolves-nothing-at-spawn failure the decode-side type
-			// errors exist to prevent.
-			secrets := vm.NewMap()
-			for envName, ref := range t.Secrets {
-				secrets.MapSet(envName, vm.StrValue(ref))
-			}
-			op.MapSet("secrets", secrets)
-		}
-		ops.MapSet(name, op)
+		ops.MapSet(name, commandToMap(t.Command))
 	}
 	return ops
 }
 
+// commandToMap marshals one resolved command, the half an op shares with a symbol
+// indexer's declaration. Every field Decode reads must be written back here, or the
+// by-value handle round trip (DecodeHandle -> registerLocalSpell) silently drops it: the
+// exact resolves-nothing-at-spawn failure the decode-side type errors exist to prevent.
+func commandToMap(t spells.Command) vm.Value {
+	op := vm.NewMap()
+	if t.Bin != "" {
+		op.MapSet("bin", vm.StrValue(t.Bin))
+	}
+	if len(t.Args) > 0 {
+		op.MapSet("args", strSliceToBuzzList(t.Args))
+	}
+	if len(t.DefaultArgs) > 0 {
+		op.MapSet("defaultArgs", strSliceToBuzzList(t.DefaultArgs))
+	}
+	if len(t.Charms) > 0 {
+		charms := vm.NewMap()
+		for cn, c := range t.Charms {
+			ce := vm.NewMap()
+			ce.MapSet("ops", patchOpsToBuzzList(c.Ops))
+			charms.MapSet(cn, ce)
+		}
+		op.MapSet("charms", charms)
+	}
+	if len(t.Secrets) > 0 {
+		secrets := vm.NewMap()
+		for envName, ref := range t.Secrets {
+			secrets.MapSet(envName, vm.StrValue(ref))
+		}
+		op.MapSet("secrets", secrets)
+	}
+	return op
+}
+
 // patchOpsToBuzzList marshals a charm's RFC 6902 ops back to the array-of-records
-// list shape spellruntime.Decode reads.
+// list shape spell.Decode reads.
 func patchOpsToBuzzList(ops []spells.PatchOp) vm.Value {
 	items := make([]vm.Value, len(ops))
 	for i, po := range ops {
@@ -240,7 +261,7 @@ func buzzSpellObject(name string) vm.Value {
 	m := vm.NewMap()
 	m.MapSet("name", vm.StrValue(name))
 
-	spec, ok := spellruntime.Builtins()[name]
+	spec, ok := spell.Builtins()[name]
 	if !ok {
 		return m
 	}

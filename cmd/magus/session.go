@@ -67,12 +67,17 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 		return attentionDispose(root, rest)
 	case "checkpoint":
 		return checkpointCmd(ctx, root, os.Stdin, os.Stdout, rest)
-	case "hook":
-		return hookCmd(ctx, os.Stdin, os.Stdout, rest)
 	case "notify":
 		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
+	case "hook":
+		// Removed, not renamed-in-place: the verdict was never session-scoped, and the
+		// one thing worse than moving it is leaving a second door onto the same rules.
+		// Named here rather than falling through to the generic unknown-subcommand
+		// message because the caller is usually installed host wiring, not a person,
+		// and "unknown subcommand" does not tell whoever reads that log what to re-run.
+		return usagef("magus session hook is now `%s`, which takes the same flags and stdin. Re-run `%s` to rewrite host wiring that still calls the old path", hint.Shell, hint.AgentHarnessInstall)
 	default:
-		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
+		return usagef("magus session: unknown subcommand %q (want ls, show, hints, load, checkpoint, attention, dispose, or notify); the bare command lists recent sessions, bounded by --limit and --since. Taking a job is `%s`", verb, hint.JobExec)
 	}
 }
 

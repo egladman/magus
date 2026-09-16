@@ -1,7 +1,7 @@
 # Host schemas
 
 The schemas the agent-host integration files are graded against, vendored so no test ever reaches the network. Every row
-records where the bytes came from, when, and what they are worth. `hostschema_test.go` at the repository root reads this
+records where the bytes came from, when, and what they are worth. `host_schema_test.go` at the repository root reads this
 table: a vendored file whose digest stops matching the `sha256` column fails the build, so a hand-edit cannot pass for a
 refresh.
 
@@ -34,7 +34,7 @@ string, with `additionalProperties: false` at both levels. Its hook STDOUT is Ty
 Codex is the best covered of the four. SchemaStore carries `.codex/hooks.json`, and OpenAI itself generates a schema per
 hook event, input and output, under `codex-rs/hooks/schema/generated` in the `openai/codex` repository. The one gap is
 that the hooks schema's `hooks` object takes `additionalProperties`, so an event name it does not know still validates.
-`hostschema_test.go` closes that itself, by requiring every event name magus ships to be one the schema names.
+`host_schema_test.go` closes that itself, by requiring every event name magus ships to be one the schema names.
 
 Cursor publishes a schema for `.cursor/environment.json` (`https://cursor.com/schemas/environment.schema.json`, draft
 2019-09) and none for `.cursor/hooks.json`. `https://cursor.com/schemas/hooks.schema.json` answers with the docs SPA,

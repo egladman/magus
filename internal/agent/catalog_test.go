@@ -10,6 +10,7 @@ import (
 	"text/template"
 	"text/template/parse"
 
+	"github.com/egladman/magus/internal/hint"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,7 +67,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	writeTestHarness(t, dir)
-	written, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	written, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources), "a full install writes one file per skill and no twins")
 
@@ -117,7 +118,7 @@ func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	writeTestHarness(t, dir)
-	_, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, ".agents/skills", false, FormFull)
 	require.NoError(t, err)
 	require.False(t, catalog.CheckStatuses(dir)[0].Stale)
 
@@ -150,7 +151,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".agents/skills"
-	_, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
 	require.NoError(t, err)
 
 	// An orphan from an earlier release: magus wrote it, so magus may remove it.
@@ -211,12 +212,12 @@ func TestWriteSkillTreeRejectsPathEscape(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 
-	_, err := catalog.WriteSkillTree(dir, "../../outside", false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, "../../outside", false, FormFull)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "escapes the working tree")
 
 	// An ordinary nested destination is unaffected.
-	written, err := catalog.WriteSkillTree(dir, "nested/skills", false, FormFull)
+	written, _, err := catalog.WriteSkillTree(dir, "nested/skills", false, FormFull)
 	require.NoError(t, err)
 	require.Len(t, written, len(skillSources))
 }
@@ -252,7 +253,7 @@ func TestCatalogAgentsBlockIsSelfDelimitedAndStable(t *testing.T) {
 func TestFormBothWritesTwinsStampedFull(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
-	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
+	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
 	require.NoError(t, err)
 	require.Len(t, written, 2*len(skillSources), "FormBoth writes one primary plus one twin per skill")
 
@@ -352,7 +353,7 @@ func TestPlanSkillTreeMatchesTheWriter(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, planned)
 
-	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
+	written, _, err := catalog.WriteSkillTree(dir, ".claude/skills", false, FormBoth)
 	require.NoError(t, err)
 
 	assert.Equal(t, written, planned, "the plan must name exactly what the writer writes")
@@ -406,7 +407,7 @@ func TestSkillTreeRefusesASymlinkedDestination(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "symlink")
 
-	_, err = catalog.WriteSkillTree(dir, dest, true, FormFull)
+	_, _, err = catalog.WriteSkillTree(dir, dest, true, FormFull)
 	require.Error(t, err, "a write through a symlinked component lands outside the tree")
 	_, err = catalog.PlanSkillTree(dir, dest, FormFull)
 	require.Error(t, err, "a plan must refuse what the writer refuses")
@@ -463,6 +464,35 @@ func TestCatalogRenderAndStamp(t *testing.T) {
 }
 
 // TestApplyVariantKeepsBothPermutationsWellFormed pins the branching contract.
+// TestApplyVariantResolvesCommandsThroughTheRegistry pins the reason skill prose
+// calls {{cmd}} instead of typing a command path: a verb that moves must break an
+// install rather than ship a sentence naming a command nobody has.
+func TestApplyVariantResolvesCommandsThroughTheRegistry(t *testing.T) {
+	got, err := applyVariant("s", `run {{cmd "agent harness verify"}} first`, VariantShort)
+	require.NoError(t, err)
+	assert.Equal(t, "run magus agent harness verify first", got)
+
+	// The failure this exists for, demonstrated against a command that WAS real: `agent
+	// improve` was retired, and every skill naming it failed the install until it was
+	// repointed, which is the whole reason prose resolves instead of retyping.
+	_, err = applyVariant("s", `run {{cmd "agent improve"}} first`, VariantShort)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `no command "agent improve"`)
+}
+
+// TestApplyVariantRendersCommandsForTheReadersPath keeps an installed skill free of
+// this process's argv0. A skill is read in another checkout, where ./magus is a path
+// to something else or to nothing.
+func TestApplyVariantRendersCommandsForTheReadersPath(t *testing.T) {
+	hint.ResolveBinaryNameFrom("./magus")
+	t.Cleanup(func() { hint.ResolveBinaryNameFrom(hint.DefaultBinaryName) })
+	require.Equal(t, "./magus", hint.BinaryName(), "the test needs the argv0 spelling actually set")
+
+	got, err := applyVariant("s", `{{cmd "doctor"}}`, VariantShort)
+	require.NoError(t, err)
+	assert.Equal(t, "magus doctor", got)
+}
+
 func TestApplyVariantKeepsBothPermutationsWellFormed(t *testing.T) {
 	body := "Do the thing{{if .Full}} - because the alternative silently corrupts output{{end}}.\n" +
 		"\n{{if .Full}}A whole paragraph of rationale.{{end}}\n\nNext step."
@@ -552,7 +582,7 @@ func TestSkillTemplatesUseOnlyBranching(t *testing.T) {
 			// package now, so the test reads exactly what a build ships.
 			body, err := skillFS.ReadFile(source.bodyPath)
 			require.NoError(t, err)
-			tmpl, err := template.New(source.name).Parse(string(body))
+			tmpl, err := template.New(source.name).Funcs(skillFuncs).Parse(string(body))
 			require.NoError(t, err)
 			require.NoError(t, validateTemplateNode(tmpl.Root))
 		})
@@ -610,18 +640,36 @@ func validateBranchPipe(pipe *parse.PipeNode) error {
 }
 
 func validateActionPipe(pipe *parse.PipeNode) error {
-	if len(pipe.Cmds) != 1 || len(pipe.Cmds[0].Args) != 1 {
-		return fmt.Errorf("template action must be one bare field or string")
+	if len(pipe.Cmds) != 1 {
+		return fmt.Errorf("template action must be one bare field, a string, or a registered lookup")
 	}
-	switch node := pipe.Cmds[0].Args[0].(type) {
-	case *parse.StringNode:
-		return nil
-	case *parse.FieldNode:
-		if len(node.Ident) == 1 {
-			return nil
+	args := pipe.Cmds[0].Args
+	// A registered lookup: {{cmd "agent improve"}}. Permitted because it resolves an
+	// identifier from a registry and renders the SAME text in both forms, so it cannot
+	// make the two diverge, which is the property this file exists to assert. A function
+	// added to skillFuncs inherits that obligation: render variant-independently, or the
+	// forms stop describing one behaviour and nothing here would catch it.
+	if len(args) == 2 {
+		ident, identOK := args[0].(*parse.IdentifierNode)
+		_, stringOK := args[1].(*parse.StringNode)
+		if identOK && stringOK {
+			if _, ok := skillFuncs[ident.Ident]; ok {
+				return nil
+			}
+			return fmt.Errorf("template calls %q, which is not a registered skill function", ident.Ident)
 		}
 	}
-	return fmt.Errorf("template action must be one bare field or string")
+	if len(args) == 1 {
+		switch node := args[0].(type) {
+		case *parse.StringNode:
+			return nil
+		case *parse.FieldNode:
+			if len(node.Ident) == 1 {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("template action must be one bare field, a string, or a registered lookup")
 }
 
 // TestStampNamesTheVariantButSharesTheDigest pins the versioning property the
@@ -652,7 +700,7 @@ func TestGradeDestReportsAnUnreadableSkill(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormBoth)
 	require.NoError(t, err)
 
 	blocked := filepath.Join(dir, dest, "magus-run", "SKILL.md")
@@ -676,7 +724,7 @@ func TestGradeDestReportsEveryReasonNotJustTheFirst(t *testing.T) {
 	catalog := testCatalog(t)
 	dir := t.TempDir()
 	dest := ".claude/skills"
-	_, err := catalog.WriteSkillTree(dir, dest, false, FormFull)
+	_, _, err := catalog.WriteSkillTree(dir, dest, false, FormFull)
 	require.NoError(t, err)
 
 	// Sorts before every shipped name, so the old first-offender return hit this

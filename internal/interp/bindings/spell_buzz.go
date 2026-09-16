@@ -8,7 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -120,7 +120,7 @@ func extractDescriptorWithModules(ctx context.Context, src, dir string) (spells.
 	if err := interp.TimeExec(ctx, interp.ModeSpell, func() error { return sess.Exec(ctx, src) }); err != nil {
 		return spells.Descriptor{}, err
 	}
-	return spellruntime.Resolve(ctx, sess)
+	return spell.Resolve(ctx, sess)
 }
 
 // spellSearchPaths resolves imports from the candidate and its magusfile's directory.

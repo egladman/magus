@@ -38,7 +38,7 @@ func TestSessionBriefSurfacesOneRecurringFeedbackReview(t *testing.T) {
 	}}
 	text := brief.Text()
 	assert.Contains(t, text, "improvement review: raw-tool denied 3 times")
-	assert.Contains(t, text, "magus agent improve")
+	assert.Contains(t, text, "recurring-guard-denials")
 	assert.NotContains(t, text, "output-pipe", "rehydration gets one bounded review, not a table")
 	assertBriefIsContextSafe(t, text)
 }

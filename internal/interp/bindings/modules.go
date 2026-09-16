@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -76,7 +76,7 @@ func magusModules(modules bindinggen.Set) []buzz.Module {
 				// module, gen/decls/json.buzz) but register them under the IMPORT
 				// PATH, because resolveImport looks them up by the path the import
 				// line spelled.
-				if src, ok := spellruntime.ModuleDecls(name); ok {
+				if src, ok := spell.ModuleDecls(name); ok {
 					s.SetModuleDecls(importPath, src)
 				}
 				// Buzz's stdlib may already own this bare name (os, fs, crypto):
@@ -198,17 +198,17 @@ func registerMagusModules(ctx context.Context, sess *buzz.Session) {
 // Everything else that used to live here is now generated, leaf-first, from the
 // returns themselves: a mirror can no longer go missing when a return is added.
 var magusUndeclaredTypeSource = strings.Join([]string{
-	spellruntime.ModuleFieldEntrySource,
-	spellruntime.ModuleMethodEntrySource,
-	spellruntime.ModuleSource,
-	spellruntime.TargetRunSource,
-	spellruntime.RunSource,
+	spell.ModuleFieldEntrySource,
+	spell.ModuleMethodEntrySource,
+	spell.ModuleSource,
+	spell.TargetRunSource,
+	spell.RunSource,
 }, "\n")
 
 // RegisterSpellSourceModules installs every source-only Buzz module a spell (or
 // magusfile) imports for its value types:
 //
-//   - magus/spell (spellruntime.SpellModulePath): the canonical Target/Command/Service/
+//   - magus/spell (spell.SpellModulePath): the canonical Target/Command/Service/
 //     Charm/PatchOp types a spell op WRITES. Kept separate from the base host-module
 //     surface because a plain script needs none of these until it imports a spell
 //     module.
@@ -222,8 +222,8 @@ var magusUndeclaredTypeSource = strings.Join([]string{
 // deliberately, by `magus buzz` so a spell file and its `test "..." {}` blocks run
 // under `magus buzz -t` with the same modules the engine loads them with.
 func RegisterSpellSourceModules(sess *buzz.Session) {
-	sess.SetModuleDecls(spellruntime.SpellModulePath, spellruntime.SpellModuleSource)
-	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
+	sess.SetModuleDecls(spell.SpellModulePath, spell.SpellModuleSource)
+	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
 	// The same generated source every other module gets (object mirrors plus an extern
 	// per method), which is what types magus\\affectedImpact and friends at a call site
 	// instead of leaving them Unknown.
@@ -235,7 +235,7 @@ func RegisterSpellSourceModules(sess *buzz.Session) {
 	// libs/diagram's own Node for every file the docs render imported after
 	// engine/page, and the diagram chain stopped compiling. Eager keeps them lowest,
 	// so a program's own type of that name still wins.
-	decls, ok := spellruntime.ModuleDecls("magus")
+	decls, ok := spell.ModuleDecls("magus")
 	if !ok {
 		panic("bindings: generated magus declarations are missing; run `magus run generate`")
 	}

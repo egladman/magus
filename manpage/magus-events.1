@@ -14,7 +14,7 @@ another terminal shows up here. It needs no daemon, no token, and no loadable
 magusfile \- an editor can attach to a repository whose magusfile is mid\-edit.
 .PP
 The stream is outbound only. Nothing a subscriber does can change a magus
-verdict; the inbound counterpart is the session hook.
+verdict; the inbound counterpart is magus shell.
 .PP
 target.output is excluded unless named with \-\-type: it is the one event type
 that scales with build size rather than project count. To read a target's full
@@ -76,6 +76,7 @@ magus events --limit 1
 \fBmagus\-watch\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),

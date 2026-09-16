@@ -1,5 +1,5 @@
 // Command magus-spelldocs generates Markdown reference documentation for every
-// built-in spell in the internal/spellruntime registry. It mirrors cmd/magus-docs: walk
+// built-in spell in the internal/spell registry. It mirrors cmd/magus-docs: walk
 // the registry, emit one page per spell to docs/spells/<name>.md (injecting a
 // per-op example from spells/examples/<name>/<op>.buzz), and refresh the
 // built-in-spell table on the /spells/ landing (docs/spells.md) between its marker
@@ -31,7 +31,7 @@ import (
 	"github.com/egladman/magus/internal/docs"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render/md"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 )
 
@@ -50,6 +50,12 @@ type spellInfo struct {
 // Every built-in must have an entry; main() exits non-zero on a spell with no
 // entry, so a newly added spell can't ship an unlabeled page.
 var spellMeta = map[string]spellInfo{
+	"buzz": {
+		dir: "buzz", language: "Buzz",
+		description: "Buzz language identity: the .buzz extension and the comment and string syntax magus reads source with.",
+		intro:       "The `buzz` spell declares what a Buzz file IS and declares no ops. It is what lets the knowledge graph and the symbol index tell code from a comment or a string in a `.buzz` source, and what binds the extension to its project. Running Buzz needs no spell: `magus buzz -t <file>` executes a file's in-file `test` blocks through magus's own embedded engine.",
+		tags:        []string{"buzz", "language"},
+	},
 	"go": {
 		dir: "golang", language: "Go",
 		description: "Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops.",
@@ -136,7 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	builtins := spellruntime.Builtins()
+	builtins := spell.Builtins()
 	names := make([]string, 0, len(builtins))
 	for name := range builtins {
 		if _, ok := spellMeta[name]; !ok {

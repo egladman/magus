@@ -434,7 +434,7 @@ stdout 'whole-tree git stash'
 -- stale-magus --
 #!/bin/sh
 # Stands in for the binary a month behind the workspace: it answers `version` and knows
-# nothing about `session hook`, which is what silences the guard.
+# nothing about `magus shell`, which is what silences the guard.
 [ "$1" = version ] && { echo 'magus v0.0.1-stale (deadbeef) built 2026-08-02T01:05:00Z'; exit 0; }
 echo 'magus: WARN config: unknown or unexpected keys in config file' >&2
 echo 'magus: unknown subcommand "session"' >&2

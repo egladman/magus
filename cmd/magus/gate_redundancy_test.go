@@ -277,16 +277,38 @@ func TestGateRecordsNothingWhenTheRunWasCutShort(t *testing.T) {
 
 	cut, cancel := context.WithCancel(context.Background())
 	cancel()
-	g.record(cut, nil)
+	g.record(cut, nil, true /* cutShort */)
 
 	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	_, ok := sessions.LatestGate(fold, "b", types.TargetCI)
 	assert.False(t, ok, "a cancelled run must record no verdict, whatever it returned")
 
-	g.record(context.Background(), nil)
+	g.record(context.Background(), nil, false)
 	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
 	require.True(t, ok, "a run that finished still records")
+	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
+}
+
+// TestGateRecordsAVerdictDecidedBeforeTheSignal is the other half, and the reason
+// cutShort is the CALLER's answer rather than a context read inside record. A gate that
+// completes and is then interrupted has already decided; dropping that verdict costs a
+// full re-run of a gate that genuinely passed. The context is cancelled here to prove the
+// decision no longer turns on it.
+func TestGateRecordsAVerdictDecidedBeforeTheSignal(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+
+	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
+
+	interrupted, cancel := context.WithCancel(context.Background())
+	cancel()
+	g.record(interrupted, nil, false /* the run had already returned */)
+
+	rec, ok := sessions.LatestGate(fold2(t, dir), "b", types.TargetCI)
+	require.True(t, ok, "a verdict decided before the signal must survive it")
 	assert.Equal(t, sessions.OutcomePass, rec.Outcome)
 }
 

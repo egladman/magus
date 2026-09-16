@@ -33,7 +33,7 @@ func TestMCPToolHintsResolve(t *testing.T) {
 		assert.Truef(t, valid[tn.String()], "tool constant %q is not a Registry[].Name", tn)
 	}
 
-	// And the reverse, which is what makes hint/mcptool.go's "every Registry[].Name
+	// And the reverse, which is what makes hint/mcp_tool.go's "every Registry[].Name
 	// is bound to one of these" true rather than aspirational: a Name() returning a
 	// string literal satisfies the interface, ships unhinted, and passes every
 	// assertion above, because those only walk the constants.

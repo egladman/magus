@@ -71,7 +71,14 @@ func RecentGuardFeedback(base, session string, limit int) ([]GuardFeedback, erro
 		key := sessionKey{host: request.Host, session: request.Session}
 		// No host session means no safe causal join. Keep the observation in the
 		// activity trail, but do not guess which later command followed it.
-		if key.session == "" {
+		//
+		// A missing HOST is refused for the same reason and one of its own: this
+		// report exists to decide whether a host integration should change, and an
+		// event no host claims cannot answer that. It also keeps a probe or a
+		// hand-run hook from counting as one of the sessions NeedsReview weighs,
+		// which would let a single operator manufacture the repeat that promotes a
+		// candidate.
+		if key.session == "" || key.host == "" {
 			continue
 		}
 		if response.Decision != "deny" && isMagusRunRequest(request.Command) {

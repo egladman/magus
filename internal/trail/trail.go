@@ -128,7 +128,7 @@ const (
 // Event is one recorded action, the on-disk atom of the trail. The envelope (Ts/Kind/Actor/
 // Action/Outcome) is common to every kind; the payload refs point into the blob store so a large
 // body never bloats the line. Field names are snake_case and match the journal's Event where
-// they overlap (Ts, DurMs).
+// they overlap (Ts, DurationMs).
 //
 // Host and Session duplicate what an agent-hook event also records in its request blob, and that
 // duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
@@ -148,12 +148,41 @@ type Event struct {
 	Lease         string `json:"lease,omitempty"`
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
-	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
+	DurationMs    int64  `json:"duration_ms,omitempty"`   // wall-clock, on call-shaped actions
 	RequestRef    string `json:"request_ref,omitempty"`   // blob ref for the request body (mcp<hash>)
 	ResponseRef   string `json:"response_ref,omitempty"`  // blob ref for the response body
 	Preview       string `json:"preview,omitempty"`       // opening characters of the response, for list views
 	RequestBytes  int64  `json:"request_bytes,omitempty"` // full request length
 	ResponseBytes int64  `json:"response_bytes,omitempty"`
+}
+
+// UnmarshalJSON decodes an event, reading a duration written under either spelling.
+//
+// compat(until: no trail under <base>/activity still carries "dur_ms"): the duration was
+// spelled `dur_ms` before [Event.DurationMs] was. The trail is append-only and rotates, so
+// observing that dropping this is safe means finding none left:
+//
+//	grep -l '"dur_ms"' <base>/activity/events.jsonl
+//
+// Dropping it early is silent rather than loud: the daemon's scheduler reads a job's last
+// finish as start plus duration, so every pre-rename row reads as having finished the instant
+// it started, and a job whose interval has not elapsed is rerun anyway.
+func (e *Event) UnmarshalJSON(b []byte) error {
+	type event Event // no method set, so this does not recurse
+	var decoded event
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return err
+	}
+	*e = Event(decoded)
+	if e.DurationMs == 0 {
+		var legacy struct {
+			DurMs int64 `json:"dur_ms"`
+		}
+		if json.Unmarshal(b, &legacy) == nil {
+			e.DurationMs = legacy.DurMs
+		}
+	}
+	return nil
 }
 
 // AgentCommand is the normalized, host-independent observation an agent hook contributes to the

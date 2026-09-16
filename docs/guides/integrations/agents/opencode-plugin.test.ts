@@ -97,7 +97,7 @@ const deny: Canned = { schema_version: 1, decision: "deny", reason: "whole-tree 
 const advise: Canned = { schema_version: 1, decision: "advise", context: "that file is generated" };
 const pass: Canned = { schema_version: 1, decision: "pass" };
 
-test("a shell command is judged over stdin by the top-level hook subcommand", async () => {
+test("a shell command is judged over stdin by the top-level shell subcommand", async () => {
   const calls = stubBun(() => deny);
   const h = await hooks();
 
@@ -109,7 +109,7 @@ test("a shell command is judged over stdin by the top-level hook subcommand", as
   assert.equal(calls.length, 1);
   // The exact contract, spelled out rather than pattern-matched: these are the two
   // things that were wrong, and a loose assertion would have passed on both.
-  assert.deepEqual(calls[0].argv, ["session", "hook", "--agent-name", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, ["shell", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "git stash");
   assert.ok(
     !calls[0].argv.includes("agent"),
@@ -129,15 +129,7 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     );
   });
 
-  assert.deepEqual(calls[0].argv, [
-    "session",
-    "hook",
-    "--path",
-    "--agent-name",
-    "opencode",
-    "-o",
-    "json",
-  ]);
+  assert.deepEqual(calls[0].argv, ["shell", "--path", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "gen/index.json");
   // An advise must not throw, and must not be logged either: it is held for the
   // call it judged and appended to that call's own result, which is the only

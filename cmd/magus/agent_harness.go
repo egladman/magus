@@ -97,11 +97,22 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 		}
 		return nil
 	}
-	written, err := agentSkills.WriteSkillTree(root, path, true, form)
+	written, changed, err := agentSkills.WriteSkillTree(root, path, true, form)
 	if err != nil {
 		return err
 	}
+	// Logged per file, so the line says whether this install moved that file's bytes.
+	// A reinstall that rewrites thirty unchanged files and one real update read the same
+	// thirty-one ways before.
+	altered := make(map[string]bool, len(changed))
+	for _, file := range changed {
+		altered[file] = true
+	}
 	for _, file := range written {
+		if !altered[file] {
+			slog.DebugContext(ctx, "agent harness install: already current", slog.String("path", file))
+			continue
+		}
 		slog.InfoContext(ctx, "agent harness install: wrote", slog.String("path", file))
 	}
 	removed, err := agentSkills.PruneSkillTree(root, path, form)

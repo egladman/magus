@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -80,7 +80,7 @@ func TestSpellHandleRoundTripKeepsDefaultArgs(t *testing.T) {
 			"test": {Command: spells.Command{Bin: "go", Args: []string{"test"}, DefaultArgs: []string{"./..."}}},
 		},
 	})
-	got, err := spellruntime.DecodeHandle(h)
+	got, err := spell.DecodeHandle(h)
 	require.NoError(t, err)
 	op, ok := got.Ops["test"]
 	require.True(t, ok)

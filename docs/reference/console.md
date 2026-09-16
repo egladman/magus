@@ -135,13 +135,13 @@ registered job by its resource name (`jobs/{job}`), and `ListJobs` reports every
 job's running state, last run, and target size. A job name nobody registered is
 a NotFound error rather than a third RPC.
 
-| Job                 | Effect                                               |
-| ------------------- | ---------------------------------------------------- |
-| `sync-graph`        | Reconcile the knowledge graph to current source      |
-| `rotate-activities` | Trim the activity trail to its cap                   |
-| `rotate-logs`       | Trim the invocation run-log journals to their cap    |
-| `clear-cache`       | Invalidate cached build entries                      |
-| `check-review`      | Note when a review this tree took part in has merged |
+| Job                 | Effect                                                                            |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `sync-graph`        | Reconcile the knowledge graph to current source                                   |
+| `rotate-activities` | Trim the activity trail to its cap                                                |
+| `rotate-logs`       | Trim the invocation run-log journals to their cap                                 |
+| `clear-cache`       | Invalidate cached build entries                                                   |
+| `check-review`      | Note when a review this tree took part in has merged                              |
 | `check-drift`       | Notice, without blocking, a commit that left generated output or formatting stale |
 
 Each submit is fire-and-forget and coalesced (an identical in-flight job is not

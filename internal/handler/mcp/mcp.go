@@ -325,7 +325,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 			UserAgent:     o.UserAgent,
 			Action:        toolName,
 			Outcome:       trail.OutcomeOK,
-			DurMs:         dur.Milliseconds(),
+			DurationMs:    dur.Milliseconds(),
 			RequestRef:    reqRef,
 			RequestBytes:  reqBytes,
 			ResponseRef:   respRef,

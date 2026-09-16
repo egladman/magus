@@ -355,9 +355,9 @@ func TestVerifyHarnessRejectsConfigThatDoesNotInvokeMagus(t *testing.T) {
 
 func TestInvokesMagusRejectsGenericGuardScripts(t *testing.T) {
 	assert.False(t, invokesMagus("sh host-guard.sh"))
-	assert.False(t, invokesMagus("echo session hook"))
+	assert.False(t, invokesMagus("echo shell"))
 	assert.True(t, invokesMagus("sh docs/guides/integrations/agents/cursor-guard.sh"))
-	assert.True(t, invokesMagus("magus session hook -o json"))
+	assert.True(t, invokesMagus("magus shell -o json"))
 	assert.True(t, invokesMagus("./magus session notify"))
 }
 
@@ -410,7 +410,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 			Skills:        HarnessSkills{Paths: []string{".agents/skills"}, Form: FormFull},
 			ManagedEntries: []HarnessEntries{{
 				Path:    []string{"hooks", "before"},
-				Entries: []map[string]any{{"command": "magus session hook"}},
+				Entries: []map[string]any{{"command": "magus shell"}},
 			}},
 		}, "spell:test-host", true, nil
 	}

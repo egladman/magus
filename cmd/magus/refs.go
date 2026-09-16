@@ -32,6 +32,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			"Exclude declared-output files from the fallback text search entirely, instead of searching them and marking the ones that match")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus refs --text <pattern> [<path>...] [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, types.KnowledgeRefsDefinition)
 			fmt.Fprintln(os.Stderr, "")
@@ -63,7 +64,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
 			classify = ws.ClassifyFiles
 		}
-		return refsTextCmd(ctx, root, pos[0], noGenerated, classify)
+		return refsTextCmd(ctx, root, pos[0], pos[1:], noGenerated, classify)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -204,10 +205,17 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 // command. refs' own -o name format already carves out its own exit meaning per mode
 // for the same reason (see emitOccurrences); this is that same move made explicit
 // for --text rather than left to collide silently with the verdict path.
-func refsTextCmd(ctx context.Context, root, pattern string, noGenerated bool, classify classifyFunc) error {
+func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, classify classifyFunc) error {
 	searchRoot := resolveRootOrEmpty(root)
 	if searchRoot == "" {
 		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
+		return errSilent{exitCode: 2}
+	}
+	scopes, err := resolveSearchScopes(searchRoot, scopeArgs)
+	if err != nil {
+		// Exit 2, never 1: a scope magus could not resolve is a search that never ran,
+		// and reporting it as "no match" would answer a question nobody asked.
+		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
 		return errSilent{exitCode: 2}
 	}
 	// A root that cannot be listed at all (missing, not a directory, permission
@@ -220,7 +228,7 @@ func refsTextCmd(ctx context.Context, root, pattern string, noGenerated bool, cl
 		return errSilent{exitCode: 2}
 	}
 
-	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, noGenerated, classify)
+	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, scopes, noGenerated, classify)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
 		return errSilent{exitCode: 2}

@@ -421,7 +421,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		// The guard's half of the index-staleness fact; the load-bearing half rides the
-		// command's own output (staleindex.go). alreadyFired is asked BEFORE the rule, not
+		// command's own output (stale_index.go). alreadyFired is asked BEFORE the rule, not
 		// after: producing this text costs a directory walk, and once the session has been
 		// told, paying for it again only to discard the answer is the cost nobody sees.
 		if verdict.Decision == "pass" && preauth == "" && !markers.AlreadyFired(advisoryGraphStale) && commandReadsGraph(input) {

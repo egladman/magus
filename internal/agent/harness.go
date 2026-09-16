@@ -47,15 +47,19 @@ const (
 
 var (
 	harnessIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
-	// magusSessionInvocation requires magus as a program token before session,
-	// so `echo session hook` and similar do not count as coverage.
-	magusSessionInvocation = regexp.MustCompile(`(?:^|[^\w.-])magus(?:\s+|$)[^;\n]*\bsession(?:\s+hook\b|\b)`)
+	// magusGuardInvocation requires magus as a program token before the verb, so
+	// `echo shell` and similar do not count as coverage.
+	//
+	// It admits `session` as well as `shell` because a descriptor may wire any magus
+	// command a host should reach; the guard moved to `shell`, and the session verbs it
+	// left behind are still legitimate wiring for a host that records rather than judges.
+	magusGuardInvocation = regexp.MustCompile(`(?:^|[^\w.-])magus(?:\s+|$)[^;\n]*\b(?:shell|session)\b`)
 )
 
 // HarnessDescriptor is a user-owned collaborator contract. Magus merges the
 // opaque config fragments a descriptor declares; it does not inject a command
 // or a reply codec. Transport lives in host-native glue (shipped scripts or a
-// plugin) that already names session hook. Optional MCP client wiring is a
+// plugin) that already names magus shell. Optional MCP client wiring is a
 // separate document (or register hint), always bound to a secret ref.
 type HarnessDescriptor struct {
 	SchemaVersion  int              `json:"schema_version"`
@@ -396,7 +400,7 @@ func validateHarnessEntries(group HarnessEntries) error {
 	}
 	for _, command := range commands {
 		if !invokesMagus(command) {
-			return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, session hook, or magus session)", command)
+			return fmt.Errorf("command %q does not invoke magus (want a shipped guard script, magus shell, or magus session)", command)
 		}
 	}
 	return nil
@@ -661,7 +665,7 @@ func removeConfigDefaults(config map[string]any, defaults map[string]any) bool {
 // VerifyHarness validates both the descriptor and the concrete harness config.
 // It reports an explicit status so callers cannot mistake an absent hook for a
 // healthy one. Coverage is a config that still carries the declared fragments
-// and invokes magus somehow (a shipped script basename, session hook, or
+// and invokes magus somehow (a shipped script basename, magus shell, or
 // magus session). A skills-only descriptor has nothing to wire.
 func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, error) {
 	if err := ctx.Err(); err != nil {
@@ -928,7 +932,7 @@ func invokesMagus(command string) bool {
 		return true
 	case strings.Contains(command, "magus-rehydrate"):
 		return true
-	case magusSessionInvocation.MatchString(command):
+	case magusGuardInvocation.MatchString(command):
 		return true
 	default:
 		return false

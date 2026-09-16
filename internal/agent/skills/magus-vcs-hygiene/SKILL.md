@@ -14,7 +14,7 @@ each against the workspace's declared globs{{end}}:
 magus describe file $(git diff --name-only) <other paths...>
 ```
 
-MCP: `magus_describe_file` {paths}. Each path comes back with its owning
+MCP: `{{tool "describe_file"}}` {paths}. Each path comes back with its owning
 project and a role:
 
 - `output` - matches a declared outputs glob: the file is GENERATED.
@@ -28,7 +28,7 @@ project and a role:
   output globs, so no project can claim it{{end}}.
 - `unclaimed` - no project declares it and magus does not write it: it enters no
   cache key, but directory containment still seeds its owning project, so touching
-  it reruns targets whose answer cannot have changed (MGS1028). Declaring it in the
+  it reruns targets whose answer cannot have changed ({{mgslink "MGS1028"}}). Declaring it in the
   owning project's `sources` fixes both halves{{if .Full}}; leaving it undeclared is right when
   nothing reads it{{end}}. Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost{{else}} - an unclaimed
@@ -184,6 +184,6 @@ Then, whatever the backend:
    advises on; the whole-tree forms it denies, because that untracked work is in no
    commit to recover from.{{end}}
 
-`magus_affected_explain` {project} answers why a specific project is in the
+`{{tool "affected_explain"}}` {project} answers why a specific project is in the
 affected set{{if .Full}} (the changed files and dependency chains that pulled it in) when
 the result surprises you{{end}}.

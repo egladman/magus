@@ -129,8 +129,8 @@ Memory and scratch:
 
 Console:
 
-| Tool                    | Purpose                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| Tool                    | Purpose                                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
 | `magus_console_present` | Return a tokenless link to a local console surface when the user asks to see dashboard status or output |
 
 `magus_console_present` does not open a browser or hand a client a token. A compatible

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/egladman/magus"
@@ -153,7 +154,7 @@ func TestSearchableFilesSkipsMachineWrittenTrees(t *testing.T) {
 		"node_modules/pkg/index.js": "module.exports = {}",
 	})
 
-	paths, _, err := searchableFiles(w.Root())
+	paths, _, err := searchableFiles(w.Root(), nil)
 	require.NoError(t, err)
 
 	rels := make([]string, 0, len(paths))
@@ -178,10 +179,76 @@ func TestSearchableFilesCountsWhatItDeclined(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(w.Path("huge.txt"), big, 0o644))
 
-	paths, skipped, err := searchableFiles(w.Root())
+	paths, skipped, err := searchableFiles(w.Root(), nil)
 	require.NoError(t, err)
 	assert.Len(t, paths, 1)
 	assert.Equal(t, 2, skipped, "the empty file and the oversized one are both declined, and both counted")
+}
+
+// TestSearchableFilesHonorsScopes is the path scope `refs --text` grew so a search can
+// be narrowed the way grep's trailing operands narrow one. Without it the only text
+// search magus offered was the whole workspace, so a reader asking about one directory
+// had no magus answer at all.
+func TestSearchableFilesHonorsScopes(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"internal/guard/shell.go": "package guard",
+		"internal/hint/hint.go":   "package hint",
+		"cmd/magus/main.go":       "package main",
+	})
+
+	rels := func(paths []string) []string {
+		out := make([]string, 0, len(paths))
+		for _, p := range paths {
+			rel, err := filepath.Rel(w.Root(), p)
+			require.NoError(t, err)
+			out = append(out, rel)
+		}
+		sort.Strings(out)
+		return out
+	}
+
+	paths, _, err := searchableFiles(w.Root(), []string{w.Path("internal/guard")})
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join("internal", "guard", "shell.go")}, rels(paths),
+		"a directory scope searches that directory and nothing beside it")
+
+	paths, _, err = searchableFiles(w.Root(), []string{w.Path("cmd/magus/main.go")})
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join("cmd", "magus", "main.go")}, rels(paths),
+		"a file scope is a scope of one")
+
+	// Overlapping scopes are an ordinary way to write the argument list, and a file
+	// counted twice would report its matches twice.
+	paths, _, err = searchableFiles(w.Root(), []string{w.Path("internal"), w.Path("internal/guard")})
+	require.NoError(t, err)
+	assert.Equal(t, []string{
+		filepath.Join("internal", "guard", "shell.go"),
+		filepath.Join("internal", "hint", "hint.go"),
+	}, rels(paths), "an overlapping scope reads each file once")
+}
+
+// TestResolveSearchScopesRefusesOutsideTheWorkspace pins the containment check. A scope
+// that silently resolved to nothing would print "no matches" for a search that never
+// looked where the reader asked, which is worse than the error.
+func TestResolveSearchScopesRefusesOutsideTheWorkspace(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("internal/guard/shell.go", "package guard")
+
+	scopes, err := resolveSearchScopes(w.Root(), nil)
+	require.NoError(t, err)
+	assert.Nil(t, scopes, "no operands means the whole workspace, not an empty search")
+
+	scopes, err = resolveSearchScopes(w.Root(), []string{w.Path("internal/guard")})
+	require.NoError(t, err)
+	assert.Equal(t, []string{w.Path("internal/guard")}, scopes)
+
+	_, err = resolveSearchScopes(w.Root(), []string{filepath.Join(w.Root(), "..")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "outside the workspace")
+
+	_, err = resolveSearchScopes(w.Root(), []string{w.Path("nope")})
+	require.Error(t, err, "a scope that does not exist is an error, not an empty search")
 }
 
 // TestTextPresenceSkipsBinary covers the NUL-byte heuristic: a match inside a binary

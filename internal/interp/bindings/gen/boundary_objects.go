@@ -1042,6 +1042,59 @@ func ObjectVCSTag(v types.VCSTag) vm.Value {
 	return out
 }
 
+func ObjectHint(v spells.Hint) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("contains", vm.StrValue(v.Contains))
+	out.MapSet("advise", vm.StrValue(v.Advise))
+	return out
+}
+
+func ObjectCommand(v spells.Command) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("bin", vm.StrValue(v.Bin))
+	itemsArgs := make([]vm.Value, len(v.Args))
+	for indexArgs := range v.Args {
+		itemsArgs[indexArgs] = vm.StrValue(v.Args[indexArgs])
+	}
+	out.MapSet("args", vm.ListValue(itemsArgs))
+	itemsDefaultArgs := make([]vm.Value, len(v.DefaultArgs))
+	for indexDefaultArgs := range v.DefaultArgs {
+		itemsDefaultArgs[indexDefaultArgs] = vm.StrValue(v.DefaultArgs[indexDefaultArgs])
+	}
+	out.MapSet("defaultArgs", vm.ListValue(itemsDefaultArgs))
+	mappedCharms := vm.NewMap()
+	for keyCharms, itemCharms := range v.Charms {
+		mappedCharms.MapSet(keyCharms, ObjectCharm(itemCharms))
+	}
+	out.MapSet("charms", mappedCharms)
+	itemsSources := make([]vm.Value, len(v.Sources))
+	for indexSources := range v.Sources {
+		itemsSources[indexSources] = vm.StrValue(v.Sources[indexSources])
+	}
+	out.MapSet("sources", vm.ListValue(itemsSources))
+	out.MapSet("external", vm.StrValue(string(v.External)))
+	out.MapSet("sourcesEach", vm.BoolValue(v.SourcesEach))
+	out.MapSet("capture", vm.BoolValue(v.Capture))
+	mappedSecrets := vm.NewMap()
+	for keySecrets, itemSecrets := range v.Secrets {
+		mappedSecrets.MapSet(keySecrets, vm.StrValue(itemSecrets))
+	}
+	out.MapSet("secrets", mappedSecrets)
+	itemsHints := make([]vm.Value, len(v.Hints))
+	for indexHints := range v.Hints {
+		itemsHints[indexHints] = ObjectHint(v.Hints[indexHints])
+	}
+	out.MapSet("hints", vm.ListValue(itemsHints))
+	return out
+}
+
+func ObjectSymbolIndexer(v spells.SymbolIndexer) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("format", vm.StrValue(string(v.Format)))
+	out.MapSet("command", ObjectCommand(v.Command))
+	return out
+}
+
 func ObjectCommitAuthor(v types.CommitAuthor) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("name", vm.StrValue(v.Name))

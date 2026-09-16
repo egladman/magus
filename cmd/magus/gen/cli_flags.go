@@ -71,14 +71,6 @@ const (
 	FlagAgentHarnessRemoveID = "id"
 	// agent harness verify: --id
 	FlagAgentHarnessVerifyID = "id"
-	// agent improve: --all
-	FlagAgentImproveAll = "all"
-	// agent improve: --apply
-	FlagAgentImproveApply = "apply"
-	// agent improve: --id
-	FlagAgentImproveID = "id"
-	// agent improve: --session
-	FlagAgentImproveSession = "session"
 	// agent: --dir
 	FlagAgentDir = "dir"
 	// agent: --dry-run
@@ -203,12 +195,6 @@ const (
 	FlagExplainRefresh = "refresh"
 	// graph build: --no-symbols
 	FlagGraphBuildNoSymbols = "no-symbols"
-	// graph build: --push
-	FlagGraphBuildPush = "push"
-	// graph build: --ref
-	FlagGraphBuildRef = "ref"
-	// graph build: --tag
-	FlagGraphBuildTag = "tag"
 	// graph deps: --depth
 	FlagGraphDepsDepth = "depth"
 	// graph deps: --spell
@@ -255,8 +241,8 @@ const (
 	FlagGraphPushRef = "ref"
 	// graph push: --refresh
 	FlagGraphPushRefresh = "refresh"
-	// graph push: --tag
-	FlagGraphPushTag = "tag"
+	// graph push: --username
+	FlagGraphPushUsername = "username"
 	// graph stats: --global
 	FlagGraphStatsGlobal = "global"
 	// graph stats: --kind
@@ -445,20 +431,6 @@ const (
 	FlagSessionCheckpointTranscript = "transcript"
 	// session dispose: --reason
 	FlagSessionDisposeReason = "reason"
-	// session hook: --agent-name
-	FlagSessionHookAgentName = "agent-name"
-	// session hook: --event
-	FlagSessionHookEvent = "event"
-	// session hook: --lease
-	FlagSessionHookLease = "lease"
-	// session hook: --observe
-	FlagSessionHookObserve = "observe"
-	// session hook: --path
-	FlagSessionHookPath = "path"
-	// session hook: --session
-	FlagSessionHookSession = "session"
-	// session hook: --transcript
-	FlagSessionHookTranscript = "transcript"
 	// session load: --file
 	FlagSessionLoadFile = "file"
 	// session notify: --desktop
@@ -471,6 +443,20 @@ const (
 	FlagSessionLimit = "limit"
 	// session: --since
 	FlagSessionSince = "since"
+	// shell: --agent-name
+	FlagShellAgentName = "agent-name"
+	// shell: --event
+	FlagShellEvent = "event"
+	// shell: --lease
+	FlagShellLease = "lease"
+	// shell: --observe
+	FlagShellObserve = "observe"
+	// shell: --path
+	FlagShellPath = "path"
+	// shell: --session
+	FlagShellSession = "session"
+	// shell: --transcript
+	FlagShellTranscript = "transcript"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -738,34 +724,28 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 
 // GraphBuildFlags are the flags declared for `magus graph build`.
 type GraphBuildFlags struct {
-	NoSymbols bool   // --no-symbols
-	Push      bool   // --push
-	Ref       string // --ref
-	Tag       string // --tag
+	NoSymbols bool // --no-symbols
 }
 
 // BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
 func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
 	var f GraphBuildFlags
 	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
-	fs.BoolVar(&f.Push, FlagGraphBuildPush, false, "Push the rebuilt graph to the registry afterwards (see magus graph push)")
-	fs.StringVar(&f.Ref, FlagGraphBuildRef, "", "With --push: the artifact to push to (default: derived from the repository's origin remote)")
-	fs.StringVar(&f.Tag, FlagGraphBuildTag, "", "With --push: an extra tag to write beside latest, repeatable or comma-separated")
 	return &f
 }
 
 // GraphPushFlags are the flags declared for `magus graph push`.
 type GraphPushFlags struct {
-	Ref     string // --ref
-	Tag     string // --tag
-	Refresh bool   // --refresh
+	Ref      string // --ref
+	Username string // --username
+	Refresh  bool   // --refresh
 }
 
 // BindGraphPush registers `magus graph push`'s flags on fs and returns the destination.
 func BindGraphPush(fs *flag.FlagSet) *GraphPushFlags {
 	var f GraphPushFlags
-	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to (default: derived from the repository's origin remote)")
-	fs.StringVar(&f.Tag, FlagGraphPushTag, "", "An extra tag to write beside latest, repeatable or comma-separated")
+	fs.StringVar(&f.Ref, FlagGraphPushRef, "", "The artifact to push to, as <registry>/<repository>:<tag> (required; never derived)")
+	fs.StringVar(&f.Username, FlagGraphPushUsername, "", "The registry username; the token is read from stdin, the way docker login --password-stdin takes one")
 	fs.BoolVar(&f.Refresh, FlagGraphPushRefresh, false, "Rebuild the graph before pushing instead of exporting what is cached")
 	return &f
 }
@@ -958,7 +938,7 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
-	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes)")
+	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
 	return &f
 }
 
@@ -1035,6 +1015,30 @@ type CleanFlags struct {
 func BindClean(fs *flag.FlagSet) *CleanFlags {
 	var f CleanFlags
 	fs.BoolVar(&f.Cache, FlagCleanCache, false, "Also invalidate magus cache entries for the selected projects")
+	return &f
+}
+
+// ShellFlags are the flags declared for `magus shell`.
+type ShellFlags struct {
+	Path       bool   // --path
+	Observe    bool   // --observe
+	Lease      string // --lease
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+	Event      string // --event
+}
+
+// BindShell registers `magus shell`'s flags on fs and returns the destination.
+func BindShell(fs *flag.FlagSet) *ShellFlags {
+	var f ShellFlags
+	fs.BoolVar(&f.Path, FlagShellPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	fs.BoolVar(&f.Observe, FlagShellObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
+	fs.StringVar(&f.Lease, FlagShellLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
+	fs.StringVar(&f.AgentName, FlagShellAgentName, "", "Name of the agent host this invocation came from (attribution only)")
+	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
+	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	return &f
 }
 
@@ -1258,30 +1262,6 @@ type SessionDisposeFlags struct {
 func BindSessionDispose(fs *flag.FlagSet) *SessionDisposeFlags {
 	var f SessionDisposeFlags
 	fs.StringVar(&f.Reason, FlagSessionDisposeReason, "", "Record why the request is being closed, alongside the disposition")
-	return &f
-}
-
-// SessionHookFlags are the flags declared for `magus session hook`.
-type SessionHookFlags struct {
-	Path       bool   // --path
-	Observe    bool   // --observe
-	Lease      string // --lease
-	AgentName  string // --agent-name
-	Session    string // --session
-	Transcript string // --transcript
-	Event      string // --event
-}
-
-// BindSessionHook registers `magus session hook`'s flags on fs and returns the destination.
-func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
-	var f SessionHookFlags
-	fs.BoolVar(&f.Path, FlagSessionHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
-	fs.BoolVar(&f.Observe, FlagSessionHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Lease, FlagSessionHookLease, "", "The lease this call is acting as, graded against the ledger's declared write boundary (defaults to magus.lease in $BAGGAGE)")
-	fs.StringVar(&f.AgentName, FlagSessionHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
-	fs.StringVar(&f.Session, FlagSessionHookSession, "", "The host's own session id for this invocation")
-	fs.StringVar(&f.Transcript, FlagSessionHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
-	fs.StringVar(&f.Event, FlagSessionHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	return &f
 }
 
@@ -1648,24 +1628,6 @@ type AgentHarnessInstallFlags struct {
 func BindAgentHarnessInstall(fs *flag.FlagSet) *AgentHarnessInstallFlags {
 	var f AgentHarnessInstallFlags
 	fs.StringVar(&f.ID, FlagAgentHarnessInstallID, "", "Harness ID; omit to install every magusfile-wired provider")
-	return &f
-}
-
-// AgentImproveFlags are the flags declared for `magus agent improve`.
-type AgentImproveFlags struct {
-	Session string // --session
-	All     bool   // --all
-	Apply   bool   // --apply
-	ID      string // --id
-}
-
-// BindAgentImprove registers `magus agent improve`'s flags on fs and returns the destination.
-func BindAgentImprove(fs *flag.FlagSet) *AgentImproveFlags {
-	var f AgentImproveFlags
-	fs.StringVar(&f.Session, FlagAgentImproveSession, "", "Only evidence from this host session")
-	fs.BoolVar(&f.All, FlagAgentImproveAll, false, "Include one-off feedback")
-	fs.BoolVar(&f.Apply, FlagAgentImproveApply, false, "Apply one descriptor-managed harness update")
-	fs.StringVar(&f.ID, FlagAgentImproveID, "", "Harness descriptor to update with --apply")
 	return &f
 }
 

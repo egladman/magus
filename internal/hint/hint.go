@@ -1,7 +1,7 @@
 // Package hint is the hints home: everything magus renders to point a reader
 // at a better next command. It holds shell-to-graph suggestion translation
-// (this file), the canonical MCP tool names and follow-up lines (mcptool.go),
-// the canonical CLI command paths shown in user-facing output (clicommand.go),
+// (this file), the canonical MCP tool names and follow-up lines (mcp_tool.go),
+// the canonical CLI command paths shown in user-facing output (cli_command.go),
 // and the did-you-mean edit distance every "unknown X" site measures with
 // (nearest.go). It stays a near-leaf (stdlib plus types), so an emitter
 // anywhere in the tree can render a hint without acquiring a dependency set
@@ -428,15 +428,20 @@ func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 	scope := t.scope(paths)
 	if !prose {
 		// A non-recursive grep, or one pointed only at files, reads those files
-		// rather than asking a repo-wide question, no graph equivalent. The
+		// rather than asking a repo-wide question, so no GRAPH verb answers it. The
 		// prose case stays: a docsection query replaces scanning the .md itself.
+		//
+		// `refs --text` does answer it, and takes the same path operands, so these
+		// two branches hand that back instead of abstaining. They are the shapes the
+		// translator was silent on for as long as magus had no raw-text search, and
+		// silence here is what sent a reader back to grep with nothing to try.
 		if !sa.recursive {
-			return nil
+			return textOnly(pats[0], sa)
 		}
 		// A recursive-by-default tool keeps asking a repo-wide question when a
-		// file operand narrows it, so only the grep family abstains here.
+		// file operand narrows it, so only the grep family lands here.
 		if !sa.spec.recursiveByDefault && len(paths) > 0 && allFiles(paths) {
-			return nil
+			return textOnly(pats[0], sa)
 		}
 	}
 	if prose {
@@ -465,6 +470,53 @@ func (t *Translator) suggestSearch(sa searchArgs) []Suggestion {
 	return t.routePattern(pats[0], sa, scope)
 }
 
+// textOnly wraps textSuggestion for the branches whose only honest answer it is, so a
+// pattern it abstains on (a regex) still yields no suggestion rather than a wrong one.
+func textOnly(pat string, sa searchArgs) []Suggestion {
+	if s, ok := textSuggestion(pat, sa); ok {
+		return []Suggestion{s}
+	}
+	return nil
+}
+
+// textSuggestion is the literal-for-literal translation: `refs --text` is a substring
+// search over the workspace's source files with grep's own exit codes, and it takes the
+// same trailing path operands, so the caller's scope carries over unchanged.
+//
+// It is what makes a raw-text search answerable AT ALL. Every other suggestion in this
+// file translates a text match into a semantic question and is honest that the two agree
+// only when the pattern is a real symbol; this one asks the same question grep asked.
+//
+// It abstains for a REGEX, which is the one shape it cannot honor: `refs --text` matches
+// a substring, so offering it for `Handle.*Foo` would hand back a command that quietly
+// answers something narrower. `-F` settles that in the caller's favor whatever the
+// pattern looks like, since it promised there is no regex in it.
+func textSuggestion(pat string, sa searchArgs) (Suggestion, bool) {
+	if pat == "" || (!sa.fixed && hasRegexMeta(pat)) {
+		return Suggestion{}, false
+	}
+	run := "magus refs --text " + quoted(pat)
+	for _, p := range sa.paths() {
+		// `.` is the whole workspace, which is what no scope already means. Carrying
+		// it through would spell the default out as an argument on the commonest
+		// grep there is (`grep -rn Foo .`).
+		if p == "." || p == "./" {
+			continue
+		}
+		run += " " + p
+	}
+	hedge := "Case-sensitive and literal; generated files are searched and counted separately."
+	if sa.ignoreCase {
+		hedge = "Case-SENSITIVE, unlike the -i you asked for, and literal."
+	}
+	return Suggestion{
+		Run:        run,
+		Why:        "the same literal search, over the workspace's source files, with grep's exit codes",
+		Confidence: ConfidenceHigh,
+		Hedge:      hedge,
+	}, true
+}
+
 // routePattern picks the verb by the pattern's shape. See suggestSearch for
 // why the routing exists and why every branch hedges.
 func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Suggestion {
@@ -490,7 +542,7 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 			// pattern is a whole symbol, not a substring.
 			refsConf = ConfidenceHigh
 		}
-		return []Suggestion{
+		out := []Suggestion{
 			{
 				Run:        "magus refs " + pat,
 				Why:        "the pattern reads like a code symbol, and refs answers with verified occurrences",
@@ -504,6 +556,13 @@ func (t *Translator) routePattern(pat string, sa searchArgs, scope string) []Sug
 				Hedge:      hedge(hedgeQuery, sa),
 			},
 		}
+		// Last, because both graph verbs answer a better question when the pattern really
+		// is a symbol. It is here so the hedge above ("grep is right") names a magus
+		// command rather than sending the reader out of the workspace to act on it.
+		if s, ok := textSuggestion(pat, sa); ok {
+			out = append(out, s)
+		}
+		return out
 	case hasRegexMeta(pat) && !sa.fixed:
 		return []Suggestion{{
 			Run:        "magus query " + matcherArg("id=~"+pat) + scope,

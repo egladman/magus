@@ -2390,7 +2390,7 @@ func attributeRun(ctx context.Context) context.Context {
 	// cmd/magus/main.go does at its entry point. Appending self to an empty list leaves a
 	// one-element list that ancestorInvocations strips straight back to empty, and the
 	// fallbacks that read the environment fire only when ctx carries none
-	// (internal/cache/machinegate.go, lock.go): stamping first silences them and leaves
+	// (internal/cache/machine_gate.go, lock.go): stamping first silences them and leaves
 	// the run blind to the very ancestor this identity exists to recognize.
 	if len(types.InvocationAncestorsFromContext(ctx)) == 0 {
 		ctx = types.WithInvocationAncestors(ctx, procrun.AncestorsFromEnv())

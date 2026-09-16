@@ -93,10 +93,10 @@ magus\project({
                 // built-in spell or its example, or the CLI/manpage registry must mark this
                 // project affected so content-generate re-runs and the drift gate catches an
                 // unregenerated page. Data sources are ../std + ../host (module ref), ../spells
-                // + ../internal/spellruntime (spell docs), and ../internal/cli + ../internal/config
+                // + ../internal/spell (spell docs), and ../internal/cli + ../internal/config
                 // (manpages); the tools themselves live under ../cmd/magus-{docs,spelldocs,manpage}.
                 "../std/**/*.go", "../host/**/*.go",
-                "../spells/**/*.buzz", "../internal/spellruntime/**/*.go",
+                "../spells/**/*.buzz", "../internal/spell/**/*.go",
                 "../internal/cli/**/*.go", "../internal/config/**/*.go",
                 "../internal/render/**/*.go", "../internal/graph/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
@@ -210,7 +210,7 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
 // drift-gates the result.
 export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace\file("std/**/*.go"), workspace\file("host/**/*.go"),
-        workspace\file("spells/**/*.buzz"), workspace\file("internal/spellruntime/**/*.go"),
+        workspace\file("spells/**/*.buzz"), workspace\file("internal/spell/**/*.go"),
         workspace\file("internal/cli/**/*.go"), workspace\file("internal/config/**/*.go"),
         workspace\file("internal/render/**/*.go"), workspace\file("internal/graph/**/*.go"),
         workspace\file("cmd/magus-docs/**/*.go"), workspace\file("cmd/magus-spelldocs/**/*.go"),

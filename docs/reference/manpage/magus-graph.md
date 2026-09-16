@@ -11,7 +11,7 @@ The workspace's graphs as objects: deps, export, stats
 
 ## Synopsis
 
-**magus** graph \<build|deps|export|stats|diff\> [flags]
+**magus** graph \<build|push|pull|deps|export|stats|diff\> [flags]
 
 ## Description
 
@@ -60,6 +60,25 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 
 **--no-symbols**
 : Rebuild the domain graph only; do not reindex code symbols
+
+### graph push options
+
+**--ref** *string*
+: The artifact to push to, as \<registry\>/\<repository\>:\<tag\> (required; never derived)
+
+**--refresh**
+: Rebuild the graph before pushing instead of exporting what is cached
+
+**--username** *string*
+: The registry username; the token is read from stdin, the way docker login --password-stdin takes one
+
+### graph pull options
+
+**--out** *string*
+: Write the graph here instead of stdout
+
+**--ref** *string*
+: The artifact to pull (default: derived from the repository's origin remote)
 
 ### graph deps options
 
@@ -143,6 +162,12 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
 **build**
 : Rebuild the knowledge graph now, reindexing code symbols first
 
+**push**
+: Push the knowledge graph to a container registry as an OCI artifact
+
+**pull**
+: Fetch a published knowledge graph; reads public artifacts with no credentials
+
 **deps**
 : Emit the project dependency DAG (text, json, yaml, dot, mermaid, tree)
 
@@ -225,5 +250,5 @@ magus graph export --open --targets --print
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-events**(1)](magus-events.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-shell**(1)](magus-shell.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-job**(1)](magus-job.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-mcp**(1)](magus-mcp.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/docs"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 )
 
@@ -33,7 +33,7 @@ func useRepoSpells(t *testing.T) {
 // would otherwise only fail at generate time, and the page it needs is prose
 // nobody can derive from the Descriptor.
 func TestEveryBuiltinHasEditorialMetadata(t *testing.T) {
-	for name := range spellruntime.Builtins() {
+	for name := range spell.Builtins() {
 		meta, ok := spellMeta[name]
 		if !assert.True(t, ok, "built-in spell %q has no spellMeta entry", name) {
 			continue
@@ -47,7 +47,7 @@ func TestEveryBuiltinHasEditorialMetadata(t *testing.T) {
 	}
 
 	for name := range spellMeta {
-		assert.Contains(t, spellruntime.Builtins(), name, "spellMeta describes %q, which is not a built-in", name)
+		assert.Contains(t, spell.Builtins(), name, "spellMeta describes %q, which is not a built-in", name)
 	}
 }
 
@@ -58,7 +58,7 @@ func TestEveryBuiltinHasEditorialMetadata(t *testing.T) {
 func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 	useRepoSpells(t)
 
-	for name, d := range spellruntime.Builtins() {
+	for name, d := range spell.Builtins() {
 		t.Run(name, func(t *testing.T) {
 			body := renderSpell(d)
 			meta := spellMeta[name]
@@ -116,7 +116,7 @@ func TestRenderSpellReportsTheDescriptor(t *testing.T) {
 func TestExamplesAreMarkedRunnable(t *testing.T) {
 	useRepoSpells(t)
 
-	d := spellruntime.Builtins()["go"]
+	d := spell.Builtins()["go"]
 	require.NotEmpty(t, d.Ops)
 	body := renderSpell(d)
 
@@ -134,7 +134,7 @@ func TestOpDocsComeFromTheSource(t *testing.T) {
 	docsByOp := parseOpDocs("golang")
 	require.NotEmpty(t, docsByOp, "no op docs recovered from spells/golang/spell.buzz")
 
-	d := spellruntime.Builtins()["go"]
+	d := spell.Builtins()["go"]
 	for op, doc := range docsByOp {
 		assert.Contains(t, d.Ops, op, "recovered a doc for %q, which is not an op of the go spell", op)
 		assert.NotContains(t, doc, "\n", "a doc lands in Markdown prose, so it is flowed to one paragraph")
@@ -287,7 +287,7 @@ func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "spells.md")
 	require.NoError(t, os.WriteFile(path, []byte(landing(spellListBegin+" -->", spellListEnd)), 0o644))
 
-	builtins := spellruntime.Builtins()
+	builtins := spell.Builtins()
 	names := slices.Sorted(maps.Keys(builtins))
 	require.NoError(t, injectSpellList(path, builtins, names))
 
@@ -312,7 +312,7 @@ func TestInjectSpellListRewritesOnlyTheMarkedRegion(t *testing.T) {
 }
 
 func TestInjectSpellListRefusesAMalformedPage(t *testing.T) {
-	builtins := spellruntime.Builtins()
+	builtins := spell.Builtins()
 	names := slices.Sorted(maps.Keys(builtins))
 
 	for _, tc := range []struct {

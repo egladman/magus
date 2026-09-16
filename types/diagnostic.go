@@ -206,7 +206,15 @@ const (
 	// A reads-external op has two answers, not one: declare skip_cache, or let the
 	// spell probe the external data's identity (Tool.observe) so it keys like any other
 	// input. A mutates-external op has only the first: a side effect cannot be hashed.
-	CacheableExternalOp       DiagnosticCode = "MGS1033"
+	CacheableExternalOp DiagnosticCode = "MGS1033"
+	// SourceIsAlsoOutput is one target naming a path in both ctx.readsFiles and
+	// ctx.writesFiles. The cache restores an output before the target runs, so the bytes
+	// keying the target are the bytes the cache wrote: an edit to that file can neither
+	// miss the cache nor be read by the target that declared it.
+	SourceIsAlsoOutput DiagnosticCode = "MGS1034"
+	// WriteWithoutRWCharm is a target with an rw branch that writes a file outside it, so
+	// the run that was given no rw charm edits the tree anyway and then reports its own edit.
+	WriteWithoutRWCharm       DiagnosticCode = "MGS1035"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -420,7 +428,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
-	TimeoutDeclarationDrift, CacheableExternalOp,
+	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

@@ -139,7 +139,6 @@ fun install() > void !> any {
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight, textsearch\test);
     ctx.writesFiles("coverage.svg");
-    final before = drift\hashes(["coverage.svg"]);
     install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
@@ -154,9 +153,15 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
-    fs\writeFile("coverage.svg", badge\coverage("typescript coverage", percent: pct, radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift\changedSince(before, ["coverage.svg"]).len() > 0) {
+    final wanted = badge\coverage("typescript coverage", percent: pct, radius: 3);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile("coverage.svg", content: wanted);
+        return;
+    }
+    // Compared, never written (MGS1035). Writing the badge and then noticing it changed
+    // leaves this run's own output in the tree, so the next gate reads it as an edit
+    // nobody made and a re-run passes because the first run fixed what it reported.
+    if (fs\readFile("coverage.svg") != wanted) {
         // Names the figure this run measured. Node's line coverage differs by a fraction
         // of a point between platforms, so a badge committed from a developer machine can
         // be stale on CI by a rounding step nobody can see from the message alone.

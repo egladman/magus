@@ -292,10 +292,18 @@ func resolvedSpells(projects []*types.Project) []*spells.Spell {
 // dispatched report their own cancellation and the run itself then has nothing to add. A
 // gate killed at six seconds by a terminating shell took that path and recorded a PASS
 // over nine projects it never ran, and MGS3010 refused every later gate on that commit
-// on the strength of it. ctx is the invocation's own context, so asking IT whether the
-// run was cut short is the question that cannot be answered wrong.
-func (g *gateRedundancy) record(ctx context.Context, runErr error) {
-	if g == nil || ctx.Err() != nil || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
+// on the strength of it.
+//
+// cutShort is read by the CALLER, at the instant the run returns, rather than here. The
+// invocation's context is cancelled asynchronously by the signal handler, so reading it
+// one call deeper widens the window in which a run that genuinely finished is mistaken
+// for one that did not.
+//
+// The residual window is the run's own last instant, and it is deliberately resolved
+// toward NOT recording: a dropped verdict costs one re-run, while a recorded verdict for
+// a run that did not happen makes MGS3010 refuse every later gate on that commit.
+func (g *gateRedundancy) record(ctx context.Context, runErr error, cutShort bool) {
+	if g == nil || cutShort || errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded) {
 		return
 	}
 	outcome := sessions.OutcomePass

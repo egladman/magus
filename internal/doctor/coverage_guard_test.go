@@ -134,7 +134,7 @@ func TestCheckGuardBinary(t *testing.T) {
 }
 
 // TestResolveGuardBinaryForWiring is kept separate from checkGuardBinary on purpose, so
-// a change to one check's resolution order cannot silently retarget the other's canary.
+// a change to one check's resolution order cannot silently retarget the other's probe.
 func TestResolveGuardBinaryForWiring(t *testing.T) {
 	t.Run("prefers ./magus", func(t *testing.T) {
 		root := t.TempDir()

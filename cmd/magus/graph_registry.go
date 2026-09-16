@@ -2,17 +2,23 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
+	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/oci"
-	"github.com/egladman/magus/vcs"
+	"github.com/egladman/magus/types"
 )
 
 // The knowledge graph as something a team SHARES rather than each member rebuilds.
@@ -22,21 +28,31 @@ import (
 // and anyone who can clone the repository can already see its packages. Nothing new to
 // host, nothing new to authenticate against.
 //
-// The artifact is one blob with a media type of our own, not an image. A registry that
-// understands OCI 1.1 stores it happily; one that insists on images would reject it, and
-// that refusal is the honest answer rather than something to work around.
+// The artifact is a set of blobs with media types of our own, not an image. A registry
+// that understands OCI 1.1 stores it happily; one that insists on images would reject it,
+// and that refusal is the honest answer rather than something to work around.
+//
+// It carries the knowledge store SHARD BY SHARD rather than as one merged graph, because
+// the reader's problem is not "fetch the graph" but "fetch the half I am missing". Shards
+// are content-addressed by fingerprint, so a reader names the shards it lacks and the
+// registry answers with exactly those blobs.
 
 const (
 	// graphArtifactType is what the manifest says the artifact IS. A puller checks it
-	// before reading the layer, so a tag someone else's tooling wrote to fails loudly
+	// before reading any layer, so a tag someone else's tooling wrote to fails loudly
 	// instead of yielding bytes that merely parse as JSON.
 	graphArtifactType = "application/vnd.magus.knowledge-graph.v1+json"
-	// graphLayerMediaType is what the layer itself is. Deliberately uncompressed: the
-	// point of publishing is that anyone can read it, and a plain JSON layer is one
-	// unauthenticated GET away from usable without knowing how magus framed it.
-	graphLayerMediaType = "application/vnd.magus.knowledge-graph.v1+json"
-	// graphArtifactName is the repository suffix under the owner's namespace.
-	graphArtifactName = "knowledge-graph"
+	// graphStoreMediaType is the knowledge store's routing manifest: shard name to
+	// content fingerprint. A reader takes this first, because it is what turns a shard
+	// name into the layer title that carries it.
+	graphStoreMediaType = "application/vnd.magus.knowledge-store.v1+json"
+	// graphShardMediaType is one shard file. Deliberately uncompressed: the point of
+	// publishing is that anyone can read it, and a plain JSON layer is one unauthenticated
+	// GET away from usable without knowing how magus framed it.
+	graphShardMediaType = "application/vnd.magus.knowledge-shard.v1+json"
+	// graphStoreLayer titles the routing manifest's layer. Every other layer is titled
+	// with a shard's content fingerprint, so this name cannot collide with one.
+	graphStoreLayer = "manifest.json"
 	// graphFloatingTag is what a plain pull reads and every push moves.
 	graphFloatingTag = "latest"
 )
@@ -46,7 +62,7 @@ const (
 // and no pull is ever the thing that must succeed.
 const graphRegistryTimeout = 2 * time.Minute
 
-// graphDestinationUndeclared is what a push or pull says when nobody named a destination.
+// errNoGraphDestination is what a push or pull says when nobody named a destination.
 //
 // NOTHING here derives a registry from the origin remote. A published artifact is a
 // decision about where this workspace's knowledge goes, and deriving it would mean a
@@ -54,7 +70,7 @@ const graphRegistryTimeout = 2 * time.Minute
 // reading whatever happens to sit at a host nobody chose. The magusfile is where a
 // registry is declared, beside the ones the images already use, so adding one stays a
 // one-line change in one file.
-func graphDestinationUndeclared(verb string) error {
+func errNoGraphDestination(verb string) error {
 	return fmt.Errorf("graph %s: no destination. Pass --ref <registry>/<repository>:<tag>, "+
 		"or declare it in the magusfile beside the image registries and run the target that supplies it", verb)
 }
@@ -76,56 +92,12 @@ func readToken() (string, error) {
 	return tok, nil
 }
 
-// graphTags is the tag set one push writes: the SHORT COMMIT, the floating tag, and
-// whatever --tag named.
-//
-// The short commit is the same tag cd.yaml's per-commit image publishes (magusfile's
-// `commit()`, which is vcs\commit().short), so a graph and the image built from the same
-// merge into main are addressable by one string. A reader holding a commit can ask for
-// the graph of exactly that tree rather than whatever `latest` has since become.
-//
-// The floating tag is always written too, because a reader who passes no tag must get
-// something, and "the most recent push" is the only answer that stays true.
-func graphTags(commit, extra string) []string {
-	var tags []string
-	seen := map[string]bool{}
-	for _, t := range append([]string{commit, graphFloatingTag}, strings.Split(extra, ",")...) {
-		t = strings.TrimSpace(t)
-		if t == "" || t == "unknown" || seen[t] {
-			continue
-		}
-		seen[t] = true
-		tags = append(tags, t)
-	}
-	return tags
-}
-
-// headShortCommit is the revision this push describes, in the same spelling the image
-// tags use, or "" when the backend cannot say. Distinct from shortCommit, which truncates
-// an id it was handed rather than resolving one.
-func headShortCommit(ctx context.Context, root string) string {
-	ws, err := inspectWorkspace(ctx, root)
-	if err != nil {
-		return ""
-	}
-	res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions())
-	if err != nil || res.VCS == nil {
-		return ""
-	}
-	meta, err := res.VCS.Metadata(ctx, ws.Root())
-	if err != nil {
-		return ""
-	}
-	return meta.Short
-}
-
 func graphPush(ctx context.Context, root string, args []string) error {
-	var ref, tag, user string
+	var ref, user string
 	var refresh bool
 	_, err := cmdParse("graph push", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&ref, "ref", "", "the artifact to push to, as <registry>/<repository>:<tag> (required)")
 		fs.StringVar(&user, "username", "", "the registry username; the token is read from stdin")
-		fs.StringVar(&tag, "tag", "", "an extra tag to write beside latest, repeatable or comma-separated")
 		fs.BoolVar(&refresh, "refresh", false, "rebuild the graph before pushing instead of exporting what is cached")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph push [flags]")
@@ -133,8 +105,10 @@ func graphPush(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Publish this workspace's knowledge graph to a container registry as an OCI")
 			fmt.Fprintln(os.Stderr, "artifact, so collaborators can `magus graph pull` it instead of rebuilding.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "The destination is never derived: --ref names it, and the magusfile is")
-			fmt.Fprintln(os.Stderr, "where a workspace declares one, beside the registries its images use.")
+			fmt.Fprintln(os.Stderr, "The destination is never derived: --ref names it, tag included, and the")
+			fmt.Fprintln(os.Stderr, "magusfile is where a workspace declares one, beside the registries its")
+			fmt.Fprintln(os.Stderr, "images use. One invocation writes one tag; a caller that wants several")
+			fmt.Fprintln(os.Stderr, "calls this once per tag, where its own naming vocabulary lives.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The token is read from STDIN, the way `docker login --password-stdin` takes")
 			fmt.Fprintln(os.Stderr, "one, so it never lands in a process listing or a run log. Whatever resolves")
@@ -151,22 +125,26 @@ func graphPush(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return graphPushTo(ctx, root, ref, tag, user, refresh)
-}
 
-// graphPushTo is the push itself, shared with `graph build --push` so the two cannot
-// drift into publishing different bytes to different places.
-func graphPushTo(ctx context.Context, root, ref, tag, user string, refresh bool) error {
 	if ref == "" {
-		return graphDestinationUndeclared("push")
+		return errNoGraphDestination("push")
 	}
+	// The tag --ref carries is the tag written. Recomputing a tag set here would mean two
+	// implementations of tag policy, and the caller's would lose; the magusfile already
+	// has channel(), commit() and version(), the same vocabulary the image targets name
+	// their tags with, which is what lets a graph and the image from one merge share a
+	// string.
 	dest, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
 		return err
 	}
-	raw, nodes, edges, err := graphExportBytes(ctx, root, refresh)
+	layers, err := graphLayers(ctx, root, refresh)
 	if err != nil {
 		return err
+	}
+	var size int
+	for _, l := range layers {
+		size += len(l.Payload)
 	}
 
 	pass, err := readToken()
@@ -179,18 +157,91 @@ func graphPushTo(ctx context.Context, root, ref, tag, user string, refresh bool)
 		Password: pass,
 	}
 
-	commit := headShortCommit(ctx, root)
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
-	for _, t := range graphTags(commit, tag) {
-		at := dest
-		at.Tag = t
-		if err := client.Push(ctx, at, raw, graphArtifactType, graphLayerMediaType); err != nil {
-			return fmt.Errorf("graph push: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "pushed %s (%d nodes, %d edges, %d bytes)\n", at, nodes, edges, len(raw))
+	if err := client.Push(ctx, dest, graphArtifactType, layers...); err != nil {
+		return fmt.Errorf("graph push: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "pushed %s (%d shards, %d bytes)\n", dest, len(layers)-1, size)
 	return nil
+}
+
+// graphLayers is the published artifact's content: the knowledge store's routing manifest,
+// then one layer per shard titled with the content fingerprint the store addresses it by.
+//
+// One layer per shard is what makes the fetch incremental. A reader takes the routing
+// manifest, subtracts the shards it already holds, and asks for the rest by fingerprint;
+// nothing here is merged, so a fresh worktree never pays for the whole graph to get the
+// half it lacks.
+//
+// The build runs first, WITH symbols, so the store on disk is current before it is read.
+// The SCIP shards are the expensive half and are never committed, which is the whole
+// reason to publish; gen/knowledge-graph.json already carries the domain graph, so
+// republishing that alone would add nothing.
+func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, error) {
+	if _, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */); err != nil {
+		return nil, err
+	}
+	// Off the workspace's own root, not the caller's --root argument, which may be empty
+	// or name a directory inside the workspace; the store the build just wrote is the one
+	// that root resolves to.
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	cacheDir, err := magus.ResolveCacheDir(ws.Root(), magus.WithLoadedConfig(globalCfg))
+	if err != nil {
+		return nil, fmt.Errorf("graph push: %w", err)
+	}
+	export, err := knowledge.ReadStoreExport(cacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("graph push: %w", err)
+	}
+	layers := make([]oci.Layer, 0, len(export.Shards)+1)
+	layers = append(layers, oci.Layer{Name: graphStoreLayer, MediaType: graphStoreMediaType, Payload: export.Manifest})
+	for _, sh := range export.Shards {
+		layers = append(layers, oci.Layer{Name: sh.Key, MediaType: graphShardMediaType, Payload: sh.Bytes})
+	}
+	return layers, nil
+}
+
+// seedFromPublishedGraph points the workspace's knowledge store at the published artifact,
+// so the rebuild that follows fetches a missing shard instead of recomputing it. It fetches
+// nothing itself: the store asks, shard by shard and by fingerprint, for only what it lacks.
+//
+// It ANNOUNCES ITSELF BEFORE any request, naming the host the build is about to reach. This
+// is the only place magus talks to a network the user did not ask it to talk to: it fires
+// from a branch switch, through the VCS refresh hook, and an unexplained pause there is
+// indistinguishable from a hang. Saying so afterwards is too late to be the explanation,
+// and saying it at debug level says it to nobody.
+//
+// The OUTCOME is best-effort and quiet. No published graph, no network, a private package,
+// a tag nobody pushed: each means the graph is built locally, which is what would have
+// happened anyway. Only the attempt is loud, because only the attempt costs the user
+// something they did not ask for.
+//
+// Does nothing unless knowledge.published_ref names an artifact. Opt-in per repository,
+// because reading a graph decides what magus answers about this tree.
+func seedFromPublishedGraph(ws types.Inspector) {
+	ref := globalCfg.Knowledge.PublishedRef
+	if ref == "" {
+		return
+	}
+	src, err := graphReference(ref, graphFloatingTag)
+	if err != nil {
+		// A ref nobody can parse is a misconfiguration, not a quiet miss: the user asked
+		// for this pull by writing the key, so the key being wrong is worth their
+		// attention even though the build carries on without it.
+		interactive.Emit(os.Stderr, fmt.Sprintf("knowledge.published_ref %q does not parse, so no graph was pulled: %v", ref, err))
+		return
+	}
+
+	fmt.Fprintf(os.Stderr, "magus: fetching the published knowledge graph from %s (knowledge.published_ref; unset it to build locally)\n", src.Registry)
+	// The timeout rides on the HTTP client rather than a ctx bounded here, because the
+	// requests happen later, inside the build, and a deadline started now would expire
+	// against whatever else that build has to do first.
+	client := &oci.Client{HTTP: &http.Client{Timeout: graphRegistryTimeout}}
+	magus.UsePublishedShards(ws, magus.PublishedShards(client, src, graphArtifactType, slog.Default()))
 }
 
 func graphPull(ctx context.Context, root string, args []string) error {
@@ -216,7 +267,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	}
 
 	if ref == "" {
-		return graphDestinationUndeclared("pull")
+		return errNoGraphDestination("pull")
 	}
 	src, err := graphReference(ref, graphFloatingTag)
 	if err != nil {
@@ -229,7 +280,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	ctx, cancel := context.WithTimeout(ctx, graphRegistryTimeout)
 	defer cancel()
 
-	raw, err := client.Pull(ctx, src, graphArtifactType)
+	raw, err := pullMergedGraph(ctx, client, src, root)
 	if err != nil {
 		return fmt.Errorf("graph pull: %w", err)
 	}
@@ -254,28 +305,49 @@ func graphReference(ref, tag string) (oci.Reference, error) {
 	return oci.ParseReference(ref)
 }
 
-// graphExportBytes produces the node-link JSON a reader would have exported locally,
-// WITH the two things that make the published copy worth fetching.
+// pullMergedGraph fetches every shard the artifact names and merges them into the
+// node-link JSON `magus graph export -o json` emits.
 //
-// The symbol shards are included (loadKnowledgeGraph's last argument), which the plain
-// `graph export` leaves out because they can dwarf the domain graph. Here that size is
-// the point: the SCIP indexes are the expensive half to build, they are never committed,
-// and a collaborator who has to reindex to use the graph has been handed the cheap half.
+// The artifact stores shards, not a merged graph, so the merge happens on this side
+// rather than costing every publish a second copy of the same content. That makes
+// `graph pull` the expensive read by design: it wants the whole graph, where the store
+// wants the few shards it is missing.
 //
-// The git history rides along in the same output (types.KnowledgeVCS per file: commit
-// count, last commit, last author, last modified), so the published graph answers
-// ownership and churn questions without the puller holding the repository. Nothing here
-// passes the reproducible flag, which is what would strip it.
-func graphExportBytes(ctx context.Context, root string, refresh bool) (raw []byte, nodes, edges int, err error) {
-	g, err := loadKnowledgeGraph(ctx, root, refresh, false, true /* includeSymbols */)
+// The symbol shards come too. The SCIP indexes are the expensive half to build, they are
+// never committed, and a collaborator who has to reindex to use the graph has been handed
+// the cheap half. So does the git history each shard carries (types.KnowledgeVCS per file),
+// which is what lets the pulled graph answer ownership and churn without the repository.
+func pullMergedGraph(ctx context.Context, client *oci.Client, src oci.Reference, root string) ([]byte, error) {
+	art, err := client.Artifact(ctx, src, graphArtifactType)
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, err
+	}
+	raw, err := art.Layer(ctx, graphStoreLayer)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := knowledge.ShardKeys(raw)
+	if err != nil {
+		return nil, err
+	}
+	g := knowledge.NewGraph()
+	// Sorted by shard name, for the reason the store's own Load sorts: a merge is
+	// first-writer-wins, so the order decides which shard supplies a node's provenance,
+	// and an unsorted merge yields a different export run to run.
+	for _, name := range slices.Sorted(maps.Keys(keys)) {
+		b, err := art.Layer(ctx, keys[name])
+		if err != nil {
+			return nil, fmt.Errorf("shard %q: %w", name, err)
+		}
+		if err := knowledge.MergeShardFile(g, b); err != nil {
+			return nil, fmt.Errorf("shard %q: %w", name, err)
+		}
 	}
 	out := g.Output()
 	out.SourceBaseURL = deriveSourceBase(ctx, root)
-	raw, err = json.Marshal(out)
+	body, err := json.Marshal(out)
 	if err != nil {
-		return nil, 0, 0, fmt.Errorf("encode graph: %w", err)
+		return nil, fmt.Errorf("encode graph: %w", err)
 	}
-	return raw, out.NodeCount, out.EdgeCount, nil
+	return body, nil
 }

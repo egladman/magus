@@ -900,6 +900,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "session":
 		return sessionCmd(ctx, root, subArgs)
+	case "shell":
+		return shellCmd(ctx, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "job":

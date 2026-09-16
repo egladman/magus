@@ -11,7 +11,7 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 )
 
-// The command surface of `magus session hook`: the rules that judge a shell line,
+// The command surface of `magus shell`: the rules that judge a shell line,
 // minus the two large pieces that earned their own files. Tokenizing is in
 // internal/guard/parse.go and the git rules are in internal/guard/vcs.go.
 //
@@ -19,6 +19,17 @@ import (
 // hint translator the caller built), and is tested as one, so a rule that has to read
 // live workspace state lives beside its own reader instead (internal/guard/lease.go). The
 // path surface is internal/guard/write.go.
+//
+// HOW LONG A DENY MAY BE: three lines. The first is the replacement command; the rest
+// are facts the reader cannot discover by trying again. That is the whole budget.
+//
+// It is a budget because a refusal is read under interruption, by someone who wanted to
+// run something else, and length is what makes it skimmed instead of read. Everything
+// these messages used to carry and no longer do was true and still cost more than it
+// returned: why magus is better, what the guard also catches, which skill to load, what
+// is still allowed. A reader who needs the argument can find the rule; a reader who needs
+// the command needs it in the first line. An advisory (Context) may run longer, since
+// nothing was blocked and the reader chose to keep going.
 
 // ShellVerdict classifies one shell command line. Deny blocks the call with a
 // reason the model sees; Context lets it proceed and injects a reminder.
@@ -149,23 +160,69 @@ var textFilters = map[string]bool{
 // `magus query output <ref>` is the ONE exemption: it returns a raw captured
 // log with no schema for magus to project, so searching it is a real need. Every
 // other verb emits a structured record that -o shapes exactly.
-func magusPipedToFilter(command string, d Dialect) bool {
+// It returns the magus VERB and the FILTER rather than a bool, for the reason
+// firstRawToolDenied gives below: a reader told only that a pipe was denied has to work
+// out which half offended and what to do instead, and a correction becomes a hunt. The
+// verb lets the message name the command in front of them; the filter says what they were
+// actually trying to do, which is what decides the answer. `| head` wants less output and
+// `| grep` wants fewer rows, and those are different levers.
+func magusPipedToFilter(command string, d Dialect) (verb, filter string, ok bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return false
+		return "", "", false
 	}
-	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
-		pipe, ok := n.(*syntax.BinaryCmd)
-		if !ok || pipe.Op != syntax.Pipe {
+		if ok {
+			return false
+		}
+		pipe, isPipe := n.(*syntax.BinaryCmd)
+		if !isPipe || pipe.Op != syntax.Pipe {
 			return true
 		}
-		if trimmableMagus(lastOfPipeline(pipe.X, d)) && isTextFilter(firstOfPipeline(pipe.Y, d)) {
-			found = true
+		left := lastOfPipeline(pipe.X, d)
+		if !trimmableMagus(left) {
+			return true
 		}
-		return true
+		name, isFilter := firstTextFilter(firstOfPipeline(pipe.Y, d))
+		if !isFilter {
+			return true
+		}
+		verb, filter, ok = magusVerb(left), name, true
+		return false
 	})
-	return found
+	return verb, filter, ok
+}
+
+// firstTextFilter names the filter the output was piped into.
+func firstTextFilter(cmds []hint.Invocation) (string, bool) {
+	for _, c := range cmds {
+		if textFilters[c.Name] {
+			return c.Name, true
+		}
+	}
+	return "", false
+}
+
+// magusVerb is the subcommand path a magus invocation names, at most two words
+// ("agent install", "affected ci"), so a message can quote the command the reader ran
+// rather than the word "magus".
+func magusVerb(cmds []hint.Invocation) string {
+	for _, c := range cmds {
+		if !strings.HasSuffix(c.Name, "magus") {
+			continue
+		}
+		var words []string
+		for _, a := range c.Args {
+			if strings.HasPrefix(a, "-") {
+				break
+			}
+			if words = append(words, a); len(words) == 2 {
+				break
+			}
+		}
+		return strings.Join(words, " ")
+	}
+	return ""
 }
 
 // magusRedirected reports a magus command whose stdout or stderr is being sent
@@ -178,27 +235,49 @@ func magusPipedToFilter(command string, d Dialect) bool {
 // `magus query output <ref>` is exempt, as with the pipe rule. Note --tee is NOT
 // the escape hatch a reader might assume (it mirrors STRUCTURED output only),
 // so the message points at the persisted log instead.
-func magusRedirected(command string, d Dialect) bool {
+// It returns the magus VERB and the redirect DESTINATION for the reason the pipe rule
+// returns its filter: what the redirect was aiming at is what decides the answer.
+// `> /dev/null` wants silence, a named file wants the output kept, and magus has a
+// different lever for each.
+func magusRedirected(command string, d Dialect) (verb, dest string, ok bool) {
 	f, err := parseFile(command, d)
 	if err != nil {
-		return false
+		return "", "", false
 	}
-	found := false
 	syntax.Walk(f, func(n syntax.Node) bool {
-		stmt, ok := n.(*syntax.Stmt)
-		if !ok || len(stmt.Redirs) == 0 || !trimmableMagus(stmtCommands(stmt, d)) {
+		if ok {
+			return false
+		}
+		stmt, isStmt := n.(*syntax.Stmt)
+		if !isStmt || len(stmt.Redirs) == 0 || !trimmableMagus(stmtCommands(stmt, d)) {
 			return true
 		}
 		for _, r := range stmt.Redirs {
 			// Output redirects only. A HEREDOC or an input redirect feeds magus
 			// rather than hiding what it said, so neither is this rule's business.
-			if writesToFile(r.Op) {
-				found = true
+			if !writesToFile(r.Op) {
+				continue
 			}
+			verb, dest, ok = magusVerb(stmtCommands(stmt, d)), redirectTarget(r), true
+			return false
 		}
 		return true
 	})
-	return found
+	return verb, dest, ok
+}
+
+// redirectTarget names where the output was being sent, for the message to quote. The
+// word is the reader's own, so an unprintable or computed target degrades to the operator
+// rather than to a guess.
+func redirectTarget(r *syntax.Redirect) string {
+	if r.Word == nil {
+		return r.Op.String()
+	}
+	lit := r.Word.Lit()
+	if lit == "" {
+		return r.Op.String()
+	}
+	return r.Op.String() + lit
 }
 
 // capturePathRe matches the files that hold magus console output verbatim:
@@ -421,16 +500,36 @@ func resolvedCommand(c hint.Invocation) string {
 // It does not repeat that re-wrapping will not help: runGuardContext's tail
 // already says the guard reads the command being RUN, and this prefix is
 // prepended to it.
+//
+// Both spellings are ELIDED, because the reader wrote the command and is looking at
+// it: the prefix identifies which one was judged, it does not quote it back. A line
+// carrying a heredoc replayed the whole body here, which made the refusal longer than
+// the script that tripped it.
 func explainDeny(typed string, c hint.Invocation, reason string) string {
 	resolved := resolvedCommand(c)
 	var b strings.Builder
-	b.WriteString("magus guard denied `" + resolved + "`")
+	b.WriteString("magus guard denied `" + elideCommand(resolved) + "`")
 	if strings.TrimSpace(typed) != resolved {
-		b.WriteString(" (what `" + strings.TrimSpace(typed) + "` resolves to once wrappers and quoting are stripped)")
+		b.WriteString(" (what `" + elideCommand(strings.TrimSpace(typed)) + "` resolves to)")
 	}
 	b.WriteString(".\n\n")
 	b.WriteString(reason)
 	return b.String()
+}
+
+// maxEchoedCommand bounds a command quoted back to its author, in bytes.
+const maxEchoedCommand = 120
+
+// elideCommand shortens a command for quoting back, keeping the head (the verb and
+// its first arguments, which is what names it) and collapsing the rest to one line.
+func elideCommand(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = strings.TrimSpace(s[:i])
+	}
+	if len(s) <= maxEchoedCommand {
+		return s
+	}
+	return strings.TrimSpace(s[:maxEchoedCommand]) + " ..."
 }
 
 // rawToolDenied reports whether one resolved command has a registered spell-op
@@ -653,8 +752,7 @@ var (
 	// so the deny costs nothing, and an advisory loses to a trained reflex. As an
 	// advisory it changed behavior zero times over a long session and left the Go
 	// build cache poisoned by uninstrumented raw runs.
-	runGuardContext = "magus covers this exactly and adds cache, sandbox, and affected tracking, so the deny costs you nothing. A raw WRITE (codegen, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) also leaves the owning target reporting drift it did not cause, and that half has no exceptions.\n" +
-		"The guard reads the command being RUN, so a launcher, a `VAR=value` prefix, or `bash -c '...'` reaches the same verdict. Run the magus command directly. Load the magus-run skill if not already loaded."
+	runGuardContext = "A wrapper, a `VAR=value` prefix or `bash -c` reaches the same verdict."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it,
 	// but a generate target rewriting its declared outputs is the system working,
@@ -678,15 +776,17 @@ var (
 	// Magus takes the project as an argument; a host that needs a one-shot
 	// directory change has a working_directory / cwd field that does not rewrite
 	// the command line. A DIFFERENT workspace is `--root <path>`, not a cd.
-	denyCd = "Do not `cd`. Name the project (`" + hint.Run.With("<target>", "<project>") + "`, `" + hint.DescribeProject.With("<path>") + "`), use `" + hint.Where.With("<name>") + "` to resolve a name, or `--root <path>` for a different workspace.\n" +
-		"A host shell tool that needs a different directory for one call has a working_directory (or cwd) field: set that instead of rewriting the command with `cd`. Magus is CWD-relative, so a leading `cd` is how the right command lands on the wrong project; project paths are workspace-relative and written bare (`libs/foo`)."
+	denyCd = "Do not `cd`. The project is an argument, written bare: `" + hint.Run.With("<target>", "libs/foo") + "`. A different workspace is `--root <path>`; `" + hint.Where.With("<name>") + "` resolves a fuzzy name.\n" +
+		"Your shell tool has a working_directory (or cwd) field: set that. A `cd` prefix relocates every later command on the line."
 
 	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
 		"  CODE SYMBOL (defined / used where):  " + hint.Refs.With("<symbol>") + "\n" +
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  " + hint.Query.With("\"<terms>\"") + "  with kind=<k> project=<p> relation=<r> matchers, kind!=<k> to exclude, id=~<re> for a regex\n" +
 		"  ONE node's edges, provenance, blast radius:  " + hint.Explain.With("<node>") + "\n" +
 		"  HOW two things connect:  " + hint.Path.With("<a>", "<b>") + "\n" +
-		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. " + searchColdIndexRouting + " Searching raw text in CODE (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Markdown PROSE does now: `" + hint.Query.With("kind=docsection", "\"<terms>\"") + "` returns the section that covers it. Load the magus-query skill for the full grammar."
+		"  RAW TEXT (a string literal, a comment, a config value):  " + hint.Refs.With("--text", "<pattern>", "[<path>...]") + "  a literal substring search with grep's exit codes, scoped by the same trailing paths\n" +
+		"  MARKDOWN PROSE:  " + hint.Query.With("kind=docsection", "\"<terms>\"") + "  returns the section that covers it\n" +
+		"`" + hint.Query.With("<symbol>") + "` returns 0 for a code symbol, which is refs's job. " + searchColdIndexRouting + " Load the magus-query skill for the full grammar."
 
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
@@ -724,56 +824,35 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyReadAck = "A read receipt records that a PERSON read a change, so only a person can record one.\n" +
-		"This is not a permission you are missing - there is no spelling of it an agent may use, and an agent stamping the changeset would make the measure mean nothing for everybody, including the human relying on it.\n" +
-		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt, and `" + hint.Diff.With("-o", "json") + "` puts read_state on each file for a caller to branch on.\n" +
-		"If you were asked to mark the change reviewed, say that you cannot and hand back the unread list."
+	denyReadAck = "Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one).\n" +
+		"A read receipt records that a PERSON read a change, so only a person can record one. Say you cannot and hand back the unread list."
 
-	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `" + hint.MemoryPut.With("<name>") + "` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
-		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is denied however the write is spelled.\n" +
-		"`capture` and `promote` are that same write under other names. `capture` files a review transcript as a note; `promote` writes a memory record into the SHARED store, where the commit puts a person's name on prose they never read.\n" +
-		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
+	denyNotesAuthor = "Use `" + hint.MemoryPut.With("<name>") + "`: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
+		"Notes are human-authored by design, so every spelling of the write is denied: `capture` files a transcript as a note, `promote` writes into the SHARED store, and both put a person's name on prose they never read.\n" +
+		"If it genuinely belongs in the notes, say so and let the person run it."
 
-	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is denied for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
-		"  1. `" + hint.GraphBuild.String() + "` FIRST if `" + hint.Refs.String() + "` says a project is not-indexed: a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
-		"  2. `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise, verified sites, per file.\n" +
-		"  3. Edit those sites. Let the compiler enumerate what moved; do not widen the pattern until it goes quiet.\n" +
-		"A regex cannot tell YOUR symbol from a dependency's symbol of the same name: a `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which; a pattern never can.\n\n" +
-		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent: say so and use your editor tool."
+	denyScriptedRewrite = "Use your editor tool for a few sites. For a whole-tree rename: `" + hint.Refs.With("<symbol>", "--occurrences") + "` for verified sites, then edit those.\n" +
+		"Run `" + hint.GraphBuild.String() + "` first if refs reports not-indexed; that verdict means unknown, not absent.\n" +
+		"A regex cannot tell your `.Sum` from the OTel SDK's, and it writes before anyone reads a diff. Raw TEXT (prose, a config value) has no graph equivalent: use your editor tool."
 
-	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
-		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing. So it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
+	denySedInPlace = "Use your editor tool: it reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
+		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed is untouched."
 
-	denyBusyWait = "Do not poll for work you started; you are told when it finishes.\n" +
-		"A backgrounded command is tracked and announces its own completion, so start it and go do something else - or nothing. Read the result when the notification arrives.\n" +
-		"This loop has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive - a run that failed early never prints the line being grepped for. Several have had to be killed by hand.\n" +
-		"Waiting on something OUTSIDE this machine (a remote queue, a deploy nobody here started) is what your host's monitor surface is for."
+	denyBusyWait = "Do not poll for work you started; you are told when it finishes. Start it and do something else.\n" +
+		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
+		"Waiting on something outside this machine is what your host's monitor surface is for."
 
-	denyProcessPoll = "Do not inspect process tables to wait on magus work.\n" +
-		"A magus run holds a project lock and announces itself; `" + hint.Status.With("--watch=15s") + "` reads that same lock state continuously (holder PID, command, age, waiters).\n" +
-		"`pgrep`, `pidof`, and `ps` invent a second waiter that races the real one, has no bound of its own, and answers a question magus already answered in the lock message.\n" +
-		"If a run is waiting on another magus process, keep `" + hint.Status.With("--watch=15s") + "` attached until the lock releases; do not `pgrep` for it."
+	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age, waiters).\n" +
+		"`pgrep`, `pidof` and `ps` invent a second waiter that races the real one and answers what the lock message already said."
 
 	// LEADS with the replacement, like the pipe and redirect messages it extends,
 	// and spells out the block because the reader cannot lose what they can see.
-	denyCaptureFilter = "Read that file whole, or give the run an output contract to begin with:\n" +
-		"  -o jsonl --tee <file>        background the run this way and the capture IS a contract; `jq` over that file is fine\n" +
-		"  cat <file>, or your editor tool   the capture as written; under -s a failure is a bounded tail\n" +
-		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log, once the ref is in hand\n" +
-		"That file is the host's task capture, or a run log: magus console output one step removed, so filtering it loses exactly what the pipe rule exists to protect. A failure prints five lines together, and a filter keeps the one you matched:\n" +
-		"  [fail] <target>\n" +
-		"  cause: <what went wrong>\n" +
-		"  output: out<hex>\n" +
-		"  inspect: magus query output out<hex>\n" +
-		"  reproduce: <the command to run it again>\n" +
-		"`grep 'cause:'` keeps the symptom and drops the ref that reads the whole log, two lines below it. A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION, and the block sits wherever the run left it.\n" +
-		"Reading the whole file is not a filter, and stays allowed."
+	denyCaptureFilter = "Read that file whole (`cat`, or your editor tool), or give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
+		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
+		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION. Reading the whole file stays allowed."
 	denyCIWatch = "Ask for the board once, when you need the answer:\n" +
 		"  gh pr list --state open --json number,mergeable,statusCheckRollup\n" +
-		"One call answers every open pull request, mergeability included, and costs one turn.\n" +
-		"Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: the human merges, not you. Measured in one session: four watches, every one green, every one a turn spent re-reading a verdict that was already true.\n" +
-		"It is also the second half of a duplicate. A gate you already ran locally is the same command on the same tree; running it here and then waiting for CI to agree is paying twice for one answer.\n" +
-		"Iterating on a run that is already RED is the case worth following, and polling the board serves it too - once checks exist, and only while you are acting on what it says."
+		"Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: the human merges, not you. Poll that command instead while you are acting on a RED run."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -782,9 +861,8 @@ var (
 	// a commit about something else. Measured: one such call put 69 files (a whole
 	// regenerated docs site plus five untouched source files) into a commit about
 	// four collection methods.
-	denyStageAll = "Stage through the workspace instead: `" + hint.VCSAdd.String() + "` classifies every dirty path against the declared output globs, keeps a source change and the outputs it produced together, and REPORTS anything undeclared rather than sweeping it in. `" + hint.VCSAdd.With("--dry-run") + "` classifies and stages nothing.\n" +
-		"For a hand-picked subset, `git add -- <paths>` is still fine; confirm it with `git diff --cached --stat` before committing.\n" +
-		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. Load the magus-vcs-hygiene skill if not already loaded."
+	denyStageAll = "Stage through the workspace: `" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
+		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
 	// An ADVISORY, not a deny: two genuinely independent targets in one line is real work
 	// (`magus run build api ; magus run test docs`), and only the dependency graph knows
@@ -797,21 +875,79 @@ var (
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
 	// correction is the flag that returns that thing, not the prohibition.
-	outputPipeDeny = "Ask magus for the field instead of filtering its output:\n" +
-		"  -o name                      the ids/names, one per line\n" +
-		"  -o json                      the full record\n" +
-		"  -o template=<go-template>    one field, e.g. -o template='{{.Ref}}'\n" +
-		"A pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
-		outputGuardTail
-	outputRedirectDeny = "magus already wrote the log; you do not need to capture it:\n" +
-		"  " + hint.QueryOutput.With("<ref>") + "     the failing target's full captured log (this one may be redirected)\n" +
-		"  .magus/logs/<hash>.log       the path, printed by the failure itself\n" +
-		"  -o json --tee <file>         mirror structured output to a file (never console text)\n" +
-		"--silent prints the diagnostics and the log path on failure, and a redirect throws exactly that away.\n" +
-		outputGuardTail
+	// The exit-status fact is the half a reader cannot discover by trying again: the pipe
+	// SUCCEEDS, so a failing gate reads as exit 0 and nothing ever says so.
+	pipeExitNote      = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
 	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
 		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
-	outputGuardTail = "The one exception is `" + hint.QueryOutput.With("<ref>") + "`: a raw captured log has no schema to project."
+)
+
+// pipeDeny answers the question the filter was asking, about the command that was run.
+//
+// The menu this replaced listed -o name, -o json and -o template on every pipe, whatever
+// the reader piped or which command they piped it from. It was wrong as often as it was
+// right: `magus agent install | head` emits advisory lines with no record to project, so
+// every option offered was inapplicable, and a reader who tries one and gets nothing
+// learns the advice is noise. Three lines nobody reads are worse than one that lands.
+func pipeDeny(verb, filter string) string {
+	// The verb is quoted WITHOUT the binary name: a compiled-in verdict that spells
+	// `magus run lint` reads as an instruction, and lint/test/build/generate are this
+	// repository's target names rather than magus vocabulary, so in most workspaces that
+	// instruction names nothing. Quoting the reader's own verb identifies the command
+	// without minting a command line to copy.
+	lead := "`" + verb + " | " + filter + "`: magus answers this without the pipe.\n"
+	if verb == "" {
+		lead = "magus answers this without the pipe.\n"
+	}
+	switch filter {
+	case "head", "tail", "less", "more":
+		// Fewer LINES. -s is the only lever every command has, because it suppresses
+		// progress rather than projecting a record the command may not have.
+		return lead + "`-s` stays quiet until something fails, then prints the diagnostics and the log path.\n" + pipeExitNote
+	case "wc":
+		return lead + "`-o name` prints one id per line, which is what a count of them reads.\n" + pipeExitNote
+	case "jq":
+		return lead + "`-o json` IS the record, and `-o json --tee <file>` writes it where jq can read it.\n" + pipeExitNote
+	case "grep", "egrep", "fgrep", "rg", "ag":
+		return lead + "`-o name` for the ids alone, `-o json` for the whole record, `-o template='{{.field}}'` for one field; a bare `-o template` lists the fields this command has.\n" + pipeExitNote
+	default:
+		return lead + "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record; `-s` silences progress instead.\n" + pipeExitNote
+	}
+}
+
+// redirectDeny answers what the redirect was for, about the command that was run.
+//
+// There is no legitimate shape of this against magus, which is what makes one tailored
+// answer possible where the pipe rule needed several. Silencing and keeping are the only
+// two intents, magus has a lever for each, and both leave the full log on disk either way.
+func redirectDeny(verb, dest string) string {
+	lead := "`" + verb + " " + dest + "`: "
+	if verb == "" {
+		lead = "redirecting magus output: "
+	}
+	answer := "`-o json --tee <file>` keeps the STRUCTURED output, never console text, which is not a format anything should parse."
+	if strings.HasSuffix(dest, "/dev/null") {
+		answer = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
+	}
+	return lead + answer + mintedLogNote(verb)
+}
+
+// mintedLogNote names where the output already lives, and ONLY for a verb that mints one.
+//
+// A target run persists its whole log and prints a ref for it, so capturing the console is
+// redundant there and saying so is the point. Every other verb mints nothing: `magus ls`
+// has no ref and no run log, so offering `query output <ref>` would send the reader after
+// an id that does not exist. That is the same failure the flat menu made on the pipe rule,
+// and it is worth more care here because the suggestion LOOKS specific.
+func mintedLogNote(verb string) string {
+	head, _, _ := strings.Cut(verb, " ")
+	if head != "run" && head != "affected" && head != "x" {
+		return ""
+	}
+	return "\nThe run already wrote its full log: `" + hint.QueryOutput.With("<ref>") + "` reads it back, and a failure prints the .magus/logs/ path itself."
+}
+
+var (
 
 	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
 	// strict SUPERSET rather than a substitute, so there is nothing to block. That
@@ -1010,12 +1146,21 @@ func searchAdvisoryLead(cmds []hint.Invocation, hints *hint.Translator) string {
 	})
 	var fallback []hint.Suggestion
 	for _, c := range cmds {
-		suggestions := hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
-		if len(suggestions) == 0 && hasFileFind && hint.IsSearchTool(c.Name) {
-			// A find on the same line is feeding the grep its files, so the
-			// grep is repo-wide even though its own argv is not: ask again as
-			// recursive rather than losing the content question to the find.
+		var suggestions []hint.Suggestion
+		if hasFileFind && hint.IsSearchTool(c.Name) {
+			// A find on the same line is feeding the grep its files, so the grep is
+			// repo-wide even though its own argv is not: ask as recursive FIRST rather
+			// than losing the content question to the find.
+			//
+			// Asked first, not as a fallback when the plain ask abstains. The plain ask
+			// stopped abstaining when refs --text landed, and a non-recursive grep
+			// translates to a literal search over the files it was handed, which is a
+			// narrower answer than the repo-wide symbol question the pipeline is really
+			// asking. Kept as a fallback it would have won every time.
 			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: append([]string{"-r"}, c.Args...)})
+		}
+		if len(suggestions) == 0 {
+			suggestions = hints.Suggest(hint.Invocation{Name: c.Name, Args: c.Args})
 		}
 		if len(suggestions) == 0 {
 			continue
@@ -1113,7 +1258,7 @@ func evaluateWith(deps Dependencies, command string, hints *hint.Translator) She
 	// text was correct and complete about the redirect every time. What it never said was
 	// how much else went with it.
 	if cmds, parsed := ParseCommandsDialect(command, d); v.Deny != "" && parsed && len(cmds) > 1 {
-		v.Deny += fmt.Sprintf("\n\nNOTHING on this line ran, including the other %d command(s) in it. Re-issue those separately.", len(cmds)-1)
+		v.Deny += fmt.Sprintf("\nNOTHING on this line ran: re-issue the other %d command(s) separately.", len(cmds)-1)
 	}
 	return v
 }
@@ -1196,6 +1341,8 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 	}
 
 	rawToolCmd, rawToolDeny := firstRawToolDenied(deps, command)
+	pipedVerb, pipedFilter, pipedToFilter := magusPipedToFilter(command, d)
+	redirVerb, redirDest, redirected := magusRedirected(command, d)
 	switch {
 	// Throwaway before the general cd deny: the same line matches both, and the
 	// throwaway reason is the one that says why THAT relocation is wrong.
@@ -1221,10 +1368,10 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 			Deny: explainDeny(command, rawToolCmd, reason),
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
-	case magusPipedToFilter(command, d):
-		return ShellVerdict{Deny: outputPipeDeny, Rule: denyRule{Name: denyRuleOutputPipe}}
-	case magusRedirected(command, d):
-		return ShellVerdict{Deny: outputRedirectDeny, Rule: denyRule{Name: denyRuleOutputRedirect}}
+	case pipedToFilter:
+		return ShellVerdict{Deny: pipeDeny(pipedVerb, pipedFilter), Rule: denyRule{Name: denyRuleOutputPipe}}
+	case redirected:
+		return ShellVerdict{Deny: redirectDeny(redirVerb, redirDest), Rule: denyRule{Name: denyRuleOutputRedirect}}
 	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
 		return ShellVerdict{Context: updateGuardContext}
 	case ruleFires(cmds, parsed, command, docSearchFires, docSearchRe):
@@ -1244,7 +1391,24 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 		// cannot reach. Anything the index cannot vouch for stays an advisory, because a
 		// deny that routes nowhere takes a capability away. Raw text is the standing case
 		// there: a string literal or a comment body is not a symbol, so no index holds it.
-		if defined, definitive := deps.symbolDefined(ident); defined && definitive {
+		defined, definitive := deps.symbolDefined(ident)
+		// The index could not vouch for ident, which is the ONLY reason this is advice
+		// rather than the refusal below. The long form already says so (searchColdIndexRouting),
+		// but the brief is what a reader sees on every call, and "refs finds every use" reads
+		// as a preference they may decline. Naming the staleness and the one command that
+		// clears it turns a silent degradation into something actionable.
+		//
+		// It matters most on a branch that is ADDING symbols: the index lags exactly there,
+		// so the rule is quietest on the code most likely to need it.
+		if !definitive {
+			return ShellVerdict{
+				Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
+				Kind:    advisoryPrecedent,
+				Brief: "magus workspace: the symbol index cannot vouch for " + ident + " yet, so this is advice and not a refusal. `" +
+					hint.GraphBuild.String() + "` refreshes it, then `" + hint.Refs.With(ident, "--occurrences") + "` answers exactly.",
+			}
+		}
+		if defined {
 			return ShellVerdict{
 				Deny: "`" + hint.Refs.With(ident, "--occurrences") + "` answers this exactly, and is checked against the tree rather than matched against it.\n" +
 					ident + " is an indexed symbol here, so the graph knows every definition and reference including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
@@ -1285,18 +1449,19 @@ func evaluateRules(deps Dependencies, command string, hints *hint.Translator, d 
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
 func runGuardContextFor(match toolMatch) string {
-	return fmt.Sprintf("Run it through magus instead: `"+hint.Run.With("<target>", "<project>")+"`. `"+hint.DescribeTargets.String()+"` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
-		charmClause(match)+
-		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n\n%s", match.spell, match.operation, runGuardContext)
+	return fmt.Sprintf("Run it through magus: `"+hint.Run.With("<target>"+charmSuffix(match), "<project>")+"`; `"+hint.DescribeTargets.With("-o", "name")+"` lists this workspace's targets.\n"+
+		"Tool flags go after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n%s",
+		match.spell, match.operation, runGuardContext)
 }
 
-// charmClause names the charm the caller's form needs, because the same target
-// answers both and routing to the wrong one sends a rewrite at a target that would refuse
-// to do it. The charm is named rather than the target: a workspace calls its targets
-// whatever it likes, and `rw` is magus's own vocabulary.
-func charmClause(match toolMatch) string {
+// charmSuffix spells the rewrite charm into the suggested target, because the same target
+// answers both forms and routing a rewrite at the checking one sends it at a target that
+// would refuse to do it. The charm is named rather than the target: a workspace calls its
+// targets whatever it likes, and `rw` is magus's own vocabulary. A check needs no suffix,
+// which is why only the rewrite arm spends a word on it.
+func charmSuffix(match toolMatch) string {
 	if match.rewrites {
-		return "That form REWRITES, so the target has to run with the `rw` charm; a workspace that sets default_charms already has it, and `--no-default-charms` is what takes it away.\n"
+		return ":rw"
 	}
-	return "That form only CHECKS, so run the target without the `rw` charm; where this workspace sets default_charms, `--no-default-charms` is what keeps it a check.\n"
+	return ""
 }

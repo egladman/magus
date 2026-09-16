@@ -8,7 +8,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/project"
@@ -73,7 +73,7 @@ func registerAllBuzz(ctx context.Context, sess *buzz.Session, targets map[string
 	// Built-in spells follow the same import idiom as std modules: each spell is
 	// reachable as `import "magus/spell/<name>"`, binding the spell handle under
 	// its basename.
-	builtins := spellruntime.Builtins()
+	builtins := spell.Builtins()
 	for name := range builtins {
 		sess.SetNativeModule(spells.ModulePath(name), buzzSpellObject(name))
 	}

@@ -32,7 +32,7 @@ func eventToProto(e journal.Event) *viewerv1.Event {
 		Level:    e.Level,
 		Status:   statusToProto(e.Status),
 		Ref:      e.Ref,
-		Duration: durFromMs(e.DurMs),
+		Duration: durFromMs(e.DurationMs),
 		Text:     e.Text,
 	}
 	if e.Command != nil {

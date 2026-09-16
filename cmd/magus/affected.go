@@ -375,7 +375,10 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
-	gate.record(invCtx, err)
+	// Read the instant the run returns: after this line a cancellation means the signal
+	// arrived once the verdict was already decided, and dropping it would throw away a
+	// gate that genuinely ran.
+	gate.record(invCtx, err, invCtx.Err() != nil)
 	if af.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
 		return fmt.Errorf("affected %s: timed out after %s", target, af.Timeout)
 	}

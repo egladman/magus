@@ -240,7 +240,7 @@ Read the facts: `overlaps` lists each declaration covering more than one
 proposed path - a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
-Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
+Affinity stays with `{{tool "insight"}} lens=affinity`, and `magus refs <symbol>`
 when two jobs may touch the same API{{if .Full}}; `magus path <a> <b>` settles
 a suspicious pair{{end}}. A read-only job has no write set, so it is outside
 this analysis entirely.
@@ -264,13 +264,13 @@ warning. When evidence is incomplete, reduce parallelism.
 Before spawning, fork one job per unit - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
 tree is not clean) - and keep descendants in the same store. Fork each one with
-the `magus_job` tool from the orchestrating agent, or `magus job fork` from a
+the `{{tool "job"}}` tool from the orchestrating agent, or `magus job fork` from a
 person at a terminal{{if .Full}} - the same store and the same
 authorization rule either way, so a job forked by hand and one an agent forked are
 indistinguishable to everything that reads them{{end}}:
 {{if .Full}}
 The same checkpoint is what a later incremental re-review diffs from (see the
-magus-change-summary skill) - review time and pickup time read the same object.
+{{skill "change-summary"}} skill) - review time and pickup time read the same object.
 {{end}}
 
 | Job | Parent | Checkpoint | Goal and acceptance criteria | Write paths | Deny paths | Read paths | Depends on | Model | Check | State |
@@ -351,7 +351,7 @@ there is; nothing in the environment turns the rule off.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-job's `write_paths` with another `magus_job` write, or message the orchestrator
+job's `write_paths` with another `{{tool "job"}}` write, or message the orchestrator
 if the host supports it - and then carries on validating{{if .Full}}. A waiting job
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on

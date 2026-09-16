@@ -127,17 +127,17 @@ func newInvocation(inv journal.Invocation) Invocation {
 // caller-facing projection of [journal.Event]. See [Magus.InvocationEventsByID]. Field
 // tags match journal.Event's exactly for JSON wire compat.
 type Event struct {
-	Ts      int64  `json:"ts"`                // unix milliseconds
-	Inv     string `json:"inv,omitempty"`     // invocation id (one per run command)
-	Project string `json:"project,omitempty"` // repo-relative project path
-	Target  string `json:"target,omitempty"`  // target name (with charms, as the CLI spells it)
-	Kind    string `json:"kind"`              // one of the journal.Kind* constants
-	Stream  string `json:"stream,omitempty"`  // stdout|stderr, for output events
-	Level   string `json:"level,omitempty"`   // info|warn|error, for magus events
-	Status  string `json:"status,omitempty"`  // pass|fail|cached, for result events
-	Ref     string `json:"ref,omitempty"`     // target-output ref, for result events
-	DurMs   int64  `json:"dur_ms,omitempty"`  // duration in ms, for result events
-	Text    string `json:"text,omitempty"`    // output line or message
+	Ts         int64  `json:"ts"`                    // unix milliseconds
+	Inv        string `json:"inv,omitempty"`         // invocation id (one per run command)
+	Project    string `json:"project,omitempty"`     // repo-relative project path
+	Target     string `json:"target,omitempty"`      // target name (with charms, as the CLI spells it)
+	Kind       string `json:"kind"`                  // one of the journal.Kind* constants
+	Stream     string `json:"stream,omitempty"`      // stdout|stderr, for output events
+	Level      string `json:"level,omitempty"`       // info|warn|error, for magus events
+	Status     string `json:"status,omitempty"`      // pass|fail|cached, for result events
+	Ref        string `json:"ref,omitempty"`         // target-output ref, for result events
+	DurationMs int64  `json:"duration_ms,omitempty"` // wall-clock duration, for result events
+	Text       string `json:"text,omitempty"`        // output line or message
 
 	// Set only on the started event (Kind==journal.KindStarted): the run's identity.
 	Command      *Command `json:"command,omitempty"`
@@ -147,7 +147,7 @@ type Event struct {
 func newEvent(e journal.Event) Event {
 	ev := Event{
 		Ts: e.Ts, Inv: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
-		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref, DurMs: e.DurMs,
+		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref, DurationMs: e.DurationMs,
 		Text: e.Text, MagusVersion: e.MagusVersion,
 	}
 	if e.Command != nil {

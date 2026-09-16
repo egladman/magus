@@ -128,6 +128,6 @@ func isDue(base string, j scheduledJob, now time.Time) bool {
 	if !ok {
 		return true // never run in the retained trail
 	}
-	last := time.UnixMilli(ev.Ts + ev.DurMs)
+	last := time.UnixMilli(ev.Ts + ev.DurationMs)
 	return now.Sub(last) >= j.interval
 }

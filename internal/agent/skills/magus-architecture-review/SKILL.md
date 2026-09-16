@@ -12,13 +12,13 @@ Run these and read them together:
 
 ```sh
 magus graph stats            # god nodes (structural risk), orphans, doc coverage
-magus_insight lens=hotspots  # churn x complexity per project, with blast radius
-magus_insight lens=affinity  # projects that change together: hidden coupling
-magus_insight lens=ownership # author concentration, bus factor, abandonment
+{{tool "insight"}} lens=hotspots  # churn x complexity per project, with blast radius
+{{tool "insight"}} lens=affinity  # projects that change together: hidden coupling
+{{tool "insight"}} lens=ownership # author concentration, bus factor, abandonment
 magus graph deps -o tree     # the declared project DAG
 ```
 
-MCP: `magus_stats`, `magus_insight` {lens}, and `magus_query` cover the same
+MCP: `{{tool "stats"}}`, `{{tool "insight"}}` {lens}, and `{{tool "query"}}` cover the same
 ground.{{if .Full}} Affinity deserves special weight: two projects that keep changing
 together WITHOUT a declared dependency edge are coupled through the back door -
 either declare the dependency or move the shared concern.{{else}} Weight affinity most: changing
@@ -88,7 +88,7 @@ that shows it.
 
 {{if .Full}}The graph is also a lens on its OWN abstractions - use it to scrutinize kinds,
 names, and boundaries, not just code layout. Census the kinds, then read the
-stats for smells (see the magus-query skill for the query syntax):{{else}}Census the kinds, then read the stats for smells:{{end}}
+stats for smells (see the {{skill "query"}} skill for the query syntax):{{else}}Census the kinds, then read the stats for smells:{{end}}
 
 ```sh
 magus graph stats                    # god nodes, orphans, doc coverage

@@ -7,14 +7,17 @@
 // LogRecord (message->Body, attrs->Attributes, our kind->EventName).
 //
 // The typed [Event] is the schema: it is what the JSONL store persists and what
-// internal/handler maps onto the magus.viewer.v1alpha1 wire contract. This package is a leaf
-// (stdlib-only), compiled into the default binary: every run captures.
+// internal/handler maps onto the magus.viewer.v1alpha1 wire contract. This package is a leaf,
+// compiled into the default binary: every run captures. Its only magus dependency is
+// internal/json, the workspace's single codec, which reaches nothing itself.
 package journal
 
 import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // Kind classifies an [Event]. Following OpenTelemetry's EventName idea, it names the class
@@ -57,17 +60,28 @@ const (
 // to a single compact JSON object (one JSONL line); empty fields are omitted so output
 // lines stay small.
 type Event struct {
-	Ts      int64  `json:"ts"`                // unix milliseconds
-	Inv     string `json:"inv,omitempty"`     // invocation id (one per run command)
-	Project string `json:"project,omitempty"` // repo-relative project path
-	Target  string `json:"target,omitempty"`  // target name (with charms, as the CLI spells it)
-	Kind    string `json:"kind"`              // one of the Kind* constants
-	Stream  string `json:"stream,omitempty"`  // stdout|stderr, for output events
-	Level   string `json:"level,omitempty"`   // info|warn|error, for magus events
-	Status  string `json:"status,omitempty"`  // pass|fail|cached, for result events
-	Ref     string `json:"ref,omitempty"`     // target-output ref, for result events
-	DurMs   int64  `json:"dur_ms,omitempty"`  // duration in ms, for result events
-	Text    string `json:"text,omitempty"`    // output line or message
+	Ts         int64  `json:"ts"`                    // unix milliseconds
+	Inv        string `json:"inv,omitempty"`         // invocation id (one per run command)
+	Project    string `json:"project,omitempty"`     // repo-relative project path
+	Target     string `json:"target,omitempty"`      // target name (with charms, as the CLI spells it)
+	Kind       string `json:"kind"`                  // one of the Kind* constants
+	Stream     string `json:"stream,omitempty"`      // stdout|stderr, for output events
+	Level      string `json:"level,omitempty"`       // info|warn|error, for magus events
+	Status     string `json:"status,omitempty"`      // pass|fail|cached, for result events
+	Ref        string `json:"ref,omitempty"`         // target-output ref, for result events
+	DurationMs int64  `json:"duration_ms,omitempty"` // wall-clock duration, for result events
+	// CacheKey is the digest of everything the step's cache key was computed from, on
+	// result events only. It is what makes "this target never replays" answerable:
+	// repeated runs under DIFFERENT keys are the cache working, because the inputs moved,
+	// and only a key that repeats without ever being replayed is evidence of a footprint
+	// keyed on more than the target reads. Without it a reader counts runs and cannot
+	// tell those apart.
+	//
+	// A HASH, never a counter. Two values are equal or not; neither is "newer", and
+	// nothing may order them. Omitted on journals written before this field existed, and
+	// the yield check degrades rather than guessing when it is absent.
+	CacheKey string `json:"cache_key,omitempty"`
+	Text     string `json:"text,omitempty"` // output line or message
 
 	// Set ONLY on the started event (Kind==KindStarted): the run's identity, carried in the
 	// stream itself so both the durable file and any live watcher learn which command
@@ -81,6 +95,35 @@ type Event struct {
 	// consumers that need it (a live viewer, the daemon's run registry) are already
 	// reading these frames.
 	Undeclared []UndeclaredSeed `json:"undeclared,omitempty"`
+}
+
+// UnmarshalJSON decodes an event, reading a duration written under either spelling.
+//
+// compat(until: no journal under <cacheDir>/runs still carries "dur_ms"): the duration was
+// spelled `dur_ms` before [Event.DurationMs] was. Journals are append-only and rotate, so
+// observing that dropping this is safe means finding none left:
+//
+//	grep -l '"dur_ms"' <cacheDir>/runs/*.jsonl
+//
+// Dropping it early is silent rather than loud: those durations read as zero, so a run row in
+// the console and the viewer reports a minute of work as instant, and the cache-yield check
+// (MGS1009) stops reporting targets it should have caught instead of failing.
+func (e *Event) UnmarshalJSON(b []byte) error {
+	type event Event // no method set, so this does not recurse
+	var decoded event
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		return err
+	}
+	*e = Event(decoded)
+	if e.DurationMs == 0 {
+		var legacy struct {
+			DurMs int64 `json:"dur_ms"`
+		}
+		if json.Unmarshal(b, &legacy) == nil {
+			e.DurationMs = legacy.DurMs
+		}
+	}
+	return nil
 }
 
 // UndeclaredSeed is one project the affected set selected on changed files that no

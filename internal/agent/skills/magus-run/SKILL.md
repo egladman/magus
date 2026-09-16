@@ -13,7 +13,7 @@ stale and `magus affected` can no longer vouch for your change{{end}}.
 your current directory, or the whole workspace from the root. Do not assume the root.
 Scope explicitly so a command means the same anywhere: name the project (`magus run
 test web`), or let `magus affected` compute the set from the diff. `magus where <name>`
-resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the CWD.{{else}}magus is CWD-relative; never assume the root. Scope explicitly: name the
+resolves a name to its path; over MCP, `{{tool "where"}}`/`{{tool "describe"}}` ignore the CWD.{{else}}magus is CWD-relative; never assume the root. Scope explicitly: name the
 project (`magus run test web`), or let `magus affected` compute it from the diff.
 `magus where <name>` resolves a name. MCP tools ignore the CWD.{{end}}
 
@@ -41,9 +41,9 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    If it is unavailable, continue with the CLI fallback below. Hosts manage
    their own MCP connection; do not manually start a server for an agent.{{if .Full}}
    Do not make the connection a prerequisite for completing the work.{{end}}
-   - `magus_run_target` {target, projects} - run named projects{{if .Full}} (or the cwd
+   - `{{tool "run_target"}}` {target, projects} - run named projects{{if .Full}} (or the cwd
      project). Use when you know which projects to run{{end}}.
-   - `magus_run_affected` {target, base} - run ONLY the projects a VCS change
+   - `{{tool "run_affected"}}` {target, base} - run ONLY the projects a VCS change
      touched{{if .Full}}; magus computes the set. Use for a pre-commit/CI gate{{end}}.
 
    If the MCP tool errors or no daemon is connected, run the CLI equivalent
@@ -70,7 +70,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
    rerunning one failing target is cheaper than the pipeline while you fix it,
    and `ci` afterwards proves the change. `magus describe targets` lists every
    target (`-o name` for bare names){{if .Full}} and classifies each as canonical, spell,
-   or custom; `magus_describe` (kind=targets) is the MCP equivalent{{end}}. Ask the
+   or custom; `{{tool "describe"}}` (kind=targets) is the MCP equivalent{{end}}. Ask the
    workspace rather than reading `MAGUS.md`{{if .Full}}: that file is a generated index
    for humans, true only as of its last regeneration{{end}}.
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
@@ -94,8 +94,8 @@ magus run test web                # iterate on the one failing target ci named
 magus affected test               # only projects affected by the VCS diff
 ```
 
-{{if .Full}}MCP equivalents: `magus_run_target` {target, projects, dry_run} and
-`magus_run_affected` {target, base, dry_run}. Use `magus_where` to resolve a
+{{if .Full}}MCP equivalents: `{{tool "run_target"}}` {target, projects, dry_run} and
+`{{tool "run_affected"}}` {target, base, dry_run}. Use `{{tool "where"}}` to resolve a
 fuzzy project name first.
 
 {{end}}WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
@@ -209,7 +209,7 @@ composition, so the full composition is what has to pass{{end}}.
 
 Each target's result line mints an output reference id (`out1a2b3c`).
 
-1. Fetch the exact captured output: `magus_output` {ref} over MCP, or
+1. Fetch the exact captured output: `{{tool "output"}}` {ref} over MCP, or
    `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
 2. With no ref in hand, the ref is in the run that minted it: every `magus run`

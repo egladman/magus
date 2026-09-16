@@ -210,6 +210,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		}
 		cfg.Knowledge.Workspaces = out
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_PUBLISHED_REF"); v != "" {
+		cfg.Knowledge.PublishedRef = v
+	}
 	if v := getenv("MAGUS_KNOWLEDGE_MAX_SIZE_MB"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Knowledge.MaxSizeMB = n

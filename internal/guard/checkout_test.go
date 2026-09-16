@@ -144,14 +144,14 @@ func TestDenySiblingCheckoutAllowsASubmodule(t *testing.T) {
 
 // A path inside a QUOTED ARGUMENT is not a cd, and the line that found this was a
 // test harness for the rule itself: `printf '%s' "cd <sibling> && ls" | ./magus
-// session hook` mentions magus and contains the text of a cd, and the regex this
+// shell` mentions magus and contains the text of a cd, and the regex this
 // rule inherited read that as relocating into the sibling. Anything that names a
 // checkout while running magus (a note, a message, a --root) hits the same trap.
 func TestDenySiblingCheckoutIgnoresAPathInsideAQuotedArgument(t *testing.T) {
 	main, wt := twoCheckouts(t)
 	t.Chdir(main)
 
-	assert.Empty(t, testSiblingCheckoutDeny(`printf '%s' "cd `+wt+` && ls" | ./magus session hook`))
+	assert.Empty(t, testSiblingCheckoutDeny(`printf '%s' "cd `+wt+` && ls" | ./magus shell`))
 	assert.Empty(t, testSiblingCheckoutDeny(`./magus notes add "compare against `+wt+`"`))
 }
 
@@ -180,14 +180,15 @@ func TestRankSiblingCheckoutOutranksACdDeny(t *testing.T) {
 // An existing DENY stands when it is not the general cd rule. Replacing it would
 // swap a block the caller already has for a different one, and one is enough.
 func TestRankSiblingCheckoutYieldsToAnExistingDeny(t *testing.T) {
-	got := rankSiblingCheckout(ShellVerdict{Deny: outputPipeDeny}, "aimed at another checkout")
+	pipe := pipeDeny("ls", "grep")
+	got := rankSiblingCheckout(ShellVerdict{Deny: pipe}, "aimed at another checkout")
 
-	assert.Equal(t, outputPipeDeny, got.Deny)
+	assert.Equal(t, pipe, got.Deny)
 }
 
 // The common case: nothing to add, and the pure verdict passes through untouched.
 func TestRankSiblingCheckoutIsInertWithoutAReason(t *testing.T) {
-	for _, v := range []ShellVerdict{{}, {Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}, {Deny: outputPipeDeny}} {
+	for _, v := range []ShellVerdict{{}, {Deny: denyCd, Rule: denyRule{Name: denyRuleCd}}, {Deny: pipeDeny("ls", "grep")}} {
 		assert.Equal(t, v, rankSiblingCheckout(v, ""))
 	}
 }

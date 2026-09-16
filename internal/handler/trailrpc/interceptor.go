@@ -117,12 +117,12 @@ func Interceptor(trailDir, actor string, kind trail.Kind, opts ...Option) connec
 			method := methodName(req.Spec().Procedure)
 			if mutating, _ := classify(method); mutating || cfg.auditReads {
 				ev := trail.Event{
-					Ts:      start.UnixMilli(),
-					Kind:    kind,
-					Actor:   actor,
-					Action:  method,
-					Outcome: trail.OutcomeOK,
-					DurMs:   time.Since(start).Milliseconds(),
+					Ts:         start.UnixMilli(),
+					Kind:       kind,
+					Actor:      actor,
+					Action:     method,
+					Outcome:    trail.OutcomeOK,
+					DurationMs: time.Since(start).Milliseconds(),
 				}
 				if err != nil {
 					ev.Outcome = trail.OutcomeError

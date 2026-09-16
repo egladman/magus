@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
@@ -35,8 +36,6 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 	switch args[0] {
 	case "install":
 		return agentInstallCmd(ctx, args[1:])
-	case "improve":
-		return agentImproveCmd(ctx, root, args[1:])
 	case "harness":
 		return agentHarnessCmd(ctx, root, args[1:])
 	case "starter":
@@ -47,12 +46,12 @@ func agentCmd(ctx context.Context, root string, args []string) error {
 		agentUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus agent: unknown subcommand %q (want install, harness, improve, starter, or adoption)", args[0])
+		return usagef("magus agent: unknown subcommand %q (want install, harness, starter, or adoption)", args[0])
 	}
 }
 
 func agentUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus agent <install|harness|improve|starter|adoption> [flags]")
+	fmt.Fprintln(w, "Usage: magus agent <install|harness|starter|adoption> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	tty.ProseItem(w, tty.SystemProbe, "  install            ",
@@ -60,8 +59,6 @@ func agentUsage(w io.Writer) {
 		"(<skills-dir>, ...)")
 	tty.ProseItem(w, tty.SystemProbe, "  harness            ",
 		"apply or verify a user-owned harness descriptor in this workspace")
-	tty.ProseItem(w, tty.SystemProbe, "  improve            ",
-		"review recurring guard feedback; --apply updates a named workspace-local harness")
 	tty.ProseItem(w, tty.SystemProbe, "  starter            ",
 		"print a starter AGENTS.md to stdout to own and tweak; never writes a file")
 	tty.ProseItem(w, tty.SystemProbe, "  adoption           ",
@@ -162,7 +159,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 	}
 
-	var written []string
+	var written, changed []string
 	var removed, stale []string
 	for _, dest := range dests {
 		base, leaf := installTarget(af.Dir, dest, af.Global)
@@ -185,11 +182,12 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 			}
 			continue
 		}
-		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, form)
+		w, ch, err := agentSkills.WriteSkillTree(base, leaf, af.Force, form)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
+		changed = append(changed, ch...)
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
 		if af.Prune {
@@ -222,13 +220,13 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		}
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(af.Dir, written, stale, form, af.DryRun)
+	printAgentInstallNextSteps(af.Dir, written, changed, stale, form, af.DryRun)
 	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, stale []string, form agent.Form, dryRun bool) {
+func printAgentInstallNextSteps(dir string, written, changed, stale []string, form agent.Form, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
@@ -238,7 +236,19 @@ func printAgentInstallNextSteps(dir string, written, stale []string, form agent.
 		interactive.Emit(os.Stderr, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
 		return
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
+	// What the run DID, not how many files it touched. A --force reinstall rewrites every
+	// file whether or not its bytes moved, so "installed 30 file(s)" is the same sentence
+	// on the run that changed everything and the run that changed nothing. A reader who
+	// sees it three times stops reading it, which is the run where it finally mattered.
+	switch {
+	case len(changed) == 0:
+		interactive.Emit(os.Stderr, fmt.Sprintf("%d skill file(s) were already current; nothing changed", len(written)))
+	case len(changed) == len(written):
+		interactive.Emit(os.Stderr, fmt.Sprintf("wrote all %d skill file(s); commit them so your team and agents share them", len(written)))
+	default:
+		interactive.Emit(os.Stderr, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
+			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
+	}
 	// Only when there is something to act on. Nothing is stale in the ordinary case
 	// (a fresh install, or an upgrade that renamed nothing), and a line that printed on
 	// every install is one a reader stops seeing by the third time, which is exactly
@@ -264,6 +274,17 @@ func printAgentInstallNextSteps(dir string, written, stale []string, form agent.
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
 	printAgentsBlockToPaste(dir)
+}
+
+// skillNames reduces <dest>-relative SKILL.md paths to the skill names a reader
+// recognizes: ".claude/skills/magus-run/SKILL.md" is the file, "magus-run" is the thing.
+func skillNames(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, filepath.Base(filepath.Dir(p)))
+	}
+	slices.Sort(out)
+	return out
 }
 
 // printAgentsBlockToPaste offers the managed AGENTS.md block for the developer

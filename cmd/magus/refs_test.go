@@ -22,7 +22,7 @@ func TestRefsTextPrintsMatchingLines(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, nil)
 	})
 	require.NoError(t, err, "a match exits 0, like grep")
 	assert.Equal(t, w.Path("a.go")+":2:const Ref = \"NEEDLE\"\n", out)
@@ -39,7 +39,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Empty(t, out)
@@ -55,7 +55,7 @@ func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), missing, "NEEDLE", false, nil)
+		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.Contains(t, errOut, missing)
@@ -72,10 +72,43 @@ func TestRefsTextAnswersColdWithNoClassifier(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, nil)
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, "NEEDLE")
+}
+
+// TestRefsTextScopesToNamedPaths is the grep shape this had no answer for: `grep -r NEEDLE
+// internal/guard`. Without a scope the only text search magus offered was the whole
+// workspace, so a reader asking about one directory had to reach past magus to ask it.
+func TestRefsTextScopesToNamedPaths(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"internal/guard/shell.go": "const A = \"NEEDLE\"\n",
+		"internal/hint/hint.go":   "const B = \"NEEDLE\"\n",
+	})
+
+	var err error
+	out := captureStdout(t, func() {
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{w.Path("internal/guard")}, false, nil)
+	})
+	require.NoError(t, err)
+	assert.Contains(t, out, filepath.Join("internal", "guard", "shell.go"))
+	assert.NotContains(t, out, filepath.Join("internal", "hint", "hint.go"), "the scope is a narrowing, not a hint")
+}
+
+// TestRefsTextScopeOutsideWorkspaceExitsTwo keeps a refused scope distinguishable from an
+// honest miss. Exit 1 would say the pattern is not in a tree magus never looked at.
+func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("a.go", "const Ref = \"NEEDLE\"\n")
+
+	var err error
+	errOut := captureStderr(t, func() {
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, nil)
+	})
+	assert.Equal(t, errSilent{exitCode: 2}, err)
+	assert.Contains(t, errOut, "outside the workspace")
 }
 
 // TestRefsTextNoGeneratedFiltersAndReportsTheCount pins that --no-generated's
@@ -108,7 +141,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	var out, errOut string
 	errOut = captureStderr(t, func() {
 		out = captureStdout(t, func() {
-			cmdErr = refsTextCmd(ctx, root, "NEEDLE", true, m.ClassifyFiles)
+			cmdErr = refsTextCmd(ctx, root, "NEEDLE", nil, true, m.ClassifyFiles)
 		})
 	})
 	require.NoError(t, cmdErr, "the hand-written file still matches")
@@ -126,7 +159,7 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "", false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.NotEmpty(t, errOut)

@@ -2,6 +2,7 @@ package guard
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -479,6 +480,67 @@ func TestEvaluateBashGuard(t *testing.T) {
 			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
 		}
 	}
+}
+
+// TestDenyReasonsStayShort gives shell.go's three-line budget an enforcement point.
+//
+// A refusal is read under interruption by someone who wanted to run something else, so
+// length is what gets it skimmed instead of read. Every sentence these carried about why
+// magus is better, what else the guard catches, or which skill to load was true and cost
+// more than it returned. The budget is the only thing that keeps them from growing back,
+// one defensible sentence at a time.
+//
+// The allowance is per refusal as the reader SEES it: the `magus guard denied ...` prefix
+// and the multi-command trailer are framing the rule does not choose, so they are counted
+// but not charged against the three body lines.
+func TestDenyReasonsStayShort(t *testing.T) {
+	const (
+		maxLines = 5   // prefix + three body lines + the multi-command trailer
+		maxBytes = 600 // a screenful at a terminal's width, not a page
+	)
+	// One command per deny rule this file can reach, so the budget is measured against
+	// what ships rather than against a constant read in isolation.
+	commands := []string{
+		"go vet ./...",
+		"gofmt -w .",
+		"cd /repo && magus run build",
+		"magus run build > out.txt",
+		"magus run build | tail -5",
+		"sed -i 's/a/b/' cmd/magus/main.go",
+		"git add -A",
+		"git stash",
+		"magus diff --ack",
+		"magus notes add 'a decision'",
+		"while true; do magus status | grep done; done",
+		"pgrep magus",
+		"gh run watch",
+		"grep 'cause:' /tmp/task-capture.log",
+		`python3 -c "open('cmd/magus/main.go','w').write(x)"`,
+	}
+	for _, command := range commands {
+		v := Evaluate(testDependencies(), command)
+		if v.Deny == "" {
+			continue // a rule this build does not reach; other tests pin which fire
+		}
+		lines := strings.Split(strings.TrimSpace(v.Deny), "\n")
+		lines = slices.DeleteFunc(lines, func(l string) bool { return strings.TrimSpace(l) == "" })
+		assert.LessOrEqual(t, len(lines), maxLines,
+			"deny for %q runs %d lines; the budget is three body lines\n%s", command, len(lines), v.Deny)
+		assert.LessOrEqual(t, len(v.Deny), maxBytes,
+			"deny for %q is %d bytes\n%s", command, len(v.Deny), v.Deny)
+	}
+}
+
+// TestDenyDoesNotReplayALongCommand pins the elision in explainDeny. A denied line
+// carrying a heredoc replayed the whole body back to its author, which made the refusal
+// several times longer than the script that tripped it, and told the reader nothing they
+// were not already looking at.
+func TestDenyDoesNotReplayALongCommand(t *testing.T) {
+	body := strings.Repeat("x = 1\n", 200)
+	v := Evaluate(testDependencies(), "go run -c \""+body+"\"")
+	require.NotEmpty(t, v.Deny)
+	assert.NotContains(t, v.Deny, body, "the command is elided, not quoted back")
+	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
 }
 
 // TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
@@ -1032,15 +1094,27 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	assert.Contains(t, piped, "-o template=")
 	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
 
-	redirected := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
-	require.NotEmpty(t, redirected)
-	assert.Contains(t, redirected, "magus query output", "the captured log is already persisted; that is the replacement")
-	assert.Contains(t, redirected, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
-	assert.Contains(t, redirected, "never console text",
-		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
-	assert.Contains(t, redirected, "silent", "the -s + redirect combination is the case worth calling out")
+	// Discarding and KEEPING are different intents, so they get different corrections.
+	// Both name where the log already is, because `affected ci` mints one.
+	discarded := Evaluate(testDependencies(), "magus affected ci --silent > /dev/null 2>&1").Deny
+	require.NotEmpty(t, discarded)
+	assert.Contains(t, discarded, "silent", "the --silent + /dev/null combination is the case worth calling out")
+	assert.Contains(t, discarded, "magus query output", "the captured log is already persisted; that is the replacement")
+	assert.Contains(t, discarded, ".magus/logs/", "a failure names the full-log path, so capturing it is redundant")
 
-	assert.NotEqual(t, piped, redirected, "the two shapes need different corrections")
+	kept := Evaluate(testDependencies(), "magus affected ci > run.log").Deny
+	require.NotEmpty(t, kept)
+	assert.Contains(t, kept, "--tee", "keeping output is what --tee is for")
+	assert.Contains(t, kept, "never console text",
+		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
+
+	// A verb that mints no ref must not be sent after one: `magus ls` has no run log and
+	// no output ref, so naming them would point the reader at an id that never existed.
+	noRef := Evaluate(testDependencies(), "magus ls > out.txt").Deny
+	require.NotEmpty(t, noRef)
+	assert.NotContains(t, noRef, "magus query output", "ls mints no ref, so the log pointer would be a dead end")
+
+	assert.NotEqual(t, piped, discarded, "the two shapes need different corrections")
 }
 
 // TestGuardExemptsRefsTextFromOutputRules pins the --text exemption's SCOPE: it
@@ -1393,11 +1467,16 @@ func TestGuardDeniesFilteringATaskCapture(t *testing.T) {
 
 // The deny has to name what the filter was about to cut, or the reader corrects the
 // spelling instead of the mistake, and it has to route somewhere that works.
+//
+// It used to reproduce the whole five-line failure block, which was eight lines of a
+// message that still owed the reader three lines of advice. The PAIR is what carries the
+// argument: `cause:` is what a filter matches and `output:` is the ref it drops, two lines
+// below it. Naming the other three proved nothing the pair does not.
 func TestCaptureFilterDenialNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(testDependencies(), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Deny)
-	for _, field := range []string{"[fail] <target>", "cause:", "output: out<hex>", "inspect: magus query output out<hex>", "reproduce:"} {
-		assert.Contains(t, v.Deny, field, "the block's fields are what the filter drops")
+	for _, field := range []string{"cause:", "output: out<hex>"} {
+		assert.Contains(t, v.Deny, field, "the matched line and the dropped ref are what the filter costs")
 	}
 	assert.Contains(t, v.Deny, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
 	assert.Contains(t, v.Deny, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")

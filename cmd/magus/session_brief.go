@@ -398,7 +398,7 @@ func (b sessionBrief) writeFeedback(s *strings.Builder) {
 		followed = fmt.Sprintf("replacement requested in %d session(s); execution outcome is unobservable", item.FollowedSessions)
 	}
 	briefLine(s, "improvement review: %s denied %d times across %d session(s); %s", item.Rule, item.Denied, item.Sessions, followed)
-	briefLine(s, "  inspect evidence and choose a human-reviewed action: magus agent improve")
+	briefLine(s, "  inspect evidence and choose a human-reviewed action: %s (recurring-guard-denials)", hint.Doctor.String())
 }
 
 func (b sessionBrief) writeTree(s *strings.Builder) {

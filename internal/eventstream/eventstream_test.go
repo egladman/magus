@@ -39,7 +39,7 @@ func TestFromJournalMapsLifecycleAndResults(t *testing.T) {
 			name: "result carries the fetchable ref",
 			in: journal.Event{
 				Ts: 150, Inv: "inv1", Kind: journal.KindResult, Project: "api", Target: "test",
-				Status: journal.StatusPass, Ref: "out_abc", DurMs: 1200,
+				Status: journal.StatusPass, Ref: "out_abc", DurationMs: 1200,
 			},
 			want: types.StreamEvent{Ts: 150, Workspace: "/repo", Inv: "inv1", Body: types.StreamTarget{
 				Project: "api", Target: "test", Status: "ok", CacheHit: false, Ref: "out_abc", DurationMs: 1200,

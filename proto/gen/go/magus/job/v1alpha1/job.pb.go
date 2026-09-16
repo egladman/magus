@@ -142,11 +142,15 @@ func (JobHolder) EnumDescriptor() ([]byte, []int) {
 // invocation id, and the job's fresh metadata snapshot so a caller can render "last rotated
 // 3m ago, trail 2.1 MB" without a follow-up call.
 type RunJobResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	State         SubmitState            `protobuf:"varint,1,opt,name=state,proto3,enum=magus.job.v1alpha1.SubmitState" json:"state,omitempty"`
-	InvocationId  string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
-	ConsoleUrl    string                 `protobuf:"bytes,3,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`       // always empty today; TODO: deep-link once the /logs page accepts an invocation fragment
-	Job           *Job                   `protobuf:"bytes,4,opt,name=job,proto3" json:"job,omitempty"`                                       // the job's descriptor plus its last-run and current-size metadata
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	State        SubmitState            `protobuf:"varint,1,opt,name=state,proto3,enum=magus.job.v1alpha1.SubmitState" json:"state,omitempty"`
+	InvocationId string                 `protobuf:"bytes,2,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"` // the running job's invocation id (the new one, or the coalesced one)
+	// Where to watch this job: the console's runs surface scoped to invocation_id. A PATH,
+	// not an absolute URL, because the reader is the console itself and resolves it against
+	// its own origin. Empty only when the daemon coalesced a submit it could not name, since
+	// a run with no invocation has nothing to link to.
+	ConsoleUrl    string `protobuf:"bytes,3,opt,name=console_url,json=consoleUrl,proto3" json:"console_url,omitempty"`
+	Job           *Job   `protobuf:"bytes,4,opt,name=job,proto3" json:"job,omitempty"` // the job's descriptor plus its last-run and current-size metadata
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

@@ -82,8 +82,8 @@ const KnowledgeSchemaVersion = 12
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
-// ("schema v10" in internal/render/targetgraph.go), the knowledge-graph markdown
-// ("schema v10" in internal/render/knowledgegraph.go), the graph export's
+// ("schema v10" in internal/render/target_graph.go), the knowledge-graph markdown
+// ("schema v10" in internal/render/knowledge_graph.go), the graph export's
 // schema_version field, and the installed agent skills
 // ("knowledge-schema-version: 10" in internal/agent).
 var schemaStampRe = regexp.MustCompile(`(?:schema v|"schema_version":\s*|knowledge-schema-version:\s*)(\d+)`)

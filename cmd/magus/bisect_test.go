@@ -63,8 +63,8 @@ func parseBisectLog(out []byte) (string, error) {
 	return "", errors.New("could not parse culprit from git bisect log")
 }
 
-// TestSelfUpdateCmdSignatureCompat is a compile-time check: selfupdate.go
-// (!noselfupdate) and selfupdate_stub.go (noselfupdate) must expose the same
+// TestSelfUpdateCmdSignatureCompat is a compile-time check: self_update.go
+// (!noselfupdate) and self_update_stub.go (noselfupdate) must expose the same
 // `func selfUpdateCmd(context.Context, []string) error`, because self.go calls it
 // untagged. If the signatures differ the package simply won't compile under one of
 // the two build tags, which `go build` catches. This test documents the intent so a

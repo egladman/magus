@@ -426,6 +426,20 @@ type Knowledge struct {
 	// IDs from different repos cannot collide. Empty means --global covers only the
 	// current workspace.
 	Workspaces []string `json:"workspaces" yaml:"workspaces"`
+	// PublishedRef is the OCI artifact a published knowledge graph is READ from, as
+	// <registry>/<repository>:<tag>. Empty (the default) means this workspace pulls
+	// nothing and every graph is built locally.
+	//
+	// Opt-in per repository and never derived. A derived destination would mean a fork
+	// silently reading a namespace nobody chose, and the graph decides what magus answers
+	// about this tree, so it is not a thing to guess at. `magus graph push` writes it (see
+	// the magusfile's own registry declaration); this is the read side.
+	//
+	// When set, a history change (branch switch, merge, rebase) tries the pull before
+	// rebuilding, which is what makes a fresh worktree cheap: the SCIP shards are the
+	// expensive half and are never committed. A pull that fails for any reason is not an
+	// error, it is a local build.
+	PublishedRef string `json:"published_ref" yaml:"published_ref"`
 	// MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge). When
 	// exceeded after a build, least-recently-used shard files are evicted; an evicted
 	// shard is restored from the remote cache or rebuilt on the next query. 0

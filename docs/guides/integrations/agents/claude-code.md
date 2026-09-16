@@ -12,19 +12,19 @@ reach the model, so nothing in the contract is lost here. It is also the setup
 this repository dogfoods and the only one executed end to end against a real
 event.
 
-| what             | where                                  |
-| ---------------- | -------------------------------------- |
-| skills           | `.claude/skills/`                      |
-| guard wiring     | `.claude/settings.json`, `PreToolUse`  |
-| command surface  | deny and advise both reach the model   |
-| file surface     | deny and advise both reach the model   |
-| MCP call surface | deny and advise both reach the model   |
-| read observation | `PreToolUse` on the read tool          |
-| MCP              | [MCP](../mcp.md)                       |
-| attention events | `Notification`, `Stop`, `SubagentStop` |
-| checkpoint       | `Stop`                                 |
-| rehydration      | `SessionStart` (`compact`, `resume`)   |
-| lease            | `PreToolUse` on the sub-agent tool     |
+| what             | where                                                         |
+| ---------------- | ------------------------------------------------------------- |
+| skills           | `.claude/skills/`                                             |
+| guard wiring     | `.claude/settings.json`, `PreToolUse`                         |
+| command surface  | deny and advise both reach the model                          |
+| file surface     | deny and advise both reach the model                          |
+| MCP call surface | deny and advise both reach the model                          |
+| read observation | `PreToolUse` on the read tool                                 |
+| MCP              | [MCP](../mcp.md)                                              |
+| attention events | `Notification`, `Stop`, `SubagentStop`                        |
+| checkpoint       | `Stop`                                                        |
+| rehydration      | `SessionStart` (`compact`, `resume`)                          |
+| lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
 
 ## Skills
@@ -66,7 +66,7 @@ To adapt that Buzz harness without modifying Magus source: copy the spell into
 the workspace, change only the import path (for example
 `import "harness/claude-code" as claude`), edit the workspace Buzz, then re-run
 apply and verify. Details:
-[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
 
 Or target Claude Code alone (spell or `harnesses/claude-code.json` fallback):
@@ -107,7 +107,7 @@ adapt them.
 This host is a Buzz harness spell. Adapt without Magus source edits by forking
 the spell and changing only the import path; then `magus agent harness apply`
 and `verify`. See
-[Adapting a Buzz harness](../../reference/skills/magus-workspace-rules.md) and
+[Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Improving recurring friction](guard.md#improving-recurring-friction).
 
 `harnesses/claude-code.json` remains as a fallback when the magusfile does not
@@ -370,8 +370,8 @@ magus doctor
 ```
 
 `doctor`'s **guard binary** check names the binary a hook would actually run and
-fails when it is older than your working tree; **guard wiring** runs a canary
-command through it and then looks for a host config that invokes a current
+fails when it is older than your working tree; **guard wiring** probes it with a
+known-denied command and then looks for a host config that invokes a current
 template; **agent skills** grades the installed copies against the running binary
 and `--fix` reinstalls whatever it reports stale.
 

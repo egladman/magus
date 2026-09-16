@@ -170,8 +170,8 @@ func (h *RunHandler) answer(ctx context.Context, w http.ResponseWriter, req diff
 			out.State = "failed"
 			out.Error = ev.Error
 		}
-		out.FinishedMs = ev.Ts + ev.DurMs
-		out.DurationMs = ev.DurMs
+		out.FinishedMs = ev.Ts + ev.DurationMs
+		out.DurationMs = ev.DurationMs
 	}
 	handler.WriteJSON(w, out)
 }

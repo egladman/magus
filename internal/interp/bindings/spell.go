@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+
 	"github.com/egladman/magus/internal/interactive/tty"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
@@ -20,7 +22,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service/identity"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -36,7 +38,7 @@ func init() {
 }
 
 var ensureSpellsRegistered = sync.OnceFunc(func() {
-	for _, spec := range spellruntime.Builtins() {
+	for _, spec := range spell.Builtins() {
 		opts := []spells.Option{
 			spells.WithSources(spec.Needs...),
 			spells.WithIgnoreDirs(spec.IgnoreDirs...),
@@ -181,7 +183,7 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 				active = append(active, name)
 			}
 		}
-		charmSteps, err := spellruntime.ExplainCharms(op.Args, op.Charms, active)
+		charmSteps, err := spell.ExplainCharms(op.Args, op.Charms, active)
 		if err != nil {
 			return nil, false, err
 		}
@@ -203,7 +205,7 @@ func newCommandExplainer(targets map[string]spells.Op) func(string, []string) ([
 
 // newCommandConflictChecker returns the charm-conflict detector used by `magus
 // describe target`: it reports the active charms whose edit is overridden by another
-// active charm on this op's argv (see spellruntime.Conflicts). It mirrors the renderer's
+// active charm on this op's argv (see spell.Conflicts). It mirrors the renderer's
 // ok/err contract and executes nothing.
 func newCommandConflictChecker(targets map[string]spells.Op) func(string, []string) ([]spells.CharmConflict, bool, error) {
 	return func(target string, charms []string) ([]spells.CharmConflict, bool, error) {
@@ -218,7 +220,7 @@ func newCommandConflictChecker(targets map[string]spells.Op) func(string, []stri
 				active = append(active, name)
 			}
 		}
-		conflicts, err := spellruntime.Conflicts(op.Args, op.Charms, active)
+		conflicts, err := spell.Conflicts(op.Args, op.Charms, active)
 		if err != nil {
 			return nil, false, err
 		}
@@ -433,9 +435,17 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	// read as symbol-capable with no index, while `graph build` reported it reindexed
 	// and meant it. Ingestion cannot raise this: a missing index there is
 	// indistinguishable from one never built.
-	if _, err := os.Stat(indexPath); err != nil {
-		return nil, fmt.Errorf("spell %q declares a %s symbol indexer, but %q exited 0 and wrote no index to %s; the indexer must write to the path magus passes in %s",
-			spec.Name, spec.SymbolIndexer.Format, op.Bin, indexPath, symbols.IndexEnvVar)
+	// Only a MISSING file is the indexer's fault. A permission error or a broken path
+	// reads as "wrote nothing" otherwise, which sends the spell author to debug a command
+	// that worked. The format is deliberately not named here: op.Bin and the path are the
+	// diagnosis, and reading it off spec would mean trusting that the caller kept
+	// spec.SymbolIndexer in step with op.Kind, which only Decode guarantees.
+	switch _, err := os.Stat(indexPath); {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
+			spec.Name, op.Bin, indexPath, symbols.IndexEnvVar)
+	case err != nil:
+		return nil, fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spec.Name, op.Bin, err)
 	}
 	return noResult()
 }
@@ -567,7 +577,7 @@ func loadSpellFile(ctx context.Context, path string) (spells.Driver, error) {
 }
 
 // loadLocalBuzzSpell compiles a workspace-local Buzz spell at path, returning its
-// spec and ok=false on any failure. Extract routes through the same spellruntime.Decode
+// spec and ok=false on any failure. Extract routes through the same spell.Decode
 // a built-in uses, so a .buzz workspace spell and a built-in are read and validated
 // identically. Errors are logged, not raised, since discovery paths cannot route an
 // error back to the caller. Registration is deferred to magus.project; the handle
@@ -582,7 +592,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 		// A plain Buzz library imported by name (not a spell) is expected here:
 		// resolution falls through to a normal module import. Only a genuinely
 		// malformed spell is worth logging.
-		if !errors.Is(err, spellruntime.ErrNotASpell) {
+		if !errors.Is(err, spell.ErrNotASpell) {
 			slog.ErrorContext(ctx, "load local spell: buzz", "path", path, "err", err)
 		}
 		return spells.Descriptor{}, false
@@ -626,7 +636,7 @@ func localSpellBaseOptions(m spells.Descriptor) []spells.Option {
 }
 
 // registerLocalSpell registers a decoded fork-only workspace-local spell into the
-// default registry. The shared spellruntime.Decode produces m for the imported Buzz
+// default registry. The shared spell.Decode produces m for the imported Buzz
 // spell by-value path, so this is the single deferred registration point (called at
 // magus.project bind time). A function-op spell instead registers eagerly at load
 // via loadBuzzSpell.
@@ -679,7 +689,7 @@ func checkSpellImports(handles []string) error {
 // This mirrors the native modules registerAllBuzz installs, so the check can
 // never reject a handle the import would actually resolve.
 func isRegisteredSpell(name string) bool {
-	if _, ok := spellruntime.Builtins()[name]; ok {
+	if _, ok := spell.Builtins()[name]; ok {
 		return true
 	}
 	_, ok := project.DefaultSpellRegistry().Lookup(name)
@@ -720,7 +730,7 @@ func suggestSpellName(name string) string {
 // builtinSpellHandles returns the compiled-in spell handles, sorted. Used both for
 // the suggestion search and the handles listed in the error.
 func builtinSpellHandles() []string {
-	b := spellruntime.Builtins()
+	b := spell.Builtins()
 	out := make([]string, 0, len(b))
 	for name := range b {
 		out = append(out, name)

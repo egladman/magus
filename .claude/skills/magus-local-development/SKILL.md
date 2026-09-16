@@ -67,7 +67,7 @@ In `std/`, a method's `Name` and `Doc` are inputs to codegen, not documentation.
   names. Nothing catches a renamed std method.
 
 Renaming `fs.mkdirall` to `fs.mkdirAll` was one word in one descriptor. It left
-`internal/interp/bindings/gen/fs.go`, `internal/spellruntime/gen/decls/fs.buzz`,
+`internal/interp/bindings/gen/fs.go`, `internal/spell/gen/decls/fs.buzz`,
 `internal/langservice/manifest_data.go` and the manpage API lock stale, and three
 tests red until regeneration. Regenerate in the SAME commit, via `magus run
 generate .` (or the narrower `*-generate` target that owns the stale output).

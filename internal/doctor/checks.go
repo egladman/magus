@@ -2014,7 +2014,7 @@ func harnessConfigCandidates(root string, wired ...string) ([]string, error) {
 // execute, in the same order checkGuardBinary reports on: ./magus at the
 // workspace root if present and executable, else whatever resolves on PATH.
 // Kept separate from checkGuardBinary rather than shared, so a change to one
-// check's resolution order cannot silently retarget the other's canary.
+// check's resolution order cannot silently retarget the other's probe.
 func resolveGuardBinaryForWiring(root string) (string, bool) {
 	bin := filepath.Join(root, "magus")
 	if info, err := os.Stat(bin); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
@@ -2128,145 +2128,22 @@ func guardTemplateMarkerProblem(body []byte) string {
 // (a host glue calling the wrong subcommand for weeks, unnoticed) sits the
 // same failure with nothing to notice at all: no invocation.
 //
-// Two layers, cheapest first. Layer A is a binary-level canary that always
+// Two layers, cheapest first. Layer A is a binary-level probe that always
 // runs: it proves the resolved binary can still judge a command at all,
 // independent of whether anything is wired to ask it to. Layer B is a wiring
 // inventory: for each candidate host hook config found, it confirms the
-// config actually mentions magus and hook, and that every template file it
-// names (or, for a self-contained template, the file itself) carries a
-// current magus-guard-template marker.
+// config actually invokes magus, and that every template file it names (or,
+// for a self-contained template, the file itself) carries a current
+// magus-guard-template marker.
 //
 // Layer B never executes a candidate config's command string: jq or a
 // host-relative path may only make sense inside the host's own event loop.
-// The canary plus the marker comparison is the honest, portable probe; full
+// The probe plus the marker comparison is the honest, portable check; full
 // end-to-end execution is guard_templates.txtar's job, which runs in CI
 // against real event fixtures.
 func (r *runner) checkGuardWiring() types.DoctorCheck {
-	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardCanaryBudget, workspaceHarnesses(r.ws)...)
+	return checkGuardWiring(r.runCtx(), r.ws.Root(), guardProbeBudget, workspaceHarnesses(r.ws)...)
 }
-
-func (r *runner) checkCheckpointWiring() types.DoctorCheck {
-	return checkCheckpointWiring(r.ws.Root(), workspaceHarnesses(r.ws)...)
-}
-
-// checkCheckpointWiring reports a host that magus is wired into but that records no
-// checkpoint, so nothing says where the work stood when a session stopped.
-//
-// It asks only of a checkout that ALREADY has a host hook config. A machine with no host
-// wiring at all is guard-wiring's finding, and repeating it here would be a second
-// advisory about the same absence. What this catches is the narrower and quieter case: a
-// host set up months ago, guarding correctly, silently recording nothing.
-//
-// Advice rather than a failure. Not every workspace wants this wired, and a doctor that
-// fails over an optional hook teaches people to stop reading it.
-func checkCheckpointWiring(root string, wired ...string) types.DoctorCheck {
-	const name = "checkpoint-wiring"
-
-	var hosts, recording []string
-	for _, path := range HookConfigs(context.Background(), root, wired...) {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		hosts = append(hosts, path)
-		if configRecordsCheckpoint(root, body) {
-			recording = append(recording, path)
-		}
-	}
-
-	switch {
-	case len(hosts) == 0:
-		return types.DoctorCheck{
-			Name:     name,
-			Status:   types.DoctorOK,
-			Evidence: types.EvidenceUnknown,
-			Message:  "no agent-host hook config in this checkout, so there is nothing to record from; skipped",
-		}
-	case len(recording) == 0:
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorAdvice,
-			Message: fmt.Sprintf("%d host hook config(s) wired, none recording a checkpoint; nothing says where work stood when a session stopped", len(hosts)),
-			Details: append(append([]string{}, hosts...),
-				"wire a stop hook to "+checkpointTemplate+": docs/guides/integrations/agents.md",
-				"or record one by hand: "+hint.SessionCheckpoint.With(`--note "..."`)),
-		}
-	default:
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
-			Message: fmt.Sprintf("%d of %d host hook config(s) record a checkpoint", len(recording), len(hosts)),
-			Details: recording,
-		}
-	}
-}
-
-// configRecordsCheckpoint reports whether a host hook config (or a workspace script
-// it names) actually records a session checkpoint. Cursor embeds the call inside
-// cursor-guard.sh rather than spelling "checkpoint" in hooks.json; looking only at
-// the JSON body falsely grades that host as silent.
-func configRecordsCheckpoint(root string, body []byte) bool {
-	if bytes.Contains(body, []byte("checkpoint")) {
-		return true
-	}
-	var decoded any
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return false
-	}
-	for _, cmd := range collectJSONStringFields(decoded, "command") {
-		if strings.Contains(cmd, "checkpoint") {
-			return true
-		}
-		for _, rel := range shellScriptPaths(cmd) {
-			script, err := os.ReadFile(filepath.Join(root, rel))
-			if err != nil {
-				continue
-			}
-			if bytes.Contains(script, []byte("session checkpoint")) ||
-				bytes.Contains(script, []byte(checkpointTemplate)) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func collectJSONStringFields(v any, key string) []string {
-	var out []string
-	switch t := v.(type) {
-	case map[string]any:
-		for k, child := range t {
-			if k == key {
-				if s, ok := child.(string); ok && s != "" {
-					out = append(out, s)
-				}
-			}
-			out = append(out, collectJSONStringFields(child, key)...)
-		}
-	case []any:
-		for _, child := range t {
-			out = append(out, collectJSONStringFields(child, key)...)
-		}
-	}
-	return out
-}
-
-// shellScriptPaths returns workspace-relative .sh operands from a hook command line
-// (e.g. `sh docs/guides/integrations/agents/cursor-guard.sh`).
-func shellScriptPaths(cmd string) []string {
-	var out []string
-	for _, field := range strings.Fields(cmd) {
-		clean := strings.Trim(field, `"'`)
-		if strings.HasSuffix(clean, ".sh") && !filepath.IsAbs(clean) {
-			out = append(out, filepath.Clean(clean))
-		}
-	}
-	return out
-}
-
-// checkpointTemplate is the shipped stop-hook script, named here so the check can spot a
-// config that runs it. A path, which is the one host-specific shape magus owns.
-const checkpointTemplate = "magus-checkpoint.sh"
 
 // HookConfigs names the host hook config files IN THIS CHECKOUT that run a magus
 // hook, which is what a caller outside doctor needs to say whether a checkout's
@@ -2276,7 +2153,7 @@ const checkpointTemplate = "magus-checkpoint.sh"
 // Scoped to the checkout on purpose, unlike that check: a home-relative config
 // governs the machine, and a report about this tree that named one would tell a
 // reader their tree is wired when the next clone of it is not. It grades nothing
-// either: staleness is the check's job, and it costs a canary subprocess this
+// either: staleness is the check's job, and it costs a probe subprocess this
 // caller must not pay.
 func HookConfigs(ctx context.Context, root string, wired ...string) []string {
 	return guardHookConfigs(ctx, root, wired...)
@@ -2302,12 +2179,12 @@ func guardHookConfigs(ctx context.Context, root string, wired ...string) []strin
 	return out
 }
 
-// guardCanaryBudget bounds the canary. Generous for what it runs (one `magus
-// hook` that has to load the workspace to answer), but bounded because doctor
+// guardProbeBudget bounds the probe. Generous for what it runs (one `magus
+// shell` that has to load the workspace to answer), but bounded because doctor
 // is interactive and a hung binary must not hang the report. Injected rather
 // than hardcoded at the call site so a test on a loaded machine can raise it
 // without loosening what ships.
-const guardCanaryBudget = 5 * time.Second
+const guardProbeBudget = 5 * time.Second
 
 // checkGuardWiring is the free-function core. wiredNames are magusfile-selected
 // harness spell names unioned with JSON descriptors.
@@ -2319,14 +2196,14 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: "no ./magus and no magus on PATH, so the guard canary could not run",
+			Message: "no ./magus and no magus on PATH, so the guard probe could not run",
 			Details: []string{"build one: " + hint.Run.With("build", ".")},
 		}
 	}
 
-	canaryCtx, cancel := context.WithTimeout(ctx, budget)
+	probeCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	cmd := exec.CommandContext(canaryCtx, bin, "session", "hook", "-o", "name")
+	cmd := exec.CommandContext(probeCtx, bin, "shell", "-o", "name")
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader("git stash")
 	stdout, runErr := cmd.Output()
@@ -2344,9 +2221,9 @@ func checkGuardWiring(ctx context.Context, root string, budget time.Duration, wi
 		return types.DoctorCheck{
 			Name:    name,
 			Status:  types.DoctorFail,
-			Message: "the guard canary did not return a deny",
+			Message: "the guard probe did not return a deny",
 			Details: []string{
-				"command: printf 'git stash' | " + bin + " session hook -o name",
+				"command: printf 'git stash' | " + bin + " shell -o name",
 				"stdout:  " + firstLine,
 				"exit:    " + exit,
 				"rebuild: " + hint.Run.With("build", "."),

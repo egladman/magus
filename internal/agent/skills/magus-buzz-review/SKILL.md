@@ -1,12 +1,12 @@
 # Reviewing Buzz code
 
-magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+{{skill "buzz-write"}} teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel{{if .Full}},
 the same fan-out-and-merge shape go-review-ultra uses for Go{{end}}.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz-write's territory{{if .Full}} and it already covers it; restating it here would only
+{{skill "buzz-write"}}'s territory{{if .Full}} and it already covers it; restating it here would only
 drift out of sync with it{{end}}. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
@@ -127,7 +127,7 @@ That is the fixture doing its job.
 - **A magusfile carrying logic that wants a test is a finding.**{{if .Full}} A
   magusfile is declarative configuration; a test of it tests your
   configuration, not your logic.{{end}} The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz-write's "Test what you write".
+  spell or a sibling module - see {{skill "buzz-write"}}'s "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -136,7 +136,7 @@ That is the fixture doing its job.
 - **A `magus\Context.needs`-adjacent branch on a diagnostic code that names no
   real code.** The documented idiom for handling a magus failure in Buzz is
   to catch, then branch on `e["code"]` rather than matching `e["message"]` -
-  a transposed code (`"MSG3003"` for `"MGS3003"`) or a stale one silently
+  a transposed code (`"MSG3003"` for `"{{mgs "MGS3003"}}"`) or a stale one silently
   never matches, and the `catch` block still reads as live error handling
   while being dead code. A code cited only in a comment rots the same way,
   slower. Authority: GOPHERBUZZ/MAGUS, not upstream - `MGSxxxx` and `BZZxxxx`
@@ -296,7 +296,7 @@ Prompt template per subagent:
 
 ```text
 Read the "Lens: <idiom and style|skeptic and correctness|upstream conformance>"
-section of the installed magus-buzz-review skill (.claude/skills/magus-buzz-review/SKILL.md,
+section of the installed {{skill "buzz-review"}} skill (.claude/skills/{{skill "buzz-review"}}/SKILL.md,
 or wherever this workspace installed it) and apply it to <target file/dir>.
 Establish the surface first (magusfile/spell = always embedded; a standalone
 script = check how it is invoked) before applying any strict-mode-derived rule.
@@ -327,8 +327,8 @@ times instead of once{{end}}.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz-write.
+  makes an op a service. Use {{skill "buzz-write"}}.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
+- Teach Buzz syntax from scratch. Use {{skill "buzz-write"}} for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".

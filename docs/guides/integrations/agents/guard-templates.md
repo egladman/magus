@@ -247,9 +247,9 @@ fi
 # in a release.
 guard() {
   if [ -n "$HOST_EVENT_RAW" ]; then
-    printf '%s' "$event" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
   else
-    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
   fi
 }
 
@@ -424,7 +424,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook --path "$@" -o "template=$HOST_RESPONSE"
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell --path "$@" -o "template=$HOST_RESPONSE"
 }
 # Same discrimination as magus-guard-command.sh, and for the same reason now that this
 # surface can render a deny: a DENY exits non-zero (2) with the verdict on stdout, so a
@@ -578,7 +578,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # missing from `magus session`, the binary is too old. Both streams are
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
-printf '%s' "$path" | "$GUARD_MAGUS_BIN" session hook --observe \
+printf '%s' "$path" | "$GUARD_MAGUS_BIN" shell --observe \
   --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 

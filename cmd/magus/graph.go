@@ -104,14 +104,9 @@ func graphUsage() {
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
-	var skipSymbols, push bool
-	var ref, tag, user string
+	var skipSymbols bool
 	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
-		fs.BoolVar(&push, "push", false, "push the rebuilt graph to the registry afterwards")
-		fs.StringVar(&ref, "ref", "", "with --push: the artifact to push to, as <registry>/<repository>:<tag>")
-		fs.StringVar(&user, "username", "", "with --push: the registry username; the token is read from stdin")
-		fs.StringVar(&tag, "tag", "", "with --push: an extra tag to write beside the commit and latest")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -150,12 +145,7 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	}
 	out := g.Output()
 	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
-	if !push {
-		return nil
-	}
-	// The rebuild above already refreshed everything, so the push exports what is now
-	// cached rather than paying for a second one.
-	return graphPushTo(ctx, root, ref, tag, user, false /* refresh */)
+	return nil
 }
 
 // graphDeps emits the project dependency DAG, the standalone home of the view
@@ -469,6 +459,13 @@ func loadKnowledgeGraph(ctx context.Context, root string, refresh, global, inclu
 			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
 		}
 		return magus.BuildGlobalKnowledgeGraph(ctx, ws, globalCfg, refresh, slog.Default())
+	}
+	if refresh {
+		// Before paying to rebuild, take the published copy if this workspace names one.
+		// A refresh is the moment the expensive half (the SCIP shards, which are never
+		// committed) would otherwise be recomputed, and a branch switch reaches here
+		// through the VCS refresh hook's sync-graph job.
+		seedFromPublishedGraph(ws)
 	}
 	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), globalCfg, refresh, slog.Default())
 	if err != nil {

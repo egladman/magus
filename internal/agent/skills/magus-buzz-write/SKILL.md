@@ -53,8 +53,8 @@ magus describe module json            # its methods, docs, and SIGNATURES with r
 | question | where |
 | --- | --- |
 | what modules exist, what a method takes and RETURNS | `magus describe module <name>` - the authority, generated from the bindings |
-| how a feature works, concepts, guides, worked examples | the magus-docs-lookup skill - the documentation is written and searchable |
-| what THIS workspace declares (targets, spells, projects) | the magus-query skill |
+| how a feature works, concepts, guides, worked examples | the {{skill "docs-lookup"}} skill - the documentation is written and searchable |
+| what THIS workspace declares (targets, spells, projects) | the {{skill "query"}} skill |
 
 {{if .Full}}Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
 behavior - is documented; search it rather than guessing from this page.{{else}}Error sets, fibers, generics, the full stdlib and sandbox behavior are all
@@ -103,7 +103,7 @@ main();
 WRONG: `proc\exec("magus", args: [...], dir: ".", opts: {})` - magus warns on it.
 CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `doctor`.
 
-Members that need a magusfile raise MGS1022 naming the constraint: the ones
+Members that need a magusfile raise {{mgslink "MGS1022"}} naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
 (`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the
@@ -221,4 +221,4 @@ imports parse embedded, not strict){{end}}.
 Prefer a target over a script for anything that will be run more than once{{if .Full}}: a
 script re-runs from scratch every time, a target replays from cache{{end}}.
 
-Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
+Reviewing existing Buzz code rather than writing new code: use {{skill "buzz-review"}}.

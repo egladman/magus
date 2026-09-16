@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"crypto/sha256"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -26,9 +28,10 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/repoid"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -138,7 +141,7 @@ func CatalogFingerprint() string {
 	for _, c := range types.AllDiagnosticCodes() {
 		fmt.Fprintf(h, "%s\x00", c)
 	}
-	fmt.Fprintf(h, "spells\x00%s\x00", spellruntime.BuiltinsHash())
+	fmt.Fprintf(h, "spells\x00%s\x00", spell.BuiltinsHash())
 	fmt.Fprint(h, "modules\x00")
 	for _, m := range allModuleEntries() {
 		for _, meth := range m.Methods {
@@ -1128,19 +1131,139 @@ func (a remoteShardAdapter) PutShard(ctx context.Context, key string, r io.Reade
 	return a.b.PutArtifact(ctx, knowledgeRemoteNamespace, key, r)
 }
 
-// remoteShardsFor returns the shard backing for a workspace: the build cache's
-// remote backend when ws is a cache-backed *Magus, else nil (local-only). An
-// Inspect-constructed *Magus has no cache, so it stays local.
+// publishedShards reads shards out of a published OCI artifact: the read-only half of the
+// shard backing, for a collaborator or a fresh worktree that has the repository but not
+// the build cache behind it.
+//
+// Shards are addressed by the content fingerprint the store keys them on, which is the
+// title of the layer carrying them. That is what makes the fetch incremental: the reader
+// asks for the shards it lacks, not for a merged graph it would have to take whole.
+type publishedShards struct {
+	client       *oci.Client
+	ref          oci.Reference
+	artifactType string
+	log          *slog.Logger
+
+	// The artifact is opened once per instance: a load asks for many shards and the token
+	// exchange plus manifest GET answers the same way every time. The first caller's ctx
+	// governs that open, so a cancelled first call leaves this handle permanently missing,
+	// which is the same outcome as an unreachable registry and is handled identically.
+	once sync.Once
+	art  *oci.Artifact
+}
+
+// PublishedShards returns a read-only knowledge.RemoteShards over the artifact at ref.
+// Nothing is fetched until a shard is asked for.
+//
+// Every read failure is a MISS: no artifact, no such tag, a private package, no network,
+// no layer with that key. The store's answer to a miss is to build the shard locally,
+// which is what would have happened anyway, so a registry nobody can reach must never
+// turn into a failed command. Real failures are logged at debug and dropped.
+func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log *slog.Logger) knowledge.RemoteShards {
+	if log == nil {
+		log = slog.Default()
+	}
+	return &publishedShards{client: c, ref: ref, artifactType: artifactType, log: log}
+}
+
+func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
+	p.once.Do(func() {
+		art, err := p.client.Artifact(ctx, p.ref, p.artifactType)
+		if err != nil {
+			p.log.DebugContext(ctx, "knowledge: published graph unreadable",
+				slog.String("ref", p.ref.String()), slog.String("error", err.Error()))
+			return
+		}
+		p.art = art
+	})
+	if p.art == nil {
+		return nil, knowledge.ErrShardMiss
+	}
+	b, err := p.art.Layer(ctx, key)
+	if err != nil {
+		if !errors.Is(err, oci.ErrLayerMiss) {
+			p.log.DebugContext(ctx, "knowledge: published shard fetch failed",
+				slog.String("ref", p.ref.String()), slog.String("key", key), slog.String("error", err.Error()))
+		}
+		return nil, knowledge.ErrShardMiss
+	}
+	return io.NopCloser(bytes.NewReader(b)), nil
+}
+
+// PutShard refuses, and says so rather than reporting a write that did not happen.
+//
+// A registry has no per-blob append: publishing is upload every blob, then PUT one
+// manifest naming them all. So a shard cannot join an existing artifact on its own, and
+// an adapter that accumulated shards here would be holding a buffer nothing ever flushes
+// (the store calls this from the middle of a build, never at the end of one). The batched
+// publish is `magus graph push`, which reads the finished store off disk and uploads it as
+// a single artifact. The store treats this the way it treats any remote failure: the local
+// shard write already succeeded.
+func (p *publishedShards) PutShard(context.Context, string, io.Reader) error {
+	return errors.New("knowledge: a published graph is republished whole by `magus graph push`, never one shard at a time")
+}
+
+// UsePublishedShards installs a read-only shard source on ws, consulted whenever the
+// knowledge store reaches for a shard it does not hold. Nothing is fetched here.
+//
+// A ws that is not a *Magus is ignored: a caller holding some other Inspector has no
+// store for this to back.
+func UsePublishedShards(ws types.Inspector, r knowledge.RemoteShards) {
+	if m, ok := ws.(*Magus); ok {
+		m.publishedShards.Store(&r)
+	}
+}
+
+// shardChain reads from each backing in order and writes only to the FIRST. The build
+// cache is the writable one; a published artifact is republished whole, so a later link
+// has nothing to accept (see publishedShards.PutShard).
+//
+// Any read error moves to the next link and the last one's error is returned, so one
+// unreachable backing cannot mask a hit from another.
+type shardChain []knowledge.RemoteShards
+
+func (c shardChain) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {
+	err := knowledge.ErrShardMiss
+	for _, s := range c {
+		var rc io.ReadCloser
+		rc, err = s.GetShard(ctx, key)
+		if err == nil {
+			return rc, nil
+		}
+	}
+	return nil, err
+}
+
+func (c shardChain) PutShard(ctx context.Context, key string, r io.Reader) error {
+	return c[0].PutShard(ctx, key, r)
+}
+
+// remoteShardsFor returns the shard backing for a workspace: the build cache's remote
+// backend when ws is a cache-backed *Magus, then whatever UsePublishedShards installed.
+// nil means local-only, which is what an Inspect-constructed *Magus with no published ref
+// gets, because it has no cache either.
 func remoteShardsFor(ws types.Inspector) knowledge.RemoteShards {
 	m, ok := ws.(*Magus)
-	if !ok || m.cache == nil {
+	if !ok {
 		return nil
 	}
-	rb := m.cache.Remote()
-	if rb == nil {
-		return nil
+	var chain shardChain
+	if m.cache != nil {
+		if rb := m.cache.Remote(); rb != nil {
+			chain = append(chain, remoteShardAdapter{rb})
+		}
 	}
-	return remoteShardAdapter{rb}
+	if p := m.publishedShards.Load(); p != nil {
+		chain = append(chain, *p)
+	}
+	switch len(chain) {
+	case 0:
+		return nil
+	case 1:
+		return chain[0] // one backing answers for itself; the chain would only add a hop
+	default:
+		return chain
+	}
 }
 
 // warmKnowledgeGraph returns this handle's lazily-created warm-graph holder. The
@@ -1151,8 +1274,8 @@ func (m *Magus) warmKnowledgeGraph() *warmGraph {
 	m.warmGraphOnce.Do(func() {
 		root := m.Root()
 		cfg := m.cfg
-		m.warmGraph = newWarmGraph(func(ctx context.Context) (*knowledge.Graph, error) {
-			return BuildKnowledgeGraph(ctx, m, root, cfg, false, slog.Default())
+		m.warmGraph = newWarmGraph(func(ctx context.Context, refresh bool) (*knowledge.Graph, error) {
+			return BuildKnowledgeGraph(ctx, m, root, cfg, refresh, slog.Default())
 		}, slog.Default())
 	})
 	return m.warmGraph

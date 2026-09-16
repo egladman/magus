@@ -357,6 +357,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_KNOWLEDGE_WORKSPACES: Workspaces are additional workspace roots to union into a '--global' knowledge-graph query (query/explain/path and gr...",
 	},
 	{
+		GoPath:   "Knowledge.PublishedRef",
+		YamlPath: "knowledge.published_ref",
+		EnvVar:   "MAGUS_KNOWLEDGE_PUBLISHED_REF",
+		Flag:     fieldtype.FlagNames{Long: "knowledge-published-ref"},
+		Kind:     fieldtype.KindString,
+		Usage:    "MAGUS_KNOWLEDGE_PUBLISHED_REF: PublishedRef is the OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>.",
+	},
+	{
 		GoPath:   "Knowledge.MaxSizeMB",
 		YamlPath: "knowledge.max_size_mb",
 		EnvVar:   "MAGUS_KNOWLEDGE_MAX_SIZE_MB",

@@ -315,6 +315,30 @@ workaround runs outside the cache and the sandbox, where magus can no longer
 account for the work. An error that leaves you with no next step is a doctrine
 bug; file it as one.
 
+### Misconfiguration is an error, never a warning
+
+A setting magus cannot honor fails the command that read it. It is not logged
+and stepped over, not repaired with a default, not carried as a warning nobody
+reads in a CI log that scrolled past an hour ago.
+
+The reason is what a warning actually communicates. You wrote the setting, so
+you believe it is in effect; a warning leaves that belief standing while the
+behavior underneath it is something else. Every subsequent decision rests on
+a premise the tool already knew was false, and the failure surfaces somewhere
+far away, as something else, long after the edit that caused it. A tool that
+knows a value is wrong and proceeds anyway has chosen to be misleading.
+
+So the test for any warning is one question: is the value honored? If it is
+not, the warning is a bug in disguise, and the fix is to fail. If it is, say
+nothing, because a warning about something that works is noise that teaches
+people to skim past the warnings that matter.
+
+The corollary binds the other direction: a knob magus accepts is a knob magus
+must obey. A field that reads as a retention window while the code enforces a
+fixed cap, or a flag documented as repeatable that silently keeps the last
+value, is the same defect as the ignored setting. It just fails later, and
+reads as a lie rather than an oversight.
+
 ### Automation you can interrogate
 
 Each automated verdict has a lens that shows its inputs. `affected --explain`

@@ -83,10 +83,12 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 ## Layout
 
 - `magus.go` + root `*.go`: public API and composition root (`Open`, `Inspect`)
-- `types/`: pure domain types; near-leaf. Imports only `spells` and
-  `libs/diagnostics` (deliberate and one-way, see `spells/doc.go`). A type a
-  magusfile or script reads lives HERE, not behind an alias in the package that
-  computes it.
+- `types/`: pure domain types; near-leaf. Of magus it imports `spells`,
+  `libs/diagnostics` (deliberate and one-way, see `spells/doc.go`) and
+  `internal/json`, and it reaches no filesystem, process or network.
+  `TestTypesStaysPureDomain` enforces that, so this line is a signpost rather
+  than the rule. A type a magusfile or script reads lives HERE, not behind an
+  alias in the package that computes it.
 - `internal/`: the engine (cache, interp, depgraph, spell, proc, sandbox, guard)
 - `cmd/magus`: the CLI; `cmd/magus-*`: codegen and docs tools
 - `std/`: the Buzz host modules a magusfile calls, registered into

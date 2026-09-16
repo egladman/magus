@@ -19,7 +19,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// The path surface of `magus session hook`: every rule that judges a file an edit is
+// The path surface of `magus shell`: every rule that judges a file an edit is
 // about to write. The order they speak in is Judge's, not theirs, so each answers
 // only about the path it was handed and returns "" when it has nothing to say. The
 // command surface is internal/guard/shell.go.
@@ -651,8 +651,8 @@ func magusOwnSourceTree() bool {
 var agentSurfaceSources = []string{
 	"internal/agent/skills/",
 	"internal/handler/mcp/registry.go",
-	"internal/hint/mcptool.go",
-	"internal/hint/clicommand.go",
+	"internal/hint/mcp_tool.go",
+	"internal/hint/cli_command.go",
 }
 
 // adviseAgentSurfaceWrite routes an edit to the agent surface through the method that

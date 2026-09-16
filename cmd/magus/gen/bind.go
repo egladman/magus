@@ -47,6 +47,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.StringVar(&cfg.MCP.Address, "mcp-address", cfg.MCP.Address, "MAGUS_MCP_ADDRESS")
 	fs.StringVar(&cfg.Log.Format, "log-format", cfg.Log.Format, "MAGUS_LOG_FORMAT")
 	fs.StringVar(&cfg.Log.Level, "log-level", cfg.Log.Level, "MAGUS_LOG_LEVEL: Level is the minimum log level; 'trace' also enables the startup timing table.")
+	fs.StringVar(&cfg.Knowledge.PublishedRef, "knowledge-published-ref", cfg.Knowledge.PublishedRef, "MAGUS_KNOWLEDGE_PUBLISHED_REF: PublishedRef is the OCI artifact a published knowledge graph is READ from, as <registry>/<repository>:<tag>.")
 	fs.IntVar(&cfg.Knowledge.MaxSizeMB, "knowledge-max-size-mb", cfg.Knowledge.MaxSizeMB, "MAGUS_KNOWLEDGE_MAX_SIZE_MB: MaxSizeMB is a soft cap on the knowledge shard store (<cache>/knowledge).")
 	fs.BoolVar(&cfg.Knowledge.VCS.Enabled, "knowledge-vcs-enabled", cfg.Knowledge.VCS.Enabled, "MAGUS_KNOWLEDGE_VCS_ENABLED")
 	fs.IntVar(&cfg.Knowledge.VCS.MaxCommits, "knowledge-vcs-max-commits", cfg.Knowledge.VCS.MaxCommits, "MAGUS_KNOWLEDGE_VCS_MAX_COMMITS: MaxCommits bounds the history walk to the most recent N commits.")

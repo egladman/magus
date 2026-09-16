@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/types"
 )
 
@@ -41,7 +41,7 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// snippet could read a field no return carries and the dry run would say nothing,
 	// which is the opposite of what a dry run is for. The stubs above are shaped to
 	// match, and TestMagusSurfaceMatchesBindings holds the member set in sync.
-	if src, ok := spellruntime.ModuleDecls("magus"); ok {
+	if src, ok := spell.ModuleDecls("magus"); ok {
 		sess.SetModuleDecls("magus", src)
 	}
 	for name, ops := range spells {
@@ -62,21 +62,21 @@ func installHost(ctx context.Context, sess *buzz.Session, tr *Tracer, spells map
 	// resolvable without also having to fake functional os/fs/http/vcs bindings.
 	// The session's import lookup order (native, then declarations, then resolver)
 	// means this is never shadowed by the catch-all resolver below.
-	sess.SetModuleDecls(spellruntime.SpellModulePath, strings.Join([]string{
-		spellruntime.TargetModuleSource,
-		spellruntime.PatchOpSource,
-		spellruntime.CharmTypeSource,
-		spellruntime.CommandSource,
-		spellruntime.ServiceSource,
-		spellruntime.ExecResultSource,
-		spellruntime.CommitAuthorSource,
-		spellruntime.CommitSource,
-		spellruntime.FileInfoSource,
-		spellruntime.HTTPResponseSource,
-		spellruntime.SemverVersionSource,
-		spellruntime.URLSource,
+	sess.SetModuleDecls(spell.SpellModulePath, strings.Join([]string{
+		spell.TargetModuleSource,
+		spell.PatchOpSource,
+		spell.CharmTypeSource,
+		spell.CommandSource,
+		spell.ServiceSource,
+		spell.ExecResultSource,
+		spell.CommitAuthorSource,
+		spell.CommitSource,
+		spell.FileInfoSource,
+		spell.HTTPResponseSource,
+		spell.SemverVersionSource,
+		spell.URLSource,
 	}, "\n"))
-	sess.SetModuleDecls(spellruntime.CharmModulePath, spellruntime.CharmModuleSource)
+	sess.SetModuleDecls(spell.CharmModulePath, spell.CharmModuleSource)
 
 	// A workspace-local `import "spells/foo"` that no caller registered can't be
 	// resolved in the sandbox; return a stub instead of failing the whole evaluation
@@ -278,7 +278,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// affectedImpact) fork a real magus in the live host. Same rule as
 	// ls/affected: stub each with its result shape so `magus.doctor().summary.fail`
 	// and friends resolve. Field names track the Buzz mirrors in
-	// internal/spellruntime/gen/types.
+	// internal/spell/gen/types.
 	m.MapSet("doctor", fn("magus.doctor", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("workspace", vm.StrValue(""))

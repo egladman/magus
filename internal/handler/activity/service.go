@@ -128,8 +128,8 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 			RequestBytes:  e.RequestBytes,
 			ResponseBytes: e.ResponseBytes,
 		}
-		if e.DurMs > 0 {
-			pe.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
+		if e.DurationMs > 0 {
+			pe.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
 		}
 		out = append(out, pe)
 	}

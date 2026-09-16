@@ -62,7 +62,7 @@ wire the guard hook. Both are on your host's page.
 | host                                 | skills                        | guard                                                    |
 | ------------------------------------ | ----------------------------- | -------------------------------------------------------- |
 | [Claude Code](agents/claude-code.md) | `.claude/skills/`             | shipped `PreToolUse` scripts via harness spell           |
-| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | shipped `PreToolUse` scripts via harness spell |
+| [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | shipped `PreToolUse` scripts via harness spell           |
 | [Cursor](agents/cursor.md)           | AGENTS.md only                | one self-contained script                                |
 | [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | TypeScript plugin (harness spell is skills-only)         |
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
@@ -76,8 +76,7 @@ spell into the workspace and change only the import path (keep
 `magus\harness.provider(...)`). Edit the workspace Buzz, then
 `magus agent harness apply` / `verify`. That ownership switch is documented in
 the [workspace-rules skill](../../reference/skills/magus-workspace-rules.md)
-under "Adapting a Buzz harness" and in [Improving recurring
-friction](agents/guard.md#improving-recurring-friction). Additive deny/advise
+under "Adapting a Buzz harness" and in [Improving recurring friction](agents/guard.md#improving-recurring-friction). Additive deny/advise
 that is not host-shaped stays in `magus\guard.shell({...})`.
 
 A JSON descriptor under `harnesses/` still works the same way: it names a config
@@ -176,12 +175,12 @@ launch command, and evidence contract. A descriptor must represent a real host
 dispatch path; the runner never substitutes a fixture and calls that an
 end-to-end pass.
 
-|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                             |
-| ----------- | ------------- | -------------------- | ---- | ------ | ----------------------------------------------- | ------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                                             | wired, rule-empty; live pending             |
-| Codex       | yes           | yes                  | yes  | yes    | yes                                             | wired, fixture-verified; live pending       |
-| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                     | not wired: event exists, payload does not   |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                                             | not wired: sees call, tool name unconfirmed |
+|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                              |
+| ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | ------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending             |
+| Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending       |
+| Cursor      | yes           | yes                  | yes  | yes    | unsupported                                      | not wired: event exists, payload does not   |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed |
 
 "Fixture-verified" means the adapter executed against this binary with a
 controlled host event on stdin. "Manual-E2E-proven" means a locally installed

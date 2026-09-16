@@ -189,9 +189,9 @@ The one escape hatch: build the workspace programmatically instead of via a
 magusfile, using the exported `Option`/`ProjectOption`/`BindingOption` wire
 API (`register.go`: `WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
 Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode
-through `internal/spellruntime`, which IS reachable this way because the exported
+through `internal/spell`, which IS reachable this way because the exported
 `register.go` functions live inside this module and call into it on the
-caller's behalf - the caller never imports `internal/spellruntime` directly, they
+caller's behalf - the caller never imports `internal/spell` directly, they
 call the exported wrapper. This path gets a caller real spell execution
 without a magusfile; it does not get them arbitrary Buzz-authored targets.
 
@@ -211,16 +211,16 @@ naming:
 3. **Is a boundary deliberate or accidental?** Read the package doc comment
    first (`doc.go` or the top of the main file) before proposing a merge -
    `spells/doc.go` documents that `spells` (exported: the Buzz sources plus
-   `Op`/`Driver`/`Descriptor`) and `internal/spellruntime` (unexported: the bytecode
+   `Op`/`Driver`/`Descriptor`) and `internal/spell` (unexported: the bytecode
    decoder) used to be three packages telling the same story from different
    angles, and were deliberately collapsed to two, with the dependency
    direction (`spells` imports nothing from `types`; `types` imports
    `spells`) called out as load-bearing so the two cannot cycle. That is a
-   documented, deliberate split - proposing to merge `internal/spellruntime` into
+   documented, deliberate split - proposing to merge `internal/spell` into
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -
-   that shape (see the magus-architecture-review skill's table) is the accidental
+   that shape (see the {{skill "architecture-review"}} skill's table) is the accidental
    kind.
 
 Do not paper over a genuine gap with a workaround the reader did not ask for.

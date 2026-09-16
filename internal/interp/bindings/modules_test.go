@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/interp"
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
-	"github.com/egladman/magus/internal/spellruntime"
+	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/std"
@@ -1551,29 +1551,29 @@ func BenchmarkRunBuzzParallel(b *testing.B) {
 const testBoundaryTypesPath = "test/boundary-types"
 
 var testBoundaryTypesSource = strings.Join([]string{
-	spellruntime.ExecResultSource,
-	spellruntime.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
-	spellruntime.CommitSource,
-	spellruntime.FileInfoSource,
-	spellruntime.HTTPResponseSource,
-	spellruntime.SemverVersionSource,
-	spellruntime.SemverNextSource,
-	spellruntime.URLSource,
-	spellruntime.TagSource, // Tag.version is SemverVersion, so it must follow that source
-	spellruntime.ProjectEntrySource,
-	spellruntime.ProjectsSource,
-	spellruntime.AffectedSource,
-	spellruntime.GraphSource,
-	spellruntime.CrossTargetRefSource,
-	spellruntime.TargetSpellUseSource,
-	spellruntime.InputRefSource,
-	spellruntime.OutputRefSource,
-	spellruntime.TargetGraphNodeSource,
-	spellruntime.TargetGraphProjectSource,
-	spellruntime.TargetGraphSource,
-	spellruntime.ModuleFieldEntrySource,
-	spellruntime.ModuleMethodEntrySource,
-	spellruntime.ModuleSource,
+	spell.ExecResultSource,
+	spell.CommitAuthorSource, // precedes Commit: Commit.author is CommitAuthor
+	spell.CommitSource,
+	spell.FileInfoSource,
+	spell.HTTPResponseSource,
+	spell.SemverVersionSource,
+	spell.SemverNextSource,
+	spell.URLSource,
+	spell.TagSource, // Tag.version is SemverVersion, so it must follow that source
+	spell.ProjectEntrySource,
+	spell.ProjectsSource,
+	spell.AffectedSource,
+	spell.GraphSource,
+	spell.CrossTargetRefSource,
+	spell.TargetSpellUseSource,
+	spell.InputRefSource,
+	spell.OutputRefSource,
+	spell.TargetGraphNodeSource,
+	spell.TargetGraphProjectSource,
+	spell.TargetGraphSource,
+	spell.ModuleFieldEntrySource,
+	spell.ModuleMethodEntrySource,
+	spell.ModuleSource,
 }, "\n")
 
 // TestEveryBoundaryTypeHasAMirror is the completeness gate. A BuzzObject method on a

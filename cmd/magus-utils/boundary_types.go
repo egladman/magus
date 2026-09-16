@@ -26,10 +26,15 @@ var boundaryTypes = []boundaryType{
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
-	{Name: "Command", Type: reflect.TypeFor[spells.Command]()},
+	// RuntimeObject on both: a resolved spell is handed back to Buzz as a handle, and the
+	// encoder for that has to be GENERATED from this registry rather than hand-written
+	// beside it. A hand-written one drops a field the moment the struct grows one, silently
+	// and only on the round trip, which is how SymbolIndexer went missing from a handle
+	// while the decoder still demanded it.
+	{Name: "Command", Type: reflect.TypeFor[spells.Command](), RuntimeObject: true},
 	{Name: "Service", Type: reflect.TypeFor[spells.Service]()},
 	// Must follow Command: SymbolIndexer.command is one.
-	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer]()},
+	{Name: "SymbolIndexer", Type: reflect.TypeFor[spells.SymbolIndexer](), RuntimeObject: true},
 	{Name: "Charm", Type: reflect.TypeFor[spells.Charm]()},
 	{Name: "PatchOp", Type: reflect.TypeFor[spells.PatchOp]()},
 	{Name: "VersionKey", Type: reflect.TypeFor[spells.VersionKey]()},
@@ -120,7 +125,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Volatility", Type: reflect.TypeFor[types.VolatilityReport](), RuntimeObject: true},
 	// Not RuntimeObject: unlike their insight-bundle siblings above, nothing declares
 	// these for Buzz (no gen/decls entry reaches them), so no method call ever surfaces
-	// one as a typed return; moduledecls.go's KnowledgeGodNode comment is the fossil
+	// one as a typed return; module_decls.go's KnowledgeGodNode comment is the fossil
 	// of that gap (an `in:` field that shipped unparsable because nothing checked it).
 	{Name: "KnowledgeGodNode", Type: reflect.TypeFor[types.KnowledgeGodNode]()},
 	{Name: "KnowledgeOrphan", Type: reflect.TypeFor[types.KnowledgeOrphan]()},

@@ -12,8 +12,8 @@ tool work, and fixes its place in the hierarchy between [Spells](spells.md),
 [Targets](targets.md), and the result a run produces. It also disambiguates the
 two words magus overloads, _op_ and _Target_.
 
-> **Status.** The hierarchy, the `ExecResult` value type, and the `spellruntime.Op` (née
-> `spellruntime.Target`) Operation type all exist today. A per-op `OpResult`/`TargetResult`
+> **Status.** The hierarchy, the `ExecResult` value type, and the `spell.Op` (née
+> `spell.Target`) Operation type all exist today. A per-op `OpResult`/`TargetResult`
 > consolidation was prototyped and removed as speculative (no consumer); the run
 > path reports at the **target** level only, via the `run.target.result` event
 > (`internal/report`). The Operation-layer rows below are kept as the conceptual
@@ -112,17 +112,17 @@ operations. magus never names anything just `op` in the spell API, for exactly t
 
 - **`types.Target`**: the addressable **work-unit** `Path + Name`, plus charms
   and changed files. This is _the_ Target ([targets.md](targets.md)).
-- **`spellruntime.Op`** (formerly `spellruntime.Target`): "a single dispatchable surface of a
+- **`spell.Op`** (formerly `spell.Target`): "a single dispatchable surface of a
   spell," i.e. an **Operation**. It was named `Target`, colliding with the
   work-unit above; renamed to `Op` to formalize this vocabulary.
 
-### Naming decision (done): `spellruntime.Target` → `spellruntime.Op`
+### Naming decision (done): `spell.Target` → `spell.Op`
 
-`spellruntime.Target` _was_ an Operation misnamed as a Target. It is now `spellruntime.Op`
+`spell.Target` _was_ an Operation misnamed as a Target. It is now `spell.Op`
 (`Spec.Ops`, `OpNames`, and the resolve/fork/bind paths followed), wire formats
 preserved. The docs warn against substituting "Operation" for a work-unit Target
 ([targets.md](targets.md)); that warning is about `types.Target` and never
-protected `spellruntime.Target`, which was the actual offender.
+protected `spell.Target`, which was the actual offender.
 
 ## Relationship to the value types
 

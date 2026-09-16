@@ -3,7 +3,7 @@
 magus\-agent \- Manage skills, harnesses, and agent feedback
 .SH SYNOPSIS
 .B magus
-.RI "agent <install|harness|improve|starter|adoption> [flags]"
+.RI "agent <install|harness|starter|adoption> [flags]"
 .SH DESCRIPTION
 Render the agent skills embedded in this binary and write or stream them
 into named destinations (<skills\-dir>).
@@ -21,8 +21,8 @@ descriptor already names, remove deletes only those same fragments (a user's
 own hooks beside them are untouched, and nothing is asked for confirmation \-
 pass \-\-dry\-run to preview one first), and verify actually runs the wired guard
 command against a synthetic event rather than trusting its mere presence in
-the config. Omit \-\-id to act on every magusfile\-wired provider. improve
-reviews recurring guard feedback and can explicitly update those fragments.
+the config. Omit \-\-id to act on every magusfile\-wired provider. Guard feedback
+that keeps recurring is doctor's recurring\-guard\-denials check, not a verb here.
 .PP
 agent is a pure data generator, which is what makes \-\-tar the general
 answer: it streams a tar archive to stdout, so skills can be installed
@@ -88,21 +88,6 @@ Harness ID; omit to verify every magusfile\-wired provider
 \fB\-\-id\fR \fIstring\fR
 Harness ID; omit to install every magusfile\-wired provider
 .RE
-.SS agent improve options
-.RS
-.TP
-\fB\-\-all\fR
-Include one\-off feedback
-.TP
-\fB\-\-apply\fR
-Apply one descriptor\-managed harness update
-.TP
-\fB\-\-id\fR \fIstring\fR
-Harness descriptor to update with \-\-apply
-.TP
-\fB\-\-session\fR \fIstring\fR
-Only evidence from this host session
-.RE
 .SS agent adoption options
 .RS
 .TP
@@ -117,9 +102,6 @@ Render the embedded skills and write or stream them into named destinations
 .TP
 \fBharness\fR
 Apply, remove, or verify harnesses wired in the magusfile or JSON descriptors
-.TP
-\fBimprove\fR
-Review recurring guard feedback and propose a harness update
 .TP
 \fBstarter\fR
 Print a starter AGENTS.md to stdout; never writes a file
@@ -199,6 +181,7 @@ magus agent adoption --commands commands.txt -o json
 \fBmagus\-events\fR(1),
 \fBmagus\-status\fR(1),
 \fBmagus\-clean\fR(1),
+\fBmagus\-shell\fR(1),
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),

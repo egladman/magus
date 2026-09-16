@@ -209,10 +209,12 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 // reviewed range rather than a diff squeezed into a CI log, so Mercurial's default context
 // applies, matching git's and jj's RangeDiff.
 func (v hgVCS) RangeDiff(ctx context.Context, dir, base, head string, paths []string) (string, error) {
-	if err := checkRef(base); err != nil {
+	// checkRevsetRef, not checkRef: both refs are interpolated INTO the ancestor()
+	// expression below, where a comma or a paren rewrites it rather than naming a revision.
+	if err := checkRevsetRef(base); err != nil {
 		return "", err
 	}
-	if err := checkRef(head); err != nil {
+	if err := checkRevsetRef(head); err != nil {
 		return "", err
 	}
 	args := []string{"diff", "--git", "-r", "ancestor(" + base + "," + head + ")", "-r", head}

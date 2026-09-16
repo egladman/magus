@@ -22,6 +22,11 @@ import (
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/std"
+	"github.com/egladman/magus/types"
 )
 
 // SkillVersion changes when the installed skill contract changes. It is part
@@ -165,7 +170,27 @@ import (
 // a person or unbound orchestrator may explicitly refresh only the Magus-owned
 // host hook entries, while the rule engine, installed skills, memory,
 // and repository instructions remain outside that write set.
-const SkillVersion = 77
+// 78: magus-workspace-rules states the self-improvement loop as a checklist that
+// stops at the first failing line, names who acts on each destination, and ends in
+// proof: show the rule in the file the agent LOADS, then re-run the command the
+// evidence cites. A change that does not move that verdict changed nothing, and
+// the loop it replaced ended before anyone could notice.
+// 79: skill bodies resolve their cross-links instead of retyping them. CLI paths,
+// MCP tool names, sibling skill names and Buzz host calls now go through the
+// registries that define them, so a rename fails the install rather than shipping
+// prose that names something gone. A cited MGS code gains its docs URL, whose
+// category segment the digits do not imply.
+// 80: `magus agent improve` is retired. Its read half is doctor's
+// recurring-guard-denials check, where every other workspace verdict already lives, and
+// its --apply half duplicated `magus agent harness apply` call for call.
+// magus-workspace-rules routes to both.
+// 81: internal/spellruntime is internal/spell. magus-sdk named the old path when
+// explaining what an SDK caller may and may not import.
+// 82: `magus session hook` is `magus shell`, with no alias. The verdict was never
+// session-scoped, and one command now answers a person typing at a prompt and a host's
+// pre-tool-use hook: an operand for the first, stdin for the second, one evaluator
+// behind both. magus-context-audit piped its candidate command into the old path.
+const SkillVersion = 82
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -361,8 +386,124 @@ func (f Form) Variant() Variant {
 // `-o template` flag, magus-buzz-write documents mustache) escapes it as a string
 // constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too; the
 // template engine does not know what Markdown is.
+// skillFuncs is the template vocabulary a skill body may call.
+//
+// `cmd` renders a CLI path from the canonical registry rather than from the
+// author's memory of it: {{cmd "agent improve"}}. A verb that gets renamed then
+// fails the install with the path it could not resolve, instead of shipping a
+// sentence that names a command nobody has any more. Skills install into repos
+// whose readers cannot check, which is exactly where stale prose survives.
+//
+// It renders the PATH spelling always. The reader is another process on another
+// machine, so this process's own argv0 (./magus in a source checkout) would be a
+// path that resolves somewhere else or nowhere.
+// magusModule is the host module a skill's Buzz examples call into. The only one they
+// name: fs, http and the rest belong to magusfile authoring, which magus-buzz-write
+// covers from the live module list rather than from prose here.
+const magusModule = "magus"
+
+// diagnosticCode resolves a registered code, so a skill can cite only one that exists.
+func diagnosticCode(code string) (types.DiagnosticCode, error) {
+	for _, c := range types.AllDiagnosticCodes() {
+		if string(c) == code {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("no diagnostic %q: a skill may only cite a registered code", code)
+}
+
+// buzzSurfaceName is the identifier a magusfile writes for decl, which is not always
+// its declared Name: a declaration may pin a verbatim spelling, and otherwise the Buzz
+// surface is the camelCase of the snake_case Name.
+func buzzSurfaceName(decl std.Method) string {
+	if decl.BuzzName != "" {
+		return decl.BuzzName
+	}
+	return std.CamelCase(decl.Name)
+}
+
+// Every function here renders the SAME text in both forms. That is not a style
+// preference: the two forms exist to describe one behaviour at two lengths, and
+// validateActionPipe permits these calls only on that basis.
+var skillFuncs = template.FuncMap{
+	"cmd": func(path string) (string, error) {
+		c, ok := hint.Lookup(path)
+		if !ok {
+			return "", fmt.Errorf("no command %q: declare it in internal/hint and register it in AllCommands", path)
+		}
+		return c.StringAs(hint.DefaultBinaryName), nil
+	},
+	"tool": func(verb string) (string, error) {
+		t, ok := hint.LookupTool("magus_" + verb)
+		if !ok {
+			return "", fmt.Errorf("no MCP tool %q: declare it in internal/hint and register it in AllToolNames", "magus_"+verb)
+		}
+		return t.String(), nil
+	},
+	"skill": func(topic string) (string, error) {
+		for _, s := range skillSources {
+			if s.name == "magus-"+topic {
+				return s.name, nil
+			}
+		}
+		return "", fmt.Errorf("no shipped skill %q: a cross-reference must name one magus installs", "magus-"+topic)
+	},
+	// mgs is the bare code, checked against the registry. For the places a code appears
+	// as DATA rather than as a citation: inside a graph node id, a URL pattern, a string
+	// literal the prose is quoting. A link in any of those would be wrong, so this one
+	// buys validation only.
+	"mgs": func(code string) (string, error) {
+		if _, err := diagnosticCode(code); err != nil {
+			return "", err
+		}
+		return code, nil
+	},
+	// mgslink is the citation form: a markdown link to the code's documentation. The URL
+	// is the half a reader cannot reconstruct, because its category segment comes from
+	// the code's range rather than from the digits, so prose that cited a bare code sent
+	// its reader to a search box.
+	"mgslink": func(code string) (string, error) {
+		c, err := diagnosticCode(code)
+		if err != nil {
+			return "", err
+		}
+		return "[" + code + "](" + types.CodeURL(c) + ")", nil
+	},
+	// buzz renders a call into the magus host module from "namespace.method":
+	// magus\harness.provider. These are the load-bearing lines in magus-workspace-rules,
+	// the calls a workspace makes to wire a host or strengthen the guard, so a renamed
+	// method would teach a call that errors in the one place a reader cannot check it.
+	//
+	// The backslash is namespace access and the dot is member access on the object the
+	// namespace resolves to, which is why this walks Namespaces rather than Methods.
+	"buzz": func(call string) (string, error) {
+		space, method, ok := strings.Cut(call, ".")
+		if !ok {
+			return "", fmt.Errorf("buzz call %q must be \"namespace.method\"", call)
+		}
+		for _, m := range hostmodules.All() {
+			if m.Name != magusModule {
+				continue
+			}
+			for _, ns := range m.Namespaces {
+				if ns.Name != space {
+					continue
+				}
+				for _, decl := range ns.Methods {
+					if buzzSurfaceName(decl) == method {
+						return magusModule + `\` + call, nil
+					}
+				}
+				return "", fmt.Errorf(`no method %q on magus\%s`, method, space)
+			}
+			return "", fmt.Errorf(`no namespace %q on the %s module`, space, magusModule)
+		}
+		return "", fmt.Errorf("no host module %q", magusModule)
+	},
+}
+
 func applyVariant(name, body string, v Variant) (string, error) {
-	t, err := template.New(name).Parse(body)
+	t, err := template.New(name).Funcs(skillFuncs).Parse(body)
 	if err != nil {
 		return "", fmt.Errorf("skill %q: %w", name, err)
 	}
@@ -706,34 +847,45 @@ func checkDestination(dir, dest string) error {
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
-func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) ([]string, error) {
+// changed is the SUBSET of written whose bytes this install actually altered, so a
+// caller can report what a run did rather than how many files it touched. Without it
+// every reinstall reads identically whether it replaced the whole set or confirmed a
+// set that was already current, and a line that says the same thing every time is one
+// nobody reads on the run where it finally differs.
+func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (written, changed []string, err error) {
 	if err := checkDestination(dir, dest); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	skills, err := c.RenderedSkills(form)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	var written []string
 	for _, skill := range skills {
 		rel := filepath.Join(skill.Name, "SKILL.md")
 		outPath := filepath.Join(dir, dest, rel)
 		if !force {
 			if _, err := os.Stat(outPath); err == nil {
-				return nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
+				return nil, nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
 			} else if !os.IsNotExist(err) {
-				return nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
+				return nil, nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
 			}
 		}
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant), 0o644); err != nil {
-			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
+		body := c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
+		// A read error counts as changed: the install is about to overwrite whatever is
+		// there, and claiming "unchanged" for a file magus could not read would be the
+		// one answer that stops a reader looking.
+		if prev, readErr := os.ReadFile(outPath); readErr != nil || !bytes.Equal(prev, body) {
+			changed = append(changed, filepath.Join(dest, rel))
+		}
+		if err := os.WriteFile(outPath, body, 0o644); err != nil {
+			return nil, nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
 	}
-	return written, nil
+	return written, changed, nil
 }
 
 // StaleSkillDirs returns the installed skill directories under <dir>/<dest> that
