@@ -38,12 +38,12 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 			assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 		}
 	}
-	for _, kind := range advisoryKinds {
-		doc, ok := catalogued[string(kind)]
-		assert.Truef(t, ok, "advisory %q has no catalog row: add one to advisoryDocs", kind)
+	for _, name := range advisoryNames() {
+		doc, ok := catalogued[name]
+		assert.Truef(t, ok, "advisory %q has no catalog row: add one to advisoryDocs", name)
 		if ok {
-			assert.Equal(t, "advise", doc.Decision, "%q is an advisory", kind)
-			assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", kind)
+			assert.Equal(t, "advise", doc.Decision, "%q is an advisory", name)
+			assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 		}
 	}
 
@@ -53,8 +53,8 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 	for _, name := range declared {
 		known[name] = true
 	}
-	for _, kind := range advisoryKinds {
-		known[string(kind)] = true
+	for _, name := range advisoryNames() {
+		known[name] = true
 	}
 	for _, r := range Rules() {
 		assert.Truef(t, known[r.Name], "catalog row %q names no declared rule or advisory", r.Name)

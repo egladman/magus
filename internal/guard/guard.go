@@ -263,9 +263,18 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// advisory about editing a file the agent opened read-only.
 	case isPath:
 		advice := ""
-		// adviceKind is which rung spoke, for the verdict to name. Empty for the rungs
-		// that are pure heuristics on a filename: those carry no marker kind, so there
-		// is nothing stable to print.
+		// adviceKind is which rung spoke, for the verdict to name.
+		//
+		// NAMING IS NOT HOLDING. A kind is both an identity and a marker key, and the
+		// two are separable: a rung sets this to be nameable, and separately chooses
+		// whether to route its text through markers.Once.
+		//
+		// Enrolling these rungs in the gate as a side effect of naming them broke the
+		// harness probe, which fires the AGENTS.md advisory once per wired harness and
+		// reads the verdict: the first firing spent the marker and the other three
+		// harnesses read `pass`, so `magus doctor` reported the guard uncovered. The
+		// rungs below name themselves and speak every time, which is what they did
+		// before they had names.
 		adviceKind := hint.MarkerKind("")
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
@@ -309,7 +318,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseGeneratedWrite(ctx, deps, input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisoryGeneratedWrite, text), advisoryGeneratedWrite, true
+				advice, adviceKind, spoken = text, advisoryGeneratedWrite, true
 			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict that
@@ -322,12 +331,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseInstalledSkillWrite(input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisoryInstalledSkill, text), advisoryInstalledSkill, true
+				advice, adviceKind, spoken = text, advisoryInstalledSkill, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input); text != "" {
-				advice, adviceKind, spoken = markers.Once(advisoryMemoryWrite, text), advisoryMemoryWrite, true
+				advice, adviceKind, spoken = text, advisoryMemoryWrite, true
 			}
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
@@ -398,7 +407,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
-				verdict.Rule = string(v.Kind)
+				verdict.Rule = v.advisoryName()
 			}
 		}
 		denyUndeclared(input)

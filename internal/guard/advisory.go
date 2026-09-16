@@ -42,10 +42,19 @@ const (
 	advisoryMemoryWrite    hint.MarkerKind = "memory-write"
 	advisoryScopeDrift     hint.MarkerKind = "scope-drift"
 	advisoryNewSourceDir   hint.MarkerKind = "new-source-dir"
+)
 
-	advisoryPushGate        hint.MarkerKind = "push-gate"
-	advisoryRevertClassify  hint.MarkerKind = "revert-classify"
-	advisoryCheckpointState hint.MarkerKind = "checkpoint-state"
+// The VCS advisories name themselves without enrolling in the gate above, so they are
+// denyRuleName values rather than MarkerKinds: a kind is a marker KEY, and holding these
+// is a behavior change none of them asked for. See ShellVerdict.Rule.
+//
+// denyRuleName is the type despite these not denying. Renaming it to cover both arms
+// would touch every rule in the file for a word, and the field it lands in, Rule, already
+// reads correctly on either.
+const (
+	advisoryPushGate        denyRuleName = "push-gate"
+	advisoryRevertClassify  denyRuleName = "revert-classify"
+	advisoryCheckpointState denyRuleName = "checkpoint-state"
 )
 
 // advisoryFocusPath keys a marker on the PATH as well as on the kind, so a session

@@ -164,7 +164,7 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 		sub, rest := c.Args[0], c.Args[1:]
 		switch sub {
 		case "push":
-			return ShellVerdict{Context: pushGuardContext, Kind: advisoryPushGate, Brief: pushGuardBrief}, true
+			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 		case "add":
 			// The stage-everything forms already denied in the first pass.
 			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
@@ -174,11 +174,11 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
 			if slices.Contains(rest, "--") {
-				return ShellVerdict{Context: revertGuardContext, Kind: advisoryRevertClassify, Brief: revertGuardBrief}, true
+				return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 			}
 		case "restore":
 			// `git restore` targets worktree files by definition.
-			return ShellVerdict{Context: revertGuardContext, Kind: advisoryRevertClassify, Brief: revertGuardBrief}, true
+			return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 		case "describe":
 			// --tags and --always are the build-stamp spelling (this repository's own
 			// go_build target uses both): the caller wants a version string to embed,
@@ -187,14 +187,14 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
 				continue
 			}
-			return ShellVerdict{Context: checkpointGuardContext, Kind: advisoryCheckpointState, Brief: checkpointGuardBrief}, true
+			return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 		case "stash":
 			if len(rest) > 0 && rest[0] == "create" {
-				return ShellVerdict{Context: checkpointGuardContext, Kind: advisoryCheckpointState, Brief: checkpointGuardBrief}, true
+				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		case "rev-parse":
 			if isTreeIdentityQuery(rest) {
-				return ShellVerdict{Context: checkpointGuardContext, Kind: advisoryCheckpointState, Brief: checkpointGuardBrief}, true
+				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		}
 	}
@@ -252,11 +252,11 @@ func gitGuardFallback(command string) (ShellVerdict, bool) {
 	case stageAllRe.MatchString(command):
 		return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
 	case pushRe.MatchString(command):
-		return ShellVerdict{Context: pushGuardContext, Kind: advisoryPushGate, Brief: pushGuardBrief}, true
+		return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
 	case stageRe.MatchString(command):
 		return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
 	case scopedRevertRe.MatchString(command):
-		return ShellVerdict{Context: revertGuardContext, Kind: advisoryRevertClassify, Brief: revertGuardBrief}, true
+		return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
 	}
 	return ShellVerdict{}, false
 }

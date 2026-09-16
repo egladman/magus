@@ -244,5 +244,24 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryMemoryWrite,
 	advisoryScopeDrift, advisoryNewSourceDir,
+}
+
+// advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the
+// once-per-session gate, so they are denyRuleName values and not kinds. The catalog test
+// walks them beside advisoryKinds: what makes a rule catalogable is having a name, and
+// these have one.
+var advisoryRuleNames = []denyRuleName{
 	advisoryPushGate, advisoryRevertClassify, advisoryCheckpointState,
+}
+
+// advisoryNames is every advisory's name, held or not: the set the catalog must cover.
+func advisoryNames() []string {
+	out := make([]string, 0, len(advisoryKinds)+len(advisoryRuleNames))
+	for _, k := range advisoryKinds {
+		out = append(out, string(k))
+	}
+	for _, n := range advisoryRuleNames {
+		out = append(out, string(n))
+	}
+	return out
 }
