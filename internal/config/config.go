@@ -467,6 +467,18 @@ type Knowledge struct {
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
 	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
+	// Sessions declares which agent hosts' transcripts to fold into the @session overlay,
+	// the layer that answers which code agents actually touch. `magus graph build` runs
+	// each declared adapter before assembling, so the daemon's sync-graph job keeps it
+	// current without a second schedule.
+	//
+	// Nothing is derived: an adapter reads a transcript store outside the workspace,
+	// usually under $HOME, and magus does not go looking through a person's home
+	// directory because a config key was left blank. The ingest is also deliberately
+	// LOCAL. Everything it produces lives in the per-repo session store and the local
+	// shard, never in a committed graph, because a transcript carries the paths someone
+	// worked on and the prose their host recorded.
+	Sessions SessionsConfig `json:"sessions" yaml:"sessions"`
 	// Notes declares where this workspace keeps its human-authored notes (see
 	// NotesConfig). Empty (the default) means no notes store at all and every part of the
 	// feature is inert.
@@ -565,6 +577,43 @@ type KnowledgeVCSConfig struct {
 	// an agent, and the edges are already bounded by MaxCommits. Set false to keep only
 	// the per-file vcs_* attrs and omit the author layer.
 	Authorship *bool `json:"authorship" yaml:"authorship"`
+}
+
+// SessionsConfig configures agent-session ingestion (see Knowledge.Sessions). Zero value
+// = enabled, with nothing to run until an adapter is declared.
+type SessionsConfig struct {
+	// Disabled opts out entirely, so `graph build` runs no adapter and `--no-sessions`
+	// becomes the permanent answer. The switch to reach for when the transcripts on this
+	// machine are not yours to read.
+	Disabled bool `json:"disabled" yaml:"disabled"`
+	// Adapters are the commands that load each host's transcripts, run in the workspace
+	// root before the graph is assembled.
+	Adapters []SessionAdapter `json:"adapters" yaml:"adapters"`
+}
+
+// SessionAdapter declares one agent host's transcript loader.
+//
+// It is a COMMAND rather than a host magus knows how to read, and that is the whole
+// design: transcript formats belong to the hosts, so a host renaming a tool costs this
+// one line instead of a magus release. magus ships a ready adapter per host it documents
+// (docs/guides/integrations/agents/magus-session-load-*.sh); declaring one here is how a
+// workspace opts in, and writing your own is how an undocumented host gets supported
+// without waiting for anybody.
+//
+// The command's contract is `magus session load`'s: normalize the host's transcripts into
+// the event stream and load them. It owns its own incremental state, so re-running it is
+// expected to be cheap and to load only what is new.
+type SessionAdapter struct {
+	Host string `json:"host" yaml:"host"` // the host whose transcripts this reads, for reporting
+	// Command is the program and its arguments, run from the workspace root. A LIST, not a
+	// command line: magus executes this directly, with no shell, so a declared adapter
+	// runs the one program it names. That is both how magus represents every command it
+	// runs (see job.CatalogEntry.Argv) and what keeps a committed config value from
+	// becoming a second command on a machine that merely pulled the branch.
+	//
+	// Something needing a pipeline or a variable writes a script and names the script,
+	// which is what the adapters magus documents already are.
+	Command []string `json:"command" yaml:"command"`
 }
 
 // SymbolIndex declares one project's SCIP index for symbol ingestion.

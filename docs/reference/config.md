@@ -82,6 +82,7 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | `knowledge.notes.private`                        | `MAGUS_KNOWLEDGE_NOTES_PRIVATE`                        | `--knowledge-notes-private`                        | string                             |
 | `knowledge.notes.shared`                         | `MAGUS_KNOWLEDGE_NOTES_SHARED`                         | `--knowledge-notes-shared`                         | string                             |
 | `knowledge.published_ref`                        | `MAGUS_KNOWLEDGE_PUBLISHED_REF`                        | `--knowledge-published-ref`                        | string                             |
+| `knowledge.sessions.disabled`                    | `MAGUS_KNOWLEDGE_SESSIONS_DISABLED`                    | `--knowledge-sessions-disabled`                    | bool                               |
 | `knowledge.symbol_indexing.disabled`             | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_DISABLED`             | `--knowledge-symbol-indexing-disabled`             | bool                               |
 | `knowledge.symbol_indexing.min_interval_seconds` | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS` | `--knowledge-symbol-indexing-min-interval-seconds` | int                                |
 | `knowledge.symbol_indexing.quiet_seconds`        | `MAGUS_KNOWLEDGE_SYMBOL_INDEXING_QUIET_SECONDS`        | `--knowledge-symbol-indexing-quiet-seconds`        | int                                |

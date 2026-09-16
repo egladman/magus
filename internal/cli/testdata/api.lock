@@ -29,6 +29,7 @@ config knowledge.max_size_mb
 config knowledge.notes.private
 config knowledge.notes.shared
 config knowledge.published_ref
+config knowledge.sessions.disabled
 config knowledge.symbol_indexing.disabled
 config knowledge.symbol_indexing.min_interval_seconds
 config knowledge.symbol_indexing.quiet_seconds

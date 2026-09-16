@@ -243,6 +243,9 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.SymbolIndexing.MinIntervalSeconds = n
 		}
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_SESSIONS_DISABLED"); v != "" {
+		cfg.Knowledge.Sessions.Disabled = parseBoolEnv(v, cfg.Knowledge.Sessions.Disabled)
+	}
 	if v := getenv("MAGUS_KNOWLEDGE_NOTES_SHARED"); v != "" {
 		cfg.Knowledge.Notes.Shared = v
 	}

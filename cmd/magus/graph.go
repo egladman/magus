@@ -27,6 +27,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -104,16 +105,19 @@ func graphUsage() {
 // otherwise keeps fresh in the background. A missing indexer is reported with an install
 // hint but does not fail the build; the domain graph rebuilds regardless.
 func graphBuild(ctx context.Context, root string, args []string) error {
-	var skipSymbols bool
+	var skipSymbols, skipSessions bool
 	_, err := cmdParse("graph build", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&skipSymbols, "no-symbols", false, "rebuild the domain graph only; do not reindex code symbols")
+		fs.BoolVar(&skipSessions, "no-sessions", false, "do not run the declared agent-session adapters first")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph build [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Rebuild the knowledge graph now. By default it first reindexes code symbols")
-			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then rebuilds and")
-			fmt.Fprintln(os.Stderr, "re-ingests. The daemon does this automatically in the background; this is the")
-			fmt.Fprintln(os.Stderr, "manual trigger (after a branch switch, or when the daemon is not running).")
+			fmt.Fprintln(os.Stderr, "by running each symbol-capable project's `scip` op, then runs each adapter")
+			fmt.Fprintln(os.Stderr, "declared in knowledge.sessions to fold this machine's agent transcripts into")
+			fmt.Fprintln(os.Stderr, "the @session overlay, then rebuilds and re-ingests. The daemon does this")
+			fmt.Fprintln(os.Stderr, "automatically in the background; this is the manual trigger (after a branch")
+			fmt.Fprintln(os.Stderr, "switch, or when the daemon is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -139,6 +143,10 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 		}
 	}
 
+	if !skipSessions {
+		ingestSessions(ctx, root)
+	}
+
 	g, err := loadKnowledgeGraph(ctx, root, true /* refresh */, false, false)
 	if err != nil {
 		return err
@@ -146,6 +154,41 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 	out := g.Output()
 	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
 	return nil
+}
+
+// ingestSessions runs the declared transcript adapters, reporting each one's own summary
+// line, before the graph that reads what they loaded is assembled.
+//
+// Never fatal, for the same reason reindexing is not: an adapter that fails leaves the
+// previous ingest in place, so the graph is missing its newest sessions rather than
+// wrong, and failing the rebuild over it would take the other nine tenths of the graph
+// down with it. A workspace that declares no adapter says nothing at all, since silence
+// is the correct report for a feature nobody opted into.
+func ingestSessions(ctx context.Context, root string) {
+	cfg := globalCfg.Knowledge.Sessions
+	if cfg.Disabled {
+		return
+	}
+	// The config-to-store mapping lives HERE, in the composition root, so neither package
+	// names the other's vocabulary: config owns the workspace schema, internal/sessions
+	// owns the store and takes two strings per adapter.
+	adapters := make([]sessions.Adapter, 0, len(cfg.Adapters))
+	for _, a := range cfg.Adapters {
+		adapters = append(adapters, sessions.Adapter{Host: a.Host, Argv: a.Command})
+	}
+	// Resolved here rather than taken as given: root is empty on every invocation that did
+	// not pass --root, and an adapter is a command with a working directory, so it has to
+	// be a real path before one can run.
+	results := sessions.RunAdapters(ctx, resolveRootOrEmpty(root), adapters)
+	for _, r := range results {
+		if r.Err != nil {
+			interactive.Emit(os.Stderr, "session adapter "+r.Host+" did not finish:")
+			fmt.Fprintf(os.Stderr, "  %s\n", r.Err.Error())
+		}
+		if r.Output != "" {
+			fmt.Fprintf(os.Stderr, "%s\n", r.Output)
+		}
+	}
 }
 
 // graphDeps emits the project dependency DAG, the standalone home of the view

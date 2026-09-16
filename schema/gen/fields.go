@@ -421,6 +421,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_KNOWLEDGE_SYMBOL_INDEXING_MIN_INTERVAL_SECONDS: MinIntervalSeconds is the minimum time between re-index runs for one project, a ceiling on how often the indexer fire...",
 	},
 	{
+		GoPath:   "Knowledge.Sessions.Disabled",
+		YamlPath: "knowledge.sessions.disabled",
+		EnvVar:   "MAGUS_KNOWLEDGE_SESSIONS_DISABLED",
+		Flag:     fieldtype.FlagNames{Long: "knowledge-sessions-disabled"},
+		Kind:     fieldtype.KindBool,
+		Usage:    "MAGUS_KNOWLEDGE_SESSIONS_DISABLED: Disabled opts out entirely, so 'graph build' runs no adapter and '--no-sessions' becomes the permanent answer.",
+	},
+	{
 		GoPath:   "Knowledge.Notes.Shared",
 		YamlPath: "knowledge.notes.shared",
 		EnvVar:   "MAGUS_KNOWLEDGE_NOTES_SHARED",

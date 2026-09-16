@@ -647,6 +647,24 @@ type LoadResult struct {
 // join this store exists to record. Events are written in the order given, so a
 // caller that wants them ordered orders them first.
 func LoadEvents(dir string, events []LoadEvent, start SessionStart) (LoadResult, error) {
+	// The one operation in this package that is NOT append-only, and therefore the one
+	// that needs a lock. Everything else appends a line, which POSIX makes atomic on a
+	// local filesystem; this reads the whole store to build a dedup set and then appends
+	// against it, so two loaders that both read before either writes each believe the
+	// other's events are new and store them twice, permanently, because the dedup set is
+	// a snapshot.
+	//
+	// That was a narrow window while a person ran `magus session load` by hand. It became
+	// routine when `graph build` started running adapters and the daemon started running
+	// graph build every six hours: the store is keyed by repository IDENTITY, so every
+	// worktree and every clone on the machine shares one, and each of their daemons ticks
+	// on its own schedule.
+	unlock, err := lockStore(dir)
+	if err != nil {
+		return LoadResult{}, err
+	}
+	defer unlock()
+
 	fold, err := ReadAll(dir)
 	if err != nil {
 		return LoadResult{}, err

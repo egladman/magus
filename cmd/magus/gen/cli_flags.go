@@ -193,6 +193,8 @@ const (
 	FlagExplainGlobal = "global"
 	// explain: --refresh
 	FlagExplainRefresh = "refresh"
+	// graph build: --no-sessions
+	FlagGraphBuildNoSessions = "no-sessions"
 	// graph build: --no-symbols
 	FlagGraphBuildNoSymbols = "no-symbols"
 	// graph deps: --depth
@@ -728,12 +730,14 @@ func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
 
 // GraphBuildFlags are the flags declared for `magus graph build`.
 type GraphBuildFlags struct {
-	NoSymbols bool // --no-symbols
+	NoSessions bool // --no-sessions
+	NoSymbols  bool // --no-symbols
 }
 
 // BindGraphBuild registers `magus graph build`'s flags on fs and returns the destination.
 func BindGraphBuild(fs *flag.FlagSet) *GraphBuildFlags {
 	var f GraphBuildFlags
+	fs.BoolVar(&f.NoSessions, FlagGraphBuildNoSessions, false, "Do not run the declared agent-session adapters first")
 	fs.BoolVar(&f.NoSymbols, FlagGraphBuildNoSymbols, false, "Rebuild the domain graph only; do not reindex code symbols")
 	return &f
 }

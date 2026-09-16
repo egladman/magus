@@ -88,3 +88,15 @@ knowledge:
     shared: notes
   vcs:
     enabled: true
+  # This repository loads its own Claude Code sessions with the adapter it ships, the
+  # same way it wires the guard template it ships rather than keeping a private copy. If
+  # the recipe breaks for a reader, it broke here first.
+  #
+  # The script resolves ./magus by walking up to the magusfile, so nothing here names a
+  # binary; from a worktree with no ./magus it falls through to PATH and says so on
+  # stderr. It carries its own byte offsets per transcript, so `graph build` running it
+  # every time costs a stat and a tail once the first load is done.
+  sessions:
+    adapters:
+      - host: claude-code
+        command: ["sh", "docs/guides/integrations/agents/magus-session-load-claude-code.sh"]

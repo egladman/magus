@@ -22,9 +22,11 @@ home of the graph itself.
 Subcommands (the first argument):
 
 build    Rebuild the knowledge graph now, reindexing code symbols first (runs
-           each symbol-capable project's scip op) unless --no-symbols. The
-           daemon does this automatically in the background; this is the manual
-           trigger, after a branch switch or when the daemon is not running.
+           each symbol-capable project's scip op) unless --no-symbols, then
+           running each adapter declared in knowledge.sessions unless
+           --no-sessions. The daemon does this automatically in the background;
+           this is the manual trigger, after a branch switch or when the daemon
+           is not running.
   deps     The project dependency DAG. A trailing list of project paths roots
            the graph; -o selects text, json, yaml, dot, mermaid, or tree. The
            same view scoped to a run is available as magus run \<target\> --graph
@@ -57,6 +59,9 @@ build    Rebuild the knowledge graph now, reindexing code symbols first (runs
            artifact, emit as json or markdown for a CI comment.
 
 ### graph build options
+
+**--no-sessions**
+: Do not run the declared agent-session adapters first
 
 **--no-symbols**
 : Rebuild the domain graph only; do not reindex code symbols

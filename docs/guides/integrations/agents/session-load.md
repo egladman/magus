@@ -175,6 +175,28 @@ sh magus-session-load-claude-code.sh            # extract and load
 sh magus-session-load-claude-code.sh --stdout   # read the stream yourself
 ```
 
+Declare it instead, and you stop running it by hand:
+
+```yaml
+knowledge:
+  sessions:
+    adapters:
+      - host: claude-code
+        command: sh magus-session-load-claude-code.sh
+```
+
+`magus graph build` runs each declared adapter before it assembles, so the
+overlay is rebuilt from the same command that rebuilds everything else reading
+it, and the daemon's `sync-graph` job carries it on the daemon's own schedule
+with nothing further to set up. `--no-sessions` skips them for one build;
+`knowledge.sessions.disabled` turns them off for good. An adapter that fails is
+reported and not fatal: the graph is then missing its newest sessions, which is a
+smaller problem than no graph.
+
+Nothing is derived. An adapter reads a transcript store under your home
+directory, and magus does not go looking through it because a config key was left
+blank.
+
 Each one scopes to a repository (`HOST_REPO_ROOT`, defaulting to the git toplevel
 of the current directory) and keeps a per-file checkpoint under
 `${XDG_STATE_HOME:-~/.local/state}/magus/session-load/<host>/`, so a re-run reads

@@ -233,9 +233,6 @@ magus\project({
         "graph-generate": {"skip_cache": "output derives from the entire knowledge graph, which no input glob can key"},
         "ci-shard": {"skip_cache": "emits a shard plan for the current invocation, not a reusable artifact"},
         "test": {"timeout": "15m"},
-        // Its input is a host's session store, which no glob in this tree can key,
-        // and a replay would report the sessions of whatever ran last.
-        "session-load": {"skip_cache": "reads an agent host's session store, which changes independently of this tree"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
         // Declares no outputs, deliberately: the output globs are what EnsureMergeDriver
@@ -3506,17 +3503,6 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 // Reports installed toolchains; excluded from CI because it probes remote tags.
 export fun toolchain_report(ctx: magus\Context, args: [str]) > void !> any {
     toolchains\report();
-}
-
-// Loads this checkout's own Claude Code sessions, so the repository dogfoods the
-// recipe it ships the same way it invokes the guard template it ships rather than
-// keeping a private copy.
-//
-// The recipe resolves the binary itself by walking up to the magusfile, so no
-// argument names one here; from a worktree with no ./magus it falls through to
-// PATH and announces itself on stderr if that copy cannot load.
-export fun session_load(ctx: magus\Context, args: [str]) > void !> any {
-    proc\exec("sh", ["docs/guides/integrations/agents/magus-session-load-claude-code.sh"], ".", {});
 }
 
 export fun serve(ctx: magus\Context, args: [str]) > void !> any {
