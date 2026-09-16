@@ -50,6 +50,55 @@ URL is an artifact to unpack and re-read, not bytes to diff, so the refresh scri
 is re-read by hand. Where the docs page and the validator disagree (the page types `matcher` as an object; the validator
 requires a string that compiles as a regex), the schema follows the validator, because the binary is what runs.
 
+The same bundle reaches npm, which is better provenance than either artifact above and is what the upstream table below
+pins. `@cursor/sdk` carries the hooks module: `dist/esm/357.js` holds the event-name map and the stdout validator, and
+the registry serves an immutable tarball per version with an `integrity` the fetch verifies, where a
+`downloads.cursor.com/lab/...` URL is a moving build that will eventually 404. It is still `derived`: the validator is
+zod, but it is INTERNAL, so none of this is generatable through a supported interface. `@cursor/sdk`'s `exports` map
+offers `.`, `./agent` and `./sqlite` only, the validator is a mangled symbol, and `dist/esm/357.js` is a chunk name that
+moves whenever the bundler reorders. What the upstream table buys is a tripwire, not a generator: when the recorded
+digest stops matching, a human re-reads the bundle.
+
+`@cursor/sdk` was checked for exported hook TYPES on 2026-09-16 and has none, so it cannot serve the role
+`@anthropic-ai/claude-agent-sdk` serves for Claude Code. Recorded because the absence is the kind of thing that invites
+the same search twice: the package is a TypeScript SDK, it obviously ought to carry them, and it does not.
+
+### Cursor's hook events
+
+The validator rejects an event name it does not know, so this list IS the contract, and
+`cursor/hooks.schema.json` must name all of it. Read from the `dist/esm/357.js` event map at the version pinned below:
+
+`beforeShellExecution`, `beforeMCPExecution`, `afterShellExecution`, `afterMCPExecution`, `beforeReadFile`,
+`afterFileEdit`, `beforeTabFileRead`, `afterTabFileEdit`, `stop`, `beforeSubmitPrompt`, `afterAgentResponse`,
+`afterAgentThought`, `sessionStart`, `sessionEnd`, `preCompact`, `subagentStart`, `subagentStop`, `preToolUse`,
+`postToolUse`, `postToolUseFailure`, `workspaceOpen`.
+
+Twenty-one, and magus wires five. `preCompact` is the notable absence: magus has a post-compaction brief on the hosts
+that offer the moment, and Cursor offers it.
+
+## Upstream artifacts
+
+What the `derived` rows above were transcribed FROM. The rows in the first table digest OUR files; these digest the
+declarations they came out of, which is the half that was missing: nothing noticed when an upstream release changed the
+validator, because only our own transcription was ever hashed.
+
+A SLICE, not the file. `marker` is located in the named file and a fixed window from it is what gets digested, because a
+whole-file digest reports every release as drift whatever moved in it. Measured: `@anthropic-ai/claude-agent-sdk` went
+0.3.267 to 0.3.273 and `sdk.d.ts` changed, while `SyncHookJSONOutput` did not move a byte. A tripwire that fires on
+every SDK bump is one somebody mutes, and a muted tripwire is worse than none.
+
+A marker the tool cannot find is an ERROR, never a pass. That is the failure the slice buys its quiet with: if the
+declaration is renamed or the bundler reorders a chunk, the window silently becomes something else, so not finding it
+has to be loud.
+
+The window is 512 BYTES, not characters. Buzz indexes strings by byte, so a digest computed with character slicing
+disagrees with the one the tool computes as soon as the window covers anything outside ASCII, and `sdk.d.ts` does.
+
+| package | version | file | marker | sha256 |
+| --- | --- | --- | --- | --- |
+| `@anthropic-ai/claude-agent-sdk` | 0.3.273 | `sdk.d.ts` | `export declare type SyncHookJSONOutput` | `184e4135dc77d5fc8c05683856b4c5ea0a83258a85ed37e5cc0ec965e3535ff8` |
+| `@cursor/sdk` | 1.0.31 | `dist/esm/357.js` | `beforeShellExecution:"beforeShellExecution"` | `4f6248c31d295f9fd2ee9ecaaea4898002b3790954761de161f900a5d8350860` |
+
 OpenCode has no hook config file at all: a plugin intercepts tool calls, so there is nothing here to schema-check. Its
 plugin surface is typed instead, and the check already exists elsewhere: `docs/guides/integrations/agents` type-checks
 `opencode-plugin.ts` against the `Plugin` type from `@opencode-ai/plugin` (pinned at 1.18.30, the current release when

@@ -29,6 +29,7 @@ import "fs";
 import "os";
 import "http";
 import "crypto";
+import "archive";
 
 final SOURCES = "testdata/hosts/SOURCES.md";
 final DIR = "testdata/hosts";
@@ -45,6 +46,101 @@ fun plain(cells: [str], index: int) > str {
     return cells[index].trim();
 }
 
+// checkUpstream digests the bundles the `derived` rows were transcribed FROM, and reports
+// how many have moved.
+//
+// It is the half the first table cannot cover. Those rows hash OUR transcription, so they
+// answer "has anyone edited our file" and never "has the host changed the thing we copied".
+// A derived schema with no watch on its source is a snapshot that ages into a claim about a
+// host that no longer exists, which is the same failure vendoring was adopted to prevent.
+//
+// REPORTS, never writes. The bundle is minified JavaScript and the schema is a reading of
+// it, so there is nothing to regenerate: a moved digest means a person re-reads the
+// validator. That is why this has no fetch arm while the published rows above do.
+fun checkUpstream() > int !> any {
+    var rows = 0;
+    var moved = 0;
+    var inTable = false;
+    foreach (line in fs\readFile(SOURCES).split("\n")) {
+        if (line.startsWith("## Upstream artifacts")) { inTable = true; continue; }
+        // Any later heading ends the table; without this the parser walks the rest of the
+        // file and reads a prose backtick as a row.
+        if (inTable and line.startsWith("## ")) { break; }
+        if (!inTable or !line.startsWith("| `")) { continue; }
+        final cells = line.split("|");
+        if (cells.len() < 7) { continue; }
+
+        final pkg = code(cells, index: 1);
+        // plain, not code: a version is a bare number in the table, and reading it as a
+        // backticked cell indexes past the end of a split that found no backtick.
+        final version = plain(cells, index: 2);
+        final inner = code(cells, index: 3);
+        final marker = code(cells, index: 4);
+        final recorded = code(cells, index: 5);
+        rows = rows + 1;
+
+        // The registry's own tarball URL, which is immutable per version: the point of
+        // pinning here rather than at a vendor download that rebuilds under its own URL.
+        // A scoped name (@cursor/sdk) puts only the unscoped half in the filename, while
+        // the path keeps the scope. An if rather than a ternary: this file runs without
+        // --embedded, where upstream-strict parsing rejects the compact form.
+        final scope = pkg.split("/");
+        var name = scope[0];
+        if (scope.len() > 1) {
+            name = scope[1];
+        }
+        final tarball = "https://registry.npmjs.org/" + pkg + "/-/" + name + "-" + version + ".tgz";
+        final digest = digestInsideTarball(tarball, inner: inner, marker: marker);
+        if (digest == recorded) {
+            std\print("same {pkg}@{version} {inner}");
+            continue;
+        }
+        moved = moved + 1;
+        std\print("MOVED {pkg}@{version} {inner}: upstream hashes {digest}, the table records {recorded}; re-read the validator by hand");
+    }
+    if (rows == 0) {
+        throw "host-schemas: {SOURCES} has no Upstream artifacts table, so no derived row's source is watched";
+    }
+    return moved;
+}
+
+// SLICE is how much of the file after the marker gets digested.
+//
+// Arbitrary, and that is fine: what it has to be is STABLE and big enough to cover the
+// declaration a schema was read from. 512 bytes holds SyncHookJSONOutput's whole body and
+// Cursor's entire event map. Changing it invalidates every recorded digest at once, so it
+// is a constant rather than a per-row column nobody would tune correctly.
+final SLICE = 512;
+
+// digestInsideTarball fetches an npm tarball and returns the sha256 of a WINDOW of one file
+// inside it, starting at marker.
+//
+// archive\readFile rather than uncompress: only one entry is wanted, and unpacking a whole
+// package to read it costs the disk and leaves a tree to clean up. The tarball still lands
+// on disk because the archive module works on paths, and it is removed before returning.
+//
+// `package/` is the prefix npm gives every entry, so the recorded path stays the one a
+// reader sees in the published package rather than carrying that prefix around.
+fun digestInsideTarball(url: str, inner: str, marker: str) > str !> any {
+    final tgz = fs\tempFile("magus-upstream");
+    fs\writeFile(tgz, content: http\get(url, opts: {"fail": true}).body);
+    final body = archive\readFile(tgz, name: "package/" + inner);
+    fs\remove(tgz);
+
+    final at = body.indexOf(marker);
+    // Loud, because this is the one way a slice can go quietly wrong. A renamed
+    // declaration or a reordered chunk leaves the marker absent, and digesting some other
+    // window would report a match against a region nobody chose.
+    if (at == null) {
+        throw "host-schemas: {url} carries {inner} but not \"{marker}\"; the declaration moved, so the recorded marker is stale and nothing was checked";
+    }
+    var end = at + SLICE;
+    if (end > body.len()) {
+        end = body.len();
+    }
+    return crypto\sha256Hex(body.sub(at, len: end - at));
+}
+
 export fun main() > void !> any {
     final mode = os\env("HOST_SCHEMAS_MODE") ?? "verify";
     if (mode != "verify" and mode != "fetch") {
@@ -54,6 +150,9 @@ export fun main() > void !> any {
     var checked = 0;
     var moved = 0;
     foreach (line in fs\readFile(SOURCES).split("\n")) {
+        // The upstream table below has the same row shape and different columns, so this
+        // loop has to stop where it starts or it reads a package name as a file path.
+        if (line.startsWith("## Upstream artifacts")) { break; }
         // Every data row opens with a backticked file path; the header and the
         // separator do not, which is what keeps this from parsing them as rows.
         if (!line.startsWith("| `")) { continue; }
@@ -91,6 +190,12 @@ export fun main() > void !> any {
     if (checked == 0) {
         throw "host-schemas: {SOURCES} named no published row, so nothing was checked";
     }
+
+    // Counted apart from `moved`, because the two have different remedies and one message
+    // covering both sends a reader to a mode that cannot help them: fetch rewrites a
+    // published schema from upstream bytes, and an upstream bundle has none to rewrite
+    // from. A moved bundle is read by a person.
+    final upstreamMoved = checkUpstream();
     if (mode == "fetch") {
         std\print("fetched {checked} published schema(s); {moved} changed");
         return;
@@ -100,5 +205,10 @@ export fun main() > void !> any {
     if (moved > 0) {
         throw "host-schemas: {moved} of {checked} vendored schema(s) moved upstream. Re-run with HOST_SCHEMAS_MODE=fetch, then update the sha256 and read date in {SOURCES} in the same commit as whatever had to change with them";
     }
-    std\print("checked {checked} published schema(s); every one matches what {SOURCES} records");
+    // Its own arm, and deliberately no fetch instruction: the bundle is minified
+    // JavaScript, our schema is a READING of it, and no mode here can redo that reading.
+    if (upstreamMoved > 0) {
+        throw "host-schemas: {upstreamMoved} upstream bundle(s) changed since the derived schemas were read. Re-read the validator in the named file, update the derived schemas and both digests in {SOURCES}, and record today as the read date";
+    }
+    std\print("checked {checked} published schema(s) and every upstream bundle; all match what {SOURCES} records");
 }

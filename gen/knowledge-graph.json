@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 6264,
-  "edge_count": 11164,
+  "node_count": 6268,
+  "edge_count": 11173,
   "relations": [
     {
       "id": "annotates",
@@ -3213,8 +3213,8 @@
       "label": "testdata",
       "source": "testdata",
       "attrs": {
-        "dir_files": "6",
-        "dir_languages": "markdown,md#host-schemas,md#refreshing,md#table,md#what-each-host-publishes"
+        "dir_files": "8",
+        "dir_languages": "markdown,md#cursors-hook-events,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
       }
     },
     {
@@ -3223,8 +3223,8 @@
       "label": "testdata/hosts",
       "source": "testdata/hosts",
       "attrs": {
-        "dir_files": "5",
-        "dir_languages": "markdown,md#host-schemas,md#refreshing,md#table,md#what-each-host-publishes"
+        "dir_files": "7",
+        "dir_languages": "markdown,md#cursors-hook-events,md#host-schemas,md#refreshing,md#table,md#upstream-artifacts,md#what-each-host-publishes"
       }
     },
     {
@@ -41452,6 +41452,16 @@
       }
     },
     {
+      "id": "docsection:testdata/hosts/SOURCES.md#cursors-hook-events",
+      "kind": "docsection",
+      "label": "Cursor's hook events",
+      "source": "testdata/hosts/SOURCES.md#cursors-hook-events",
+      "attrs": {
+        "anchor": "cursors-hook-events",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:testdata/hosts/SOURCES.md#host-schemas",
       "kind": "docsection",
       "label": "Host schemas",
@@ -41478,6 +41488,16 @@
       "source": "testdata/hosts/SOURCES.md#table",
       "attrs": {
         "anchor": "table",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:testdata/hosts/SOURCES.md#upstream-artifacts",
+      "kind": "docsection",
+      "label": "Upstream artifacts",
+      "source": "testdata/hosts/SOURCES.md#upstream-artifacts",
+      "attrs": {
+        "anchor": "upstream-artifacts",
         "level": "2"
       }
     },
@@ -53006,17 +53026,31 @@
       }
     },
     {
+      "id": "function:tools/host-schemas.buzz:checkUpstream",
+      "kind": "function",
+      "label": "checkUpstream",
+      "doc": "checkUpstream digests the bundles the `derived` rows were transcribed FROM, and reports how many have moved.  It is the half the first table cannot cover. Those rows hash OUR transcription, so they answer \"has anyone edited our file\" and never \"has the host changed the thing we copied\". A derived schema with no watch on its source is a snapshot that ages into a claim about a host that no longer exists, which is the same failure vendoring was adopted to prevent.  REPORTS, never writes. The bundle is minified",
+      "source": "tools/host-schemas.buzz:60"
+    },
+    {
       "id": "function:tools/host-schemas.buzz:code",
       "kind": "function",
       "label": "code",
       "doc": "code reads a column the table quotes in backticks, which is every path and URL. Split rather than replace because this file runs WITHOUT --embedded, so strict mode applies and a two-argument method call is the form that does not parse.",
-      "source": "tools/host-schemas.buzz:39"
+      "source": "tools/host-schemas.buzz:40"
+    },
+    {
+      "id": "function:tools/host-schemas.buzz:digestInsideTarball",
+      "kind": "function",
+      "label": "digestInsideTarball",
+      "doc": "digestInsideTarball fetches an npm tarball and returns the sha256 of a WINDOW of one file inside it, starting at marker.  archive\\readFile rather than uncompress: only one entry is wanted, and unpacking a whole package to read it costs the disk and leaves a tree to clean up. The tarball still lands on disk because the archive module works on paths, and it is removed before returning.  `package/` is the prefix npm gives every entry, so the recorded path stays the one a reader sees in the published package ra",
+      "source": "tools/host-schemas.buzz:124"
     },
     {
       "id": "function:tools/host-schemas.buzz:main",
       "kind": "function",
       "label": "main",
-      "source": "tools/host-schemas.buzz:48",
+      "source": "tools/host-schemas.buzz:144",
       "attrs": {
         "exported": "true"
       }
@@ -53026,7 +53060,7 @@
       "kind": "function",
       "label": "plain",
       "doc": "plain reads an unquoted column.",
-      "source": "tools/host-schemas.buzz:44"
+      "source": "tools/host-schemas.buzz:45"
     },
     {
       "id": "function:tools/registry.buzz:buildDoc",
@@ -120581,7 +120615,23 @@
     },
     {
       "source": "docsection:testdata/hosts/SOURCES.md#host-schemas",
+      "target": "docsection:testdata/hosts/SOURCES.md#upstream-artifacts",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "testdata/hosts/SOURCES.md"
+    },
+    {
+      "source": "docsection:testdata/hosts/SOURCES.md#host-schemas",
       "target": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "testdata/hosts/SOURCES.md"
+    },
+    {
+      "source": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
+      "target": "docsection:testdata/hosts/SOURCES.md#cursors-hook-events",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -134821,7 +134871,23 @@
     },
     {
       "source": "file:tools/host-schemas.buzz",
+      "target": "function:tools/host-schemas.buzz:checkUpstream",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "file:tools/host-schemas.buzz",
       "target": "function:tools/host-schemas.buzz:code",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "file:tools/host-schemas.buzz",
+      "target": "function:tools/host-schemas.buzz:digestInsideTarball",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -134841,6 +134907,14 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "file:tools/host-schemas.buzz",
+      "target": "import:archive",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "tools/host-schemas.buzz"
     },
     {
@@ -139338,6 +139412,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "tools/drift.buzz"
+    },
+    {
+      "source": "function:tools/host-schemas.buzz:checkUpstream",
+      "target": "function:tools/host-schemas.buzz:code",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "function:tools/host-schemas.buzz:checkUpstream",
+      "target": "function:tools/host-schemas.buzz:digestInsideTarball",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "function:tools/host-schemas.buzz:checkUpstream",
+      "target": "function:tools/host-schemas.buzz:plain",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
+    },
+    {
+      "source": "function:tools/host-schemas.buzz:main",
+      "target": "function:tools/host-schemas.buzz:checkUpstream",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "tools/host-schemas.buzz"
     },
     {
       "source": "function:tools/host-schemas.buzz:main",
