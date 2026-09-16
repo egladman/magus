@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 6256,
-  "edge_count": 11149,
+  "edge_count": 11150,
   "relations": [
     {
       "id": "annotates",
@@ -68392,6 +68392,14 @@
     {
       "source": "doc:README.md",
       "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/concepts/spells/buzz.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
