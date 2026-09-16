@@ -129,6 +129,14 @@ func (g Gate) Once(kind MarkerKind, text string) string {
 // happens on first contact, so a repeat earns its place only at a size nobody has to read
 // around. A one-line repeat still names the command; a suppressed one cannot.
 //
+// TODO: the brief repeats without limit, and one 961-command session re-judged the four
+// search advisories as firing 426 times with zero measured uptake. A capped tier that
+// went silent after N repeats was tried and REVERTED: it cannot tell a reader ignoring
+// the tenth reminder from sixteen workers racing the first firing, and
+// TestAdvisoryGateRaceCostsBytesNotVerdicts pins that a raced firing must never come back
+// silent. Whatever replaces it has to separate repeats over TIME from concurrent
+// duplicates, which the marker alone does not record.
+//
 // An empty brief goes quiet on the repeat, which is right for a notice reporting a
 // condition rather than offering a command.
 func (g Gate) OnceOrBrief(kind MarkerKind, full, brief string) string {
