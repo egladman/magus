@@ -123,9 +123,13 @@ magus\project({
     // everything without keying anything (MGS1028).
     //
     // Deliberately NOT here: LICENSE (only release-build reads it, and that target is
-    // skip_cache, so declaring it would invalidate build/test/lint to key nothing) and
-    // .gitignore (no target reads it at all). Both keep seeding by containment, and
-    // doctor keeps saying so - an undeclared file is only wrong when it is an input.
+    // skip_cache, so declaring it would invalidate build/test/lint to key nothing),
+    // .gitignore (no target reads it at all), and the nested
+    // internal/spell/gen/.gitattributes, which only git reads. The root .gitattributes
+    // is a third case again: magus writes it FROM these output globs, so declaring it
+    // would make the input to a derivation claim to be its own product. All keep
+    // seeding by containment, and doctor keeps saying so - an undeclared file is only
+    // wrong when it is an input.
     "sources": [
         // No spell claims .buzz any more (the buzz spell carried no working op and
         // is gone, see go_build's own note on why this glob has to stay a source
@@ -148,6 +152,12 @@ magus\project({
         // not editor metadata. The descriptor selects which one applies; this
         // generic input keeps cache keys aligned without naming a host here.
         ".*/hooks.json",
+        // The one hook config the glob above cannot reach, because Claude Code
+        // keeps its hooks in settings.json rather than a file named for them.
+        // host_schema_test.go grades this exact path against the vendored schema
+        // and conventions_test.go asserts it invokes the shipped template rather
+        // than inlining a copy, so an edit here can turn the root tests red.
+        ".claude/settings.json",
         // Harness descriptors (JSON) remain as a compat fallback for hosts not yet
         // migrated to harness spells under spells/harness/.
         "harnesses/*.json",
@@ -156,6 +166,13 @@ magus\project({
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
         // refresh would otherwise not invalidate the tests that read them.
         "testdata/hostschemas/**/*.json",
+        // The recorded command corpus TestCommandDistribution asserts exact class
+        // counts over. Same gap as the schemas above: *.txt matches no spell glob, so
+        // a line added to the corpus moved the expected counts while the test that
+        // pins them replayed. Not a blanket **/testdata/** glob: two lock files under
+        // testdata are declared OUTPUTS of generate targets, and a project cannot
+        // read its own product as a source.
+        "internal/hint/testdata/*",
     ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
