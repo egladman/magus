@@ -173,6 +173,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Session:    sessionOrTerminal(sf.Session),
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
+		// Declared by the wiring, because only a host that observes skill loads can
+		// honestly say it does. See guard.denySpawnWithoutBrief.
+		ObservesSkillLoads: sf.ObservesSkillLoads,
 	})
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter

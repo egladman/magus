@@ -103,6 +103,12 @@ const (
 	denyRuleSymbolSearch      denyRuleName = "symbol-search"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
+
+	// Not a shell rule: it fires on a SPAWN, which reaches no shell parser. It lives in
+	// this block because denyRuleName is the one namespace every verdict's Rule field is
+	// drawn from, and the catalog test reads this block to find what must be documented.
+	// See internal/guard/spawn.go.
+	denySpawnUnbriefed denyRuleName = "spawn-unbriefed"
 )
 
 // denyRule is the rule plus what it fired on, so a rule that renders a verb or a

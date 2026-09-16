@@ -77,6 +77,11 @@ var denyRuleDocs = []RuleDoc{
 			"`gh pr list --state open --json number,mergeable,statusCheckRollup` answers every open pull request in one call. " +
 			"Iterating on a run that is already RED is the case worth following, and polling that command serves it too."},
 	{Name: string(denyRuleInterpreterRewrite), Decision: "deny", Catches: "an inline interpreter rewriting a file this tree already carries"},
+	{Name: string(denySpawnUnbriefed), Decision: "deny",
+		Catches: "a subagent spawned before the multi-agent skill loaded",
+		Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +
+			"Measured across 2,147 session transcripts: zero loads, under every name and every variant, while the two skills a hook DEMANDS loaded 415 times. A skill nobody is required to read is a skill nobody reads, and this workspace had already written that down before measuring it again here. " +
+			"It grades the session, never the prompt: it asks whether a marker file exists, so a handed-over prompt that merely mentions a denied command is untouched. Load Skill(magus-multi-agent) once and every later spawn in the session passes."},
 	{Name: string(denyRuleMergeSideCheckout), Decision: "deny",
 		Catches: "a checkout of one merge side over a conflicted file, which discards the merge",
 		Why: "It reads like \"undo my edit to this file\" and is not: during a merge the working-tree copy IS the merge, and this replaces it wholesale with one side. " +

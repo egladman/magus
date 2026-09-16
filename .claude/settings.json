@@ -50,6 +50,16 @@
           }
         ],
         "matcher": "Agent|Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "HOST_EVENT_RAW=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Skill"
       }
     ],
     "SessionStart": [

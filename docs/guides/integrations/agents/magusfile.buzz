@@ -25,6 +25,9 @@ import "magus";
 import "os";
 
 import "proc";
+// fs enumerates the shell templates for shellcheck, so adding one does not mean
+// remembering to add it to a list.
+import "fs";
 // magusfile binds this file's exported targets; bash adds shellcheck for the sh
 // templates; ts adds the TypeScript spell so the plugin is
 // symbol-capable (its `scip` op indexes it for the knowledge graph). ts is opaque - pnpm owns
@@ -75,10 +78,16 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // The shell templates are POSIX sh that users copy into their own hook config, so
     // they get the same scrutiny as the TypeScript: shellcheck in sh mode catches the
     // bashisms that would break on a host whose /bin/sh is dash.
-    proc\exec("shellcheck", ["--shell=sh", "--severity=style",
-                          "magus-guard-command.sh", "magus-guard-path.sh", "cursor-guard.sh",
-                          "magus-session-load-claude-code.sh", "magus-session-load-codex.sh",
-                          "magus-session-load-opencode.sh"], ".", {});
+    // GLOBBED, not enumerated. The hand-written list this replaced named six of the nine
+    // scripts here: magus-guard-observe.sh, magus-rehydrate.sh and magus-checkpoint.sh
+    // were added later and never joined it, so the three that run on every Read, every
+    // compaction and every Stop were the unchecked ones. A list that must be edited when a
+    // file is added is a list that stops matching the directory.
+    var shell_args = mut ["--shell=sh", "--severity=style"];
+    foreach (script in fs\glob("*.sh")) {
+        shell_args.append(script.value);
+    }
+    proc\exec("shellcheck", shell_args, ".", {});
 }
 
 // test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level

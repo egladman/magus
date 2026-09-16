@@ -33,6 +33,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [sed-in-place](sed-in-place.md)               | `sed -i`, whose two spellings destroy each other's work across platforms           |
 | [shared-stash](shared-stash.md)               | a bare stash push or pop, on a stack every worktree shares                         |
 | [sibling-checkout](sibling-checkout.md)       | a magus command relocated into another checkout, judging a tree nobody ships       |
+| [spawn-unbriefed](spawn-unbriefed.md)         | a subagent spawned before the multi-agent skill loaded                             |
 | [stage-all](stage-all.md)                     | `git add -A`, which sweeps regenerated output into a commit about something else   |
 | [symbol-search](symbol-search.md)             | a recursive text search for a symbol the index defines and can enumerate           |
 | [throwaway-copy](throwaway-copy.md)           | a run inside a temp or scratchpad copy, which leaves the real tree unverified      |

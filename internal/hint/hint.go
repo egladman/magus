@@ -25,8 +25,10 @@ package hint
 import (
 	"path"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/types"
 )
@@ -77,6 +79,10 @@ const (
 // collide with knowledge.Graph in the callers that hold both.
 type Translator struct {
 	projects []string
+	// variant is the coreutils family this translator assumes is running the commands it
+	// grades. Zero value is VariantUnknown, which reads as "do not reason about family";
+	// NewTranslator fills it from LocalVariant so the common case needs no option.
+	variant Variant
 }
 
 type Option func(*Translator)
@@ -96,12 +102,18 @@ func WithProjects(paths []string) Option {
 }
 
 func NewTranslator(opts ...Option) *Translator {
-	t := &Translator{}
+	// The host family is resolved once per process by LocalVariant, so every translator
+	// starts with the right answer and WithVariant is only for a caller reasoning about a
+	// machine other than this one.
+	t := &Translator{variant: LocalVariant()}
 	for _, opt := range opts {
 		opt(t)
 	}
 	return t
 }
+
+// Variant is the coreutils family this translator assumes will run the commands it grades.
+func (t *Translator) Variant() Variant { return t.variant }
 
 // toolSpec is everything the translator knows about one search tool, so a
 // reviewer checks a row against one manpage instead of hunting the same fact
@@ -245,6 +257,282 @@ func sedPrints(args []string) bool {
 		}
 	}
 	return hasN
+}
+
+// sedSpec is sed's row in the same shape searchTools carries: the short flags that consume
+// the NEXT word. -e takes a script and -f takes a script FILE, and reading either as a path
+// is what would let a script's own text decide how a caller is graded.
+//
+// Separate from searchTools rather than an entry in it, because membership of that map is
+// the definition of "this is a content search" (IsSearchTool), and sed is a stream editor.
+// Sharing the flag-splitting shape without joining the family is the point.
+var sedSpec = toolSpec{valueShorts: "ef"}
+
+// Variant names the implementation family behind a POSIX tool name. The same name is
+// several different programs, and they disagree in ways that decide what a command does:
+// sed's -i suffix, xargs' -r and -J, grep's -P.
+//
+// Uses: reporting, and choosing which spelling to SUGGEST. Never for relaxing a safety
+// decision. Inference reads the flags on one line, so it is evidence rather than a fact
+// about the machine, and a rule that trusted it would be trusting a guess about a program
+// it cannot see.
+type Variant uint8
+
+const (
+	// VariantUnknown is the honest default: the line carries nothing family-specific, or
+	// the evidence points both ways.
+	VariantUnknown Variant = iota
+	// VariantGNU is coreutils, the default on Linux.
+	VariantGNU
+	// VariantBSD covers macOS and the BSDs, which ship the same lineage.
+	VariantBSD
+)
+
+func (v Variant) String() string {
+	switch v {
+	case VariantGNU:
+		return "gnu"
+	case VariantBSD:
+		return "bsd"
+	default:
+		return "unknown"
+	}
+}
+
+// gnuOnlyFlags are spellings only coreutils accepts. Long options are the strongest
+// signal: BSD sed and BSD xargs have none at all, so any `--flag` on one of them is GNU.
+var gnuOnlyFlags = map[string][]string{
+	"sed":   {"--in-place", "--expression", "--file", "--regexp-extended", "--quiet", "--silent", "--separate", "--null-data"},
+	"xargs": {"--no-run-if-empty", "--null", "--delimiter", "--max-args", "--replace", "--arg-file", "-r", "-d"},
+	"grep":  {"-P", "--perl-regexp", "--include", "--exclude", "--color"},
+	"find":  {"-printf", "-regextype"},
+}
+
+// bsdOnlyFlags are spellings only the BSD lineage accepts.
+var bsdOnlyFlags = map[string][]string{
+	"xargs": {"-J", "-L", "-o"},
+	"find":  {"-x", "-s"},
+}
+
+// LocalVariant is the coreutils family on THIS host, derived once.
+//
+// Derived from GOOS rather than probed: a probe means a process per tool, and the answer is
+// a property of the machine, not of any command, so paying for it on a hook that runs
+// before every tool call would be paying repeatedly for a constant. A caller that wants a
+// sharper answer (Alpine ships busybox, which is neither family) can override it with
+// [WithVariant] from a spell's version probe, which already runs once per target.
+//
+// Session-scoped by construction: sync.Once, so the whole process shares one answer and
+// nothing recomputes it per line.
+func LocalVariant() Variant {
+	localVariantOnce.Do(func() {
+		switch runtime.GOOS {
+		case "darwin", "freebsd", "openbsd", "netbsd", "dragonfly":
+			localVariant = VariantBSD
+		case "linux":
+			// The common case, and wrong on busybox. A probe is what settles that, and
+			// the caller who cares is the one who should pay for it.
+			localVariant = VariantGNU
+		default:
+			localVariant = VariantUnknown
+		}
+	})
+	return localVariant
+}
+
+var (
+	localVariantOnce sync.Once
+	localVariant     Variant
+)
+
+// WithVariant overrides the host family a translator assumes, for a caller that probed it
+// or is reasoning about another machine.
+func WithVariant(v Variant) Option {
+	return func(t *Translator) { t.variant = v }
+}
+
+// PortabilityGap reports a command written for one coreutils family about to run on the
+// other, naming both. Empty when the line carries no family-specific spelling, when the
+// families agree, or when either side is unknown.
+//
+// This is what the local variant buys that flag inference alone cannot: `sed --in-place`
+// is correct prose on Linux and simply fails on macOS, and the failure arrives as an
+// unrecognized-flag error with nothing saying why. Naming it is context, never a refusal:
+// the command may be headed for a container, and a guard that blocked it would be grading
+// a machine it cannot see.
+func PortabilityGap(cmd Invocation, host Variant) string {
+	wrote := InferVariant(cmd)
+	if wrote == VariantUnknown || host == VariantUnknown || wrote == host {
+		return ""
+	}
+	return path.Base(cmd.Name) + " is spelled for " + wrote.String() + " and this host is " + host.String()
+}
+
+// InferVariant reads a command's flags and reports which family it was SPELLED for, or
+// VariantUnknown when nothing on the line decides it.
+//
+// Distinct from [LocalVariant], and the pair is the point: one says what the author
+// assumed, the other what will actually run it, and a disagreement is a portability bug
+// worth naming (see [PortabilityGap]). Neither may relax a safety decision on its own.
+func InferVariant(cmd Invocation) Variant {
+	name := path.Base(cmd.Name)
+	gnu := matchesAny(cmd.Args, gnuOnlyFlags[name])
+	bsd := matchesAny(cmd.Args, bsdOnlyFlags[name])
+	switch {
+	case gnu && !bsd:
+		return VariantGNU
+	case bsd && !gnu:
+		return VariantBSD
+	default:
+		// Both, or neither. A line carrying evidence for both families is one nobody's
+		// tool would run, and saying "unknown" is truer than picking a winner.
+		return VariantUnknown
+	}
+}
+
+// matchesAny reports whether any arg is one of flags, or carries it as a --flag=value.
+func matchesAny(args, flags []string) bool {
+	for _, a := range args {
+		for _, f := range flags {
+			if a == f || (strings.HasPrefix(f, "--") && strings.HasPrefix(a, f+"=")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// inPlaceSuffixIsUnambiguous reports whether sed's in-place flag says, by itself, whether a
+// backup suffix was given.
+//
+// Unambiguous: a short cluster with characters packed after the `i` (`-i.bak`), and the
+// long form in either spelling, since only GNU accepts a long option and GNU's -i never
+// consumes a separate word. Ambiguous: any cluster ending at `i` (`-i`, `-ni`, `-ei`),
+// where BSD takes the next word as the suffix and GNU takes it as the first file.
+func inPlaceSuffixIsUnambiguous(args []string) bool {
+	for _, a := range args {
+		if a == "--in-place" || strings.HasPrefix(a, "--in-place=") {
+			return true
+		}
+		if !strings.HasPrefix(a, "-") || strings.HasPrefix(a, "--") {
+			continue
+		}
+		cluster := a[1:]
+		idx := strings.IndexByte(cluster, 'i')
+		if idx < 0 {
+			continue
+		}
+		// Characters after the i are the packed suffix. Nothing after it means the
+		// suffix, if any, is the next word, and which it is depends on the family.
+		if idx == len(cluster)-1 {
+			return false
+		}
+	}
+	return true
+}
+
+// SedFiles returns the file operands of a sed invocation, and whether the set is one a
+// reader can see in full.
+//
+// bounded is false when an operand carries a glob or substitution metacharacter, or when
+// sed was given no file at all and reads a stream instead. Both mean the files edited are
+// not knowable from the line, which is the distinction a caller grading a rewrite needs:
+// a sed naming its files is a targeted edit, a sed naming a traversal is a blind one.
+//
+// Exported because the guard asks the question and this package owns the parsing. A second
+// flag-splitter in the guard is exactly the drift this file's per-tool tables exist to
+// prevent, and it had already happened once.
+func SedFiles(args []string) (files []string, bounded bool) {
+	// An in-place flag carrying no packed suffix cannot be split reliably, so it is never
+	// bounded. BSD sed reads the next word as the backup SUFFIX and GNU sed reads it as the
+	// first FILE, which is the portability trap this tool is best known for; guessing
+	// either way gets the operand list wrong on half the machines that run it.
+	if !inPlaceSuffixIsUnambiguous(args) {
+		return nil, false
+	}
+	sa := parseSearch(sedSpec, args)
+	ops := sa.operands
+	// The first bare word is the script, unless -e or -f already supplied one. BOTH have
+	// to be checked: -e fills patterns, while -f names a script FILE and sets fromFile
+	// with patterns left empty, so testing patterns alone dropped a real file from the
+	// list and reported a bounded edit as unbounded.
+	if len(sa.patterns) == 0 && !sa.fromFile && len(ops) > 0 {
+		ops = ops[1:]
+	}
+	if len(ops) == 0 {
+		return nil, false
+	}
+	for _, op := range ops {
+		// An EMPTY operand is what a command substitution leaves behind: the shell parser
+		// renders `$(git ls-files)` as a word with no literal text, so the operand survives
+		// the split but names nothing. It is never a real filename, and reading it as one
+		// let a run-time file list (the least knowable operand set there is) pass as a
+		// bounded edit.
+		if op == "" || strings.ContainsAny(op, "*?[]{}$`") {
+			return ops, false
+		}
+	}
+	return ops, true
+}
+
+// xargsSpec is xargs' row: the short flags taking the next word. -I names a replace string,
+// -n a max-args count, -P a parallelism, -d/-E/-s their own values. Everything after those
+// is the COMMAND xargs runs, which is the part a caller needs.
+var xargsSpec = toolSpec{valueShorts: "IndPsE"}
+
+// DrivenCommand returns the command a driver tool would run over a file list it produced,
+// and whether one was found.
+//
+// The two drivers are xargs, whose operands after its own flags ARE the command, and find,
+// whose command follows -exec or -execdir. Both hand a downstream tool a set of paths that
+// appears nowhere on the line, so a caller grading what that tool will do needs the tool's
+// own name and argv rather than the driver's.
+//
+// This is the parser that was missing. The guard had been asking the question with a regex
+// over the whole line, which cannot tell a driven rewrite from a line that merely mentions
+// find, and cannot report WHICH command is about to be driven.
+func DrivenCommand(cmd Invocation) (Invocation, bool) {
+	switch path.Base(cmd.Name) {
+	case "xargs":
+		// Split the RAW args at the first bare word rather than reading parseSearch's
+		// operands. Everything from there is the child's own argv, and flag-parsing it
+		// as xargs' would strip the child's flags: `xargs sed -i ...` came back as sed
+		// with no -i, so a driven in-place rewrite read as a harmless one.
+		for i := 0; i < len(cmd.Args); i++ {
+			a := cmd.Args[i]
+			if !strings.HasPrefix(a, "-") {
+				return Invocation{Name: a, Args: cmd.Args[i+1:]}, true
+			}
+			// xargs' own value-taking shorts consume the next word; a long flag
+			// spelled --max-args=3 carries its value inline and consumes nothing.
+			if len(a) == 2 && strings.ContainsRune(xargsSpec.valueShorts, rune(a[1])) && i+1 < len(cmd.Args) {
+				i++
+			}
+		}
+		// Bare xargs runs echo, which writes nothing.
+		return Invocation{}, false
+	case "find":
+		for i, a := range cmd.Args {
+			if a != "-exec" && a != "-execdir" && a != "-ok" && a != "-okdir" {
+				continue
+			}
+			rest := cmd.Args[i+1:]
+			if len(rest) == 0 {
+				return Invocation{}, false
+			}
+			// The command runs until the terminator find requires; anything past it is
+			// another predicate, not this command's argv.
+			end := len(rest)
+			for j, r := range rest {
+				if r == ";" || r == "+" || r == `\;` {
+					end = j
+					break
+				}
+			}
+			return Invocation{Name: rest[0], Args: rest[1:end]}, true
+		}
+	}
+	return Invocation{}, false
 }
 
 // searchArgs is a grep/rg/ag invocation reduced to the parts the translator

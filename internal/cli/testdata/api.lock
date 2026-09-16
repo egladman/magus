@@ -148,6 +148,7 @@ flag query/publish
 flag query/refresh
 flag query/secrets
 flag query/url
+flag refs/limit
 flag refs/no-generated
 flag refs/occurrences
 flag refs/refresh
@@ -175,6 +176,7 @@ flag shell/agent-name
 flag shell/event
 flag shell/lease
 flag shell/observe
+flag shell/observes-skill-loads
 flag shell/path
 flag shell/session
 flag shell/transcript

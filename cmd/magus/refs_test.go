@@ -22,7 +22,7 @@ func TestRefsTextPrintsMatchingLines(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
 	})
 	require.NoError(t, err, "a match exits 0, like grep")
 	assert.Equal(t, w.Path("a.go")+":2:const Ref = \"NEEDLE\"\n", out)
@@ -39,7 +39,7 @@ func TestRefsTextNoMatchExitsOneAndPrintsNothing(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE_NOT_PRESENT", nil, false, 0, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Empty(t, out)
@@ -55,7 +55,7 @@ func TestRefsTextUnreadableRootExitsTwo(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, nil)
+		err = refsTextCmd(context.Background(), missing, "NEEDLE", nil, false, 0, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.Contains(t, errOut, missing)
@@ -72,7 +72,7 @@ func TestRefsTextAnswersColdWithNoClassifier(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", nil, false, 0, nil)
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, "NEEDLE")
@@ -90,7 +90,7 @@ func TestRefsTextScopesToNamedPaths(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{w.Path("internal/guard")}, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{w.Path("internal/guard")}, false, 0, nil)
 	})
 	require.NoError(t, err)
 	assert.Contains(t, out, filepath.Join("internal", "guard", "shell.go"))
@@ -105,7 +105,7 @@ func TestRefsTextScopeOutsideWorkspaceExitsTwo(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "NEEDLE", []string{filepath.Join(w.Root(), "..")}, false, 0, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.Contains(t, errOut, "outside the workspace")
@@ -141,7 +141,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 	var out, errOut string
 	errOut = captureStderr(t, func() {
 		out = captureStdout(t, func() {
-			cmdErr = refsTextCmd(ctx, root, "NEEDLE", nil, true, m.ClassifyFiles)
+			cmdErr = refsTextCmd(ctx, root, "NEEDLE", nil, true, 0, m.ClassifyFiles)
 		})
 	})
 	require.NoError(t, cmdErr, "the hand-written file still matches")
@@ -159,7 +159,7 @@ func TestRefsTextExitsTwoOnScanError(t *testing.T) {
 
 	var err error
 	errOut := captureStderr(t, func() {
-		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, nil)
+		err = refsTextCmd(context.Background(), w.Root(), "", nil, false, 0, nil)
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
 	assert.NotEmpty(t, errOut)

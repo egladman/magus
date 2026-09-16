@@ -1249,6 +1249,7 @@ not block every tool call.`,
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
+		{Name: "observes-skill-loads", Kind: FlagBool, Doc: "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down"},
 	},
 	Examples: []Example{
 		{"Check one command", "magus shell 'go test ./...'"},
@@ -1303,6 +1304,7 @@ questions and are not meant to share a contract.`,
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
+		{Name: "limit", Kind: FlagInt, Doc: "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code"},
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{

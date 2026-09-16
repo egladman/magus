@@ -103,6 +103,10 @@ overrides and execs it, so there is one implementation to reason about.
 #   GUARD_NO_ADVISE  set it when the host has no context-injection channel, so
 #                    an advise renders nothing rather than a reply it rejects
 #   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
+#   GUARD_SHELL_FLAGS  extra `magus shell` flags this wiring declares about itself,
+#                    space-separated. Capabilities, not policy: a config that also
+#                    matches its host's skill tool passes --observes-skill-loads, and
+#                    rules that require a skill load stand down where it is absent
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
@@ -245,11 +249,20 @@ fi
 # So: try with attribution, and on any failure re-run without it - exactly the call this script made
 # before attribution existed. One extra process only on an older binary, and none once the flags are
 # in a release.
+#
+# GUARD_SHELL_FLAGS rides the same retry. It is how a wiring DECLARES a capability it
+# provides - today `--observes-skill-loads`, set by a config that also matches the host's
+# skill tool - and a rule that needs one stands down when it is absent. That makes the
+# fallback below the correct degradation rather than a loss: a binary too old for the flag
+# drops it, magus hears no claim, and the rule it would have armed goes quiet instead of
+# denying something the reader cannot fix. Word-split on purpose, so a wiring may pass more
+# than one; keep the values flag-shaped and space-separated.
+# shellcheck disable=SC2086
 guard() {
   if [ -n "$HOST_EVENT_RAW" ]; then
-    printf '%s' "$event" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | "$GUARD_MAGUS_BIN" shell $GUARD_SHELL_FLAGS "$@" -o "template=$HOST_RESPONSE"
   else
-    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell "$@" -o "template=$HOST_RESPONSE"
+    printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" shell $GUARD_SHELL_FLAGS "$@" -o "template=$HOST_RESPONSE"
   fi
 }
 

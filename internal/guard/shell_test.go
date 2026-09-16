@@ -1244,15 +1244,36 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 func TestGuardDeniesInPlaceSed(t *testing.T) {
 	t.Parallel()
 	for _, cmd := range []string{
+		// A bare -i is the unsplittable form: BSD reads the next word as the suffix and
+		// GNU reads it as the first file, so the edited set is unknowable either way.
 		"sed -i 's/a/b/' f.go",
 		"sed -i '' 's/a/b/' f.go",
-		"sed -i.bak s/a/b/ f",
-		"sed --in-place=.bak s/a/b/ f",
 		"cat x | sed -i s/a/b/ y",
+		// Driven forms. The file list comes from a traversal and appears nowhere on the
+		// line, which is the blind rewrite this rule is for.
 		"find . -name '*.go' -exec sed -i 's/a/b/' {} +",
+		"find . -name '*.go' -exec sed -i.bak 's/a/b/' {} +",
+		"git ls-files | xargs sed -i.bak 's/a/b/'",
+		// Unbounded operands: a glob names files nobody listed.
+		"sed -i.bak s/a/b/ **/*.go",
+		"sed -i.bak s/a/b/ $(git ls-files)",
 	} {
 		v := Evaluate(testDependencies(), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+	}
+	// A sed that NAMES its files is a targeted edit and is allowed. This reverses the
+	// blanket refusal that stood here: the alternative it pointed at, `refs --occurrences`,
+	// answers for SYMBOLS, so a rename of an environment variable or a filename was denied
+	// with nothing offered that could do it. An unambiguous suffix plus literal paths is a
+	// change a reader can check before it runs, which is the whole distinction.
+	for _, cmd := range []string{
+		"sed -i.bak s/a/b/ f",
+		"sed --in-place=.bak s/a/b/ f",
+		"sed -i.bak -e s/a/b/ one.go two.go",
+		"sed -i.bak -f prog.sed one.go",
+	} {
+		v := Evaluate(testDependencies(), cmd)
+		assert.Empty(t, v.Deny, "a sed naming its files is targeted, not blind: %q", cmd)
 	}
 	for _, cmd := range []string{
 		"sed -n '1,5p' f.go",

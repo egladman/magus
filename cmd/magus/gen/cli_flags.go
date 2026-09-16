@@ -353,6 +353,8 @@ const (
 	FlagQuerySecrets = "secrets"
 	// query: --url
 	FlagQueryURL = "url"
+	// refs: --limit
+	FlagRefsLimit = "limit"
 	// refs: --no-generated
 	FlagRefsNoGenerated = "no-generated"
 	// refs: --occurrences
@@ -451,6 +453,8 @@ const (
 	FlagShellLease = "lease"
 	// shell: --observe
 	FlagShellObserve = "observe"
+	// shell: --observes-skill-loads
+	FlagShellObservesSkillLoads = "observes-skill-loads"
 	// shell: --path
 	FlagShellPath = "path"
 	// shell: --session
@@ -931,6 +935,7 @@ type RefsFlags struct {
 	Refresh     bool // --refresh
 	Occurrences bool // --occurrences
 	Text        bool // --text
+	Limit       int  // --limit
 }
 
 // BindRefs registers `magus refs`'s flags on fs and returns the destination.
@@ -939,6 +944,7 @@ func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
 	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
 	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
+	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	return &f
 }
 
@@ -1020,13 +1026,14 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path       bool   // --path
-	Observe    bool   // --observe
-	Lease      string // --lease
-	AgentName  string // --agent-name
-	Session    string // --session
-	Transcript string // --transcript
-	Event      string // --event
+	Path               bool   // --path
+	Observe            bool   // --observe
+	Lease              string // --lease
+	AgentName          string // --agent-name
+	Session            string // --session
+	Transcript         string // --transcript
+	Event              string // --event
+	ObservesSkillLoads bool   // --observes-skill-loads
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1039,6 +1046,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Session, FlagShellSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
+	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
 	return &f
 }
 

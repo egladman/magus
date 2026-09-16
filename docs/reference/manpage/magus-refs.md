@@ -40,6 +40,9 @@ questions and are not meant to share a contract.
 
 ## Options
 
+**--limit** *| head*
+: Print at most this many --text matches, then say how many more there were (0 for all). What \`| head\` would do, without losing the count or the exit code
+
 **--no-generated** *string*
 : In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match
 

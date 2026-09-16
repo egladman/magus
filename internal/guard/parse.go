@@ -638,11 +638,47 @@ func operands(args []string, takesValue string) []string {
 	return out
 }
 
-// sedInPlaceFires reports an in-place sed. The flag may be packed (`-ni`) or long.
+// sedInPlaceFires reports an in-place sed this guard refuses. The flag may be packed
+// (`-ni`) or long.
+//
+// A sed naming its files LITERALLY is allowed, and that is the whole rule. What this
+// refuses is the BLIND sweep: operands that arrive from a glob, a command substitution, or
+// another process (`find -exec`, `xargs`), where the set of files edited is not visible on
+// the line and nobody can check it before it runs. A rename driven off
+// `magus refs --occurrences` produces exactly the allowed shape (verified paths, spelled
+// out), so the rule now separates a targeted edit from a hopeful one instead of refusing
+// both and sending every mechanical change through one file at a time.
+//
+// The earlier blanket refusal was measured costing more than it saved: the sanctioned
+// alternative it named, `refs --occurrences`, answers for SYMBOLS, and a rename of an
+// environment variable or a filename has no symbol to ask about, so the rule denied the
+// work and offered nothing that could do it.
 func sedInPlaceFires(cmds []hint.Invocation) bool {
 	return slices.ContainsFunc(cmds, func(c hint.Invocation) bool {
-		return path.Base(c.Name) == "sed" && hasFlag(c.Args, 'i', "in-place")
+		if rewritesInPlace(c) {
+			return true
+		}
+		// A driver hands its downstream command a file list that appears nowhere on the
+		// line. hint.DrivenCommand is what reads find's -exec argv and xargs' operands,
+		// so the sed inside one is graded as the sed it is rather than missed because
+		// the invocation magus parsed was `find`.
+		driven, ok := hint.DrivenCommand(c)
+		return ok && rewritesInPlace(driven)
 	})
+}
+
+// rewritesInPlace reports a sed that edits files the caller did not name in full.
+//
+// The operand split comes from hint.SedFiles, beside the other per-tool parsers, rather
+// than from a second flag-walker here: sed's -e and -f take a SCRIPT and a script file, and
+// a guard that counted either as a path would let the script's own text decide how the
+// caller is graded.
+func rewritesInPlace(c hint.Invocation) bool {
+	if path.Base(c.Name) != "sed" || !hasFlag(c.Args, 'i', "in-place") {
+		return false
+	}
+	_, bounded := hint.SedFiles(c.Args)
+	return !bounded
 }
 
 // scriptedRewriteInterpreters are the inline interpreters a refused rewrite reaches for

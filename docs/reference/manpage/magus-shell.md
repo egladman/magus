@@ -81,6 +81,9 @@ not block every tool call.
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
 
+**--observes-skill-loads**
+: This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down
+
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 

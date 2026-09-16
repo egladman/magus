@@ -128,6 +128,14 @@ type Request struct {
 	Session    string
 	Transcript string
 	Event      string
+	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution: the
+	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
+	// the wiring that provides the observation, never inferred from Host, because guard
+	// code may not branch on a host's name and a name would not prove the wiring anyway.
+	//
+	// False is the safe answer: rules that need it stand down, which is what keeps them
+	// from denying forever on a host that can never satisfy them.
+	ObservesSkillLoads bool
 }
 
 // Verdict is the neutral result of evaluating one shell command: exactly
@@ -172,6 +180,25 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
 	if env, isEnvelope := decodeHookEnvelope(input); isEnvelope {
+		// Attribution is resolved BEFORE the nothing-to-judge arm below returns: a skill
+		// load is a nothing-to-judge envelope that still has to be recorded against the
+		// session that made it, and a session read after the return is read too late.
+		ctx = hookContextAt(ctx, deps, env.Cwd)
+		if who.Session == "" {
+			who.Session = env.Who.Session
+		}
+		if who.Transcript == "" {
+			who.Transcript = env.Who.Transcript
+		}
+		if who.Event == "" {
+			who.Event = env.Who.Event
+		}
+		if env.LoadedSkill != "" {
+			// Recorded, never judged. The gate is built here rather than reusing the one
+			// below because this arm returns before it: same cacheDir, same session.
+			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session), env.LoadedSkill)
+			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		}
 		if env.NothingToJudge {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
 			// list, a search) has nothing any rule can read. Falling through judged the raw
@@ -184,22 +211,25 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if env.IsPath {
 			isPath = true
 		}
-		ctx = hookContextAt(ctx, deps, env.Cwd)
-		if who.Session == "" {
-			who.Session = env.Who.Session
-		}
-		if who.Transcript == "" {
-			who.Transcript = env.Who.Transcript
-		}
-		if who.Event == "" {
-			who.Event = env.Who.Event
-		}
 		if env.IsSpawn {
-			// A spawn carries no verdict, so it returns the pass every other
-			// non-finding does and never reaches the guard. Handled here rather than
-			// beside the two guard arms because the whole point is that nothing judges
-			// it: the handed context is prose, and a prompt that merely MENTIONS a
-			// denied command would otherwise block the spawn that describes it.
+			// A spawn's PROMPT carries no verdict, so it returns the pass every other
+			// non-finding does. Handled here rather than beside the two guard arms
+			// because nothing judges the prose: a prompt that merely MENTIONS a denied
+			// command would otherwise block the spawn that describes it.
+			//
+			// The one question asked is about the SESSION, not the prompt: whether the
+			// multi-agent brief was read before work was handed out. That reads a marker
+			// file and no prose, which is what lets it live on this path.
+			spawnGate := hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session)
+			if reason := denySpawnWithoutBrief(spawnGate, req.ObservesSkillLoads); reason != "" {
+				appendHookSpawn(ctx, deps, env, who)
+				return Verdict{
+					SchemaVersion: agent.GuardSchemaVersion,
+					Decision:      "deny",
+					Reason:        reason,
+					Rule:          string(denySpawnUnbriefed),
+				}
+			}
 			appendHookSpawn(ctx, deps, env, who)
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
@@ -654,6 +684,13 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = env.Command
 	case envelopeWritePath(env.ToolInput) != "":
 		req.Value, req.IsPath = envelopeWritePath(env.ToolInput), true
+	case envelopeString(env.ToolInput, "skill") != "":
+		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
+		// whether the session read the brief. The FIELD name is magus's contract with the
+		// host config, the way `command` and `file_path` are; the host's tool name stays
+		// in its own matcher.
+		req.LoadedSkill = envelopeString(env.ToolInput, "skill")
+		req.NothingToJudge = true
 	case envelopeString(env.ToolInput, "prompt") != "" || env.Task != "":
 		if p := envelopeString(env.ToolInput, "prompt"); p != "" {
 			req.Value = p
@@ -750,7 +787,11 @@ type hookRequest struct {
 	// guard's coverage vocabulary (deny=model, advise=model), so a bare Model field
 	// here would read as a verdict channel rather than a spawn's own claim.
 	DeclaredModel string
-	Who           hookAttribution
+	// LoadedSkill is the skill this envelope reports as loaded, or "" when it reports
+	// none. Recorded rather than judged: it is what lets a later spawn ask whether the
+	// session read its brief. See denySpawnWithoutBrief.
+	LoadedSkill string
+	Who         hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be

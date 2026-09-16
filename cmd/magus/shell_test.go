@@ -580,11 +580,17 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
 // spawn is recorded rather than blocked for describing a denied command; and that stays true
 // whether or not the caller named a model, which is a claim this guard grades nothing on.
+//
+// The session loads the multi-agent brief first, which is the one question a spawn IS graded
+// on (spawn-unbriefed). Without it the pass below would be a deny for an unrelated reason and
+// this test would stop covering what it is named for; TestHookCmd_DeniesSpawnBeforeTheBrief
+// carries that rule.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
+	loadSkillForTest(t, ctx, dir, "abc123")
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
 		`"tool_input":{"description":"audit the store","subagent_type":"Explore","model":"opus",` +
 		`"prompt":"lease: notes-store-6b\nDo not run git stash anywhere."}}`
@@ -1313,4 +1319,53 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		_, err := run(owned, "--path", "--lease", "lease-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
 	})
+}
+
+// loadSkillForTest drives the same envelope a host sends when a skill loads, so a test that
+// needs a briefed session gets one through the real path rather than by writing the marker
+// file, which would let the two drift.
+func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
+	t.Helper()
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"` + session + `","tool_name":"Skill",` +
+		`"tool_input":{"skill":"magus-multi-agent"}}`
+	var out bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &out,
+		[]string{"--agent-name", "claude-code", "-o", "name"}))
+	require.Equal(t, "pass\n", out.String(), "a skill load carries nothing to judge")
+}
+
+// TestHookCmd_DeniesSpawnBeforeTheBrief is the spawn-unbriefed rule end to end: the first
+// spawn of a session is denied until the multi-agent skill loads, and passes after.
+//
+// The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
+// so nothing about the handed context should change the verdict either way.
+func TestHookCmd_DeniesSpawnBeforeTheBrief(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"briefless","tool_name":"Task",` +
+		`"tool_input":{"subagent_type":"Explore","prompt":"read the cache package"}}`
+
+	// Without --observes-skill-loads the rule stands down, which is what keeps it from
+	// denying forever on a harness that reports no skill loads. Asserted first, because it
+	// is the behaviour three of the four shipped harnesses get.
+	var unobserved bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &unobserved,
+		[]string{"--agent-name", "claude-code", "-o", "name"}))
+	assert.Equal(t, "pass\n", unobserved.String(),
+		"a wiring that cannot report a skill load must not be held to having reported one")
+
+	var denied bytes.Buffer
+	err := shellStdin(ctx, strings.NewReader(envelope), &denied,
+		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"})
+	require.Error(t, err, "a deny is a non-zero exit")
+	assert.Equal(t, "deny\n", denied.String())
+
+	loadSkillForTest(t, ctx, dir, "briefless")
+
+	var allowed bytes.Buffer
+	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &allowed,
+		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
 }

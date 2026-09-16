@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 6256,
-  "edge_count": 11150,
+  "node_count": 6264,
+  "edge_count": 11164,
   "relations": [
     {
       "id": "annotates",
@@ -1705,7 +1705,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1889",
+        "dir_files": "1895",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -2085,7 +2085,7 @@
       "label": "docs/reference/rules",
       "source": "docs/reference/rules",
       "attrs": {
-        "dir_files": "258",
+        "dir_files": "264",
         "dir_languages": "markdown,md#busy-wait,md#cache-dir-write,md#capture-filter,md#cd,md#checkpoint-state,md#ci-watch,md#code-search,md#doc-search,md#explains,md#focus,md#gate-repeat,md#generated-write,md#graph-stale,md#guard-rules,md#hook-wiring,md#installed-skill,md#interpre"
       }
     },
@@ -7309,6 +7309,18 @@
         "section": "reference",
         "tags": "guard,rules,source-read,advise",
         "title": "source-read: an unbounded source read the symbol index has already answered"
+      }
+    },
+    {
+      "id": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "kind": "doc",
+      "label": "docs/reference/rules/spawn-unbriefed.md",
+      "source": "docs/reference/rules/spawn-unbriefed.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "guard,rules,spawn-unbriefed,deny",
+        "title": "spawn-unbriefed: a subagent spawned before the multi-agent skill loaded"
       }
     },
     {
@@ -17717,6 +17729,16 @@
       "attrs": {
         "anchor": "what-runs-when",
         "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/doctrine.md#a-cache-is-an-accelerator-never-a-dependency",
+      "kind": "docsection",
+      "label": "A cache is an accelerator, never a dependency",
+      "source": "docs/doctrine.md#a-cache-is-an-accelerator-never-a-dependency",
+      "attrs": {
+        "anchor": "a-cache-is-an-accelerator-never-a-dependency",
+        "level": "3"
       }
     },
     {
@@ -37380,6 +37402,56 @@
       }
     },
     {
+      "id": "docsection:docs/reference/rules/spawn-unbriefed.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/rules/spawn-unbriefed.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/spawn-unbriefed.md#seeing-it",
+      "kind": "docsection",
+      "label": "Seeing it",
+      "source": "docs/reference/rules/spawn-unbriefed.md#seeing-it",
+      "attrs": {
+        "anchor": "seeing-it",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "kind": "docsection",
+      "label": "spawn-unbriefed",
+      "source": "docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "attrs": {
+        "anchor": "spawn-unbriefed",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/spawn-unbriefed.md#what-it-catches",
+      "kind": "docsection",
+      "label": "What it catches",
+      "source": "docs/reference/rules/spawn-unbriefed.md#what-it-catches",
+      "attrs": {
+        "anchor": "what-it-catches",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/rules/spawn-unbriefed.md#why",
+      "kind": "docsection",
+      "label": "Why",
+      "source": "docs/reference/rules/spawn-unbriefed.md#why",
+      "attrs": {
+        "anchor": "why",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/reference/rules/stage-all.md#see-also",
       "kind": "docsection",
       "label": "See also",
@@ -45383,7 +45455,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off. There is nothing to build here, so the gate is lint plus the plugin's transport tests. The rest of what these files must agree WITH is checked at the repo root: conventions_test.go verifies that this repository's own hook config invokes them, that the guide embeds them verbatim, and that each declares a stance for every decision and surface in the guard contract (the magus-guard-coverage lines).  This comment used to claim the templates' behavior was asserted",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:130",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:139",
       "attrs": {
         "exported": "true"
       }
@@ -45393,7 +45465,7 @@
       "kind": "function",
       "label": "format",
       "doc": "format owns the Markdown in this directory - the per-host guide pages beside the templates. The docs project cannot do it: dprint discovers this project's dprint.json and would format the subtree under it, which is a parent target writing into a descendant project (MGS3001). So the pages are formatted by the project that owns them, which is the same rule every other project with Markdown follows.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:141",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:150",
       "attrs": {
         "exported": "true"
       }
@@ -45403,7 +45475,7 @@
       "kind": "function",
       "label": "host_integration",
       "doc": "host-integration is deliberately NOT a dependency of ci. It starts real, locally installed agent hosts, so it can consume the caller's authentication and quota. A person opts in with MAGUS_HOST_E2E=1 and supplies the collaborator-owned harness descriptors explicitly:  MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \\ host-e2e/example.json  The runner creates a disposable workspace and applies each descriptor's config. A missing local host is a structured skip; a present host t",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:113",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:122",
       "attrs": {
         "exported": "true"
       }
@@ -45413,14 +45485,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:63"
+      "source": "docs/guides/integrations/agents/magusfile.buzz:66"
     },
     {
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint is the templates' static-analysis gate: the TypeScript type-check (tsc --noEmit) plus Biome's banned patterns (no `any`, no non-null assertions - see biome.json, which mirrors libs/textsearch's rules so the whole workspace writes TypeScript the same way). proc.exec raises on a non-zero exit, so either gate fails lint.",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:71",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:74",
       "attrs": {
         "exported": "true"
       }
@@ -45429,7 +45501,7 @@
       "id": "function:docs/guides/integrations/agents/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:55",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:58",
       "attrs": {
         "exported": "true"
       }
@@ -45439,7 +45511,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.  It runs under node, not bun, even though the plugin's runtime is bun. The test supplies Bun.spawn - the only Bun API the plugin touches - and leaves the shipped artifact unmodified, which is a better trade than putting a second JS runtime in every contributor's toolchain for one file. The residual gap is bun-versus-node spawn semant",
-      "source": "docs/guides/integrations/agents/magusfile.buzz:95",
+      "source": "docs/guides/integrations/agents/magusfile.buzz:104",
       "attrs": {
         "exported": "true"
       }
@@ -51786,25 +51858,25 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_agent_command",
       "kind": "function",
       "label": "claude_agent_command",
-      "source": "spells/harness/claude-code/spell.buzz:44"
+      "source": "spells/harness/claude-code/spell.buzz:51"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_checkpoint_command",
       "kind": "function",
       "label": "claude_checkpoint_command",
-      "source": "spells/harness/claude-code/spell.buzz:55"
+      "source": "spells/harness/claude-code/spell.buzz:71"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_command_hook",
       "kind": "function",
       "label": "claude_command_hook",
-      "source": "spells/harness/claude-code/spell.buzz:59"
+      "source": "spells/harness/claude-code/spell.buzz:75"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config",
       "kind": "function",
       "label": "claude_config",
-      "source": "spells/harness/claude-code/spell.buzz:106"
+      "source": "spells/harness/claude-code/spell.buzz:123"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_config_path",
@@ -51816,7 +51888,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "kind": "function",
       "label": "claude_entries",
-      "source": "spells/harness/claude-code/spell.buzz:74"
+      "source": "spells/harness/claude-code/spell.buzz:90"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_guard_command",
@@ -51828,7 +51900,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp",
       "kind": "function",
       "label": "claude_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:131"
+      "source": "spells/harness/claude-code/spell.buzz:148"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_mcp_command",
@@ -51852,19 +51924,25 @@
       "id": "function:spells/harness/claude-code/spell.buzz:claude_pretool_entry",
       "kind": "function",
       "label": "claude_pretool_entry",
-      "source": "spells/harness/claude-code/spell.buzz:67"
+      "source": "spells/harness/claude-code/spell.buzz:83"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
       "kind": "function",
       "label": "claude_rehydrate_command",
-      "source": "spells/harness/claude-code/spell.buzz:51"
+      "source": "spells/harness/claude-code/spell.buzz:67"
+    },
+    {
+      "id": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
+      "kind": "function",
+      "label": "claude_skill_command",
+      "source": "spells/harness/claude-code/spell.buzz:44"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "kind": "function",
       "label": "claude_skills",
-      "source": "spells/harness/claude-code/spell.buzz:112"
+      "source": "spells/harness/claude-code/spell.buzz:129"
     },
     {
       "id": "function:spells/harness/claude-code/spell.buzz:claude_skills_form",
@@ -51882,7 +51960,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_config",
       "kind": "function",
       "label": "harness_config",
-      "source": "spells/harness/claude-code/spell.buzz:119",
+      "source": "spells/harness/claude-code/spell.buzz:136",
       "attrs": {
         "exported": "true"
       }
@@ -51891,7 +51969,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_entries",
       "kind": "function",
       "label": "harness_entries",
-      "source": "spells/harness/claude-code/spell.buzz:127",
+      "source": "spells/harness/claude-code/spell.buzz:144",
       "attrs": {
         "exported": "true"
       }
@@ -51900,7 +51978,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_mcp",
       "kind": "function",
       "label": "harness_mcp",
-      "source": "spells/harness/claude-code/spell.buzz:151",
+      "source": "spells/harness/claude-code/spell.buzz:168",
       "attrs": {
         "exported": "true"
       }
@@ -51909,7 +51987,7 @@
       "id": "function:spells/harness/claude-code/spell.buzz:harness_skills",
       "kind": "function",
       "label": "harness_skills",
-      "source": "spells/harness/claude-code/spell.buzz:123",
+      "source": "spells/harness/claude-code/spell.buzz:140",
       "attrs": {
         "exported": "true"
       }
@@ -64047,6 +64125,14 @@
     },
     {
       "source": "dir:docs/reference/rules",
+      "target": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "dir:docs/reference/rules",
       "target": "doc:docs/reference/rules/stage-all.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -75112,6 +75198,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/guard-templates.md",
       "target": "doc:docs/reference/manpage/magus-session.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/guard-templates.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard-templates.md",
+      "target": "doc:docs/reference/manpage/magus-shell.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -94103,6 +94197,14 @@
     },
     {
       "source": "doc:docs/reference/rules/index.md",
+      "target": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/index.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/index.md",
       "target": "doc:docs/reference/rules/stage-all.md",
       "relation": "references",
       "confidence": "extracted",
@@ -94772,6 +94874,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/rules/source-read.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "target": "doc:docs/reference/rules/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "doc:docs/reference/rules/spawn-unbriefed.md",
+      "target": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
     },
     {
       "source": "doc:docs/reference/rules/stage-all.md",
@@ -104264,6 +104390,14 @@
     {
       "source": "docsection:docs/doctrine.md#judgment",
       "target": "docsection:docs/doctrine.md#the-host-wiring-is-yours",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/doctrine.md"
+    },
+    {
+      "source": "docsection:docs/doctrine.md#principles",
+      "target": "docsection:docs/doctrine.md#a-cache-is-an-accelerator-never-a-dependency",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -117806,6 +117940,38 @@
       "provenance": "docs/reference/rules/source-read.md"
     },
     {
+      "source": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "target": "docsection:docs/reference/rules/spawn-unbriefed.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "target": "docsection:docs/reference/rules/spawn-unbriefed.md#seeing-it",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "target": "docsection:docs/reference/rules/spawn-unbriefed.md#what-it-catches",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
+      "source": "docsection:docs/reference/rules/spawn-unbriefed.md#spawn-unbriefed",
+      "target": "docsection:docs/reference/rules/spawn-unbriefed.md#why",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/rules/spawn-unbriefed.md"
+    },
+    {
       "source": "docsection:docs/reference/rules/stage-all.md#stage-all",
       "target": "docsection:docs/reference/rules/stage-all.md#see-also",
       "relation": "contains",
@@ -122691,6 +122857,14 @@
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/guides/integrations/agents/magusfile.buzz"
+    },
+    {
+      "source": "file:docs/guides/integrations/agents/magusfile.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
       "provenance": "docs/guides/integrations/agents/magusfile.buzz"
     },
     {
@@ -132583,6 +132757,14 @@
     },
     {
       "source": "file:spells/harness/claude-code/spell.buzz",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "file:spells/harness/claude-code/spell.buzz",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_skills",
       "relation": "contains",
       "confidence": "extracted",
@@ -138752,6 +138934,14 @@
     {
       "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
       "target": "function:spells/harness/claude-code/spell.buzz:claude_rehydrate_command",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/harness/claude-code/spell.buzz"
+    },
+    {
+      "source": "function:spells/harness/claude-code/spell.buzz:claude_entries",
+      "target": "function:spells/harness/claude-code/spell.buzz:claude_skill_command",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,

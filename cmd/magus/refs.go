@@ -64,7 +64,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if ws, wsErr := inspectWorkspace(ctx, root); wsErr == nil {
 			classify = ws.ClassifyFiles
 		}
-		return refsTextCmd(ctx, root, pos[0], pos[1:], noGenerated, classify)
+		return refsTextCmd(ctx, root, pos[0], pos[1:], noGenerated, rf.Limit, classify)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -205,7 +205,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 // command. refs' own -o name format already carves out its own exit meaning per mode
 // for the same reason (see emitOccurrences); this is that same move made explicit
 // for --text rather than left to collide silently with the verdict path.
-func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, classify classifyFunc) error {
+func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, limit int, classify classifyFunc) error {
 	searchRoot := resolveRootOrEmpty(root)
 	if searchRoot == "" {
 		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
@@ -234,10 +234,28 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 		return errSilent{exitCode: 2}
 	}
 
+	// --limit is what `| head` was reaching for, without the two things head costs: the
+	// count of what it cut, and the exit code, which a pipeline takes from the last stage
+	// so a match becomes head's 0 and a no-match becomes head's 0 as well.
+	//
+	// The elision is COUNTED and said out loud on stderr, for the same reason the filtering
+	// notes below are: a silent under-report is the one failure that would make this worse
+	// than the grep it replaces. Truncation happens at PRINT time, never in the scan, so
+	// the match total and the per-file accounting describe the whole search.
 	matchedFiles := map[string]bool{}
-	for _, m := range matches {
+	shown := matches
+	if limit > 0 && len(shown) > limit {
+		shown = shown[:limit]
+	}
+	for _, m := range shown {
 		fmt.Printf("%s:%d:%s\n", m.Path, m.Line, m.Text)
+	}
+	for _, m := range matches {
 		matchedFiles[m.Path] = true
+	}
+	if len(shown) < len(matches) {
+		fmt.Fprintf(os.Stderr, "magus refs --text: showing %d of %d matches (--limit); raise --limit or pass 0 for all\n",
+			len(shown), len(matches))
 	}
 	// Same accounting textPresence prints beside a symbol miss, on stderr so stdout
 	// stays exactly the match stream a pipe or xargs expects: any filtering must be
