@@ -37,7 +37,7 @@ func contactStore(t *testing.T, events ...contact) string {
 	return dir
 }
 
-func TestContactForCountsSessionsNotEvents(t *testing.T) {
+func TestReadPathContactCountsSessionsNotEvents(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UnixMilli()
@@ -50,13 +50,14 @@ func TestContactForCountsSessionsNotEvents(t *testing.T) {
 
 	assert.Equal(t,
 		PathContact{Sessions: 2, Writes: 2, Reads: 1, Last: time.UnixMilli(now - 1000)},
-		ContactFor(dir, "internal/guard/buzz.go"),
+		ReadPathContact(dir, "internal/guard/buzz.go"),
 		"one session saving twice is one session, and Last is the newest contact with THIS path")
 }
 
-// TestContactForIgnoresPathlessKinds pins that only file events count. A shell command's
-// text is never stored, so anything else matching a path is not contact with the file.
-func TestContactForIgnoresPathlessKinds(t *testing.T) {
+// TestReadPathContactIgnoresPathlessKinds pins that only file events count. A shell
+// command's text is never stored, so anything else matching a path is not contact with
+// the file.
+func TestReadPathContactIgnoresPathlessKinds(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
@@ -65,10 +66,10 @@ func TestContactForIgnoresPathlessKinds(t *testing.T) {
 		contact{session: "one", kind: EventSkillLoad, path: "magusfile.buzz", atMs: 7},
 	)
 
-	assert.Equal(t, PathContact{}, ContactFor(dir, "magusfile.buzz"))
+	assert.Equal(t, PathContact{}, ReadPathContact(dir, "magusfile.buzz"))
 }
 
-func TestContactForRecordsWhatTheHostRefused(t *testing.T) {
+func TestReadPathContactRecordsWhatTheHostRefused(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
@@ -78,14 +79,14 @@ func TestContactForRecordsWhatTheHostRefused(t *testing.T) {
 
 	assert.Equal(t,
 		PathContact{Sessions: 1, Writes: 2, Denials: 1, Last: time.UnixMilli(11)},
-		ContactFor(dir, "gen/graph.json"))
+		ReadPathContact(dir, "gen/graph.json"))
 }
 
-// TestContactForLeavesAnUndatedContactUndated pins that a host that recorded no time does
-// not get one invented. Taken literally a zero is 1970, which is After every real time, so
-// one undated event would date the whole contact to the epoch and render as a confident
-// "20000 days ago" rather than the missing answer it is.
-func TestContactForLeavesAnUndatedContactUndated(t *testing.T) {
+// TestReadPathContactLeavesAnUndatedContactUndated pins that a host that recorded no time
+// does not get one invented. Taken literally a zero is 1970, which is After every real
+// time, so one undated event would date the whole contact to the epoch and render as a
+// confident "20000 days ago" rather than the missing answer it is.
+func TestReadPathContactLeavesAnUndatedContactUndated(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t,
@@ -93,16 +94,16 @@ func TestContactForLeavesAnUndatedContactUndated(t *testing.T) {
 		contact{session: "one", kind: EventFileRead, path: "a.go", atMs: 0},
 	)
 
-	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, ContactFor(dir, "a.go"))
+	assert.Equal(t, PathContact{Sessions: 1, Writes: 1, Reads: 1}, ReadPathContact(dir, "a.go"))
 }
 
-func TestContactForSaysNothingWhenThereIsNothingToSay(t *testing.T) {
+func TestReadPathContactSaysNothingWhenThereIsNothingToSay(t *testing.T) {
 	t.Parallel()
 
 	dir := contactStore(t, contact{session: "one", kind: EventFileWrite, path: "a.go", atMs: 1})
 
-	assert.Equal(t, PathContact{}, ContactFor(dir, "b.go"), "a path no session reached")
-	assert.Equal(t, PathContact{}, ContactFor(dir, ""), "a node that is about no file")
-	assert.Equal(t, PathContact{}, ContactFor("", "a.go"), "no store")
-	assert.Equal(t, PathContact{}, ContactFor(t.TempDir(), "a.go"), "an empty store")
+	assert.Equal(t, PathContact{}, ReadPathContact(dir, "b.go"), "a path no session reached")
+	assert.Equal(t, PathContact{}, ReadPathContact(dir, ""), "a node that is about no file")
+	assert.Equal(t, PathContact{}, ReadPathContact("", "a.go"), "no store")
+	assert.Equal(t, PathContact{}, ReadPathContact(t.TempDir(), "a.go"), "an empty store")
 }

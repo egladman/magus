@@ -41,7 +41,7 @@ func sessionContact(root string, node types.KnowledgeNode) *sessions.PathContact
 	if err != nil {
 		return nil
 	}
-	c := sessions.ContactFor(dir, path)
+	c := sessions.ReadPathContact(dir, path)
 	if !c.Touched() {
 		return nil
 	}

@@ -16,8 +16,12 @@ import (
 // store the overlay is built from, which is the cheaper half of a fact magus already
 // decodes on every graph build.
 
-// PathContact is what the loaded sessions recorded about one file: who touched it, how,
-// and when.
+// PathContact is what the loaded agent sessions did to one file: how many distinct
+// sessions reached it, how many reads and writes they made, how many the host refused,
+// and when the newest of them happened.
+//
+// It is the per-file half of the same fact the knowledge graph's @session overlay carries
+// as agent_sessions / agent_reads / agent_writes on a file node.
 //
 // Sessions is a COUNT OF DISTINCT SESSIONS rather than of events, because the question it
 // answers is "is somebody else working here", and one session that saved a file nine
@@ -39,14 +43,19 @@ type PathContact struct {
 // Touched reports whether any loaded session reached this path.
 func (c PathContact) Touched() bool { return c.Sessions > 0 }
 
-// ContactFor summarizes what the loaded sessions did to one checkout-relative path, or
-// the zero value when none of them reached it.
+// ReadPathContact summarizes what the loaded sessions did to one checkout-relative path,
+// or the zero value when none of them reached it.
+//
+// The verb is READ because this reads the store, pairing with ReadAll beside it. It was
+// ContactFor, which two separate readers stopped at to ask what a contact was and whose
+// it was: the name carried neither the action nor the object, and "for" stood in for
+// both.
 //
 // Best-effort like every other reader of this store: no store, an unreadable one, or a
 // record this build cannot decode all report nothing rather than failing the caller. A
 // workspace that has never loaded a transcript is indistinguishable from one whose files
 // no session touched, which is correct: both have nothing to say.
-func ContactFor(dir, path string) PathContact {
+func ReadPathContact(dir, path string) PathContact {
 	var out PathContact
 	if dir == "" || path == "" {
 		return out
