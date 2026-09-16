@@ -714,11 +714,20 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Deliberately NOT cross-referenced from the primary's description. The
-		// twin's own description already announces itself in the host's skill
-		// listing, where a delegated model browsing for a skill sees it; adding a
-		// pointer here would spend context on every short skill to say something
-		// the twin's own entry already says, and short exists to spend less.
+		// Cross-referenced, which reverses an earlier decision and is worth saying why.
+		// The old reasoning was that a pointer here spends context on every short skill to
+		// say what the twin's own entry already says. That held while the twin's entry
+		// RESTATED this one in full; now it is a standalone line, so the pair costs about
+		// 900 bytes of back-references against the ~8.6KB the restatement used to spend.
+		//
+		// The link is what makes the twin reachable at all. A reader with the short copy in
+		// hand and a step it left underspecified has no way to learn the fuller copy exists
+		// unless this entry says so, and browsing for it is exactly what nobody did:
+		// measured, 12 of 15 twins were never loaded once.
+		if form == FormBoth {
+			primary.Description += " A fuller copy with the worked examples kept is installed as " +
+				FullTwinName(def.Name) + "; load that one if this leaves a step underspecified."
+		}
 		skills = append(skills, primary)
 
 		if form != FormBoth {
@@ -729,8 +738,19 @@ func (c *Catalog) RenderedSkills(form Form) ([]AgentSkill, error) {
 			return nil, err
 		}
 		full.Name = FullTwinName(def.Name)
-		full.Description = def.Description + " This is the full reference copy of " + def.Name +
-			" - prefer it over " + def.Name + " if you are a smaller or delegated model."
+		// STANDALONE, not the twin's description plus a sentence. Restating it cost 10,105
+		// of the 19,113 description bytes a host loads into every session's prompt, and
+		// bought nothing: measured across 2,147 transcripts, 12 of the 15 full twins were
+		// never loaded once, because the sentence it appended asked the model to decide
+		// whether it is "smaller", which is not a fact a model has. The trigger conditions
+		// live on the twin, which is always installed beside this one.
+		//
+		// Discovery moves to something that can actually act on it: the guard names the
+		// full twin when the acting lease says a delegated worker is running, and the
+		// session brief names it for the same reason. A description cannot route; a
+		// verdict that has read the lease can.
+		full.Description = "Full reference copy of " + def.Name + ", same scope with the worked examples kept. " +
+			"Load it instead of " + def.Name + " when magus names it, or when that skill left a step underspecified."
 		skills = append(skills, full)
 	}
 	return skills, nil

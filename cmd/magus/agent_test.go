@@ -354,15 +354,25 @@ func TestShortInstallShipsAFullTwinForEverySkill(t *testing.T) {
 		assert.Contains(t, string(agentSkills.StampSkill(twin.Name, agentSkills.RenderSkill(twin), twin.Variant)),
 			"skill-variant: full", "%s must stamp itself full", twin.Name)
 
-		// The twin announces itself; the primary does not carry a pointer to it.
-		// The short form exists to spend less context, so the discoverability
-		// cost is paid once on the twin's own listing entry, not on every skill.
-		assert.Contains(t, twin.Description, "delegated",
-			"%s must tell a delegated model to prefer it, or nothing routes to it", twin.Name)
+		// The twins point AT EACH OTHER, and neither restates the other.
+		//
+		// This reverses what the pair used to assert, and the measurement is why. The twin's
+		// description was this one's verbatim plus a sentence asking the model to decide
+		// whether it is "smaller" (not a fact a model has), and the primary named no twin at
+		// all. So nothing routed: 12 of 15 twins were never loaded once across 2,147 sessions,
+		// while the restatement spent 10,105 of the 19,113 description bytes a host loads into
+		// every prompt.
+		//
+		// Now the twin is standalone and the primary carries one clause naming it. That is the
+		// only path by which a reader holding the short copy can learn the fuller one exists.
+		assert.NotContains(t, twin.Description, def.Description,
+			"%s must stand alone, not restate %s: the restatement was half of every session's skill-description budget", twin.Name, def.Name)
+		assert.Contains(t, twin.Description, def.Name,
+			"%s must name the skill it is a fuller copy of", twin.Name)
 		primary, ok := byName[def.Name]
 		require.True(t, ok)
-		assert.NotContains(t, primary.Description, agent.FullTwinName(def.Name),
-			"%s must not spend the short form's context pointing at its twin; the twin's own entry does that", def.Name)
+		assert.Contains(t, primary.Description, agent.FullTwinName(def.Name),
+			"%s must name its twin, or a reader holding the short copy can never discover it", def.Name)
 	}
 }
 
