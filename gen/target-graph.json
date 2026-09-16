@@ -1062,6 +1062,30 @@
             },
             {
               "project": ".",
+              "glob": "internal/hint/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/job/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/registry/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "benchmarks/agent/internal/bench/testdata/*"
+            },
+            {
+              "project": ".",
+              "glob": "internal/registry/registry-keys.json"
+            },
+            {
+              "project": ".",
+              "glob": "internal/selfupdate/release-keys.json"
+            },
+            {
+              "project": ".",
               "glob": "console/src/styles/tokens.css"
             },
             {
@@ -2778,10 +2802,24 @@
           "reads_files": [
             {
               "project": "libs/commentdash",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",
@@ -3129,10 +3167,24 @@
           "reads_files": [
             {
               "project": "libs/gopherbuzz",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",
@@ -3330,10 +3382,24 @@
           "reads_files": [
             {
               "project": "libs/testlayout",
-              "glob": "**/*.md"
+              "glob": "dprint.json"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.md"
+            },
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            }
+          ]
         },
         {
           "name": "lint",

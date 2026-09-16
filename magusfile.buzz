@@ -122,14 +122,26 @@ magus\project({
     // still seeds the root project through directory containment, so touching it reruns
     // everything without keying anything (MGS1028).
     //
-    // Deliberately NOT here: LICENSE (only release-build reads it, and that target is
-    // skip_cache, so declaring it would invalidate build/test/lint to key nothing),
-    // .gitignore (no target reads it at all), and the nested
-    // internal/spell/gen/.gitattributes, which only git reads. The root .gitattributes
-    // is a third case again: magus writes it FROM these output globs, so declaring it
-    // would make the input to a derivation claim to be its own product. All keep
-    // seeding by containment, and doctor keeps saying so - an undeclared file is only
-    // wrong when it is an input.
+    // Deliberately NOT here, and `magus doctor` keeps listing them, which is the check
+    // working: an undeclared file is only wrong when it is an INPUT, and declaring a
+    // non-input only makes an unrelated edit invalidate a cache. Four groups:
+    //
+    //   - Nothing reads them: .gitignore, NOTICE, .github/actions/*/action.yml (GitHub
+    //     reads those, no target does), and the nested internal/spell/gen/.gitattributes,
+    //     which only git reads.
+    //   - LICENSE, read only by release-build, which is skip_cache: declaring it would
+    //     invalidate build/test/lint to key nothing.
+    //   - The benchmark corpora under benchmarks/ (fixtures, task meta.json, manifests,
+    //     pricing.json, the swebench set). Their consumers are agent-bench-run and
+    //     agent-bench-report, both skip_cache, so the LICENSE argument holds for all of
+    //     them at once. The one exception is declared above: the bench package's own
+    //     testdata, which `go test ./...` reads.
+    //   - tools/testdata-upstream/*.json, which arrived with the registry and which
+    //     nothing in the tree references today.
+    //
+    // The root .gitattributes is a fifth case and never appears: magus writes it FROM
+    // these output globs, so declaring it would make the input to a derivation claim to
+    // be its own product. types.IsMagusMaintained is what exempts it.
     "sources": [
         // No spell claims .buzz any more (the buzz spell carried no working op and
         // is gone, see go_build's own note on why this glob has to stay a source
@@ -166,13 +178,28 @@ magus\project({
         // against. No spell claims them (the go spell takes *.go and *.txtar), so a
         // refresh would otherwise not invalidate the tests that read them.
         "testdata/hostschemas/**/*.json",
-        // The recorded command corpus TestCommandDistribution asserts exact class
-        // counts over. Same gap as the schemas above: *.txt matches no spell glob, so
-        // a line added to the corpus moved the expected counts while the test that
-        // pins them replayed. Not a blanket **/testdata/** glob: two lock files under
-        // testdata are declared OUTPUTS of generate targets, and a project cannot
-        // read its own product as a source.
+        // Hand-authored fixtures the tests beside them read, which the go spell's
+        // *.go and *.txtar globs do not reach. Same gap as the schemas above, and the
+        // same cost: a line added to hint's command corpus moved the class counts
+        // TestCommandDistribution asserts exactly, while the test that pins them
+        // replayed.
+        //
+        // Enumerated per directory rather than a blanket **/testdata/**, because
+        // internal/cli/testdata/api.lock and internal/interp/bindings/testdata/magus-api.lock
+        // are declared OUTPUTS of generate targets: one glob covering both roles would
+        // make a project read its own product as a source.
         "internal/hint/testdata/*",
+        "internal/job/testdata/*",
+        "internal/registry/testdata/*",
+        // benchmarks/agent carries no go.mod, so it is part of THIS module and
+        // `go test ./...` runs the package that reads these.
+        "benchmarks/agent/internal/bench/testdata/*",
+        // Go embeds both key rings INTO the binary, so rotating a key changes what
+        // every build produces while matching no glob above: an embedded JSON is
+        // neither *.go nor *.txtar. This is MGS1028's silent half at its worst - the
+        // artifact differs and the cache cannot tell.
+        "internal/registry/registry-keys.json",
+        "internal/selfupdate/release-keys.json",
     ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
@@ -2543,11 +2570,28 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // Narrowing this does NOT stop a markdown edit re-running `format`, which reads every
     // .md because dprint and markdownlint genuinely format them all. What it stops is the
     // Go suite re-running, which is the expensive half.
+    //
+    // The non-.md fixtures below are the same enumeration for the same reason. They sit
+    // in the project's sources too, which is what keys go_build, but a readsFiles call
+    // REPLACES the footprint, so the baseline never reaches this target and each one has
+    // to be restated here to key the suite that reads it:
+    //
+    //   */testdata/*                      hand-authored corpora and goldens the tests
+    //                                     beside them read; *.go and *.txtar do not cover
+    //                                     a .txt, .jsonl, .golden or a fixture .json
+    //   internal/{registry,selfupdate}    the two go:embed'd key rings, which are a
+    //                                     compile-time input exactly as the skills
+    //                                     directory above is
     ctx.readsFiles("**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
                    "go.mod", "go.sum", "go.work", "go.work.sum",
                    "**/*.buzz", "mise.toml", "magus.yaml",
                    "docs/**/*.md", "internal/agent/skills/**",
-                   "internal/agent/agents-section.md", "CHANGELOG.md");
+                   "internal/agent/agents-section.md", "CHANGELOG.md",
+                   "internal/hint/testdata/*", "internal/job/testdata/*",
+                   "internal/registry/testdata/*",
+                   "benchmarks/agent/internal/bench/testdata/*",
+                   "internal/registry/registry-keys.json",
+                   "internal/selfupdate/release-keys.json");
     // types/kind_palette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
