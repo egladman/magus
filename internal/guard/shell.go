@@ -761,6 +761,7 @@ var (
 	// into the output.
 	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
 		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
+	revertGuardBrief = "magus workspace: `" + hint.DescribeFile.With("<paths>") + "` before reverting; a generated file moved by a source change is correct."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
 	// search to fall back on, so "where does this string appear" has no magus
 	// answer and the deny removed a capability. The advisory still applies the
@@ -823,6 +824,7 @@ var (
 	// workspace vocabulary and routes through discovery.
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
+	pushGuardBrief = "magus workspace: `" + hint.Affected.With("ci") + "` before publishing, if you have not since your last change."
 
 	denyReadAck = "Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one).\n" +
 		"A read receipt records that a PERSON read a change, so only a person can record one. Say you cannot and hand back the unread list."
@@ -954,6 +956,7 @@ var (
 	// also rules out the third deny trigger, which needs an exact equivalent.
 	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty), so a later reader knows what the work was looking at. It PRINTS; the value reaches a store only when you register it with a lease or record it with `magus session checkpoint`.\n" +
 		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS with no tag, no stash, no ref, and no file, so one nobody keeps has cost nothing."
+	checkpointGuardBrief = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies a dirty tree, which a revision alone cannot."
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
 	// exact magus equivalent to route to, so the third deny trigger does not apply.

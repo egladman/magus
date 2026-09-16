@@ -106,7 +106,11 @@ magus\project({
                 // its page must regenerate, or the site documents a version nobody
                 // installs - the exact drift this generator exists to prevent.
                 "../cmd/magus-skilldocs/**/*.go", "../internal/agent/**/*.go",
-                "../internal/agent/skills/**/*.md"],
+                "../internal/agent/skills/**/*.md",
+                // Same argument for the rule reference: the pages are the guard's own
+                // catalog rendered, so a rule added or reworded there must regenerate
+                // them, or the site documents a rule under a name nothing fires.
+                "../cmd/magus-ruledocs/**/*.go", "../internal/guard/**/*.go"],
     // The committed Markdown that content-generate derives from the Go tree
     // (buzz/modules, spells, manpage) is declared per-target in content-generate's own
     // magus.outputs, not here, so that generator's cache entry snapshots exactly its
@@ -217,6 +221,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("cmd/magus-manpage/**/*.go"), workspace\file("cmd/magus-examples/**/*.go"),
         workspace\file("cmd/magus-skilldocs/**/*.go"), workspace\file("internal/agent/**/*.go"),
         workspace\file("internal/agent/skills/**/*.md"), workspace\file("cmd/magus-protodocs/**/*.go"),
+        workspace\file("cmd/magus-ruledocs/**/*.go"), workspace\file("internal/guard/**/*.go"),
         // The DESCRIPTOR, not the .proto sources: it is the proto project's declared output, so
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
@@ -239,7 +244,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         workspace\file("benchmarks/agent/reports/**/*.md"), workspace\file("benchmarks/BENCHMARKS.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/**/*.md");
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/rules/*.md", "reference/api/**/*.md", "changelog.md", "benchmarks/**/*.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -256,6 +261,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     go["go-run"](ctx, {"args": ["../cmd/magus-manpage", "-format", "md", "-out", "./reference/manpage"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-examples", "-dir", "."]});
     go["go-run"](ctx, {"args": ["../cmd/magus-skilldocs", "-out", "./reference/skills"]});
+    go["go-run"](ctx, {"args": ["../cmd/magus-ruledocs", "-out", "./reference/rules"]});
     go["go-run"](ctx, {"args": ["../cmd/magus-protodocs", "-descriptor", "../proto/gen/descriptor.binpb", "-out", "./reference/api"]});
 
     // The changelog as a docs page. CHANGELOG.md is generated at the repo ROOT (magus-utils,
@@ -315,6 +321,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     pruneContentPageCopies(contentPages);
     pruneGeneratedPageCopies("reference/skills/*.md");
     pruneGeneratedPageCopies("reference/manpage/*.md");
+    pruneGeneratedPageCopies("reference/rules/*.md");
 }
 
 // pruneContentPageCopies removes only a byte-identical numeric copy beside a page
@@ -402,7 +409,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "concepts/review.md", "reference/manpage", "reference/skills",
-        "reference/api", "changelog.md"];
+        "reference/rules", "reference/api", "changelog.md"];
     // The three pages content-generate INJECTS into rather than writes whole. It declares them
     // itself, but the write is attributed to this composed target as well, so the declaration has
     // to exist in both places or a run that actually changes one trips MGS4007.

@@ -309,7 +309,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// filename and only fills the silence it leaves.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseGeneratedWrite(ctx, deps, input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = markers.Once(advisoryGeneratedWrite, text), advisoryGeneratedWrite, true
 			}
 		}
 		// The notes rule DENIES, so it is checked before the advisories: a verdict that
@@ -322,12 +322,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseInstalledSkillWrite(input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = markers.Once(advisoryInstalledSkill, text), advisoryInstalledSkill, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseMemoryWrite(input); text != "" {
-				advice, spoken = text, true
+				advice, adviceKind, spoken = markers.Once(advisoryMemoryWrite, text), advisoryMemoryWrite, true
 			}
 		}
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
@@ -344,7 +344,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Above the new-directory rule because it is the wider question: whether this
 		// write belongs in this session at all outranks how its unit is laid out.
 		if verdict.Decision == "pass" && !spoken && drift.advice != "" {
-			advice, spoken = drift.advice, true
+			// Not held here: gradeScopeDrift already gates its own firing, on the PROJECT
+			// as well as the kind, because a second drift into a different project is a
+			// second fact. Re-holding it on the kind alone would report only the first.
+			advice, adviceKind, spoken = drift.advice, advisoryScopeDrift, true
 		}
 		// Mutually exclusive with the rung below: that one answers an empty directory,
 		// this one a populated one. Held to one firing per session, where the new-directory
@@ -356,8 +359,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
+		//
+		// Not held, unlike its siblings: creating a boundary is not ordinary work, and the
+		// rung above (new-file) is the one held for exactly that contrast. It carries a
+		// kind anyway, because the kind is also the NAME a verdict reports.
 		if verdict.Decision == "pass" && !spoken {
-			advice = adviseNewSourceDir(input)
+			if text := adviseNewSourceDir(input); text != "" {
+				advice, adviceKind = text, advisoryNewSourceDir
+			}
 		}
 		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"

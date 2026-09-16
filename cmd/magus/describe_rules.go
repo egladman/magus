@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive/tty"
 )
 
 // `magus describe rules` answers "what does this workspace enforce", which had no answer
@@ -114,6 +115,11 @@ func emitRuleDetail(opts OutputOptions, doc guard.RuleDoc) error {
 	fmt.Println("catches")
 	fmt.Println("  " + doc.Catches)
 	fmt.Println()
+	if doc.Why != "" {
+		fmt.Println("why")
+		tty.Prose(os.Stdout, tty.SystemProbe, doc.Why)
+		fmt.Println()
+	}
 	if doc.Decision == "deny" {
 		fmt.Println("A deny blocks the call and names what to run instead. Nothing magus")
 		fmt.Println("refuses is a capability it removes: every one has a covered equivalent.")

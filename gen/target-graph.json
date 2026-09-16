@@ -2046,6 +2046,14 @@
             },
             {
               "project": ".",
+              "glob": "cmd/magus-ruledocs/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "internal/guard/**/*.go"
+            },
+            {
+              "project": ".",
               "glob": "proto/magus/**/*.proto"
             },
             {
@@ -2081,6 +2089,9 @@
             },
             {
               "glob": "reference/skills/*.md"
+            },
+            {
+              "glob": "reference/rules/*.md"
             },
             {
               "glob": "reference/api/**/*.md"
