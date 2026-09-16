@@ -228,8 +228,10 @@ func TestHookCmd(t *testing.T) {
 		return out.String()
 	}
 
-	assert.True(t, strings.HasPrefix(run("git commit -m x"), "advise: "))
-	assert.True(t, strings.HasPrefix(run("git stash"), "deny: "))
+	// The label carries the rule name, which is the only route a person has from a
+	// verdict to `magus describe rule <name>`.
+	assert.True(t, strings.HasPrefix(run("git commit -m x"), "advise [stage-classify]: "))
+	assert.True(t, strings.HasPrefix(run("git stash"), "deny [whole-tree]: "))
 
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
@@ -764,7 +766,7 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	}
 
 	first := run("session-1")
-	require.True(t, strings.HasPrefix(first, "advise: "))
+	require.True(t, strings.HasPrefix(first, "advise [code-search]: "))
 	assert.Contains(t, first, "knowledge graph")
 
 	repeat := run("session-1")
@@ -798,13 +800,13 @@ func TestHookCmdScopesSearchAdviceFromManifest(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(base, "knowledge", "manifest.json"), []byte(man), 0o644))
 
 		got := run(t, base, "grep -rn Foo docs/")
-		require.True(t, strings.HasPrefix(got, "advise: "))
+		require.True(t, strings.HasPrefix(got, "advise [code-search]: "))
 		assert.Contains(t, got, `magus query Foo 'project=~^docs(/|$)'`)
 	})
 
 	t.Run("no manifest stays unscoped", func(t *testing.T) {
 		got := run(t, t.TempDir(), "grep -rn Foo docs/")
-		require.True(t, strings.HasPrefix(got, "advise: "))
+		require.True(t, strings.HasPrefix(got, "advise [code-search]: "))
 		// The closing backtick is what carries the assertion: it proves no matcher
 		// follows the pattern. The generic reason below the lead documents the
 		// `project=<p>` grammar in prose, so a bare `project=` is present either way

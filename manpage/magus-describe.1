@@ -101,12 +101,30 @@ Classify paths as generated output, declared source, maintained, or unclaimed
 .TP
 \fBgraph\fR
 Emit the target catalog and dependency graph
+.TP
+\fBrules\fR
+List the guard rules this workspace enforces, and what each one catches
+.TP
+\fBrule\fR
+Detail one guard rule, by the name a verdict reported
 .RE
 .SH EXAMPLES
 \fIList every target\fR
 .PP
 .EX
 magus describe targets
+.EE
+.PP
+\fIList what the guard enforces\fR
+.PP
+.EX
+magus describe rules
+.EE
+.PP
+\fILook up the rule a verdict named\fR
+.PP
+.EX
+magus describe rule stage-all
 .EE
 .PP
 \fIList a charm's declaring targets\fR

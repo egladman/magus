@@ -99,6 +99,8 @@ var (
 	DescribeFile        = cmd("describe", "file")
 	DescribeGraph       = cmd("describe", "graph")
 	DescribeMCPTools    = cmd("describe", "mcp-tools")
+	DescribeRule        = cmd("describe", "rule")
+	DescribeRules       = cmd("describe", "rules")
 	Explain             = cmd("explain")
 	Path                = cmd("path")
 	Diff                = cmd("diff")
@@ -184,7 +186,7 @@ var AllCommands = []Command{
 	Run, Query, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	GraphDiff, ServerStart, ServerStop, ServerStatus, ServerReload, Status, Watch, Affected,
 	Describe, DescribeTargets, DescribeTarget, DescribeProject, DescribeFile, DescribeGraph,
-	DescribeMCPTools, DescribeJob, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs, Shell,
+	DescribeMCPTools, DescribeJob, DescribeRule, DescribeRules, Explain, Path, Diff, Init, Clean, Doctor, Where, X, Ls, LsTargets, LsJobs, Refs, Shell,
 	MemoryLs, MemoryPut, MemoryVerify, JobFork, JobExec, JobExit, JobWait, JobRun, NotesLs, NotesGet, NotesEdit,
 	Session, SessionLoad, SessionShow, SessionAttention, SessionCheckpoint, SessionDispose, SessionNotify,
 	VCSAdd, VCSResolve, VCSCheckpoint, AgentInstall, AgentStarter,

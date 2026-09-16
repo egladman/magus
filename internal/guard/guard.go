@@ -140,9 +140,14 @@ type Verdict struct {
 	Decision      string `json:"decision"`          // one of agent.GuardDecisions
 	Reason        string `json:"reason,omitempty"`  // deny: the block reason, written for the model
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
-	// Rule names the stable guard rule that denied the call, when the rule can
-	// identify itself. It is evidence for later review, not text for the host to
-	// render: host adapters keep using Reason and Context.
+	// Rule names the stable rule or advisory that produced this verdict, when it can
+	// identify itself. Host adapters still render Reason and Context; this is what a
+	// PERSON looks up, reports as a false positive, or greps a trail for, and the text
+	// arm prints it beside the decision for exactly that reason.
+	//
+	// Empty is an honest answer, not a gap to paper over: several path advisories are
+	// heuristics with no marker kind of their own, and inventing a slug for one would
+	// promise a catalog entry that does not exist.
 	Rule string `json:"rule,omitempty"`
 	// Lease is the row this verdict was graded under, empty when the call named none.
 	//
@@ -258,6 +263,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// advisory about editing a file the agent opened read-only.
 	case isPath:
 		advice := ""
+		// adviceKind is which rung spoke, for the verdict to name. Empty for the rungs
+		// that are pure heuristics on a filename: those carry no marker kind, so there
+		// is nothing stable to print.
+		adviceKind := hint.MarkerKind("")
 		// Graded ahead of the rules, though it speaks near the end of them: the project
 		// this write lands in is recorded whatever verdict they reach, so it cannot be
 		// resolved inside a rung that a louder rule skips.
@@ -282,7 +291,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision = "deny"
 				verdict.Reason = g.Reason
 			case "advise":
-				advice, spoken = markers.Once(g.Kind, g.Context), true
+				advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
 			}
 		}
 		if verdict.Decision != "deny" {
@@ -291,7 +300,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision, verdict.Reason = "deny", g.Reason
 			case "advise":
 				if !spoken {
-					advice, spoken = markers.Once(g.Kind, g.Context), true
+					advice, adviceKind, spoken = markers.Once(g.Kind, g.Context), g.Kind, true
 				}
 			}
 		}
@@ -324,12 +333,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Both of these are inert outside magus's own checkout; see magusOwnSourceTree.
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseAgentSurfaceWrite(input); text != "" {
-				advice, spoken = markers.Once(advisorySkillSource, text), true
+				advice, adviceKind, spoken = markers.Once(advisorySkillSource, text), advisorySkillSource, true
 			}
 		}
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseDescriptorWrite(input); text != "" {
-				advice, spoken = markers.Once(advisoryRegenSource, text), true
+				advice, adviceKind, spoken = markers.Once(advisoryRegenSource, text), advisoryRegenSource, true
 			}
 		}
 		// Above the new-directory rule because it is the wider question: whether this
@@ -343,7 +352,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// is not (internal/guard/file.go).
 		if verdict.Decision == "pass" && !spoken {
 			if text := adviseNewFileName(input); text != "" {
-				advice, spoken = markers.Once(advisoryNewFile, text), true
+				advice, adviceKind, spoken = markers.Once(advisoryNewFile, text), advisoryNewFile, true
 			}
 		}
 		// Last rung, so it sets no flag: there is nothing below it to hold back.
@@ -353,6 +362,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if verdict.Decision == "pass" && advice != "" {
 			verdict.Decision = "advise"
 			verdict.Context = advice
+			verdict.Rule = string(adviceKind)
 		}
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != "deny" {
@@ -379,6 +389,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if held := markers.OnceOrBrief(v.Kind, v.Context, v.Brief); held != "" {
 				verdict.Decision = "advise"
 				verdict.Context = held
+				verdict.Rule = string(v.Kind)
 			}
 		}
 		denyUndeclared(input)
@@ -406,7 +417,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				verdict.Decision, verdict.Reason, verdict.Context = "deny", focus.Reason, ""
 			case verdict.Decision == "pass" && focus.Decision == "advise" && !markers.MarkFired(advisoryFocusPath(focus.Rel)):
 				if held := markers.OnceOrBrief(advisoryFocus, focus.Context, focus.Brief); held != "" {
-					verdict.Decision, verdict.Context = "advise", held
+					verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryFocus)
 				}
 			}
 		}
@@ -418,6 +429,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if notice := markers.OnceOrBrief(advisoryGateRepeat, full, brief); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
+				verdict.Rule = string(advisoryGateRepeat)
 			}
 		}
 		// The guard's half of the index-staleness fact; the load-bearing half rides the
@@ -428,6 +440,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if notice := markers.Once(advisoryGraphStale, deps.graphStaleAdvice(ctx)); notice != "" {
 				verdict.Decision = "advise"
 				verdict.Context = notice
+				verdict.Rule = string(advisoryGraphStale)
 			}
 		}
 	}
@@ -450,7 +463,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Context += "\n\n" + held
 			continue
 		}
-		verdict.Decision, verdict.Context = "advise", held
+		verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(kind)
 	}
 	// Said last and on EVERY surface: a stale binary's verdicts are all suspect, not
 	// just the ones that matched a rule.
@@ -469,9 +482,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Reason += "\n\n" + notice
 		} else if held := markers.Once(advisoryStaleBinary, notice); held != "" {
 			if verdict.Decision == "advise" {
+				// Appended, so the rule stays whatever MATCHED the command: this notice
+				// is a standing fact about the binary, and naming it here would report
+				// the footnote instead of the finding.
 				verdict.Context += "\n\n" + held
 			} else {
-				verdict.Decision, verdict.Context = "advise", held
+				verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryStaleBinary)
 			}
 		}
 	}

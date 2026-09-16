@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -75,6 +76,9 @@ func shellUsage(w io.Writer) {
 	fmt.Fprintln(w, "Exit codes: 2 is a deny, everything else is allowed. An advisory exits 0")
 	fmt.Fprintln(w, "on purpose. Unreadable input is 2, so a host that blocks on 2 fails closed")
 	fmt.Fprintln(w, "when bytes were lost on the way in.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "A verdict names the rule that produced it, in brackets. `"+hint.DescribeRules.String()+"`")
+	fmt.Fprintln(w, "lists every rule this workspace enforces; `"+hint.DescribeRule.With("<name>")+"` details one.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
 }
@@ -169,6 +173,14 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
 	})
+	// -q and -s mean the exit code IS the answer, which this command can honor exactly
+	// because its whole output is one verdict. They bound a run's progress chatter
+	// everywhere else; here there is no progress, so suppressing the verdict is the only
+	// reading that leaves them meaning anything at all. A script asking "would this be
+	// refused" wants the status and nothing on its stdout.
+	if global.quiet || global.silent {
+		return enforceVerdictTo(io.Discard, opts, verdict)
+	}
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}

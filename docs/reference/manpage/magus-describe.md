@@ -109,12 +109,30 @@ step at a time.
 **graph**
 : Emit the target catalog and dependency graph
 
+**rules**
+: List the guard rules this workspace enforces, and what each one catches
+
+**rule**
+: Detail one guard rule, by the name a verdict reported
+
 ## Examples
 
 *List every target*
 
 ```sh
 magus describe targets
+```
+
+*List what the guard enforces*
+
+```sh
+magus describe rules
+```
+
+*Look up the rule a verdict named*
+
+```sh
+magus describe rule stage-all
 ```
 
 *List a charm's declaring targets*

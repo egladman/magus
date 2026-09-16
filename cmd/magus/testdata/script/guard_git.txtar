@@ -20,7 +20,7 @@
 # exits 0 blocks nothing.
 stdin stash.txt
 ! exec magus shell
-stdout 'deny: Verify in place'
+stdout 'deny \[[a-z-]+\]: Verify in place'
 stdout 'magus run <target> <project>'
 stdout 'magus affected ci'
 stdout 'throwaway .git worktree add'
@@ -31,7 +31,7 @@ stdout 'magus-vcs-hygiene'
 # shares, so the routing is to READ the stack and name an entry.
 stdin stash-pop.txt
 ! exec magus shell
-stdout 'deny: Name the entry you meant'
+stdout 'deny \[[a-z-]+\]: Name the entry you meant'
 stdout 'git stash list'
 stdout 'git stash pop stash@'
 
@@ -53,20 +53,20 @@ stdout 'whole-tree git clean destroys'
 # has to spend its length saying why it is not, and then offer both deliberate forms.
 stdin checkout-merge-head.txt
 ! exec magus shell
-stdout 'deny: Restoring a path from MERGE_HEAD overwrites it with ONE side'
+stdout 'deny \[[a-z-]+\]: Restoring a path from MERGE_HEAD overwrites it with ONE side'
 stdout 'magus vcs resolve'
 stdout 'git checkout --ours'
 
 stdin add-all.txt
 ! exec magus shell
-stdout 'deny: Stage through the workspace'
+stdout 'deny \[[a-z-]+\]: Stage through the workspace'
 stdout 'magus vcs add'
 stdout 'magus vcs add --dry-run'
 stdout 'git add -- <paths>'
 
 stdin worktree-remove.txt
 ! exec magus shell
-stdout 'deny: Check it is clean first with .git -C <path> status'
+stdout 'deny \[[a-z-]+\]: Check it is clean first with .git -C <path> status'
 stdout 'git worktree remove deletes that worktree'
 
 # The non-git backends reach the same rule, and the replacement is REWRITTEN for them:
@@ -90,7 +90,7 @@ stdout 'jj workspace forget drops that workspace'
 # refusal is lost to whichever reminder the first command earned.
 stdin restore-then-add-all.txt
 ! exec magus shell
-stdout 'deny: Stage through the workspace'
+stdout 'deny \[[a-z-]+\]: Stage through the workspace'
 
 # A line that does not parse falls back to the regexes, where an over-eager deny is the
 # safe direction: these rules guard work that cannot be recovered.
@@ -102,26 +102,26 @@ stdout 'whole-tree git stash destroys'
 
 stdin push.txt
 exec magus shell
-stdout 'advise: magus workspace: run the gate before publishing'
+stdout 'advise( \[[a-z-]+\])?: magus workspace: run the gate before publishing'
 stdout 'magus affected ci'
 
 stdin add-paths.txt
 exec magus shell
-stdout 'advise: magus workspace: classify the dirty tree first'
+stdout 'advise \[[a-z-]+\]: magus workspace: classify the dirty tree first'
 stdout 'magus describe file'
 
 stdin commit.txt
 exec magus shell
-stdout 'advise: magus workspace: classify the dirty tree first'
+stdout 'advise \[[a-z-]+\]: magus workspace: classify the dirty tree first'
 
 stdin checkout-path.txt
 exec magus shell
-stdout 'advise: magus workspace: classify before reverting'
+stdout 'advise( \[[a-z-]+\])?: magus workspace: classify before reverting'
 stdout 'magus describe file <paths>'
 
 stdin rev-parse-head.txt
 exec magus shell
-stdout 'advise: magus workspace: .magus vcs checkpoint'
+stdout 'advise( \[[a-z-]+\])?: magus workspace: .magus vcs checkpoint'
 stdout 'identifies the working state'
 
 # --- the allowed shapes: a guard that denies everything routes nobody ---------

@@ -142,9 +142,9 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guard.Verdict)
 	case FormatText:
 		switch verdict.Decision {
 		case "deny":
-			fmt.Fprintln(out, "deny: "+verdict.Reason)
+			fmt.Fprintln(out, decisionLabel("deny", verdict.Rule)+" "+verdict.Reason)
 		case "advise":
-			fmt.Fprintln(out, "advise: "+verdict.Context)
+			fmt.Fprintln(out, decisionLabel("advise", verdict.Rule)+" "+verdict.Context)
 		default:
 			fmt.Fprintln(out, "pass")
 		}
@@ -154,6 +154,24 @@ func writeGuardVerdict(out io.Writer, opts OutputOptions, verdict guard.Verdict)
 		return nil
 	}
 	return writeFormatted(out, opts, verdict)
+}
+
+// decisionLabel opens a text verdict with the decision and, where the rule can identify
+// itself, its name: `deny [stage-all]`.
+//
+// The name was reachable only through `-o json` before this, which meant a person could
+// read a refusal and still have nothing to look up, grep a trail for, or cite when
+// reporting it as a false positive. Every other verdict magus reaches carries a code a
+// reader can take somewhere; this was the exception.
+//
+// Bracketed rather than appended so it survives a line-wrap next to the decision it
+// qualifies, and omitted entirely when the rule is anonymous: an empty `[]` would promise
+// an identifier that does not exist.
+func decisionLabel(decision, rule string) string {
+	if rule == "" {
+		return decision + ":"
+	}
+	return decision + " [" + rule + "]:"
 }
 
 // guardInputLimit bounds the payload one hook call may carry.
