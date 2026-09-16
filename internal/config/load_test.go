@@ -72,9 +72,12 @@ func TestLoadDirIntoMissing(t *testing.T) {
 	assert.Equal(t, base.Cache.WriteEnabled(), cfg.Cache.WriteEnabled(), "Cache.Write.Enabled changed unexpectedly")
 }
 
+// Not t.Parallel, and neither are the other two tests in this file that capture the
+// logger. slog.SetDefault is a PROCESS global: the comment below guarded these subtests
+// against each other and missed that a parallel sibling doing the same thing restores its
+// own `prev` while this one is mid-assertion. Failed under gate load and passed when run
+// alone, which is the signature.
 func TestWarnIfConcurrencyHigh(t *testing.T) {
-	t.Parallel()
-
 	run := func(t *testing.T, concurrency, numCPU int, wantWarn bool) {
 		// slog.SetDefault mutates global state — subtests cannot run in parallel.
 		var buf bytes.Buffer
@@ -184,8 +187,8 @@ func TestLoadDirIntoBoolTrueOverridesADefaultOffKey(t *testing.T) {
 // is in. The empty-log assert is the load-bearing half: a warning leaves the
 // command at exit 0, and -s/--silent drops it entirely, so a change back to
 // warning has to break a test rather than pass one.
+// Not t.Parallel: it captures the slog default. See TestWarnIfConcurrencyHigh.
 func TestUnknownKeyIsALoadError(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "magus.yaml")
 	require.NoError(t, os.WriteFile(path, []byte("concurrencyy: 4\n"), 0o644))
@@ -220,8 +223,9 @@ func TestSecondDocumentIsALoadError(t *testing.T) {
 // An empty or comment-only magus.yaml declares nothing, which is valid. yaml's
 // decoder reports io.EOF for it, and reading that as a decode failure would turn
 // every empty file into an unknown-key error.
+//
+// Not t.Parallel: its subtests capture the slog default. See TestWarnIfConcurrencyHigh.
 func TestEmptyDocumentIsNotAnError(t *testing.T) {
-	t.Parallel()
 	for name, content := range map[string]string{
 		"empty":        "",
 		"comment only": "# nothing configured here yet\n",
