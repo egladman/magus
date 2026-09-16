@@ -435,6 +435,14 @@ var allChecks = []checkDef{
 		run:            (*runner).checkSourceIsAlsoOutput,
 	},
 	{
+		Name:           "footprint-drops-op-globs",
+		Doc:            "a target that narrows its footprint and then runs an op over files it no longer names",
+		Code:           types.FootprintDropsOpGlobs,
+		Evidence:       types.EvidenceDeclared,
+		NeedsWorkspace: true,
+		run:            (*runner).checkFootprintDropsOpGlobs,
+	},
+	{
 		Name:           "output-ownership",
 		Doc:            "one output glob declared by two targets in the same project",
 		Code:           types.OutputOwnedByTwoTargets,

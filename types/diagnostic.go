@@ -214,7 +214,24 @@ const (
 	SourceIsAlsoOutput DiagnosticCode = "MGS1034"
 	// WriteWithoutRWCharm is a target with an rw branch that writes a file outside it, so
 	// the run that was given no rw charm edits the tree anyway and then reports its own edit.
-	WriteWithoutRWCharm       DiagnosticCode = "MGS1035"
+	WriteWithoutRWCharm DiagnosticCode = "MGS1035"
+	// FootprintDropsOpGlobs is a target that declares its own footprint and then composes a
+	// spell op reading file kinds that footprint never names.
+	//
+	// A ctx.readsFiles call REPLACES the project baseline (buildStep), and a spell
+	// contributes its globs project-wide unless it declares them per target, so narrowing a
+	// target's footprint silently drops the very files the ops in its body run on. The
+	// target then replays on an edit to them.
+	//
+	// The failure is GREEN, which is what earns it a code over a comment: the op is skipped,
+	// not failed, and a sibling target that kept the baseline still re-runs, so the gate
+	// stays green while the formatter or the suite never saw the change. Measured in this
+	// workspace four times before anyone wrote the rule down.
+	//
+	// It fires only on total omission. A footprint naming one *.go path is a narrowing its
+	// author meant; a footprint naming no Go file at all under a target that calls go-fmt is
+	// the mistake, and the two are distinguishable without knowing what the op reads.
+	FootprintDropsOpGlobs     DiagnosticCode = "MGS1036"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -429,6 +446,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	UnmatchableSourceGlob, MemoryDeclarationDrift, OutputIsAnotherProjectsSource,
 	TimeoutDeclarationDrift, CacheableExternalOp, SourceIsAlsoOutput, WriteWithoutRWCharm,
+	FootprintDropsOpGlobs,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

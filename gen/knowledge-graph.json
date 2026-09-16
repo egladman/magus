@@ -3,8 +3,8 @@
   "schema_version": 12,
   "directed": true,
   "multigraph": false,
-  "node_count": 6250,
-  "edge_count": 11133,
+  "node_count": 6256,
+  "edge_count": 11149,
   "relations": [
     {
       "id": "annotates",
@@ -1705,7 +1705,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1883",
+        "dir_files": "1889",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1975,7 +1975,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "545",
+        "dir_files": "551",
         "dir_languages": "markdown,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-shared-output-to-exactly-one-project,md#2-if-the-consumer-should-not-consume-the-producers-outp"
       }
     },
@@ -2025,7 +2025,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "215",
+        "dir_files": "221",
         "dir_languages": "markdown,md#an-endpoint-carries-this-in-a-sharper-form,md#cause,md#codes,md#confirming-the-fix,md#detection,md#exact-paths-only,md#example,md#fix,md#fixing-it,md#keeping-the-name,md#magusfile-authoring-diagnostics,md#members-that-declare-into-a-workspace,m"
       }
     },
@@ -5785,6 +5785,18 @@
         "section": "reference",
         "tags": "MGS1035,magusfile,charms,rw,drift,writesFiles",
         "title": "MGS1035: a target writes the tree when it was given no rw charm"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1036.md",
+      "source": "docs/reference/codes/magusfile/MGS1036.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1036,magusfile,sources,cache,readsFiles,footprint,doctor",
+        "title": "MGS1036: a narrowed footprint dropped the files its own ops read"
       }
     },
     {
@@ -30164,6 +30176,56 @@
       "source": "docs/reference/codes/magusfile/MGS1035.md#why-it-matters",
       "attrs": {
         "anchor": "why-it-matters",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "kind": "docsection",
+      "label": "MGS1036: a narrowed footprint dropped the files its own ops read",
+      "source": "docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "attrs": {
+        "anchor": "mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+        "level": "1"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1036.md#resolve-it",
+      "kind": "docsection",
+      "label": "Resolve it",
+      "source": "docs/reference/codes/magusfile/MGS1036.md#resolve-it",
+      "attrs": {
+        "anchor": "resolve-it",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1036.md#see-also",
+      "kind": "docsection",
+      "label": "See also",
+      "source": "docs/reference/codes/magusfile/MGS1036.md#see-also",
+      "attrs": {
+        "anchor": "see-also",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1036.md#what-it-does-not-report",
+      "kind": "docsection",
+      "label": "What it does not report",
+      "source": "docs/reference/codes/magusfile/MGS1036.md#what-it-does-not-report",
+      "attrs": {
+        "anchor": "what-it-does-not-report",
+        "level": "2"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/codes/magusfile/MGS1036.md#why-this-matters",
+      "kind": "docsection",
+      "label": "Why this matters",
+      "source": "docs/reference/codes/magusfile/MGS1036.md#why-this-matters",
+      "attrs": {
+        "anchor": "why-this-matters",
         "level": "2"
       }
     },
@@ -63017,6 +63079,14 @@
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
       "target": "doc:docs/reference/codes/magusfile/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -81150,6 +81220,94 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1035.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "diagnostic:MGS1004",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "diagnostic:MGS1029",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "diagnostic:MGS1034",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "diagnostic:MGS1036",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "doc:docs/concepts/cache.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1004.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1034.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1036.md",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -112894,6 +113052,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1035.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1036.md#resolve-it",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1036.md#see-also",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1036.md#what-it-does-not-report",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
+    },
+    {
+      "source": "docsection:docs/reference/codes/magusfile/MGS1036.md#mgs1036-a-narrowed-footprint-dropped-the-files-its-own-ops-read",
+      "target": "docsection:docs/reference/codes/magusfile/MGS1036.md#why-this-matters",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1036.md"
     },
     {
       "source": "docsection:docs/reference/codes/magusfile/README.md#magusfile-authoring-diagnostics",

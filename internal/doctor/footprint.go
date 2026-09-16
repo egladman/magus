@@ -3,9 +3,12 @@ package doctor
 import (
 	"fmt"
 	"os"
+	"path"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/describe"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
@@ -104,4 +107,145 @@ func (*runner) checkSourceIsAlsoOutput(projects []*types.Project) types.DoctorCh
 			len(details), types.CodeURL(types.SourceIsAlsoOutput)),
 		Details: details,
 	}
+}
+
+// checkFootprintDropsOpGlobs is MGS1036: a target that declares its own footprint with
+// ctx.readsFiles and then composes a spell op reading file kinds that footprint never names.
+//
+// buildStep treats an explicit footprint as an ownership boundary and resets step.Sources to
+// the magusfiles, then folds back only the refs the body declared and the spell sources
+// specific to THAT target. A spell whose globs are project-wide (the go spell's
+// mgs_listRequiredGlobs takes no target, so every glob it has is project-wide) therefore
+// loses all of them, and a target calling go-fmt or go-test keys on no Go file at all.
+//
+// The failure is green, which is what earns it a check. The op is skipped rather than
+// failed, and a sibling target that kept the baseline still re-runs, so a gate composing
+// both passes while the formatter never saw the edit. It reached this workspace four times.
+//
+// Total omission only. Naming one *.go path is the narrowing its author meant and says
+// nothing about the rest; naming no Go file under a target that runs the Go toolchain is
+// the mistake, and the two are told apart without knowing what an op reads.
+func (*runner) checkFootprintDropsOpGlobs(projects []*types.Project) types.DoctorCheck {
+	const name = "footprint-drops-op-globs"
+	var details []string
+	for _, p := range projects {
+		for target, inputs := range p.TargetInputs {
+			if len(inputs) == 0 {
+				continue
+			}
+			declared, unbounded := declaredFileKinds(p, target)
+			if unbounded {
+				continue
+			}
+			for _, use := range p.TargetSpellOps[target] {
+				sp := resolvedSpell(p, use.Spell)
+				if sp == nil {
+					continue
+				}
+				kinds := globFileKinds(sp.Sources())
+				if len(kinds) == 0 {
+					continue
+				}
+				// Globs the spell declares for THIS target survive the reset, so they
+				// count as part of the footprint rather than as something it dropped.
+				have := append(slices.Clone(declared), globFileKinds(sp.TargetSources()[target])...)
+				if kindsOverlap(have, kinds) {
+					continue
+				}
+				details = append(details, fmt.Sprintf(
+					"%s: %s declares its own footprint and calls %s, whose spell reads %s; no declared glob names any of them",
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), target,
+					strings.Join(qualifiedOps(use), ", "), strings.Join(sp.Sources(), " ")))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every narrowed footprint still names the files its ops read"}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d target(s) replace their cache footprint and then run an op over files that footprint never names, so an edit to those files replays "+
+				"the op instead of running it (see %s)",
+			len(details), types.CodeURL(types.FootprintDropsOpGlobs)),
+		Details: details,
+	}
+}
+
+// qualifiedOps names a spell use as the reader sees it in the magusfile body.
+func qualifiedOps(use types.TargetSpellUse) []string {
+	if len(use.Ops) == 0 {
+		return []string{use.Spell}
+	}
+	out := make([]string, 0, len(use.Ops))
+	for _, op := range use.Ops {
+		out = append(out, use.Spell+"["+op+"]")
+	}
+	return out
+}
+
+// resolvedSpell finds a project's bound spell by name.
+func resolvedSpell(p *types.Project, name string) *spells.Spell {
+	for _, s := range p.ResolvedSpells {
+		if s.Name() == name {
+			return s
+		}
+	}
+	return nil
+}
+
+// declaredFileKinds is every file kind a target's own declarations name, plus whether one of
+// them is broad enough that asking the question is meaningless.
+//
+// ctx.modifiesExistingFiles counts: buildStep folds those refs into Sources exactly as
+// inputs, so a target that declares what it EDITS has keyed those files whether or not it
+// also calls them inputs. That is the shape gofmt and dprint have, and reporting it would
+// be reporting the correct declaration.
+func declaredFileKinds(p *types.Project, target string) (kinds []string, unbounded bool) {
+	globs := make([]string, 0, len(p.TargetInputs[target])+len(p.TargetUpdates[target]))
+	for _, ref := range p.TargetInputs[target] {
+		globs = append(globs, ref.Glob)
+	}
+	for _, ref := range p.TargetUpdates[target] {
+		globs = append(globs, ref.Glob)
+	}
+	for _, g := range globs {
+		// A footprint that takes everything under a tree drops nothing, and it carries no
+		// extension to compare, so it would otherwise read as naming no kind at all.
+		if base := path.Base(g); base == "*" || base == "**" {
+			return nil, true
+		}
+	}
+	return globFileKinds(globs), false
+}
+
+// globFileKinds reduces globs to the file kinds they can match: the extension, plus the
+// exact basename when the glob names one literally, so `go.mod` and `**/*.mod` compare equal
+// and a literal `tapes/demo.txtar` still answers for `**/*.txtar`.
+//
+// A glob with neither (a bare directory tree such as `internal/agent/skills/**`) yields
+// nothing rather than a wildcard: it must not manufacture an overlap it cannot prove.
+func globFileKinds(globs []string) []string {
+	var out []string
+	add := func(k string) {
+		if k != "" && !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+	for _, g := range globs {
+		base := path.Base(g)
+		add(path.Ext(base))
+		if !strings.ContainsAny(base, "*?[") {
+			add(base)
+		}
+	}
+	return out
+}
+
+// kindsOverlap reports whether the two sets share a file kind. Any overlap at all is the
+// author narrowing on purpose; none is the footprint having lost the spell entirely.
+func kindsOverlap(a, b []string) bool {
+	return slices.ContainsFunc(a, func(k string) bool { return slices.Contains(b, k) })
 }
