@@ -47,6 +47,12 @@ const (
 	briefFeedbackEvidence = 2
 )
 
+// briefRecentSessions bounds the earlier sessions listed. Three, because this is a
+// pointer into a store rather than the store itself: a reader who wants the fourth has
+// `magus session` for the whole list, and every line here is spent from the context
+// window the brief exists to refill.
+const briefRecentSessions = 3
+
 // sessionBrief is the whole payload, and the -o json shape.
 type sessionBrief struct {
 	Workspace string `json:"workspace"`
@@ -76,6 +82,26 @@ type sessionBrief struct {
 	// review. It is derived from activity on every brief, not copied into a
 	// checkpoint, so an old stop never keeps injecting an already-resolved issue.
 	Feedback []trail.GuardFeedback `json:"feedback,omitempty"`
+	// Recent is what OTHER sessions in this repository did lately, from transcripts a
+	// `magus session load` folded in. Empty until a workspace declares an adapter, and
+	// empty is the honest answer then: nothing was observed, rather than nothing happened.
+	//
+	// The other fields answer "what is this checkout", which one session can work out
+	// alone. This one cannot be worked out alone: a session that starts fresh, or wakes
+	// up compacted, has no way to know another session spent yesterday in the files it is
+	// about to open. That is the whole reason transcripts are loaded at all, and a brief
+	// that omitted it would leave the evidence sitting in a store nobody reads.
+	Recent []briefSession `json:"recent,omitempty"`
+}
+
+// briefSession is one earlier session reduced to what makes it worth opening: who it was,
+// when it stopped, and how much it did. Not what it did, which is `magus session show`'s
+// to answer at a length this payload cannot afford.
+type briefSession struct {
+	Session string `json:"session"`
+	Host    string `json:"host,omitempty"`
+	LastMs  int64  `json:"last_ms"`
+	Events  int    `json:"events"`
 }
 
 // briefUnpushed counts the commits this checkout carries that its base ref does not.
@@ -191,8 +217,45 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 			}
 		}
 	}
+	brief.Recent = recentLoadedSessions(resolveRootOrEmpty(root))
 	brief.Console = consoleRootURL()
 	return brief
+}
+
+// recentLoadedSessions lists the last few sessions a transcript load folded in, newest
+// first.
+//
+// Only sessions with loaded EVENTS count. Every run magus performs also writes a row
+// here, so listing rows outright would fill the brief with this checkout's own builds,
+// which the reader already knows about and cannot open anyway.
+//
+// THE CALLER'S OWN SESSION IS NOT EXCLUDED, and that is deliberate rather than a
+// limitation of what a hook can know about itself. This payload exists for a session
+// whose history was replaced by a summary, and the transcript of its own earlier hours is
+// the single most useful thing in the list to that reader.
+//
+// Best-effort and silent, like every other source feeding the brief: a workspace that
+// loads no transcripts contributes nothing instead of an error.
+func recentLoadedSessions(root string) []briefSession {
+	dir, err := sessions.Dir(root)
+	if err != nil {
+		return nil
+	}
+	fold, err := sessions.ReadAll(dir)
+	if err != nil {
+		return nil
+	}
+	var out []briefSession
+	for _, s := range sessions.Summarize(fold) {
+		if s.Events == 0 {
+			continue
+		}
+		out = append(out, briefSession{Session: s.Session, Host: s.Host, LastMs: s.LastMs, Events: s.Events})
+		if len(out) == briefRecentSessions {
+			break
+		}
+	}
+	return out
 }
 
 // readVCS fills in the branch, the revision, the unpushed count and the dirty tree.
@@ -376,6 +439,7 @@ func (b sessionBrief) Text() string {
 	b.writeLeases(&s)
 	b.writeFailures(&s)
 	b.writeFeedback(&s)
+	b.writeRecent(&s)
 
 	if len(b.GuardWiring) > 0 {
 		briefLine(&s, "guard wiring: %s", strings.Join(b.GuardWiring, ", "))
@@ -386,6 +450,26 @@ func (b sessionBrief) Text() string {
 		briefLine(&s, "rules live in %s; re-read them, nothing above restates one", strings.Join(b.Rules, ", "))
 	}
 	return s.String()
+}
+
+// writeRecent names the earlier sessions and the one command that opens one.
+//
+// It NAMES them rather than summarizing them. A summary of what another session did is
+// prose about prose, two removes from the transcript and wrong in a way the reader cannot
+// detect; the id plus `magus session show` puts them one command from the record itself.
+func (b sessionBrief) writeRecent(s *strings.Builder) {
+	if len(b.Recent) == 0 {
+		return
+	}
+	briefLine(s, "earlier sessions loaded here (%s reads one):", hint.SessionShow)
+	for _, r := range b.Recent {
+		host := r.Host
+		if host == "" {
+			host = "unknown host"
+		}
+		briefLine(s, "  %s  %s, %s, last active %s",
+			r.Session, host, countOf(r.Events, "event"), humanAge(time.UnixMilli(r.LastMs)))
+	}
 }
 
 func (b sessionBrief) writeFeedback(s *strings.Builder) {

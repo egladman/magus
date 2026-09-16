@@ -205,6 +205,29 @@ declared CODEOWNERS ownership appears - it is not blame-inferred.{{else}} `magus
 <node>` for owners plus dependents; `magus query kind=owner` to list. Declared
 ownership only, never blame-inferred.{{end}}
 
+## What other sessions already did here
+
+You are not the first agent in this repository, and the ones before you left a
+record. Where a workspace declares a session adapter, `magus graph build` folds
+each host's own transcripts into a local store, and two surfaces read it back.
+
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded
+  session touched that file: reads, writes, how many distinct sessions, how long
+  ago, and any write the host refused. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one,
+  joined against this checkout's guard trail.
+
+{{if .Full}}Read it BEFORE a non-trivial edit, for the reason the git half of the same output
+exists. A file last committed three weeks ago looks dormant and may have been
+rewritten twice yesterday by a session whose work is not committed yet. Four
+sessions on one file is a reason to look at what they did before adding a fifth
+opinion, and a refused write is a rule you are about to hit too.{{else}}Read it before a non-trivial edit: a file last committed weeks ago may have been
+rewritten yesterday by a session whose work is not committed. A refused write
+there is a rule you are about to hit too.{{end}}
+
+Never infer from an empty result that nobody worked on a file. It equally means
+this workspace declares no adapter, which is the common case.
+
 ## Across workspaces and neighbors
 
 - `--global` unions every workspace registered in config

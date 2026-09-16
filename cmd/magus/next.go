@@ -7,6 +7,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,6 +29,15 @@ type queryWithNext struct {
 type explainWithNext struct {
 	types.KnowledgeExplainOutput `yaml:",inline"`
 	Next                         []hint.Next `json:"next,omitempty" yaml:"next,omitempty"`
+	// AgentSessions is what the loaded transcripts recorded about this node's file, the
+	// same fact the text view prints. Absent when nothing touched it, or when the node is
+	// not about a file.
+	//
+	// Here as well as in the text renderer because the machine-readable surface is the one
+	// an agent reads, and the argument for printing contact at all is that omitting it
+	// makes a reader conclude a file is quiet. That argument does not weaken when the
+	// reader is a program.
+	AgentSessions *sessions.PathContact `json:"agent_sessions,omitempty" yaml:"agent_sessions,omitempty"`
 }
 
 type filesWithNext struct {

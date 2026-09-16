@@ -762,13 +762,16 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, explainWithNext{KnowledgeExplainOutput: out, Next: next})
+		return emitFormatted(opts, explainWithNext{
+			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node),
+		})
 	case outputName:
 		fmt.Println(out.Node.ID)
 		return nil
 	}
 
 	fmt.Print(render.ExplainText(out))
+	printSessionContact(os.Stdout, root, out.Node)
 
 	// Complementary deep-link: focus this node in the live Graph Explorer with a
 	// blast view (the console's own analogue of `magus explain`). Symbol nodes are

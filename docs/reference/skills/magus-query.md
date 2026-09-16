@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 13412
-skill_short_bytes: 10888
+skill_full_bytes: 14573
+skill_short_bytes: 11868
 ---
 
 # magus-query
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `82` |
 | `knowledge-schema-version` | `12` |
-| `skill-content` | `5a207df3b9cf` |
+| `skill-content` | `ac8b91008c52` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -227,6 +227,25 @@ If the repo commits a `CODEOWNERS` file, the graph has `owner` nodes with `owns`
 edges to the projects and files they cover. `magus explain
 <node>` for owners plus dependents; `magus query kind=owner` to list. Declared
 ownership only, never blame-inferred.
+
+## What other sessions already did here
+
+You are not the first agent in this repository, and the ones before you left a
+record. Where a workspace declares a session adapter, `magus graph build` folds
+each host's own transcripts into a local store, and two surfaces read it back.
+
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded
+  session touched that file: reads, writes, how many distinct sessions, how long
+  ago, and any write the host refused. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one,
+  joined against this checkout's guard trail.
+
+Read it before a non-trivial edit: a file last committed weeks ago may have been
+rewritten yesterday by a session whose work is not committed. A refused write
+there is a rule you are about to hit too.
+
+Never infer from an empty result that nobody worked on a file. It equally means
+this workspace declares no adapter, which is the common case.
 
 ## Across workspaces and neighbors
 
@@ -460,6 +479,27 @@ edges to the projects and files they cover. Combine that with dependency edges t
 answer "who owns the blast radius of this change": `magus explain <node>` for the
 node's owners and dependents, or `magus query kind=owner` to list owners. Only
 declared CODEOWNERS ownership appears - it is not blame-inferred.
+
+## What other sessions already did here
+
+You are not the first agent in this repository, and the ones before you left a
+record. Where a workspace declares a session adapter, `magus graph build` folds
+each host's own transcripts into a local store, and two surfaces read it back.
+
+- `magus explain <node>` ends with an `agent sessions:` line when any loaded
+  session touched that file: reads, writes, how many distinct sessions, how long
+  ago, and any write the host refused. Silence means nothing touched it.
+- `magus session` lists those sessions; `magus session show <id>` opens one,
+  joined against this checkout's guard trail.
+
+Read it BEFORE a non-trivial edit, for the reason the git half of the same output
+exists. A file last committed three weeks ago looks dormant and may have been
+rewritten twice yesterday by a session whose work is not committed yet. Four
+sessions on one file is a reason to look at what they did before adding a fifth
+opinion, and a refused write is a rule you are about to hit too.
+
+Never infer from an empty result that nobody worked on a file. It equally means
+this workspace declares no adapter, which is the common case.
 
 ## Across workspaces and neighbors
 
