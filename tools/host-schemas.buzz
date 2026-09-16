@@ -1,5 +1,5 @@
 // host-schemas.buzz refreshes the agent-host schemas vendored under
-// testdata/hostschemas, and says when one has moved upstream.
+// testdata/hosts, and says when one has moved upstream.
 //
 // The schemas are what host_schema_test.go grades this repository's hook configs and
 // rendered verdicts against. Vendoring them is what keeps that test off the network;
@@ -22,7 +22,7 @@
 //
 // Run from the workspace root: every path here is relative to it, the way `magus buzz`
 // resolves them.
-namespace hostschemas;
+namespace hosts;
 
 import "std";
 import "fs";
@@ -30,8 +30,8 @@ import "os";
 import "http";
 import "crypto";
 
-final SOURCES = "testdata/hostschemas/SOURCES.md";
-final DIR = "testdata/hostschemas";
+final SOURCES = "testdata/hosts/SOURCES.md";
+final DIR = "testdata/hosts";
 
 // code reads a column the table quotes in backticks, which is every path and URL.
 // Split rather than replace because this file runs WITHOUT --embedded, so strict mode

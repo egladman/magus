@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://magus.invalid/hostschemas/cursor/hooks.schema.json",
-  "$comment": "OURS, but transcribed from Cursor's OWN validator rather than from its prose. Cursor publishes no schema for .cursor/hooks.json; cursor.com/schemas/hooks.schema.json serves the docs SPA. It does ship the validator: the bundled hooks package rejects an unknown event name, a missing or fractional version, and a malformed handler before a hook can fire. Read 2026-09-10 out of two artifacts that carry the same code, the cursor-agent CLI package (2026.09.08-6caf4ff, dist-package/index.js, module ../hooks/dist/index.js) and the desktop app (3.19.19, resources/app/extensions/cursor-agent-host/dist/main.js). Digests and URLs are in testdata/hostschemas/SOURCES.md.",
+  "$id": "https://magus.invalid/hosts/cursor/hooks.schema.json",
+  "$comment": "OURS, but transcribed from Cursor's OWN validator rather than from its prose. Cursor publishes no schema for .cursor/hooks.json; cursor.com/schemas/hooks.schema.json serves the docs SPA. It does ship the validator: the bundled hooks package rejects an unknown event name, a missing or fractional version, and a malformed handler before a hook can fire. Read 2026-09-10 out of two artifacts that carry the same code, the cursor-agent CLI package (2026.09.08-6caf4ff, dist-package/index.js, module ../hooks/dist/index.js) and the desktop app (3.19.19, resources/app/extensions/cursor-agent-host/dist/main.js). Digests and URLs are in testdata/hosts/SOURCES.md.",
   "title": "Cursor hooks.json",
   "type": "object",
   "required": ["version", "hooks"],

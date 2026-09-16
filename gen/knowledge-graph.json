@@ -3218,10 +3218,10 @@
       }
     },
     {
-      "id": "dir:testdata/hostschemas",
+      "id": "dir:testdata/hosts",
       "kind": "dir",
-      "label": "testdata/hostschemas",
-      "source": "testdata/hostschemas",
+      "label": "testdata/hosts",
+      "source": "testdata/hosts",
       "attrs": {
         "dir_files": "5",
         "dir_languages": "markdown,md#host-schemas,md#refreshing,md#table,md#what-each-host-publishes"
@@ -8133,10 +8133,10 @@
       }
     },
     {
-      "id": "doc:testdata/hostschemas/SOURCES.md",
+      "id": "doc:testdata/hosts/SOURCES.md",
       "kind": "doc",
-      "label": "testdata/hostschemas/SOURCES.md",
-      "source": "testdata/hostschemas/SOURCES.md",
+      "label": "testdata/hosts/SOURCES.md",
+      "source": "testdata/hosts/SOURCES.md",
       "attrs": {
         "role": "doc"
       }
@@ -41452,40 +41452,40 @@
       }
     },
     {
-      "id": "docsection:testdata/hostschemas/SOURCES.md#host-schemas",
+      "id": "docsection:testdata/hosts/SOURCES.md#host-schemas",
       "kind": "docsection",
       "label": "Host schemas",
-      "source": "testdata/hostschemas/SOURCES.md#host-schemas",
+      "source": "testdata/hosts/SOURCES.md#host-schemas",
       "attrs": {
         "anchor": "host-schemas",
         "level": "1"
       }
     },
     {
-      "id": "docsection:testdata/hostschemas/SOURCES.md#refreshing",
+      "id": "docsection:testdata/hosts/SOURCES.md#refreshing",
       "kind": "docsection",
       "label": "Refreshing",
-      "source": "testdata/hostschemas/SOURCES.md#refreshing",
+      "source": "testdata/hosts/SOURCES.md#refreshing",
       "attrs": {
         "anchor": "refreshing",
         "level": "2"
       }
     },
     {
-      "id": "docsection:testdata/hostschemas/SOURCES.md#table",
+      "id": "docsection:testdata/hosts/SOURCES.md#table",
       "kind": "docsection",
       "label": "Table",
-      "source": "testdata/hostschemas/SOURCES.md#table",
+      "source": "testdata/hosts/SOURCES.md#table",
       "attrs": {
         "anchor": "table",
         "level": "2"
       }
     },
     {
-      "id": "docsection:testdata/hostschemas/SOURCES.md#what-each-host-publishes",
+      "id": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
       "kind": "docsection",
       "label": "What each host publishes",
-      "source": "testdata/hostschemas/SOURCES.md#what-each-host-publishes",
+      "source": "testdata/hosts/SOURCES.md#what-each-host-publishes",
       "attrs": {
         "anchor": "what-each-host-publishes",
         "level": "2"
@@ -67565,19 +67565,19 @@
     },
     {
       "source": "dir:testdata",
-      "target": "dir:testdata/hostschemas",
+      "target": "dir:testdata/hosts",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas"
+      "provenance": "testdata/hosts"
     },
     {
-      "source": "dir:testdata/hostschemas",
-      "target": "doc:testdata/hostschemas/SOURCES.md",
+      "source": "dir:testdata/hosts",
+      "target": "doc:testdata/hosts/SOURCES.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas/SOURCES.md"
+      "provenance": "testdata/hosts/SOURCES.md"
     },
     {
       "source": "dir:tools",
@@ -97300,12 +97300,12 @@
       "provenance": "tapes/README.md"
     },
     {
-      "source": "doc:testdata/hostschemas/SOURCES.md",
-      "target": "docsection:testdata/hostschemas/SOURCES.md#host-schemas",
+      "source": "doc:testdata/hosts/SOURCES.md",
+      "target": "docsection:testdata/hosts/SOURCES.md#host-schemas",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas/SOURCES.md"
+      "provenance": "testdata/hosts/SOURCES.md"
     },
     {
       "source": "docsection:.claude/skills/magus-local-development/SKILL.md#developing-magus-itself",
@@ -120564,28 +120564,28 @@
       "provenance": "tapes/README.md"
     },
     {
-      "source": "docsection:testdata/hostschemas/SOURCES.md#host-schemas",
-      "target": "docsection:testdata/hostschemas/SOURCES.md#refreshing",
+      "source": "docsection:testdata/hosts/SOURCES.md#host-schemas",
+      "target": "docsection:testdata/hosts/SOURCES.md#refreshing",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas/SOURCES.md"
+      "provenance": "testdata/hosts/SOURCES.md"
     },
     {
-      "source": "docsection:testdata/hostschemas/SOURCES.md#host-schemas",
-      "target": "docsection:testdata/hostschemas/SOURCES.md#table",
+      "source": "docsection:testdata/hosts/SOURCES.md#host-schemas",
+      "target": "docsection:testdata/hosts/SOURCES.md#table",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas/SOURCES.md"
+      "provenance": "testdata/hosts/SOURCES.md"
     },
     {
-      "source": "docsection:testdata/hostschemas/SOURCES.md#host-schemas",
-      "target": "docsection:testdata/hostschemas/SOURCES.md#what-each-host-publishes",
+      "source": "docsection:testdata/hosts/SOURCES.md#host-schemas",
+      "target": "docsection:testdata/hosts/SOURCES.md#what-each-host-publishes",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "testdata/hostschemas/SOURCES.md"
+      "provenance": "testdata/hosts/SOURCES.md"
     },
     {
       "source": "file:badge.buzz",

@@ -438,7 +438,7 @@ If you would rather not have the plugin do it, running
   `edit`, `write`, `read`, `patch` and `glob` all appear in its binary, and
   `filePath` is the field its edit tools carry. An MCP tool's `input.tool`
   string was NOT among them (OpenCode has no hook config schema to check it
-  against either, per `testdata/hostschemas/SOURCES.md`), so the MCP call
+  against either, per `testdata/hosts/SOURCES.md`), so the MCP call
   surface is feasible - `tool.execute.before`/`.after` already see every call,
   MCP included - but not wired: a branch keyed on a guessed name risks judging
   an unrelated tool rather than magus's own calls. Confirm the string against a

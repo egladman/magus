@@ -35,10 +35,10 @@ import (
 // template bodies in those files so it is the real bytes and not a copy, and
 // validates it against the host's hook-stdout schema.
 //
-// Nothing here reaches the network. testdata/hostschemas holds vendored copies and
+// Nothing here reaches the network. testdata/hosts holds vendored copies and
 // records the provenance of each; tools/host-schemas.buzz is what refreshes them.
 
-const hostSchemaDir = "testdata/hostschemas"
+const hostSchemaDir = "testdata/hosts"
 
 // hostConfigSchema names the schema every hooks config a host reads is graded against.
 // A host absent from this map is a host whose config nothing checks, which is the
@@ -51,11 +51,11 @@ var hostConfigSchema = map[string]string{
 
 // hostOutputSchema names the schema a rendered verdict is graded against. Codex's is
 // OpenAI's own generated one; Claude Code's and Cursor's are ours, because neither
-// publishes a schema for hook stdout. testdata/hostschemas/SOURCES.md says which is
+// publishes a schema for hook stdout. testdata/hosts/SOURCES.md says which is
 // which and refuses to let that distinction blur.
 var hostOutputSchema = map[string]string{
 	"claude-code": "claude-code/hook-output.schema.json",
-	"codex":       "codex/pre-tool-use.output.schema.json",
+	"codex":       "codex/pre-tool-use.command.output.schema.json",
 	"cursor":      "cursor/hook-output.schema.json",
 }
 

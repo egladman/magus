@@ -188,7 +188,7 @@ script also accepts `file_path`.
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=model advise=model pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=mcp deny=none advise=none pass=none
-# NOT because the transport is missing: testdata/hostschemas/cursor/hooks.schema.json DOES
+# NOT because the transport is missing: testdata/hosts/cursor/hooks.schema.json DOES
 # declare beforeMCPExecution and afterMCPExecution, the MCP-call twins of beforeShellExecution
 # and preToolUse/postToolUse above. What is missing is the PAYLOAD: no vendored source (Cursor
 # ships no schema for it, only the config-shape validator the rows above are transcribed from)

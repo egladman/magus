@@ -132,7 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The hook configs magus ships are graded against the agent hosts' own schemas.** Claude
   Code's `.claude/settings.json`, the `codex-hooks.json` wiring, and every hooks block the
   Claude Code, Codex and Cursor guide pages embed now validate against a schema vendored
-  under `testdata/hostschemas/`: SchemaStore's for Claude Code settings and Codex hooks, and
+  under `testdata/hosts/`: SchemaStore's for Claude Code settings and Codex hooks, and
   OpenAI's own generated one for a Codex `PreToolUse` reply. The JSON the shipped guard
   templates print is rendered from the template bodies in those files and graded the same
   way, so a host renaming a field surfaces as a failing test rather than as a hook that
@@ -141,7 +141,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Cursor publish nothing for hook stdout and Cursor nothing for `.cursor/hooks.json`, so
   those three schemas are transcribed by hand from the reference pages and the
   `@anthropic-ai/claude-agent-sdk` types and are recorded as ours, not theirs, in
-  `testdata/hostschemas/SOURCES.md` beside each file's URL, read date and digest. OpenCode
+  `testdata/hosts/SOURCES.md` beside each file's URL, read date and digest. OpenCode
   has no hook config to check; its plugin is type-checked against `@opencode-ai/plugin`
   already. `HOST_SCHEMAS_MODE=verify magus buzz tools/host-schemas.buzz` re-fetches and
   reports what moved upstream. No test reaches the network.
