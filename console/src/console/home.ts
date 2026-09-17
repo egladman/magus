@@ -10,6 +10,13 @@
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
+import {
+  DEMO_HINT,
+  renderConnectPrompt,
+  type ConnectPromptOptions,
+  type ConnectPromptState,
+  type DaemonNeed,
+} from "./connectPrompt";
 import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
 
@@ -23,6 +30,10 @@ export interface Launchable {
   // between constantly; the launcher grid and the Applications menu ignore the flag and list
   // everything, because neither has a foot to pin them to.
   utility?: boolean;
+  // Set on a surface with nothing to show without a daemon: the shell opens its connect page in the
+  // surface's place until an address is applied (requireDaemon). Omit it for a surface that works
+  // offline, from a file or a snapshot.
+  daemon?: DaemonNeed;
 }
 
 // The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
@@ -590,10 +601,27 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   demoLabel.textContent = "Try the demo";
   const demoHint = document.createElement("span");
   demoHint.setAttribute("data-empty-hint", "");
-  demoHint.textContent = "Pick acme from the Workspace menu. Demo data, no daemon needed.";
+  demoHint.textContent = DEMO_HINT;
   demoWay.append(demoLabel, demoHint);
 
   ways.append(pickWay, demoWay);
+
+  // Stands in for the ways, at every width, once the shell knows no daemon answers. The first screen
+  // is where someone who has never started one lands, and it is the one place that said nothing.
+  const connect = document.createElement("div");
+  connect.dataset.launcherConnect = "";
+  connect.hidden = true;
+  const connectLine = document.createElement("p");
+  const connectTitle = document.createElement("strong");
+  connectTitle.dataset.launcherConnectTitle = "";
+  const connectMessage = document.createElement("span");
+  connectMessage.dataset.launcherConnectMessage = "";
+  connectLine.append(connectTitle, " ", connectMessage);
+  const connectActions = document.createElement("div");
+  connectActions.className = "pf-v6-c-empty-state__actions";
+  connectActions.dataset.launcherConnectActions = "";
+  connectActions.setAttribute("data-empty-ways", "");
+  connect.append(connectLine, connectActions);
 
   // The headline figure, bottom-right of the screen rather than in the reading column: it is not a
   // step in the flow, it is the reason the tool exists, and it should be the thing your eye lands on
@@ -613,6 +641,24 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   savedNote.textContent = "this session";
   saved.append(savedValue, savedUnit, savedNote);
 
-  root.append(sigil, title, sub, live, ways, gallery, saved);
+  root.append(sigil, title, sub, live, connect, ways, gallery, saved);
   return root;
+}
+
+// syncLauncherConnectPrompt shows the connect prompt in place of the launcher's ways while state is
+// non-null, and gives the ways back when it is null. Called on every readiness poll.
+export function syncLauncherConnectPrompt(
+  root: HTMLElement,
+  state: ConnectPromptState | null,
+  options?: ConnectPromptOptions,
+): void {
+  const connect = root.querySelector<HTMLElement>("[data-launcher-connect]");
+  const ways = root.querySelector<HTMLElement>("[data-launcher-ways]");
+  const title = root.querySelector<HTMLElement>("[data-launcher-connect-title]");
+  const message = root.querySelector<HTMLElement>("[data-launcher-connect-message]");
+  const actions = root.querySelector<HTMLElement>("[data-launcher-connect-actions]");
+  if (!connect || !ways || !title || !message || !actions) return;
+  connect.hidden = state === null;
+  ways.hidden = state !== null;
+  if (state) renderConnectPrompt({ title, message, actions }, state, options);
 }

@@ -25,6 +25,10 @@ config diff.tui
 config dry_run
 config hints.enabled
 config history_path
+config jobs.default_timeout
+config jobs.max_depth
+config jobs.max_live
+config jobs.stale_after
 config knowledge.duplication.include_tests
 config knowledge.duplication.min_callees
 config knowledge.duplication.min_score

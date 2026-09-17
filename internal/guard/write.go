@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus"
@@ -273,6 +274,9 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 	}
 
 	if me, enrolled := liveLease(live, actingLease); enrolled {
+		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
+			return writeGrade{Decision: "deny", Reason: reason}
+		}
 		return gradeAgainstOwnLease(me, live, rel)
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
@@ -394,8 +398,10 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 	if owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
-				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.",
-			rel, owner.ID, criteriaLine(owner), owner.State, me.ID)}
+				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
+				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.",
+			rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
+			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID))}
 	}
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
@@ -458,8 +464,11 @@ func liveLease(live []types.Job, id string) (types.Job, bool) {
 // between two runs over the same file: an answer that changes run to run is one nobody
 // can act on.
 func ownerOf(live []types.Job, rel, exclude string) (types.Job, bool, error) {
+	now := time.Now().Unix()
 	for _, u := range live {
-		if u.ID == exclude {
+		// An overdue lease's own writes are denied, so its lane would otherwise block
+		// everyone, the holder included, until somebody ends the row.
+		if u.ID == exclude || u.Overdue(now) {
 			continue
 		}
 		_, ok, err := declarationCovering(u.WritePaths, rel)

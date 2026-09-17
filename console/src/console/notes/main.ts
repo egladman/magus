@@ -38,22 +38,28 @@ import {
 import {
   parseHash,
   wantsDemo,
-  daemonAttach,
+  resolveDaemonHostOrRemembered,
+  isUnreachable,
   adoptDaemonOrigin,
-  validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
 } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
+import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../view";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 import type { SurfaceInstance } from "../standalone";
 import { demoNotes } from "./demo";
 import { parseTranscript, type Transcript } from "./transcript";
 import { renderMarkdown } from "./markdown";
 
-// The SAME key the dashboard remembers its last daemon under, so opening Notes after
-// connecting the dashboard resumes the same loopback host. Read-only here.
-const daemonCell = persisted<string | null>("dashboard-daemon", null);
+const PURPOSE =
+  "Notes are prose a person wrote about this workspace, anchored to what it is about.";
 
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
 // "private" are the words in magus.yaml, but what a reader needs at a glance is who ends up
@@ -110,8 +116,7 @@ interface Refs {
   detailScope: HTMLElement;
   detailBody: HTMLElement;
   empty: HTMLElement;
-  emptyTitle: HTMLElement;
-  emptySub: HTMLElement;
+  emptySlots: EmptyStateSlots;
 }
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or null when absent. A note
@@ -282,44 +287,12 @@ function buildScaffold(host: HTMLElement): Refs {
 
   const empty = h("div", "pf-v6-c-empty-state console-notes-app__empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
+  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text");
   const emptyBody = h("div", "pf-v6-c-empty-state__body");
-  const emptySub = h("p");
-  emptySub.textContent =
-    "Notes are prose a person wrote about this workspace, anchored to what it is about.";
+  const emptyMessage = h("p");
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
   emptyActions.dataset.emptyWays = "";
-
-  const wayLive = h("div");
-  wayLive.dataset.emptyWay = "";
-  const liveLabel = h("span", undefined, "Connect a daemon");
-  liveLabel.dataset.emptyWayLabel = "";
-  const liveCmd = h("pre");
-  liveCmd.dataset.emptyCmd = "";
-  liveCmd.append(h("code", undefined, "magus server start"));
-  const liveHint = h("span", undefined, "Then open the live link it prints.");
-  liveHint.dataset.emptyHint = "";
-  wayLive.append(liveLabel, liveCmd, liveHint);
-
-  // The hint says "sample" here, and the status-bar tag says it again for as long as the data is
-  // on screen. Twice on purpose: this is the surface where mistaking invented prose for something
-  // a colleague wrote is the costly error, and one notice is one thing to miss.
-  //
-  // No button, matching every other surface - the Workspace menu is the one way in.
-  const wayDemo = h("div");
-  wayDemo.dataset.emptyWay = "";
-  const demoLabel = h("span", undefined, "Try the demo");
-  demoLabel.dataset.emptyWayLabel = "";
-  const demoHint = h(
-    "span",
-    undefined,
-    "Pick acme from the Workspace menu. Demo notes, no daemon needed.",
-  );
-  demoHint.dataset.emptyHint = "";
-  wayDemo.append(demoLabel, demoHint);
-
-  emptyActions.append(wayLive, wayDemo);
-  emptyBody.append(emptySub, emptyActions);
+  emptyBody.append(emptyMessage, emptyActions);
   emptyContent.append(emptyTitle, emptyBody);
   empty.append(emptyContent);
 
@@ -337,8 +310,7 @@ function buildScaffold(host: HTMLElement): Refs {
     detailScope,
     detailBody,
     empty,
-    emptyTitle,
-    emptySub,
+    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
   };
 }
 
@@ -359,7 +331,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   let selected: string | null = null;
   let loadBody: (n: Note) => Promise<string> = () => Promise.resolve("");
 
-  function showEmpty(title: string, sub: string): void {
+  function showEmptyNotes(): void {
     notes = [];
     stores = [];
     selected = null;
@@ -369,8 +341,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.main.hidden = true;
     refs.bar.hidden = true;
     refs.empty.hidden = false;
-    refs.emptyTitle.textContent = title;
-    refs.emptySub.textContent = sub;
+  }
+
+  function showConnectPrompt(state: ConnectPromptState): void {
+    showEmptyNotes();
+    renderConnectPrompt(refs.emptySlots, state, { purpose: PURPOSE, onRetry: load });
+  }
+
+  function showNotesError(message: string): void {
+    showEmptyNotes();
+    renderEmptyMessage(refs.emptySlots, "Could not read the notes", message);
   }
 
   // The store is part of a note's resource name ("shared/x", "private/x") rather than a
@@ -726,22 +706,29 @@ export function activate(host: HTMLElement): SurfaceInstance {
     showBlank();
   }
 
+  // Bumped by every load, so the answer from an address the reader has since moved off is dropped
+  // instead of painted over the current one.
+  let loadGeneration = 0;
+
   async function loadLive(daemonHost: string): Promise<void> {
+    const generation = ++loadGeneration;
+    const superseded = (): boolean => stale || generation !== loadGeneration;
     const client = createClient(NotesService, createDaemonTransport(daemonHost));
     try {
       const resp = await client.listNotes({});
-      if (stale) return;
+      if (superseded()) return;
       show(resp.notes, resp.stores, async (n) => {
         const one = await client.getNote({ name: noteResourceName(n) });
         return one.body ?? "";
       });
     } catch (e) {
-      if (stale) return;
+      if (superseded()) return;
       const msg = e instanceof Error ? e.message : String(e);
-      showEmpty(
-        "Could not reach the daemon",
-        "The daemon at " + daemonHost + " did not answer (" + msg + ").",
-      );
+      if (!isUnreachable(e)) {
+        showNotesError("The daemon at " + daemonHost + " answered with an error (" + msg + ").");
+        return;
+      }
+      showConnectPrompt({ connection: "disconnected", host: daemonHost, reason: msg });
     }
   }
 
@@ -755,8 +742,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     show(demo.notes, demo.stores, (n) => Promise.resolve(demo.body(n.name)));
   }
 
-  // load resolves what to read: an explicit #demo, then an explicit daemon attach (a #port link
-  // or the daemon-origin console), then the last daemon the dashboard remembered.
+  // load resolves what to read: an explicit #demo, then resolveDaemonHostOrRemembered (a #port
+  // link, the daemon-origin console, the Settings address, or the last daemon the dashboard reached).
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
@@ -770,23 +757,25 @@ export function activate(host: HTMLElement): SurfaceInstance {
       loadDemo();
       return;
     }
-    const linked = daemonAttach(params);
-    const remembered = daemonCell.get();
-    const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
+    const daemonHost = resolveDaemonHostOrRemembered(params);
     if (daemonHost) {
+      showConnectPrompt({ connection: "connecting", host: daemonHost });
       void loadLive(daemonHost);
       return;
     }
-    showEmpty(
-      "No daemon connected",
-      "Notes are prose a person wrote about this workspace, anchored to what it is about.",
-    );
+    loadGeneration++; // any load still out belongs to an address that no longer resolves
+    showConnectPrompt({ connection: "none" });
   }
 
   refs.search.addEventListener("input", () => renderList());
   refs.main.hidden = true;
   refs.bar.hidden = true;
   load();
+  // A new address is followed only while no notes are on screen: an open note keeps the daemon it
+  // came from until the tab is reopened.
+  const unsubscribeHost = subscribeDefaultHost(() => {
+    if (refs.main.hidden) load();
+  });
 
   return {
     // Nothing to suppress: the store is read on mount and filtered by the reader, and it writes no
@@ -795,6 +784,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     setVisible(): void {},
     deactivate(): void {
       stale = true;
+      unsubscribeHost();
     },
   };
 }

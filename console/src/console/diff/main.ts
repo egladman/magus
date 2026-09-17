@@ -79,6 +79,7 @@ import {
   type BranchChange,
 } from "./session";
 import { setMarkdown } from "./markdown";
+import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
 import {
   demoSession,
@@ -90,9 +91,22 @@ import {
 } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
-import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
+import {
+  resolveDaemonHostOrRemembered,
+  isUnreachable,
+  parseHash,
+  adoptDaemonOrigin,
+  wantsDemo,
+} from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
+import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../view";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 import { svgGlyph } from "../../ui/glyph";
 
 // Marks for this surface's two toolbar controls. Kept here rather than in ui/glyph.ts, which holds
@@ -149,7 +163,6 @@ type FileIndexEntry =
   | { kind: "project"; project: string; count: number }
   | { kind: "file"; project: string; changeIndex: number };
 
-const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
 const sidebarCell = persisted<boolean>("diff-sidebar-collapsed", false);
 // Remembered like the view mode and the sidebar beside it: whoever reads this way reads this way
@@ -654,8 +667,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   contextClose.textContent = "×";
   const contextBody = h("pre", "console-diff-context__body");
   contextBody.setAttribute("aria-live", "polite");
+  // The agent session shares this panel: one bounded region outside the stream, one close key.
+  const sessionBody = h("div", "console-diff-context__body console-diff-agent");
+  sessionBody.hidden = true;
+  sessionBody.setAttribute("aria-live", "polite");
   contextHead.append(contextTitle, contextClose);
-  context.append(contextHead, contextBody);
+  context.append(contextHead, contextBody, sessionBody);
 
   const rail = h("div", "console-diff-rail");
   rail.setAttribute("aria-label", "Agent suggestions");
@@ -695,13 +712,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
   const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Loading");
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
-  const emptyBody = h("p", undefined, "Reading the working tree.");
-  emptyBodyWrap.append(emptyBody);
-  // No demo BUTTON here any more, on any page. Inside the console the title bar's Workspace menu is
-  // the single way in; standalone the fragment still is (/console/diff/#demo), and showEmpty says so.
-  // Six buttons for one thing was five too many, and each showed a different amount of the product.
+  const emptyMessage = h("p", undefined, "Reading the working tree.");
+  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
+  emptyActions.dataset.emptyWays = "";
+  emptyBodyWrap.append(emptyMessage, emptyActions);
   emptyContent.append(emptyTitle, emptyBodyWrap);
   empty.append(emptyContent);
+  const emptySlots: EmptyStateSlots = {
+    title: emptyTitle,
+    message: emptyMessage,
+    actions: emptyActions,
+  };
 
   // The end of a review, offered once. A merged pull request is where a conversation stops being
   // live and starts being the only record of why the code is the way it is, and that record is
@@ -850,6 +871,21 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const what = h("span", "console-diff-row__story");
       what.textContent = storyText(row.touch);
       el.append(who, what);
+      const ran = row.touch.ran ?? [];
+      if (ran.length) {
+        const r = h("span", "console-diff-row__ran", `ran ${ran.slice(0, 3).join(", ")}`);
+        r.title = `Ran before this write, newest first: ${ran.join(", ")}`;
+        el.append(r);
+      }
+      const open = h("button", "console-diff-row__session", "Session") as HTMLButtonElement;
+      open.type = "button";
+      open.title = "Show what this agent session ran and said before this write";
+      const touch = row.touch;
+      open.addEventListener("click", (event) => {
+        event.stopPropagation();
+        void showSession(row.file, touch);
+      });
+      el.append(open);
       if (row.touch.transcript) {
         const t = h("span", "console-diff-row__transcript", "transcript");
         // A POINTER: magus never opens it, and neither does this - the path is shown so the
@@ -1189,7 +1225,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the reader had visited the dashboard first.
   const host_ = (): string | null => {
     adoptDaemonOrigin();
-    return resolveDaemonHost(parseHash()) ?? daemonCell.get();
+    return resolveDaemonHostOrRemembered(parseHash());
   };
 
   const canCollaborate = (): boolean => demo || state.collaboration === "live";
@@ -1233,6 +1269,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hunk: { newStart: number; newCount: number },
     focus = false,
   ): Promise<void> => {
+    contextBody.hidden = false;
+    sessionBody.hidden = true;
+    context.setAttribute("aria-label", "Surrounding code");
     // Demo fixtures cannot provide workspace context. The row button is withheld in demo for the
     // same reason (see renderRow), but the p key and command-bar entry have no button to withhold,
     // so they still need to say why nothing happened rather than doing nothing silently.
@@ -1280,6 +1319,35 @@ export function activate(host: HTMLElement): SurfaceInstance {
           ? "The review snapshot changed. Refresh the diff before peeking at surrounding code."
           : "Could not load surrounding code: " + String(error);
     }
+  };
+
+  const showSession = async (file: DiffFile, touch: DiffTouch): Promise<void> => {
+    contextRequest?.abort();
+    const request = new AbortController();
+    contextRequest = request;
+    const requestID = ++contextRequestID;
+    contextBody.hidden = true;
+    sessionBody.hidden = false;
+    context.setAttribute("aria-label", "Agent session");
+    context.hidden = false;
+    contextTitle.textContent = `${touch.host || "agent"} session ${touch.session || "(no id)"}`;
+    context.focus();
+    const hp = demo ? null : host_();
+    const offline = demo
+      ? "session activity is not part of this showcase"
+      : !touch.session
+        ? "the host supplied no session id"
+        : !hp
+          ? "no daemon is connected"
+          : "";
+    if (offline || !hp || !touch.session) {
+      renderAgentSession(sessionBody, touch, { offline });
+      return;
+    }
+    renderAgentSession(sessionBody, touch, null);
+    const result = await fetchSessionActivity(hp, touch.session, file.path, request.signal);
+    if (disposed || requestID !== contextRequestID || request.signal.aborted) return;
+    renderAgentSession(sessionBody, touch, result);
   };
 
   const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffSession | null> => {
@@ -2979,24 +3047,29 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // --- load -----------------------------------------------------------------
 
-  // cmd is the trailing "run this" half of an empty state, as a real <code> element the way the
-  // activity trail writes it. Backticks in the string rendered as backticks - textContent does not
-  // read markdown - so this surface was the one telling the reader to type punctuation.
-  const showEmpty = (title: string, body: string, cmd?: string, offerDemo = false): void => {
+  const showEmpty = (title: string, message: string): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
-    emptyTitle.textContent = title;
-    emptyBody.textContent = body;
-    if (cmd) emptyBody.append(" ", h("code", undefined, cmd), ".");
-    // Where a populated version lives. Every /console/<surface>/ path is the SHELL with a <base>
-    // injected (scripts/surface-stubs.mjs), so the Workspace menu is always on screen - there is no
-    // shell-less page that would need a different sentence.
-    if (offerDemo) {
-      emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated changeset.");
-    }
+    renderEmptyMessage(emptySlots, title, message);
   };
 
+  // `promptState`, not `state`: this closure already reads the surface's own `state`.
+  const showConnectPrompt = (promptState: ConnectPromptState): void => {
+    state.phase = "empty";
+    root.dataset.phase = "empty";
+    renderConnectPrompt(emptySlots, promptState, {
+      purpose: "Diff reads the working tree through a local daemon.",
+      onRetry: () => void load(),
+    });
+  };
+
+  // Bumped by every load, so a patch from an address the reader has since moved off, or from a load
+  // a Retry replaced, is dropped instead of painted.
+  let loadGeneration = 0;
+
   const load = async (): Promise<void> => {
+    const generation = ++loadGeneration;
+    const superseded = (): boolean => disposed || generation !== loadGeneration;
     stopPolling();
     // The showcase joins the same pipeline one step in, with the patch and the session the
     // daemon would have returned. Everything below order() is the production path, so what it
@@ -3018,18 +3091,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const hp = host_();
     if (!hp) {
       state.collaboration = "unavailable";
-      showEmpty(
-        "No daemon connected",
-        "Diff reads the working tree through a local daemon. Start one with:",
-        "magus server start",
-        true,
-      );
+      showConnectPrompt({ connection: "none" });
       return;
     }
     let files: readonly WireFile[];
     let digest = "";
     try {
       const res = await fetchPatch(hp, controller.signal);
+      if (superseded()) return;
       if (res.clean) {
         showEmpty("Nothing to read", "The working tree is clean. Every change is committed.");
         return;
@@ -3037,7 +3106,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       files = res.files;
       digest = res.digest;
     } catch (e) {
-      if (disposed) return;
+      if (superseded()) return;
+      if (isUnreachable(e)) {
+        const reason = e instanceof Error ? e.message : String(e);
+        showConnectPrompt({ connection: "disconnected", host: hp, reason });
+        return;
+      }
       const status = e instanceof HttpError ? e.status : 0;
       showEmpty(
         status === 503 ? "No workspace" : "Could not read the diff",
@@ -3075,7 +3149,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         parsed.map((f) => f.path),
         controller.signal,
       );
-      if (disposed) return;
+      if (superseded()) return;
       if (sess.as_of && sess.as_of !== snapshot) {
         // Do not decorate an older patch with a session computed after it moved. The plain reader
         // remains usable, but all paired affordances are honestly held until the reader refreshes.
@@ -3125,6 +3199,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
   controller.signal.addEventListener("abort", () => paneResize?.disconnect(), { once: true });
 
   void load();
+  // Only a reader with nothing on screen follows a new address. An open review carries read marks
+  // and drafts that belong to the daemon it came from.
+  const unsubscribeHost = subscribeDefaultHost(() => {
+    if (state.phase !== "ready") void load();
+  });
 
   return {
     setVisible(visible: boolean): void {
@@ -3134,6 +3213,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     },
     deactivate(): void {
       disposed = true;
+      unsubscribeHost();
       stopPolling();
       controller.abort();
       for (const c of COMMANDS) unregisterCommand(c.id);

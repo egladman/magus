@@ -25,11 +25,18 @@ type Service struct {
 	outputs outputSource
 	runs    runSource
 	poll    time.Duration
+	// sessionRoot is the workspace whose loaded session store GetSessionActivity reads, empty
+	// when the caller wired none.
+	sessionRoot string
 }
 
 // NewService builds the ViewerService Connect handler reading from the run and output stores.
-func NewService(outputs outputSource, runs runSource) *Service {
-	return &Service{outputs: outputs, runs: runs, poll: streamPollInterval}
+func NewService(outputs outputSource, runs runSource, opts ...Option) *Service {
+	s := &Service{outputs: outputs, runs: runs, poll: streamPollInterval}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 var _ viewerv1alpha1connect.ViewerServiceHandler = (*Service)(nil)

@@ -846,7 +846,7 @@ export function initRunBrowser(deps: RunBrowserDeps): {
   // the version that reads as data loss.
   function emptyNote(unfiltered: boolean): string {
     if (!deps.host && !deps.demo) {
-      return "No daemon connected. Set a daemon address in Settings, or launch the demo.";
+      return "No daemon connected. Set a daemon address in Settings, or pick acme from the Workspace menu for demo data.";
     }
     if (!loaded) return "Loading runs...";
     if (!unfiltered) return "No runs match this filter.";

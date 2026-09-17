@@ -589,6 +589,7 @@ export object Job {
     registered: int = 0,
     created: int = 0,
     updated: int = 0,
+    deadline: int = 0,
     result: JobResult? = null,
     attempt: JobAttempt? = null,
     gateAttempts: [JobGateAttempt] = [],
@@ -605,6 +606,9 @@ export object JobOverlap {
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
+    overdue: [str] = [],
+    orphans: [str] = [],
+    stale: [str] = [],
 }
 
 export object GateStatus {
@@ -621,6 +625,7 @@ export object JobStatus {
     risks: [str] = [],
     command: str = "",
     gates: [GateStatus] = [],
+    staleIndexes: [str] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;

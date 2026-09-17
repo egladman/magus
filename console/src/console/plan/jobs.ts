@@ -17,10 +17,16 @@ import {
   JobHolder,
   JobService,
   SubmitState,
+  type CompletionGate,
   type Job,
   type JobOverlap,
 } from "@wire/job/v1alpha1/job_pb";
-import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
+import {
+  createDaemonTransport,
+  getLiveToken,
+  isCapabilityDenied,
+  isUnreachable,
+} from "../../lib/daemon";
 import { errMessage } from "../../lib/guards";
 import { humanBytes } from "../activity/adapter";
 import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../graph/layout";
@@ -148,6 +154,17 @@ export function lastRunLine(job: Job, nowMs: number): string {
   if (!last?.endTime) return "";
   const age = ageLabel(Number(last.endTime.seconds), nowMs);
   return "last run " + (age ? age + " ago" : "just now") + (last.ok ? "" : " (failed)");
+}
+
+// gateSubject is what a completion gate examines, rendered for the detail sheet - the TS mirror
+// of CompletionGate.Subject() in types/job.go, so the two surfaces name a gate's subject the same
+// way. check is already rendered as the command that runs it (the server does that, the same way
+// it renders the primary Check field), so this never re-renders it.
+export function gateSubject(gate: CompletionGate): string {
+  if (gate.check) return gate.check;
+  if (gate.paths.length) return gate.paths.join(", ");
+  if (gate.symbols.length) return gate.symbols.join(", ");
+  return "";
 }
 
 // ---- the tree model --------------------------------------------------------
@@ -416,9 +433,11 @@ export function joinRuns(model: JobTree, rows: readonly ActivityRow[]): RunJoin 
 // ---- placement -------------------------------------------------------------
 
 // Node geometry, in the same world units the layered layout spaces columns and rows by
-// (LAYERED_COL_W 180 / LAYERED_ROW_H 48), so a node sits inside its cell with a real gap.
+// (LAYERED_COL_W 180 / LAYERED_ROW_H 48), so a node sits inside its cell with a real gap. NODE_H
+// carries a third text row (the holder and the truncated criteria, main.ts's goal line) below the
+// mark/id row a plain job carries; a target or a catalog job just leaves it blank.
 export const NODE_W = 152;
-export const NODE_H = 30;
+export const NODE_H = 40;
 const PAD = 24;
 
 export interface NodeLayout {
@@ -509,6 +528,7 @@ export function jobClient(host: string): JobClient {
 export type JobsRead =
   | { readonly kind: "ok"; readonly jobs: Job[]; readonly overlaps: JobOverlap[] }
   | { readonly kind: "denied"; readonly detail: string }
+  | { readonly kind: "unreachable"; readonly detail: string }
   | { readonly kind: "unreadable"; readonly detail: string };
 
 // listJobs reads every job the daemon holds and every one a session does. A daemon that does not
@@ -520,7 +540,8 @@ export async function listJobs(client: JobClient, signal?: AbortSignal): Promise
     const resp = await client.listJobs({}, { signal });
     return { kind: "ok", jobs: resp.jobs, overlaps: resp.overlaps };
   } catch (e) {
-    return { kind: isCapabilityDenied(e) ? "denied" : "unreadable", detail: errMessage(e) };
+    const kind = isCapabilityDenied(e) ? "denied" : isUnreachable(e) ? "unreachable" : "unreadable";
+    return { kind, detail: errMessage(e) };
   }
 }
 

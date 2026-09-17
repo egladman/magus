@@ -16,7 +16,7 @@ func TestDecodeDeclarationReadsALaneUnderItsOldName(t *testing.T) {
 	t.Parallel()
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":6,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
+		`{"schema_version":7,"id":"adj/ledger","owned_paths":["internal/ledger"],` +
 			`"forbidden_paths":["MAGUS.md"],"focus":["internal/hint"],"tier":"principal"}`))
 	require.NoError(t, err)
 	require.Equal(t, types.Declaration{
@@ -33,7 +33,7 @@ func TestDecodeDeclarationRefusesALaneSpelledBothWays(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":6,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
+		`{"schema_version":7,"id":"adj/ledger","owned_paths":["a"],"write_paths":["b"]}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "owned_paths")
 }
@@ -94,7 +94,7 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 		{"registered_by", `"registered_by":{"session":"someone"}`},
 		{"releases", `"releases":[]`},
 	} {
-		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":6,"id":"adj/store",` + field.member + `}`))
+		_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj/store",` + field.member + `}`))
 		require.Error(t, err, field.name)
 		// The refusal has to NAME the field. An error alone is satisfied by the version
 		// check too, so a fixture whose schema_version fell behind would leave this
@@ -107,16 +107,16 @@ func TestDecodeDeclarationRefusesTheStoresOwnFields(t *testing.T) {
 func TestDecodeDeclarationValidatesWhatItRead(t *testing.T) {
 	t.Parallel()
 
-	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":6,"id":"adj store"}`))
+	_, err := DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj store"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a lease id")
 
-	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":6,"id":"adj/store","state":"done"}`))
+	_, err = DecodeDeclaration(strings.NewReader(`{"schema_version":7,"id":"adj/store","state":"done"}`))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
 
 	row, err := DecodeDeclaration(strings.NewReader(
-		`{"schema_version":6,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
+		`{"schema_version":7,"id":"adj/store","write_paths":["internal/ledger"],"state":"declared"}`))
 	require.NoError(t, err)
 	assert.Equal(t, types.StateDeclared, row.State)
 }
@@ -183,6 +183,8 @@ func TestDeclarationAndMergeAcceptTheSameFields(t *testing.T) {
 			value = []any{"internal/job"}
 		case "read_only":
 			value = true
+		case "timeout":
+			value = "30m"
 		case "check":
 			value = "test internal/job"
 		case "validation":

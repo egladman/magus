@@ -108,6 +108,21 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 			set = append(set, func(u *types.Job) { u.State = s })
 		}
 	}
+	// A length, never an instant: the deadline is stamped when the store applies the merge.
+	if v, ok, e := mergeString(params, "timeout"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		if d, perr := types.ParseJobTimeout(v); perr != nil {
+			err = errors.Join(err, perr)
+		} else {
+			set = append(set, func(u *types.Job) {
+				u.Deadline = 0
+				if d > 0 {
+					u.Deadline = deadlineAfter(d)
+				}
+			})
+		}
+	}
 	if v, present := params["read_only"]; present {
 		b, ok := v.(bool)
 		if !ok {
@@ -130,7 +145,7 @@ func ParseMerge(params map[string]any) (func(*types.Job), error) {
 // because they are how a door names the call rather than fields of the row.
 var mergeFields = []string{
 	"parent", "criteria", "checkpoint", "write_paths", "deny_paths", "read_paths",
-	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only",
+	"depends_on", "model", "check", "validation", "completion_gates", "state", "read_only", "timeout",
 }
 
 // renamedFields pairs each lane's pre-rename JSON key with the one it answers to now.

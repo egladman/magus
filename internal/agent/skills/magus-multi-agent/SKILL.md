@@ -78,7 +78,7 @@ Run this control loop:
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
 3. Give every job its own criteria, ownership boundary, and completion gates.
-4. Hand out work within one global cost and concurrency budget.
+4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
    repeat until the criteria pass.
@@ -97,15 +97,48 @@ hand out, observe, evaluate, course-correct, integrate. A worker is not complete
 until its criteria and assigned check pass; the root agent decides whether
 the top-level goal is complete.{{end}}
 
+## Declare the interface before any job forks
+
+When a change adds a shared surface - a module several call sites will use, a type,
+an event, an exported function - the ROOT names it before any edit: the path, every
+exported name with its signature, and the EXISTING symbols it must reuse rather than
+restate. Workers implement names they were handed and never coin a public one. A
+name invented at each call site is how one concept ends up with five spellings
+{{- if .Full}}, and how a plan that says "collapse two state types into one" ships
+a third: each site made a locally sensible choice and nobody owned the set{{end}}.
+
+Then make the declaration gradeable, so the names are a contract rather than a
+suggestion:
+
+- `symbol` + `present` for each new exported name.
+- `symbol` + `absent` for the name a second copy would predictably take beside a
+  symbol the work must reuse. No gate grades reuse itself{{if .Full}}: `present`
+  holds for a symbol that existed before the job began, and a reference count
+  cannot tell the defining file or an import from real use{{end}}.
+- `symbol` + `unreferenced` for each helper the shared surface replaces.
+
+Check each declared name with `magus refs` before forking. A bare name that
+resolves to more than one definition is graded against one of them, silently.
+
+This applies with zero workers. A solo change that crosses several call sites is a
+one-job tree, and skipping the declaration because nothing is being forked is the
+same failure without a fork to blame{{if .Full}}. Write the table in the
+conversation, check it with `magus refs` when the edits land, and only then report
+the change done{{end}}.
+
 ## Set one topology boundary
 
-Before spawning, state one compact budget: maximum simultaneously active agents,
-model per job, whether isolated worktrees are available, and how deep
-jobs may nest. Editing costs the workspace nothing; what contends is
-VALIDATION - the magus runs a job triggers - so size that cap from the live
-pool (`magus status`) rather than a fixed number, and serialize validations
-that share a worktree even when their write sets are disjoint. Ask before
-exceeding the budget.
+Before spawning, state the topology: the model per job and whether isolated
+worktrees are available. Fan-out and depth are not capped unless the workspace
+sets a cap: spawn as many jobs, nested as deep, as the partition supports. A limit
+exists only when magus.yaml's `jobs` section sets one (read it with
+`{{cmd "config view"}}` or `{{tool "config_get"}}`): `max_depth` and `max_live`
+make `{{cmd "job fork"}}` refuse past them, naming the key, and
+`default_timeout` bounds a fork that names no `--timeout`. Honor a cap the user
+states the same way. Editing costs the workspace nothing; what contends is VALIDATION - the
+magus runs a job triggers - so read the live pool (`magus status`) before
+starting a validation rather than before starting an agent, and serialize
+validations that share a worktree even when their write sets are disjoint.
 
 Assign the check from the pipeline the workspace composed, not from convention:
 `magus describe target ci <project>` names what `ci` chains and in what order,
@@ -134,14 +167,11 @@ refuses to accept{{end}}.
 
 A worker may fork part of its own job. What it may not do is hand it out
 without shrinking the problem{{if .Full}} - that is the shape that does not terminate, and
-the cost people attribute to "multi-agent" is almost always this{{end}}. Three rules give
-it a definitive end:
+the cost people attribute to "multi-agent" is almost always this{{end}}. These rules give
+it a definitive end without capping how deep it goes:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
   worker that would hand on its whole job should do the work instead.
-- **Depth is capped.** Two levels below the root by default: the root forks jobs,
-  a job may fork parts of its own, and those parts do the work{{if .Full}}. Deeper than that
-  and the root can no longer say what is running or why{{end}}. Say so if you need more.
 - **Every job carries acceptance criteria down with it.** A child inherits its
   parent's criteria plus its own. A job nobody can evaluate is a job that cannot
   end, which is what makes depth dangerous rather than the nesting itself.
@@ -199,13 +229,13 @@ new budget or a private ownership map. Before a child spawns descendants, it mus
 report the proposed jobs to its parent. The store must then carry those
 descendants, their parent, model, criteria, and write paths. Descendants
 inherit the ancestor's deny paths and may subdivide only the ancestor's
-write paths. Apply worker and cost caps globally, not once per parent.
+write paths. A cap the user sets applies to the whole tree, not once per parent.
 
 Keep one integration owner at the root even when the job tree is deep.
 {{if .Full}}A child may coordinate its descendants, but it may not accept changes
 outside its own job, relax top-level acceptance criteria, or hide additional
-fan-out from the root. Prefer a shallow tree unless a child has a genuinely
-separable area and enough context to partition it better than the root.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
+fan-out from the root. Nest wherever a child has a genuinely separable area and
+enough context to partition it better than its parent.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
 
 ## Seed the partition with Magus
 
@@ -213,14 +243,14 @@ Choose the target that will validate the work. `ci` is the release gate, but any
 target accepted by `magus affected <target>` can be planned:
 
 ```sh
-magus affected <target> --plan --max-shards <global-worker-cap>
+magus affected <target> --plan
 ```
 
 For a proposed change whose paths are known but not edited yet, plan those paths
 instead of the current diff:
 
 ```sh
-printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan --max-shards <global-worker-cap>
+printf '%s\n' <repo-relative-path>... | magus affected <target> --stdin --plan
 ```
 
 Read the JSON fields `count`, `max_parallel`, `source`, and `matrix`. A shard is a
@@ -367,13 +397,28 @@ would otherwise derive by hand: which live jobs claim intersecting
 `write_paths`, and how long since each row was touched. Both are facts, not
 verdicts - magus transitions nothing, so a row that has gone quiet is a job YOU
 decide is possibly dead, and a reported overlap is a pair you either intended or
-must repartition.
+must repartition. It also marks a live job `orphan` when its root job has ended,
+`stale` when it was not updated within `jobs.stale_after` (only when that key is
+set), and `overdue`, and names `{{cmd "job exit"}} <id>` for each; `{{cmd "doctor"}}`
+reports the first two. Ending the row stays yours.
+
+`--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
+denies every write graded under that lease, and its paths stop blocking other
+jobs; the row stays live until you end it. A job with acceptance criteria needs no
+bound{{if .Full}}: the gates end it, and a timeout only helps where a stuck worker
+would otherwise hold paths nobody else can write{{end}}.
+
+`{{cmd "job wait"}}` holds a writing job's `changed_paths` to the diff magus observes
+since its checkpoint: every claimed path must be in it, something in it must be
+inside the write paths, and a diff it cannot read FAILS. So fork writing jobs with
+a checkpoint. It also refuses pass while any descendant is still live, and grades
+a child against its ancestors' symbol gates as well as its own.
 
 The store RECORDS and the agent guard GRADES. A worker that exported
 `magus.lease` has each file write judged against these declarations as it
 happens: inside its own write paths passes; inside its deny paths, or inside
 another live job's write paths, is DENIED, and the denial names the owning
-job. A writer magus cannot attribute - a person in their own checkout, or a
+job, how long ago it was last updated, and the exit command that releases it. A writer magus cannot attribute - a person in their own checkout, or a
 worker that never enrolled - is ADVISED and never blocked, and every uncertainty
 fails open the same way{{if .Full}}: no jobs declared, none live, a store
 that will not parse{{end}}. It is a seatbelt for harnesses that opt in, not a

@@ -29,7 +29,14 @@ import { createTabBar, tabViews } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
-import { syncLauncherChord, syncLauncherPulse, buildLauncher, type Launchable } from "./home";
+import {
+  syncLauncherChord,
+  syncLauncherConnectPrompt,
+  syncLauncherPulse,
+  buildLauncher,
+  type Launchable,
+} from "./home";
+import { REQUEST_DAEMON_SETTINGS_EVENT, requireDaemon } from "./connectPrompt";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
   registerCommand,
@@ -80,6 +87,7 @@ import {
   applyFocusRing,
   getFocusRing,
   getDefaultHost,
+  subscribeDefaultHost,
   applyNodeShapes,
   getNodeShapes,
 } from "../lib/settings";
@@ -199,15 +207,25 @@ const KEYMAP_PRESET_LIST: { id: string; label: string }[] = [
 const splitMode = splitModeCell;
 
 const registry = new Map<string, PageModule<unknown, unknown>>();
+// Every mount resolves through the registry (a launcher pick, a restored layout, a deep link, app
+// mode), so wrapping here is what keeps each of them off a daemon surface with no daemon.
 function register(m: PageModule<unknown, unknown>): void {
-  registry.set(m.id, m);
+  registry.set(m.id, requireDaemon(m, SURFACES.find((s) => s.pageId === m.id)?.daemon));
 }
 
 // The surfaces the home launcher offers (and the console can open). Ordered to tell the
 // operator's story: what is magus doing now (dashboard), what just happened (activity),
 // drill into one run (logs), then understand the workspace (graph), then the meta surfaces.
+//
+// daemon marks a surface with nothing to show without one; register() wraps those in requireDaemon.
+// The Log Viewer and Graph Explorer open files and snapshots offline, so they carry no mark.
 const SURFACES: Launchable[] = [
-  { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
+  {
+    pageId: "dashboard",
+    label: "Dashboard",
+    hint: "What magus is doing right now",
+    daemon: { purpose: "The dashboard streams a running daemon's pool, cache, and health." },
+  },
   {
     pageId: "activity",
     // The bare noun, never "Trail": "audit trail" is the phrase it summons, and that frames the
@@ -216,18 +234,36 @@ const SURFACES: Launchable[] = [
     // agent's reasoning hangs off the command it led to, "activity" still covers it.
     label: "Activity",
     hint: "Everything that happened here, and what led to it",
+    daemon: { purpose: "Activity records what the daemon did: MCP calls, jobs, config changes." },
   },
   // Runs before Log Viewer, because it is the one you reach for FIRST: the viewer reads a run you
   // already have, this finds the run. The pair is deliberate - browsing history and reading one
   // run's output are different jobs, and the viewer's own side panel covers only "the next one"
   // while you are already reading.
-  { pageId: "runs", label: "Runs", hint: "Every run this workspace kept, no ref needed" },
+  {
+    pageId: "runs",
+    label: "Runs",
+    hint: "Every run this workspace kept, no ref needed",
+    daemon: { purpose: "Runs reads the runs your local daemon has kept." },
+  },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
-  { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
+  {
+    pageId: "diff",
+    label: "Diff",
+    hint: "Read what you have changed but not committed",
+    daemon: { purpose: "Diff reads the working tree through a local daemon." },
+  },
   // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
   // that someone who was here before you left it for you, at the spot where it matters.
-  { pageId: "notes", label: "Notes", hint: "What people left here for whoever comes next" },
+  {
+    pageId: "notes",
+    label: "Notes",
+    hint: "What people left here for whoever comes next",
+    daemon: {
+      purpose: "Notes are prose a person wrote about this workspace, anchored to what it is about.",
+    },
+  },
   // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it) while the
   // LABEL is Shortcuts, because "actions" collides with both the Command Palette and the Activity
   // feed. Prior art splits the two roles cleanly and this surface is the second one: VS Code's
@@ -2042,6 +2078,7 @@ export function startConsole(
     e.preventDefault(); // Space must not also scroll the page
     openDaemonSettings();
   });
+  document.addEventListener(REQUEST_DAEMON_SETTINGS_EVENT, openDaemonSettings);
 
   // Readiness polling: enriches whichever #console-conn is currently docked with the daemon's /readyz
   // component report on a fixed interval, independent of tab switches. This is the composition root -
@@ -2099,12 +2136,16 @@ export function startConsole(
       const demoRoots = DEMO_WORKSPACES;
       workspacePicker?.setWorkspaces(demoRoots);
       castSeen(demoRoots);
+      pollGeneration++; // a live answer still out must not paint over the demo
+      syncLauncherConnectPrompt(launcher, null);
       return;
     }
     const host = resolveDaemonHost();
     if (!host) {
+      pollGeneration++; // nor over "no address", once the address is cleared
       pulse.set(null); // a count with no daemon behind it outlives the thing it described
       railBadges.set({});
+      syncLauncherConnectPrompt(launcher, { connection: "none" });
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
@@ -2154,8 +2195,12 @@ export function startConsole(
     }
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
+      if (generation !== pollGeneration) return; // see the pulse above
       lastReadiness = { report, host, at: startedAt };
       applyReadiness();
+      syncLauncherConnectPrompt(launcher, report ? null : { connection: "disconnected", host }, {
+        onRetry: pollReadiness,
+      });
     });
   }
 
@@ -2209,6 +2254,8 @@ export function startConsole(
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) pollReadiness();
   });
+  // A new daemon address is answered now rather than on the next tick, up to 15s later.
+  subscribeDefaultHost(pollReadiness);
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 

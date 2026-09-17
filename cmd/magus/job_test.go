@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -72,6 +74,39 @@ func TestPrintLedgerTreeRendersOverlaps(t *testing.T) {
 	assert.Contains(t, got, "magus run test internal/ledger")
 	assert.Contains(t, got, "overlaps")
 	assert.Contains(t, got, "plan and plan/cli claim common ground")
+}
+
+func TestPrintJobTreeMarksJobsNobodyIsWaitingOn(t *testing.T) {
+	t.Parallel()
+
+	rows := []types.Job{
+		{ID: "root", State: types.StatePass},
+		{ID: "root/orphan", Parent: "root", State: types.StateRunning, Updated: 100},
+		{ID: "late", State: types.StateRunning, Deadline: 50, Updated: 100},
+	}
+	var out strings.Builder
+	printJobTree(&out, types.NewJobList(rows).Flag(200, time.Minute))
+	text := out.String()
+	assert.Contains(t, text, "overdue")
+	assert.Contains(t, text, "orphan")
+	assert.Contains(t, text, "stale")
+	assert.Contains(t, text, hint.JobExit.With("root/orphan"))
+}
+
+func TestLeasedBoundarySkipsTheRowsAncestors(t *testing.T) {
+	t.Parallel()
+
+	rows := []types.Job{
+		{ID: "root", State: types.StateRunning, WritePaths: []string{"internal"}},
+		{ID: "root/a", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/job"}},
+		{ID: "root/a/leaf", Parent: "root/a", State: types.StateRunning, WritePaths: []string{"internal/job/plan.go"}},
+		{ID: "root/b", Parent: "root", State: types.StateRunning, WritePaths: []string{"internal/guard"}},
+	}
+	var owners []string
+	for _, b := range leasedBoundary(rows[2], rows) {
+		owners = append(owners, b.Path)
+	}
+	assert.Equal(t, []string{"internal/guard"}, owners, "a sibling's lane is off limits, an ancestor's is where the leaf was forked")
 }
 
 func TestPrintLedgerTreeSaysWhereAnEmptyPlanComesFrom(t *testing.T) {
@@ -172,7 +207,7 @@ func TestRegisterFromFlagsAndFromStdinAgree(t *testing.T) {
 		model:      "principal",
 	}
 	piped, err := job.DecodeDeclaration(strings.NewReader(`{
-	  "schema_version": 6,
+	  "schema_version": 7,
 	  "id": "adj/store",
 	  "parent": "adjacency",
 	  "criteria": "the store is the enforcement point",

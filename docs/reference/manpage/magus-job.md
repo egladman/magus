@@ -17,7 +17,8 @@ Fork a job, take it, return it with its result, and verify that result
 
 Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read lanes, plus the one check
-it runs.
+it runs. A job is not a run: \`magus run\` executes a target with no job involved,
+while a job's check and the daemon's maintenance each cause runs.
 
 Two channels write the job store. The magus_job MCP tool is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
@@ -85,7 +86,7 @@ them and magus describe job prints one job's terms.
 : The working state this job is handed, as \`magus vcs checkpoint -o name\` prints it
 
 **--criteria** *string*
-: What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths
+: What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-\* flag)
 
 **--deny-paths** *string*
 : A path inside the lane this job may not write; repeatable or comma-separated
@@ -134,6 +135,9 @@ them and magus describe job prints one job's terms.
 
 **--stdin**
 : Read one job as JSON on stdin instead of taking it from flags
+
+**--timeout** *duration*
+: Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout
 
 **--write-paths** *string*
 : A path this job may write; repeatable or comma-separated

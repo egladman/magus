@@ -1886,16 +1886,6 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 [data-app-current] { --pf-v6-c-card--BorderStyle: dashed; cursor: default; }
 [data-app-current] svg { color: var(--pf-t--global--text--color--subtle); }
 
-/* Connect panel: it now holds only the resume form, centered in the EmptyState footer. The lead, the
-   command block, the demo link and the privacy note it used to style are gone - going live is one of the
-   shared [data-empty-ways] cards (console.css) like every other surface, and the privacy note moved to
-   the Reference panel. */
-[data-connect-panel] { max-width: 32rem; margin: 0 auto; text-align: center; }
-/* Resume form: reconnect to a remembered daemon host. Input is a PF FormControl; buttons are PF. */
-[data-resume] { max-width: 30rem; margin: 0 auto 1.25rem; }
-[data-resume-row] { display: flex; gap: 0.4rem; align-items: stretch; }
-[data-resume-row] .pf-v6-c-form-control { flex: 1; }
-[data-resume-row] input { font-family: var(--pf-t--global--font--family--mono); }
 
 /* uPlot base styles (vendored from uplot/dist/uPlot.min.css, MIT). Inlined here rather than
    imported in the TS entry: the dashboard's CSS is minified as a single standalone file by

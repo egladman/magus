@@ -471,7 +471,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Read-only, so it takes the read bearer and joins the share surface the way its
 			// retired JSON twins did: a shared phone renders the run browser, and it must keep
 			// reaching the same runs whichever route the page settles on.
-			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore), connectReadMax)
+			var viewerOpts []viewer.Option
+			if opts.Magus != nil {
+				viewerOpts = append(viewerOpts, viewer.WithSessionRoot(opts.Magus.Root()))
+			}
+			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, viewerOpts...), connectReadMax)
 			httpServer.Handle(viewerPath, httpx.GuardRebind(siteAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, viewerConnectHandler))))
 			shareGuarded[viewerPath] = viewerConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))

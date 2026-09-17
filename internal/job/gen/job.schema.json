@@ -10,7 +10,7 @@
   "properties": {
     "schema_version": {
       "type": "integer",
-      "const": 6,
+      "const": 7,
       "description": "SchemaVersion is the row shape this record is written in, and it is required: a version this magus does not know is rejected by name. See JobSchemaVersion."
     },
     "id": {
@@ -192,6 +192,10 @@
         }
       },
       "description": "CompletionGates declare additional evidence-backed acceptance conditions."
+    },
+    "timeout": {
+      "type": "string",
+      "description": "Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when it writes the row, so a declaration carries a length and never an instant. Empty is no bound; there is no default here (a workspace may set jobs.default_timeout)."
     }
   }
 }

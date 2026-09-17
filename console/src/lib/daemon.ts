@@ -34,7 +34,7 @@ import { errName } from "./guards";
 
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { Code, ConnectError, type Interceptor, type Transport } from "@connectrpc/connect";
-import { getDefaultHost } from "./settings";
+import { getDefaultHost, getRememberedHost } from "./settings";
 
 // isCapabilityDenied reports whether a Connect RPC error is the daemon DECLINING the capability to
 // this client (not a transient outage). A read-only LAN-share session cannot reach TokenService
@@ -49,6 +49,22 @@ export function isCapabilityDenied(e: unknown): boolean {
     e.code === Code.PermissionDenied ||
     e.code === Code.Unimplemented ||
     e.code === Code.NotFound
+  );
+}
+
+// isUnreachable reports whether a request failed without any response to read: nothing listening,
+// a connection the browser blocked, or a deadline that ran out. Those are the failures a connect
+// prompt describes. An error the daemon SENT (a 500, a Connect status) is not one of them, and
+// telling that reader to start a daemon sends them to fix the wrong thing.
+//
+// fetch reports "no response" as a TypeError, and Connect wraps it with the TypeError as its cause.
+// A timed-out Connect call carries no cause, only Canceled or DeadlineExceeded.
+export function isUnreachable(e: unknown): boolean {
+  if (e instanceof TypeError) return true;
+  if (e instanceof Error && e.name === "TimeoutError") return true;
+  if (!(e instanceof ConnectError)) return false;
+  return (
+    e.cause instanceof TypeError || e.code === Code.Canceled || e.code === Code.DeadlineExceeded
   );
 }
 
@@ -271,6 +287,16 @@ export function resolveDaemonHost(params: HashParams = parseHash()): string | nu
   // normalizeDaemonHost (not validateLoopbackHost) so a stored bare port resolves the same way the
   // Settings field accepts one - "8787" expands to 127.0.0.1:8787 rather than reading as unset.
   return configured ? normalizeDaemonHost(configured) : null;
+}
+
+// resolveDaemonHostOrRemembered is resolveDaemonHost, then the last daemon the dashboard reached
+// (loopback only). Surfaces that read a daemon on mount use it, so a reader who has connected once
+// is not asked again after a reload with no link in the URL.
+export function resolveDaemonHostOrRemembered(params: HashParams = parseHash()): string | null {
+  const resolved = resolveDaemonHost(params);
+  if (resolved) return resolved;
+  const remembered = getRememberedHost();
+  return remembered ? validateLoopbackHost(remembered) : null;
 }
 
 // ---- reachability probe ----------------------------------------------------

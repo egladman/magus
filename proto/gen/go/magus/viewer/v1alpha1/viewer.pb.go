@@ -277,6 +277,62 @@ func (Trigger) EnumDescriptor() ([]byte, []int) {
 	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{3}
 }
 
+// TurnRole is who a turn belongs to.
+type TurnRole int32
+
+const (
+	TurnRole_TURN_ROLE_UNSPECIFIED TurnRole = 0
+	TurnRole_TURN_ROLE_USER        TurnRole = 1
+	TurnRole_TURN_ROLE_ASSISTANT   TurnRole = 2
+	TurnRole_TURN_ROLE_REASONING   TurnRole = 3
+	TurnRole_TURN_ROLE_TOOL        TurnRole = 4
+)
+
+// Enum value maps for TurnRole.
+var (
+	TurnRole_name = map[int32]string{
+		0: "TURN_ROLE_UNSPECIFIED",
+		1: "TURN_ROLE_USER",
+		2: "TURN_ROLE_ASSISTANT",
+		3: "TURN_ROLE_REASONING",
+		4: "TURN_ROLE_TOOL",
+	}
+	TurnRole_value = map[string]int32{
+		"TURN_ROLE_UNSPECIFIED": 0,
+		"TURN_ROLE_USER":        1,
+		"TURN_ROLE_ASSISTANT":   2,
+		"TURN_ROLE_REASONING":   3,
+		"TURN_ROLE_TOOL":        4,
+	}
+)
+
+func (x TurnRole) Enum() *TurnRole {
+	p := new(TurnRole)
+	*p = x
+	return p
+}
+
+func (x TurnRole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TurnRole) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_viewer_v1alpha1_viewer_proto_enumTypes[4].Descriptor()
+}
+
+func (TurnRole) Type() protoreflect.EnumType {
+	return &file_magus_viewer_v1alpha1_viewer_proto_enumTypes[4]
+}
+
+func (x TurnRole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TurnRole.Descriptor instead.
+func (TurnRole) EnumDescriptor() ([]byte, []int) {
+	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{4}
+}
+
 // Command is the invoking command line and context - what was asked of magus.
 type Command struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1529,6 +1585,335 @@ func (x *GetJournalRequest) GetName() string {
 	return ""
 }
 
+type GetSessionActivityRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The host's own session id, as a review's touch carries it.
+	Session string `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	// The checkout-relative path whose last write ends the window.
+	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSessionActivityRequest) Reset() {
+	*x = GetSessionActivityRequest{}
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSessionActivityRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSessionActivityRequest) ProtoMessage() {}
+
+func (x *GetSessionActivityRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSessionActivityRequest.ProtoReflect.Descriptor instead.
+func (*GetSessionActivityRequest) Descriptor() ([]byte, []int) {
+	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetSessionActivityRequest) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *GetSessionActivityRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+// SessionTurn is one entry of a session's record, oldest first within its window.
+type SessionTurn struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Role  TurnRole               `protobuf:"varint,1,opt,name=role,proto3,enum=magus.viewer.v1alpha1.TurnRole" json:"role,omitempty"`
+	// For a tool turn, the session event kind: shell.command, file.read, file.write,
+	// skill.load, hook.output, spawn or magus.call.
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	// A path, skill, subagent type or tool name. Never a shell command's text, which the
+	// store does not keep, and empty for hook.output, whose text can quote one.
+	Text string `protobuf:"bytes,3,opt,name=text,proto3" json:"text,omitempty"`
+	// A shell command's program, arguments dropped.
+	Program string                 `protobuf:"bytes,4,opt,name=program,proto3" json:"program,omitempty"`
+	Time    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=time,proto3" json:"time,omitempty"`
+	// What today's guard rules say about a shell command: pass, advise or deny.
+	Verdict string `protobuf:"bytes,6,opt,name=verdict,proto3" json:"verdict,omitempty"`
+	Rule    string `protobuf:"bytes,7,opt,name=rule,proto3" json:"rule,omitempty"`
+	// Zero is both success and a host that records no exit status; the store keeps no
+	// distinction, so only a non-zero value is a measurement.
+	Exit          int32 `protobuf:"varint,8,opt,name=exit,proto3" json:"exit,omitempty"`
+	Denied        bool  `protobuf:"varint,9,opt,name=denied,proto3" json:"denied,omitempty"`
+	Interrupted   bool  `protobuf:"varint,10,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SessionTurn) Reset() {
+	*x = SessionTurn{}
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionTurn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionTurn) ProtoMessage() {}
+
+func (x *SessionTurn) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionTurn.ProtoReflect.Descriptor instead.
+func (*SessionTurn) Descriptor() ([]byte, []int) {
+	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SessionTurn) GetRole() TurnRole {
+	if x != nil {
+		return x.Role
+	}
+	return TurnRole_TURN_ROLE_UNSPECIFIED
+}
+
+func (x *SessionTurn) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *SessionTurn) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *SessionTurn) GetProgram() string {
+	if x != nil {
+		return x.Program
+	}
+	return ""
+}
+
+func (x *SessionTurn) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *SessionTurn) GetVerdict() string {
+	if x != nil {
+		return x.Verdict
+	}
+	return ""
+}
+
+func (x *SessionTurn) GetRule() string {
+	if x != nil {
+		return x.Rule
+	}
+	return ""
+}
+
+func (x *SessionTurn) GetExit() int32 {
+	if x != nil {
+		return x.Exit
+	}
+	return 0
+}
+
+func (x *SessionTurn) GetDenied() bool {
+	if x != nil {
+		return x.Denied
+	}
+	return false
+}
+
+func (x *SessionTurn) GetInterrupted() bool {
+	if x != nil {
+		return x.Interrupted
+	}
+	return false
+}
+
+// Unrecorded names a part of the transcript this answer cannot carry, and why. A part listed
+// here is unobservable, which a reader must not mistake for a session that said nothing.
+type Unrecorded struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Role          TurnRole               `protobuf:"varint,1,opt,name=role,proto3,enum=magus.viewer.v1alpha1.TurnRole" json:"role,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Unrecorded) Reset() {
+	*x = Unrecorded{}
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Unrecorded) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Unrecorded) ProtoMessage() {}
+
+func (x *Unrecorded) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Unrecorded.ProtoReflect.Descriptor instead.
+func (*Unrecorded) Descriptor() ([]byte, []int) {
+	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *Unrecorded) GetRole() TurnRole {
+	if x != nil {
+		return x.Role
+	}
+	return TurnRole_TURN_ROLE_UNSPECIFIED
+}
+
+func (x *Unrecorded) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type SessionActivity struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Session string                 `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Host    string                 `protobuf:"bytes,2,opt,name=host,proto3" json:"host,omitempty"`
+	// A pointer to the host's own log. The daemon does not open it.
+	Transcript string `protobuf:"bytes,3,opt,name=transcript,proto3" json:"transcript,omitempty"`
+	// Whether the loaded record holds a write of the requested path. False with no turns means
+	// the session was seen only by the guard hook, or its transcript was never loaded.
+	Wrote bool           `protobuf:"varint,4,opt,name=wrote,proto3" json:"wrote,omitempty"`
+	Turns []*SessionTurn `protobuf:"bytes,5,rep,name=turns,proto3" json:"turns,omitempty"`
+	// Set when the window held more turns than were returned; the oldest were dropped.
+	Truncated     bool          `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	Unrecorded    []*Unrecorded `protobuf:"bytes,7,rep,name=unrecorded,proto3" json:"unrecorded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SessionActivity) Reset() {
+	*x = SessionActivity{}
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SessionActivity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SessionActivity) ProtoMessage() {}
+
+func (x *SessionActivity) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_viewer_v1alpha1_viewer_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SessionActivity.ProtoReflect.Descriptor instead.
+func (*SessionActivity) Descriptor() ([]byte, []int) {
+	return file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *SessionActivity) GetSession() string {
+	if x != nil {
+		return x.Session
+	}
+	return ""
+}
+
+func (x *SessionActivity) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *SessionActivity) GetTranscript() string {
+	if x != nil {
+		return x.Transcript
+	}
+	return ""
+}
+
+func (x *SessionActivity) GetWrote() bool {
+	if x != nil {
+		return x.Wrote
+	}
+	return false
+}
+
+func (x *SessionActivity) GetTurns() []*SessionTurn {
+	if x != nil {
+		return x.Turns
+	}
+	return nil
+}
+
+func (x *SessionActivity) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *SessionActivity) GetUnrecorded() []*Unrecorded {
+	if x != nil {
+		return x.Unrecorded
+	}
+	return nil
+}
+
 var File_magus_viewer_v1alpha1_viewer_proto protoreflect.FileDescriptor
 
 const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
@@ -1635,7 +2020,39 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"\vinvocations\x18\x01 \x03(\v2!.magus.viewer.v1alpha1.InvocationR\vinvocations\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"M\n" +
 	"\x11GetJournalRequest\x128\n" +
-	"\x04name\x18\x01 \x01(\tB$\xbaH!r\x1f2\x1d^(out[0-9a-f]+|inv[0-9a-z]+)$R\x04name*\xae\x01\n" +
+	"\x04name\x18\x01 \x01(\tB$\xbaH!r\x1f2\x1d^(out[0-9a-f]+|inv[0-9a-z]+)$R\x04name\"|\n" +
+	"\x19GetSessionActivityRequest\x12?\n" +
+	"\asession\x18\x01 \x01(\tB%\xbaH\"r \x18\x80\x022\x1b^[A-Za-z0-9][A-Za-z0-9_-]*$R\asession\x12\x1e\n" +
+	"\x04path\x18\x02 \x01(\tB\n" +
+	"\xbaH\ar\x05\x10\x01\x18\x80 R\x04path\"\xb0\x02\n" +
+	"\vSessionTurn\x123\n" +
+	"\x04role\x18\x01 \x01(\x0e2\x1f.magus.viewer.v1alpha1.TurnRoleR\x04role\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\x12\x18\n" +
+	"\aprogram\x18\x04 \x01(\tR\aprogram\x12.\n" +
+	"\x04time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x18\n" +
+	"\averdict\x18\x06 \x01(\tR\averdict\x12\x12\n" +
+	"\x04rule\x18\a \x01(\tR\x04rule\x12\x12\n" +
+	"\x04exit\x18\b \x01(\x05R\x04exit\x12\x16\n" +
+	"\x06denied\x18\t \x01(\bR\x06denied\x12 \n" +
+	"\vinterrupted\x18\n" +
+	" \x01(\bR\vinterrupted\"Y\n" +
+	"\n" +
+	"Unrecorded\x123\n" +
+	"\x04role\x18\x01 \x01(\x0e2\x1f.magus.viewer.v1alpha1.TurnRoleR\x04role\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x90\x02\n" +
+	"\x0fSessionActivity\x12\x18\n" +
+	"\asession\x18\x01 \x01(\tR\asession\x12\x12\n" +
+	"\x04host\x18\x02 \x01(\tR\x04host\x12\x1e\n" +
+	"\n" +
+	"transcript\x18\x03 \x01(\tR\n" +
+	"transcript\x12\x14\n" +
+	"\x05wrote\x18\x04 \x01(\bR\x05wrote\x128\n" +
+	"\x05turns\x18\x05 \x03(\v2\".magus.viewer.v1alpha1.SessionTurnR\x05turns\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\x12A\n" +
+	"\n" +
+	"unrecorded\x18\a \x03(\v2!.magus.viewer.v1alpha1.UnrecordedR\n" +
+	"unrecorded*\xae\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fKIND_STARTED\x10\a\x12\x11\n" +
@@ -1665,7 +2082,13 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"TRIGGER_CI\x10\x03\x12\r\n" +
 	"\tTRIGGER_X\x10\x04\x12\x11\n" +
 	"\rTRIGGER_WATCH\x10\x05\x12\x12\n" +
-	"\x0eTRIGGER_DIRECT\x10\x062\xce\x05\n" +
+	"\x0eTRIGGER_DIRECT\x10\x06*\x7f\n" +
+	"\bTurnRole\x12\x19\n" +
+	"\x15TURN_ROLE_UNSPECIFIED\x10\x00\x12\x12\n" +
+	"\x0eTURN_ROLE_USER\x10\x01\x12\x17\n" +
+	"\x13TURN_ROLE_ASSISTANT\x10\x02\x12\x17\n" +
+	"\x13TURN_ROLE_REASONING\x10\x03\x12\x12\n" +
+	"\x0eTURN_ROLE_TOOL\x10\x042\xbe\x06\n" +
 	"\rViewerService\x12_\n" +
 	"\rGetInvocation\x12+.magus.viewer.v1alpha1.GetInvocationRequest\x1a!.magus.viewer.v1alpha1.Invocation\x12a\n" +
 	"\n" +
@@ -1675,7 +2098,8 @@ const file_magus_viewer_v1alpha1_viewer_proto_rawDesc = "" +
 	"\tGetOutput\x12'.magus.viewer.v1alpha1.GetOutputRequest\x1a(.magus.viewer.v1alpha1.GetOutputResponse\x12p\n" +
 	"\x0fListInvocations\x12-.magus.viewer.v1alpha1.ListInvocationsRequest\x1a..magus.viewer.v1alpha1.ListInvocationsResponse\x12V\n" +
 	"\n" +
-	"GetJournal\x12(.magus.viewer.v1alpha1.GetJournalRequest\x1a\x1e.magus.viewer.v1alpha1.JournalB\xeb\x01\n" +
+	"GetJournal\x12(.magus.viewer.v1alpha1.GetJournalRequest\x1a\x1e.magus.viewer.v1alpha1.Journal\x12n\n" +
+	"\x12GetSessionActivity\x120.magus.viewer.v1alpha1.GetSessionActivityRequest\x1a&.magus.viewer.v1alpha1.SessionActivityB\xeb\x01\n" +
 	"\x19com.magus.viewer.v1alpha1B\vViewerProtoP\x01ZKgithub.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1;viewerv1alpha1\xa2\x02\x03MVX\xaa\x02\x15Magus.Viewer.V1alpha1\xca\x02\x15Magus\\Viewer\\V1alpha1\xe2\x02!Magus\\Viewer\\V1alpha1\\GPBMetadata\xea\x02\x17Magus::Viewer::V1alpha1b\x06proto3"
 
 var (
@@ -1690,81 +2114,93 @@ func file_magus_viewer_v1alpha1_viewer_proto_rawDescGZIP() []byte {
 	return file_magus_viewer_v1alpha1_viewer_proto_rawDescData
 }
 
-var file_magus_viewer_v1alpha1_viewer_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_magus_viewer_v1alpha1_viewer_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_magus_viewer_v1alpha1_viewer_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_magus_viewer_v1alpha1_viewer_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_magus_viewer_v1alpha1_viewer_proto_goTypes = []any{
-	(Kind)(0),                       // 0: magus.viewer.v1alpha1.Kind
-	(Stream)(0),                     // 1: magus.viewer.v1alpha1.Stream
-	(Status)(0),                     // 2: magus.viewer.v1alpha1.Status
-	(Trigger)(0),                    // 3: magus.viewer.v1alpha1.Trigger
-	(*Command)(nil),                 // 4: magus.viewer.v1alpha1.Command
-	(*Invocation)(nil),              // 5: magus.viewer.v1alpha1.Invocation
-	(*UndeclaredSeed)(nil),          // 6: magus.viewer.v1alpha1.UndeclaredSeed
-	(*Event)(nil),                   // 7: magus.viewer.v1alpha1.Event
-	(*Journal)(nil),                 // 8: magus.viewer.v1alpha1.Journal
-	(*GetInvocationRequest)(nil),    // 9: magus.viewer.v1alpha1.GetInvocationRequest
-	(*EventQuery)(nil),              // 10: magus.viewer.v1alpha1.EventQuery
-	(*ListEventsRequest)(nil),       // 11: magus.viewer.v1alpha1.ListEventsRequest
-	(*ListEventsResponse)(nil),      // 12: magus.viewer.v1alpha1.ListEventsResponse
-	(*StreamEventsRequest)(nil),     // 13: magus.viewer.v1alpha1.StreamEventsRequest
-	(*StreamEventsResponse)(nil),    // 14: magus.viewer.v1alpha1.StreamEventsResponse
-	(*Output)(nil),                  // 15: magus.viewer.v1alpha1.Output
-	(*ListOutputsRequest)(nil),      // 16: magus.viewer.v1alpha1.ListOutputsRequest
-	(*ListOutputsResponse)(nil),     // 17: magus.viewer.v1alpha1.ListOutputsResponse
-	(*GetOutputRequest)(nil),        // 18: magus.viewer.v1alpha1.GetOutputRequest
-	(*GetOutputResponse)(nil),       // 19: magus.viewer.v1alpha1.GetOutputResponse
-	(*ListInvocationsRequest)(nil),  // 20: magus.viewer.v1alpha1.ListInvocationsRequest
-	(*ListInvocationsResponse)(nil), // 21: magus.viewer.v1alpha1.ListInvocationsResponse
-	(*GetJournalRequest)(nil),       // 22: magus.viewer.v1alpha1.GetJournalRequest
-	(*timestamppb.Timestamp)(nil),   // 23: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),     // 24: google.protobuf.Duration
-	(*v1alpha1.StringMatch)(nil),    // 25: magus.query.v1alpha1.StringMatch
-	(*v1alpha1.TimeRange)(nil),      // 26: magus.query.v1alpha1.TimeRange
+	(Kind)(0),                         // 0: magus.viewer.v1alpha1.Kind
+	(Stream)(0),                       // 1: magus.viewer.v1alpha1.Stream
+	(Status)(0),                       // 2: magus.viewer.v1alpha1.Status
+	(Trigger)(0),                      // 3: magus.viewer.v1alpha1.Trigger
+	(TurnRole)(0),                     // 4: magus.viewer.v1alpha1.TurnRole
+	(*Command)(nil),                   // 5: magus.viewer.v1alpha1.Command
+	(*Invocation)(nil),                // 6: magus.viewer.v1alpha1.Invocation
+	(*UndeclaredSeed)(nil),            // 7: magus.viewer.v1alpha1.UndeclaredSeed
+	(*Event)(nil),                     // 8: magus.viewer.v1alpha1.Event
+	(*Journal)(nil),                   // 9: magus.viewer.v1alpha1.Journal
+	(*GetInvocationRequest)(nil),      // 10: magus.viewer.v1alpha1.GetInvocationRequest
+	(*EventQuery)(nil),                // 11: magus.viewer.v1alpha1.EventQuery
+	(*ListEventsRequest)(nil),         // 12: magus.viewer.v1alpha1.ListEventsRequest
+	(*ListEventsResponse)(nil),        // 13: magus.viewer.v1alpha1.ListEventsResponse
+	(*StreamEventsRequest)(nil),       // 14: magus.viewer.v1alpha1.StreamEventsRequest
+	(*StreamEventsResponse)(nil),      // 15: magus.viewer.v1alpha1.StreamEventsResponse
+	(*Output)(nil),                    // 16: magus.viewer.v1alpha1.Output
+	(*ListOutputsRequest)(nil),        // 17: magus.viewer.v1alpha1.ListOutputsRequest
+	(*ListOutputsResponse)(nil),       // 18: magus.viewer.v1alpha1.ListOutputsResponse
+	(*GetOutputRequest)(nil),          // 19: magus.viewer.v1alpha1.GetOutputRequest
+	(*GetOutputResponse)(nil),         // 20: magus.viewer.v1alpha1.GetOutputResponse
+	(*ListInvocationsRequest)(nil),    // 21: magus.viewer.v1alpha1.ListInvocationsRequest
+	(*ListInvocationsResponse)(nil),   // 22: magus.viewer.v1alpha1.ListInvocationsResponse
+	(*GetJournalRequest)(nil),         // 23: magus.viewer.v1alpha1.GetJournalRequest
+	(*GetSessionActivityRequest)(nil), // 24: magus.viewer.v1alpha1.GetSessionActivityRequest
+	(*SessionTurn)(nil),               // 25: magus.viewer.v1alpha1.SessionTurn
+	(*Unrecorded)(nil),                // 26: magus.viewer.v1alpha1.Unrecorded
+	(*SessionActivity)(nil),           // 27: magus.viewer.v1alpha1.SessionActivity
+	(*timestamppb.Timestamp)(nil),     // 28: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),       // 29: google.protobuf.Duration
+	(*v1alpha1.StringMatch)(nil),      // 30: magus.query.v1alpha1.StringMatch
+	(*v1alpha1.TimeRange)(nil),        // 31: magus.query.v1alpha1.TimeRange
 }
 var file_magus_viewer_v1alpha1_viewer_proto_depIdxs = []int32{
 	3,  // 0: magus.viewer.v1alpha1.Command.trigger:type_name -> magus.viewer.v1alpha1.Trigger
-	4,  // 1: magus.viewer.v1alpha1.Invocation.command:type_name -> magus.viewer.v1alpha1.Command
-	23, // 2: magus.viewer.v1alpha1.Invocation.start_time:type_name -> google.protobuf.Timestamp
-	23, // 3: magus.viewer.v1alpha1.Invocation.end_time:type_name -> google.protobuf.Timestamp
+	5,  // 1: magus.viewer.v1alpha1.Invocation.command:type_name -> magus.viewer.v1alpha1.Command
+	28, // 2: magus.viewer.v1alpha1.Invocation.start_time:type_name -> google.protobuf.Timestamp
+	28, // 3: magus.viewer.v1alpha1.Invocation.end_time:type_name -> google.protobuf.Timestamp
 	2,  // 4: magus.viewer.v1alpha1.Invocation.status:type_name -> magus.viewer.v1alpha1.Status
-	23, // 5: magus.viewer.v1alpha1.Event.time:type_name -> google.protobuf.Timestamp
+	28, // 5: magus.viewer.v1alpha1.Event.time:type_name -> google.protobuf.Timestamp
 	0,  // 6: magus.viewer.v1alpha1.Event.kind:type_name -> magus.viewer.v1alpha1.Kind
 	1,  // 7: magus.viewer.v1alpha1.Event.stream:type_name -> magus.viewer.v1alpha1.Stream
 	2,  // 8: magus.viewer.v1alpha1.Event.status:type_name -> magus.viewer.v1alpha1.Status
-	24, // 9: magus.viewer.v1alpha1.Event.duration:type_name -> google.protobuf.Duration
-	4,  // 10: magus.viewer.v1alpha1.Event.command:type_name -> magus.viewer.v1alpha1.Command
-	6,  // 11: magus.viewer.v1alpha1.Event.undeclared:type_name -> magus.viewer.v1alpha1.UndeclaredSeed
-	5,  // 12: magus.viewer.v1alpha1.Journal.invocation:type_name -> magus.viewer.v1alpha1.Invocation
-	7,  // 13: magus.viewer.v1alpha1.Journal.events:type_name -> magus.viewer.v1alpha1.Event
-	25, // 14: magus.viewer.v1alpha1.EventQuery.text:type_name -> magus.query.v1alpha1.StringMatch
-	26, // 15: magus.viewer.v1alpha1.EventQuery.time:type_name -> magus.query.v1alpha1.TimeRange
-	10, // 16: magus.viewer.v1alpha1.ListEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
-	7,  // 17: magus.viewer.v1alpha1.ListEventsResponse.events:type_name -> magus.viewer.v1alpha1.Event
-	10, // 18: magus.viewer.v1alpha1.StreamEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
-	7,  // 19: magus.viewer.v1alpha1.StreamEventsResponse.event:type_name -> magus.viewer.v1alpha1.Event
-	23, // 20: magus.viewer.v1alpha1.Output.create_time:type_name -> google.protobuf.Timestamp
-	24, // 21: magus.viewer.v1alpha1.Output.duration:type_name -> google.protobuf.Duration
-	15, // 22: magus.viewer.v1alpha1.ListOutputsResponse.outputs:type_name -> magus.viewer.v1alpha1.Output
-	5,  // 23: magus.viewer.v1alpha1.ListInvocationsResponse.invocations:type_name -> magus.viewer.v1alpha1.Invocation
-	9,  // 24: magus.viewer.v1alpha1.ViewerService.GetInvocation:input_type -> magus.viewer.v1alpha1.GetInvocationRequest
-	11, // 25: magus.viewer.v1alpha1.ViewerService.ListEvents:input_type -> magus.viewer.v1alpha1.ListEventsRequest
-	13, // 26: magus.viewer.v1alpha1.ViewerService.StreamEvents:input_type -> magus.viewer.v1alpha1.StreamEventsRequest
-	16, // 27: magus.viewer.v1alpha1.ViewerService.ListOutputs:input_type -> magus.viewer.v1alpha1.ListOutputsRequest
-	18, // 28: magus.viewer.v1alpha1.ViewerService.GetOutput:input_type -> magus.viewer.v1alpha1.GetOutputRequest
-	20, // 29: magus.viewer.v1alpha1.ViewerService.ListInvocations:input_type -> magus.viewer.v1alpha1.ListInvocationsRequest
-	22, // 30: magus.viewer.v1alpha1.ViewerService.GetJournal:input_type -> magus.viewer.v1alpha1.GetJournalRequest
-	5,  // 31: magus.viewer.v1alpha1.ViewerService.GetInvocation:output_type -> magus.viewer.v1alpha1.Invocation
-	12, // 32: magus.viewer.v1alpha1.ViewerService.ListEvents:output_type -> magus.viewer.v1alpha1.ListEventsResponse
-	14, // 33: magus.viewer.v1alpha1.ViewerService.StreamEvents:output_type -> magus.viewer.v1alpha1.StreamEventsResponse
-	17, // 34: magus.viewer.v1alpha1.ViewerService.ListOutputs:output_type -> magus.viewer.v1alpha1.ListOutputsResponse
-	19, // 35: magus.viewer.v1alpha1.ViewerService.GetOutput:output_type -> magus.viewer.v1alpha1.GetOutputResponse
-	21, // 36: magus.viewer.v1alpha1.ViewerService.ListInvocations:output_type -> magus.viewer.v1alpha1.ListInvocationsResponse
-	8,  // 37: magus.viewer.v1alpha1.ViewerService.GetJournal:output_type -> magus.viewer.v1alpha1.Journal
-	31, // [31:38] is the sub-list for method output_type
-	24, // [24:31] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	29, // 9: magus.viewer.v1alpha1.Event.duration:type_name -> google.protobuf.Duration
+	5,  // 10: magus.viewer.v1alpha1.Event.command:type_name -> magus.viewer.v1alpha1.Command
+	7,  // 11: magus.viewer.v1alpha1.Event.undeclared:type_name -> magus.viewer.v1alpha1.UndeclaredSeed
+	6,  // 12: magus.viewer.v1alpha1.Journal.invocation:type_name -> magus.viewer.v1alpha1.Invocation
+	8,  // 13: magus.viewer.v1alpha1.Journal.events:type_name -> magus.viewer.v1alpha1.Event
+	30, // 14: magus.viewer.v1alpha1.EventQuery.text:type_name -> magus.query.v1alpha1.StringMatch
+	31, // 15: magus.viewer.v1alpha1.EventQuery.time:type_name -> magus.query.v1alpha1.TimeRange
+	11, // 16: magus.viewer.v1alpha1.ListEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
+	8,  // 17: magus.viewer.v1alpha1.ListEventsResponse.events:type_name -> magus.viewer.v1alpha1.Event
+	11, // 18: magus.viewer.v1alpha1.StreamEventsRequest.filter:type_name -> magus.viewer.v1alpha1.EventQuery
+	8,  // 19: magus.viewer.v1alpha1.StreamEventsResponse.event:type_name -> magus.viewer.v1alpha1.Event
+	28, // 20: magus.viewer.v1alpha1.Output.create_time:type_name -> google.protobuf.Timestamp
+	29, // 21: magus.viewer.v1alpha1.Output.duration:type_name -> google.protobuf.Duration
+	16, // 22: magus.viewer.v1alpha1.ListOutputsResponse.outputs:type_name -> magus.viewer.v1alpha1.Output
+	6,  // 23: magus.viewer.v1alpha1.ListInvocationsResponse.invocations:type_name -> magus.viewer.v1alpha1.Invocation
+	4,  // 24: magus.viewer.v1alpha1.SessionTurn.role:type_name -> magus.viewer.v1alpha1.TurnRole
+	28, // 25: magus.viewer.v1alpha1.SessionTurn.time:type_name -> google.protobuf.Timestamp
+	4,  // 26: magus.viewer.v1alpha1.Unrecorded.role:type_name -> magus.viewer.v1alpha1.TurnRole
+	25, // 27: magus.viewer.v1alpha1.SessionActivity.turns:type_name -> magus.viewer.v1alpha1.SessionTurn
+	26, // 28: magus.viewer.v1alpha1.SessionActivity.unrecorded:type_name -> magus.viewer.v1alpha1.Unrecorded
+	10, // 29: magus.viewer.v1alpha1.ViewerService.GetInvocation:input_type -> magus.viewer.v1alpha1.GetInvocationRequest
+	12, // 30: magus.viewer.v1alpha1.ViewerService.ListEvents:input_type -> magus.viewer.v1alpha1.ListEventsRequest
+	14, // 31: magus.viewer.v1alpha1.ViewerService.StreamEvents:input_type -> magus.viewer.v1alpha1.StreamEventsRequest
+	17, // 32: magus.viewer.v1alpha1.ViewerService.ListOutputs:input_type -> magus.viewer.v1alpha1.ListOutputsRequest
+	19, // 33: magus.viewer.v1alpha1.ViewerService.GetOutput:input_type -> magus.viewer.v1alpha1.GetOutputRequest
+	21, // 34: magus.viewer.v1alpha1.ViewerService.ListInvocations:input_type -> magus.viewer.v1alpha1.ListInvocationsRequest
+	23, // 35: magus.viewer.v1alpha1.ViewerService.GetJournal:input_type -> magus.viewer.v1alpha1.GetJournalRequest
+	24, // 36: magus.viewer.v1alpha1.ViewerService.GetSessionActivity:input_type -> magus.viewer.v1alpha1.GetSessionActivityRequest
+	6,  // 37: magus.viewer.v1alpha1.ViewerService.GetInvocation:output_type -> magus.viewer.v1alpha1.Invocation
+	13, // 38: magus.viewer.v1alpha1.ViewerService.ListEvents:output_type -> magus.viewer.v1alpha1.ListEventsResponse
+	15, // 39: magus.viewer.v1alpha1.ViewerService.StreamEvents:output_type -> magus.viewer.v1alpha1.StreamEventsResponse
+	18, // 40: magus.viewer.v1alpha1.ViewerService.ListOutputs:output_type -> magus.viewer.v1alpha1.ListOutputsResponse
+	20, // 41: magus.viewer.v1alpha1.ViewerService.GetOutput:output_type -> magus.viewer.v1alpha1.GetOutputResponse
+	22, // 42: magus.viewer.v1alpha1.ViewerService.ListInvocations:output_type -> magus.viewer.v1alpha1.ListInvocationsResponse
+	9,  // 43: magus.viewer.v1alpha1.ViewerService.GetJournal:output_type -> magus.viewer.v1alpha1.Journal
+	27, // 44: magus.viewer.v1alpha1.ViewerService.GetSessionActivity:output_type -> magus.viewer.v1alpha1.SessionActivity
+	37, // [37:45] is the sub-list for method output_type
+	29, // [29:37] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_magus_viewer_v1alpha1_viewer_proto_init() }
@@ -1777,8 +2213,8 @@ func file_magus_viewer_v1alpha1_viewer_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_viewer_v1alpha1_viewer_proto_rawDesc), len(file_magus_viewer_v1alpha1_viewer_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   19,
+			NumEnums:      5,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

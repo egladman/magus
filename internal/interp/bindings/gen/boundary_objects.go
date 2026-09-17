@@ -1478,6 +1478,7 @@ func ObjectJob(v types.Job) vm.Value {
 	out.MapSet("registered", vm.IntValue(int64(v.Registered)))
 	out.MapSet("created", vm.IntValue(int64(v.Created)))
 	out.MapSet("updated", vm.IntValue(int64(v.Updated)))
+	out.MapSet("deadline", vm.IntValue(int64(v.Deadline)))
 	optResult := vm.Null
 	if v.Result != nil {
 		optResult = ObjectJobResult((*v.Result))
@@ -1530,6 +1531,21 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsOverlaps[indexOverlaps] = ObjectJobOverlap(v.Overlaps[indexOverlaps])
 	}
 	out.MapSet("overlaps", vm.ListValue(itemsOverlaps))
+	itemsOverdue := make([]vm.Value, len(v.Overdue))
+	for indexOverdue := range v.Overdue {
+		itemsOverdue[indexOverdue] = vm.StrValue(v.Overdue[indexOverdue])
+	}
+	out.MapSet("overdue", vm.ListValue(itemsOverdue))
+	itemsOrphans := make([]vm.Value, len(v.Orphans))
+	for indexOrphans := range v.Orphans {
+		itemsOrphans[indexOrphans] = vm.StrValue(v.Orphans[indexOrphans])
+	}
+	out.MapSet("orphans", vm.ListValue(itemsOrphans))
+	itemsStale := make([]vm.Value, len(v.Stale))
+	for indexStale := range v.Stale {
+		itemsStale[indexStale] = vm.StrValue(v.Stale[indexStale])
+	}
+	out.MapSet("stale", vm.ListValue(itemsStale))
 	return out
 }
 
@@ -1566,5 +1582,10 @@ func ObjectJobStatus(v types.JobStatus) vm.Value {
 		itemsGates[indexGates] = ObjectGateStatus(v.Gates[indexGates])
 	}
 	out.MapSet("gates", vm.ListValue(itemsGates))
+	itemsStaleIndexes := make([]vm.Value, len(v.StaleIndexes))
+	for indexStaleIndexes := range v.StaleIndexes {
+		itemsStaleIndexes[indexStaleIndexes] = vm.StrValue(v.StaleIndexes[indexStaleIndexes])
+	}
+	out.MapSet("staleIndexes", vm.ListValue(itemsStaleIndexes))
 	return out
 }

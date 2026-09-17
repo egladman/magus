@@ -69,6 +69,14 @@ GetJournal returns one past invocation whole - header plus every event - which i
 
 Takes [GetJournalRequest](#getjournalrequest), returns [Journal](#journal).
 
+### GetSessionActivity
+
+GetSessionActivity returns what one loaded agent session did in the run-up to its last write of one path: a bounded window of turns, never the whole session. Loopback peers only, unlike the rest of this service: a session's record names every path and skill it reached, which a share link has no business reading.
+
+`POST /magus.viewer.v1alpha1.ViewerService/GetSessionActivity`: unary. Source: [viewer.proto:178](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L178).
+
+Takes [GetSessionActivityRequest](#getsessionactivityrequest), returns [SessionActivity](#sessionactivity).
+
 ## Messages
 
 ### Command
@@ -113,7 +121,7 @@ Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](
 
 EventQuery filters an invocation's events server-side (for a large log). It is the viewer's OWN typed query, composed from the shared query primitives plus the viewer's event fields - log fields (target/stream/level) are not graph fields, so there is no generic shared Query. Set fields AND together; repeated values within a field OR; matching is case-insensitive. The time window (including its since resume cursor) lives here too, so one message carries the whole filter.
 
-Source: [viewer.proto:190](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L190).
+Source: [viewer.proto:195](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L195).
 
 | Field      | Type                                                              | # | Description                                         |
 | ---------- | ----------------------------------------------------------------- | - | --------------------------------------------------- |
@@ -130,7 +138,7 @@ Used by: [ListEvents (request)](viewer.md#listevents), [StreamEvents (request)](
 
 ### GetInvocationRequest
 
-Source: [viewer.proto:176](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L176).
+Source: [viewer.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L181).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -140,7 +148,7 @@ Used by: [GetInvocation (request)](viewer.md#getinvocation).
 
 ### GetJournalRequest
 
-Source: [viewer.proto:266](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L266).
+Source: [viewer.proto:271](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L271).
 
 | Field  | Type   | # | Description                                                                                                                                          |
 | ------ | ------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -150,7 +158,7 @@ Used by: [GetJournal (request)](viewer.md#getjournal).
 
 ### GetOutputRequest
 
-Source: [viewer.proto:248](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L248).
+Source: [viewer.proto:253](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L253).
 
 | Field  | Type   | # | Description                                                        |
 | ------ | ------ | - | ------------------------------------------------------------------ |
@@ -160,13 +168,24 @@ Used by: [GetOutput (request)](viewer.md#getoutput).
 
 ### GetOutputResponse
 
-Source: [viewer.proto:252](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L252).
+Source: [viewer.proto:257](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L257).
 
 | Field  | Type  | # | Description                                               |
 | ------ | ----- | - | --------------------------------------------------------- |
 | `body` | bytes | 1 | The captured bytes, exactly as the subprocess wrote them. |
 
 Used by: [GetOutput (response)](viewer.md#getoutput).
+
+### GetSessionActivityRequest
+
+Source: [viewer.proto:277](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L277).
+
+| Field     | Type   | # | Description                                                                                                                     |
+| --------- | ------ | - | ------------------------------------------------------------------------------------------------------------------------------- |
+| `session` | string | 1 | _string.max_len: 256; string.pattern: `^[A-Za-z0-9][A-Za-z0-9_-]*$`_ The host's own session id, as a review's touch carries it. |
+| `path`    | string | 2 | _string.min_len: 1; string.max_len: 4096_ The checkout-relative path whose last write ends the window.                          |
+
+Used by: [GetSessionActivity (request)](viewer.md#getsessionactivity).
 
 ### Invocation
 
@@ -201,7 +220,7 @@ Used by: [GetJournal (response)](viewer.md#getjournal).
 
 ### ListEventsRequest
 
-Source: [viewer.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L201).
+Source: [viewer.proto:206](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L206).
 
 | Field        | Type                      | # | Description                                                                                                               |
 | ------------ | ------------------------- | - | ------------------------------------------------------------------------------------------------------------------------- |
@@ -214,7 +233,7 @@ Used by: [ListEvents (request)](viewer.md#listevents).
 
 ### ListEventsResponse
 
-Source: [viewer.proto:208](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L208).
+Source: [viewer.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L213).
 
 | Field             | Type                     | # | Description                 |
 | ----------------- | ------------------------ | - | --------------------------- |
@@ -225,7 +244,7 @@ Used by: [ListEvents (response)](viewer.md#listevents).
 
 ### ListInvocationsRequest
 
-Source: [viewer.proto:257](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L257).
+Source: [viewer.proto:262](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L262).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -236,7 +255,7 @@ Used by: [ListInvocations (request)](viewer.md#listinvocations).
 
 ### ListInvocationsResponse
 
-Source: [viewer.proto:261](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L261).
+Source: [viewer.proto:266](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L266).
 
 | Field             | Type                               | # | Description                      |
 | ----------------- | ---------------------------------- | - | -------------------------------- |
@@ -247,7 +266,7 @@ Used by: [ListInvocations (response)](viewer.md#listinvocations).
 
 ### ListOutputsRequest
 
-Source: [viewer.proto:239](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L239).
+Source: [viewer.proto:244](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L244).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -258,7 +277,7 @@ Used by: [ListOutputs (request)](viewer.md#listoutputs).
 
 ### ListOutputsResponse
 
-Source: [viewer.proto:243](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L243).
+Source: [viewer.proto:248](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L248).
 
 | Field             | Type                       | # | Description                  |
 | ----------------- | -------------------------- | - | ---------------------------- |
@@ -271,7 +290,7 @@ Used by: [ListOutputs (response)](viewer.md#listoutputs).
 
 Output is one stored run's descriptor: what it was, how it went, and the ref that fetches its captured bytes. The wire twin of cache.OutputDescriptor.
 
-Source: [viewer.proto:225](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L225).
+Source: [viewer.proto:230](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L230).
 
 | Field         | Type      | # | Description                                                                        |
 | ------------- | --------- | - | ---------------------------------------------------------------------------------- |
@@ -286,9 +305,46 @@ Source: [viewer.proto:225](https://github.com/egladman/magus/blob/main/proto/mag
 
 Used by: [ListOutputs (response)](viewer.md#listoutputs).
 
+### SessionActivity
+
+Source: [viewer.proto:328](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L328).
+
+| Field        | Type                                 | # | Description                                                                                                                                                               |
+| ------------ | ------------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session`    | string                               | 1 |                                                                                                                                                                           |
+| `host`       | string                               | 2 |                                                                                                                                                                           |
+| `transcript` | string                               | 3 | A pointer to the host's own log. The daemon does not open it.                                                                                                             |
+| `wrote`      | bool                                 | 4 | Whether the loaded record holds a write of the requested path. False with no turns means the session was seen only by the guard hook, or its transcript was never loaded. |
+| `turns`      | [repeated SessionTurn](#sessionturn) | 5 |                                                                                                                                                                           |
+| `truncated`  | bool                                 | 6 | Set when the window held more turns than were returned; the oldest were dropped.                                                                                          |
+| `unrecorded` | [repeated Unrecorded](#unrecorded)   | 7 |                                                                                                                                                                           |
+
+Used by: [GetSessionActivity (response)](viewer.md#getsessionactivity).
+
+### SessionTurn
+
+SessionTurn is one entry of a session's record, oldest first within its window.
+
+Source: [viewer.proto:300](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L300).
+
+| Field         | Type                  | #  | Description                                                                                                                                                  |
+| ------------- | --------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `role`        | [TurnRole](#turnrole) | 1  |                                                                                                                                                              |
+| `kind`        | string                | 2  | For a tool turn, the session event kind: shell.command, file.read, file.write, skill.load, hook.output, spawn or magus.call.                                 |
+| `text`        | string                | 3  | A path, skill, subagent type or tool name. Never a shell command's text, which the store does not keep, and empty for hook.output, whose text can quote one. |
+| `program`     | string                | 4  | A shell command's program, arguments dropped.                                                                                                                |
+| `time`        | Timestamp             | 5  |                                                                                                                                                              |
+| `verdict`     | string                | 6  | What today's guard rules say about a shell command: pass, advise or deny.                                                                                    |
+| `rule`        | string                | 7  |                                                                                                                                                              |
+| `exit`        | int32                 | 8  | Zero is both success and a host that records no exit status; the store keeps no distinction, so only a non-zero value is a measurement.                      |
+| `denied`      | bool                  | 9  |                                                                                                                                                              |
+| `interrupted` | bool                  | 10 |                                                                                                                                                              |
+
+Used by: [GetSessionActivity (response)](viewer.md#getsessionactivity).
+
 ### StreamEventsRequest
 
-Source: [viewer.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L213).
+Source: [viewer.proto:218](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L218).
 
 | Field    | Type                      | # | Description                                                                                                                                                                        |
 | -------- | ------------------------- | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -299,7 +355,7 @@ Used by: [StreamEvents (request)](viewer.md#streamevents).
 
 ### StreamEventsResponse
 
-Source: [viewer.proto:219](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L219).
+Source: [viewer.proto:224](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L224).
 
 | Field   | Type            | # | Description |
 | ------- | --------------- | - | ----------- |
@@ -320,6 +376,19 @@ Source: [viewer.proto:105](https://github.com/egladman/magus/blob/main/proto/mag
 | `inputs`  | repeated string | 3 | inputs is the subset of files that read as build INPUTS (a dependency lock, a linter rule set, a toolchain pin). It is the half that changes what a verdict means: a target selected anyway can still replay an answer computed under the rules the edit just replaced, because the file that replaced them keys nothing. |
 
 Used by: [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [StreamEvents (response)](viewer.md#streamevents).
+
+### Unrecorded
+
+Unrecorded names a part of the transcript this answer cannot carry, and why. A part listed here is unobservable, which a reader must not mistake for a session that said nothing.
+
+Source: [viewer.proto:323](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L323).
+
+| Field    | Type                  | # | Description |
+| -------- | --------------------- | - | ----------- |
+| `role`   | [TurnRole](#turnrole) | 1 |             |
+| `reason` | string                | 2 |             |
+
+Used by: [GetSessionActivity (response)](viewer.md#getsessionactivity).
 
 ## Enums
 
@@ -391,4 +460,20 @@ Source: [viewer.proto:62](https://github.com/egladman/magus/blob/main/proto/magu
 | `TRIGGER_DIRECT`      | 6 | a directly invoked spell/op  |
 
 Used by: [GetInvocation (response)](viewer.md#getinvocation), [GetJournal (response)](viewer.md#getjournal), [ListEvents (response)](viewer.md#listevents), [ListInvocations (response)](viewer.md#listinvocations), [StreamEvents (response)](viewer.md#streamevents).
+
+### TurnRole
+
+TurnRole is who a turn belongs to.
+
+Source: [viewer.proto:291](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L291).
+
+| Value                   | # | Description |
+| ----------------------- | - | ----------- |
+| `TURN_ROLE_UNSPECIFIED` | 0 |             |
+| `TURN_ROLE_USER`        | 1 |             |
+| `TURN_ROLE_ASSISTANT`   | 2 |             |
+| `TURN_ROLE_REASONING`   | 3 |             |
+| `TURN_ROLE_TOOL`        | 4 |             |
+
+Used by: [GetSessionActivity (response)](viewer.md#getsessionactivity).
 

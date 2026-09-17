@@ -57,7 +57,7 @@ export function jobsTile(): Tile {
       note.textContent = "";
       return;
     }
-    if (read.kind === "unreadable") {
+    if (read.kind === "unreadable" || read.kind === "unreachable") {
       card.setNote("jobs unreadable");
       summary.textContent = "The jobs could not be read.";
       list.replaceChildren();

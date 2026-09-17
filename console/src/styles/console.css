@@ -70,6 +70,7 @@
 [data-empty-cmd] { margin: 0; }
 [data-empty-cmd] code { font-size: 0.8em; font-family: var(--pf-t--global--font--family--mono); }
 [data-empty-hint] { font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+[data-empty-way-actions] { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; margin-top: 0.3rem; }
 /* Stack the ways on a narrow viewport - side by side they are unreadable on a phone. */
 @media (max-width: 40rem) {
   [data-empty-ways] { grid-template-columns: 1fr; }
@@ -310,6 +311,12 @@ body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
      surface that declares nothing reads slightly wide, rather than reading as broken.
      --console-pad, not a literal, so the inset tracks the same responsive step as the rest of the
      shell. The full-bleed exemption is the rule directly below. */
+  padding-inline: var(--console-pad);
+}
+/* The shell's connect page, standing in a daemon surface's place (requireDaemon): centered in the
+   pane, and scrolling with it when the ways outgrow a short pane. */
+#console-outlet div[data-pane-id] > [data-connect-page] {
+  flex: 1 0 auto;
   padding-inline: var(--console-pad);
 }
 /* Full-bleed surfaces take the whole pane. These paint their own panel edge to edge and meet the
@@ -1533,6 +1540,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 [data-launcher-live][hidden] { display: none; }
 [data-launcher-live-label] { color: var(--pf-t--global--text--color--regular); }
+/* The launcher's not-connected block replaces its ways at every width, so it carries its own spacing
+   rather than the ways row's desktop-only rules. */
+[data-launcher-connect] { max-width: 44rem; margin-block: 0.35rem 2rem; font-size: 0.86rem; color: var(--pf-t--global--text--color--subtle); }
+[data-launcher-connect] strong { color: var(--pf-t--global--text--color--regular); }
+[data-launcher-connect] [data-empty-ways] { margin: 0.9rem 0 0; font-size: var(--pf-t--global--font--size--body--default); }
 
 /* Marks a row as NOT REAL: the demo's roots are spelled like checkouts (~/Repos/acme), so without
    this the menu presents fabricated workspaces as though a daemon had loaded them. Also tags the demo

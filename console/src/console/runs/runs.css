@@ -361,7 +361,7 @@
 /* --- Empty states -------------------------------------------------------------- */
 .console-runs__empty { padding: 2.5rem 1.5rem; max-inline-size: 34rem; }
 .console-runs__empty-title { margin: 0; font-size: 1rem; font-weight: 600; }
-.console-runs__empty .pf-v6-c-button { margin-block-start: 0.9rem; }
+.console-runs__empty > .pf-v6-c-button { margin-block-start: 0.9rem; }
 
 /* --- Narrow ---------------------------------------------------------------------
    Below the shell's own breakpoint the two columns stack: a 375px viewport cannot carry a list

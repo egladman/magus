@@ -74,6 +74,15 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 | --------------- | --------------------- | ------------ | ----------------- |
 | `hints.enabled` | `MAGUS_HINTS_ENABLED` | _(env only)_ | bool _(env only)_ |
 
+## jobs
+
+| Config key             | Environment variable         | Flag                     | Type     |
+| ---------------------- | ---------------------------- | ------------------------ | -------- |
+| `jobs.default_timeout` | `MAGUS_JOBS_DEFAULT_TIMEOUT` | `--jobs-default-timeout` | duration |
+| `jobs.max_depth`       | `MAGUS_JOBS_MAX_DEPTH`       | `--jobs-max-depth`       | int      |
+| `jobs.max_live`        | `MAGUS_JOBS_MAX_LIVE`        | `--jobs-max-live`        | int      |
+| `jobs.stale_after`     | `MAGUS_JOBS_STALE_AFTER`     | `--jobs-stale-after`     | duration |
+
 ## knowledge
 
 | Config key                                       | Environment variable                                   | Flag                                               | Type                               |

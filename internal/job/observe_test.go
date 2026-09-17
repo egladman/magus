@@ -1,6 +1,7 @@
 package job
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -28,7 +29,7 @@ func TestPathsGateReadsTheDiffAndNotTheReport(t *testing.T) {
 
 	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, seen)
 	assert.False(t, status.Verified)
-	assert.Contains(t, status.Violations[0], `nothing matching "db/migrations/**" changed since abc1234`)
+	assert.Contains(t, strings.Join(status.Violations, "\n"), `nothing matching "db/migrations/**" changed since abc1234`)
 }
 
 func TestPathsGateVerifiesWhenTheDiffCoversEveryGlob(t *testing.T) {
@@ -90,7 +91,8 @@ func TestPathsGateRefusesWhenTheDiffCouldNotBeRead(t *testing.T) {
 
 	status := VerifyGates(row, rep, types.JobAttempt{}, nil, []types.Job{row}, Observed{})
 	assert.False(t, status.Verified)
-	assert.Contains(t, status.Violations[0], "could not read what this job changed")
+	require.Len(t, status.Gates, 1)
+	assert.Contains(t, strings.Join(status.Gates[0].Violations, "\n"), "could not read what this job changed")
 }
 
 // TestPathsGateSeparatesNothingChangedFromNobodyLooked pins why ChangedKnown exists at

@@ -698,6 +698,9 @@ func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 // were never meant to reach it.
 func (m *Magus) DiffTUIEnabled() bool { return m.cfg.Diff.TuiEnabled() }
 
+// JobLimits is the magus.yaml jobs section, which every door that forks a job enforces.
+func (m *Magus) JobLimits() config.Jobs { return m.cfg.Jobs }
+
 // WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
 // diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
 // is clean.

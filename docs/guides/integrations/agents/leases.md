@@ -33,7 +33,7 @@ took it. A job is the thing; a lease is permission over it.
 How to split the work is not on this page. That is the
 [`magus-multi-agent` skill](../../../reference/skills/magus-multi-agent.md):
 partition by write set rather than by affected project, prove the jobs cannot
-collide, bound the fan-out, match a model to each job. This page is the surface
+collide, narrow the scope at every level, match a model to each job. This page is the surface
 that skill writes to and reads from.
 
 | step                      | surface                                         |
@@ -174,6 +174,27 @@ carried forward the first time the new one opens it.
 **A read-only job carries an abbreviated row**: `read_only` set, and empty write
 and deny paths that then read as deliberate rather than forgotten.
 
+**A timeout is optional.** `magus job fork <job> --timeout 2h` (or `timeout` in
+the `--stdin` record or the `magus_job` call) has the store stamp a `deadline`
+on the row at fork time; nothing accepts a deadline directly. It is unset by
+default, and a job with acceptance criteria needs no bound. Past the deadline the
+guard denies every write graded under that lease and its write paths stop
+blocking other jobs, while the row stays live: magus never transitions it, and
+`magus ls jobs` marks it `overdue`.
+
+**Limits exist only when the workspace sets them**, in magus.yaml:
+
+```yaml
+jobs:
+  max_depth: 3 # levels below the root job; 0 = unlimited
+  max_live: 12 # live jobs under one root; 0 = unlimited
+  default_timeout: 2h # applies when fork names no --timeout
+  stale_after: 30m # flag live jobs untouched this long
+```
+
+Every key is unset by default. `magus job fork` refuses past `max_depth` or
+`max_live`, naming the key that set the limit.
+
 ### Two answers the store gives back
 
 Neither is enforcement. Each is something an orchestrator would otherwise derive
@@ -198,6 +219,12 @@ releaser deleted it" and "something is there nobody could read" send you to
 different places. Hand the digest to the job taking the path over; one that no
 longer matches at verification time means that job built on a tree the releaser
 never saw.
+
+**Jobs nobody is waiting on.** A list also marks a live job an `orphan` when its
+root job has ended, and `stale` when it was not updated within
+`jobs.stale_after` (only when that key is set), naming `magus job exit <id>` for
+each. `magus doctor`'s **job-tree** check reports the same two. Both are
+reports: ending the row stays yours.
 
 Three doors write the store and they reach one set of rules: `magus job` is the
 person's, `magus_job` is the agent's, and `magus\job` is a magusfile's.
@@ -277,6 +304,7 @@ file write and every command. It denies:
 | the guard refuses                                            | the row field that decided it    |
 | ------------------------------------------------------------ | -------------------------------- |
 | any write, before the holder takes the lease here            | the recorded base                |
+| any write, once the job's timeout has passed                 | `deadline`                       |
 | any write, by a job that gathers evidence and writes nothing | `read_only`                      |
 | a write covered by this job's own deny list                  | `deny_paths`                     |
 | a write covered by another live job's write list             | `write_paths` (that job's)       |
@@ -286,6 +314,10 @@ file write and every command. It denies:
 
 It advises on one more: your own path, written from a base that diverges from
 the checkpoint you were handed.
+
+A denial for another job's path also says how long ago that job was last
+updated and names `magus job exit <id>`, which releases a job nobody holds any
+more. A job past its deadline owns nothing against other jobs.
 
 The read row is the write lane read the other way. `write_paths` stands in when
 `read_paths` is empty, because a holder leased to edit a project was pointed at
@@ -389,6 +421,14 @@ EVIDENCE rather than what the result claims: every changed path inside the write
 paths and outside the denied ones, a change set that is not empty, the
 descendants the store carries, and a run recording a PASSING execution of this
 job's own check. A job that verifies is recorded `pass`.
+
+For a job that writes, the claimed `changed_paths` are held to the diff magus
+observes since the job's checkpoint: every claimed path must appear in it, at
+least one change in it must fall inside `write_paths`, and a diff magus cannot
+read fails the job rather than passing it. A read-only job has no diff to check.
+`wait` also refuses `pass` while any descendant (by `parent` chain) is still
+live, naming each, and grades a job against its ancestors' symbol gates as well
+as its own.
 
 Two failing statuses, because they send a caller somewhere different. Exit 1 is
 a status: the result was read and rejected, and every rule that failed is named.

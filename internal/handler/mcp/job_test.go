@@ -207,6 +207,14 @@ func TestJobTool(t *testing.T) {
 	})
 }
 
+// diffShows is an observer whose diff since the checkpoint is exactly paths, since wait
+// fails a writing job whose diff nobody could read.
+func diffShows(paths ...string) job.Observer {
+	return func(context.Context, types.Job) (job.Observed, error) {
+		return job.Observed{Changed: paths, ChangedKnown: true}, nil
+	}
+}
+
 func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 	t.Parallel()
 
@@ -215,6 +223,7 @@ func TestJobToolExitAndWaitUseTheSharedLifecycle(t *testing.T) {
 		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
 			return types.JobAttempt{Found: true, Ref: ref, Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}, nil
 		},
+		observe: diffShows("internal/job/verify.go"),
 	}
 	invoke := func(params map[string]any) spells.InvokeResponse {
 		t.Helper()
@@ -258,6 +267,7 @@ func TestJobToolCompletionGatesRoundTripThroughMCP(t *testing.T) {
 		resolve: func(_ context.Context, ref string) (types.JobAttempt, error) {
 			return attempts[ref], nil
 		},
+		observe: diffShows("internal/job/verify.go"),
 	}
 	invoke := func(params map[string]any) spells.InvokeResponse {
 		t.Helper()

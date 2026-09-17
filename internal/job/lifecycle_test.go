@@ -9,6 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// observeClaim is an observer whose diff shows exactly what rep claims.
+func observeClaim(rep types.JobResult) Observer {
+	return func(context.Context, types.Job) (Observed, error) { return claimed(rep), nil }
+}
+
 // TestExitFilesEvidenceForAWaitInAnotherCheckout keeps the lifecycle at the Store
 // boundary. The resolver is the worker checkout's output cache; the waiter deliberately
 // has no resolver, proving Exit copied the portable attempt onto the repository-wide row.
@@ -32,7 +37,7 @@ func TestExitFilesEvidenceForAWaitInAnotherCheckout(t *testing.T) {
 	require.NotNil(t, exited.Attempt)
 	assert.Equal(t, attempt, *exited.Attempt)
 
-	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, nil)
+	status, err := Wait(t.Context(), NewStore(loc), result.Job, nil, nil, observeClaim(result))
 	require.NoError(t, err)
 	// The primary check is LISTED, like any other gate: it is one, and reporting it only
 	// when other gates existed is what let `describe job --gates` say a check-only job had
@@ -69,7 +74,7 @@ func TestExitFilesEveryCompletionGateForAWaitInAnotherCheckout(t *testing.T) {
 	require.Len(t, exited.GateAttempts, 2)
 	assert.Nil(t, exited.Attempt, "a gate-only job has no synthetic primary attempt")
 
-	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, nil)
+	status, err := Wait(t.Context(), NewStore(loc), row.ID, nil, nil, observeClaim(result))
 	require.NoError(t, err)
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)

@@ -3,8 +3,8 @@
   "schema_version": 13,
   "directed": true,
   "multigraph": false,
-  "node_count": 6290,
-  "edge_count": 11204,
+  "node_count": 6308,
+  "edge_count": 11231,
   "relations": [
     {
       "id": "annotates",
@@ -1258,6 +1258,18 @@
       }
     },
     {
+      "id": "dir:.codex",
+      "kind": "dir",
+      "label": ".codex",
+      "source": ".codex"
+    },
+    {
+      "id": "dir:.cursor",
+      "kind": "dir",
+      "label": ".cursor",
+      "source": ".cursor"
+    },
+    {
       "id": "dir:benchmarks",
       "kind": "dir",
       "label": "benchmarks",
@@ -1655,7 +1667,7 @@
       "label": "docs/guides",
       "source": "docs/guides",
       "attrs": {
-        "dir_files": "239",
+        "dir_files": "240",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#--no-autoload,md#--step,md#-c-dir,md#1-install-magus,md#2-bootstrap-a-workspace-with-magus-init,md#3-read-your-first-magusfile,md#4-bind-your-first-spell,md#5-compose-a-ci-target-and-run-only-what-changed,md#a-"
       }
     },
@@ -1665,7 +1677,7 @@
       "label": "docs/guides/integrations",
       "source": "docs/guides/integrations",
       "attrs": {
-        "dir_files": "144",
+        "dir_files": "145",
         "dir_languages": "markdown,md#--limit-0-means-replay-nothing,md#a-reference-client,md#agents,md#amended-2026-09-02-machine-wide-admission-is-daemon-owned,md#annotations-and-folded-logs,md#available-tools,md#azure-pipelines,md#before-the-push-the-same-advisors-locally,md#bou"
       }
     },
@@ -1705,7 +1717,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "1910",
+        "dir_files": "1919",
         "dir_languages": "markdown,md#-v-why-did-this-run-and-what-did-it-run,md#-vv-the-firehose,md#-vvv-scheduling-and-startup,md#1-add-the-missing-graph-edge,md#1-identify-the-source,md#1-scope-outputs-under-the-project-directory,md#1-suppress-a-known-safe-race,md#2-assign-the-s"
       }
     },
@@ -1715,7 +1727,7 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "269",
+        "dir_files": "277",
         "dir_languages": "markdown,md#activityevent,md#activityquery,md#activityservice,md#affected,md#affinityoutput,md#anchor,md#anchorkind,md#anchorstatus,md#answer,md#backfill,md#before-you-call-anything,md#buildinfo,md#buzz,md#cache,md#calling-a-method-without-a-generated-clie"
       }
     },
@@ -1785,8 +1797,8 @@
       "label": "docs/reference/api/job",
       "source": "docs/reference/api/job",
       "attrs": {
-        "dir_files": "19",
-        "dir_languages": "markdown,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
+        "dir_files": "21",
+        "dir_languages": "markdown,md#completiongate,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobresult,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,"
       }
     },
     {
@@ -1795,8 +1807,8 @@
       "label": "docs/reference/api/job/v1alpha1",
       "source": "docs/reference/api/job/v1alpha1",
       "attrs": {
-        "dir_files": "18",
-        "dir_languages": "markdown,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,md#submitstate"
+        "dir_files": "20",
+        "dir_languages": "markdown,md#completiongate,md#enums,md#job,md#jobholder,md#joboverlap,md#jobrelease,md#jobresult,md#jobrun,md#jobservice,md#listjobs,md#listjobsrequest,md#listjobsresponse,md#messages,md#methods,md#resourcesize,md#runjob,md#runjobrequest,md#runjobresponse,"
       }
     },
     {
@@ -1945,8 +1957,8 @@
       "label": "docs/reference/api/viewer",
       "source": "docs/reference/api/viewer",
       "attrs": {
-        "dir_files": "36",
-        "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#invocation,md#journal,md#kind,md#listevents,md#listeventsrequest,md#lis"
+        "dir_files": "42",
+        "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#getsessionactivity,md#getsessionactivityrequest,md#invocation,md#journa"
       }
     },
     {
@@ -1955,8 +1967,8 @@
       "label": "docs/reference/api/viewer/v1alpha1",
       "source": "docs/reference/api/viewer/v1alpha1",
       "attrs": {
-        "dir_files": "35",
-        "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#invocation,md#journal,md#kind,md#listevents,md#listeventsrequest,md#lis"
+        "dir_files": "41",
+        "dir_languages": "markdown,md#command,md#enums,md#event,md#eventquery,md#getinvocation,md#getinvocationrequest,md#getjournal,md#getjournalrequest,md#getoutput,md#getoutputrequest,md#getoutputresponse,md#getsessionactivity,md#getsessionactivityrequest,md#invocation,md#journa"
       }
     },
     {
@@ -2152,12 +2164,18 @@
       }
     },
     {
+      "id": "dir:harnesses",
+      "kind": "dir",
+      "label": "harnesses",
+      "source": "harnesses"
+    },
+    {
       "id": "dir:internal",
       "kind": "dir",
       "label": "internal",
       "source": "internal",
       "attrs": {
-        "dir_files": "173",
+        "dir_files": "174",
         "dir_languages": "buzz,markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-"
       }
     },
@@ -2167,7 +2185,7 @@
       "label": "internal/agent",
       "source": "internal/agent",
       "attrs": {
-        "dir_files": "163",
+        "dir_files": "164",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2177,7 +2195,7 @@
       "label": "internal/agent/skills",
       "source": "internal/agent/skills",
       "attrs": {
-        "dir_files": "160",
+        "dir_files": "161",
         "dir_languages": "markdown,md#a-worked-script,md#across-workspaces-and-neighbors,md#act-in-this-order,md#adapting-a-buzz-harness-no-magus-source-edits,md#adapting-the-agent-surface-to-this-workspace,md#answer-a-granular-diff-question,md#architecture-decisions-from-the-graph"
       }
     },
@@ -2267,8 +2285,8 @@
       "label": "internal/agent/skills/magus-multi-agent",
       "source": "internal/agent/skills/magus-multi-agent",
       "attrs": {
-        "dir_files": "11",
-        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#declare-the-criteria-magus-can-check-for-you,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that-jobs-do-not-collide,md#run-the-graph-engineer"
+        "dir_files": "12",
+        "dir_languages": "markdown,md#coalesce-what-the-write-sets-allow,md#declare-the-criteria-magus-can-check-for-you,md#declare-the-interface-before-any-job-forks,md#fork-one-job-per-unit-of-work,md#integrate-and-verify,md#observe-through-the-correct-control-plane,md#prove-that"
       }
     },
     {
@@ -18506,6 +18524,16 @@
       }
     },
     {
+      "id": "docsection:docs/glossary.md#run",
+      "kind": "docsection",
+      "label": "Run",
+      "source": "docs/glossary.md#run",
+      "attrs": {
+        "anchor": "run",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/glossary.md#sandbox",
       "kind": "docsection",
       "label": "Sandbox",
@@ -19062,6 +19090,16 @@
       "source": "docs/guides/integrations/agents.md#the-cli-works-without-it",
       "attrs": {
         "anchor": "the-cli-works-without-it",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/guides/integrations/agents.md#this-repository-as-a-worked-example",
+      "kind": "docsection",
+      "label": "This repository as a worked example",
+      "source": "docs/guides/integrations/agents.md#this-repository-as-a-worked-example",
+      "attrs": {
+        "anchor": "this-repository-as-a-worked-example",
         "level": "3"
       }
     },
@@ -23026,6 +23064,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/job/v1alpha1/job.md#completiongate",
+      "kind": "docsection",
+      "label": "CompletionGate",
+      "source": "docs/reference/api/job/v1alpha1/job.md#completiongate",
+      "attrs": {
+        "anchor": "completiongate",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/job/v1alpha1/job.md#enums",
       "kind": "docsection",
       "label": "Enums",
@@ -23072,6 +23120,16 @@
       "source": "docs/reference/api/job/v1alpha1/job.md#jobrelease",
       "attrs": {
         "anchor": "jobrelease",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/job/v1alpha1/job.md#jobresult",
+      "kind": "docsection",
+      "label": "JobResult",
+      "source": "docs/reference/api/job/v1alpha1/job.md#jobresult",
+      "attrs": {
+        "anchor": "jobresult",
         "level": "3"
       }
     },
@@ -24386,6 +24444,26 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivity",
+      "kind": "docsection",
+      "label": "GetSessionActivity",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivity",
+      "attrs": {
+        "anchor": "getsessionactivity",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivityrequest",
+      "kind": "docsection",
+      "label": "GetSessionActivityRequest",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivityrequest",
+      "attrs": {
+        "anchor": "getsessionactivityrequest",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#invocation",
       "kind": "docsection",
       "label": "Invocation",
@@ -24536,6 +24614,26 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#sessionactivity",
+      "kind": "docsection",
+      "label": "SessionActivity",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#sessionactivity",
+      "attrs": {
+        "anchor": "sessionactivity",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#sessionturn",
+      "kind": "docsection",
+      "label": "SessionTurn",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#sessionturn",
+      "attrs": {
+        "anchor": "sessionturn",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#status",
       "kind": "docsection",
       "label": "Status",
@@ -24596,12 +24694,32 @@
       }
     },
     {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#turnrole",
+      "kind": "docsection",
+      "label": "TurnRole",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#turnrole",
+      "attrs": {
+        "anchor": "turnrole",
+        "level": "3"
+      }
+    },
+    {
       "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
       "kind": "docsection",
       "label": "UndeclaredSeed",
       "source": "docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
       "attrs": {
         "anchor": "undeclaredseed",
+        "level": "3"
+      }
+    },
+    {
+      "id": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#unrecorded",
+      "kind": "docsection",
+      "label": "Unrecorded",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md#unrecorded",
+      "attrs": {
+        "anchor": "unrecorded",
         "level": "3"
       }
     },
@@ -32476,6 +32594,16 @@
       }
     },
     {
+      "id": "docsection:docs/reference/config.md#jobs",
+      "kind": "docsection",
+      "label": "jobs",
+      "source": "docs/reference/config.md#jobs",
+      "attrs": {
+        "anchor": "jobs",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:docs/reference/config.md#knowledge",
       "kind": "docsection",
       "label": "knowledge",
@@ -39756,6 +39884,16 @@
       }
     },
     {
+      "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-interface-before-any-job-forks",
+      "kind": "docsection",
+      "label": "Declare the interface before any job forks",
+      "source": "internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-interface-before-any-job-forks",
+      "attrs": {
+        "anchor": "declare-the-interface-before-any-job-forks",
+        "level": "2"
+      }
+    },
+    {
       "id": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#fork-one-job-per-unit-of-work",
       "kind": "docsection",
       "label": "Fork one job per unit of work",
@@ -41734,6 +41872,24 @@
         "anchor": "what-each-host-publishes",
         "level": "2"
       }
+    },
+    {
+      "id": "file:.claude/settings.json",
+      "kind": "file",
+      "label": ".claude/settings.json",
+      "source": ".claude/settings.json"
+    },
+    {
+      "id": "file:.codex/hooks.json",
+      "kind": "file",
+      "label": ".codex/hooks.json",
+      "source": ".codex/hooks.json"
+    },
+    {
+      "id": "file:.cursor/hooks.json",
+      "kind": "file",
+      "label": ".cursor/hooks.json",
+      "source": ".cursor/hooks.json"
     },
     {
       "id": "file:MAGUS.md",
@@ -60966,6 +61122,14 @@
       "provenance": ".claude/skills"
     },
     {
+      "source": "dir:.claude",
+      "target": "file:.claude/settings.json",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".claude/settings.json"
+    },
+    {
       "source": "dir:.claude/skills",
       "target": "dir:.claude/skills/magus-local-development",
       "relation": "contains",
@@ -60996,6 +61160,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": ".claude/skills/magus-skill-authoring/SKILL.md"
+    },
+    {
+      "source": "dir:.codex",
+      "target": "file:.codex/hooks.json",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".codex/hooks.json"
+    },
+    {
+      "source": "dir:.cursor",
+      "target": "file:.cursor/hooks.json",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".cursor/hooks.json"
     },
     {
       "source": "dir:benchmarks",
@@ -74551,6 +74731,14 @@
     },
     {
       "source": "doc:docs/glossary.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
       "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
@@ -74943,6 +75131,22 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",
+      "target": "dir:harnesses",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:AGENTS.md",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/concepts/cache/output-refs.md",
       "relation": "references",
       "confidence": "extracted",
@@ -75097,6 +75301,38 @@
       "source": "doc:docs/guides/integrations/agents.md",
       "target": "docsection:docs/guides/integrations/agents.md#agents",
       "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "file:.claude/settings.json",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "file:.codex/hooks.json",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "file:.cursor/hooks.json",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "file:magusfile.buzz",
+      "relation": "documents",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents.md"
@@ -95847,6 +96083,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-multi-agent.md",
       "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
@@ -97028,6 +97272,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal/agent/skills/magus-memory/SKILL.md"
+    },
+    {
+      "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
     },
     {
       "source": "doc:internal/agent/skills/magus-multi-agent/SKILL.md",
@@ -105335,6 +105587,14 @@
     },
     {
       "source": "docsection:docs/glossary.md#sessions-and-leases",
+      "target": "docsection:docs/glossary.md#run",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "docsection:docs/glossary.md#sessions-and-leases",
       "target": "docsection:docs/glossary.md#session",
       "relation": "contains",
       "confidence": "extracted",
@@ -105672,6 +105932,14 @@
     {
       "source": "docsection:docs/guides/integrations/agents.md#mcp",
       "target": "docsection:docs/guides/integrations/agents.md#why-a-daemon-not-a-wrapper",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "docsection:docs/guides/integrations/agents.md#set-up-your-host",
+      "target": "docsection:docs/guides/integrations/agents.md#this-repository-as-a-worked-example",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -108591,6 +108859,14 @@
     },
     {
       "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
+      "target": "docsection:docs/reference/api/job/v1alpha1/job.md#completiongate",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
       "target": "docsection:docs/reference/api/job/v1alpha1/job.md#job",
       "relation": "contains",
       "confidence": "extracted",
@@ -108608,6 +108884,14 @@
     {
       "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
       "target": "docsection:docs/reference/api/job/v1alpha1/job.md#jobrelease",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/job/v1alpha1/job.md#messages",
+      "target": "docsection:docs/reference/api/job/v1alpha1/job.md#jobresult",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -109518,6 +109802,14 @@
       "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#enums",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#turnrole",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#command",
       "relation": "contains",
@@ -109568,6 +109860,14 @@
     {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getoutputresponse",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivityrequest",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -109647,6 +109947,22 @@
     },
     {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#sessionactivity",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#sessionturn",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#streameventsrequest",
       "relation": "contains",
       "confidence": "extracted",
@@ -109664,6 +109980,14 @@
     {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#undeclaredseed",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#messages",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#unrecorded",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -109688,6 +110012,14 @@
     {
       "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#methods",
       "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getoutput",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#methods",
+      "target": "docsection:docs/reference/api/viewer/v1alpha1/viewer.md#getsessionactivity",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -114959,6 +115291,14 @@
     },
     {
       "source": "docsection:docs/reference/config.md#configuration",
+      "target": "docsection:docs/reference/config.md#jobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/config.md"
+    },
+    {
+      "source": "docsection:docs/reference/config.md#configuration",
       "target": "docsection:docs/reference/config.md#knowledge",
       "relation": "contains",
       "confidence": "extracted",
@@ -119776,6 +120116,14 @@
     {
       "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
       "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-criteria-magus-can-check-for-you",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "internal/agent/skills/magus-multi-agent/SKILL.md"
+    },
+    {
+      "source": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#splitting-work-across-agents",
+      "target": "docsection:internal/agent/skills/magus-multi-agent/SKILL.md#declare-the-interface-before-any-job-forks",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -142153,6 +142501,22 @@
     },
     {
       "source": "project:.",
+      "target": "dir:.codex",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".codex"
+    },
+    {
+      "source": "project:.",
+      "target": "dir:.cursor",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": ".cursor"
+    },
+    {
+      "source": "project:.",
       "target": "dir:benchmarks",
       "relation": "contains",
       "confidence": "extracted",
@@ -142174,6 +142538,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd"
+    },
+    {
+      "source": "project:.",
+      "target": "dir:harnesses",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "harnesses"
     },
     {
       "source": "project:.",

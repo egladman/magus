@@ -105,6 +105,7 @@ func TestBoundWorkerCannotRewriteThePlan(t *testing.T) {
 		"parent":     func(u *types.Job) { u.Parent = "adj/other" },
 		"model":      func(u *types.Job) { u.Model = "principal" },
 		"read_only":  func(u *types.Job) { u.ReadOnly = true },
+		"deadline":   func(u *types.Job) { u.Deadline = 1 << 40 },
 		"completion_gates": func(u *types.Job) {
 			u.CompletionGates = []types.CompletionGate{{ID: "gate", Check: types.LeaseCheck{Target: "ci", Project: "."}}}
 		},

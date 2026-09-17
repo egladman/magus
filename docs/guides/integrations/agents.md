@@ -91,6 +91,28 @@ remains an option where a native event contract is not available.
 [Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
 what it costs you.
 
+### This repository as a worked example
+
+The magus repository wires every shipped provider on itself and commits what
+that writes, so the wiring can be read whole rather than assembled from the
+pages above. Its maintainers do not use every host; the files for the others are
+kept as examples. `magus agent harness verify` reports whether each is still what
+its spell writes, and the root tests grade the committed hook configs against
+each host's vendored schema.
+
+| file                                                                                         | what it shows                                                  |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [`magusfile.buzz`](https://github.com/egladman/magus/blob/main/magusfile.buzz)               | the four `magus\harness.provider(...)` calls that select hosts |
+| [`.claude/settings.json`](https://github.com/egladman/magus/blob/main/.claude/settings.json) | Claude Code guard hooks, as the spell writes them              |
+| [`.codex/hooks.json`](https://github.com/egladman/magus/blob/main/.codex/hooks.json)         | Codex guard hooks                                              |
+| [`.cursor/hooks.json`](https://github.com/egladman/magus/blob/main/.cursor/hooks.json)       | Cursor hooks, all routed through one script                    |
+| [`AGENTS.md`](https://github.com/egladman/magus/blob/main/AGENTS.md)                         | the managed skills block between its `magus:skills` markers    |
+| [`harnesses/`](https://github.com/egladman/magus/tree/main/harnesses)                        | the JSON descriptor form of the same four hosts                |
+
+Installed skills are not committed, because `magus agent install` regenerates
+them from the binary. The two under `.claude/skills/` that are committed are
+written by hand for working on magus itself.
+
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the files Claude Code

@@ -24,7 +24,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/job/v1alpha1/job.proto.
  */
 export const file_magus_job_v1alpha1_job: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEikgEKDlJ1bkpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSJAoDam9iGAQgASgLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYiLvAwoDSm9iEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHcnVubmluZxgDIAEoCBIsCghsYXN0X3J1bhgEIAEoCzIaLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSdW4SMAoGdGFyZ2V0GAUgASgLMiAubWFndXMuam9iLnYxYWxwaGExLlJlc291cmNlU2l6ZRIKCgJpZBgGIAEoCRItCgZob2xkZXIYByABKA4yHS5tYWd1cy5qb2IudjFhbHBoYTEuSm9iSG9sZGVyEg0KBXN0YXRlGAggASgJEhAKCGNyaXRlcmlhGAkgASgJEg4KBnBhcmVudBgKIAEoCRINCgVtb2RlbBgLIAEoCRINCgVjaGVjaxgMIAEoCRITCgt3cml0ZV9wYXRocxgNIAMoCRISCgpkZW55X3BhdGhzGA4gAygJEhIKCnJlYWRfcGF0aHMYDyADKAkSEgoKZGVwZW5kc19vbhgQIAMoCRIRCglyZWFkX29ubHkYESABKAgSEgoKY2hlY2twb2ludBgSIAEoCRIwCghyZWxlYXNlcxgTIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZWxlYXNlEg8KB2NyZWF0ZWQYFCABKAMSDwoHdXBkYXRlZBgVIAEoAyI/CgpKb2JSZWxlYXNlEgwKBHBhdGgYASABKAkSDgoGZGlnZXN0GAIgASgJEhMKC3JlbGVhc2VkX2F0GAMgASgDIkwKCkpvYk92ZXJsYXASDQoFam9iX2EYASABKAkSDQoFam9iX2IYAiABKAkSDwoHcGF0aHNfYRgDIAMoCRIPCgdwYXRoc19iGAQgAygJIsUBCgZKb2JSdW4SFQoNaW52b2NhdGlvbl9pZBgBIAEoCRIsCghlbmRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoIZHVyYXRpb24YAyABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SCgoCb2sYBCABKAgSDQoFZXJyb3IYBSABKAkSFQoNaXRlbXNfcmVtb3ZlZBgGIAEoAxIXCg9ieXRlc19yZWNsYWltZWQYByABKAMiNgoMUmVzb3VyY2VTaXplEhIKCnNpemVfYnl0ZXMYASABKAMSEgoKaXRlbV9jb3VudBgCIAEoAyI8Cg1SdW5Kb2JSZXF1ZXN0EisKBG5hbWUYASABKAlCHbpIGnIYMhZeam9icy9bYS16XVthLXowLTktXSokIkQKD0xpc3RKb2JzUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgCIAEoCSKEAQoQTGlzdEpvYnNSZXNwb25zZRIlCgRqb2JzGAEgAygLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSMAoIb3ZlcmxhcHMYAyADKAsyHi5tYWd1cy5qb2IudjFhbHBoYTEuSm9iT3ZlcmxhcCppCgtTdWJtaXRTdGF0ZRIcChhTVUJNSVRfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZTVUJNSVRfU1RBVEVfU1VCTUlUVEVEEAESIAocU1VCTUlUX1NUQVRFX0FMUkVBRFlfUlVOTklORxACKlYKCUpvYkhvbGRlchIaChZKT0JfSE9MREVSX1VOU1BFQ0lGSUVEEAASFQoRSk9CX0hPTERFUl9EQUVNT04QARIWChJKT0JfSE9MREVSX1NFU1NJT04QAjK0AQoKSm9iU2VydmljZRJVCghMaXN0Sm9icxIjLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1JlcXVlc3QaJC5tYWd1cy5qb2IudjFhbHBoYTEuTGlzdEpvYnNSZXNwb25zZRJPCgZSdW5Kb2ISIS5tYWd1cy5qb2IudjFhbHBoYTEuUnVuSm9iUmVxdWVzdBoiLm1hZ3VzLmpvYi52MWFscGhhMS5SdW5Kb2JSZXNwb25zZULTAQoWY29tLm1hZ3VzLmpvYi52MWFscGhhMUIISm9iUHJvdG9QAVpFZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvam9iL3YxYWxwaGExO2pvYnYxYWxwaGExogIDTUpYqgISTWFndXMuSm9iLlYxYWxwaGExygISTWFndXNcSm9iXFYxYWxwaGEx4gIeTWFndXNcSm9iXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIUTWFndXM6OkpvYjo6VjFhbHBoYTFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEikgEKDlJ1bkpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSJAoDam9iGAQgASgLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYiLuBAoDSm9iEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHcnVubmluZxgDIAEoCBIsCghsYXN0X3J1bhgEIAEoCzIaLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSdW4SMAoGdGFyZ2V0GAUgASgLMiAubWFndXMuam9iLnYxYWxwaGExLlJlc291cmNlU2l6ZRIKCgJpZBgGIAEoCRItCgZob2xkZXIYByABKA4yHS5tYWd1cy5qb2IudjFhbHBoYTEuSm9iSG9sZGVyEg0KBXN0YXRlGAggASgJEhAKCGNyaXRlcmlhGAkgASgJEg4KBnBhcmVudBgKIAEoCRINCgVtb2RlbBgLIAEoCRINCgVjaGVjaxgMIAEoCRITCgt3cml0ZV9wYXRocxgNIAMoCRISCgpkZW55X3BhdGhzGA4gAygJEhIKCnJlYWRfcGF0aHMYDyADKAkSEgoKZGVwZW5kc19vbhgQIAMoCRIRCglyZWFkX29ubHkYESABKAgSEgoKY2hlY2twb2ludBgSIAEoCRIwCghyZWxlYXNlcxgTIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZWxlYXNlEg8KB2NyZWF0ZWQYFCABKAMSDwoHdXBkYXRlZBgVIAEoAxI8ChBjb21wbGV0aW9uX2dhdGVzGBYgAygLMiIubWFndXMuam9iLnYxYWxwaGExLkNvbXBsZXRpb25HYXRlEi0KBnJlc3VsdBgXIAEoCzIdLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSZXN1bHQSEAoIZGVhZGxpbmUYGCABKAMikgEKDkNvbXBsZXRpb25HYXRlEgoKAmlkGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEgwKBGtpbmQYAyABKAkSDgoGZXhwZWN0GAQgASgJEg0KBWNoZWNrGAUgASgJEg0KBXBhdGhzGAYgAygJEg8KB3N5bWJvbHMYByADKAkSEgoKZGVwZW5kc19vbhgIIAMoCSJRCglKb2JSZXN1bHQSFQoNY2hhbmdlZF9wYXRocxgBIAMoCRIYChB1bnJlc29sdmVkX3Jpc2tzGAIgAygJEhMKC2Rlc2NlbmRhbnRzGAMgAygJIj8KCkpvYlJlbGVhc2USDAoEcGF0aBgBIAEoCRIOCgZkaWdlc3QYAiABKAkSEwoLcmVsZWFzZWRfYXQYAyABKAMiTAoKSm9iT3ZlcmxhcBINCgVqb2JfYRgBIAEoCRINCgVqb2JfYhgCIAEoCRIPCgdwYXRoc19hGAMgAygJEg8KB3BhdGhzX2IYBCADKAkixQEKBkpvYlJ1bhIVCg1pbnZvY2F0aW9uX2lkGAEgASgJEiwKCGVuZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCghkdXJhdGlvbhgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIKCgJvaxgEIAEoCBINCgVlcnJvchgFIAEoCRIVCg1pdGVtc19yZW1vdmVkGAYgASgDEhcKD2J5dGVzX3JlY2xhaW1lZBgHIAEoAyI2CgxSZXNvdXJjZVNpemUSEgoKc2l6ZV9ieXRlcxgBIAEoAxISCgppdGVtX2NvdW50GAIgASgDIjwKDVJ1bkpvYlJlcXVlc3QSKwoEbmFtZRgBIAEoCUIdukgachgyFl5qb2JzL1thLXpdW2EtejAtOS1dKiQiRAoPTGlzdEpvYnNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJIoQBChBMaXN0Sm9ic1Jlc3BvbnNlEiUKBGpvYnMYASADKAsyFy5tYWd1cy5qb2IudjFhbHBoYTEuSm9iEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCRIwCghvdmVybGFwcxgDIAMoCzIeLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JPdmVybGFwKmkKC1N1Ym1pdFN0YXRlEhwKGFNVQk1JVF9TVEFURV9VTlNQRUNJRklFRBAAEhoKFlNVQk1JVF9TVEFURV9TVUJNSVRURUQQARIgChxTVUJNSVRfU1RBVEVfQUxSRUFEWV9SVU5OSU5HEAIqVgoJSm9iSG9sZGVyEhoKFkpPQl9IT0xERVJfVU5TUEVDSUZJRUQQABIVChFKT0JfSE9MREVSX0RBRU1PThABEhYKEkpPQl9IT0xERVJfU0VTU0lPThACMrQBCgpKb2JTZXJ2aWNlElUKCExpc3RKb2JzEiMubWFndXMuam9iLnYxYWxwaGExLkxpc3RKb2JzUmVxdWVzdBokLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1Jlc3BvbnNlEk8KBlJ1bkpvYhIhLm1hZ3VzLmpvYi52MWFscGhhMS5SdW5Kb2JSZXF1ZXN0GiIubWFndXMuam9iLnYxYWxwaGExLlJ1bkpvYlJlc3BvbnNlQtMBChZjb20ubWFndXMuam9iLnYxYWxwaGExQghKb2JQcm90b1ABWkVnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9qb2IvdjFhbHBoYTE7am9idjFhbHBoYTGiAgNNSliqAhJNYWd1cy5Kb2IuVjFhbHBoYTHKAhJNYWd1c1xKb2JcVjFhbHBoYTHiAh5NYWd1c1xKb2JcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhRNYWd1czo6Sm9iOjpWMWFscGhhMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
  * RunJobResponse reports what the submission did: whether the job started or coalesced, the
@@ -214,6 +214,29 @@ export type Job = Message<"magus.job.v1alpha1.Job"> & {
    * @generated from field: int64 updated = 21;
    */
   updated: bigint;
+
+  /**
+   * CompletionGates are the declared machine-verifiable acceptance conditions, empty on a job
+   * that named none beyond its primary check. See CompletionGate.
+   *
+   * @generated from field: repeated magus.job.v1alpha1.CompletionGate completion_gates = 22;
+   */
+  completionGates: CompletionGate[];
+
+  /**
+   * Result is what the holder filed on exit, unset until it has.
+   *
+   * @generated from field: magus.job.v1alpha1.JobResult result = 23;
+   */
+  result?: JobResult;
+
+  /**
+   * Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
+   * set no timeout.
+   *
+   * @generated from field: int64 deadline = 24;
+   */
+  deadline: bigint;
 };
 
 /**
@@ -222,6 +245,95 @@ export type Job = Message<"magus.job.v1alpha1.Job"> & {
  */
 export const JobSchema: GenMessage<Job> = /*@__PURE__*/
   messageDesc(file_magus_job_v1alpha1_job, 1);
+
+/**
+ * CompletionGate is one machine-verifiable condition a job's completion is checked against,
+ * projected from types.CompletionGate. kind names WHAT it examines and expect names what must
+ * be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is
+ * rendered as the command that runs it, the same way Job.check is - the wire never carries the
+ * unrendered form, so a client needs no second parser for it.
+ *
+ * @generated from message magus.job.v1alpha1.CompletionGate
+ */
+export type CompletionGate = Message<"magus.job.v1alpha1.CompletionGate"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * @generated from field: string kind = 3;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string expect = 4;
+   */
+  expect: string;
+
+  /**
+   * @generated from field: string check = 5;
+   */
+  check: string;
+
+  /**
+   * @generated from field: repeated string paths = 6;
+   */
+  paths: string[];
+
+  /**
+   * @generated from field: repeated string symbols = 7;
+   */
+  symbols: string[];
+
+  /**
+   * @generated from field: repeated string depends_on = 8;
+   */
+  dependsOn: string[];
+};
+
+/**
+ * Describes the message magus.job.v1alpha1.CompletionGate.
+ * Use `create(CompletionGateSchema)` to create a new message.
+ */
+export const CompletionGateSchema: GenMessage<CompletionGate> = /*@__PURE__*/
+  messageDesc(file_magus_job_v1alpha1_job, 2);
+
+/**
+ * JobResult is what a holder filed when it exited: the paths it changed, the risks it left
+ * unresolved, and the jobs it spawned. A projection of types.JobResult's console-facing half;
+ * the schema version and per-gate evidence stay server-side, since nothing renders them yet.
+ *
+ * @generated from message magus.job.v1alpha1.JobResult
+ */
+export type JobResult = Message<"magus.job.v1alpha1.JobResult"> & {
+  /**
+   * @generated from field: repeated string changed_paths = 1;
+   */
+  changedPaths: string[];
+
+  /**
+   * @generated from field: repeated string unresolved_risks = 2;
+   */
+  unresolvedRisks: string[];
+
+  /**
+   * @generated from field: repeated string descendants = 3;
+   */
+  descendants: string[];
+};
+
+/**
+ * Describes the message magus.job.v1alpha1.JobResult.
+ * Use `create(JobResultSchema)` to create a new message.
+ */
+export const JobResultSchema: GenMessage<JobResult> = /*@__PURE__*/
+  messageDesc(file_magus_job_v1alpha1_job, 3);
 
 /**
  * JobRelease is a path a job gave up, and the version of it the next one inherits. The
@@ -254,7 +366,7 @@ export type JobRelease = Message<"magus.job.v1alpha1.JobRelease"> & {
  * Use `create(JobReleaseSchema)` to create a new message.
  */
 export const JobReleaseSchema: GenMessage<JobRelease> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 2);
+  messageDesc(file_magus_job_v1alpha1_job, 4);
 
 /**
  * JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
@@ -294,7 +406,7 @@ export type JobOverlap = Message<"magus.job.v1alpha1.JobOverlap"> & {
  * Use `create(JobOverlapSchema)` to create a new message.
  */
 export const JobOverlapSchema: GenMessage<JobOverlap> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 3);
+  messageDesc(file_magus_job_v1alpha1_job, 5);
 
 /**
  * JobRun is one completed execution of a job.
@@ -355,7 +467,7 @@ export type JobRun = Message<"magus.job.v1alpha1.JobRun"> & {
  * Use `create(JobRunSchema)` to create a new message.
  */
 export const JobRunSchema: GenMessage<JobRun> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 4);
+  messageDesc(file_magus_job_v1alpha1_job, 6);
 
 /**
  * ResourceSize is the current magnitude of a job's target resource, for a caller to show how much
@@ -384,7 +496,7 @@ export type ResourceSize = Message<"magus.job.v1alpha1.ResourceSize"> & {
  * Use `create(ResourceSizeSchema)` to create a new message.
  */
 export const ResourceSizeSchema: GenMessage<ResourceSize> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 5);
+  messageDesc(file_magus_job_v1alpha1_job, 7);
 
 /**
  * @generated from message magus.job.v1alpha1.RunJobRequest
@@ -405,7 +517,7 @@ export type RunJobRequest = Message<"magus.job.v1alpha1.RunJobRequest"> & {
  * Use `create(RunJobRequestSchema)` to create a new message.
  */
 export const RunJobRequestSchema: GenMessage<RunJobRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 6);
+  messageDesc(file_magus_job_v1alpha1_job, 8);
 
 /**
  * Paginated by contract so growth never forces a breaking change, though the registry is a
@@ -430,7 +542,7 @@ export type ListJobsRequest = Message<"magus.job.v1alpha1.ListJobsRequest"> & {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 7);
+  messageDesc(file_magus_job_v1alpha1_job, 9);
 
 /**
  * @generated from message magus.job.v1alpha1.ListJobsResponse
@@ -463,7 +575,7 @@ export type ListJobsResponse = Message<"magus.job.v1alpha1.ListJobsResponse"> & 
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 8);
+  messageDesc(file_magus_job_v1alpha1_job, 10);
 
 /**
  * SubmitState is the disposition of a trigger RPC. Both values are SUCCESS outcomes returned in a

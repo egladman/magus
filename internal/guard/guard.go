@@ -231,8 +231,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			// The one question asked is about the SESSION, not the prompt: whether the
 			// multi-agent brief was read before work was handed out. That reads a marker
 			// file and no prose, which is what lets it live on this path.
-			spawnGate := hint.NewGate(hookLocation(ctx, deps).cacheDir, who.Session)
-			if reason := denySpawnWithoutBrief(spawnGate, req.ObservesSkillLoads); reason != "" {
+			spawnLocation := hookLocation(ctx, deps)
+			spawnGate := hint.NewGate(spawnLocation.cacheDir, who.Session)
+			if reason := denySpawnWithoutBrief(spawnGate, req.ObservesSkillLoads, spawnLocation.workspace); reason != "" {
 				appendHookSpawn(ctx, deps, env, who)
 				return Verdict{
 					SchemaVersion: agent.GuardSchemaVersion,
@@ -358,7 +359,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// reason: the two above answer whether this agent may touch the file at all, and
 		// there is nothing to learn before a write that is refused anyway.
 		if verdict.Decision != "deny" {
-			if reason := denyBuzzWriteWithoutSkill(markers, req.ObservesSkillLoads, input); reason != "" {
+			if reason := denyBuzzWriteWithoutSkill(markers, req.ObservesSkillLoads, location.workspace, input); reason != "" {
 				verdict.Decision, verdict.Reason = "deny", reason
 				verdict.Rule = string(denyBuzzUnbriefed)
 			}
@@ -448,7 +449,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Outside Evaluate for the same reason the two rules above are: it reads session
 		// state (which skills have loaded) rather than the line alone, and Evaluate's
 		// verdict is a pure function of what was handed in.
-		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(markers, req.ObservesSkillLoads, input, shellD)); {
+		switch v = rankBuzzAuthor(v, denyBuzzAuthorWithoutSkill(markers, req.ObservesSkillLoads, location.workspace, input, shellD)); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
 			// reach them: whole-tree VCS, a pipe or redirect of magus's own output, a raw

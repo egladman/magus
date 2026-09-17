@@ -4,12 +4,52 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
+	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
+
+func (r *runner) checkJobTree() types.DoctorCheck {
+	return checkJobTree(r.ws.Root(), r.opts.cfg.Jobs, time.Now().Unix())
+}
+
+// checkJobTree reports live jobs nobody is left to wait on. It only reports: magus never
+// transitions a row, so the finding names the exit command a person runs instead.
+func checkJobTree(root string, limits config.Jobs, now int64) types.DoctorCheck {
+	const name = "job-tree"
+
+	rows, err := job.NewStore(job.Location{Root: root}).List()
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorFail, Evidence: types.EvidenceUnknown,
+			Message: fmt.Sprintf("could not read the job store: %v", err)}
+	}
+	flagged := types.NewJobList(rows).Flag(now, limits.StaleAfter)
+	var parts, details []string
+	if len(flagged.Orphans) > 0 {
+		parts = append(parts, fmt.Sprintf("%d live job(s) whose root job has ended: %s", len(flagged.Orphans), strings.Join(flagged.Orphans, ", ")))
+	}
+	if len(flagged.Stale) > 0 {
+		parts = append(parts, fmt.Sprintf("%d live job(s) not updated within jobs.stale_after (%s): %s",
+			len(flagged.Stale), limits.StaleAfter, strings.Join(flagged.Stale, ", ")))
+	}
+	if len(parts) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every live job has a live root and a recent update"}
+	}
+	seen := map[string]bool{}
+	for _, id := range append(slices.Clone(flagged.Orphans), flagged.Stale...) {
+		if !seen[id] {
+			seen[id] = true
+			details = append(details, "if nobody holds it: "+hint.JobExit.With(id))
+		}
+	}
+	details = append(details, "magus reports these and never ends a row itself")
+	return types.DoctorCheck{Name: name, Status: types.DoctorAdvice, Message: strings.Join(parts, "; "), Details: details}
+}
 
 func (r *runner) checkBoundLease() types.DoctorCheck {
 	return checkBoundLease(r.runCtx(), r.cacheDir(), r.ws.Root(), workspaceHarnesses(r.ws)...)
