@@ -134,7 +134,7 @@ round, while a red PR from a risk you knowingly deferred is the system working.
 
 ## Workflows
 
-Seven, in `.github/workflows/`. The trigger does not follow from the name, and
+Six, in `.github/workflows/`. The trigger does not follow from the name, and
 the table that used to live here drifted twice. Read the files; this lists how
 each job builds magus:
 

@@ -1,8 +1,9 @@
 name: CI
 
-# Validates a change. Nothing here publishes an artifact, and no job asks for a write
-# scope beyond the pull-request comment the advisor posts - the top-level default is
-# contents: read and every job keeps it.
+# Validates a change. Nothing here publishes an artifact. The top-level default is
+# contents: read; the advisor holds pull-requests: write for its comment, and the plan
+# holds contents: write for the one thing it pushes: regenerated output on a pull request
+# a human labelled FIX_LABEL.
 #
 # Four workflows, one trigger each, and the name says which: ci.yaml validates (pull
 # request), cd.yaml ships what a merge produces (main push), release.yaml cuts a release
@@ -68,6 +69,10 @@ env:
   # The cost is real: output from concurrently running projects interleaves, so
   # read a shard log by target rather than top to bottom.
   MAGUS_LOG_STREAM: '1'
+  # STANDING consent for magus to push regenerated output to a pull request's branch:
+  # present means "keep this branch settled against main", so the same PR is fixed again
+  # the next time main breaks it. Remove the label to stop.
+  FIX_LABEL: 'magus:regenerate:requested'
 
 jobs:
   plan:
@@ -75,10 +80,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
-      contents: read
-      # The runs API behind last_green_run, and the only reason this job holds a
-      # scope the others do not. Read-only: it looks up run history, never writes.
+      # The runs API behind last_green_run. Read-only: it looks up run history.
       actions: read
+      # The regenerate steps at the end: they push to a labelled pull request's branch and
+      # comment on it. A fork's token stays read-only whatever this says, and the fixers
+      # refuse a fork before they try.
+      contents: write
+      pull-requests: write
     outputs:
       matrix:        ${{ steps.plan.outputs.matrix }}
       count:         ${{ steps.plan.outputs.count }}
@@ -188,6 +196,102 @@ jobs:
         # nothing and the step's status came from ci-shard's complaint about it.
         shell: bash
         run: magus affected ci --plan | magus run ci-shard:gha --no-default-charms
+
+      # The regenerate steps come LAST, after the verdict for this commit is decided, so
+      # they may leave any checkout behind. !cancelled() rather than success(): the plan
+      # failing on drift is exactly when a labelled branch wants regenerating. None of them
+      # gates: continue-on-error, because a failed fix leaves the PR as it already was.
+      #
+      # The label is read live, not from the event payload, so labelling a pull request and
+      # re-running this job acts on it. A push by the Actions token starts no workflow run,
+      # so a fix cannot trigger the run that would fix it again.
+      - id: regenerate
+        name: Look for the regenerate label
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          labels=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name')
+          if grep -qxF "$FIX_LABEL" <<<"$labels"; then
+            echo "requested=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The fixers push, so they need the head BRANCH by name: the merge commit checked out
+      # above is base-already-merged, and the fixers refuse to push it.
+      - name: Check out the pull request branch
+        if: ${{ !cancelled() && steps.regenerate.outputs.requested == 'true' }}
+        continue-on-error: true
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git clean -fd
+          git checkout --force -B "$HEAD_REF" "$HEAD_SHA"
+
+      # Only the writing advisors: the read-only ones run in the advisor job.
+      - name: Regenerate the pull request
+        if: ${{ !cancelled() && steps.regenerate.outputs.requested == 'true' }}
+        continue-on-error: true
+        uses: ./.github/actions/advice
+        with:
+          fix-merge-conflict: 'true'
+          fix-generated-drift: 'true'
+          fix-label: ${{ env.FIX_LABEL }}
+          merge-conflicts: 'false'
+          hand-edited-generated: 'false'
+          target-outputs: 'false'
+          doctor: 'false'
+          version-floor: 'false'
+          blast-radius: 'false'
+          unclaimed: 'false'
+          skip-cache: 'false'
+          conformance: 'false'
+          missing-target: 'false'
+          api-surface: 'false'
+          first-contribution: 'false'
+
+      # A base branch moving fires NO pull_request event, so a labelled pull request that
+      # this push put in conflict hears about it only from here. Generated drift is not
+      # chased: it comes from the PR's own commits, which arrive as a pull_request run.
+      #
+      # mergeable is GitHub's own answer to "did main just break this", recomputed when the
+      # base moves; filtering on it is what keeps a push from regenerating every labelled PR.
+      # UNKNOWN means still computing, so poll rather than read it as fine.
+      - name: Settle labelled pull requests this push put in conflict
+        if: ${{ !cancelled() && github.event_name == 'push' }}
+        continue-on-error: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BUZZ_INCLUDE_PATH: ${{ github.workspace }}/.github/actions/advice
+        run: |
+          set -euo pipefail
+          for _ in 1 2 3 4 5 6; do
+            gh pr list --repo "$REPO" --state open --base main --label "$FIX_LABEL" --limit 50 \
+              --json number,headRefName,isCrossRepository,mergeable > prs.json
+            [ "$(jq '[.[] | select(.mergeable == "UNKNOWN")] | length' prs.json)" = "0" ] && break
+            sleep 10
+          done
+          jq -r '.[] | select(.mergeable == "CONFLICTING" and (.isCrossRepository | not))
+                     | "\(.number) \(.headRefName)"' prs.json > conflicting.txt
+          echo "labelled and open: $(jq length prs.json), conflicting: $(wc -l < conflicting.txt)"
+
+          # The scripts, not the advice action: an action step cannot loop, and each pull
+          # request needs its own branch checked out by name.
+          status=0
+          while read -r number ref; do
+            git fetch --no-tags origin "+refs/heads/$ref:refs/remotes/origin/$ref"
+            git merge --abort 2>/dev/null || true
+            git clean -fd
+            git checkout --force -B "$ref" "origin/$ref"
+            PR_NUMBER="$number" PR_BASE=main PR_HEAD_REF="$ref" PR_HEAD_REPO="$REPO" \
+              FIX_CONFLICTS=true magus buzz "$BUZZ_INCLUDE_PATH/fix-merge-conflict.buzz" </dev/null \
+              || { echo "::warning::could not settle #$number"; status=1; }
+          done < conflicting.txt
+          exit "$status"
 
   ci:
     name: magus shard ${{ matrix.shard }}
@@ -395,9 +499,8 @@ jobs:
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
       #
-      # The fixers are not here: they write, and this job is contents: read. regenerate.yaml
-      # runs them on the label - offer-fix-label is what tells the conflict comment that
-      # workflow exists.
+      # The fixers are not here: they write, and the plan job runs them on the label.
+      # offer-fix-label is what tells the conflict comment that job exists.
       - uses: ./.github/actions/advice
         with:
           offer-fix-label: 'true'
