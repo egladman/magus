@@ -138,6 +138,9 @@ A path this job may write; repeatable or comma\-separated
 \fB\-\-base\fR \fImagus vcs checkpoint -o name\fR
 The base this checkout landed on, as `magus vcs checkpoint \-o name` prints it (default: read from this checkout)
 .TP
+\fB\-\-session\fR \fIstring\fR
+The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's
+.TP
 \fB\-\-vacate\fR
 Give up the lease this checkout holds, so a later exec can take a different one. A no\-op if it holds none; refused while the job is declared or running
 .RE

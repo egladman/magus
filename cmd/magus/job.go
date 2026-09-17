@@ -105,8 +105,12 @@ func lsJobs(root string, args []string) error {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus ls jobs [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count and")
-			fmt.Fprintln(os.Stderr, "check, followed by every pair that claims the same path.")
+			fmt.Fprintln(os.Stderr, "Print every job as a tree, each with its state, model, write-path count, what")
+			fmt.Fprintln(os.Stderr, "its fork could prove about its lane (LANES) and its check, followed by every")
+			fmt.Fprintln(os.Stderr, "pair that claims the same path.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "LANES is what the checkout looked like when the job was forked: alone (nothing")
+			fmt.Fprintln(os.Stderr, "else live was bound there), disjoint, or overlapping.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -157,7 +161,7 @@ func printJobTree(out io.Writer, report types.JobList) {
 		return
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tCHECK")
+	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tLANES\tCHECK")
 	marks := map[string][]string{}
 	for word, ids := range map[string][]string{"overdue": report.Overdue, "orphan": report.Orphans, "stale": report.Stale} {
 		for _, id := range ids {
@@ -170,10 +174,10 @@ func printJobTree(out io.Writer, report types.JobList) {
 			slices.Sort(m)
 			state += " (" + strings.Join(m, ", ") + ")"
 		}
-		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\n",
+		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
 			string(row.lease.Holder.OrSession()), state, orDash(row.lease.Model),
-			len(row.lease.WritePaths), orDash(row.lease.Validation))
+			len(row.lease.WritePaths), orDash(string(row.lease.LaneProof)), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
 
@@ -520,6 +524,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.CompletionGates, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
+	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths}
+	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	proof := job.LaneProofFor(store, plan, row.ID, candidate)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
@@ -528,7 +537,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			row.Checkpoint = token
 		}
 	}
-	stored, err := store.Update(ctx, row.ID, job.Declare(row, globalCfg.Jobs.DefaultTimeout))
+	declare := job.Declare(row, globalCfg.Jobs.DefaultTimeout)
+	stored, err := store.Update(ctx, row.ID, func(u *types.Job) {
+		declare(u)
+		u.LaneProof = proof
+	})
 	if err != nil {
 		return err
 	}
@@ -563,10 +576,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 // believes it is on is a holder reporting a belief; the divergence this records is only
 // worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
-	var base string
+	var base, session string
 	var vacate bool
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+		fs.StringVar(&session, "session", "", "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's, as it was before")
 		fs.BoolVar(&vacate, "vacate", false, "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none.")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
@@ -578,6 +592,10 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "them as a fact rather than a refusal.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "With no job, it prints the one this checkout holds.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--session names the session taking it, so several sessions sharing one checkout")
+			fmt.Fprintln(os.Stderr, "each hold their own lease and each gets its own lane graded. Pass the id this")
+			fmt.Fprintln(os.Stderr, "agent host reports to its hooks, or the binding is the whole checkout's.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--vacate gives that binding up instead of taking one, so the checkout can exec a")
 			fmt.Fprintln(os.Stderr, "different job (or the daemon's next assignment). Refused while the job is still")
@@ -607,7 +625,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		if cerr != nil {
 			return fmt.Errorf("magus job exec --vacate: %w", cerr)
 		}
-		return jobExecVacate(root, cacheDir)
+		return jobExecVacate(root, job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)})
 	}
 	if len(pos) > 1 {
 		return usagef("magus job exec: takes at most one job")
@@ -621,15 +639,16 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
+	here := job.Checkout{CacheDir: cacheDir, Session: strings.TrimSpace(session)}
 	if len(pos) == 0 {
-		if id := job.LeaseFromMarker(cacheDir); id != "" {
+		if id := here.Marker(); id != "" {
 			fmt.Printf("this checkout holds the lease on %s\n", id)
 			return nil
 		}
 		fmt.Println("this checkout holds no job")
 		return nil
 	}
-	if err := job.BindLease(cacheDir, pos[0]); err != nil {
+	if err := here.Bind(pos[0]); err != nil {
 		return fmt.Errorf("magus job exec: %w", err)
 	}
 	if strings.TrimSpace(base) == "" {
@@ -667,8 +686,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	}
 }
 
-// jobExecVacate gives up the lease this checkout holds, so a later exec can take a
-// different one (or the same one again, which BindLease already permitted).
+// jobExecVacate gives up the lease this session holds here, so a later exec can take a
+// different one (or the same one again, which Bind already permitted). It releases only
+// this session's binding: a sibling session working in the same checkout keeps its own.
 //
 // Refused only while the row says work is still IN FLIGHT (declared or running): a
 // holder that walks away from those two leaves its next write ungraded from here on,
@@ -680,8 +700,8 @@ func jobExec(ctx context.Context, root string, args []string) error {
 // store cannot find or read is treated the same permissive way: nothing here declares a
 // boundary left to protect, the same fail-open reading the guard gives an unreadable
 // ledger.
-func jobExecVacate(root, cacheDir string) error {
-	id := job.LeaseFromMarker(cacheDir)
+func jobExecVacate(root string, here job.Checkout) error {
+	id := here.Marker()
 	if id == "" {
 		fmt.Println("this checkout holds no job; nothing to vacate")
 		return nil
@@ -697,7 +717,7 @@ func jobExecVacate(root, cacheDir string) error {
 			}
 		}
 	}
-	cleared, err := job.VacateLease(cacheDir)
+	cleared, err := here.Vacate()
 	if err != nil {
 		return fmt.Errorf("magus job exec --vacate: %w", err)
 	}

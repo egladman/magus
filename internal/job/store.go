@@ -32,7 +32,6 @@ import (
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/repoid"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -800,111 +799,6 @@ func rowFields(row types.Job) (map[string]json.RawMessage, error) {
 		out[name] = raw
 	}
 	return out, nil
-}
-
-// LeaseMarkerName is the file, in a checkout's cache dir, that binds a lease to THAT
-// checkout (`magus session lease <id>` writes it through BindLease). It exists because
-// the environment cannot carry a lease into a hook: a host runs its hooks with its own
-// environment, so a worker exporting BAGGAGE for its shell is invisible to the guard
-// judging its commands. A worker with its own worktree has one checkout, and a file
-// in it is the one channel the worker's shell, the host's hook and the sandbox all
-// read. BAGGAGE and an explicit --lease still win; the marker is the last resort.
-const LeaseMarkerName = "lease"
-
-// ActingLease is the lease the current process acts under, for the checkout whose cache
-// dir is cacheDir: the W3C baggage a worker inherits, else the marker BindLease wrote,
-// else "". The guard hook and the sandbox both resolve through this one function so the
-// two enforcement tiers cannot disagree about who is acting.
-func ActingLease(cacheDir string) string {
-	lease, marker := trail.LeaseFromEnv(), LeaseFromMarker(cacheDir)
-	// The MARKER wins. It is written by `magus job exec` into the checkout that took the
-	// lease, so it is a fact about where the work is happening; the env member is a claim
-	// the worker makes about itself, and letting a claim override the record meant a
-	// worker bound to one job could be graded against another job's lanes by exporting
-	// its id.
-	//
-	// Not a fail-open case: a checkout with neither answer is a question magus cannot ask
-	// and stays advisory, which is unchanged. This is the case where magus CAN ask and got
-	// two answers, and preferring the one nobody can rewrite from a shell is the whole of
-	// the fix. LeaseConflict reports the disagreement so a caller can say so.
-	if marker != "" {
-		return marker
-	}
-	return lease
-}
-
-// LeaseConflict names the two ids when a checkout's marker and the environment disagree,
-// or returns false. The env member is ignored in that case (see ActingLease); this is how
-// a surface tells the reader that, rather than grading against one and never mentioning
-// the other.
-func LeaseConflict(cacheDir string) (marker, claimed string, conflicted bool) {
-	marker, claimed = LeaseFromMarker(cacheDir), trail.LeaseFromEnv()
-	return marker, claimed, marker != "" && claimed != "" && marker != claimed
-}
-
-// LeaseFromMarker reads the lease bound to the checkout whose cache dir is cacheDir,
-// or "" when none is bound or the marker does not hold a lease id.
-func LeaseFromMarker(cacheDir string) string {
-	if cacheDir == "" {
-		return ""
-	}
-	raw, err := os.ReadFile(filepath.Join(cacheDir, LeaseMarkerName))
-	if err != nil {
-		return ""
-	}
-	id := strings.TrimSpace(string(raw))
-	if !types.ValidJobID(id) {
-		return ""
-	}
-	return id
-}
-
-// BindLease writes the marker binding lease id to the checkout whose cache dir is
-// cacheDir, creating the dir if needed. An id ValidJobID rejects is refused, so the
-// marker never holds a value LeaseFromMarker would read back as nothing.
-//
-// BINDING IS ONE-WAY for a worker. A session already acting under a lease cannot bind
-// itself to a different one, because that is the whole boundary: a worker that can name
-// the orchestrator's row is graded against the orchestrator's paths from its next command.
-// Re-binding the lease it already holds is allowed and does nothing, so a worker that
-// runs its bootstrap twice is not refused. Only an UNBOUND session, which is the
-// orchestrator or the person, binds a checkout.
-func BindLease(cacheDir, id string) error {
-	if !types.ValidJobID(id) {
-		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only)", id)
-	}
-	if bound := ActingLease(cacheDir); bound != "" && bound != id {
-		return &RefusedError{
-			Lease: id, Actor: Actor{Lease: bound},
-			Rule: fmt.Sprintf("re-binding it to %s is how a worker would be graded against another lease's paths", id),
-		}
-	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return fmt.Errorf("job: bind lease: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(cacheDir, LeaseMarkerName), []byte(id+"\n"), 0o644); err != nil {
-		return fmt.Errorf("job: bind lease: %w", err)
-	}
-	return nil
-}
-
-// VacateLease clears the marker binding a lease to the checkout whose cache dir is
-// cacheDir, so a later BindLease can take a different one (or the same one again,
-// which it already permitted). Returns the lease it cleared, or "" when the checkout
-// held none.
-//
-// Idempotent by construction: a checkout with no marker already reads back "" from
-// LeaseFromMarker, and removing a file that is already gone is not an error here, so a
-// repeated vacate, or one racing a sibling process clearing the same marker, is a no-op
-// rather than a failure. This is the file half only; whether the lease it named is one a
-// caller SHOULD be giving up is judged by the caller (see `magus job exec --vacate`),
-// which reads the row before calling this.
-func VacateLease(cacheDir string) (string, error) {
-	id := LeaseFromMarker(cacheDir)
-	if err := os.Remove(filepath.Join(cacheDir, LeaseMarkerName)); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("job: vacate lease: %w", err)
-	}
-	return id, nil
 }
 
 // Delete removes ONE row and returns it, or reports that no such row exists.

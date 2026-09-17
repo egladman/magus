@@ -48,6 +48,7 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 	if err != nil {
 		return types.Job{}, err
 	}
+	proof := types.JobLaneProof("")
 	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
 		candidate := types.Job{ID: id}
 		merge(&candidate)
@@ -57,12 +58,19 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 		if err := RefuseAmbiguousSymbols(ctx, candidate.CompletionGates, read); err != nil {
 			return types.Job{}, err
 		}
+		if err := RefuseSharedCheckout(store, rows, id, candidate); err != nil {
+			return types.Job{}, err
+		}
+		proof = LaneProofFor(store, rows, id, candidate)
 	}
 	return store.Update(ctx, id, func(u *types.Job) {
 		created := u.Created == 0
 		merge(u)
 		if created && u.Deadline == 0 && limits.DefaultTimeout > 0 {
 			u.Deadline = deadlineAfter(limits.DefaultTimeout)
+		}
+		if proof != "" {
+			u.LaneProof = proof
 		}
 	})
 }

@@ -147,6 +147,9 @@ them and magus describe job prints one job's terms.
 **--base** *magus vcs checkpoint -o name*
 : The base this checkout landed on, as \`magus vcs checkpoint -o name\` prints it (default: read from this checkout)
 
+**--session** *string*
+: The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's
+
 **--vacate**
 : Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running
 

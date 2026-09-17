@@ -1839,6 +1839,12 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:  "fork",
 			Short: "Declare one job, from flags or a JSON record on stdin",
+			Description: "Declare one job: what its holder is handed, where it may write, and the one check it runs. " +
+				"It refuses a job whose write paths cover a file the workspace has to LOAD (any project's magusfile.buzz, " +
+				"its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound " +
+				"to this checkout, because a half-saved one of those stops the workspace loading for every job here at " +
+				"once: give that job its own worktree. Every other fork records what it could prove about its lane against " +
+				"the jobs already here, in lane_proof, which `magus ls jobs` prints.",
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
@@ -1866,9 +1872,10 @@ them and magus describe job prints one job's terms.`,
 		{
 			Name:        "exec",
 			Short:       "Take the lease on a job here, and record the base this checkout landed on",
-			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
+			Description: "Write the job id into the checkout's cache dir, where the guard hook reads it when neither --lease nor BAGGAGE names one, and record the base this tree is on. The binding is the SESSION's when --session names one, so several sessions in one checkout each hold their own. With no job, print the one this checkout holds. --vacate gives up the binding instead.",
 			Flags: []Flag{
 				{Name: "base", Kind: FlagString, Doc: "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)"},
+				{Name: "session", Kind: FlagString, Doc: "The session taking the job, as this agent host names it. Several sessions in one checkout each hold their own lease; without it the binding is the whole checkout's"},
 				{Name: "vacate", Kind: FlagBool, Doc: "Give up the lease this checkout holds, so a later exec can take a different one. A no-op if it holds none; refused while the job is declared or running"},
 			},
 		},
