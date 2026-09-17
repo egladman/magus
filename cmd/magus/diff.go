@@ -301,9 +301,10 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	switch {
 	case rf.NoTui, !enabled:
 		return false
-	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
-	// prompt to copy. They are requests for an answer rather than for somewhere to read.
-	case rf.Ack, rf.Impact, rf.Prompt:
+	// All four END in output the viewer has nowhere to put: a receipt count, a report, a
+	// prompt to copy, and a bump. They are requests for an answer rather than for somewhere
+	// to read.
+	case rf.Ack, rf.Impact, rf.Prompt, rf.Baseline != "":
 		return false
 	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
 	// drives the terminal itself. A revision range is neither: it is a tree state magus can
@@ -399,7 +400,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if tui {
 		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base)
+	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline)
 	if err != nil {
 		return err
 	}
@@ -541,8 +542,26 @@ const branchOverlapLimit = 20
 // One definition, because the TUI and the one-shot renderer must show the same facts: two
 // callers folding on their own overlays is how "the console said 12 files reference this and
 // the CLI said nothing" happens.
-func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base string) (types.Diff, error) {
-	rev, err := m.Diff(ctx, paths)
+//
+// baselinePath, when set, is a `graph export --symbols -o json` the changed symbols are
+// compared against for the API delta.
+func annotateDiff(ctx context.Context, m *magus.Magus, content reviewedContent, paths []string, base, baselinePath string) (types.Diff, error) {
+	var rev types.Diff
+	var err error
+	if baselinePath == "" {
+		rev, err = m.Diff(ctx, paths)
+	} else {
+		var baseline types.KnowledgeGraphOutput
+		raw, rerr := os.ReadFile(baselinePath)
+		if rerr != nil {
+			return types.Diff{}, fmt.Errorf("magus diff: read --baseline: %w", rerr)
+		}
+		if uerr := json.Unmarshal(raw, &baseline); uerr != nil {
+			return types.Diff{}, fmt.Errorf("magus diff: decode --baseline %s (expected `%s` output): %w",
+				baselinePath, hint.GraphExport.With("--symbols", "-o", "json"), uerr)
+		}
+		rev, err = m.DiffAgainst(ctx, paths, baseline, baselinePath)
+	}
 	if err != nil {
 		return types.Diff{}, err
 	}
@@ -733,7 +752,7 @@ func attachDiffSession(ctx context.Context, m *magus.Magus, content reviewedCont
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
 	}
-	rev, err := annotateDiff(ctx, m, content, paths, base)
+	rev, err := annotateDiff(ctx, m, content, paths, base, "")
 	if err != nil {
 		return types.Diff{}, nil, nil, err
 	}
@@ -1233,6 +1252,12 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 
 	fmt.Println(diffCountsLine(rev, showGenerated))
 	fmt.Println()
+	if lines := diffAPILines(rev.API); len(lines) > 0 {
+		for _, line := range lines {
+			fmt.Println(line)
+		}
+		fmt.Println()
+	}
 
 	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
 	// note it arrived after the reader had already read the first entry as the most dangerous
@@ -1341,6 +1366,27 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	}
 }
 
+// diffAPILines states the semver bump a baseline comparison proved, or nothing without one.
+//
+// The floor leads because it is the only claim magus can prove; the likely bump follows with
+// the count that raised it, so a reader who knows the signature change is compatible can see
+// exactly what they are overruling.
+func diffAPILines(api *types.DiffAPI) []string {
+	if api == nil {
+		return nil
+	}
+	head := "API: at least " + api.Floor
+	if api.Likely != api.Floor {
+		head += fmt.Sprintf(", likely %s (%d public signature(s) changed)", api.Likely, api.Signature)
+	}
+	return []string{
+		head + " against " + api.Base,
+		fmt.Sprintf("  public symbols: %d added, %d removed, %d re-signed, %d changed in body only",
+			api.Added, api.Removed, api.Signature, api.Body),
+		"  a floor, not a verdict: behavior can change under an unchanged signature, so raise it freely",
+	}
+}
+
 // diffFileFacts is what magus knows about one changed file, one claim per line.
 //
 // One definition for the printer and the interactive reader, so both show the SAME sentences:
@@ -1370,6 +1416,21 @@ func diffFileFacts(f types.DiffFile) []string {
 			facts = append(facts, "PUBLIC SURFACE: used by "+strings.Join(across, ", "))
 		default:
 			facts = append(facts, "PUBLIC SURFACE")
+		}
+		// Only the changes a consumer can see. A private helper listed here would sit beside
+		// the bump it did not move, and read as the reason for it.
+		for _, s := range f.Symbols {
+			if !s.ModuleAPI && len(s.ExternalProjects) == 0 {
+				continue
+			}
+			switch s.Change {
+			case types.DiffChangeRemoved:
+				facts = append(facts, "REMOVED "+s.Qualified)
+			case types.DiffChangeAdded:
+				facts = append(facts, "ADDED "+s.Qualified)
+			case types.DiffChangeSignature:
+				facts = append(facts, "SIGNATURE "+s.Qualified+": `"+s.BaseSignature+"` -> `"+s.Signature+"`")
+			}
 		}
 	}
 	if n := f.ReachOr(0); f.Reach != nil && n > 0 {

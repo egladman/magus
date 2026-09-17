@@ -57,17 +57,9 @@ const (
 	DiffReadStale = "stale"
 )
 
-// DiffSurface is how far a changed symbol's referents reach, which is the question a
-// semver decision actually turns on. It is EVIDENCE, never a verdict: magus reports where a
-// symbol is used and lets the reader decide the bump.
-//
-// It deliberately stops short of claiming a break. Deciding that needs signature
-// compatibility, which needs a base-side index magus does not have (the symbol shards
-// describe the working tree, not history) and language semantics magus does not model. A
-// tool that guessed at it would be wrong in exactly the cases that matter most (an
-// unchanged signature with changed behavior, a widened parameter type), and a
-// breaking-change warning nobody trusts is worse than none. The per-language answer belongs
-// in a spell op (an apidiff), whose output joins this same review.
+// DiffSurface is how far a changed symbol's referents reach, which is half of the question a
+// semver decision turns on. The other half is what the change did to the symbol, which is
+// DiffChange, and it needs a base graph to answer.
 const (
 	// DiffSurfaceInternal means every referent lives inside the defining project. A change
 	// here cannot break a consumer that the workspace does not also rebuild.
@@ -81,6 +73,58 @@ const (
 	// to be ignored.
 	DiffSurfaceUnknown = "unknown"
 )
+
+// The DiffChange constants say what a change did to one symbol, read by comparing the head
+// graph against a base graph (`magus diff --baseline`). Empty when there was no base to
+// compare against, which must never render as "unchanged".
+//
+// Signatures are the indexer's rendered text, compared byte for byte. magus models no
+// language, so DiffChangeSignature says the declaration text moved, not that it broke: a
+// renamed parameter or a widened type moves it too. That is why it raises a bump's Likely
+// and never its Floor.
+const (
+	// DiffChangeAdded is a symbol the base did not define anywhere in the workspace.
+	DiffChangeAdded = "added"
+	// DiffChangeRemoved is a symbol the base defined in a changed file and the head defines
+	// nowhere. A symbol that moved between files keeps its ID and is not removed.
+	DiffChangeRemoved = "removed"
+	// DiffChangeSignature is a symbol defined on both sides whose declaration text differs.
+	DiffChangeSignature = "signature"
+	// DiffChangeBody is a symbol defined on both sides whose changed lines left its
+	// declaration text alone.
+	DiffChangeBody = "body"
+)
+
+// The DiffBump constants are semver bump sizes, ordered none < patch < minor < major.
+//
+// A bump is a LOWER bound. Evidence can prove a change is at least minor (something public
+// was added) or at least major (something public was removed), and nothing a graph holds can
+// prove a change is at most a patch: behavior moves under an unchanged signature. So a
+// reader may raise any bump magus reports and should never lower one.
+const (
+	DiffBumpNone  = "none"
+	DiffBumpPatch = "patch"
+	DiffBumpMinor = "minor"
+	DiffBumpMajor = "major"
+)
+
+// DiffAPI is what a changeset did to the workspace's public API, against a base graph.
+type DiffAPI struct {
+	// Base names the graph the head was compared against, as the reader supplied it.
+	Base string `json:"base" yaml:"base"`
+	// Floor is the smallest bump the public changes prove: removed is major, added is minor,
+	// any other changed symbol is patch.
+	Floor string `json:"floor" yaml:"floor"`
+	// Likely is Floor raised to major when a public signature's text changed. A separate
+	// field because it is the one claim here that can be wrong, and a reader deciding the
+	// bump needs to see which of the two carried it.
+	Likely string `json:"likely" yaml:"likely"`
+	// Added, Removed, Signature and Body count the PUBLIC symbols in each DiffChange.
+	Added     int `json:"added"     yaml:"added"`
+	Removed   int `json:"removed"   yaml:"removed"`
+	Signature int `json:"signature" yaml:"signature"`
+	Body      int `json:"body"      yaml:"body"`
+}
 
 // DiffSymbol is one changed symbol with its exposure.
 type DiffSymbol struct {
@@ -105,6 +149,18 @@ type DiffSymbol struct {
 	// the published SDK surface as internal. Conflating the two answers the wrong question:
 	// "who in this workspace breaks" is not "who in the world breaks".
 	ModuleAPI bool `json:"module_api,omitempty" yaml:"module_api,omitempty"`
+	// Change is what this changeset did to the symbol, one of the DiffChange constants, or
+	// empty when the review had no base graph.
+	Change string `json:"change,omitempty" yaml:"change,omitempty"`
+	// Qualified names the symbol through its enclosing declarations (`DiffAPI.Signature`),
+	// read from the ID, so two members sharing a Label stay distinguishable. Set alongside
+	// Change.
+	Qualified string `json:"qualified,omitempty" yaml:"qualified,omitempty"`
+	// Signature and BaseSignature are the declaration as the indexer rendered it on each
+	// side. Either is empty where that side does not define the symbol or its indexer
+	// rendered no declaration.
+	Signature     string `json:"signature,omitempty"      yaml:"signature,omitempty"`
+	BaseSignature string `json:"base_signature,omitempty" yaml:"base_signature,omitempty"`
 }
 
 // DiffChurn is how often this file has been changing, and whether that is accelerating.
@@ -280,6 +336,9 @@ type Diff struct {
 	// coverage run). They are surfaced rather than swallowed: a reader who sees no reach
 	// numbers must be able to tell "nothing depends on this" from "nothing was measured".
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	// API is what the changeset did to the public API, present only when the review was given
+	// a base graph to compare against.
+	API *DiffAPI `json:"api,omitempty" yaml:"api,omitempty"`
 	// Reviewed is the earlier pass this reader already made over these files, when there was one.
 	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
 }

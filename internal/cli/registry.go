@@ -643,6 +643,7 @@ Subcommands (the first argument):
 			{Name: "static", Kind: FlagBool, Doc: "Deprecated alias for --reproducible"},
 			{Name: "select", Kind: FlagString, Doc: "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid"},
 			{Name: "budget", Kind: FlagInt, Default: 50, DefaultAtBind: true, Doc: "Node budget for --select (how many nodes the neighborhood may collect)"},
+			{Name: "symbols", Kind: FlagBool, Doc: "Include every indexed code symbol, which the whole-graph export leaves out; a `magus diff --baseline` needs them"},
 		}},
 		{Name: "stats", Short: "Report the knowledge graph's shape: god nodes, orphans, doc coverage", Flags: []Flag{
 			{Name: "kind", Kind: FlagString, Doc: "Scope every section to one node kind (spell, target, doc, ...)"},
@@ -2021,6 +2022,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
+		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},

@@ -102,6 +102,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
 	{Name: "DiffFile", Type: reflect.TypeFor[types.DiffFile](), RuntimeObject: true},
 	{Name: "DiffReviewed", Type: reflect.TypeFor[types.DiffReviewed](), RuntimeObject: true},
+	{Name: "DiffAPI", Type: reflect.TypeFor[types.DiffAPI](), RuntimeObject: true},
 	{Name: "VCSCheckpoint", Type: reflect.TypeFor[types.VCSCheckpoint](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.

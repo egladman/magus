@@ -996,6 +996,10 @@ func statusLinePath(line string) string {
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
 func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	return m.diff(ctx, paths, diffConfig{})
+}
+
+func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types.Diff, error) {
 	out := types.Diff{Base: "working"}
 
 	entries, err := m.ClassifyFiles(ctx, paths)
@@ -1080,7 +1084,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 			continue
 		}
 		sym := types.DiffSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
-		sym.ModuleAPI = exportedFromModule(s.File, s.Label)
+		sym.ModuleAPI = exportedFromModule(s.File, s.Label, s.Symbol)
 		if graph != nil {
 			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
@@ -1125,6 +1129,13 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 			f.Coverage = &cov
 		}
 	}
+	if cfg.baseline != nil {
+		if indexed {
+			m.attachAPIDelta(&out, byPath, graph, cfg)
+		} else {
+			out.Notes = append(out.Notes, "API delta skipped: no symbol index loaded for this tree, so nothing could be compared against "+cfg.baselineLabel)
+		}
+	}
 
 	out.SortForReading()
 	return out, nil
@@ -1159,8 +1170,9 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 	return out
 }
 
-// exportedFromModule reports whether a symbol defined at path with the given label is
-// reachable from OUTSIDE the module: the boundary a semver bump is actually about.
+// exportedFromModule reports whether a symbol defined at path with the given label and
+// symbol ID is reachable from OUTSIDE the module: the boundary a semver bump is actually
+// about.
 //
 // It is deliberately per-language and deliberately narrow. Go is the only language answered
 // here because Go states export in the language itself (an initial capital) and states
@@ -1173,7 +1185,7 @@ func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 // convention it merely encourages. TypeScript's `export` keyword does not qualify, because
 // what a package actually publishes is decided by its entry points and its `exports` map,
 // which this signature cannot see.
-func exportedFromModule(path, label string) bool {
+func exportedFromModule(path, label, id string) bool {
 	if !strings.HasSuffix(path, ".go") || label == "" {
 		return false
 	}
@@ -1188,6 +1200,11 @@ func exportedFromModule(path, label string) bool {
 	// A test file exports nothing a consumer can import.
 	if strings.HasSuffix(path, "_test.go") {
 		return false
+	}
+	// The ID names the symbol's enclosing declarations too, and Go exports a method or field
+	// only through an exported type.
+	if exported, ok := goDescriptorsExported(id); ok {
+		return exported
 	}
 	r := rune(label[0])
 	return r >= 'A' && r <= 'Z'
