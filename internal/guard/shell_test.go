@@ -155,6 +155,10 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// moment the work stops being yours alone.
 		{command: "git push origin HEAD", context: "magus affected ci"},
 		{command: "git push --force-with-lease", context: "magus affected ci"},
+		// A global option before the subcommand is still a push. Missing it let
+		// `git -C . push` past the push gate, and with it past the person's approval.
+		{command: "git -C . push origin HEAD", context: "magus affected ci"},
+		{command: "git -c push.default=current push", context: "magus affected ci"},
 		// Stage-everything DENIES: `git add <path>` is an exact equivalent, so the
 		// deny costs nothing, and one such call swept 69 files (a regenerated docs
 		// site plus five untouched sources) into a commit about four methods.

@@ -161,6 +161,12 @@ func gitGuard(cmds []hint.Invocation) (ShellVerdict, bool) {
 		if c.Name != "git" || len(c.Args) == 0 {
 			continue
 		}
+		// Read past global options (-C <dir>, -c k=v) for push alone: it is the one
+		// advisory the push gate upgrades to an ask, so a relocated push that slipped by
+		// here would publish without the person being asked.
+		if vcsMutation(c) == "git push" {
+			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+		}
 		sub, rest := c.Args[0], c.Args[1:]
 		switch sub {
 		case "push":

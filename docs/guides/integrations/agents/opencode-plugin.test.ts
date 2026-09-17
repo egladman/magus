@@ -85,6 +85,16 @@ async function hooks() {
       output: { args: Record<string, unknown> },
     ) => Promise<void>;
     "tool.execute.after": (input: { callID: string }, output: { output: string }) => Promise<void>;
+    config: (input: Record<string, unknown>) => Promise<void>;
+    "permission.ask": (
+      input: {
+        type: string;
+        title: string;
+        pattern?: string | string[];
+        metadata: Record<string, unknown>;
+      },
+      output: { status: "ask" | "deny" | "allow" },
+    ) => Promise<void>;
     // Optional, and asserted ABSENT below: magus registers no pre-compaction handler.
     "experimental.session.compacting"?: (
       input: Record<string, never>,
@@ -110,7 +120,16 @@ test("a shell command is judged over stdin by the top-level shell subcommand", a
   assert.equal(calls.length, 1);
   // The exact contract, spelled out rather than pattern-matched: these are the two
   // things that were wrong, and a loose assertion would have passed on both.
-  assert.deepEqual(calls[0].argv, ["shell", "--agent-name", "opencode", "-o", "json"]);
+  // --renders-ask is the claim that an ask never passes through unasked; without it magus
+  // answers every ask with a deny.
+  assert.deepEqual(calls[0].argv, [
+    "shell",
+    "--agent-name",
+    "opencode",
+    "--renders-ask",
+    "-o",
+    "json",
+  ]);
   assert.equal(calls[0].stdin, "git stash");
   assert.ok(
     !calls[0].argv.includes("agent"),
@@ -130,7 +149,15 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     );
   });
 
-  assert.deepEqual(calls[0].argv, ["shell", "--path", "--agent-name", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, [
+    "shell",
+    "--path",
+    "--agent-name",
+    "opencode",
+    "--renders-ask",
+    "-o",
+    "json",
+  ]);
   assert.equal(calls[0].stdin, "gen/index.json");
   // An advise must not throw, and must not be logged either: it is held for the
   // call it judged and appended to that call's own result, which is the only
@@ -215,4 +242,114 @@ test("a verdict from an unknown schema is ignored rather than obeyed", async () 
   });
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /schema 99/);
+});
+
+const ask: Canned = {
+  schema_version: 1,
+  decision: "ask",
+  reason: "pushing abc1234, which no passing gate covers",
+};
+const pushPrompt = { permission: { bash: { "git push": "ask", "git push *": "ask" } } };
+type Status = "ask" | "deny" | "allow";
+
+test("an unknown decision refuses the call, never allows it", async () => {
+  stubBun(() => ({ schema_version: 1, decision: "maybe", reason: "?" }));
+  const h = await hooks();
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "ls" } }),
+    /does not know/,
+  );
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "write", callID: "c2" }, { args: { filePath: "README.md" } }),
+    /does not know/,
+  );
+});
+
+test("an ask on a push reaches OpenCode's prompt when the config asks for push", async () => {
+  stubBun(() => ask);
+  const h = await hooks();
+  await h.config(pushPrompt);
+  await h["tool.execute.before"](
+    { tool: "bash", callID: "c1" },
+    { args: { command: "git push origin HEAD" } },
+  );
+});
+
+test("an ask with no push prompt configured refuses, naming the person's terminal", async () => {
+  stubBun(() => ask);
+  const h = await hooks();
+  await h.config({ permission: { bash: { "git push *": "allow" } } });
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "bash", callID: "c1" }, { args: { command: "git push" } }),
+    /own terminal/,
+  );
+});
+
+test("an ask no push prompt can match refuses", async () => {
+  stubBun(() => ask);
+  const h = await hooks();
+  await h.config(pushPrompt);
+  await assert.rejects(
+    h["tool.execute.before"](
+      { tool: "bash", callID: "c1" },
+      { args: { command: "git -C x push" } },
+    ),
+    /own terminal/,
+  );
+  await assert.rejects(
+    h["tool.execute.before"]({ tool: "write", callID: "c2" }, { args: { filePath: "README.md" } }),
+    /own terminal/,
+  );
+});
+
+test("permission.ask answers a push prompt from the verdict", async () => {
+  const cases: Array<[Canned, Status]> = [
+    [pass, "allow"],
+    [{ schema_version: 1, decision: "advise", context: "gate ran" }, "allow"],
+    [ask, "ask"],
+    [deny, "deny"],
+    [{ schema_version: 1, decision: "maybe" }, "deny"],
+  ];
+  for (const [verdict, want] of cases) {
+    const calls = stubBun(() => verdict);
+    const h = await hooks();
+    const output: { status: Status } = { status: "ask" };
+    await h["permission.ask"](
+      {
+        type: "bash",
+        title: "git push origin HEAD",
+        pattern: ["git push origin HEAD"],
+        metadata: { command: "git push origin HEAD" },
+      },
+      output,
+    );
+    assert.equal(output.status, want, `decision ${verdict.decision}`);
+    assert.equal(calls[0].stdin, "git push origin HEAD");
+  }
+});
+
+test("permission.ask leaves every other prompt to the person", async () => {
+  const calls = stubBun(() => pass);
+  const h = await hooks();
+  const output: { status: Status } = { status: "ask" };
+  await h["permission.ask"](
+    { type: "bash", title: "rm -rf build", metadata: { command: "rm -rf build" } },
+    output,
+  );
+  await h["permission.ask"]({ type: "edit", title: "README.md", metadata: {} }, output);
+  assert.equal(output.status, "ask");
+  assert.equal(calls.length, 0, "a prompt magus did not configure is not judged");
+});
+
+test("permission.ask with no runnable magus keeps the prompt", async () => {
+  stubBun(null);
+  const h = await hooks();
+  const output: { status: Status } = { status: "ask" };
+  await withWarnings(async () => {
+    await h["permission.ask"](
+      { type: "bash", title: "git push", metadata: { command: "git push" } },
+      output,
+    );
+  });
+  assert.equal(output.status, "ask");
 });

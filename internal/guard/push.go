@@ -208,21 +208,30 @@ func builtFrom(version, commit string) bool {
 	return false
 }
 
-// denyPushWithoutGate is the verdict for a push at a commit no green gate covers, or ""
-// when one does.
+// askUnrendered is appended when the verdict would be ask and the caller did not declare
+// that it renders one. Such a hook predates the decision, renders it as nothing, and its
+// host reads nothing as allow, so the push is refused instead of published unasked.
+const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the push is refused instead. " +
+	"Run `magus agent harness apply` or refresh the hook template from the magus docs, then push again; or push from your own terminal."
+
+// gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
+// "ask" for a session no job lease binds, "deny" for one a lease binds, and "" when a gate
+// covers the commit or the question could not be asked.
 //
-// It names the deliberate-publish escape, and that is not a weakness in the rule. A
-// work-in-progress push is legitimate and magus cannot tell one from an oversight, so the
-// rule refuses the SILENT case and lets a caller who says what they are doing through. A
-// deny with no way past it is a deny people disable.
-func denyPushWithoutGate(cover gateCoverage) string {
+// An unbound session is the orchestrator, and publishing work in progress is a call it
+// makes with the person. magus cannot tell a deliberate push from an oversight, so the
+// host's own approval prompt decides. A marker the agent types is not consent.
+//
+// A bound session is a worker. Approving its push would publish from a lane that does not
+// own the branch, so nobody is asked.
+func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, reason string) {
 	var state string
 	switch cover {
-	// Unknown passes. This is the only deny in its tier, so it refuses on evidence or not
-	// at all: no run log, no VCS, or a host magus cannot read the revision from all mean
-	// the question was never asked, and a refusal there is one nobody can clear.
+	// Unknown passes. This rule refuses on evidence or not at all: no run log, no VCS, or a
+	// host magus cannot read the revision from all mean the question was never asked, and
+	// a refusal there is one nobody can clear.
 	case gateUnknown, gatePassed:
-		return ""
+		return "", ""
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
 	case gateFailed:
@@ -230,7 +239,10 @@ func denyPushWithoutGate(cover gateCoverage) string {
 	case gateIncomplete:
 		state = "the `" + string(types.TargetCI) + "` run at this commit never finished, so it is still going or it was killed"
 	}
-	return "pushing a commit no passing gate covers: " + state + ".\n" +
-		"`" + hint.Affected.With(string(types.TargetCI)) + "` runs it, and CI runs the identical command on the identical tree, so a red push pays twice for one answer.\n" +
-		"Publishing work-in-progress deliberately? Say so and push again."
+	head := "pushing " + commit + ", which no passing gate covers: " + state + ".\n"
+	gate := "`" + hint.Affected.With(string(types.TargetCI)) + "` runs the gate, and CI runs the identical command on the identical tree, so a red push pays twice for one answer."
+	if lease != "" {
+		return "deny", head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
+	}
+	return "ask", head + "Approving publishes it as it stands. " + gate
 }

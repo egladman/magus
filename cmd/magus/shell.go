@@ -176,6 +176,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		// Declared by the wiring, because only a host that observes skill loads can
 		// honestly say it does. See guard.denySpawnWithoutBrief.
 		ObservesSkillLoads: sf.ObservesSkillLoads,
+		// Declared by the wiring for the same reason: only a glue that renders the host's
+		// approval prompt can say so, and one that predates ask renders it as an allow.
+		RendersAsk: sf.RendersAsk,
 	})
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter

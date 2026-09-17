@@ -1,0 +1,8 @@
+{
+  "permission": {
+    "bash": {
+      "git push": "ask",
+      "git push *": "ask"
+    }
+  }
+}

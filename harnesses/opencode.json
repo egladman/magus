@@ -8,5 +8,9 @@
   "skills": {
     "paths": [".opencode/skills"],
     "form": "both"
-  }
+  },
+  "prompts": [
+    {"path": "opencode.json", "key": ["permission", "bash", "git push"], "value": "ask"},
+    {"path": "opencode.json", "key": ["permission", "bash", "git push *"], "value": "ask"}
+  ]
 }

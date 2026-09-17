@@ -1,10 +1,14 @@
 package guard
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +39,8 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234-dirty", "pass", "affected", "ci")
 		assert.Equal(t, gatePassed, gateCoverageAt(dir, "abc1234"))
-		assert.Empty(t, denyPushWithoutGate(gateCoverageAt(dir, "abc1234")))
+		decision, _ := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		assert.Empty(t, decision)
 	})
 
 	t.Run("a failed gate is not coverage", func(t *testing.T) {
@@ -50,7 +55,8 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gabc1234", "", "run", "ci", ".")
 		assert.Equal(t, gateIncomplete, gateCoverageAt(dir, "abc1234"))
-		assert.NotContains(t, denyPushWithoutGate(gateCoverageAt(dir, "abc1234")), "RED")
+		_, reason := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		assert.NotContains(t, reason, "RED")
 	})
 
 	t.Run("a green gate at a DIFFERENT commit is not coverage", func(t *testing.T) {
@@ -59,7 +65,8 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 		dir := t.TempDir()
 		runLog(t, dir, "a.jsonl", "v0.4.3-97-gdeadbee", "pass", "affected", "ci")
 		assert.Equal(t, gateAbsent, gateCoverageAt(dir, "abc1234"))
-		assert.NotEmpty(t, denyPushWithoutGate(gateCoverageAt(dir, "abc1234")))
+		decision, _ := gradePushWithoutGate(gateCoverageAt(dir, "abc1234"), "abc1234", "")
+		assert.Equal(t, "ask", decision)
 	})
 
 	t.Run("a green NON-gate run is not coverage", func(t *testing.T) {
@@ -79,8 +86,8 @@ func TestGateCoverageReadsTheRunLog(t *testing.T) {
 
 // TestPushGateStandsDownWithNothingToProve pins that this rule refuses only on evidence.
 //
-// It is the one deny in its tier, so every case where the question could not be ASKED has
-// to pass: a fresh clone with no run log, a host with no VCS to read a revision from, a
+// Every case where the question could not be ASKED has to pass, for the orchestrator and a
+// leased worker alike: a fresh clone with no run log, a host with no VCS to read a revision from, a
 // test fixture. Built without this distinction the rule denied all three, because an
 // unasked question and a failed one shared the zero value.
 func TestPushGateStandsDownWithNothingToProve(t *testing.T) {
@@ -92,7 +99,11 @@ func TestPushGateStandsDownWithNothingToProve(t *testing.T) {
 		"no such directory":  gateCoverageAt(filepath.Join(t.TempDir(), "absent"), "abc1234"),
 	} {
 		assert.Equal(t, gateUnknown, cover, name)
-		assert.Empty(t, denyPushWithoutGate(cover), "%s must not deny", name)
+		for _, lease := range []string{"", "harness/worker"} {
+			decision, reason := gradePushWithoutGate(cover, "abc1234", lease)
+			assert.Empty(t, decision, "%s must neither ask nor deny (lease %q)", name, lease)
+			assert.Empty(t, reason, name)
+		}
 	}
 }
 
@@ -109,4 +120,75 @@ func TestBuiltFromMatchesEitherAbbreviation(t *testing.T) {
 	assert.False(t, builtFrom("", "abc1234"))
 	assert.False(t, builtFrom("v0.4.3-97-gabc1234", ""))
 	assert.False(t, builtFrom("v0.4.3", "abc1234"), "a release build names no commit")
+}
+
+// judgePush runs one push through Judge in a workspace whose run log exists, so a gate
+// missing at HEAD is proven absent rather than unknown. gate, when set, records a finished
+// `affected ci` run with that status at HEAD first.
+func judgePush(t *testing.T, gate, lease string, leases ...types.Job) Verdict {
+	t.Helper()
+	return judgePushFrom(t, true, gate, lease, leases...)
+}
+
+// judgePushFrom is judgePush for a caller that does or does not declare it renders ask.
+func judgePushFrom(t *testing.T, rendersAsk bool, gate, lease string, leases ...types.Job) Verdict {
+	t.Helper()
+	ctx, _ := fleetFixture(t, leases...)
+	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	if gate != "" {
+		runLog(t, runs, "a.jsonl", "v0.4.3-97-gabc1234", gate, "affected", "ci")
+	}
+	deps := Dependencies{HeadCommit: func(context.Context) string { return "abc1234" }}
+	return Judge(ctx, deps, Request{Input: "git push origin HEAD", Lease: lease, RendersAsk: rendersAsk})
+}
+
+// TestAskReachesOnlyACallerThatRendersIt pins the fail-open this closes: a hook installed
+// before the decision existed renders an ask as nothing, and every host reads nothing as
+// allow. A caller that does not declare it renders ask gets a deny that says why.
+func TestAskReachesOnlyACallerThatRendersIt(t *testing.T) {
+	v := judgePushFrom(t, false, "", "")
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Contains(t, v.Reason, "predates approval prompts")
+	assert.Contains(t, v.Reason, "magus agent harness apply")
+	assert.Contains(t, v.Reason, "abc1234", "the refusal still names what it refused")
+
+	gated := judgePushFrom(t, false, "pass", "")
+	assert.Contains(t, []string{"pass", "advise"}, gated.Decision, "a covered push needs no prompt, so an old hook passes it")
+}
+
+// TestUngatedPushAsksTheOrchestrator pins that consent to publish comes from the person,
+// through the host's own prompt. A marker the agent types is not consent, and the deny this
+// replaced promised exactly that escape without implementing it.
+func TestUngatedPushAsksTheOrchestrator(t *testing.T) {
+	v := judgePush(t, "", "")
+	assert.Equal(t, "ask", v.Decision)
+	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Contains(t, v.Reason, "abc1234", "the prompt names the commit it publishes")
+	assert.Contains(t, v.Reason, "no `ci` run is recorded")
+	assert.Contains(t, v.Reason, "Approving publishes")
+	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+
+	failed := judgePush(t, "fail", "")
+	assert.Equal(t, "ask", failed.Decision)
+	assert.Contains(t, failed.Reason, "failed")
+}
+
+// TestUngatedPushDeniesALeasedWorker pins that a bound session is never offered the prompt:
+// approving it would publish from a lane that does not own the branch.
+func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
+	lease := narrowLease()
+	v := judgePush(t, "", lease.ID, lease)
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, string(denyRulePushUngated), v.Rule)
+	assert.Contains(t, v.Reason, lease.ID)
+	assert.Contains(t, v.Reason, "workers do not publish")
+	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+}
+
+// TestGatedPushIsNeverAsked pins that the prompt appears only when consent is needed.
+func TestGatedPushIsNeverAsked(t *testing.T) {
+	v := judgePush(t, "pass", "")
+	assert.Contains(t, []string{"pass", "advise"}, v.Decision)
 }

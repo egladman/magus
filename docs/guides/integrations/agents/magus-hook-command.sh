@@ -18,6 +18,8 @@
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
 #   HOST_ADVISE_BRANCH  the advise arm of that template
+#   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
+#                    front of the PERSON through the host's own approval prompt
 #   __MAGUS_NO_ADVISE  set it when the host has no context-injection channel, so
 #                    an advise renders nothing rather than a reply it rejects
 #   __MAGUS_AGENT_NAME  the agent host name recorded alongside the observation
@@ -53,18 +55,30 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 14
-# magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none
-# magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none
+#
+# An ask reaches the person on both hosts, by different routes. Claude Code takes
+# permissionDecision "ask" from PreToolUse and prompts. Codex parses that value and does
+# not support it: the hook run is marked failed and the call CONTINUES, so on Codex this
+# file never emits it. There the prompt comes from a rules file the codex harness writes
+# (.codex/rules/magus.rules, a prefix_rule on git push with decision "prompt"), and the
+# PermissionRequest event Codex raises before that prompt reaches this same file, which
+# answers allow for a push the gate covers, leaves an ungated one to the person, and
+# denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
+# permission_mode that never asks, a call no rule matches) the ask renders as a deny that
+# names the person's own terminal.
+# magus-guard-template: 15
+# magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none ask=human
+# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=model pass=none ask=human
+# magus-guard-coverage: schema=1 host=claude-code surface=mcp deny=model advise=model pass=none ask=human
 # claude-code's mcp row is real: an mcp__magus__* PreToolUse call carries no tool_input.command,
 # so HOST_EVENT_RAW forwards the whole event instead, and the same hookSpecificOutput reply this
 # file already renders for the command surface carries a deny or an advise on this one too.
-# magus-guard-coverage: schema=1 host=codex surface=mcp deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=codex surface=mcp deny=model advise=model pass=none ask=model
 # Codex PreToolUse matches canonical MCP names such as mcp__magus__*, whose tool_input is
 # an arguments object rather than a command string. The Codex template therefore sets
 # HOST_EVENT_RAW=1 so magus session hook can judge the complete event and render the same
-# hookSpecificOutput deny or advisory as it does for Bash.
+# hookSpecificOutput deny or advisory as it does for Bash. No rule prompts for an MCP call
+# on Codex, so its ask renders as a deny.
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -86,7 +100,8 @@ if [ -n "$__MAGUS_NO_ADVISE" ]; then
 else
   [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
 fi
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ADVISE_BRANCH"'{{end}}'
+# HOST_RESPONSE's default is assembled below, once the event is read: the ask arm depends on
+# which event arrived and on what the host reports about its own approval settings.
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
 # not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
@@ -123,6 +138,97 @@ done
 event=$(cat)
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
 transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
+event_name=$(printf '%s' "$event" | jq -r '.hook_event_name // empty' 2>/dev/null)
+
+# plain_push succeeds when the call is one bare `git push`, the only shape the Codex prompt
+# rule matches. Anything else (a compound line, `git -C dir push`, an MCP call) reaches no
+# rule, so Codex would run it unprompted, and no answer here may assume it prompts.
+plain_push() {
+  [ -z "$HOST_EVENT_RAW" ] || return 1
+  push_line=$(printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH // empty" 2>/dev/null)
+  case $push_line in
+  *[\;\&\|\`\$\(\)\<\>\\]* | *"
+"*) return 1 ;;
+  "git push" | "git push "*) return 0 ;;
+  esac
+  return 1
+}
+
+# codex_cannot_prompt prints why Codex will not put this call in front of the person, and
+# nothing when its own approval prompt will. It walks up from the session directory to the
+# rules file, the same way Codex finds a project's .codex layer.
+codex_cannot_prompt() {
+  mode=$(printf '%s' "$event" | jq -r '.permission_mode // empty' 2>/dev/null)
+  case $mode in
+  bypassPermissions | dontAsk)
+    printf 'this Codex session runs in permission_mode %s, which never prompts' "$mode"
+    return
+    ;;
+  esac
+  plain_push || {
+    printf 'no Codex approval rule matches this call, only a plain git push command'
+    return
+  }
+  rules_dir=$PWD
+  while [ -n "$rules_dir" ]; do
+    if [ -f "$rules_dir/.codex/rules/magus.rules" ]; then
+      grep -q '"git", *"push"' "$rules_dir/.codex/rules/magus.rules" && return
+      break
+    fi
+    rules_dir=${rules_dir%/*}
+  done
+  printf 'no .codex/rules/magus.rules carries the git push prompt rule, which magus agent harness apply --id codex writes'
+}
+
+# Codex is recognized by its event as well as by name, so a Codex wiring that forgot
+# __MAGUS_AGENT_NAME still never receives permissionDecision "ask", which it would run
+# unasked. turn_id is a required field of Codex's published PreToolUse input
+# (testdata/hosts/codex/pre-tool-use.command.input.schema.json) and of its
+# PermissionRequest input; no vendored Claude Code or Cursor schema names it.
+codex=
+if [ "$__MAGUS_AGENT_NAME" = codex ] || [ "$(printf '%s' "$event" | jq -r 'has("turn_id")' 2>/dev/null)" = true ]; then
+  codex=1
+fi
+
+# renders_ask is the --renders-ask claim: this call's reply puts an ask in front of the
+# person, or refuses it, and never lets it through unasked. Only a reply this file assembled
+# can make that claim. A HOST_RESPONSE the reader wrote gets no flag, so magus answers it
+# with a deny rather than a decision it may render as nothing.
+renders_ask=
+
+# The ask arm, per host. The default is Claude Code's prompt. Codex gets a pass-through
+# with the reason as context when its rules will prompt, and a deny otherwise: see the
+# header for why this file never sends Codex permissionDecision "ask".
+if [ -z "$HOST_ASK_BRANCH" ]; then
+  if [ -n "$codex" ]; then
+    ask_blocker=$(codex_cannot_prompt)
+    if [ -z "$ask_blocker" ]; then
+      HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .reason}}}}'
+    else
+      HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print .reason "\n\nThis call needs the approval of the person you work for, and '"$ask_blocker"'. Ask them to run it from their own terminal.")}}}}'
+    fi
+  else
+    HOST_ASK_BRANCH='{{else if eq .decision "ask"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":{{toJson .reason}}}}'
+  fi
+fi
+# A decision this file does not know is refused, never allowed: the guard contract grows,
+# and a copy older than the growth must not read the new verdict as a pass.
+unknown_decision='{{else}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}{{end}}'
+if [ -z "$HOST_RESPONSE" ] && [ "$event_name" = PermissionRequest ]; then
+  # Codex raises PermissionRequest just before its own approval prompt. No decision object
+  # leaves the prompt to the person; allow skips it, and is answered only for a plain push,
+  # because this event fires for every approval Codex asks and a pass from the guard is not
+  # the person's consent to anything else.
+  no_decision='{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}'
+  covered=$no_decision
+  plain_push && covered='{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
+  HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson .reason}}}}}{{else if eq .decision "ask"}}'"$no_decision"'{{else if eq .decision "pass"}}'"$covered"'{{else if eq .decision "advise"}}'"$covered"'{{else}}{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"deny","message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it. Update the hook template from the magus docs.")}}}}}{{end}}'
+  renders_ask=--renders-ask
+fi
+if [ -z "$HOST_RESPONSE" ]; then
+  HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ASK_BRANCH$HOST_ADVISE_BRANCH"'{{else if eq .decision "advise"}}{{else if eq .decision "pass"}}'"$unknown_decision"
+  renders_ask=--renders-ask
+fi
 
 # guard_notice_once succeeds the first time $1 fires in this session and fails on every
 # repeat, so a caller writes `guard_notice_once <family> && printf ...`.
@@ -210,7 +316,11 @@ guard_failure_notice() {
 # cannot tell the cases apart either, because a pass renders empty on purpose. Both
 # together can: a rejected flag prints its usage to STDERR and leaves stdout empty, while
 # any real verdict that is not a pass leaves something on stdout.
-verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
+#
+# --renders-ask rides the attributed call only. A binary too old for it is too old to ask,
+# so the retry dropping it loses nothing.
+# shellcheck disable=SC2086
+verdict=$(guard --agent-name "$__MAGUS_AGENT_NAME" --session "$session" --transcript "$transcript" $renders_ask 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

@@ -722,6 +722,21 @@ func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
 	require.Error(t, enforceVerdict(OutputOptions{Format: FormatJSON}, guard.Verdict{Decision: "deny", Reason: "no"}))
 }
 
+// TestEnforceVerdictBlocksAnAsk pins that an ask stops the call wherever nothing renders the
+// host's prompt. A glue that reads only the exit status would otherwise take the person's
+// approval as already given. The shipped templates read stdout and exit 0 themselves.
+func TestEnforceVerdictBlocksAnAsk(t *testing.T) {
+	err := enforceVerdict(OutputOptions{Format: FormatText}, guard.Verdict{Decision: "ask", Reason: "publish?"})
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, guardDenyExitCode, silent.exitCode)
+
+	var stdout bytes.Buffer
+	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText},
+		guard.Verdict{Decision: "ask", Rule: "push-ungated", Reason: "publish?"}))
+	assert.Equal(t, "ask [push-ungated]: publish?\n", stdout.String())
+}
+
 // TestGuardDenyPrintsItsReasonOnce: text mode already renders the full reason to stdout, and
 // every guard template this repo ships reads the verdict from stdout (one discards stderr
 // outright), so an unconditional stderr copy reached nobody who lacked another channel and

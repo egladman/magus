@@ -77,6 +77,15 @@ fun codex_entries() > [any] {
             ],
         },
         {
+            // Raised just before Codex's own approval prompt. The shared template answers
+            // it from the verdict: allow for a push a gate covers, no decision for an
+            // ungated one (the person decides), deny for a leased worker.
+            "path": ["hooks", "PermissionRequest"],
+            "entries": [
+                codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking approval"),
+            ],
+        },
+        {
             "path": ["hooks", "SessionStart"],
             "entries": [
                 {
@@ -141,6 +150,37 @@ export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
     return codex_mcp();
 }
 
+fun codex_rules_path() > str { return ".codex/rules/magus.rules"; }
+
+// codex_rules makes Codex ask before every git push. Codex hooks cannot ask (a hook ask is
+// parsed, reported as a failure, and the call continues), so the prompt is the rule's, and
+// the PermissionRequest hook above decides whether it reaches the person.
+fun codex_rules() > str {
+    return "# Written by magus agent harness apply --id codex. magus agent harness remove deletes it.\n"
+        + "#\n"
+        + "# Every git push raises an approval request. The magus PermissionRequest hook answers it:\n"
+        + "# a push a passing gate covers is approved without asking, an ungated push is left to\n"
+        + "# the person, and a push from a leased worker is refused.\n"
+        + "prefix_rule(\n"
+        + "    pattern = [\"git\", \"push\"],\n"
+        + "    decision = \"prompt\",\n"
+        + "    justification = \"magus: publishing a commit no passing gate covers needs your approval\",\n"
+        + ")\n";
+}
+
+fun codex_prompts() > [any] {
+    return [
+        {
+            "path": codex_rules_path(),
+            "content": codex_rules(),
+        },
+    ];
+}
+
+export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
+    return codex_prompts();
+}
+
 test "mgs_getName is the harness id apply and verify look up" {
     assert\equal(mgs_getName(), "codex", "id must match magus\\harness.provider wiring and --id");
 }
@@ -171,9 +211,29 @@ test "guard commands name the shared templates with __MAGUS_AGENT_NAME=codex" {
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.sh") != null, "Stop checkpoint");
 }
 
-test "harness_entries covers PreToolUse SessionStart and Stop" {
+test "harness_prompts keeps the git push prompt rule the shared template looks for" {
+    final prompts = codex_prompts();
+    assert\equal(prompts.len(), 1, "one rules file");
+    assert\equal("{prompts[0]["path"]}", ".codex/rules/magus.rules", "project-local Codex rules");
+    assert\isTrue(codex_rules().indexOf("[\"git\", \"push\"]") != null, "magus-hook-command.sh greps this exact pattern");
+    assert\isTrue(codex_rules().indexOf("decision = \"prompt\"") != null, "the rule prompts rather than forbids");
+}
+
+test "PermissionRequest answers Codex's approval with the shared command template" {
     final entries = codex_entries();
-    assert\equal(entries.len(), 3, "three managed path blocks");
+    final pr = entries[1];
+    final pr_path = pr["path"] as [str];
+    assert\equal(pr_path[1], "PermissionRequest", "the event raised before the prompt");
+    final pr_entries = pr["entries"] as [any];
+    assert\equal(pr_entries.len(), 1, "Bash only");
+    assert\equal("{pr_entries[0]["matcher"]}", "Bash", "the push rule matches shell commands");
+    final hooks = pr_entries[0]["hooks"] as [any];
+    assert\equal("{hooks[0]["command"]}", codex_guard_command(), "same template as PreToolUse");
+}
+
+test "harness_entries covers PreToolUse PermissionRequest SessionStart and Stop" {
+    final entries = codex_entries();
+    assert\equal(entries.len(), 4, "four managed path blocks");
     final pre = entries[0];
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
@@ -185,10 +245,10 @@ test "harness_entries covers PreToolUse SessionStart and Stop" {
         assert\equal("{hooks[0]["type"]}", "command", "Codex hook type");
         assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
     }
-    final start = entries[1];
+    final start = entries[2];
     final start_path = start["path"] as [str];
     assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
-    final stop = entries[2];
+    final stop = entries[3];
     final stop_path = stop["path"] as [str];
     assert\equal(stop_path[1], "Stop", "checkpoint");
 }

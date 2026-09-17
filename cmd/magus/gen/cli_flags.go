@@ -481,6 +481,8 @@ const (
 	FlagShellObservesSkillLoads = "observes-skill-loads"
 	// shell: --path
 	FlagShellPath = "path"
+	// shell: --renders-ask
+	FlagShellRendersAsk = "renders-ask"
 	// shell: --session
 	FlagShellSession = "session"
 	// shell: --transcript
@@ -1072,6 +1074,7 @@ type ShellFlags struct {
 	Transcript         string // --transcript
 	Event              string // --event
 	ObservesSkillLoads bool   // --observes-skill-loads
+	RendersAsk         bool   // --renders-ask
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1085,6 +1088,7 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.StringVar(&f.Transcript, FlagShellTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagShellEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	fs.BoolVar(&f.ObservesSkillLoads, FlagShellObservesSkillLoads, false, "This host's wiring reports skill loads to magus, so a rule may require one before a spawn; without it those rules stand down")
+	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	return &f
 }
 
