@@ -1519,6 +1519,14 @@ func ObjectJobOverlap(v types.JobOverlap) vm.Value {
 	return out
 }
 
+func ObjectJobBlock(v types.JobBlock) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("job", vm.StrValue(v.Job))
+	out.MapSet("on", vm.StrValue(v.On))
+	out.MapSet("state", vm.StrValue(string(v.State)))
+	return out
+}
+
 func ObjectJobList(v types.JobList) vm.Value {
 	out := vm.NewMap()
 	itemsJobs := make([]vm.Value, len(v.Jobs))
@@ -1546,6 +1554,11 @@ func ObjectJobList(v types.JobList) vm.Value {
 		itemsStale[indexStale] = vm.StrValue(v.Stale[indexStale])
 	}
 	out.MapSet("stale", vm.ListValue(itemsStale))
+	itemsBlocked := make([]vm.Value, len(v.Blocked))
+	for indexBlocked := range v.Blocked {
+		itemsBlocked[indexBlocked] = ObjectJobBlock(v.Blocked[indexBlocked])
+	}
+	out.MapSet("blocked", vm.ListValue(itemsBlocked))
 	return out
 }
 

@@ -603,12 +603,19 @@ export object JobOverlap {
     pathsB: [str] = [],
 }
 
+export object JobBlock {
+    job: str = "",
+    on: str = "",
+    state: str = "",
+}
+
 export object JobList {
     jobs: [Job] = [],
     overlaps: [JobOverlap] = [],
     overdue: [str] = [],
     orphans: [str] = [],
     stale: [str] = [],
+    blocked: [JobBlock] = [],
 }
 
 export object GateStatus {

@@ -227,33 +227,6 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
         fs\copyDir(site.root + "/assets", site.outDir + "/assets");
     }
 
-    // The README also badges each libs/* project's own coverage.svg, which that project
-    // writes beside itself (ctx.writesFiles("coverage.svg")) rather than into assets/. The
-    // README renders in two places - GitHub and gen/index.html - so the badge path has to
-    // resolve in both; mirroring the repo-relative path into gen/ satisfies both, whereas
-    // rewriting the README to point at assets/ would fix the site by breaking GitHub.
-    // Globbed, not a hardcoded list: a second project adding a badge must not be a silent
-    // 404 that only assetIntegrityCheck notices. Wiped first, like assets/ above, so a
-    // removed project leaves no stale badge behind.
-    //
-    // fs\glob rather than a shell for-loop over `libs/*/coverage.svg`: the glob is the
-    // same pattern, but the destination is derived with fs\dirname/fs\basename instead of
-    // nested command substitution, so it reads as the path arithmetic it is.
-    fs\removeAll(site.outDir + "/libs");
-    foreach (svg in fs\glob(site.root + "/libs/*/coverage.svg")) {
-        final project = fs\basename(fs\dirname(svg.value));
-        fs\mkdirAll(site.outDir + "/libs/" + project);
-        fs\copyFile(svg.value, site.outDir + "/libs/" + project + "/coverage.svg");
-    }
-    // The TypeScript badge is the console's: the console sits at the top of the
-    // TypeScript dependency graph, so its test target is where every lcov report
-    // converges, and it cannot write into assets/ without a dependency cycle.
-    fs\removeAll(site.outDir + "/console/coverage.svg");
-    if (fs\exists(site.root + "/console/coverage.svg")) {
-        fs\mkdirAll(site.outDir + "/console");
-        fs\copyFile(site.root + "/console/coverage.svg", site.outDir + "/console/coverage.svg");
-    }
-
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
     // of every feature module). hljs is a lazy dynamic import() of the same-origin

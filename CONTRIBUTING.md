@@ -439,17 +439,28 @@ page. The magus-specific part is that the root `generate` target already drift-g
 every generated file in the workspace, so a per-artifact drift test in Go is redundant
 and will drift from the real `//go:generate` directive.
 
-## The coverage badge is a record, not a measurement
+## Coverage badges are published, never committed
 
-There are three language badges on the README: `assets/coverage.svg` (Go),
-`assets/buzz-coverage.svg` (Buzz), and `console/coverage.svg` (TypeScript). The Go
-badge is the special case below; Buzz and TypeScript are measured by their own
-test targets (`buzz-test` and `console`'s `test`) and drift-gated the same way
-as any other declared output.
+The README shows three language badges: Go, Buzz, and TypeScript. None of them lives in
+the tree. The CD site job (`.github/workflows/cd.yaml`) measures all three on every push
+to main with `magus run coverage-render .`, renders the SVGs, and publishes them with
+the docs site under `assets/`. Nothing to refresh, nothing to commit.
 
-`assets/coverage.svg` is one figure over the whole Go codebase, and no single machine
-can measure that: 119 non-test files sit behind `//go:build` constraints, so macOS and
-Linux read 67.6% and 66.9% for the same commit. The Go badge is therefore split in two.
+A committed badge cannot be gated consistently. Go coverage differs by platform, and
+Node's line coverage moves with its patch version, so a badge measured on one machine is
+stale on the next. What stays local is a floor per language, each a threshold on the
+figure the suite that just ran measured:
+
+- Go: 70%, in the root `test` target, over this module with generated files removed.
+- Buzz: 62%, in `buzz-test`.
+- TypeScript: 67%, in `console`'s `test`, merged across the console and `libs/textsearch`.
+
+Lower a floor deliberately, in the change that explains why.
+
+The published Go figure is a different number from the floor on purpose: it spans the
+whole Go codebase, and no single machine compiles all of that. 119 non-test files sit
+behind `//go:build` constraints, so macOS and Linux read 67.6% and 66.9% for the same
+commit. The published figure is therefore split in two.
 
 The **denominator** is static. Which statements exist does not depend on where you
 stand, so `coverage.buzz` enumerates every statement block of every Go file in every
@@ -459,26 +470,9 @@ file yields its block table on a Mac and lands in the denominator at zero. Verif
 against a real profile: over the 418 files both a `go test -coverprofile` run and this
 pass covered, the block sets were identical.
 
-The **numerator** is recorded. `coverage/<goos>-<goarch>.json` holds one committed
-record per platform: a digest and a bitset per file, the commit it was measured at, and
-when. `magus run coverage-badge:rw .` refreshes the record for the platform it runs on,
-from the suites that just ran, and writes the badge from every committed record. A
-platform's record is raised by running that command on a machine of that platform, never
-by a container run or a CI matrix: both would re-measure what such a machine already
-measures, and the commit each record names says how current it is.
-
-Two consequences worth knowing:
-
-- **CI never measures.** `coverage-badge` under any charm re-derives the badge from the
-  tree and `coverage/` and fails when it disagrees. That is a pure function, so it runs
-  without a test matrix and anyone can check it. There is no CI test matrix here and
-  there is not going to be one.
-- **An unrefreshed record can only pull the figure down.** A file whose digest no longer
-  matches the tree is reported and credited nothing, rather than misread against the
-  wrong block list. Refresh a platform the way you refresh a lockfile.
-
-The 70% floor in `test` is a different number on purpose: it is this machine's coverage
-of this module, guarding the suite that just ran.
+The **numerator** is what the CD job's Linux run entered, across every Go module's suite.
+A file only another platform compiles stays in the denominator at zero, so the published
+figure can only understate coverage, never overstate it.
 
 ## Workflow targets, not inline shell
 

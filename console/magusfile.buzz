@@ -3,13 +3,12 @@ import "proc";
 // The shared advisory gate. See tools/audit.buzz for why an exit code is the wrong
 // question and what this asks instead.
 import "../tools/audit" as audit;
-import "../tools/drift" as drift;
 import "../tools/toolchain-policy" as policy;
-// Modules the targets use: fs (lcov reads, badge write), os (pnpm/esbuild); the drift
-// coverage.svg gates hash through tools/drift.buzz; the gen/ gate still uses vcs.
+// Modules the targets use: fs (lcov reads), os (pnpm/esbuild), vcs (the gen/ drift gate).
 import "fs";
 import "os";
 import "proc";
+import "std";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
 // Reference drawer imports from source. Affected tracking is glob-based (not
@@ -18,9 +17,7 @@ import "vcs";
 import "project/../libs/textsearch" as textsearch;
 import "project/.." as root;
 
-// badge renders the coverage SVG; cov merges the per-process lcov reports into one figure.
-import "../badge" as badge;
-import "../coverage" as cov;
+// lcov merges the per-process reports into the one figure the floor gates on.
 import "lcov";
 
 // magusfile binds this file's own exported targets (build, typecheck, test, ci); ts adds the
@@ -55,7 +52,6 @@ magus\project({
     // build manifests (package.json + pnpm-lock.yaml, where the esbuild deps are pinned) round it out.
     // pnpm is the package manager - NOT npm; pnpm-workspace.yaml's minimumReleaseAge gate is the reason.
     "sources": ["*.buzz",
-                "../badge.buzz", "../coverage.buzz",
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
@@ -105,7 +101,7 @@ fun install() > void !> any {
 }
 
 // test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests)
-// and renders a line-coverage badge from the run.
+// and holds the merged line coverage above a floor.
 //
 // The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs
 // localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying
@@ -117,9 +113,8 @@ fun install() > void !> any {
 // their LF/LH would count those files once per process and report a number that is not about
 // anything. The merge unions DA: records instead, so a line is found once and hit if any run hit it.
 //
-// Two flags in the test script exist ONLY to make the figure deterministic, because a badge is a
-// committed artifact and the gate below fails on any drift - a measurement that wobbles by a line is
-// a gate that fails on whichever value it was not given. Consecutive runs of an unchanged tree
+// Two flags in the test script exist ONLY to make the figure deterministic: a figure that wobbles by
+// a line between runs of an unchanged tree says nothing about the tree, and an unchanged tree once
 // reported 49.1% and 49.2%.
 //
 //   --splitting (esbuild): without it every test bundle inlines its own copy of each shared module,
@@ -137,43 +132,31 @@ fun install() > void !> any {
 // Both --sourcemap (esbuild, in the test script) and --enable-source-maps (node) are required. With
 // only the first, Node reads the sourcemap for stack traces alone and every record stays
 // SF:.testcache/<bundle>.js - a coverage figure about the bundle rather than the source.
-//
-// The badge sits in this project's own tree, NOT in <root>/assets/ beside the Go one. It cannot:
-// `magus describe project console` reports depends_on=[. libs/textsearch], and writing another
-// project's tree makes THAT project depend on this one, which magus rejects as a 2-cycle
-// (MGS8003/CrossOutputCycle) - correctly, since the root would then have to run both before and after
-// the console. docs/render.buzz copies this one file into the site beside the libs/* badges, so the
-// README's badge path resolves on GitHub and on the site alike.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight, textsearch\test);
-    ctx.writesFiles("coverage.svg");
+    // coverage.txt is the merged figure, declared so a cache hit restores it for the
+    // root's coverage-render, which publishes it and cannot import this project.
+    ctx.writesFiles("coverage.plain.lcov", "coverage.dom.lcov", "coverage.txt");
     install();
     proc\exec("pnpm", ["run", "test"], ".", {});
 
-    // One badge per LANGUAGE, not per project: this figure spans every TypeScript
-    // project with a suite, which today is this one and libs/textsearch. The console
-    // renders it because it sits at the top of the TypeScript dependency graph, so its
-    // test is where every report has already been produced. The textsearch report's
-    // paths are prefixed before the merge: both projects name their files src/..., and
-    // the merge unions DA: records by path, so unprefixed they would read as one file.
+    // One figure per LANGUAGE, not per project: it spans every TypeScript project with a
+    // suite, which today is this one and libs/textsearch. The console measures it because
+    // it sits at the top of the TypeScript dependency graph, so its test is where every
+    // report has already been produced. The textsearch report's paths are prefixed before
+    // the merge: both projects name their files src/..., and the merge unions DA: records
+    // by path, so unprefixed they would read as one file.
     final textsearch_report = fs\readFile(fs\join("..", "libs", "textsearch", "coverage.lcov"))
         .replace("SF:src/", "SF:libs/textsearch/src/");
     final pct = lcov\mergePercent(
         [fs\readFile("coverage.plain.lcov"), fs\readFile("coverage.dom.lcov"), textsearch_report],
         keep: "src/");
-    final wanted = badge\coverage("typescript coverage", percent: pct, radius: 3);
-    if (ctx.hasCharm("rw")) {
-        fs\writeFile("coverage.svg", content: wanted);
-        return;
-    }
-    // Compared, never written (MGS1035). Writing the badge and then noticing it changed
-    // leaves this run's own output in the tree, so the next gate reads it as an edit
-    // nobody made and a re-run passes because the first run fixed what it reported.
-    if (fs\readFile("coverage.svg") != wanted) {
-        // Names the figure this run measured. Node's line coverage differs by a fraction
-        // of a point between platforms, so a badge committed from a developer machine can
-        // be stale on CI by a rounding step nobody can see from the message alone.
-        throw "test: console/coverage.svg is stale; this run measured {pct}%; re-run `magus run test:rw console` and commit the badge";
+    fs\writeFile("coverage.txt", content: pct + "\n");
+    // The floor sits two points under the 69.1% measured when it was set, because the
+    // figure moves by a fraction of a point with the Node patch version.
+    final floor = 67;
+    if (std\parseInt(pct.split(".")[0])! < floor) {
+        throw "test: typescript coverage " + pct + "% is below the {floor}% floor; investigate the regression or lower the floor deliberately";
     }
 }
 

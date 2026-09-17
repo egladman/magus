@@ -16,8 +16,9 @@ gen/search-index.json
 # copy-static (package.json) refreshes it from ../docs/graph.json on every build; the build drift gate
 # keeps it in sync.
 
-# The per-process lcov reports `pnpm run test` writes, one per Node invocation. Intermediate
-# inputs to the merged figure, not the figure: coverage.svg IS committed (its drift gate is what
-# keeps the badge honest), these are regenerated on every run.
+# The per-process lcov reports `pnpm run test` writes, one per Node invocation, and the merged
+# figure test computes from them. The badge is rendered from coverage.txt at deploy time and
+# never committed.
 coverage.plain.lcov
 coverage.dom.lcov
+coverage.txt
