@@ -351,6 +351,14 @@ const attrDefEndLine = "def_end_line"
 // package, read from the moniker rather than guessed from a directory.
 const attrNamespace = "namespace"
 
+// AttrSignature is a symbol's declaration as its indexer rendered it, and AttrBodyDigest a
+// fingerprint of its definition's lines. Compared against a base graph's copies, the pair
+// separates a changed API from a changed body from an untouched symbol in a changed file.
+const (
+	AttrSignature  = "signature"
+	AttrBodyDigest = "body_digest"
+)
+
 // attrLanguage and attrSymbolKind are the attrs a symbol (and, for language, a file) node
 // carries from its index. Named because they are read from four places across two files
 // and a mistyped literal would silently match nothing rather than fail.
