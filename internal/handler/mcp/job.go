@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
@@ -34,6 +35,10 @@ type jobTool struct {
 	store   *job.Store
 	resolve job.AttemptResolver
 	observe job.Observer
+	// limits and symbols hold a fork to the same jobs limits and symbol-gate check the CLI
+	// applies. A zero limits and a nil symbols check nothing.
+	limits  config.Jobs
+	symbols job.SymbolReader
 }
 
 func (t *jobTool) Name() string { return hint.ToolJob.String() }
@@ -59,7 +64,7 @@ func (t *jobTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.
 		// lock. Two concurrent forks on one id (an orchestrator advancing state while a
 		// worker records its checkpoint) would each read the row before the other wrote
 		// it, and the second write would revert the first one's field.
-		stored, err := t.store.Update(ctx, strings.TrimSpace(paramString(req.Params, "id", "")), merge)
+		stored, err := job.ForkMerge(ctx, t.store, strings.TrimSpace(paramString(req.Params, "id", "")), merge, t.limits, t.symbols)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}

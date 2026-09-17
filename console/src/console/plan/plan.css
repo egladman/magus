@@ -16,8 +16,9 @@
 .console-plan-layout {
   display: grid;
   grid-template-columns: 17rem minmax(0, 1fr) 20rem;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   grid-template-areas:
+    "intro intro intro"
     "toolbar toolbar toolbar"
     "tree stage detail";
   height: 100%;
@@ -39,9 +40,23 @@
 .console-plan-layout[data-phase="empty"] .console-plan-detail { display: none; }
 .console-plan-layout[data-phase="empty"] .console-plan-empty {
   display: flex;
-  grid-row: 2;
+  grid-row: 3;
   grid-column: 1 / -1;
 }
+
+/* The one-line explainer under the title: what a job IS (owned work), telling it apart from a run
+   (Runs, one click away). Visible in every phase, empty included - it says what the view is FOR
+   regardless of whether there happens to be anything in it right now. */
+.console-plan-intro {
+  grid-area: intro;
+  margin: 0;
+  padding-block: 0.35rem;
+  padding-inline: var(--console-pad);
+  font-size: 0.72rem;
+  color: var(--pf-t--global--text--color--subtle);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-plan-intro__link { font-size: inherit; }
 
 /* Compact, so it does not tower over the summary line beside it - the same treatment (and the
    same reason) as the settings sheet's view toggle. PF's default ToggleGroup is 37px against a
@@ -118,12 +133,40 @@
    and the run control keeps its natural width so the id beside it still gets the whole row. */
 .console-plan-list__row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 0.3rem;
   margin: 0;
   padding-inline-end: 0.4rem;
 }
 .console-plan-list__run { flex: 0 0 auto; }
+/* The GOALS line: criteria and parent, under the mark/id/meta line rather than crowded into it.
+   flex-basis 100% on a wrapping row is what forces it onto its own line regardless of how much
+   room the row above left over - the standard "second line in a flex row" trick, cheaper than a
+   second grid row per item. */
+.console-plan-list__goal {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-inline-start: calc(0.4rem + var(--console-plan-depth, 0) * 0.6rem);
+  padding-inline-end: 0.5rem;
+  padding-block-end: 0.25rem;
+  font-size: 0.68rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-list__goal-criteria {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-plan-list__goal-parent {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  white-space: nowrap;
+}
 .console-plan-list__runstate {
   flex: 0 0 auto;
   font-size: 0.66rem;
@@ -335,6 +378,14 @@
   fill: var(--pf-t--global--text--color--subtle);
   font-size: 8px;
 }
+/* KIND + truncated GOAL, the card's own answer to the same question the list row's meta/goal
+   lines answer. Smaller than the id above it - it is context for the mark and id, not a second
+   headline. */
+.console-plan-node__goal {
+  fill: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 8px;
+}
 
 /* ---- the detail sheet ----------------------------------------------------- */
 
@@ -399,6 +450,24 @@
   font-size: 0.66rem;
   color: var(--pf-t--global--text--color--subtle);
 }
+/* The declared completion gates: an id, the kind+expect pair that says what must be true, and the
+   subject (a check rendered as its command, a path glob, or a symbol) as its own line below - the
+   same two-tier shape the released-paths list uses, for the same reason (a long check command
+   must not squeeze the id it belongs to). */
+.console-plan-detail__gates { margin: 0; padding: 0; list-style: none; }
+.console-plan-detail__gate { display: flex; flex-direction: column; padding: 0.2rem 0; }
+.console-plan-detail__gateid { font-size: 0.74rem; overflow-wrap: anywhere; }
+.console-plan-detail__gatecond { font-size: 0.66rem; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__gatesubject {
+  margin: 0.1rem 0 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.7rem;
+  overflow-wrap: anywhere;
+}
+/* Unresolved risks are prose a holder wrote, not paths - a plain bulleted list rather than the
+   chip treatment pathField gives something a reader searches or compares. */
+.console-plan-detail__risks { margin: 0; padding-inline-start: 1.1rem; }
+.console-plan-detail__risk { font-size: 0.74rem; overflow-wrap: anywhere; padding: 0.1rem 0; }
 .console-plan-detail__runlist { margin: 0; padding: 0; list-style: none; }
 .console-plan-detail__run {
   display: flex;
@@ -422,6 +491,7 @@
   .console-plan-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
+      "intro"
       "toolbar"
       "tree"
       "detail";

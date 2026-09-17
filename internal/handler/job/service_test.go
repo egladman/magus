@@ -192,6 +192,25 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 		row.Checkpoint = "60dc9151"
 		row.WritePaths = []string{"internal/job", "types/job.go"}
 		row.State = types.StateRunning
+		row.CompletionGates = []types.CompletionGate{
+			{
+				ID:     "lint",
+				Kind:   types.GateKindCheck,
+				Expect: types.ExpectPassed,
+				Check:  types.LeaseCheck{Target: "lint", Project: "."},
+			},
+			{
+				ID:     "store-touched",
+				Kind:   types.GateKindPaths,
+				Expect: types.ExpectChanged,
+				Paths:  []string{"internal/job/store.go"},
+			},
+		}
+		row.Result = &types.JobResult{
+			ChangedPaths:    []string{"internal/job/store.go"},
+			UnresolvedRisks: []string{"schema churn"},
+			Descendants:     []string{"job-b"},
+		}
 	})
 	require.NoError(t, err)
 	// The store derives a release from a claim that shrinks, so giving up types/job.go is
@@ -226,6 +245,20 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	require.Len(t, got.Releases, 1)
 	require.Equal(t, "types/job.go", got.Releases[0].Path)
 	require.NotEmpty(t, got.Releases[0].Digest, "a release says which version of the path the next worker inherits")
+
+	require.Len(t, got.CompletionGates, 2)
+	require.Equal(t, "lint", got.CompletionGates[0].Id)
+	require.Equal(t, "check", got.CompletionGates[0].Kind)
+	require.Equal(t, "passed", got.CompletionGates[0].Expect)
+	require.Equal(t, "magus run lint .", got.CompletionGates[0].Check, "check is rendered as the command that runs it")
+	require.Equal(t, "store-touched", got.CompletionGates[1].Id)
+	require.Equal(t, []string{"internal/job/store.go"}, got.CompletionGates[1].Paths)
+	require.Empty(t, got.CompletionGates[1].Check, "a paths gate carries no check to render")
+
+	require.NotNil(t, got.Result)
+	require.Equal(t, []string{"internal/job/store.go"}, got.Result.ChangedPaths)
+	require.Equal(t, []string{"schema churn"}, got.Result.UnresolvedRisks)
+	require.Equal(t, []string{"job-b"}, got.Result.Descendants)
 
 	scout := byID["scout"]
 	require.NotNil(t, scout, "the abbreviated row is missing from the listing")

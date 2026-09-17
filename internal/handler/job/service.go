@@ -240,6 +240,8 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 	} else if ev, ok := trail.LastRun(s.ws.CacheDir(), jobstore.ActionString(j.Argv)); ok {
 		info.LastRun = lastRun(ev)
 	}
+	info.CompletionGates = wireCompletionGates(row.CompletionGates)
+	info.Result = wireJobResult(row.Result)
 	return info
 }
 
@@ -252,22 +254,25 @@ func (s *Service) job(j jobstore.CatalogEntry, running map[string]string, row ty
 // running flag this service refuses to keep for the catalog.
 func delegatedJob(row types.Job) *jobv1.Job {
 	j := &jobv1.Job{
-		Name:       jobsPrefix + row.ID,
-		Id:         row.ID,
-		Holder:     jobv1.JobHolder_JOB_HOLDER_SESSION,
-		State:      string(row.State),
-		Criteria:   row.Criteria,
-		Parent:     row.Parent,
-		Model:      row.Model,
-		Check:      row.Validation,
-		WritePaths: row.WritePaths,
-		DenyPaths:  row.DenyPaths,
-		ReadPaths:  row.ReadPaths,
-		DependsOn:  row.DependsOn,
-		ReadOnly:   row.ReadOnly,
-		Checkpoint: row.Checkpoint,
-		Created:    row.Created,
-		Updated:    row.Updated,
+		Name:            jobsPrefix + row.ID,
+		Id:              row.ID,
+		Holder:          jobv1.JobHolder_JOB_HOLDER_SESSION,
+		State:           string(row.State),
+		Criteria:        row.Criteria,
+		Parent:          row.Parent,
+		Model:           row.Model,
+		Check:           row.Validation,
+		WritePaths:      row.WritePaths,
+		DenyPaths:       row.DenyPaths,
+		ReadPaths:       row.ReadPaths,
+		DependsOn:       row.DependsOn,
+		ReadOnly:        row.ReadOnly,
+		Checkpoint:      row.Checkpoint,
+		Created:         row.Created,
+		Updated:         row.Updated,
+		CompletionGates: wireCompletionGates(row.CompletionGates),
+		Result:          wireJobResult(row.Result),
+		Deadline:        row.Deadline,
 	}
 	if row.Holder.OrSession() == types.HolderDaemon {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_DAEMON
@@ -312,6 +317,46 @@ func lastRun(e trail.Event) *jobv1.JobRun {
 		run.Duration = durationpb.New(time.Duration(e.DurationMs) * time.Millisecond)
 	}
 	return run
+}
+
+// wireCompletionGates maps the stored gates to the wire shape. check is rendered as the command
+// that runs it, the same way the row's Validation already is for the primary Check field: the
+// wire never carries the unrendered LeaseCheck, so a client needs no second parser for it.
+func wireCompletionGates(gates []types.CompletionGate) []*jobv1.CompletionGate {
+	if len(gates) == 0 {
+		return nil
+	}
+	out := make([]*jobv1.CompletionGate, 0, len(gates))
+	for _, g := range gates {
+		wire := &jobv1.CompletionGate{
+			Id:          g.ID,
+			Description: g.Description,
+			Kind:        string(g.Kind),
+			Expect:      string(g.Expect),
+			Paths:       g.Paths,
+			Symbols:     g.Symbols,
+			DependsOn:   g.DependsOn,
+		}
+		if g.Kind == types.GateKindCheck && g.Check.Target != "" {
+			wire.Check = g.Check.String()
+		}
+		out = append(out, wire)
+	}
+	return out
+}
+
+// wireJobResult maps the stored result to its console-facing wire projection. nil until a
+// holder has filed one, which is a fact the drawer needs to tell apart from a result that filed
+// nothing.
+func wireJobResult(r *types.JobResult) *jobv1.JobResult {
+	if r == nil {
+		return nil
+	}
+	return &jobv1.JobResult{
+		ChangedPaths:    r.ChangedPaths,
+		UnresolvedRisks: r.UnresolvedRisks,
+		Descendants:     r.Descendants,
+	}
 }
 
 // targetSize is the current magnitude of what a job maintains. Not every job shrinks a resource

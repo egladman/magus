@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -1221,6 +1222,11 @@ type workspaceCacheDir interface {
 	CacheDir() string
 }
 
+// workspaceJobLimits is the magus.yaml jobs section, recovered the same way.
+type workspaceJobLimits interface {
+	JobLimits() config.Jobs
+}
+
 // jobStoreFromContext opens the job store for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches job.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
@@ -1281,7 +1287,13 @@ func MagusPutJob(ctx context.Context, id string, opts map[string]any) (types.Job
 	if err != nil {
 		return types.Job{}, err
 	}
-	return store.Update(ctx, strings.TrimSpace(id), merge)
+	var limits config.Jobs
+	if l, ok := types.WorkspaceFromContext(ctx).(workspaceJobLimits); ok {
+		limits = l.JobLimits()
+	}
+	// No symbol reader: a magusfile target holds no loaded graph, so only the ambiguity
+	// check is skipped here, and the gate still refuses to certify an unresolved name.
+	return job.ForkMerge(ctx, store, strings.TrimSpace(id), merge, limits, nil)
 }
 
 // MagusRegisterJob backs magus\job.register: a worker reports the base it actually

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // JobState is where one lease stands. The three terminal values are
@@ -415,7 +416,7 @@ func ValidJobID(id string) bool {
 // its rewrite; the version is what tells such a reader to stop instead of proceeding.
 // TestJobSchemaVersionCoversEveryField pins the field set this version describes against a
 // golden list, so a field added without a bump fails a test instead of failing a store.
-const JobSchemaVersion = 6
+const JobSchemaVersion = 7
 
 // JobActor identifies the session that wrote a row: the same pair the trail records
 // for an agent's actions, so a row and the actions that followed it join on one identity.
@@ -460,6 +461,9 @@ type JobStatus struct {
 	Risks      []string     `json:"unresolved_risks,omitempty" yaml:"unresolved_risks,omitempty"`
 	Command    string       `json:"command,omitempty" yaml:"command,omitempty"`
 	Gates      []GateStatus `json:"gates,omitempty" yaml:"gates,omitempty"`
+	// StaleIndexes are the projects whose symbol index was older than their sources when
+	// symbol gates were graded, so a symbol verdict may be drawn from missing facts.
+	StaleIndexes []string `json:"stale_indexes,omitempty" yaml:"stale_indexes,omitempty"`
 }
 
 // GateStatus reports verification of one completion gate.
@@ -641,6 +645,10 @@ type Job struct {
 	// on its own, and silence has no verdict in it.
 	Created int64 `json:"created" yaml:"created"`
 	Updated int64 `json:"updated" yaml:"updated"`
+	// Deadline is unix seconds past which the guard denies this lease's writes, zero for no
+	// bound. The store stamps it from a fork's timeout and no door accepts it, for the reason
+	// Created is not accepted. Nothing transitions a row that passes it.
+	Deadline int64 `json:"deadline,omitempty" yaml:"deadline,omitempty"`
 	// Result is what the holder filed when it exited, and Attempt is the run record behind
 	// that result's output ref, resolved in the holder's OWN checkout.
 	//
@@ -739,6 +747,10 @@ type Declaration struct {
 	Validation string `json:"validation,omitempty"`
 	// CompletionGates declare additional evidence-backed acceptance conditions.
 	CompletionGates []CompletionGate `json:"completion_gates,omitempty"`
+	// Timeout bounds the lease, as a Go duration. The store stamps Job.Deadline from it when
+	// it writes the row, so a declaration carries a length and never an instant. Empty is no
+	// bound; there is no default here (a workspace may set jobs.default_timeout).
+	Timeout string `json:"timeout,omitempty"`
 }
 
 // FoldLegacyLanes moves a lane declared under its old name onto the field that carries it,
@@ -782,6 +794,9 @@ func (r Declaration) Validate() error {
 	}
 	if r.State != "" && !ValidJobState(r.State) {
 		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
+	}
+	if _, err := ParseJobTimeout(r.Timeout); err != nil {
+		return err
 	}
 	check, declared, err := r.check()
 	if err != nil {
@@ -886,6 +901,26 @@ func (g CompletionGate) Validate() error {
 		}
 	}
 	return nil
+}
+
+// ParseJobTimeout reads a declared timeout: empty is no bound and parses to zero, anything
+// else must be a positive Go duration.
+func ParseJobTimeout(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("job: timeout %q is not a positive duration such as 30m or 2h", s)
+	}
+	return d, nil
+}
+
+// Overdue reports whether a live row has passed its deadline at now, in unix seconds. A
+// terminal row has no writes left to bound, so it is never overdue.
+func (u Job) Overdue(now int64) bool {
+	return u.Deadline > 0 && u.State.Live() && now >= u.Deadline
 }
 
 // quoteJoin renders a closed set for an error that has to list what it would accept.
@@ -1083,6 +1118,64 @@ type JobOverlap struct {
 type JobList struct {
 	Jobs     []Job        `json:"jobs"               yaml:"jobs"`
 	Overlaps []JobOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
+	// Overdue, Orphans and Stale are live job ids a reader should look at, derived at one
+	// instant by [JobList.Flag]. Reports, never transitions: ending a row stays the
+	// orchestrator's call.
+	Overdue []string `json:"overdue,omitempty" yaml:"overdue,omitempty"`
+	Orphans []string `json:"orphans,omitempty" yaml:"orphans,omitempty"`
+	Stale   []string `json:"stale,omitempty"   yaml:"stale,omitempty"`
+}
+
+// Flag fills Overdue, Orphans and Stale as of now, in unix seconds. Overdue is past its
+// deadline; an orphan is live while its root ancestor has ended, so nobody is left to wait
+// on it; stale was not updated within staleAfter, and a zero staleAfter flags nothing.
+func (l JobList) Flag(now int64, staleAfter time.Duration) JobList {
+	l.Overdue, l.Orphans, l.Stale = nil, nil, nil
+	for _, row := range l.Jobs {
+		if !row.State.Live() {
+			continue
+		}
+		if row.Overdue(now) {
+			l.Overdue = append(l.Overdue, row.ID)
+		}
+		if ancestors := JobAncestors(l.Jobs, row.ID); len(ancestors) > 0 && !ancestors[len(ancestors)-1].State.Live() {
+			l.Orphans = append(l.Orphans, row.ID)
+		}
+		if staleAfter > 0 && now-row.Updated >= int64(staleAfter/time.Second) {
+			l.Stale = append(l.Stale, row.ID)
+		}
+	}
+	return l
+}
+
+// JobAncestors walks id's parent chain nearest first. It stops at a parent the rows do not
+// carry and at a cycle, since either means the plan is already damaged.
+func JobAncestors(rows []Job, id string) []Job {
+	byID := make(map[string]Job, len(rows))
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	var out []Job
+	seen := map[string]bool{id: true}
+	cur, ok := byID[id]
+	for ok && cur.Parent != "" && !seen[cur.Parent] {
+		seen[cur.Parent] = true
+		if cur, ok = byID[cur.Parent]; ok {
+			out = append(out, cur)
+		}
+	}
+	return out
+}
+
+// JobDescendants are the rows below id by parent chain, in store order.
+func JobDescendants(rows []Job, id string) []Job {
+	var out []Job
+	for _, r := range rows {
+		if r.ID != id && slices.ContainsFunc(JobAncestors(rows, r.ID), func(a Job) bool { return a.ID == id }) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // NewJobList wraps the rows and derives the overlaps. Derived on READ and

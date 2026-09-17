@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"text/tabwriter"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
@@ -70,6 +71,8 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Delegated work, on the shell's own lifecycle. A job is the unit of work; a lease is")
 	fmt.Fprintln(os.Stderr, "the grant one holder has on it: its write and read lanes, plus the one check it runs.")
+	fmt.Fprintln(os.Stderr, "A job is not a run: `magus run` executes a target with no job involved, while a job's")
+	fmt.Fprintln(os.Stderr, "check and the daemon's maintenance each cause runs.")
 	fmt.Fprintln(os.Stderr, "Kept per repository, so every worktree and clone reads one set of jobs.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Subcommands:")
@@ -126,7 +129,7 @@ func lsJobs(root string, args []string) error {
 	// The list, not the bare rows: the overlaps are derived by the same constructor
 	// the magus_job list op and the console's route use, so the three doors cannot
 	// disagree about whether two jobs claim one path.
-	list := types.NewJobList(jobs)
+	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -155,13 +158,41 @@ func printJobTree(out io.Writer, report types.JobList) {
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "JOB\tHOLDER\tSTATE\tMODEL\tPATHS\tCHECK")
+	marks := map[string][]string{}
+	for word, ids := range map[string][]string{"overdue": report.Overdue, "orphan": report.Orphans, "stale": report.Stale} {
+		for _, id := range ids {
+			marks[id] = append(marks[id], word)
+		}
+	}
 	for _, row := range jobTreeOrder(report.Jobs) {
+		state := orDash(string(row.lease.State))
+		if m := marks[row.lease.ID]; len(m) > 0 {
+			slices.Sort(m)
+			state += " (" + strings.Join(m, ", ") + ")"
+		}
 		fmt.Fprintf(w, "%s%s\t%s\t%s\t%s\t%d\t%s\n",
 			strings.Repeat("  ", row.depth), row.lease.ID,
-			string(row.lease.Holder.OrSession()), orDash(string(row.lease.State)), orDash(row.lease.Model),
+			string(row.lease.Holder.OrSession()), state, orDash(row.lease.Model),
 			len(row.lease.WritePaths), orDash(row.lease.Validation))
 	}
 	_ = w.Flush()
+
+	for _, section := range []struct {
+		title string
+		ids   []string
+	}{
+		{"overdue: past the deadline their timeout set, so their writes are denied", report.Overdue},
+		{"orphans: live under a root job that has ended", report.Orphans},
+		{"stale: not updated within jobs.stale_after", report.Stale},
+	} {
+		if len(section.ids) == 0 {
+			continue
+		}
+		fmt.Fprintf(out, "\n%s\n", section.title)
+		for _, id := range section.ids {
+			fmt.Fprintf(out, "  %s: if nobody holds it, `%s`\n", id, hint.JobExit.With(id))
+		}
+	}
 
 	if len(report.Overlaps) == 0 {
 		return
@@ -341,6 +372,7 @@ func (l *listFlag) Set(value string) error {
 // job piped in are the same declaration.
 type forkFlags struct {
 	criteria, parent, check, model, checkpoint string
+	timeout                                    string
 	writePaths, readPaths, denyPaths           listFlag
 	dependsOn                                  listFlag
 	gates                                      []types.CompletionGate
@@ -362,6 +394,7 @@ func (f forkFlags) row(id string) types.Declaration {
 		CompletionGates: f.gates,
 		Model:           f.model,
 		ReadOnly:        f.readOnly,
+		Timeout:         f.timeout,
 		// A row a person declares is one nobody has picked up yet, which is what the
 		// state vocabulary already has a word for.
 		State: types.StateDeclared,
@@ -404,7 +437,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	pos, err := cmdParse("job fork", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a job must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read one job as JSON on stdin instead of taking it from flags")
-		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths")
+		fs.StringVar(&declared.criteria, "criteria", "", "What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-* flag)")
+		fs.StringVar(&declared.timeout, "timeout", "", "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 		fs.StringVar(&declared.parent, "parent", "", "The job this one is forked from")
 		fs.StringVar(&declared.checkpoint, "checkpoint", "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 		fs.Var(&declared.writePaths, "write-paths", "A path this job may write; repeatable or comma-separated")
@@ -464,11 +498,31 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	store, err := openJobs(resolveRootOrEmpty(root))
+	root = resolveRootOrEmpty(root)
+	store, err := openJobs(root)
 	if err != nil {
 		return err
 	}
-	stored, err := store.Update(ctx, row.ID, row.Apply)
+	plan, err := store.List()
+	if err != nil {
+		return err
+	}
+	if err := job.RefuseForkLimits(plan, row.ID, row.Parent, globalCfg.Jobs); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	// The reader loads the graph only when a gate names a symbol.
+	if err := job.RefuseAmbiguousSymbols(ctx, row.CompletionGates, jobSymbolReader(root)); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	// A writing job is verified against the diff since its checkpoint, so one forked without
+	// a checkpoint could never pass. The fork records this checkout's state instead; where it
+	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
+	if !row.ReadOnly && row.Checkpoint == "" {
+		if token, err := checkoutBaseToken(ctx, root); err == nil {
+			row.Checkpoint = token
+		}
+	}
+	stored, err := store.Update(ctx, row.ID, job.Declare(row, globalCfg.Jobs.DefaultTimeout))
 	if err != nil {
 		return err
 	}
@@ -981,10 +1035,14 @@ func generatedBoundary(m *magus.Magus, projects, owned []string) []job.TermsBoun
 // leasedBoundary is every path another LIVE lease claims. A terminal row claims nothing:
 // that is the same rule the overlap report follows, and the reason a worker releasing a
 // path early lets a waiter start against it.
+//
+// An ANCESTOR claims nothing against its descendant either: a child is forked inside its
+// parent's lane, so listing the parent's paths would put the child's own lane out of reach.
 func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
+	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if other.ID == row.ID || !other.State.Live() {
+		if other.ID == row.ID || !other.State.Live() || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
 		for _, p := range other.WritePaths {
@@ -1317,6 +1375,9 @@ func jobGates(ctx context.Context, root string, pos []string) error {
 	if err != nil {
 		return usagef("magus describe job --gates: %s", err)
 	}
+	if rows, lerr := store.List(); lerr == nil && gradesSymbols(rows, pos[0]) {
+		status.StaleIndexes = staleIndexProjects(ctx, root)
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -1334,7 +1395,7 @@ func jobGates(ctx context.Context, root string, pos []string) error {
 		}
 		err = emitNames(unmet)
 	case outputText:
-		printJobGates(os.Stdout, status)
+		job.RenderGates(os.Stdout, status)
 	default:
 		err = emitFormatted(opts, status)
 	}
@@ -1344,30 +1405,19 @@ func jobGates(ctx context.Context, root string, pos []string) error {
 	return errSilent{exitCode: 1}
 }
 
-// printJobGates renders one gate per line, each unmet one followed by why.
-func printJobGates(out io.Writer, status types.JobStatus) {
-	if len(status.Gates) == 0 {
-		fmt.Fprintf(out, "%s declares no completion gate, so there is nothing here to grade.\n", status.Job)
-		fmt.Fprintf(out, "Declare one with `%s`.\n", hint.JobFork.With(status.Job, "--gate-paths", "<id>=<glob>"))
-		return
+// gradesSymbols reports whether grading id reads the symbol graph: a symbol gate of its
+// own, or one inherited from an ancestor.
+func gradesSymbols(rows []types.Job, id string) bool {
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+	if i < 0 {
+		return false
 	}
-	met := 0
-	for _, gate := range status.Gates {
-		if gate.Verified {
-			met++
+	for _, r := range append([]types.Job{rows[i]}, types.JobAncestors(rows, id)...) {
+		if slices.ContainsFunc(r.CompletionGates, func(g types.CompletionGate) bool { return g.Resolve().Kind == types.GateKindSymbol }) {
+			return true
 		}
 	}
-	fmt.Fprintf(out, "%s: %d of %d completion gate(s) met\n", status.Job, met, len(status.Gates))
-	for _, gate := range status.Gates {
-		mark := "unmet"
-		if gate.Verified {
-			mark = "met"
-		}
-		fmt.Fprintf(out, "  [%s] %s\n", mark, gate.ID)
-		for _, why := range gate.Violations {
-			fmt.Fprintf(out, "      %s\n", why)
-		}
-	}
+	return false
 }
 
 // jobDelete is `magus job rm <job>`: take one row out of the plan.

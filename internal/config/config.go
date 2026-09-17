@@ -28,6 +28,7 @@ type Config struct {
 	Knowledge  Knowledge  `json:"knowledge" yaml:"knowledge"`
 	Secret     Secret     `json:"secret" yaml:"secret"`
 	Diff       Diff       `json:"diff" yaml:"diff"`
+	Jobs       Jobs       `json:"jobs" yaml:"jobs"`
 
 	// Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter. Defaults to min(NumCPU, 8).
 	Concurrency int `json:"concurrency" yaml:"concurrency" validate:"gte=0" cli:"short=j"`
@@ -122,6 +123,21 @@ type Diff struct {
 	// for every run. Neither is needed to make the command scriptable: the viewer already
 	// stands aside on its own for anything that is not a person at a terminal.
 	Tui *bool `json:"tui" yaml:"tui"`
+}
+
+// Jobs bounds the job tree `magus job fork` declares. Every field is unset by default, and
+// unset means no limit: a bound belongs to the workspace that chose it, never to magus.
+type Jobs struct {
+	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
+	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
+	// MaxLive is how many live jobs one root's tree may hold at once, the new one included.
+	// 0 = unlimited.
+	MaxLive int `json:"max_live" yaml:"max_live" validate:"gte=0"`
+	// DefaultTimeout bounds a fork that names no --timeout. Zero = no bound.
+	DefaultTimeout time.Duration `json:"default_timeout" yaml:"default_timeout"`
+	// StaleAfter flags a live job nobody updated for this long, in `magus ls jobs` and
+	// `magus doctor`. Zero = never flag. It only reports; the row is never transitioned.
+	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.

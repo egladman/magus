@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -129,6 +130,9 @@ func readSymbols(ctx context.Context, row types.Job, read SymbolReader) (map[str
 // how a graph is built, and every caller already holds something that satisfies this.
 type SymbolGraph interface {
 	Refs(ref string) (types.KnowledgeRefsOutput, bool)
+	// Resolve is how a bare name is checked for other symbols carrying it, since Refs
+	// answers for the top-ranked one alone.
+	Resolve(input string, limit int) []types.KnowledgeMatch
 }
 
 // GraphSymbols reads symbol facts off a loaded graph. A nil graph reads as UNREADABLE
@@ -146,10 +150,35 @@ func GraphSymbols(g SymbolGraph) SymbolReader {
 			// removal that landed indistinguishable from a graph nobody could open.
 			return SymbolFact{}, true
 		}
-		files := make([]string, 0, len(out.Defs))
+		definedIn := make([]string, 0, len(out.Defs))
 		for _, d := range out.Defs {
-			files = append(files, d.File)
+			definedIn = append(definedIn, d.File)
 		}
-		return SymbolFact{Files: files, Refs: out.RefCount}, true
+		fact := SymbolFact{DefinedIn: definedIn, ReferenceCount: out.RefCount}
+		if out.Symbol != name {
+			fact.SameNameDefinitions = sameNameDefinitions(g, name)
+		}
+		return fact, true
 	}
+}
+
+// sameNameDefinitions is one defining file per symbol whose label IS name, or nil when
+// fewer than two are.
+func sameNameDefinitions(g SymbolGraph, name string) []string {
+	var files []string
+	for _, m := range g.Resolve(name, 0) {
+		if m.Kind != types.KindSymbol || m.Label != name {
+			continue
+		}
+		file := m.ID
+		if refs, ok := g.Refs(m.ID); ok && len(refs.Defs) > 0 {
+			file = refs.Defs[0].File
+		}
+		files = append(files, file)
+	}
+	if len(files) < 2 {
+		return nil
+	}
+	slices.Sort(files)
+	return files
 }

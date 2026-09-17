@@ -40,6 +40,16 @@ func passingResult() types.JobResult {
 // does not hold.
 var passingRun = types.JobAttempt{Found: true, Project: ".", Target: "go-test", Spell: "go"}
 
+// verifyClaim grades a result against a diff that shows exactly what it claims, so a case
+// about another rule is not failed by the diff check.
+func verifyClaim(row types.Job, rep types.JobResult, att types.JobAttempt, declared []types.Job) Status {
+	return VerifyGates(row, rep, att, nil, declared, claimed(rep))
+}
+
+func claimed(rep types.JobResult) Observed {
+	return Observed{Changed: rep.ChangedPaths, ChangedKnown: true}
+}
+
 func completionGateRow() types.Job {
 	return types.Job{
 		ID:         "harness/gated",
@@ -82,13 +92,13 @@ func TestVerifyTakesAResultInsideTheBoundary(t *testing.T) {
 		Command:  "magus run go::go-test . -- -run Ledger",
 		// The primary check reports as the gate it is. See the note in lifecycle_test.go.
 		Gates: []types.GateStatus{{ID: types.PrimaryCompletionGateID, OutputRef: passingResult().Validation.OutputRef, Verified: true}},
-	}, Verify(acceptRow(), passingResult(), passingRun, nil))
+	}, verifyClaim(acceptRow(), passingResult(), passingRun, nil))
 }
 
 func TestVerifyCompletionGatesRequireEvidenceForEveryDeclaredGate(t *testing.T) {
 	t.Parallel()
 
-	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil, Observed{})
+	status := VerifyGates(completionGateRow(), completionGateResult(), types.JobAttempt{}, completionGateAttempts(), nil, claimed(completionGateResult()))
 	assert.True(t, status.Verified, status.Violations)
 	require.Len(t, status.Gates, 2)
 	assert.True(t, status.Gates[0].Verified)
@@ -133,7 +143,7 @@ func TestVerifyRejectsEvidenceCapturedBeforeJobDeclaration(t *testing.T) {
 	row.Created = 100
 	attempt := passingRun
 	attempt.TimestampMs = 99_999
-	status := Verify(row, passingResult(), attempt, nil)
+	status := verifyClaim(row, passingResult(), attempt, nil)
 	assert.False(t, status.Verified)
 	assert.Contains(t, strings.Join(status.Violations, "\n"), "before job declaration")
 }
@@ -178,7 +188,7 @@ func TestVerifyNamesEveryViolation(t *testing.T) {
 	rep.ChangedPaths = append(rep.ChangedPaths, "internal/sessions/store.go")
 	rep.Validation.OutputRef = ""
 
-	v := Verify(acceptRow(), rep, types.JobAttempt{}, nil)
+	v := verifyClaim(acceptRow(), rep, types.JobAttempt{}, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 3)
 	assert.Contains(t, strings.Join(v.Violations, "\n"), "internal/sessions/store.go")
@@ -199,17 +209,18 @@ func TestVerifyRefusesTheFabricatedResult(t *testing.T) {
 	require.Error(t, err, "the unknown members alone stop it at the door")
 	assert.Contains(t, err.Error(), "passed")
 
-	// Decoded by hand, as the fields it invented were never read anyway: the two rules
-	// that would have caught it even in a result shaped correctly.
+	// Decoded by hand, as the fields it invented were never read anyway: the rules that
+	// would have caught it even in a result shaped correctly.
 	rep := passingResult()
 	rep.ChangedPaths = nil
 	rep.Validation.OutputRef = "deadbeef"
-	v := Verify(acceptRow(), rep, types.JobAttempt{Found: true, Project: ".", Target: "generate"}, nil)
+	v := verifyClaim(acceptRow(), rep, types.JobAttempt{Found: true, Project: ".", Target: "generate"}, nil)
 	assert.False(t, v.Verified)
-	require.Len(t, v.Violations, 2)
+	require.Len(t, v.Violations, 3)
 	assert.Contains(t, v.Violations[0], "no changed paths at all")
-	assert.Contains(t, v.Violations[1], "magus run generate .")
-	assert.Contains(t, v.Violations[1], "go::go-test")
+	assert.Contains(t, v.Violations[1], "nothing in the diff")
+	assert.Contains(t, v.Violations[2], "magus run generate .")
+	assert.Contains(t, v.Violations[2], "go::go-test")
 }
 
 // The stored run's own exit status is the verdict, which is the field a holder no longer
@@ -219,7 +230,7 @@ func TestVerifyReadsTheStoredRunsOutcome(t *testing.T) {
 
 	failed := passingRun
 	failed.Failed = true
-	v := Verify(acceptRow(), passingResult(), failed, nil)
+	v := verifyClaim(acceptRow(), passingResult(), failed, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "failed")
@@ -233,7 +244,7 @@ func TestVerifyRefusesARowWithNoCheckToBindTo(t *testing.T) {
 	row := acceptRow()
 	row.Check, row.Validation = nil, ""
 
-	v := Verify(row, passingResult(), passingRun, nil)
+	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "declares no completion gate")
 }
@@ -303,7 +314,7 @@ func TestVerifyReadsDeclarationsAsWrittenIn(t *testing.T) {
 
 			rep := passingResult()
 			rep.ChangedPaths = []string{tc.path}
-			v := Verify(acceptRow(), rep, passingRun, nil)
+			v := verifyClaim(acceptRow(), rep, passingRun, nil)
 			assert.Equal(t, tc.want, v.Verified, v.Violations)
 		})
 	}
@@ -316,10 +327,10 @@ func TestVerifyReadsARootDeclarationAsTheWholeTree(t *testing.T) {
 
 	row := acceptRow()
 	row.WritePaths = []string{"."}
-	assert.True(t, Verify(row, passingResult(), passingRun, nil).Verified)
+	assert.True(t, verifyClaim(row, passingResult(), passingRun, nil).Verified)
 
 	row.WritePaths = []string{""}
-	assert.False(t, Verify(row, passingResult(), passingRun, nil).Verified, "a blank declaration claims nothing")
+	assert.False(t, verifyClaim(row, passingResult(), passingRun, nil).Verified, "a blank declaration claims nothing")
 }
 
 // The deny list is read at acceptance too: a path can be inside the owned lane and still
@@ -332,7 +343,7 @@ func TestVerifyRejectsADeniedPath(t *testing.T) {
 	rep := passingResult()
 	rep.ChangedPaths = []string{"internal/ledger/store.go"}
 
-	v := Verify(row, rep, passingRun, nil)
+	v := verifyClaim(row, rep, passingRun, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "denied")
@@ -347,7 +358,7 @@ func TestVerifyRejectsADescendantNoRowDeclares(t *testing.T) {
 	rep.Descendants = []string{"harness/ledger-accept/child", "harness/ghost"}
 	declared := []types.Job{{ID: "harness/ledger-accept/child"}}
 
-	v := Verify(acceptRow(), rep, passingRun, declared)
+	v := verifyClaim(acceptRow(), rep, passingRun, declared)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "harness/ghost")
@@ -361,7 +372,7 @@ func TestVerifyRefusesARowThatIsAlreadyClosed(t *testing.T) {
 	row := acceptRow()
 	row.State = types.StatePass
 
-	v := Verify(row, passingResult(), passingRun, nil)
+	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
 	require.Len(t, v.Violations, 1)
 	assert.Contains(t, v.Violations[0], "already pass")
@@ -372,7 +383,7 @@ func TestVerifyRefusesARowThatIsAlreadyClosed(t *testing.T) {
 func TestVerifyRejectsEvidenceTheStoreDoesNotHold(t *testing.T) {
 	t.Parallel()
 
-	v := Verify(acceptRow(), passingResult(), types.JobAttempt{}, nil)
+	v := verifyClaim(acceptRow(), passingResult(), types.JobAttempt{}, nil)
 	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "a1b2c3d4")
 }
@@ -385,7 +396,7 @@ func TestVerifyRefusesWritesFromAReadOnlyLease(t *testing.T) {
 	row := acceptRow()
 	row.ReadOnly, row.WritePaths = true, nil
 
-	v := Verify(row, passingResult(), passingRun, nil)
+	v := verifyClaim(row, passingResult(), passingRun, nil)
 	assert.False(t, v.Verified)
 	assert.Contains(t, v.Violations[0], "read-only")
 }

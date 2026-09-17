@@ -7,6 +7,11 @@
 // can be RUN from its row; a session job carries its criteria, the lanes and the check it was given.
 // Neither is a different view.
 //
+// KIND AND GOALS ARE NEVER DRAWER-ONLY. The holder (daemon or session), the criteria, and the
+// parent are on the row and the card, truncated where space is tight - the drawer is where the
+// FULL text and the declared completion gates and filed result live, never the only place any of
+// them appear.
+//
 // TWO SOURCES, ONE GRAMMAR. The second tenant is not a job at all, and shares the stage, the
 // accessible twin list, the detail sheet, the state colors and the state marks:
 //
@@ -39,7 +44,7 @@
 import { createClient } from "@connectrpc/connect";
 import { ViewerService } from "@wire/viewer/v1alpha1/viewer_pb";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
-import { JobHolder, type JobRelease } from "@wire/job/v1alpha1/job_pb";
+import { JobHolder, type CompletionGate, type JobRelease } from "@wire/job/v1alpha1/job_pb";
 import {
   adoptDaemonOrigin,
   createDaemonTransport,
@@ -53,7 +58,14 @@ import { demoJobs, demoOverlaps } from "./demo";
 import { persisted } from "../../lib/persist";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { registerCommand, unregisterCommand } from "../commands";
+import { openSurface } from "../surface-navigation";
 import { h } from "../view";
+import {
+  renderConnectPrompt,
+  renderEmptyMessage,
+  type ConnectPromptState,
+  type EmptyStateSlots,
+} from "../connectPrompt";
 // The drawer OWNS the activity row model and the projections onto it (a pool slot, a lock holder, a
 // finished run, all as one shape). Imported rather than re-derived so this view joins against the
 // same rows the drawer shows - a second projection would be a second answer to "what is running".
@@ -68,6 +80,7 @@ import {
 import {
   ageLabel,
   buildJobTree,
+  gateSubject,
   isStale,
   isTerminal,
   jobClient,
@@ -275,6 +288,15 @@ interface DrawnNode {
   // The resource name to submit, "" on anything that cannot be run from here. Only the daemon's own
   // catalog can: a session's job is held by that session, and magus never starts it.
   readonly runName: string;
+  // kind is the holder in words ("daemon"/"session"), "" for a target (it has no holder). Carried
+  // on the node itself, not just folded into meta, because the card draws it and the card does
+  // not read meta at all.
+  readonly kind: string;
+  // GOALS: what this job is for and what it was handed out under - empty on a target and on a
+  // catalog job, which declare neither. Truncated where they are drawn; the full text is in the
+  // detail sheet.
+  readonly criteria: string;
+  readonly parentLabel: string;
 }
 
 // Field named `nodes` rather than `rows` so a Drawn IS a jobs.Placeable: layoutNodes takes it
@@ -323,6 +345,9 @@ function jobsDrawn(model: JobTree, nowMs: number): Drawn {
       updated: Number(n.job.updated),
       terminal: isTerminal(n.state),
       runName: daemon ? n.job.name : "",
+      kind: HOLDER_LABEL[n.holder],
+      criteria: n.job.criteria,
+      parentLabel: n.parent ?? n.danglingParent,
     });
   }
   return { nodes, edges: model.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })) };
@@ -350,6 +375,11 @@ function targetsDrawn(model: RunPlanModel): Drawn {
       // A target is not a job: what starts one is `magus run`, and a control here would be offering
       // a build from a view that reports on them.
       runName: "",
+      // Neither a holder nor a goal: a resolved target plan is not declared work, so there is
+      // nothing here to name either of them.
+      kind: "",
+      criteria: "",
+      parentLabel: "",
     })),
     // Every edge in a target plan is a dependency, so there is nothing to tell it apart FROM. It
     // still carries the depends_on kind - that is what it is - and plan.css drops the dashed accent
@@ -442,8 +472,7 @@ interface Refs {
   edgeLayer: SVGGElement;
   nodeLayer: SVGGElement;
   detail: HTMLElement;
-  emptyTitle: HTMLElement;
-  emptyBody: HTMLElement;
+  emptySlots: EmptyStateSlots;
   treeHead: HTMLElement;
   treeHide: HTMLButtonElement;
   treeReopen: HTMLButtonElement;
@@ -459,6 +488,28 @@ interface Refs {
 function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const root = h("div", "console-plan-layout");
   root.dataset.phase = "loading";
+
+  // ONE LINE, said once, because this view sits beside Runs and the two are easy to conflate: a
+  // job is work someone OWNS (an orchestrator's declaration, or the daemon's own maintenance), and
+  // a run is `magus run` actually executing - a job's check runs as one, but plenty of runs exist
+  // for no job at all. See docs/glossary.md's Job and Run entries, which this line is a plain-words
+  // echo of. The link is the same cross-surface navigation every other surface uses
+  // (openSurface/data-open-surface), not an anchor href - there is nothing to route to.
+  const intro = h("p", "console-plan-intro");
+  intro.append(
+    document.createTextNode(
+      "Work someone owns: tasks an agent handed out, and the daemon's own maintenance. Target runs are in ",
+    ),
+  );
+  const runsLink = h(
+    "button",
+    "console-plan-intro__link pf-v6-c-button pf-m-link pf-m-inline",
+  ) as HTMLButtonElement;
+  runsLink.type = "button";
+  runsLink.dataset.openSurface = "runs";
+  runsLink.append(h("span", "pf-v6-c-button__text", "Runs"));
+  runsLink.addEventListener("click", () => openSurface({ pageId: "runs" }));
+  intro.append(runsLink, document.createTextNode("."));
 
   const toolbar = h("div", "console-plan-toolbar");
   // Opts every control on this row into the shared compact height. The row carried two: a toggle
@@ -574,14 +625,14 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
   const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Reading the jobs");
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
-  const emptyBody = h("p", undefined, "");
-  emptyBodyWrap.append(emptyBody);
-  // No demo button, on any page - see the diff surface for the reasoning. showEmpty names where a
-  // populated version lives instead.
+  const emptyMessage = h("p", undefined, "");
+  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
+  emptyActions.dataset.emptyWays = "";
+  emptyBodyWrap.append(emptyMessage, emptyActions);
   emptyContent.append(emptyTitle, emptyBodyWrap);
   empty.append(emptyContent);
 
-  root.append(toolbar, tree, treeReopen, stageBox, detail, empty);
+  root.append(intro, toolbar, tree, treeReopen, stageBox, detail, empty);
   host.append(root);
   return {
     root,
@@ -594,8 +645,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     edgeLayer,
     nodeLayer,
     detail,
-    emptyTitle,
-    emptyBody,
+    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
     treeHead,
     treeHide,
     treeReopen,
@@ -654,6 +704,41 @@ function releaseField(dl: HTMLElement, releases: readonly JobRelease[]): void {
     li.append(h("span", "console-plan-detail__releasedigest", shortDigest(r.digest)));
     ul.append(li);
   }
+  dd.append(ul);
+  dl.append(dd);
+}
+
+// gateField renders the declared completion gates: what each examines (kind, expect) and its
+// subject, with a check rendered as the command that runs it - the server already did that
+// rendering, the same way it renders the primary Check field, so this only displays it.
+function gateField(dl: HTMLElement, gates: readonly CompletionGate[]): void {
+  if (!gates.length) return;
+  dl.append(h("dt", "console-plan-detail__label", "Completion gates"));
+  const dd = h("dd", "console-plan-detail__value");
+  const ul = h("ul", "console-plan-detail__gates");
+  ul.setAttribute("role", "list");
+  for (const g of gates) {
+    const li = h("li", "console-plan-detail__gate");
+    li.append(h("code", "console-plan-detail__gateid", g.id || "(unnamed)"));
+    li.append(h("span", "console-plan-detail__gatecond", g.kind + " " + g.expect));
+    const subject = gateSubject(g);
+    if (subject) li.append(h("p", "console-plan-detail__gatesubject", subject));
+    ul.append(li);
+  }
+  dd.append(ul);
+  dl.append(dd);
+}
+
+// riskField renders a job result's unresolved risks: prose sentences a holder filed, not paths -
+// a plain list rather than pathField's chips, which are for something a reader would search or
+// compare rather than read.
+function riskField(dl: HTMLElement, label: string, items: readonly string[]): void {
+  if (!items.length) return;
+  dl.append(h("dt", "console-plan-detail__label", label));
+  const dd = h("dd", "console-plan-detail__value");
+  const ul = h("ul", "console-plan-detail__risks");
+  ul.setAttribute("role", "list");
+  for (const item of items) ul.append(h("li", "console-plan-detail__risk", item));
   dd.append(ul);
   dl.append(dd);
 }
@@ -775,15 +860,22 @@ export function activate(host: HTMLElement): JobsInstance {
     refs.note.hidden = line === "";
   };
 
-  const showEmpty = (title: string, body: string, cmd?: string, offerDemo = false): void => {
+  const showEmpty = (title: string, message: string): void => {
     refs.root.dataset.phase = "empty";
-    refs.emptyTitle.textContent = title;
-    refs.emptyBody.textContent = body;
-    // A real <code> element, as every other surface writes a command.
-    if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
-    if (offerDemo) {
-      refs.emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated one.");
-    }
+    renderEmptyMessage(refs.emptySlots, title, message);
+  };
+  const showConnectPrompt = (state: ConnectPromptState): void => {
+    refs.root.dataset.phase = "empty";
+    renderConnectPrompt(refs.emptySlots, state, {
+      purpose:
+        source === "jobs"
+          ? "Jobs come from a local daemon."
+          : "The target plan comes from a local daemon.",
+      onRetry: () => {
+        void refresh();
+        if (visible) startPolling();
+      },
+    });
   };
 
   // signature is what decides whether what is on screen still matches what is in hand. The list is
@@ -796,9 +888,18 @@ export function activate(host: HTMLElement): JobsInstance {
   const signature = (d: Drawn): string =>
     d.nodes
       .map((n) =>
-        [n.id, n.state, n.depth, n.readOnly, n.meta.join("/"), n.warn.join("/"), n.runName].join(
-          ":",
-        ),
+        [
+          n.id,
+          n.state,
+          n.depth,
+          n.readOnly,
+          n.meta.join("/"),
+          n.warn.join("/"),
+          n.runName,
+          n.kind,
+          n.criteria,
+          n.parentLabel,
+        ].join(":"),
       )
       .join("|") +
     "#" +
@@ -846,6 +947,18 @@ export function activate(host: HTMLElement): JobsInstance {
         String(n.job.updated),
         sizeLine(n.job),
         n.overlaps.map((o) => [o.jobA, o.jobB, o.pathsA, o.pathsB]),
+        n.job.completionGates.map((g) => [
+          g.id,
+          g.kind,
+          g.expect,
+          g.check,
+          g.paths,
+          g.symbols,
+          g.dependsOn,
+        ]),
+        n.job.result
+          ? [n.job.result.changedPaths, n.job.result.unresolvedRisks, n.job.result.descendants]
+          : null,
         runs,
         feedsUnread,
       ])
@@ -951,6 +1064,21 @@ export function activate(host: HTMLElement): JobsInstance {
         runBtn.addEventListener("click", () => void run(n, runBtn, runState));
         li.append(runBtn, runState);
       }
+      // GOALS: what the job is for and what it was handed out under, on the row and not only in
+      // the detail sheet - both empty on a target and on a catalog job, which is what leaves the
+      // row silent for them. flex-wrap on the row plus this element's own 100% basis (plan.css) is
+      // what puts it on its own line under the mark/id/meta row rather than crowding it.
+      if (n.criteria || n.parentLabel) {
+        const goal = h("div", "console-plan-list__goal");
+        goal.style.setProperty("--console-plan-depth", String(n.depth));
+        if (n.criteria) {
+          goal.append(h("span", "console-plan-list__goal-criteria", trunc(n.criteria, 100)));
+        }
+        if (n.parentLabel) {
+          goal.append(h("span", "console-plan-list__goal-parent", "parent: " + n.parentLabel));
+        }
+        li.append(goal);
+      }
       return li;
     });
     refs.list.replaceChildren(...items);
@@ -1049,20 +1177,33 @@ export function activate(host: HTMLElement): JobsInstance {
       box.setAttribute("rx", "6");
       const mark = svgEl("text", "console-plan-node__mark");
       mark.setAttribute("x", String(-NODE_W / 2 + 8));
-      mark.setAttribute("y", "4");
+      mark.setAttribute("y", "-3");
       mark.textContent = n.mark;
       const label = svgEl("text", "console-plan-node__id");
       label.setAttribute("x", String(-NODE_W / 2 + 46));
-      label.setAttribute("y", "4");
+      label.setAttribute("y", "-3");
       label.textContent = trunc(n.text, 17);
       g.append(title, box, mark, label);
       if (n.readOnly) {
         const ro = svgEl("text", "console-plan-node__ro");
         ro.setAttribute("x", String(NODE_W / 2 - 6));
-        ro.setAttribute("y", "4");
+        ro.setAttribute("y", "-3");
         ro.setAttribute("text-anchor", "end");
         ro.textContent = "ro";
         g.append(ro);
+      }
+      // The KIND and the truncated GOAL, on their own line under the mark/id row - a target or a
+      // catalog job carries neither and the line is simply absent, matching every other "renders
+      // nothing over an empty field" spot in this view (field() in the detail sheet is the same
+      // rule). Parent is not repeated here: the edge drawn to this node's parent already says it,
+      // and there is no room left in a 152-unit box to say it twice.
+      const goalText = [n.kind, n.criteria].filter(Boolean).join(": ");
+      if (goalText) {
+        const goal = svgEl("text", "console-plan-node__goal");
+        goal.setAttribute("x", String(-NODE_W / 2 + 8));
+        goal.setAttribute("y", "13");
+        goal.textContent = trunc(goalText, 28);
+        g.append(goal);
       }
       return g;
     });
@@ -1128,6 +1269,17 @@ export function activate(host: HTMLElement): JobsInstance {
     // changed every second would rebuild itself out from under the link it holds.
     field(dl, "Created", stamp(Number(n.job.created)));
     field(dl, "Updated", stamp(Number(n.job.updated)));
+    if (n.job.deadline > 0n) field(dl, "Deadline", stamp(Number(n.job.deadline)));
+
+    // The declared acceptance conditions, and - once a holder has filed one - the result: what it
+    // changed, what it left unresolved, and what it spawned. Both render nothing when the job
+    // carries neither, the same "empty field says nothing" rule as everything above.
+    gateField(dl, n.job.completionGates);
+    if (n.job.result) {
+      pathField(dl, "Changed paths", n.job.result.changedPaths);
+      riskField(dl, "Unresolved risks", n.job.result.unresolvedRisks);
+      pathField(dl, "Descendants", n.job.result.descendants);
+    }
 
     const runs = join.byJob.get(n.id) ?? [];
     const runsBox = h("div", "console-plan-detail__runs");
@@ -1400,6 +1552,14 @@ export function activate(host: HTMLElement): JobsInstance {
       setSummary("Jobs are not served here.");
       return;
     }
+    if (read.kind === "unreachable") {
+      // The prompt promises nothing retries behind it, so the poll stops until Retry.
+      stopPolling();
+      blank();
+      showConnectPrompt({ connection: "disconnected", host: daemonHost, reason: read.detail });
+      setSummary("Not connected to a daemon.");
+      return;
+    }
     if (read.kind === "unreadable") {
       if (settleSource(false)) return refreshTargets(daemonHost);
       blank();
@@ -1512,14 +1672,7 @@ export function activate(host: HTMLElement): JobsInstance {
       // it here is what stops it painting over "not connected".
       stopReading();
       blank();
-      showEmpty(
-        "No daemon connected",
-        source === "jobs"
-          ? "Jobs come from a local daemon. Start one with:"
-          : "The target plan comes from a local daemon. Start one with:",
-        "magus server start",
-        true,
-      );
+      showConnectPrompt({ connection: "none" });
       setSummary("Not connected to a daemon.");
       return;
     }

@@ -33,6 +33,25 @@ Takes [RunJobRequest](#runjobrequest), returns [RunJobResponse](#runjobresponse)
 
 ## Messages
 
+### CompletionGate
+
+CompletionGate is one machine-verifiable condition a job's completion is checked against, projected from types.CompletionGate. kind names WHAT it examines and expect names what must be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as the command that runs it, the same way Job.check is - the wire never carries the unrendered form, so a client needs no second parser for it.
+
+Source: [job.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L123).
+
+| Field         | Type            | # | Description |
+| ------------- | --------------- | - | ----------- |
+| `id`          | string          | 1 |             |
+| `description` | string          | 2 |             |
+| `kind`        | string          | 3 |             |
+| `expect`      | string          | 4 |             |
+| `check`       | string          | 5 |             |
+| `paths`       | repeated string | 6 |             |
+| `symbols`     | repeated string | 7 |             |
+| `depends_on`  | repeated string | 8 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
 ### Job
 
 Job is the full picture of one job: what it is, who holds it, whether an instance is running now, its most recent run, and the current magnitude of the resource it maintains.
@@ -41,29 +60,32 @@ ONE message for both kinds. A catalog job fills the description and target; a de
 
 Source: [job.proto:74](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L74).
 
-| Field         | Type                               | #  | Description                                                                                                                                                                                                                                                         |
-| ------------- | ---------------------------------- | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`        | string                             | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                                                    |
-| `description` | string                             | 2  |                                                                                                                                                                                                                                                                     |
-| `running`     | bool                               | 3  | an instance is in flight right now                                                                                                                                                                                                                                  |
-| `last_run`    | [JobRun](#jobrun)                  | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                                          |
-| `target`      | [ResourceSize](#resourcesize)      | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                                                    |
-| `id`          | string                             | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                             |
-| `holder`      | [JobHolder](#jobholder)            | 7  | who runs it                                                                                                                                                                                                                                                         |
-| `state`       | string                             | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                          |
-| `criteria`    | string                             | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field. |
-| `parent`      | string                             | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                             |
-| `model`       | string                             | 11 |                                                                                                                                                                                                                                                                     |
-| `check`       | string                             | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                   |
-| `write_paths` | repeated string                    | 13 |                                                                                                                                                                                                                                                                     |
-| `deny_paths`  | repeated string                    | 14 |                                                                                                                                                                                                                                                                     |
-| `read_paths`  | repeated string                    | 15 |                                                                                                                                                                                                                                                                     |
-| `depends_on`  | repeated string                    | 16 |                                                                                                                                                                                                                                                                     |
-| `read_only`   | bool                               | 17 |                                                                                                                                                                                                                                                                     |
-| `checkpoint`  | string                             | 18 |                                                                                                                                                                                                                                                                     |
-| `releases`    | [repeated JobRelease](#jobrelease) | 19 |                                                                                                                                                                                                                                                                     |
-| `created`     | int64                              | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                                             |
-| `updated`     | int64                              | 21 |                                                                                                                                                                                                                                                                     |
+| Field              | Type                                       | #  | Description                                                                                                                                                                                                                                                         |
+| ------------------ | ------------------------------------------ | -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`             | string                                     | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                                                    |
+| `description`      | string                                     | 2  |                                                                                                                                                                                                                                                                     |
+| `running`          | bool                                       | 3  | an instance is in flight right now                                                                                                                                                                                                                                  |
+| `last_run`         | [JobRun](#jobrun)                          | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                                          |
+| `target`           | [ResourceSize](#resourcesize)              | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                                                    |
+| `id`               | string                                     | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                             |
+| `holder`           | [JobHolder](#jobholder)                    | 7  | who runs it                                                                                                                                                                                                                                                         |
+| `state`            | string                                     | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                          |
+| `criteria`         | string                                     | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field. |
+| `parent`           | string                                     | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                             |
+| `model`            | string                                     | 11 |                                                                                                                                                                                                                                                                     |
+| `check`            | string                                     | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                   |
+| `write_paths`      | repeated string                            | 13 |                                                                                                                                                                                                                                                                     |
+| `deny_paths`       | repeated string                            | 14 |                                                                                                                                                                                                                                                                     |
+| `read_paths`       | repeated string                            | 15 |                                                                                                                                                                                                                                                                     |
+| `depends_on`       | repeated string                            | 16 |                                                                                                                                                                                                                                                                     |
+| `read_only`        | bool                                       | 17 |                                                                                                                                                                                                                                                                     |
+| `checkpoint`       | string                                     | 18 |                                                                                                                                                                                                                                                                     |
+| `releases`         | [repeated JobRelease](#jobrelease)         | 19 |                                                                                                                                                                                                                                                                     |
+| `created`          | int64                                      | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                                             |
+| `updated`          | int64                                      | 21 |                                                                                                                                                                                                                                                                     |
+| `completion_gates` | [repeated CompletionGate](#completiongate) | 22 | CompletionGates are the declared machine-verifiable acceptance conditions, empty on a job that named none beyond its primary check. See CompletionGate.                                                                                                             |
+| `result`           | [JobResult](#jobresult)                    | 23 | Result is what the holder filed on exit, unset until it has.                                                                                                                                                                                                        |
+| `deadline`         | int64                                      | 24 | Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork set no timeout.                                                                                                                                                             |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -73,7 +95,7 @@ JobOverlap is one pair of jobs whose declared write paths intersect. Derived on 
 
 Each side's intersecting declarations come separately, because the two are rarely the same string ("internal/job" and "internal/job/store.go" intersect) and a reader who cannot tell which job claimed which has nothing to act on.
 
-Source: [job.proto:125](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L125).
+Source: [job.proto:159](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L159).
 
 | Field     | Type            | # | Description |
 | --------- | --------------- | - | ----------- |
@@ -88,7 +110,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobRelease is a path a job gave up, and the version of it the next one inherits. The digest is the file's sha256 when there was a file; "absent" and "dir" are carried through as they are rather than turned into a hash-shaped lie.
 
-Source: [job.proto:112](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L112).
+Source: [job.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L146).
 
 | Field         | Type   | # | Description  |
 | ------------- | ------ | - | ------------ |
@@ -98,11 +120,25 @@ Source: [job.proto:112](https://github.com/egladman/magus/blob/main/proto/magus/
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
+### JobResult
+
+JobResult is what a holder filed when it exited: the paths it changed, the risks it left unresolved, and the jobs it spawned. A projection of types.JobResult's console-facing half; the schema version and per-gate evidence stay server-side, since nothing renders them yet.
+
+Source: [job.proto:137](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L137).
+
+| Field              | Type            | # | Description |
+| ------------------ | --------------- | - | ----------- |
+| `changed_paths`    | repeated string | 1 |             |
+| `unresolved_risks` | repeated string | 2 |             |
+| `descendants`      | repeated string | 3 |             |
+
+Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
+
 ### JobRun
 
 JobRun is one completed execution of a job.
 
-Source: [job.proto:133](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L133).
+Source: [job.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L167).
 
 | Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
 | ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -120,7 +156,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Paginated by contract so growth never forces a breaking change, though the registry is a fixed handful today and one page always holds it.
 
-Source: [job.proto:163](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L163).
+Source: [job.proto:197](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L197).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -131,7 +167,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L167).
+Source: [job.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L201).
 
 | Field             | Type                               | # | Description                                                                             |
 | ----------------- | ---------------------------------- | - | --------------------------------------------------------------------------------------- |
@@ -145,7 +181,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 ResourceSize is the current magnitude of a job's target resource, for a caller to show how much there is to maintain (and to judge whether a rotate/clear is worth running).
 
-Source: [job.proto:149](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L149).
+Source: [job.proto:183](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L183).
 
 | Field        | Type  | # | Description                                                 |
 | ------------ | ----- | - | ----------------------------------------------------------- |
@@ -156,7 +192,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### RunJobRequest
 
-Source: [job.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L154).
+Source: [job.proto:188](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L188).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
 | ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

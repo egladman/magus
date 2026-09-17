@@ -104,6 +104,40 @@ message Job {
   repeated JobRelease releases = 19;
   int64 created = 20; // unix SECONDS, as the store records them
   int64 updated = 21;
+
+  // CompletionGates are the declared machine-verifiable acceptance conditions, empty on a job
+  // that named none beyond its primary check. See CompletionGate.
+  repeated CompletionGate completion_gates = 22;
+  // Result is what the holder filed on exit, unset until it has.
+  JobResult result = 23;
+  // Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
+  // set no timeout.
+  int64 deadline = 24;
+}
+
+// CompletionGate is one machine-verifiable condition a job's completion is checked against,
+// projected from types.CompletionGate. kind names WHAT it examines and expect names what must
+// be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is
+// rendered as the command that runs it, the same way Job.check is - the wire never carries the
+// unrendered form, so a client needs no second parser for it.
+message CompletionGate {
+  string id = 1;
+  string description = 2;
+  string kind = 3;
+  string expect = 4;
+  string check = 5;
+  repeated string paths = 6;
+  repeated string symbols = 7;
+  repeated string depends_on = 8;
+}
+
+// JobResult is what a holder filed when it exited: the paths it changed, the risks it left
+// unresolved, and the jobs it spawned. A projection of types.JobResult's console-facing half;
+// the schema version and per-gate evidence stay server-side, since nothing renders them yet.
+message JobResult {
+  repeated string changed_paths = 1;
+  repeated string unresolved_risks = 2;
+  repeated string descendants = 3;
 }
 
 // JobRelease is a path a job gave up, and the version of it the next one inherits. The

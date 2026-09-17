@@ -29,23 +29,6 @@ var ResultSchema string
 // boundary from magus\job.wait.
 type Status = types.JobStatus
 
-// Verify checks a holder's result against the job it was given: every changed path
-// inside the declared lanes and outside the declared deny list, a change set that is
-// not empty on a job that writes, descendants the store carries, and an evidence ref
-// recording a PASSING run of that job's own check.
-//
-// IT VERIFIES EVIDENCE, NOT ASSERTIONS, which is the difference between this and reading
-// the result: every rule turns on something magus already holds. Whether the work is GOOD,
-// and whether the prose Criteria were met, stay the reading of whoever forked the job.
-//
-// att is what an output store recorded for the result's ref, filed on the job by `job
-// exit` or resolved by the caller; resolving it is never done here, so no rule reads a
-// file while the store's lock is held. declared is the rest of the plan, which is what the
-// result's descendant ids are checked against.
-func Verify(row types.Job, rep types.JobResult, att types.JobAttempt, declared []types.Job) Status {
-	return VerifyGates(row, rep, att, nil, declared, Observed{})
-}
-
 // Observer answers what magus itself saw of a job, for the gates that are graded against
 // the tree rather than against the output store. Supplied by the caller for the same
 // reason AttemptResolver is: the work is IO, and the store's lock must not be held across
@@ -85,16 +68,20 @@ type Observed struct {
 
 // SymbolFact is what the graph knows about one symbol a gate named.
 type SymbolFact struct {
-	// Files are where the symbol is defined, so a `symbol` + `changed` gate can ask
-	// whether the diff touched one of them. Empty means the graph resolved nothing.
-	Files []string
-	// Refs is how many places reference it, which is what `unreferenced` grades.
-	Refs int
+	// DefinedIn are the files that define the symbol, so a `symbol` + `changed` gate can
+	// ask whether the diff touched one of them. Empty means the graph resolved nothing.
+	DefinedIn []string
+	// ReferenceCount is how many places reference it, which is what `unreferenced` grades.
+	ReferenceCount int
+	// SameNameDefinitions is one defining file per graph symbol a BARE name matched, filled only
+	// when it matched more than one: the graph grades the top-ranked match silently, so a
+	// gate on an ambiguous name would grade whichever symbol happened to rank first.
+	SameNameDefinitions []string
 }
 
 // Defined reports whether the symbol resolves at all. Derived rather than stored: a bool
-// beside Files is a second copy of len(Files) > 0, and the two can disagree.
-func (f SymbolFact) Defined() bool { return len(f.Files) > 0 }
+// beside DefinedIn is a second copy of len(DefinedIn) > 0, and the two can disagree.
+func (f SymbolFact) Defined() bool { return len(f.DefinedIn) > 0 }
 
 // missing names the observation this kind and condition need and did not get, or "" when
 // magus looked. Absence of evidence never satisfies a gate: a guard that cannot ask must
@@ -159,24 +146,24 @@ func (o Observed) symbolHolds(expect types.GateExpect, declared, from string) (b
 		if !fact.Defined() {
 			return true, ""
 		}
-		return false, fmt.Sprintf("%q is still defined in %s, and this gate expects it gone", declared, strings.Join(fact.Files, ", "))
+		return false, fmt.Sprintf("%q is still defined in %s, and this gate expects it gone", declared, strings.Join(fact.DefinedIn, ", "))
 	case types.ExpectUnreferenced:
-		if fact.Refs == 0 {
+		if fact.ReferenceCount == 0 {
 			return true, ""
 		}
-		return false, fmt.Sprintf("%d place(s) still reference %q, and this gate expects none", fact.Refs, declared)
+		return false, fmt.Sprintf("%d place(s) still reference %q, and this gate expects none", fact.ReferenceCount, declared)
 	default:
 		if !fact.Defined() {
 			return false, fmt.Sprintf("%q is defined nowhere the graph can see, so nothing of it could have changed", declared)
 		}
 		// covers(), not a bare equality: a definition file is compared with the same
 		// matcher a paths gate uses, so one question is not answered two ways.
-		for _, file := range fact.Files {
+		for _, file := range fact.DefinedIn {
 			if o.covering(file, o.Changed) {
 				return true, ""
 			}
 		}
-		return false, fmt.Sprintf("%q is defined in %s, and none of that changed since %s", declared, strings.Join(fact.Files, ", "), from)
+		return false, fmt.Sprintf("%q is defined in %s, and none of that changed since %s", declared, strings.Join(fact.DefinedIn, ", "), from)
 	}
 }
 
@@ -185,10 +172,17 @@ func (o Observed) covering(declared string, paths []string) bool {
 	return slices.ContainsFunc(paths, func(p string) bool { return covers(declared, p) })
 }
 
-// VerifyGates checks the primary check plus every explicit completion gate. It
-// derives every verdict from output-store snapshots; GateEvidence has no passed bit
-// by design. Callers that only carry the historical primary attempt may keep using
-// Verify while Exit/Wait use this complete form.
+// VerifyGates checks a holder's result against the job it was given: every changed path
+// inside the declared lanes, outside the deny list and in the diff magus observed, no
+// descendant still live, descendants the store carries, and a recorded passing run behind
+// the primary check and every explicit completion gate.
+//
+// IT VERIFIES EVIDENCE, NOT ASSERTIONS: every rule turns on something magus already holds,
+// and GateEvidence has no passed bit by design. Whether the work is GOOD, and whether the
+// prose Criteria were met, stay the reading of whoever forked the job.
+//
+// att and gateAttempts are what an output store recorded, and seen is what the caller
+// observed of the tree; nothing here resolves either, so no IO runs under the store's lock.
 func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateAttempts []types.JobGateAttempt, declared []types.Job, seen Observed) Status {
 	v := Status{Job: row.ID, Risks: rep.UnresolvedRisks, Command: rep.Validation.Command}
 
@@ -215,10 +209,23 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 			}
 		}
 	}
+	if !row.ReadOnly {
+		v.Violations = append(v.Violations, diffViolations(row, rep, seen)...)
+	}
 	for _, p := range rep.ChangedPaths {
 		if d, ok := matching(row.DenyPaths, p); ok {
 			v.Violations = append(v.Violations, fmt.Sprintf("changed path %q is one the job is denied (%s)", p, d))
 		}
+	}
+	var live []string
+	for _, d := range types.JobDescendants(declared, row.ID) {
+		if d.State.Live() {
+			live = append(live, fmt.Sprintf("%s (%s)", d.ID, d.State))
+		}
+	}
+	if len(live) > 0 {
+		v.Violations = append(v.Violations, fmt.Sprintf("job %s still has live descendants, %s, and a job is not done while work it"+
+			" handed out is: wait on them, or end them with `%s`", row.ID, strings.Join(live, ", "), hint.JobExit.With("<job>")))
 	}
 	for _, id := range rep.Descendants {
 		if !slices.ContainsFunc(declared, func(r types.Job) bool { return r.ID == id }) {
@@ -313,6 +320,30 @@ func VerifyGates(row types.Job, rep types.JobResult, att types.JobAttempt, gateA
 	}
 	v.Verified = len(v.Violations) == 0
 	return v
+}
+
+// diffViolations holds a writing job's claim to what magus observed since its checkpoint:
+// every claimed path is in the diff, and something in the diff is inside the write paths.
+// A diff nobody could read fails, since a claim checked against nothing is an attestation.
+func diffViolations(row types.Job, rep types.JobResult, seen Observed) []string {
+	if !seen.ChangedKnown {
+		return []string{fmt.Sprintf("magus could not read what job %s changed since its checkpoint, so its changed_paths"+
+			" cannot be checked against the tree; declare the job with a checkpoint (`%s`)", row.ID, hint.VCSCheckpoint.With("-o", "name"))}
+	}
+	from := seen.ChangedFrom
+	if from == "" {
+		from = "the job's checkpoint"
+	}
+	var out []string
+	for _, p := range rep.ChangedPaths {
+		if !slices.ContainsFunc(seen.Changed, func(c string) bool { return covers(p, c) }) {
+			out = append(out, fmt.Sprintf("the result claims %q changed, and the diff since %s does not show it", p, from))
+		}
+	}
+	if !slices.ContainsFunc(seen.Changed, func(c string) bool { _, ok := matching(row.WritePaths, c); return ok }) {
+		out = append(out, fmt.Sprintf("nothing in the diff since %s is inside its write paths (%s)", from, strings.Join(row.WritePaths, ", ")))
+	}
+	return out
 }
 
 func prefixedGateViolations(status types.GateStatus) []string {

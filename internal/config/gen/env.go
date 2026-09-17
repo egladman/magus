@@ -289,6 +289,26 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 		b := parseBoolEnv(v, cfg.Diff.Tui != nil && *cfg.Diff.Tui)
 		cfg.Diff.Tui = &b
 	}
+	if v := getenv("MAGUS_JOBS_MAX_DEPTH"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Jobs.MaxDepth = n
+		}
+	}
+	if v := getenv("MAGUS_JOBS_MAX_LIVE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Jobs.MaxLive = n
+		}
+	}
+	if v := getenv("MAGUS_JOBS_DEFAULT_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Jobs.DefaultTimeout = d
+		}
+	}
+	if v := getenv("MAGUS_JOBS_STALE_AFTER"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.Jobs.StaleAfter = d
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			cfg.Concurrency = n

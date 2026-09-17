@@ -267,6 +267,13 @@ var allChecks = []checkDef{
 		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkBoundLease() },
 	},
 	{
+		Name:           "job-tree",
+		Doc:            "live jobs nobody is left to wait on: an ended root ancestor, or no update within jobs.stale_after",
+		Evidence:       types.EvidenceMeasured,
+		NeedsWorkspace: true,
+		run:            func(r *runner, _ []*types.Project) types.DoctorCheck { return r.checkJobTree() },
+	},
+	{
 		Name:     "daemon-version",
 		Doc:      "whether the daemon answering this workspace is the same build as the binary asking",
 		Evidence: types.EvidenceMeasured,

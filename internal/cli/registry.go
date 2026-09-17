@@ -1773,7 +1773,8 @@ var jobCommand = Command{
 	Tags:        []string{"cli", "magus job", "job", "jobs", "lease", "agents", "delegation"},
 	Long: `Delegated work on the shell's own lifecycle. A JOB is the unit of work; a LEASE
 is the grant one holder has on it: its write and read lanes, plus the one check
-it runs.
+it runs. A job is not a run: ` + "`magus run`" + ` executes a target with no job involved,
+while a job's check and the daemon's maintenance each cause runs.
 
 Two channels write the job store. The magus_job MCP tool is an agent's, this verb
 is a person's, and they reach the same store and the same rules. One author per
@@ -1839,7 +1840,8 @@ them and magus describe job prints one job's terms.`,
 			Flags: []Flag{
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a job must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read one job as JSON on stdin instead of taking it from flags"},
-				{Name: "criteria", Kind: FlagString, Doc: "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths"},
+				{Name: "criteria", Kind: FlagString, Doc: "What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-* flag)"},
+				{Name: "timeout", Kind: FlagDuration, Doc: "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout"},
 				{Name: "parent", Kind: FlagString, Doc: "The job this one is forked from"},
 				{Name: "checkpoint", Kind: FlagString, Doc: "The working state this job is handed, as `magus vcs checkpoint -o name` prints it"},
 				{Name: "write-paths", Kind: FlagCustom, Doc: "A path this job may write; repeatable or comma-separated"},

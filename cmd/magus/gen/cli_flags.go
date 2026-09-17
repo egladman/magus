@@ -311,6 +311,8 @@ const (
 	FlagJobForkSchema = "schema"
 	// job fork: --stdin
 	FlagJobForkStdin = "stdin"
+	// job fork: --timeout
+	FlagJobForkTimeout = "timeout"
 	// job fork: --write-paths
 	FlagJobForkWritePaths = "write-paths"
 	// job rm: --force
@@ -1369,14 +1371,15 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 // It does NOT carry --write-paths, --deny-paths, --read-paths, --depends-on, --gate-check, --gate-paths, --gate-paths-present, --gate-paths-absent, --gate-symbol, --gate-symbol-present, --gate-symbol-absent, --gate-symbol-unreferenced: a custom-valued flag is bound by the command itself,
 // which must do so alongside this binder.
 type JobForkFlags struct {
-	Schema     bool   // --schema
-	Stdin      bool   // --stdin
-	Criteria   string // --criteria
-	Parent     string // --parent
-	Checkpoint string // --checkpoint
-	Check      string // --check
-	Model      string // --model
-	ReadOnly   bool   // --read-only
+	Schema     bool          // --schema
+	Stdin      bool          // --stdin
+	Criteria   string        // --criteria
+	Timeout    time.Duration // --timeout
+	Parent     string        // --parent
+	Checkpoint string        // --checkpoint
+	Check      string        // --check
+	Model      string        // --model
+	ReadOnly   bool          // --read-only
 }
 
 // BindJobFork registers `magus job fork`'s flags on fs and returns the destination.
@@ -1384,7 +1387,8 @@ func BindJobFork(fs *flag.FlagSet) *JobForkFlags {
 	var f JobForkFlags
 	fs.BoolVar(&f.Schema, FlagJobForkSchema, false, "Print the JSON schema a job must satisfy, and exit")
 	fs.BoolVar(&f.Stdin, FlagJobForkStdin, false, "Read one job as JSON on stdin instead of taking it from flags")
-	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is --gate-check and --gate-paths")
+	fs.StringVar(&f.Criteria, FlagJobForkCriteria, "", "What this job is for and what done means, as prose; the machine-checkable half is the completion gates (--check and every --gate-* flag)")
+	fs.DurationVar(&f.Timeout, FlagJobForkTimeout, 0, "Deny this job's writes once this long has passed since the fork (e.g. 45m, 2h); unset means no bound, unless magus.yaml sets jobs.default_timeout")
 	fs.StringVar(&f.Parent, FlagJobForkParent, "", "The job this one is forked from")
 	fs.StringVar(&f.Checkpoint, FlagJobForkCheckpoint, "", "The working state this job is handed, as `magus vcs checkpoint -o name` prints it")
 	fs.StringVar(&f.Check, FlagJobForkCheck, "", "The one check this job runs, as `<target> <project> [-- args]` (the `magus run` is implied)")

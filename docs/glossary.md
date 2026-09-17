@@ -309,6 +309,18 @@ a session, for work an orchestrator handed out, or the daemon, for its own
 maintenance. The store records; the agent guard is what reads those facts back
 when grading a write. See [doctrine.md](doctrine.md).
 
+A job is not a run. `magus run build web` is a run, and no job exists for it. A
+job causes runs: its check executes as one, and a daemon job records the
+invocation of its last one. Jobs are listed with `magus ls jobs` and in the
+console's Jobs view; runs are listed in the Runs view.
+
+### Run
+
+One target executing under one `magus` invocation, such as `magus run test web`
+or `magus affected ci`. A run keeps its captured output behind an output
+reference. Every `magus run` is a run whether or not any job asked for it; see
+Job for how the two relate.
+
 ### Lease
 
 The grant a holder takes on a job: the write and read lanes that job declared,

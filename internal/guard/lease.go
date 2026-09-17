@@ -444,6 +444,20 @@ func adviseTerminalLease(standing leaseStanding, actingLease string) string {
 		actingLease, standing.state)
 }
 
+// denyOverdueLease refuses a write graded under a live lease past its deadline, or returns
+// "" for one with no deadline or time left. The row stays live: ending it is the
+// orchestrator's, and magus never transitions a row on its own.
+func denyOverdueLease(me types.Job, now int64) string {
+	if !me.Overdue(now) {
+		return ""
+	}
+	return fmt.Sprintf("magus workspace: stop writing and report what you have; lease %s passed its deadline.\n"+
+		"Lease %s was forked with a timeout, and its deadline %s passed %s ago, so the guard denies every write graded under it. "+
+		"The row is still %s: the orchestrator ends it with `%s` or re-forks it with a new --timeout.",
+		me.ID, me.ID, time.Unix(me.Deadline, 0).UTC().Format(time.RFC3339),
+		time.Duration(now-me.Deadline)*time.Second, me.State, hint.JobExit.With(me.ID))
+}
+
 // denyLeaseScopedRebind refuses, under a bound lease, every command that would rewrite
 // WHO the caller is or what its row says.
 //

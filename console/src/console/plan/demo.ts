@@ -107,6 +107,23 @@ export function demoJobs(nowMs: number): Job[] {
       denyPaths: ["services/**", "apps/**"],
       created: at(104),
       updated: at(88),
+      // A finished job with both halves of what the drawer now shows: the gate it was held to
+      // (its own check, plus a paths gate the check cannot express - the wire contract has to
+      // actually be written down) and what it filed on exit.
+      completionGates: [
+        { id: "check", kind: "check", expect: "passed", check: "magus run test libs/authkit ." },
+        {
+          id: "contract-documented",
+          kind: "paths",
+          expect: "changed",
+          paths: ["libs/authkit/audience.go"],
+        },
+      ],
+      result: {
+        changedPaths: ["libs/authkit/claims.go", "libs/authkit/audience.go"],
+        unresolvedRisks: ["callers outside libs/ that still read Claims.Scope were not searched"],
+        descendants: ["identity-verify", "verify-tests", "dashboard-client"],
+      },
       releases: [
         {
           path: "libs/authkit/claims.go",

@@ -528,6 +528,182 @@ test("selecting a job shows its criteria, checkpoint, model, check and paths", a
   }
 });
 
+// ---- kind and goals are never drawer-only -----------------------------------
+
+test("a row shows its kind and its goals - criteria and parent - not only the detail sheet", async () => {
+  serve({
+    jobs: okJobs([
+      sessionJob("root", { criteria: "draw the jobs" }),
+      sessionJob("child", {
+        parent: "root",
+        criteria: "make the card say what it is for, same as the row does",
+      }),
+    ]),
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const row = rowFor(host, "child");
+    const goal = row?.querySelector(".console-plan-list__goal")?.textContent ?? "";
+    assert.match(goal, /make the card say what it is for/);
+    assert.match(goal, /parent: root/);
+    // Never opened the detail sheet above - this is the row alone.
+    assert.doesNotMatch(host.querySelector(".console-plan-detail")?.textContent ?? "", /root/);
+  } finally {
+    teardown();
+  }
+});
+
+// The card is the accessible list's aria-hidden twin, so this pins only that the text is there in
+// the markup - not that a reader who cannot see it relies on it.
+test("the card carries the job's kind and a truncated criteria", async () => {
+  serve({
+    jobs: okJobs([
+      sessionJob("root", {
+        criteria: "a criteria sentence long enough that the card has to cut it off somewhere",
+      }),
+    ]),
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const goal = host.querySelector(".console-plan-node__goal")?.textContent ?? "";
+    assert.match(goal, /^session: /);
+    assert.ok(goal.length <= 30, "truncated to fit the card");
+  } finally {
+    teardown();
+  }
+});
+
+test("a daemon job's card still names its kind even with no criteria to show", async () => {
+  serve({ jobs: okJobs([daemonJob("clear-cache")]) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(host.querySelector(".console-plan-node__goal")?.textContent, "daemon");
+  } finally {
+    teardown();
+  }
+});
+
+// ---- completion gates and a filed result ------------------------------------
+
+test("the drawer shows the declared completion gates: kind, expect and the subject", async () => {
+  serve({
+    jobs: okJobs([
+      sessionJob("root", {
+        completionGates: [
+          {
+            id: "unit",
+            kind: "check",
+            expect: "passed",
+            check: "magus run test console .",
+          },
+          {
+            id: "contract-documented",
+            kind: "paths",
+            expect: "changed",
+            paths: ["console/src/console/plan/main.ts"],
+          },
+        ],
+      }),
+    ]),
+    feeds: true,
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.match(detail, /Completion gates/);
+    assert.match(detail, /unit/);
+    assert.match(detail, /check passed/);
+    assert.match(
+      detail,
+      /magus run test console \./,
+      "check is rendered as the command that runs it",
+    );
+    assert.match(detail, /contract-documented/);
+    assert.match(detail, /paths changed/);
+    assert.match(detail, /console\/src\/console\/plan\/main\.ts/);
+  } finally {
+    teardown();
+  }
+});
+
+test("a filed result shows its changed paths, unresolved risks and descendants", async () => {
+  serve({
+    jobs: okJobs([
+      sessionJob("root", {
+        result: {
+          changedPaths: ["console/src/console/plan/main.ts"],
+          unresolvedRisks: ["the card was never load-tested at deep nesting"],
+          descendants: ["child-a", "child-b"],
+        },
+      }),
+    ]),
+    feeds: true,
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.match(detail, /Changed paths/);
+    assert.match(detail, /console\/src\/console\/plan\/main\.ts/);
+    assert.match(detail, /Unresolved risks/);
+    assert.match(detail, /the card was never load-tested at deep nesting/);
+    assert.match(detail, /Descendants/);
+    assert.match(detail, /child-a/);
+    assert.match(detail, /child-b/);
+  } finally {
+    teardown();
+  }
+});
+
+test("a job with no filed result shows no result fields", async () => {
+  serve({ jobs: okJobs([sessionJob("root")]), feeds: true });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.doesNotMatch(detail, /Changed paths/);
+    assert.doesNotMatch(detail, /Unresolved risks/);
+    assert.doesNotMatch(detail, /Descendants/);
+  } finally {
+    teardown();
+  }
+});
+
+// ---- what a job IS, said once, beside the surface it is easiest to confuse with -------------
+
+test("the view says what a job is and links to Runs for target runs", async () => {
+  serve({ jobs: okJobs([sessionJob("root")]) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const intro = host.querySelector(".console-plan-intro")?.textContent ?? "";
+    assert.match(intro, /Work someone owns/);
+    assert.match(intro, /the daemon's own maintenance/);
+    assert.match(intro, /Target runs are in Runs/);
+    const link = host.querySelector<HTMLButtonElement>(".console-plan-intro__link");
+    assert.equal(link?.dataset.openSurface, "runs");
+    let opened: unknown;
+    window.addEventListener(
+      "console:open-surface",
+      (e) => {
+        opened = (e as CustomEvent).detail;
+      },
+      { once: true },
+    );
+    link?.click();
+    assert.deepEqual(opened, { pageId: "runs" });
+  } finally {
+    teardown();
+  }
+});
+
 // The other half of that sentence, and the reason it is two sentences. Feeds that did not answer
 // cannot attribute a run to ANY job, which is a fact about the daemon; reporting it as the one above
 // would blame the job for a daemon that is not talking.
