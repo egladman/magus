@@ -90,6 +90,25 @@ func TestResolveRunDir(t *testing.T) {
 	}
 }
 
+// TestNestedExecOptionsCarriesStdin pins the option that was silently dropped: a magusfile
+// piping a registry token to `graph push` had it discarded, so every cd publish failed with
+// "no token on stdin" against a magusfile that passed one.
+func TestNestedExecOptionsCarriesStdin(t *testing.T) {
+	ctx := WithCwd(context.Background(), "/ws/api")
+
+	fed := nestedExecOptions(ctx, map[string]any{"stdin": "ghp_token", "quiet": true}, nil)
+	assert.Equal(t, "ghp_token", fed.Stdin)
+	assert.True(t, fed.Quiet)
+	assert.Equal(t, "/ws/api", fed.Dir)
+	assert.True(t, fed.Capture, "a nested magus is always captured; the caller reads its output")
+
+	bare := nestedExecOptions(ctx, nil, nil)
+	assert.Empty(t, bare.Stdin, "no opt means the child inherits nothing on stdin")
+
+	wrong := nestedExecOptions(ctx, map[string]any{"stdin": 7}, nil)
+	assert.Empty(t, wrong.Stdin, "a non-string stdin is ignored rather than rendered")
+}
+
 // TestMagusRaise covers the contract a magusfile author depends on: the code and url
 // survive onto the caught value as fields, and the MGS namespace is closed to them.
 func TestMagusRaise(t *testing.T) {
