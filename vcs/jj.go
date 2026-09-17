@@ -629,38 +629,9 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 	if err != nil {
 		return nil, fmt.Errorf("jj log: %w", err)
 	}
-	changes := parseChangesByCommit(out)
-	if prefix == "" {
-		return changes, nil // dir IS the repository root; every file is in the subtree
-	}
-	for i := range changes {
-		kept := changes[i].Files[:0]
-		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f.Path, prefix) {
-				kept = append(kept, f)
-			}
-		}
-		changes[i].Files = kept
-	}
-	return changes, nil
+	return keepSubtree(parseChangesByCommit(out), prefix), nil
 }
 
-// ExportRevision implements types.RevisionExporter through a throwaway jj WORKSPACE.
-//
-// jj has no `archive` or `export` command, and materializing a revision file by file
-// through `jj file show` would be one subprocess per path, unusable on a tree of any size.
-// `jj workspace add -r <rev>` checks the revision out into a directory in a single command,
-// which is the bulk primitive the other backends get from archive.
-//
-// Two consequences the other implementations do not have:
-//
-//   - The new workspace carries its own .jj directory, which belongs to no commit and is
-//     skipped when copying out.
-//   - jj RECORDS the workspace in the repository, so it has to be forgotten again or the
-//     repo accumulates one entry per export. The forget runs unconditionally, including on
-//     the failure paths, and uses a context detached from cancellation so a cancelled export
-//     still cleans up after itself.
-//
 // ReadFileAt implements types.RevisionFileReader via `jj file show -r <rev>`.
 //
 // "" is `@-`, NOT `@` as everywhere else in this driver. jj's working copy IS a commit and
@@ -686,6 +657,21 @@ func (v jjVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 	return revFileOutput(cmd, fmt.Sprintf("jj file show -r %s %s", rev, path))
 }
 
+// ExportRevision implements types.RevisionExporter through a throwaway jj WORKSPACE.
+//
+// jj has no `archive` or `export` command, and materializing a revision file by file
+// through `jj file show` would be one subprocess per path, unusable on a tree of any size.
+// `jj workspace add -r <rev>` checks the revision out into a directory in a single command,
+// which is the bulk primitive the other backends get from archive.
+//
+// Two consequences the other implementations do not have:
+//
+//   - The new workspace carries its own .jj directory, which belongs to no commit and is
+//     skipped when copying out.
+//   - jj RECORDS the workspace in the repository, so it has to be forgotten again or the
+//     repo accumulates one entry per export. The forget runs unconditionally, including on
+//     the failure paths, and uses a context detached from cancellation so a cancelled export
+//     still cleans up after itself.
 func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
 	if rev == "" {
 		rev = "@"
@@ -722,13 +708,7 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 		return fmt.Errorf("jj workspace add %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
 	}
 
-	// A revision predating dir has no subtree in the export; that is an empty tree rather
-	// than a failure, matching git.
-	staged := filepath.Join(target, filepath.FromSlash(prefix))
-	if _, err := os.Stat(staged); os.IsNotExist(err) {
-		return os.MkdirAll(dstDir, 0o755)
-	}
-	return copyTree(staged, dstDir)
+	return copySubtree(target, prefix, dstDir)
 }
 
 // StartMerge implements types.MergeStarter, and the mapping is not a transliteration of the

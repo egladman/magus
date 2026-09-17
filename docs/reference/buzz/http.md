@@ -71,7 +71,7 @@ GET url and stream the response body straight to dest, returning the HTTP status
 
 Send a POST request with body; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\post(url, body, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L244)
+**Signature:** `http\post(url, body, [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L227)
 
 | Parameter | Type                | Optional | Description |
 | --------- | ------------------- | -------- | ----------- |
@@ -110,7 +110,7 @@ try {
 
 Send an HTTP request; returns {status, body, headers}. opts (curl-style): fail, fail_with_body, fail_early (bool); timeout (seconds, default 30). Retrying is NOT configured here - pass a typed HttpRetry as the retry argument; without one the request runs exactly once.
 
-**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L250)
+**Signature:** `http\request(method, url, [body], [headers], [opts], [retry]) -> HttpResponse` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L233)
 
 | Parameter | Type                | Optional | Description |
 | --------- | ------------------- | -------- | ----------- |
@@ -148,7 +148,7 @@ try {
 
 Start a static file server in the background from an options map and return the bound port. opts keys: dir (string) serves a single directory; OR mounts (a map of URL-prefix -> dir, e.g. {"/": "docs/gen", "/console/": "console/gen"}) serves multiple roots where a request routes to the LONGEST matching prefix, so "/console/" wins over "/" for a /console/ path and the matched prefix is stripped before the file lookup. Exactly one of dir or mounts is required. port (int, optional) binds that port; 0 (the default) scans upward from 8080 and binds the first available one. Unknown keys are rejected. Serves localhost only and runs until the process exits, so pair it with a blocking call like fs.watch.
 
-**Signature:** `http\server(opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L262)
+**Signature:** `http\server(opts) -> int` - [source](https://github.com/egladman/magus/blob/main/std/http.go#L245)
 
 | Parameter | Type             | Optional | Description |
 | --------- | ---------------- | -------- | ----------- |

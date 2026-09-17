@@ -145,76 +145,55 @@ func harnessProblemsFor(ctx context.Context, root string) []agent.HarnessProblem
 }
 
 func agentHarnessApplyCmd(ctx context.Context, rootOverride string, args []string) error {
-	fset := flag.NewFlagSet("agent harness apply", flag.ContinueOnError)
-	id := fset.String("id", "", "harness descriptor ID; omit to apply every magusfile-wired provider")
-	bindDisplayFlags(fset)
-	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
-	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
-		return err
-	}
-	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness apply: positional arguments are not accepted")
-	}
-	root := resolveRootOrEmpty(rootOverride)
-	if root == "" {
-		return fmt.Errorf("magus agent harness apply: no workspace here: run it from inside one or pass --root <path>")
-	}
-	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
-	if err != nil {
-		return fmt.Errorf("magus agent harness apply: %w", err)
-	}
-	harnessProblemsFor(ctx, root)
-	for _, harnessID := range ids {
-		update, err := agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
-			Root:        root,
-			ID:          harnessID,
-			DryRun:      globalCfg.DryRun,
-			ActingLease: proc.LeaseFromContext(ctx),
+	return runHarnessChange(ctx, rootOverride, args, "apply", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
+		return agent.ApplyHarness(ctx, agent.HarnessApplyOptions{
+			Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: proc.LeaseFromContext(ctx),
 		})
-		if err != nil {
-			return fmt.Errorf("magus agent harness apply: %w", err)
-		}
-		if err := writeHarnessOutput(os.Stdout, update); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
 }
 
 // agentHarnessRemoveCmd is ApplyHarness's inverse on the CLI: it deletes only the
 // managed entries and config_defaults values apply would have written, and never
 // asks for confirmation (see RemoveHarness's doc comment for why). It prints
-// exactly what changed the same way apply does, through writeHarnessOutput, and
-// honors --dry-run to preview a removal first.
+// exactly what changed the same way apply does, and honors --dry-run to preview a
+// removal first.
 func agentHarnessRemoveCmd(ctx context.Context, rootOverride string, args []string) error {
-	fset := flag.NewFlagSet("agent harness remove", flag.ContinueOnError)
-	id := fset.String("id", "", "harness descriptor ID; omit to remove every magusfile-wired provider")
+	return runHarnessChange(ctx, rootOverride, args, "remove", func(ctx context.Context, root, id string) (agent.HarnessUpdate, error) {
+		return agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{
+			Root: root, ID: id, DryRun: globalCfg.DryRun, ActingLease: proc.LeaseFromContext(ctx),
+		})
+	})
+}
+
+// runHarnessChange runs `agent harness <verb> [--id]`: change against one descriptor, or
+// every magusfile-wired provider when --id is omitted, printing each update.
+func runHarnessChange(ctx context.Context, rootOverride string, args []string, verb string,
+	change func(ctx context.Context, root, id string) (agent.HarnessUpdate, error),
+) error {
+	name := "magus agent harness " + verb
+	fset := flag.NewFlagSet("agent harness "+verb, flag.ContinueOnError)
+	id := fset.String("id", "", "harness descriptor ID; omit to "+verb+" every magusfile-wired provider")
 	bindDisplayFlags(fset)
 	fset.Usage = func() { agentHarnessUsage(fset.Output()) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus agent harness remove: positional arguments are not accepted")
+		return usagef("%s: positional arguments are not accepted", name)
 	}
 	root := resolveRootOrEmpty(rootOverride)
 	if root == "" {
-		return fmt.Errorf("magus agent harness remove: no workspace here: run it from inside one or pass --root <path>")
+		return fmt.Errorf("%s: no workspace here: run it from inside one or pass --root <path>", name)
 	}
 	ids, ctx, err := resolveHarnessIDs(ctx, rootOverride, *id)
 	if err != nil {
-		return fmt.Errorf("magus agent harness remove: %w", err)
+		return fmt.Errorf("%s: %w", name, err)
 	}
 	harnessProblemsFor(ctx, root)
 	for _, harnessID := range ids {
-		update, err := agent.RemoveHarness(ctx, agent.HarnessRemoveOptions{
-			Root:        root,
-			ID:          harnessID,
-			DryRun:      globalCfg.DryRun,
-			ActingLease: proc.LeaseFromContext(ctx),
-		})
+		update, err := change(ctx, root, harnessID)
 		if err != nil {
-			return fmt.Errorf("magus agent harness remove: %w", err)
+			return fmt.Errorf("%s: %w", name, err)
 		}
 		if err := writeHarnessOutput(os.Stdout, update); err != nil {
 			return err

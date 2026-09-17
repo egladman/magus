@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -258,6 +259,103 @@ func hgFamilyGlobs(paths []string) []string {
 		out = append(out, "glob:"+p)
 	}
 	return out
+}
+
+// hgFamilyChangesByCommit is ChangesByCommit for hg and Sapling, which share the revset
+// language and differ only in the program and the churn template it renders.
+//
+// `-r` scopes the walk to the working copy's ancestors, so a repository with several heads
+// cannot attribute churn from a line this checkout is not on, and `not merge()` keeps a
+// merge's sprawling file list out, matching git's --no-merges.
+//
+// reverse() is load-bearing: `log -r <revset>` follows the revset's order, and ancestors()
+// is ascending, so without it `-l N` returns the N OLDEST commits while the interface
+// promises the newest.
+//
+// since bounds the scan by commit date. date() takes a date STRING rather than an epoch and
+// reads a leading ">" as "after", so an RFC 3339 bound arrives as
+// `date('>2026-01-01T00:00:00Z')`.
+func hgFamilyChangesByCommit(ctx context.Context, v types.VCSDriver, prog, template, dir string, commits int, since string) ([]types.CommitChange, error) {
+	if commits <= 0 {
+		commits = 1
+	}
+	scope := "ancestors(.)"
+	if since != "" {
+		if err := checkRef(since); err != nil {
+			return nil, err
+		}
+		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
+	}
+	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
+	out, err := vcsOutput(ctx, dir, prog, "log", "-r", revset,
+		"-l", strconv.Itoa(commits), "--template", template, "--", ".")
+	if err != nil {
+		return nil, fmt.Errorf("%s log: %w", prog, err)
+	}
+	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	return keepSubtree(parseChangesByCommit(out), prefix), nil
+}
+
+// keepSubtree drops every file outside prefix from each commit. hg, Sapling and jj all
+// narrow WHICH commits a log lists to a pathspec but still list each commit's files whole,
+// so without this a nested workspace is credited with edits made outside it. An empty
+// prefix is the repository root, where every file is in the subtree.
+func keepSubtree(changes []types.CommitChange, prefix string) []types.CommitChange {
+	if prefix == "" {
+		return changes
+	}
+	for i := range changes {
+		changes[i].Files = slices.DeleteFunc(changes[i].Files, func(f types.FileChange) bool {
+			return !strings.HasPrefix(f.Path, prefix)
+		})
+	}
+	return changes
+}
+
+// hgFamilyExportRevision is ExportRevision for hg and Sapling: `archive -t files` into a
+// staging directory, then copy dir's subtree out. extra carries each program's own include
+// and exclude flags.
+//
+// The archive keeps repository-relative paths where git's `archive <rev> -- .` re-roots
+// them, which is why dir's prefix is stripped on the way out.
+func hgFamilyExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, dstDir string, extra ...string) error {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp("", "magus-"+prog+"-export-")
+	if err != nil {
+		return fmt.Errorf("%s archive: %w", prog, err)
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+
+	args := append([]string{"archive", "-r", rev, "-t", "files"}, extra...)
+	cmd := vcsExec(ctx, prog, append(args, staging)...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s archive %q: %w\n%s", prog, rev, err, strings.TrimSpace(string(out)))
+	}
+	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return err
+	}
+	return copySubtree(staging, prefix, dstDir)
+}
+
+// copySubtree copies prefix's subtree of an exported tree at root into dstDir. A revision
+// predating the subtree exported none of it, which is an empty tree rather than a failure:
+// git reports the same case as "everything was added".
+func copySubtree(root, prefix, dstDir string) error {
+	staged := filepath.Join(root, filepath.FromSlash(prefix))
+	if _, err := os.Stat(staged); os.IsNotExist(err) {
+		return os.MkdirAll(dstDir, 0o755)
+	}
+	return copyTree(staged, dstDir)
 }
 
 func claimsExist(root string, claims []string) bool {

@@ -639,15 +639,36 @@ func (s *service) versionAdmits(reqVersion string) bool {
 	return s.gateVersion == "" || reqVersion == "" || reqVersion == s.gateVersion
 }
 
-func (s *service) run(req runRequest, reply *runReply) error {
-	if len(req.Args) > maxArgs {
-		return fmt.Errorf("proc: runRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
+// admitWork refuses a request to run magus that this daemon must not execute: one over the
+// argument limit, one speaking another protocol, or one from a different build.
+func (s *service) admitWork(request string, args []string, protocol, version string) error {
+	if len(args) > maxArgs {
+		return fmt.Errorf("proc: %s.Args exceeds limit (%d > %d)", request, len(args), maxArgs)
 	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
+	if protocol != "" && protocol != protocolV2 {
 		return ErrProtocolMismatch
 	}
-	if !s.versionAdmits(req.Version) {
+	if !s.versionAdmits(version) {
 		return ErrVersionMismatch
+	}
+	return nil
+}
+
+// trackCall adds a pool entry for work this daemon is running, so status and the Dashboard
+// see it. The caller runs untrack when the work ends.
+func (s *service) trackCall(args []string, workspace, inv string) (call *activeCall, untrack func()) {
+	id := s.nextID.Add(1)
+	call = &activeCall{
+		Call:  Call{Args: args, Workspace: workspace, StartedAt: time.Now(), Inv: inv},
+		SubOp: &SubOp{},
+	}
+	s.calls.Store(id, call)
+	return call, func() { s.calls.Delete(id) }
+}
+
+func (s *service) run(req runRequest, reply *runReply) error {
+	if err := s.admitWork("runRequest", req.Args, req.Protocol, req.Version); err != nil {
+		return err
 	}
 
 	ctx, cancel := context.WithCancel(s.parentCtx)
@@ -675,13 +696,8 @@ func (s *service) run(req runRequest, reply *runReply) error {
 	inv := journal.NewInvocationID()
 	ctx = journal.WithInvocationID(ctx, inv)
 
-	id := s.nextID.Add(1)
-	call := &activeCall{
-		Call:  Call{Args: req.Args, Workspace: req.Root, StartedAt: time.Now(), Inv: inv},
-		SubOp: &SubOp{},
-	}
-	s.calls.Store(id, call)
-	defer s.calls.Delete(id)
+	call, untrack := s.trackCall(req.Args, req.Root, inv)
+	defer untrack()
 	ctx = WithSubOp(ctx, call.SubOp)
 
 	if err := s.lim.Acquire(ctx); err != nil {
@@ -741,14 +757,8 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 	if req.Magic != jobMagic {
 		return nil // ignore unauthenticated submissions, matching status/shutdown
 	}
-	if len(req.Args) > maxArgs {
-		return fmt.Errorf("proc: jobRequest.Args exceeds limit (%d > %d)", len(req.Args), maxArgs)
-	}
-	if req.Protocol != "" && req.Protocol != protocolV2 {
-		return ErrProtocolMismatch
-	}
-	if !s.versionAdmits(req.Version) {
-		return ErrVersionMismatch
+	if err := s.admitWork("jobRequest", req.Args, req.Protocol, req.Version); err != nil {
+		return err
 	}
 
 	// Namespace the job key so it never collides with run's cycle-detection keyspace:
@@ -767,19 +777,14 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 		workspace = req.Cwd
 	}
 	inv := journal.NewInvocationID()
-	id := s.nextID.Add(1)
-	call := &activeCall{
-		Call:  Call{Args: req.Args, Workspace: workspace, StartedAt: time.Now(), Inv: inv},
-		SubOp: &SubOp{},
-	}
-	s.calls.Store(id, call)
+	call, untrack := s.trackCall(req.Args, workspace, inv)
 	reply.Inv = inv
 
 	// Run on the server's context, not the connection's: the job must outlive the
 	// socket round-trip that submitted it.
 	go func() {
 		defer s.inflight.Delete(key)
-		defer s.calls.Delete(id)
+		defer untrack()
 
 		ctx, cancel := context.WithCancel(s.parentCtx)
 		defer cancel()

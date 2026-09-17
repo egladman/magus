@@ -186,14 +186,7 @@ func configMCPConnectorList(args []string) error {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tFINGERPRINT\tCREATED\tEXPIRES")
 	for _, c := range conns {
-		expiresCol := "never"
-		if !c.Expires.IsZero() {
-			expiresCol = c.Expires.Format("2006-01-02")
-			if now.After(c.Expires) {
-				expiresCol += " (expired)"
-			}
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.Name, c.Fingerprint, c.Created.Format("2006-01-02"), expiresCol)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", c.Name, c.Fingerprint, c.Created.Format("2006-01-02"), expiresColumn(c, now))
 	}
 	return tw.Flush()
 }
@@ -214,25 +207,21 @@ func configMCPConnectorRevoke(args []string) error {
 		fs.Usage()
 		return fmt.Errorf("magus config mcp connector revoke: expected exactly one <name|fingerprint>")
 	}
+	q := rest[0]
 
 	store, err := auth.LoadConnectorStore()
 	if err != nil {
 		return err
 	}
-	// Confined to the MCP pool: a console token sharing a name must not be revocable
-	// through the connector command. See config_console.go for the mirror of this.
-	if !matchesScoped(store.ListScope(auth.ScopeMCP), rest[0]) {
-		if matchesScoped(store.ListScope(consoleScopes...), rest[0]) {
-			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `"+hint.ConfigConsoleTokenRevoke.With("%s")+"`", rest[0], rest[0])
+	// Confined to the MCP pool: see configConsoleTokenRevoke for the mirror of this.
+	removed, err := store.RevokeScoped(q, []auth.ClientScope{auth.ScopeMCP})
+	if errors.Is(err, auth.ErrConnectorNotFound) {
+		if matchesScoped(store.ListScope(consoleScopes...), q) {
+			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `"+hint.ConfigConsoleTokenRevoke.With("%s")+"`", q, q)
 		}
-		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", rest[0])
+		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", q)
 	}
-
-	removed, err := store.Revoke(rest[0])
 	if err != nil {
-		if errors.Is(err, auth.ErrConnectorNotFound) {
-			return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", rest[0])
-		}
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "magus config mcp connector revoke: removed %q (fingerprint %s)\n", removed.Name, removed.Fingerprint)

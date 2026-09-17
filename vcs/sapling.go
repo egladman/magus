@@ -438,62 +438,9 @@ func (v saplingVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bo
 // delete plus an add) lives at that constant.
 const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` + hgChurnFileTail
 
-// ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
-// copy's ancestors so a repository with several heads cannot attribute churn from a line of
-// development this checkout is not on. `not merge()` keeps a merge's sprawling file list
-// from skewing edit-frequency attribution, matching git's --no-merges.
-//
-// The `.` pathspec limits which COMMITS appear, but NOT the files each one lists: the
-// template's file keywords cover the changeset whole, so a commit touching both root.txt and
-// sub/a.txt reports both even when the log runs in sub/. git's --name-status filters to the
-// pathspec and reports only sub/a.txt. Measured, and the difference matters: churn is per
-// project, so the unfiltered list credits a nested workspace with edits made outside it.
-// The subtree filter is therefore applied here rather than left to the template.
-//
-// reverse() is load-bearing and is the one thing here that does not read like hg. A bare
-// `sl log` is newest-first, but `sl log -r <revset>` follows the REVSET's order, and
-// ancestors() is ascending, so without it `-l N` would return the N OLDEST commits while
-// the interface promises the newest, and a churn heatmap would describe the repository's
-// first week forever.
-//
-// since bounds the scan by commit date. Mercurial's date() predicate takes a date STRING
-// rather than an epoch, and reads a leading ">" as "after", so an RFC 3339 lower bound
-// arrives as `date('>2026-01-01T00:00:00Z')`.
+// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
 func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	if commits <= 0 {
-		commits = 1
-	}
-	scope := "ancestors(.)"
-	if since != "" {
-		if err := checkRef(since); err != nil {
-			return nil, err
-		}
-		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
-	}
-	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
-	args := []string{"log", "-r", revset, "-l", fmt.Sprintf("%d", commits), "--template", saplingChurnTemplate, "--", "."}
-	out, err := vcsOutput(ctx, dir, "sl", args...)
-	if err != nil {
-		return nil, fmt.Errorf("sl log: %w", err)
-	}
-	changes := parseChangesByCommit(out)
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return nil, err
-	}
-	if prefix == "" {
-		return changes, nil // dir IS the repository root; every file is in the subtree
-	}
-	for i := range changes {
-		kept := changes[i].Files[:0]
-		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f.Path, prefix) {
-				kept = append(kept, f)
-			}
-		}
-		changes[i].Files = kept
-	}
-	return changes, nil
+	return hgFamilyChangesByCommit(ctx, v, "sl", saplingChurnTemplate, dir, commits, since)
 }
 
 // saplingArchivalMeta is the provenance file `sl archive` injects into every export. It is
@@ -501,19 +448,6 @@ func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int
 // in the exported tree that no commit contains, which a graph diff would read as a change.
 const saplingArchivalMeta = ".sl_archival.txt"
 
-// ExportRevision implements types.RevisionExporter via `sl archive -t files`.
-//
-// Two Sapling behaviors shape this, both verified:
-//
-//   - A whole-tree include is REFUSED ("this repository has a very large working copy and
-//     requires an explicit set of files to be archived"), and it fires on a four-file
-//     repository, so it is a guard against an unqualified include rather than a size limit.
-//     `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
-//   - The archive is repo-rooted and ignores cwd for PATHING. Running it in a subdirectory
-//     correctly narrows the contents to that subtree but keeps the full repo-relative paths,
-//     where git's `archive <rev> -- .` re-roots them. dir's prefix is therefore stripped
-//     here, so dstDir mirrors the workspace as of rev the way the interface promises.
-//
 // ReadFileAt implements types.RevisionFileReader via `sl cat -r <rev>`. "" is `.`, the
 // committed revision, matching hg's spelling rather than git's.
 func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
@@ -528,39 +462,14 @@ func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (str
 	return revFileOutput(cmd, fmt.Sprintf("sl cat -r %s %s", rev, path))
 }
 
+// ExportRevision implements types.RevisionExporter via `sl archive -t files`.
+//
+// A whole-tree include is REFUSED ("this repository has a very large working copy and
+// requires an explicit set of files to be archived"), and it fires on a four-file
+// repository, so it is a guard against an unqualified include rather than a size limit.
+// `-I 'glob:**'` states the same set explicitly and is accepted; `-I .` is not.
 func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	if rev == "" {
-		rev = "."
-	}
-	if err := checkRef(rev); err != nil {
-		return err
-	}
-
-	staging, err := os.MkdirTemp("", "magus-sl-export-")
-	if err != nil {
-		return fmt.Errorf("sl archive: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-
-	cmd := vcsExec(ctx, "sl", "archive", "-r", rev, "-t", "files",
-		"-I", "glob:**", "-X", saplingArchivalMeta, staging)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("sl archive %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
-	}
-
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return err
-	}
-	// A revision predating dir yields no subtree in the export. That is an empty tree, not
-	// a failure (git's ExportRevision reports the same case as "everything was added"),
-	// so an absent staging subtree is left for WalkDir to skip rather than raised.
-	staged := filepath.Join(staging, filepath.FromSlash(prefix))
-	if _, err := os.Stat(staged); os.IsNotExist(err) {
-		return os.MkdirAll(dstDir, 0o755)
-	}
-	return copyTree(staged, dstDir)
+	return hgFamilyExportRevision(ctx, v, "sl", dir, rev, dstDir, "-I", "glob:**", "-X", saplingArchivalMeta)
 }
 
 // copyTree copies src's contents into dst, creating dst. A rename would be cheaper but is

@@ -875,56 +875,9 @@ const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` + hgC
 // arrives as a delete plus an add, costing lineage but staying correct.
 const hgChurnFileTail = `{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
-// ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
-// directory's ancestors so a repository with several heads cannot attribute churn from a
-// line of development this checkout is not on, and `not merge()` keeps a merge's sprawling
-// file list from skewing attribution, matching git's --no-merges.
-//
-// reverse() is load-bearing: a bare `hg log` is newest-first, but `hg log -r <revset>`
-// follows the REVSET's order, and ancestors() is ascending, so without it `-l N` returns
-// the N OLDEST commits while the interface promises the newest.
-//
-// The `.` pathspec limits which COMMITS appear but NOT the files each lists: the template's
-// file keywords cover the changeset whole, so a commit touching both root.txt and sub/a.txt
-// reports both even when the log runs in sub/, where git's --name-status reports only
-// sub/a.txt.
-// Measured, and it matters because churn is attributed per project: the unfiltered list
-// credits a nested workspace with edits made outside it. Hence the subtree filter here.
+// ChangesByCommit implements types.ChurnReporter; see hgFamilyChangesByCommit.
 func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
-	if commits <= 0 {
-		commits = 1
-	}
-	scope := "ancestors(.)"
-	if since != "" {
-		if err := checkRef(since); err != nil {
-			return nil, err
-		}
-		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
-	}
-	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
-	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", revset,
-		"-l", fmt.Sprintf("%d", commits), "--template", hgChurnTemplate, "--", ".")
-	if err != nil {
-		return nil, fmt.Errorf("hg log: %w", err)
-	}
-	changes := parseChangesByCommit(out)
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return nil, err
-	}
-	if prefix == "" {
-		return changes, nil // dir IS the repository root; every file is in the subtree
-	}
-	for i := range changes {
-		kept := changes[i].Files[:0]
-		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f.Path, prefix) {
-				kept = append(kept, f)
-			}
-		}
-		changes[i].Files = kept
-	}
-	return changes, nil
+	return hgFamilyChangesByCommit(ctx, v, "hg", hgChurnTemplate, dir, commits, since)
 }
 
 // hgArchivalMeta is the provenance file `hg archive` injects into every export. It belongs
@@ -932,12 +885,6 @@ func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 // contains, which a graph diff reads as a change.
 const hgArchivalMeta = ".hg_archival.txt"
 
-// ExportRevision implements types.RevisionExporter via `hg archive -t files`.
-//
-// Unlike Sapling's, hg's archive needs no explicit include set: `sl archive` refuses a
-// whole-tree export without one, and hg does not. Both inject a provenance file, and both
-// keep repository-relative paths where git's `archive <rev> -- .` re-roots them, so dir's
-// prefix is stripped here to give the caller the subtree it asked about.
 // ReadFileAt implements types.RevisionFileReader via `hg cat -r <rev>`. "" is `.`, hg's
 // spelling of the working directory's parent: the committed revision, as HEAD is for git.
 func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
@@ -952,37 +899,12 @@ func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, 
 	return revFileOutput(cmd, fmt.Sprintf("hg cat -r %s %s", rev, path))
 }
 
+// ExportRevision implements types.RevisionExporter via `hg archive -t files`.
+//
+// Unlike Sapling's, hg's archive needs no explicit include set: `sl archive` refuses a
+// whole-tree export without one, and hg does not.
 func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
-	if rev == "" {
-		rev = "."
-	}
-	if err := checkRef(rev); err != nil {
-		return err
-	}
-	staging, err := os.MkdirTemp("", "magus-hg-export-")
-	if err != nil {
-		return fmt.Errorf("hg archive: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(staging) }()
-
-	cmd := vcsExec(ctx, "hg", "archive", "-r", rev, "-t", "files",
-		"-X", hgArchivalMeta, staging)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("hg archive %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
-	}
-
-	_, prefix, err := repoPathPrefix(ctx, v, dir)
-	if err != nil {
-		return err
-	}
-	// A revision predating dir yields no subtree. That is an empty tree, not a failure;
-	// git reports the same case as "everything was added".
-	staged := filepath.Join(staging, filepath.FromSlash(prefix))
-	if _, err := os.Stat(staged); os.IsNotExist(err) {
-		return os.MkdirAll(dstDir, 0o755)
-	}
-	return copyTree(staged, dstDir)
+	return hgFamilyExportRevision(ctx, v, "hg", dir, rev, dstDir, "-X", hgArchivalMeta)
 }
 
 // StartMerge begins a merge of ref without committing it. See types.MergeStarter.

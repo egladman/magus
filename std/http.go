@@ -189,26 +189,9 @@ func HTTPDownload(ctx context.Context, url, dest string, headers map[string]stri
 		return 0, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return 0, fmt.Errorf("http.download: %w", err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	o := parseHTTPOpts(opts)
-	r, err := parseHTTPRetry(retryPolicy)
+	resp, err := sendHTTP(ctx, "http.download", http.MethodGet, url, nil, headers, parseHTTPOpts(opts), retryPolicy)
 	if err != nil {
 		return 0, err
-	}
-	client := defaultHTTPClient
-	if o.custom() || r.retries() {
-		client = o.client(r)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("http.download %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
@@ -463,6 +446,32 @@ func httpListen(port int) (net.Listener, error) {
 	return nil, fmt.Errorf("http.server: no bindable port in %d-%d", httpServerBasePort, httpServerBasePort+99)
 }
 
+// sendHTTP sends one request through the module's client, the retrying one when o or
+// retryPolicy ask for anything the default lacks. label prefixes every error ("http.get").
+// The caller closes the body.
+func sendHTTP(ctx context.Context, label, method, url string, body io.Reader, headers map[string]string, o httpOpts, retryPolicy map[string]any) (*http.Response, error) {
+	r, err := parseHTTPRetry(retryPolicy)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", label, err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	client := defaultHTTPClient
+	if o.custom() || r.retries() {
+		client = o.client(r)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", label, url, err)
+	}
+	return resp, nil
+}
+
 func doRequest(ctx context.Context, method, url, body string, headers map[string]string, opts, retryPolicy map[string]any) (types.HTTPResponse, error) {
 	if types.Tracing(ctx) {
 		return types.HTTPResponse{}, nil
@@ -476,31 +485,14 @@ func doRequest(ctx context.Context, method, url, body string, headers map[string
 	// update, remote cache) and every subprocess. A record of one narrow slice, framed
 	// as network auditing, is worse than an honest absence.
 
-	o := parseHTTPOpts(opts)
-	r, retryErr := parseHTTPRetry(retryPolicy)
-	if retryErr != nil {
-		return types.HTTPResponse{}, retryErr
-	}
-
 	var bodyReader io.Reader
 	if body != "" {
 		bodyReader = strings.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	o := parseHTTPOpts(opts)
+	resp, err := sendHTTP(ctx, "http."+strings.ToLower(method), method, url, bodyReader, headers, o, retryPolicy)
 	if err != nil {
-		return types.HTTPResponse{}, fmt.Errorf("http.%s: %w", strings.ToLower(method), err)
-	}
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
-
-	client := defaultHTTPClient
-	if o.custom() || r.retries() {
-		client = o.client(r)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return types.HTTPResponse{}, fmt.Errorf("http.%s %s: %w", strings.ToLower(method), url, err)
+		return types.HTTPResponse{}, err
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(resp.Body)
