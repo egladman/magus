@@ -171,6 +171,11 @@ service ViewerService {
   // same message the offline `#data=` URL fragment carries, so a browsed run and a shared
   // one render from identical bytes.
   rpc GetJournal(GetJournalRequest) returns (Journal);
+  // GetSessionActivity returns what one loaded agent session did in the run-up to its last
+  // write of one path: a bounded window of turns, never the whole session. Loopback peers
+  // only, unlike the rest of this service: a session's record names every path and skill it
+  // reached, which a share link has no business reading.
+  rpc GetSessionActivity(GetSessionActivityRequest) returns (SessionActivity);
 }
 
 message GetInvocationRequest {
@@ -267,4 +272,69 @@ message GetJournalRequest {
   // The run to fetch whole: an output ref or an invocation id, the same identity
   // GetInvocation takes.
   string name = 1 [(buf.validate.field).string.pattern = "^(out[0-9a-f]+|inv[0-9a-z]+)$"];
+}
+
+message GetSessionActivityRequest {
+  // The host's own session id, as a review's touch carries it.
+  string session = 1 [(buf.validate.field).string = {
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
+    max_len: 256
+  }];
+  // The checkout-relative path whose last write ends the window.
+  string path = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 4096
+  }];
+}
+
+// TurnRole is who a turn belongs to.
+enum TurnRole {
+  TURN_ROLE_UNSPECIFIED = 0;
+  TURN_ROLE_USER = 1;
+  TURN_ROLE_ASSISTANT = 2;
+  TURN_ROLE_REASONING = 3;
+  TURN_ROLE_TOOL = 4;
+}
+
+// SessionTurn is one entry of a session's record, oldest first within its window.
+message SessionTurn {
+  TurnRole role = 1;
+  // For a tool turn, the session event kind: shell.command, file.read, file.write,
+  // skill.load, hook.output, spawn or magus.call.
+  string kind = 2;
+  // A path, skill, subagent type or tool name. Never a shell command's text, which the
+  // store does not keep, and empty for hook.output, whose text can quote one.
+  string text = 3;
+  // A shell command's program, arguments dropped.
+  string program = 4;
+  google.protobuf.Timestamp time = 5;
+  // What today's guard rules say about a shell command: pass, advise or deny.
+  string verdict = 6;
+  string rule = 7;
+  // Zero is both success and a host that records no exit status; the store keeps no
+  // distinction, so only a non-zero value is a measurement.
+  int32 exit = 8;
+  bool denied = 9;
+  bool interrupted = 10;
+}
+
+// Unrecorded names a part of the transcript this answer cannot carry, and why. A part listed
+// here is unobservable, which a reader must not mistake for a session that said nothing.
+message Unrecorded {
+  TurnRole role = 1;
+  string reason = 2;
+}
+
+message SessionActivity {
+  string session = 1;
+  string host = 2;
+  // A pointer to the host's own log. The daemon does not open it.
+  string transcript = 3;
+  // Whether the loaded record holds a write of the requested path. False with no turns means
+  // the session was seen only by the guard hook, or its transcript was never loaded.
+  bool wrote = 4;
+  repeated SessionTurn turns = 5;
+  // Set when the window held more turns than were returned; the oldest were dropped.
+  bool truncated = 6;
+  repeated Unrecorded unrecorded = 7;
 }

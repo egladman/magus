@@ -63,6 +63,9 @@ const (
 	// ViewerServiceGetJournalProcedure is the fully-qualified name of the ViewerService's GetJournal
 	// RPC.
 	ViewerServiceGetJournalProcedure = "/magus.viewer.v1alpha1.ViewerService/GetJournal"
+	// ViewerServiceGetSessionActivityProcedure is the fully-qualified name of the ViewerService's
+	// GetSessionActivity RPC.
+	ViewerServiceGetSessionActivityProcedure = "/magus.viewer.v1alpha1.ViewerService/GetSessionActivity"
 )
 
 // ViewerServiceClient is a client for the magus.viewer.v1alpha1.ViewerService service.
@@ -92,6 +95,11 @@ type ViewerServiceClient interface {
 	// same message the offline `#data=` URL fragment carries, so a browsed run and a shared
 	// one render from identical bytes.
 	GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error)
+	// GetSessionActivity returns what one loaded agent session did in the run-up to its last
+	// write of one path: a bounded window of turns, never the whole session. Loopback peers
+	// only, unlike the rest of this service: a session's record names every path and skill it
+	// reached, which a share link has no business reading.
+	GetSessionActivity(context.Context, *connect.Request[v1alpha1.GetSessionActivityRequest]) (*connect.Response[v1alpha1.SessionActivity], error)
 }
 
 // NewViewerServiceClient constructs a client for the magus.viewer.v1alpha1.ViewerService service.
@@ -147,18 +155,25 @@ func NewViewerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(viewerServiceMethods.ByName("GetJournal")),
 			connect.WithClientOptions(opts...),
 		),
+		getSessionActivity: connect.NewClient[v1alpha1.GetSessionActivityRequest, v1alpha1.SessionActivity](
+			httpClient,
+			baseURL+ViewerServiceGetSessionActivityProcedure,
+			connect.WithSchema(viewerServiceMethods.ByName("GetSessionActivity")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // viewerServiceClient implements ViewerServiceClient.
 type viewerServiceClient struct {
-	getInvocation   *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.Invocation]
-	listEvents      *connect.Client[v1alpha1.ListEventsRequest, v1alpha1.ListEventsResponse]
-	streamEvents    *connect.Client[v1alpha1.StreamEventsRequest, v1alpha1.StreamEventsResponse]
-	listOutputs     *connect.Client[v1alpha1.ListOutputsRequest, v1alpha1.ListOutputsResponse]
-	getOutput       *connect.Client[v1alpha1.GetOutputRequest, v1alpha1.GetOutputResponse]
-	listInvocations *connect.Client[v1alpha1.ListInvocationsRequest, v1alpha1.ListInvocationsResponse]
-	getJournal      *connect.Client[v1alpha1.GetJournalRequest, v1alpha1.Journal]
+	getInvocation      *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.Invocation]
+	listEvents         *connect.Client[v1alpha1.ListEventsRequest, v1alpha1.ListEventsResponse]
+	streamEvents       *connect.Client[v1alpha1.StreamEventsRequest, v1alpha1.StreamEventsResponse]
+	listOutputs        *connect.Client[v1alpha1.ListOutputsRequest, v1alpha1.ListOutputsResponse]
+	getOutput          *connect.Client[v1alpha1.GetOutputRequest, v1alpha1.GetOutputResponse]
+	listInvocations    *connect.Client[v1alpha1.ListInvocationsRequest, v1alpha1.ListInvocationsResponse]
+	getJournal         *connect.Client[v1alpha1.GetJournalRequest, v1alpha1.Journal]
+	getSessionActivity *connect.Client[v1alpha1.GetSessionActivityRequest, v1alpha1.SessionActivity]
 }
 
 // GetInvocation calls magus.viewer.v1alpha1.ViewerService.GetInvocation.
@@ -196,6 +211,11 @@ func (c *viewerServiceClient) GetJournal(ctx context.Context, req *connect.Reque
 	return c.getJournal.CallUnary(ctx, req)
 }
 
+// GetSessionActivity calls magus.viewer.v1alpha1.ViewerService.GetSessionActivity.
+func (c *viewerServiceClient) GetSessionActivity(ctx context.Context, req *connect.Request[v1alpha1.GetSessionActivityRequest]) (*connect.Response[v1alpha1.SessionActivity], error) {
+	return c.getSessionActivity.CallUnary(ctx, req)
+}
+
 // ViewerServiceHandler is an implementation of the magus.viewer.v1alpha1.ViewerService service.
 type ViewerServiceHandler interface {
 	// GetInvocation returns an invocation's header: its command, lineage, and timing - what
@@ -223,6 +243,11 @@ type ViewerServiceHandler interface {
 	// same message the offline `#data=` URL fragment carries, so a browsed run and a shared
 	// one render from identical bytes.
 	GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error)
+	// GetSessionActivity returns what one loaded agent session did in the run-up to its last
+	// write of one path: a bounded window of turns, never the whole session. Loopback peers
+	// only, unlike the rest of this service: a session's record names every path and skill it
+	// reached, which a share link has no business reading.
+	GetSessionActivity(context.Context, *connect.Request[v1alpha1.GetSessionActivityRequest]) (*connect.Response[v1alpha1.SessionActivity], error)
 }
 
 // NewViewerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -274,6 +299,12 @@ func NewViewerServiceHandler(svc ViewerServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(viewerServiceMethods.ByName("GetJournal")),
 		connect.WithHandlerOptions(opts...),
 	)
+	viewerServiceGetSessionActivityHandler := connect.NewUnaryHandler(
+		ViewerServiceGetSessionActivityProcedure,
+		svc.GetSessionActivity,
+		connect.WithSchema(viewerServiceMethods.ByName("GetSessionActivity")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.viewer.v1alpha1.ViewerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ViewerServiceGetInvocationProcedure:
@@ -290,6 +321,8 @@ func NewViewerServiceHandler(svc ViewerServiceHandler, opts ...connect.HandlerOp
 			viewerServiceListInvocationsHandler.ServeHTTP(w, r)
 		case ViewerServiceGetJournalProcedure:
 			viewerServiceGetJournalHandler.ServeHTTP(w, r)
+		case ViewerServiceGetSessionActivityProcedure:
+			viewerServiceGetSessionActivityHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -325,4 +358,8 @@ func (UnimplementedViewerServiceHandler) ListInvocations(context.Context, *conne
 
 func (UnimplementedViewerServiceHandler) GetJournal(context.Context, *connect.Request[v1alpha1.GetJournalRequest]) (*connect.Response[v1alpha1.Journal], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.GetJournal is not implemented"))
+}
+
+func (UnimplementedViewerServiceHandler) GetSessionActivity(context.Context, *connect.Request[v1alpha1.GetSessionActivityRequest]) (*connect.Response[v1alpha1.SessionActivity], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.GetSessionActivity is not implemented"))
 }

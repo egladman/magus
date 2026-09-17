@@ -26,7 +26,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/viewer/v1alpha1/viewer.proto.
  */
 export const file_magus_viewer_v1alpha1_viewer: GenFile = /*@__PURE__*/
-  fileDesc("CiJtYWd1cy92aWV3ZXIvdjFhbHBoYTEvdmlld2VyLnByb3RvEhVtYWd1cy52aWV3ZXIudjFhbHBoYTEiYAoHQ29tbWFuZBIRCglhcmd1bWVudHMYASADKAkSCwoDY3dkGAMgASgJEi8KB3RyaWdnZXIYBCABKA4yHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVHJpZ2dlckoECAIQAyKBAgoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIvCgdjb21tYW5kGAIgASgLMh4ubWFndXMudmlld2VyLnYxYWxwaGExLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAkSLQoGc3RhdHVzGAYgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0YXR1cxISCgpzaXplX2J5dGVzGAcgASgDIkAKDlVuZGVjbGFyZWRTZWVkEg8KB3Byb2plY3QYASABKAkSDQoFZmlsZXMYAiADKAkSDgoGaW5wdXRzGAMgAygJIrUDCgVFdmVudBIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdwcm9qZWN0GAIgASgJEg4KBnRhcmdldBgDIAEoCRIpCgRraW5kGAQgASgOMhsubWFndXMudmlld2VyLnYxYWxwaGExLktpbmQSLQoGc3RyZWFtGAUgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbRINCgVsZXZlbBgGIAEoCRItCgZzdGF0dXMYByABKA4yHS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RhdHVzEgsKA3JlZhgIIAEoCRIrCghkdXJhdGlvbhgJIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIMCgR0ZXh0GAogASgJEi8KB2NvbW1hbmQYCyABKAsyHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuQ29tbWFuZBIVCg1tYWd1c192ZXJzaW9uGAwgASgJEjkKCnVuZGVjbGFyZWQYDSADKAsyJS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVW5kZWNsYXJlZFNlZWQibgoHSm91cm5hbBI1CgppbnZvY2F0aW9uGAEgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkludm9jYXRpb24SLAoGZXZlbnRzGAIgAygLMhwubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50IkoKFEdldEludm9jYXRpb25SZXF1ZXN0EjIKBG5hbWUYASABKAlCJLpIIXIfMh1eKG91dFswLTlhLWZdK3xpbnZbMC05YS16XSspJCLPAQoKRXZlbnRRdWVyeRIQCghwcm9qZWN0cxgBIAMoCRIPCgd0YXJnZXRzGAIgAygJEg0KBWtpbmRzGAMgAygJEg8KB3N0cmVhbXMYBCADKAkSDgoGbGV2ZWxzGAUgAygJEg4KBnN0YXR1cxgGIAEoCRIvCgR0ZXh0GAcgAygLMiEubWFndXMucXVlcnkudjFhbHBoYTEuU3RyaW5nTWF0Y2gSLQoEdGltZRgIIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZSKvAQoRTGlzdEV2ZW50c1JlcXVlc3QSNAoGcGFyZW50GAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQSHQoJcGFnZV9zaXplGAIgASgFQgq6SAcaBRiIJygAEhIKCnBhZ2VfdG9rZW4YAyABKAkSMQoGZmlsdGVyGAQgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50UXVlcnkiWwoSTGlzdEV2ZW50c1Jlc3BvbnNlEiwKBmV2ZW50cxgBIAMoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkibwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIlCgZwYXJlbnQYASABKAlCFbpIEnIQMg5eaW52WzAtOWEtel0rJBIxCgZmaWx0ZXIYAiABKAsyIS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuRXZlbnRRdWVyeSJDChRTdHJlYW1FdmVudHNSZXNwb25zZRIrCgVldmVudBgBIAEoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudCLHAQoGT3V0cHV0EgsKA3JlZhgBIAEoCRIPCgdwcm9qZWN0GAIgASgJEg4KBnRhcmdldBgDIAEoCRISCgppbnZvY2F0aW9uGAQgASgJEg4KBmZhaWxlZBgFIAEoCBINCgVlcnJvchgGIAEoCRIvCgtjcmVhdGVfdGltZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoIZHVyYXRpb24YCCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iRwoSTGlzdE91dHB1dHNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUYiCcoABISCgpwYWdlX3Rva2VuGAIgASgJIl4KE0xpc3RPdXRwdXRzUmVzcG9uc2USLgoHb3V0cHV0cxgBIAMoCzIdLm1hZ3VzLnZpZXdlci52MWFscGhhMS5PdXRwdXQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjcKEEdldE91dHB1dFJlcXVlc3QSIwoEbmFtZRgBIAEoCUIVukgSchAyDl5vdXRbMC05YS1mXSskIiEKEUdldE91dHB1dFJlc3BvbnNlEgwKBGJvZHkYASABKAwiSwoWTGlzdEludm9jYXRpb25zUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGIgnKAASEgoKcGFnZV90b2tlbhgCIAEoCSJqChdMaXN0SW52b2NhdGlvbnNSZXNwb25zZRI2CgtpbnZvY2F0aW9ucxgBIAMoCzIhLm1hZ3VzLnZpZXdlci52MWFscGhhMS5JbnZvY2F0aW9uEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJHChFHZXRKb3VybmFsUmVxdWVzdBIyCgRuYW1lGAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQqrgEKBEtpbmQSFAoQS0lORF9VTlNQRUNJRklFRBAAEhAKDEtJTkRfU1RBUlRFRBAHEhEKDUtJTkRfRklOSVNIRUQQCBINCglLSU5EX0VYRUMQCRIPCgtLSU5EX09VVFBVVBABEg8KC0tJTkRfUkVTVUxUEAISDgoKS0lORF9TQ09QRRAEEg0KCUtJTkRfV0FSThAGEg8KC0tJTkRfU0VDUkVUEAoiBAgDEAMiBAgFEAUqRgoGU3RyZWFtEhYKElNUUkVBTV9VTlNQRUNJRklFRBAAEhEKDVNUUkVBTV9TVERPVVQQARIRCg1TVFJFQU1fU1RERVJSEAIqVQoGU3RhdHVzEhYKElNUQVRVU19VTlNQRUNJRklFRBAAEg8KC1NUQVRVU19QQVNTEAESDwoLU1RBVFVTX0ZBSUwQAhIRCg1TVEFUVVNfQ0FDSEVEEAMqjwEKB1RyaWdnZXISFwoTVFJJR0dFUl9VTlNQRUNJRklFRBAAEg8KC1RSSUdHRVJfUlVOEAESFAoQVFJJR0dFUl9BRkZFQ1RFRBACEg4KClRSSUdHRVJfQ0kQAxINCglUUklHR0VSX1gQBBIRCg1UUklHR0VSX1dBVENIEAUSEgoOVFJJR0dFUl9ESVJFQ1QQBjLOBQoNVmlld2VyU2VydmljZRJfCg1HZXRJbnZvY2F0aW9uEisubWFndXMudmlld2VyLnYxYWxwaGExLkdldEludm9jYXRpb25SZXF1ZXN0GiEubWFndXMudmlld2VyLnYxYWxwaGExLkludm9jYXRpb24SYQoKTGlzdEV2ZW50cxIoLm1hZ3VzLnZpZXdlci52MWFscGhhMS5MaXN0RXZlbnRzUmVxdWVzdBopLm1hZ3VzLnZpZXdlci52MWFscGhhMS5MaXN0RXZlbnRzUmVzcG9uc2USaQoMU3RyZWFtRXZlbnRzEioubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbUV2ZW50c1JlcXVlc3QaKy5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RyZWFtRXZlbnRzUmVzcG9uc2UwARJkCgtMaXN0T3V0cHV0cxIpLm1hZ3VzLnZpZXdlci52MWFscGhhMS5MaXN0T3V0cHV0c1JlcXVlc3QaKi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdE91dHB1dHNSZXNwb25zZRJeCglHZXRPdXRwdXQSJy5tYWd1cy52aWV3ZXIudjFhbHBoYTEuR2V0T3V0cHV0UmVxdWVzdBooLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRPdXRwdXRSZXNwb25zZRJwCg9MaXN0SW52b2NhdGlvbnMSLS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEludm9jYXRpb25zUmVxdWVzdBouLm1hZ3VzLnZpZXdlci52MWFscGhhMS5MaXN0SW52b2NhdGlvbnNSZXNwb25zZRJWCgpHZXRKb3VybmFsEigubWFndXMudmlld2VyLnYxYWxwaGExLkdldEpvdXJuYWxSZXF1ZXN0Gh4ubWFndXMudmlld2VyLnYxYWxwaGExLkpvdXJuYWxC6wEKGWNvbS5tYWd1cy52aWV3ZXIudjFhbHBoYTFCC1ZpZXdlclByb3RvUAFaS2dpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3ZpZXdlci92MWFscGhhMTt2aWV3ZXJ2MWFscGhhMaICA01WWKoCFU1hZ3VzLlZpZXdlci5WMWFscGhhMcoCFU1hZ3VzXFZpZXdlclxWMWFscGhhMeICIU1hZ3VzXFZpZXdlclxWMWFscGhhMVxHUEJNZXRhZGF0YeoCF01hZ3VzOjpWaWV3ZXI6OlYxYWxwaGExYgZwcm90bzM", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
+  fileDesc("CiJtYWd1cy92aWV3ZXIvdjFhbHBoYTEvdmlld2VyLnByb3RvEhVtYWd1cy52aWV3ZXIudjFhbHBoYTEiYAoHQ29tbWFuZBIRCglhcmd1bWVudHMYASADKAkSCwoDY3dkGAMgASgJEi8KB3RyaWdnZXIYBCABKA4yHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVHJpZ2dlckoECAIQAyKBAgoKSW52b2NhdGlvbhIKCgJpZBgBIAEoCRIvCgdjb21tYW5kGAIgASgLMh4ubWFndXMudmlld2VyLnYxYWxwaGExLkNvbW1hbmQSLgoKc3RhcnRfdGltZRgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoIZW5kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhUKDW1hZ3VzX3ZlcnNpb24YBSABKAkSLQoGc3RhdHVzGAYgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0YXR1cxISCgpzaXplX2J5dGVzGAcgASgDIkAKDlVuZGVjbGFyZWRTZWVkEg8KB3Byb2plY3QYASABKAkSDQoFZmlsZXMYAiADKAkSDgoGaW5wdXRzGAMgAygJIrUDCgVFdmVudBIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdwcm9qZWN0GAIgASgJEg4KBnRhcmdldBgDIAEoCRIpCgRraW5kGAQgASgOMhsubWFndXMudmlld2VyLnYxYWxwaGExLktpbmQSLQoGc3RyZWFtGAUgASgOMh0ubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbRINCgVsZXZlbBgGIAEoCRItCgZzdGF0dXMYByABKA4yHS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuU3RhdHVzEgsKA3JlZhgIIAEoCRIrCghkdXJhdGlvbhgJIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbhIMCgR0ZXh0GAogASgJEi8KB2NvbW1hbmQYCyABKAsyHi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuQ29tbWFuZBIVCg1tYWd1c192ZXJzaW9uGAwgASgJEjkKCnVuZGVjbGFyZWQYDSADKAsyJS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVW5kZWNsYXJlZFNlZWQibgoHSm91cm5hbBI1CgppbnZvY2F0aW9uGAEgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkludm9jYXRpb24SLAoGZXZlbnRzGAIgAygLMhwubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50IkoKFEdldEludm9jYXRpb25SZXF1ZXN0EjIKBG5hbWUYASABKAlCJLpIIXIfMh1eKG91dFswLTlhLWZdK3xpbnZbMC05YS16XSspJCLPAQoKRXZlbnRRdWVyeRIQCghwcm9qZWN0cxgBIAMoCRIPCgd0YXJnZXRzGAIgAygJEg0KBWtpbmRzGAMgAygJEg8KB3N0cmVhbXMYBCADKAkSDgoGbGV2ZWxzGAUgAygJEg4KBnN0YXR1cxgGIAEoCRIvCgR0ZXh0GAcgAygLMiEubWFndXMucXVlcnkudjFhbHBoYTEuU3RyaW5nTWF0Y2gSLQoEdGltZRgIIAEoCzIfLm1hZ3VzLnF1ZXJ5LnYxYWxwaGExLlRpbWVSYW5nZSKvAQoRTGlzdEV2ZW50c1JlcXVlc3QSNAoGcGFyZW50GAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQSHQoJcGFnZV9zaXplGAIgASgFQgq6SAcaBRiIJygAEhIKCnBhZ2VfdG9rZW4YAyABKAkSMQoGZmlsdGVyGAQgASgLMiEubWFndXMudmlld2VyLnYxYWxwaGExLkV2ZW50UXVlcnkiWwoSTGlzdEV2ZW50c1Jlc3BvbnNlEiwKBmV2ZW50cxgBIAMoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkibwoTU3RyZWFtRXZlbnRzUmVxdWVzdBIlCgZwYXJlbnQYASABKAlCFbpIEnIQMg5eaW52WzAtOWEtel0rJBIxCgZmaWx0ZXIYAiABKAsyIS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuRXZlbnRRdWVyeSJDChRTdHJlYW1FdmVudHNSZXNwb25zZRIrCgVldmVudBgBIAEoCzIcLm1hZ3VzLnZpZXdlci52MWFscGhhMS5FdmVudCLHAQoGT3V0cHV0EgsKA3JlZhgBIAEoCRIPCgdwcm9qZWN0GAIgASgJEg4KBnRhcmdldBgDIAEoCRISCgppbnZvY2F0aW9uGAQgASgJEg4KBmZhaWxlZBgFIAEoCBINCgVlcnJvchgGIAEoCRIvCgtjcmVhdGVfdGltZRgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoIZHVyYXRpb24YCCABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iRwoSTGlzdE91dHB1dHNSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUYiCcoABISCgpwYWdlX3Rva2VuGAIgASgJIl4KE0xpc3RPdXRwdXRzUmVzcG9uc2USLgoHb3V0cHV0cxgBIAMoCzIdLm1hZ3VzLnZpZXdlci52MWFscGhhMS5PdXRwdXQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIjcKEEdldE91dHB1dFJlcXVlc3QSIwoEbmFtZRgBIAEoCUIVukgSchAyDl5vdXRbMC05YS1mXSskIiEKEUdldE91dHB1dFJlc3BvbnNlEgwKBGJvZHkYASABKAwiSwoWTGlzdEludm9jYXRpb25zUmVxdWVzdBIdCglwYWdlX3NpemUYASABKAVCCrpIBxoFGIgnKAASEgoKcGFnZV90b2tlbhgCIAEoCSJqChdMaXN0SW52b2NhdGlvbnNSZXNwb25zZRI2CgtpbnZvY2F0aW9ucxgBIAMoCzIhLm1hZ3VzLnZpZXdlci52MWFscGhhMS5JbnZvY2F0aW9uEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJHChFHZXRKb3VybmFsUmVxdWVzdBIyCgRuYW1lGAEgASgJQiS6SCFyHzIdXihvdXRbMC05YS1mXSt8aW52WzAtOWEtel0rKSQibQoZR2V0U2Vzc2lvbkFjdGl2aXR5UmVxdWVzdBI2CgdzZXNzaW9uGAEgASgJQiW6SCJyIBiAAjIbXltBLVphLXowLTldW0EtWmEtejAtOV8tXSokEhgKBHBhdGgYAiABKAlCCrpIB3IFEAEYgCAi5QEKC1Nlc3Npb25UdXJuEi0KBHJvbGUYASABKA4yHy5tYWd1cy52aWV3ZXIudjFhbHBoYTEuVHVyblJvbGUSDAoEa2luZBgCIAEoCRIMCgR0ZXh0GAMgASgJEg8KB3Byb2dyYW0YBCABKAkSKAoEdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHdmVyZGljdBgGIAEoCRIMCgRydWxlGAcgASgJEgwKBGV4aXQYCCABKAUSDgoGZGVuaWVkGAkgASgIEhMKC2ludGVycnVwdGVkGAogASgIIksKClVucmVjb3JkZWQSLQoEcm9sZRgBIAEoDjIfLm1hZ3VzLnZpZXdlci52MWFscGhhMS5UdXJuUm9sZRIOCgZyZWFzb24YAiABKAki0AEKD1Nlc3Npb25BY3Rpdml0eRIPCgdzZXNzaW9uGAEgASgJEgwKBGhvc3QYAiABKAkSEgoKdHJhbnNjcmlwdBgDIAEoCRINCgV3cm90ZRgEIAEoCBIxCgV0dXJucxgFIAMoCzIiLm1hZ3VzLnZpZXdlci52MWFscGhhMS5TZXNzaW9uVHVybhIRCgl0cnVuY2F0ZWQYBiABKAgSNQoKdW5yZWNvcmRlZBgHIAMoCzIhLm1hZ3VzLnZpZXdlci52MWFscGhhMS5VbnJlY29yZGVkKq4BCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIQCgxLSU5EX1NUQVJURUQQBxIRCg1LSU5EX0ZJTklTSEVEEAgSDQoJS0lORF9FWEVDEAkSDwoLS0lORF9PVVRQVVQQARIPCgtLSU5EX1JFU1VMVBACEg4KCktJTkRfU0NPUEUQBBINCglLSU5EX1dBUk4QBhIPCgtLSU5EX1NFQ1JFVBAKIgQIAxADIgQIBRAFKkYKBlN0cmVhbRIWChJTVFJFQU1fVU5TUEVDSUZJRUQQABIRCg1TVFJFQU1fU1RET1VUEAESEQoNU1RSRUFNX1NUREVSUhACKlUKBlN0YXR1cxIWChJTVEFUVVNfVU5TUEVDSUZJRUQQABIPCgtTVEFUVVNfUEFTUxABEg8KC1NUQVRVU19GQUlMEAISEQoNU1RBVFVTX0NBQ0hFRBADKo8BCgdUcmlnZ2VyEhcKE1RSSUdHRVJfVU5TUEVDSUZJRUQQABIPCgtUUklHR0VSX1JVThABEhQKEFRSSUdHRVJfQUZGRUNURUQQAhIOCgpUUklHR0VSX0NJEAMSDQoJVFJJR0dFUl9YEAQSEQoNVFJJR0dFUl9XQVRDSBAFEhIKDlRSSUdHRVJfRElSRUNUEAYqfwoIVHVyblJvbGUSGQoVVFVSTl9ST0xFX1VOU1BFQ0lGSUVEEAASEgoOVFVSTl9ST0xFX1VTRVIQARIXChNUVVJOX1JPTEVfQVNTSVNUQU5UEAISFwoTVFVSTl9ST0xFX1JFQVNPTklORxADEhIKDlRVUk5fUk9MRV9UT09MEAQyvgYKDVZpZXdlclNlcnZpY2USXwoNR2V0SW52b2NhdGlvbhIrLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRJbnZvY2F0aW9uUmVxdWVzdBohLm1hZ3VzLnZpZXdlci52MWFscGhhMS5JbnZvY2F0aW9uEmEKCkxpc3RFdmVudHMSKC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEV2ZW50c1JlcXVlc3QaKS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEV2ZW50c1Jlc3BvbnNlEmkKDFN0cmVhbUV2ZW50cxIqLm1hZ3VzLnZpZXdlci52MWFscGhhMS5TdHJlYW1FdmVudHNSZXF1ZXN0GisubWFndXMudmlld2VyLnYxYWxwaGExLlN0cmVhbUV2ZW50c1Jlc3BvbnNlMAESZAoLTGlzdE91dHB1dHMSKS5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdE91dHB1dHNSZXF1ZXN0GioubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RPdXRwdXRzUmVzcG9uc2USXgoJR2V0T3V0cHV0EicubWFndXMudmlld2VyLnYxYWxwaGExLkdldE91dHB1dFJlcXVlc3QaKC5tYWd1cy52aWV3ZXIudjFhbHBoYTEuR2V0T3V0cHV0UmVzcG9uc2UScAoPTGlzdEludm9jYXRpb25zEi0ubWFndXMudmlld2VyLnYxYWxwaGExLkxpc3RJbnZvY2F0aW9uc1JlcXVlc3QaLi5tYWd1cy52aWV3ZXIudjFhbHBoYTEuTGlzdEludm9jYXRpb25zUmVzcG9uc2USVgoKR2V0Sm91cm5hbBIoLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRKb3VybmFsUmVxdWVzdBoeLm1hZ3VzLnZpZXdlci52MWFscGhhMS5Kb3VybmFsEm4KEkdldFNlc3Npb25BY3Rpdml0eRIwLm1hZ3VzLnZpZXdlci52MWFscGhhMS5HZXRTZXNzaW9uQWN0aXZpdHlSZXF1ZXN0GiYubWFndXMudmlld2VyLnYxYWxwaGExLlNlc3Npb25BY3Rpdml0eULrAQoZY29tLm1hZ3VzLnZpZXdlci52MWFscGhhMUILVmlld2VyUHJvdG9QAVpLZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvdmlld2VyL3YxYWxwaGExO3ZpZXdlcnYxYWxwaGExogIDTVZYqgIVTWFndXMuVmlld2VyLlYxYWxwaGExygIVTWFndXNcVmlld2VyXFYxYWxwaGEx4gIhTWFndXNcVmlld2VyXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIXTWFndXM6OlZpZXdlcjo6VjFhbHBoYTFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1alpha1_query]);
 
 /**
  * Command is the invoking command line and context - what was asked of magus.
@@ -707,6 +707,188 @@ export const GetJournalRequestSchema: GenMessage<GetJournalRequest> = /*@__PURE_
   messageDesc(file_magus_viewer_v1alpha1_viewer, 18);
 
 /**
+ * @generated from message magus.viewer.v1alpha1.GetSessionActivityRequest
+ */
+export type GetSessionActivityRequest = Message<"magus.viewer.v1alpha1.GetSessionActivityRequest"> & {
+  /**
+   * The host's own session id, as a review's touch carries it.
+   *
+   * @generated from field: string session = 1;
+   */
+  session: string;
+
+  /**
+   * The checkout-relative path whose last write ends the window.
+   *
+   * @generated from field: string path = 2;
+   */
+  path: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.GetSessionActivityRequest.
+ * Use `create(GetSessionActivityRequestSchema)` to create a new message.
+ */
+export const GetSessionActivityRequestSchema: GenMessage<GetSessionActivityRequest> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 19);
+
+/**
+ * SessionTurn is one entry of a session's record, oldest first within its window.
+ *
+ * @generated from message magus.viewer.v1alpha1.SessionTurn
+ */
+export type SessionTurn = Message<"magus.viewer.v1alpha1.SessionTurn"> & {
+  /**
+   * @generated from field: magus.viewer.v1alpha1.TurnRole role = 1;
+   */
+  role: TurnRole;
+
+  /**
+   * For a tool turn, the session event kind: shell.command, file.read, file.write,
+   * skill.load, hook.output, spawn or magus.call.
+   *
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * A path, skill, subagent type or tool name. Never a shell command's text, which the
+   * store does not keep, and empty for hook.output, whose text can quote one.
+   *
+   * @generated from field: string text = 3;
+   */
+  text: string;
+
+  /**
+   * A shell command's program, arguments dropped.
+   *
+   * @generated from field: string program = 4;
+   */
+  program: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp time = 5;
+   */
+  time?: Timestamp;
+
+  /**
+   * What today's guard rules say about a shell command: pass, advise or deny.
+   *
+   * @generated from field: string verdict = 6;
+   */
+  verdict: string;
+
+  /**
+   * @generated from field: string rule = 7;
+   */
+  rule: string;
+
+  /**
+   * Zero is both success and a host that records no exit status; the store keeps no
+   * distinction, so only a non-zero value is a measurement.
+   *
+   * @generated from field: int32 exit = 8;
+   */
+  exit: number;
+
+  /**
+   * @generated from field: bool denied = 9;
+   */
+  denied: boolean;
+
+  /**
+   * @generated from field: bool interrupted = 10;
+   */
+  interrupted: boolean;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.SessionTurn.
+ * Use `create(SessionTurnSchema)` to create a new message.
+ */
+export const SessionTurnSchema: GenMessage<SessionTurn> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 20);
+
+/**
+ * Unrecorded names a part of the transcript this answer cannot carry, and why. A part listed
+ * here is unobservable, which a reader must not mistake for a session that said nothing.
+ *
+ * @generated from message magus.viewer.v1alpha1.Unrecorded
+ */
+export type Unrecorded = Message<"magus.viewer.v1alpha1.Unrecorded"> & {
+  /**
+   * @generated from field: magus.viewer.v1alpha1.TurnRole role = 1;
+   */
+  role: TurnRole;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.Unrecorded.
+ * Use `create(UnrecordedSchema)` to create a new message.
+ */
+export const UnrecordedSchema: GenMessage<Unrecorded> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 21);
+
+/**
+ * @generated from message magus.viewer.v1alpha1.SessionActivity
+ */
+export type SessionActivity = Message<"magus.viewer.v1alpha1.SessionActivity"> & {
+  /**
+   * @generated from field: string session = 1;
+   */
+  session: string;
+
+  /**
+   * @generated from field: string host = 2;
+   */
+  host: string;
+
+  /**
+   * A pointer to the host's own log. The daemon does not open it.
+   *
+   * @generated from field: string transcript = 3;
+   */
+  transcript: string;
+
+  /**
+   * Whether the loaded record holds a write of the requested path. False with no turns means
+   * the session was seen only by the guard hook, or its transcript was never loaded.
+   *
+   * @generated from field: bool wrote = 4;
+   */
+  wrote: boolean;
+
+  /**
+   * @generated from field: repeated magus.viewer.v1alpha1.SessionTurn turns = 5;
+   */
+  turns: SessionTurn[];
+
+  /**
+   * Set when the window held more turns than were returned; the oldest were dropped.
+   *
+   * @generated from field: bool truncated = 6;
+   */
+  truncated: boolean;
+
+  /**
+   * @generated from field: repeated magus.viewer.v1alpha1.Unrecorded unrecorded = 7;
+   */
+  unrecorded: Unrecorded[];
+};
+
+/**
+ * Describes the message magus.viewer.v1alpha1.SessionActivity.
+ * Use `create(SessionActivitySchema)` to create a new message.
+ */
+export const SessionActivitySchema: GenMessage<SessionActivity> = /*@__PURE__*/
+  messageDesc(file_magus_viewer_v1alpha1_viewer, 22);
+
+/**
  * Kind classifies an Event. Output events carry subprocess text; the rest carry magus's
  * own structural events.
  *
@@ -907,6 +1089,44 @@ export const TriggerSchema: GenEnum<Trigger> = /*@__PURE__*/
   enumDesc(file_magus_viewer_v1alpha1_viewer, 3);
 
 /**
+ * TurnRole is who a turn belongs to.
+ *
+ * @generated from enum magus.viewer.v1alpha1.TurnRole
+ */
+export enum TurnRole {
+  /**
+   * @generated from enum value: TURN_ROLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TURN_ROLE_USER = 1;
+   */
+  USER = 1,
+
+  /**
+   * @generated from enum value: TURN_ROLE_ASSISTANT = 2;
+   */
+  ASSISTANT = 2,
+
+  /**
+   * @generated from enum value: TURN_ROLE_REASONING = 3;
+   */
+  REASONING = 3,
+
+  /**
+   * @generated from enum value: TURN_ROLE_TOOL = 4;
+   */
+  TOOL = 4,
+}
+
+/**
+ * Describes the enum magus.viewer.v1alpha1.TurnRole.
+ */
+export const TurnRoleSchema: GenEnum<TurnRole> = /*@__PURE__*/
+  enumDesc(file_magus_viewer_v1alpha1_viewer, 4);
+
+/**
  * ViewerService serves an invocation's captured output to a log viewer, resource-oriented
  * per AIP: Get the Invocation (the run header), List its Events (paginated), Stream them
  * (live). The offline URL-fragment path instead carries a whole Journal directly (no
@@ -995,6 +1215,19 @@ export const ViewerService: GenService<{
     methodKind: "unary";
     input: typeof GetJournalRequestSchema;
     output: typeof JournalSchema;
+  },
+  /**
+   * GetSessionActivity returns what one loaded agent session did in the run-up to its last
+   * write of one path: a bounded window of turns, never the whole session. Loopback peers
+   * only, unlike the rest of this service: a session's record names every path and skill it
+   * reached, which a share link has no business reading.
+   *
+   * @generated from rpc magus.viewer.v1alpha1.ViewerService.GetSessionActivity
+   */
+  getSessionActivity: {
+    methodKind: "unary";
+    input: typeof GetSessionActivityRequestSchema;
+    output: typeof SessionActivitySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_viewer_v1alpha1_viewer, 0);

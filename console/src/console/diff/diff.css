@@ -925,7 +925,8 @@
   background: var(--pf-t--global--background--color--secondary--default);
   padding-inline: var(--pf-t--global--spacer--sm);
 }
-.console-diff-row__peek {
+.console-diff-row__peek,
+.console-diff-row__session {
   margin-inline-start: auto;
   border: 0;
   background: transparent;
@@ -934,7 +935,8 @@
   font: inherit;
   font-size: var(--pf-t--global--font--size--xs);
 }
-.console-diff-row__peek:hover { text-decoration: underline; }
+.console-diff-row__peek:hover,
+.console-diff-row__session:hover { text-decoration: underline; }
 
 /* The gutters are a fixed character width so the code column starts at the same x on every
  * row. tabular-nums keeps a 4-digit line number from being wider than a 4-digit one in a
@@ -1324,6 +1326,46 @@
   text-decoration: underline dotted;
   cursor: help;
 }
+
+.console-diff-row__ran {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--pf-t--global--font--family--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The session panel reuses the context body's box but reads as prose, not a code listing. */
+.console-diff-agent {
+  font-family: var(--pf-t--global--font--family--body);
+  white-space: normal;
+}
+.console-diff-agent__heading {
+  margin-block: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+.console-diff-agent__programs,
+.console-diff-agent__list,
+.console-diff-agent__unavailable {
+  margin-block: 0 var(--pf-t--global--spacer--sm);
+  padding-inline-start: var(--pf-t--global--spacer--lg);
+}
+.console-diff-agent__programs,
+.console-diff-agent__text {
+  font-family: var(--pf-t--global--font--family--mono);
+}
+.console-diff-agent__turn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pf-t--global--spacer--sm);
+}
+.console-diff-agent__role,
+.console-diff-agent__note,
+.console-diff-agent__notice,
+.console-diff-agent__empty {
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-diff-agent__empty { margin-block: 0 var(--pf-t--global--spacer--sm); }
 
 /* A read hunk dims rather than hides: the reader marked it, they did not delete it, and a
  * collapsed one would make the scroll geometry depend on progress. */
