@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -35,6 +36,94 @@ import (
 // With no arguments on an interactive terminal it opens a REPL, matching upstream
 // `buzz`. A piped or redirected stdin still runs as a script (so `cat x | magus
 // buzz` and heredocs keep working), and `magus buzz -` forces stdin.
+// buzzLoadWorkspace opens the workspace a script reads. A variable so a test can count
+// opens without the process singleton loadMagus memoizes.
+var buzzLoadWorkspace = loadMagus
+
+func warnWorkspaceNotAttached(err error) {
+	slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
+		slog.String("error", err.Error()))
+}
+
+// lazyWorkspaceContext opens a script's workspace on the first read instead of at
+// startup: about 700ms in this repo, against 10ms for a script that never reads it.
+//
+// The readers are types.WorkspaceFromContext and trail.BaseFromContext, called from
+// bindings throughout std and internal/interp. Answering their context keys here keeps
+// every one of those call sites unchanged, where a lazy WorkspaceRepository would be
+// non-nil before the open and so could not raise MGS1022 the way a nil one does, and
+// would also have to forward the optional interfaces std type-asserts for. A read that
+// cannot attach a workspace sees none, exactly as when the open ran at startup.
+type lazyWorkspaceContext struct {
+	context.Context
+	root string
+
+	once      sync.Once
+	workspace types.WorkspaceRepository
+	trailBase string
+}
+
+var (
+	workspaceContextKey = contextKeyReadBy(func(ctx context.Context) { types.WorkspaceFromContext(ctx) })
+	trailContextKey     = contextKeyReadBy(func(ctx context.Context) { trail.BaseFromContext(ctx) })
+)
+
+func newLazyWorkspaceContext(parent context.Context, root string) *lazyWorkspaceContext {
+	return &lazyWorkspaceContext{Context: parent, root: root}
+}
+
+func (c *lazyWorkspaceContext) Value(key any) any {
+	switch key {
+	case workspaceContextKey:
+		c.once.Do(c.attach)
+		if c.workspace == nil {
+			return nil
+		}
+		return c.workspace
+	case trailContextKey:
+		c.once.Do(c.attach)
+		if c.trailBase == "" {
+			return nil
+		}
+		return c.trailBase
+	}
+	return c.Context.Value(key)
+}
+
+// attach opens against the parent context, so the open cannot re-enter Value and
+// deadlock on once.
+func (c *lazyWorkspaceContext) attach() {
+	m, err := buzzLoadWorkspace(c.Context, c.root)
+	if err != nil {
+		warnWorkspaceNotAttached(err)
+		return
+	}
+	if m == nil {
+		return
+	}
+	c.workspace = m
+	c.trailBase = m.CacheDir()
+}
+
+// keyRecorder is a context that records the last key looked up in it.
+type keyRecorder struct {
+	context.Context
+	key any
+}
+
+func (r *keyRecorder) Value(key any) any {
+	r.key = key
+	return nil
+}
+
+// contextKeyReadBy returns the key read looks up, so a context can answer for a
+// package whose unexported key it cannot name.
+func contextKeyReadBy(read func(context.Context)) any {
+	r := &keyRecorder{Context: context.Background()}
+	read(r)
+	return r.key
+}
+
 func buzzCmd(ctx context.Context, root string, args []string) error {
 	// `magus buzz lsp` is the Buzz language server (stdio LSP). It is a noun
 	// subcommand of buzz, grouped with the rest of the Buzz-language tooling, rather
@@ -111,7 +200,13 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// returns nil at every binding check and an ad-hoc script writes, execs and fetches
 	// with no policy at all in a workspace that asked for one. The trail base beside it
 	// is what lets a denial land as sandbox_denial, the way a target's does.
-	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
+	//
+	// Opening is most of a run's cost, so it waits for the first read unless the policy
+	// has to be in force before the first line runs. globalCfg is the config the open
+	// would load, and an adopted workspace (daemon, tests) is already open.
+	if _, adopted := magusFromContext(ctx); !adopted && !globalCfg.Sandbox.Enabled {
+		ctx = newLazyWorkspaceContext(ctx, root)
+	} else if m, lerr := buzzLoadWorkspace(ctx, root); lerr == nil && m != nil {
 		ctx = types.WithWorkspace(ctx, m)
 		// Confined by the same policy a target run gets, lease narrowing included. A
 		// script is the shortest way around a boundary the sandbox enforces everywhere
@@ -123,8 +218,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		}
 		ctx = trail.ContextWithBase(sctx, m.CacheDir())
 	} else if lerr != nil {
-		slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
-			slog.String("error", lerr.Error()))
+		warnWorkspaceNotAttached(lerr)
 	}
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
