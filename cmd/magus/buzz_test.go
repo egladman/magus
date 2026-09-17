@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -126,4 +128,110 @@ func TestBuzzCmd_SandboxDisabledLeavesTheScriptUnrestricted(t *testing.T) {
 	events, rerr := trail.ReadRecent(m.CacheDir(), 10)
 	require.NoError(t, rerr)
 	assert.Empty(t, events, "nothing was refused, so nothing belongs on the trail")
+}
+
+const (
+	buzzVanillaScript = "import \"std\";\n\nfun main(args: [str]) > void {\n    std\\print(\"hi\");\n}\n"
+	buzzMemberScript  = "import \"std\";\nimport \"magus\";\n\nfun main(args: [str]) > void !> any {\n    final p = magus\\projects();\n    std\\print(\"{p.projects.len()}\");\n}\n"
+)
+
+// countWorkspaceOpens swaps buzzLoadWorkspace for open, counting its calls.
+func countWorkspaceOpens(t *testing.T, open func(context.Context, string) (*magus.Magus, error)) *int {
+	t.Helper()
+	prev := buzzLoadWorkspace
+	t.Cleanup(func() { buzzLoadWorkspace = prev })
+	opens := 0
+	buzzLoadWorkspace = func(ctx context.Context, root string, _ ...magus.Option) (*magus.Magus, error) {
+		opens++
+		return open(ctx, root)
+	}
+	return &opens
+}
+
+// buzzLazyWorkspace writes a one-project workspace holding script and returns its root
+// and the script path.
+func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+		[]byte("import \"magus\";\n\nmagus.project({})\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  enabled: false\n"), 0o644))
+	path := filepath.Join(root, "script.buzz")
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))
+	return root, path
+}
+
+func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
+	root, script := buzzLazyWorkspace(t, buzzVanillaScript)
+	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
+		return magus.Open(ctx, root)
+	})
+
+	var runErr error
+	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "hi\n", stdout)
+	assert.Equal(t, 0, *opens, "a script that reads no workspace member must not pay for opening one")
+}
+
+func TestBuzzCmd_WorkspaceMemberOpensTheWorkspaceOnce(t *testing.T) {
+	root, script := buzzLazyWorkspace(t, buzzMemberScript)
+	var m *magus.Magus
+	opens := countWorkspaceOpens(t, func(ctx context.Context, _ string) (*magus.Magus, error) {
+		var err error
+		m, err = magus.Open(ctx, root)
+		return m, err
+	})
+	t.Cleanup(func() {
+		if m != nil {
+			_ = m.Close()
+		}
+	})
+
+	var runErr error
+	stdout := captureStdout(t, func() { runErr = buzzCmd(t.Context(), root, []string{"-s", script}) })
+
+	require.NoError(t, runErr)
+	assert.Equal(t, "1\n", stdout)
+	assert.Equal(t, 1, *opens)
+}
+
+// TestBuzzCmd_OutsideAWorkspace pins both halves outside any workspace: a script that
+// never reads one is not warned about it, and a workspace member still raises MGS1022
+// with the reason it could not attach.
+func TestBuzzCmd_OutsideAWorkspace(t *testing.T) {
+	// buzzCmd's flag parse rebuilds the default logger on whatever os.Stderr is then,
+	// which is the only reason captureStderr sees the warning. The text handler writes
+	// synchronously; the pretty one owns a terminal region.
+	prevLog, prevFormat := slog.Default(), globalCfg.Log.Format
+	prevQuiet, prevSilent := global.quiet, global.silent
+	globalCfg.Log.Format = "text"
+	global.quiet, global.silent = false, false
+	t.Cleanup(func() {
+		slog.SetDefault(prevLog)
+		globalCfg.Log.Format = prevFormat
+		global.quiet, global.silent = prevQuiet, prevSilent
+	})
+	noWorkspace := errors.New("no magus workspace found")
+	opens := countWorkspaceOpens(t, func(context.Context, string) (*magus.Magus, error) { return nil, noWorkspace })
+	dir := t.TempDir()
+	vanilla := filepath.Join(dir, "vanilla.buzz")
+	require.NoError(t, os.WriteFile(vanilla, []byte(buzzVanillaScript), 0o644))
+	member := filepath.Join(dir, "member.buzz")
+	require.NoError(t, os.WriteFile(member, []byte(buzzMemberScript), 0o644))
+
+	var runErr error
+	stderr := captureStderr(t, func() {
+		captureStdout(t, func() { runErr = buzzCmd(t.Context(), dir, []string{vanilla}) })
+	})
+	require.NoError(t, runErr)
+	assert.Equal(t, 0, *opens)
+	assert.NotContains(t, stderr, "workspace not attached", "a script that never asked for a workspace is not warned about one")
+
+	stderr = captureStderr(t, func() { runErr = buzzCmd(t.Context(), dir, []string{member}) })
+	require.Error(t, runErr)
+	assert.ErrorContains(t, runErr, string(types.MagusfileOnlyMember))
+	assert.Contains(t, stderr, "workspace not attached")
+	assert.Contains(t, stderr, noWorkspace.Error())
 }

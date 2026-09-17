@@ -39,3 +39,16 @@ func TestCheckJobTreePassesAHealthyPlan(t *testing.T) {
 	got := checkJobTree(root, config.Jobs{StaleAfter: time.Hour}, time.Now().Unix())
 	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 }
+
+func TestCheckJobTreeNamesJobsBlockedOnAnEndedDependency(t *testing.T) {
+	_, root, store := tmpLedger(t)
+	seed(t, store, types.Job{ID: "dep", State: types.StateFail})
+	seed(t, store, types.Job{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"dep"}, WritePaths: []string{"internal/job"}})
+	seed(t, store, types.Job{ID: "queued", State: types.StateDeclared, DependsOn: []string{"live"}})
+	seed(t, store, types.Job{ID: "live", State: types.StateRunning})
+
+	got := checkJobTree(root, config.Jobs{}, time.Now().Unix())
+	require.Equal(t, types.DoctorAdvice, got.Status, got.Message)
+	assert.Contains(t, got.Message, "waiter is blocked on dep which is fail")
+	assert.NotContains(t, got.Message, "queued", "a dependency still running is a plan in order, not a finding")
+}

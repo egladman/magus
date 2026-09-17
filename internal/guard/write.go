@@ -277,12 +277,12 @@ func gradeLeasedWrite(ctx context.Context, deps Dependencies, actingLease, write
 		if reason := denyOverdueLease(me, time.Now().Unix()); reason != "" {
 			return writeGrade{Decision: "deny", Reason: reason}
 		}
-		return gradeAgainstOwnLease(me, live, rel)
+		return gradeAgainstOwnLease(me, owningLeases(leases, live), rel)
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
 	// lease whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose row in the store is simply stale.
-	owner, owned, err := ownerOf(live, rel, "")
+	owner, owned, err := ownerOf(owningLeases(leases, live), rel, "")
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -338,8 +338,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // write set is denied whether or not another lease claims the path: the set is the lane
 // the orchestrator handed out, and a worker that widens its own lane is the failure the
 // declaration exists to catch. An EMPTY write set is not a lane of size zero, it is a
-// boundary nobody declared, so it scopes nothing.
-func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade {
+// boundary nobody declared, so it scopes nothing. owners are the live leases that claim
+// their paths, see owningLeases.
+func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -391,7 +392,7 @@ func gradeAgainstOwnLease(me types.Job, live []types.Job, rel string) writeGrade
 		}
 		return writeGrade{}
 	}
-	owner, owned, err := ownerOf(live, rel, me.ID)
+	owner, owned, err := ownerOf(owners, rel, me.ID)
 	if err != nil {
 		return adviseMalformedDeclaration(err)
 	}
@@ -442,6 +443,17 @@ func liveLeases(leases []types.Job) []types.Job {
 		}
 	}
 	return live
+}
+
+// owningLeases narrows live to the rows that claim their write paths against other
+// writers: a lease blocked on a dependency that has not passed owns nothing yet, on the
+// rule types.JobBlockedOn states for the overlap report too. rows is the whole store,
+// since the dependency that decides it is usually no longer live.
+func owningLeases(rows, live []types.Job) []types.Job {
+	return slices.DeleteFunc(slices.Clone(live), func(u types.Job) bool {
+		_, blocked := types.JobBlockedOn(rows, u)
+		return blocked
+	})
 }
 
 // liveLease finds the acting lease's own row. An empty id matches nothing, so an

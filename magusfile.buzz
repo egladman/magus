@@ -270,8 +270,8 @@ magus\project({
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
-        // No skip_cache: the badge moved to coverage-badge, so a hit restores only
-        // the coverage profiles, which is what a hit should do.
+        // No skip_cache: a hit restores the coverage profiles, which is all a hit
+        // should do.
         // memory_mb measured, not guessed: on a 16GB CI runner this target took
         // available memory from 1137MB to 265MB in two seconds and the runner was
         // killed, leaving no failing target to blame because the MACHINE died rather
@@ -281,12 +281,10 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {"memory_mb": 10240},
-        // The badge renders from the per-platform records under coverage/, which a
-        // person refreshes on a developer machine, so any Go edit puts it out of date
-        // and no amount of work on the branch can settle it. It stayed in ci because
-        // the badge does have to be refreshed before a release; advisory is what stops
-        // a branch paying for that verdict three times over.
-        "coverage-badge": {"advisory": "renders from a hand-refreshed per-platform record, so a branch is stale by design"},
+        // It reads the console's coverage figure and writes into gen/site, neither of
+        // which it can declare: the console depends on this project, and deploy-generate
+        // rebuilds gen/site from empty.
+        "coverage-render": {"skip_cache": "reads the console's figure and the assembled site, which it cannot declare as inputs"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -2529,11 +2527,11 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Tests with race detection and a coverage floor. The badge is coverage_badge's.
+// Tests with race detection and a coverage floor. The published badge is coverage_render's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
-    // Declared so coverage_badge can read them after a cache HIT: without this the
-    // profiles are undeclared residue, restored by nothing, and the badge target
+    // Declared so coverage_render can read them after a cache HIT: without this the
+    // profiles are undeclared residue, restored by nothing, and the render target
     // finds no file to measure whenever the suite replays.
     ctx.writesFiles("coverage.out", "coverage.hand.out");
     // The tree this suite compiles and runs, restated. It is NOT redundant with the
@@ -2623,18 +2621,9 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // coverage_percent is THIS machine's figure over THIS module, and the 70% floor in
 // `test` gates on it. Per-platform by design: the floor guards against a regression in
 // the suite that just ran, so it has to answer for the tree that suite compiled. The
-// badge is the cross-platform figure and belongs to coverage_badge.
+// published badge is the whole-tree figure and belongs to coverage_render.
 fun coverage_percent() > str !> any {
     return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
-}
-
-// One committed record per platform, beside coverage.buzz. Results are RECORDED, never
-// recalculated: refreshing a platform is a local act like refreshing a lockfile, and the
-// badge is a pure function of the set that anyone can re-derive.
-final COVERAGE_DIR = "coverage";
-
-fun coverage_summary_path(goos: str, goarch: str) > str {
-    return fs\join(COVERAGE_DIR, goos + "-" + goarch + ".json");
 }
 
 // coverage_blocks_ran unions one platform's module profiles into "block -> did it run".
@@ -2650,142 +2639,54 @@ fun coverage_blocks_ran(profiles: [str]) > {str: bool} !> any {
     return blocks;
 }
 
-// coverage_record writes one platform's summary from the profiles its suites left.
-fun coverage_record(tables: {str: [str]}, goos: str, goarch: str, profiles: [str]) > void !> any {
-    final blocks = coverage_blocks_ran(profiles);
-    final totals = cov\platformTotals(tables, blocks: blocks);
-    fs\mkdirAll(COVERAGE_DIR);
-    fs\writeFile(coverage_summary_path(goos, goarch: goarch), content: cov\encodeSummary({
-        "goos": goos,
-        "goarch": goarch,
-        "mode": "atomic",
-        "commit": vcs\commit().short,
-        "measured_at": time\nowIso(),
-        "statements": totals["statements"],
-        "covered": totals["covered"],
-        "files": cov\summaryFiles(tables, covered: blocks),
-    }));
-    magus\log.info("coverage: " + goos + "/" + goarch
-        + " ran {totals["covered"]}/{totals["statements"]} of the statements it compiled");
-}
-
-// coverage_native_record measures the host from the profiles `test` and the four Go
-// modules' suites just wrote. coverage.out rather than coverage.hand.out: generated files
-// are excluded by the DENOMINATOR, which never enumerates them, so a pre-stripped
-// numerator would only be doing the work twice. benchmarks/aggregate and
-// libs/gopherbuzz/benchmarks/comparison have no test target and stay at zero.
+// Renders the three language coverage badges into the assembled site, gen/site/assets/.
+// The CD site job runs it after deploy-generate on every push to main, so the figures
+// are measured once, on one pinned toolchain, and published rather than committed. A
+// committed badge measured on one machine cannot be gated consistently: Go coverage
+// legitimately differs by platform, and Node's line coverage moves with its patch version.
 //
-// This is the only numerator a machine writes: its own platform's. Another platform's
-// record is raised by running the refresh THERE. No container run and no CI matrix,
-// by decision: both re-measure what a machine of that platform already measures.
-fun coverage_native_record(tables: {str: [str]}) > void !> any {
-    final env = proc\exec("go", args: ["env", "GOOS", "GOARCH"], opts: {"quiet": true}).stdout.split("\n");
-    coverage_record(tables, goos: env[0].trim(), goarch: env[1].trim(),
-        profiles: ["coverage.out", "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
-                   "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]);
-}
-
-// coverage_summaries reads every committed record. A record's commit is provenance, not
-// a gate: this repo squash-merges, so a record measured on a branch names a commit main
-// never contains, and refusing it turned every darwin checkout of main red (#196). What
-// keeps a foreign record honest is the per-file digest in mergeSummaries, which credits
-// nothing to a file whose source differs from this tree.
-fun coverage_summaries() > [any] !> any {
-    var records = mut [<any>];
-    foreach (p in fs\glob(COVERAGE_DIR + "/*.json")) {
-        records.append(cov\decodeSummary(p.value, text: fs\readFile(p.value)));
-    }
-    return records;
-}
-
-// coverage_figure merges every committed record over the static denominator. A record
-// measured against source that has since changed is reported and credited nothing, so an
-// unrefreshed platform can only pull the figure DOWN.
-fun coverage_figure(tables: {str: [str]}) > any !> any {
-    final summaries = coverage_summaries();
-    final merged = cov\mergeSummaries(tables, summaries: summaries);
-    final stale = merged["stale"];
-    if (stale.len() > 0) {
-        magus\log.warn("coverage: {stale.len()} file(s) in the committed records were measured "
-            + "against different source and count as uncovered, first: " + stale[0]);
-    }
-    return {"covered": merged["covered"], "statements": merged["statements"],
-        "platforms": summaries.len()};
-}
-
-// Writes assets/coverage.svg, and is the only target that may.
+// NOT named *-generate, deliberately: `generate` composes ctx.glob("*-generate"), so that
+// suffix would pull the race-enabled suite into the drift gate.
 //
-// Split from test so the suite can be CACHED: the badge is a declared output, so a
-// hit would restore a cached one over the committed file, which is what forced
-// skip_cache onto every test run - five minutes and 10GB to re-answer a question
-// whose inputs had not moved.
-//
-// NOT named *-generate, deliberately: `generate` composes ctx.glob("*-generate"),
-// so that suffix would pull a target that needs the race-enabled suite into the
-// drift gate.
-export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
-    // One badge per LANGUAGE, over the whole codebase rather than the slice one machine
-    // compiles. Two halves: the DENOMINATOR is every statement block of every Go file in
-    // every module, enumerated from source (coverage.buzz explains how, and why that is
-    // exact); the NUMERATOR is the union of the committed platform records.
-    //
-    // Only the rw arm measures. The verify arm re-derives the badge from the tree and
-    // coverage/, which is a pure function, so CI stays cheap and never runs a platform
-    // suite to judge a badge. The gha-only early return that used to sit here is gone
-    // with it: the figure is no longer a property of whichever machine ran.
-    // Ordered after generate in BOTH arms. The denominator reads every Go file,
-    // generated ones included (it reads them to skip them), and the generate
-    // sub-targets write Go files in this same step. Left unordered, the verify arm
-    // waited for those writers to settle while holding its slot, and with every
-    // composer above them also holding one, the writers never got a slot: a gate
-    // stalled for fifteen minutes with nothing running (2026-09-10). A declared edge
-    // is what make's jobserver rule needs here; a settle wait is not one.
-    ctx.needs(generate);
-    if (ctx.hasCharm("rw")) {
-        ctx.needs(test, gopherbuzz\test, diagnostics\test, commentdash\test, testlayout\test);
+// The TypeScript suite is NOT a need. The console imports this project, so this project
+// cannot import the console back; run `magus run test console` first, which is what
+// cd.yaml does, and this target reads the figure that run left in console/coverage.txt.
+export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
+    // generate first: the denominator reads every Go file, and the generate sub-targets
+    // write Go files. Left unordered, a reader waiting for those writers while holding
+    // its slot stalled a gate for fifteen minutes with nothing running (2026-09-10).
+    ctx.needs(generate, test, gopherbuzz\test, diagnostics\test, commentdash\test,
+        testlayout\test, buzz_test);
+    ctx.writesFiles("gen/site/assets/go-coverage.svg", "gen/site/assets/buzz-coverage.svg",
+        "gen/site/assets/typescript-coverage.svg");
+    if (!fs\exists("gen/site/index.html")) {
+        throw "coverage-render: gen/site/index.html not found; run `magus run deploy-generate .` first, since it rebuilds gen/site from empty";
     }
-    ctx.writesFiles("assets/coverage.svg");
-    // The per-platform records are MODIFIED, not owned (MGS1034). Each machine refreshes
-    // its own and they are all committed, so declaring them as outputs would let a cache
-    // snapshot taken on one platform replay over another's record, and `magus clean` delete
-    // records no run here can rebuild. An update is never replayed and never deleted, which
-    // is what leaves them free to stay an INPUT below: a teammate committing a record has
-    // to re-render the badge, and that only works while the records key this target.
-    ctx.modifiesExistingFiles("coverage/*.json");
-    // The Go tree IS an input now, because the denominator is read from it. A footprint
-    // REPLACES the project baseline rather than adding to it (see the note on `test`),
-    // so everything the verdict reads is restated here: every module's sources and
-    // go.mod for the import paths, the committed records, and the two Buzz modules that
-    // render and merge. NOT assets/coverage.svg: see the writesFiles note above.
-    ctx.readsFiles("**/*.go", "**/go.mod", "coverage/*.json",
-                   "badge.buzz", "coverage.buzz");
+    final typescript = "console/coverage.txt";
+    if (!fs\exists(typescript)) {
+        throw "coverage-render: " + typescript + " not found; run `magus run test console` first";
+    }
+
+    // Go, over the whole codebase rather than the slice this platform compiles. The
+    // DENOMINATOR is every statement block of every Go file in every module, enumerated
+    // from source whatever its build constraints (coverage.buzz explains how); the
+    // NUMERATOR is what this run's suites entered. A file only another platform compiles
+    // counts at zero. coverage.out rather than coverage.hand.out: the denominator never
+    // enumerates generated files, so the merge drops them without a pre-stripped profile.
     final tables = cov\staticBlockTables();
-    if (ctx.hasCharm("rw")) {
-        // This platform only. A Windows record can only come from a Windows machine;
-        // until one runs the refresh, its files stay in the denominator at zero.
-        coverage_native_record(tables);
-    }
-    final figure = coverage_figure(tables);
-    if (figure["platforms"] == 0) {
-        throw "coverage-badge: coverage/ holds no platform record, so there is nothing to "
-            + "render the badge from. Measure this platform with "
-            + "`magus run coverage-badge:rw .` on a developer machine.";
-    }
-    final percent = cov\percentOf(figure["covered"], statements: figure["statements"]);
-    final wanted = badge\coverage("go coverage", percent: percent, radius: 3);
-    if (ctx.hasCharm("rw")) {
-        fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);
-        return;
-    }
-    // Compared, never written: a check that mutates the tree it judges leaves its
-    // own output for the next drift gate to read as an edit.
-    if (fs\readFile(fs\join("assets", "coverage.svg")) != wanted) {
-        throw "coverage-badge: assets/coverage.svg does not match what the committed records "
-            + "render. {figure["platforms"]} platform record(s) in coverage/ cover "
-            + "{figure["covered"]} of {figure["statements"]} statements, which is " + percent
-            + "%. The badge and coverage/ are refreshed together on a developer machine: run "
-            + "`magus run coverage-badge:rw .` and commit both.";
-    }
+    final go_totals = cov\treeTotals(tables, blocks: coverage_blocks_ran(
+        ["coverage.out", "libs/gopherbuzz/coverage.out", "libs/diagnostics/coverage.out",
+         "libs/commentdash/coverage.out", "libs/testlayout/coverage.out"]));
+    final go_pct = cov\percentOf(go_totals["covered"], statements: go_totals["statements"]);
+    final buzz_pct = fs\readFile("coverage/buzz/coverage.txt").trim();
+    final typescript_pct = fs\readFile(typescript).trim();
+
+    fs\mkdirAll("gen/site/assets");
+    fs\writeFile("gen/site/assets/go-coverage.svg", content: badge\coverage("go coverage", percent: go_pct, radius: 3));
+    fs\writeFile("gen/site/assets/buzz-coverage.svg", content: badge\coverage("buzz coverage", percent: buzz_pct, radius: 3));
+    fs\writeFile("gen/site/assets/typescript-coverage.svg", content: badge\coverage("typescript coverage", percent: typescript_pct, radius: 3));
+    magus\log.info("coverage: go " + go_pct + "% ({go_totals["covered"]}/{go_totals["statements"]} statements), buzz "
+        + buzz_pct + "%, typescript " + typescript_pct + "%");
 }
 
 // buzz-check and buzz-run lived here and are gone: they ran the upstream `buzz`
@@ -2809,12 +2710,10 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
 // spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
-// magus's embedded engine. Under `rw` it also refreshes assets/buzz-coverage.svg, one
-// language badge matching assets/coverage.svg (Go) and console/coverage.svg
-// (TypeScript); without it the badge is only COMPARED, as coverage-badge does. Each -t
+// magus's embedded engine, and holds their merged line coverage above a floor. Each -t
 // invocation emits an LCOV fragment for the entry file only; imports are measured when
-// THEY are the -t subject. The fragments are throwaways under coverage/buzz/ (gitignored);
-// the badge is the committed figure.
+// THEY are the -t subject. The fragments and the merged figure are throwaways under
+// coverage/buzz/ (gitignored); coverage-render publishes the badge.
 //
 // NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is
 // not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which
@@ -2828,13 +2727,9 @@ export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
 // ten had never run in CI - nothing invoked them, and the buzz-check gate above only ever
 // covered cmd/magus/starter/spells - so both files were free to rot while looking covered.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
-    // The badge is an OUTPUT and not also an input (MGS1034): the cache restores an output
-    // before the target runs, so keying on it would hash the bytes the cache just wrote and
-    // the comparison below would check the cache against itself. Its content is a function
-    // of the sources named here, which is what makes it regenerate.
     ctx.readsFiles("badge.buzz", "coverage.buzz", "releaser.buzz", "spells/**/*.buzz",
         "docs/lib/*.buzz", "std/lib/*.buzz", "tools/*.buzz");
-    ctx.writesFiles("assets/buzz-coverage.svg", "coverage/buzz/*.lcov");
+    ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
@@ -2935,17 +2830,11 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // keep "" matches every SF: path (startsWith("") is true). It is already
     // the files buzz-test ran; node_modules exclusion in lcov is a no-op here.
     final pct = lcov\mergePercent(reports, keep: "");
-    final wanted = badge\coverage("buzz coverage", percent: pct, radius: 3);
-    if (ctx.hasCharm("rw")) {
-        fs\writeFile("assets/buzz-coverage.svg", content: wanted);
-        return;
-    }
-    // Compared, never written, the same way coverage-badge does it. Writing the badge and
-    // THEN noticing it changed leaves the check's own output in the tree, so the next
-    // drift gate reads it as an edit nobody made and the failure moves to a target that
-    // did nothing wrong.
-    if (fs\readFile("assets/buzz-coverage.svg") != wanted) {
-        throw "buzz-test: assets/buzz-coverage.svg is stale; this run measured {pct}%; re-run `magus run buzz-test:rw .` and commit the badge";
+    fs\writeFile("coverage/buzz/coverage.txt", content: pct + "\n");
+    // Two points under the 64.3% measured when the floor was set.
+    final floor = 62;
+    if (std\parseInt(pct.split(".")[0])! < floor) {
+        throw "buzz-test: buzz coverage " + pct + "% is below the {floor}% floor; investigate the regression or lower the floor deliberately";
     }
 }
 
@@ -3112,7 +3001,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, coverage_badge, compress_cgo_test, completion_test, security);
+    ctx.needs(lint, build, test, compress_cgo_test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its

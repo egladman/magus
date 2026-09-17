@@ -1124,6 +1124,45 @@ type JobList struct {
 	Overdue []string `json:"overdue,omitempty" yaml:"overdue,omitempty"`
 	Orphans []string `json:"orphans,omitempty" yaml:"orphans,omitempty"`
 	Stale   []string `json:"stale,omitempty"   yaml:"stale,omitempty"`
+	// Blocked are the live jobs that claim no paths yet because a dependency has not
+	// passed, each naming the first such dependency. Derived with Overlaps, from the rows.
+	Blocked []JobBlock `json:"blocked,omitempty" yaml:"blocked,omitempty"`
+}
+
+// JobBlock is why a live job owns none of its write paths: On, a job it depends on, is in
+// State rather than pass. State is empty when no row declares On.
+type JobBlock struct {
+	Job   string   `json:"job"             yaml:"job"`
+	On    string   `json:"on"              yaml:"on"`
+	State JobState `json:"state,omitempty" yaml:"state,omitempty"`
+}
+
+// JobBlockedOn reports the first job row depends on that has not reached pass. A blocked
+// job claims none of its write paths: the overlap report, the guard and a job's terms all
+// ask this before treating a row as an owner.
+//
+// A dependency no row declares blocks too, as it refuses the dependent's pass in
+// verification: a dropped row must not hand its lane to a waiter by vanishing.
+func JobBlockedOn(rows []Job, row Job) (JobBlock, bool) {
+	for _, dep := range row.DependsOn {
+		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == dep })
+		if i < 0 {
+			return JobBlock{Job: row.ID, On: dep}, true
+		}
+		if rows[i].State != StatePass {
+			return JobBlock{Job: row.ID, On: dep, State: rows[i].State}, true
+		}
+	}
+	return JobBlock{}, false
+}
+
+// String renders the reason as "blocked on <dep> which is <state>".
+func (b JobBlock) String() string {
+	state := string(b.State)
+	if state == "" {
+		state = "undeclared"
+	}
+	return fmt.Sprintf("blocked on %s which is %s", b.On, state)
 }
 
 // Flag fills Overdue, Orphans and Stale as of now, in unix seconds. Overdue is past its
@@ -1196,7 +1235,13 @@ func NewJobList(jobs []Job) JobList {
 	if jobs == nil {
 		jobs = []Job{}
 	}
-	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs)}
+	var blocked []JobBlock
+	for _, row := range jobs {
+		if b, ok := JobBlockedOn(jobs, row); ok && row.State.Live() {
+			blocked = append(blocked, b)
+		}
+	}
+	return JobList{Jobs: jobs, Overlaps: jobOverlaps(jobs), Blocked: blocked}
 }
 
 // jobOverlaps reports every pair of jobs whose declared write paths
@@ -1205,15 +1250,20 @@ func NewJobList(jobs []Job) JobList {
 // A job in a terminal state is not in any pair. A released or finished job is not
 // competing for a path (that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its write paths so a waiter can start), and reporting one
-// would make the surface noisiest exactly when the plan is winding down.
+// would make the surface noisiest exactly when the plan is winding down. A job blocked on
+// a dependency is not in any pair either: it claims nothing until that dependency passes.
 func jobOverlaps(jobs []Job) []JobOverlap {
+	claims := func(j Job) bool {
+		_, blocked := JobBlockedOn(jobs, j)
+		return !j.State.Terminal() && len(j.WritePaths) > 0 && !blocked
+	}
 	var out []JobOverlap
 	for i, a := range jobs {
-		if a.State.Terminal() || len(a.WritePaths) == 0 {
+		if !claims(a) {
 			continue
 		}
 		for _, b := range jobs[i+1:] {
-			if b.State.Terminal() || len(b.WritePaths) == 0 {
+			if !claims(b) {
 				continue
 			}
 			if pa, pb := intersectingPaths(a.WritePaths, b.WritePaths); len(pa) > 0 {
