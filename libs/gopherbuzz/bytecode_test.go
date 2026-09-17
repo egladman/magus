@@ -964,7 +964,7 @@ func TestJITMatchesInterpreter(t *testing.T) {
 	})
 	t.Run("or_cond", func(t *testing.T) {
 		assertJITMatchesInterp(t, `var i = 0; var s = 0;
-			while (i < 1000 or s > 0) { s = s + i; i = i + 1; } return s;`)
+			while (i < 1000 or s < 0) { s = s + i; i = i + 1; } return s;`)
 	})
 	t.Run("mixed_mul", func(t *testing.T) {
 		// Mixed int*float promotion in the float path (px:int * 0.0125:float).
