@@ -172,16 +172,17 @@ func baselineHasSymbols(g types.KnowledgeGraphOutput) bool {
 // diffNames prints the changed node IDs one per line (added, removed, then changed),
 // the `-o name` projection for piping into other tools.
 func diffNames(d types.KnowledgeGraphDiff) error {
+	names := make([]string, 0, len(d.NodesAdded)+len(d.NodesRemoved)+len(d.NodesChanged))
 	for _, n := range d.NodesAdded {
-		fmt.Println(n.ID)
+		names = append(names, n.ID)
 	}
 	for _, n := range d.NodesRemoved {
-		fmt.Println(n.ID)
+		names = append(names, n.ID)
 	}
 	for _, c := range d.NodesChanged {
-		fmt.Println(c.ID)
+		names = append(names, c.ID)
 	}
-	return nil
+	return emitNames(names)
 }
 
 // diffText prints a plain-text summary of a graph diff.

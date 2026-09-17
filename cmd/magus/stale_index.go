@@ -34,8 +34,8 @@ import (
 // staleness this banner reported. The cache compares content, so a rewrite that changes no
 // bytes is no longer a change, and the remedy the banner names is one that works.
 
-// printIndexStaleness writes the staleness line under an answer, or nothing when every
-// built index is current.
+// reportIndexStaleness writes the staleness line under an answer and FAILS the command,
+// or returns nil when every built index is current.
 //
 // It reads the ANSWER rather than probing again. Probing here printed the banner under
 // verdicts it had no bearing on: a `kind=author` lookup cannot reach the symbol layer, so
@@ -44,17 +44,27 @@ import (
 //
 // Silent when the verdict already IS the staleness: printVerdict's index-stale arm names
 // the same projects and the same refresh, and the same fact in two vocabularies teaches a
-// reader to skip both.
+// reader to skip both. The exit status still carries it, because the reader who needs it
+// most is the one reading no text at all.
 //
-// Text only, and the callers are all inside their text arm already: a structured caller
-// reads coverage off the answer record, and a line appended to json would corrupt it.
-func printIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) {
+// The non-zero exit is the whole point of the rename. This used to print and return, so a
+// stale index reached a caller as exit 0 with an advisory line it could neither see (under
+// -o json, which never prints this) nor act on. An answer magus cannot stand behind is a
+// FAILURE with a remedy attached, not a footnote under a list that looks complete: the
+// list is short by an unknown amount, and exit 0 is magus saying it is not.
+//
+// Exit 1 rather than 2, per exitForVerdict's split: the request was well formed and the
+// WORK could not be completed, because a prerequisite artifact is out of date.
+func reportIndexStaleness(w io.Writer, ans types.KnowledgeAnswer) error {
 	if ans.Reason == types.ReasonIndexStale {
-		return
+		return errSilent{exitCode: 1}
 	}
-	if notice := staleIndexNotice(ans.StaleIndexes); notice != "" {
-		fmt.Fprint(w, notice)
+	notice := staleIndexNotice(ans.StaleIndexes)
+	if notice == "" {
+		return nil
 	}
+	fmt.Fprint(w, notice)
+	return errSilent{exitCode: 1}
 }
 
 // staleIndexNotice renders the line, or "" for an empty list. Split from the probe so the
@@ -126,4 +136,20 @@ func staleGraphAdvice(ctx context.Context) string {
 		fmt.Sprintf("%s changed since %s last indexed %s: %s. A symbol added or moved since then is missing from the answer, and a lookup that misses it reports \"unknown, not absent\" rather than nothing being there.\n",
 			plural(len(stale), "One project", "Several projects"), hint.GraphBuild, plural(len(stale), "it", "them"), strings.Join(stale, ", ")) +
 		"This is an advisory: a stale index still holds true facts, so the read is worth running either way."
+}
+
+// unverifiedNotice renders what a caller of `refs --occurrences` must do when the index
+// disagrees with the tree, and it is shared by all three output arms because all three
+// used to say something different: the text arm named a target, the name arm named the
+// same target on stderr, and the structured arm said nothing at all and exited 0. A
+// caller that reads the record without comparing verified_count to occurrence_count gets
+// ranges that no longer point at the symbol.
+//
+// The target it used to name was `scip`, which is the indexer's op and not a command
+// anybody runs. `magus graph build` is what clears this, which is why the sibling
+// staleIndexNotice already names it.
+func unverifiedNotice(out types.KnowledgeOccurrencesOutput) string {
+	return fmt.Sprintf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
+		out.OccurrenceCount-out.VerifiedCount, out.StaleFiles) +
+		fmt.Sprintf("  refresh and ask again: %s; sites may also be MISSING from a stale index.\n", hint.GraphBuild)
 }

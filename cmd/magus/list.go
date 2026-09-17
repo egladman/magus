@@ -137,10 +137,11 @@ func lsProjects(ctx context.Context, root string) error {
 		return emitFormatted(opts, out)
 	case outputName:
 		// Machine-consumable: emit the stable path ("." for the root), never the label.
+		names := make([]string, 0, len(out.Projects))
 		for _, p := range out.Projects {
-			fmt.Println(p.Path)
+			names = append(names, p.Path)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// ls ENUMERATES; describe EXPLAINS one thing in full. That split is the whole
@@ -264,10 +265,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 			}
 		}
 		slices.Sort(names)
-		for _, n := range names {
-			fmt.Println(n)
-		}
-		return nil
+		return emitNames(names)
 	}
 
 	for _, p := range out.Projects {

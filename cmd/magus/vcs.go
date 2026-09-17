@@ -632,8 +632,7 @@ func emitCheckpoint(cp types.VCSCheckpoint) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, cp)
 	case outputName:
-		fmt.Println(checkpointToken(cp))
-		return nil
+		return emitNames([]string{checkpointToken(cp)})
 	}
 	fmt.Println(checkpointLine(cp))
 	return nil

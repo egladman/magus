@@ -113,10 +113,11 @@ func emitDoctorChecks(opts OutputOptions, checks []doctor.CheckInfo) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, checks)
 	case outputName:
+		names := make([]string, 0, len(checks))
 		for _, c := range checks {
-			fmt.Println(c.Name)
+			names = append(names, c.Name)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	fmt.Printf("%d checks, in the order `magus doctor` reports them:\n\n", len(checks))
@@ -142,12 +143,13 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		var names []string
 		for _, c := range out.Checks {
 			if c.Status != types.DoctorOK {
-				fmt.Println(c.Name)
+				names = append(names, c.Name)
 			}
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be

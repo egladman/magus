@@ -163,10 +163,11 @@ func sessionList(ctx context.Context, root string, args []string) error {
 	case outputText:
 		return renderSessionsText(ctx, root, summaries, fold, dir, !cutoff.IsZero())
 	case outputName:
+		names := make([]string, 0, len(summaries))
 		for _, s := range summaries {
-			fmt.Println(s.Session)
+			names = append(names, s.Session)
 		}
-		return nil
+		return emitNames(names)
 	}
 	out := map[string]any{
 		"sessions":    summaries,

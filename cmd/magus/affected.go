@@ -766,17 +766,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	case outputText, outputJSON:
 		return emitFormatted(OutputOptions{Format: outputJSON}, out)
 	case outputName:
-		w, cleanup, err := outputDst()
-		if err != nil {
-			return err
-		}
-		defer func() { _ = cleanup() }()
-		for _, s := range out.Matrix {
-			if _, err := fmt.Fprintln(w, s.Shard); err != nil {
-				return err
-			}
-		}
-		return nil
+		return emitNamesOf(out.Matrix, func(s planShard) string { return s.Shard })
 	default:
 		return emitFormatted(opts, out)
 	}
@@ -975,10 +965,11 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
+		names := make([]string, 0, len(out.AffectedProjects))
 		for _, p := range out.AffectedProjects {
-			fmt.Println(p.Path)
+			names = append(names, p.Path)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	return printImpactText(out)
@@ -1247,10 +1238,13 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(opts, out)
 	case outputName:
-		if out.Affected {
-			fmt.Println(out.Project)
+		// One name or none, which emitNames renders as a line or an empty file. The
+		// empty file is the point: `-o name` piped into xargs should see nothing rather
+		// than a blank line.
+		if !out.Affected {
+			return emitNames(nil)
 		}
-		return nil
+		return emitNames([]string{out.Project})
 	}
 
 	// text and wide

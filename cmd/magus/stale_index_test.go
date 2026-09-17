@@ -33,7 +33,7 @@ func TestStalenessBannerAgreesWithTheVerdict(t *testing.T) {
 	render := func(ans types.KnowledgeAnswer) string {
 		var buf bytes.Buffer
 		printVerdict(&buf, ans, "")
-		printIndexStaleness(&buf, ans)
+		_ = reportIndexStaleness(&buf, ans)
 		return buf.String()
 	}
 

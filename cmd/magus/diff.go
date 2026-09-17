@@ -458,13 +458,14 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	case outputName:
 		// Left alone under --impact: -o name is the shape a shell loop reads, and one
 		// non-path line in it would break every one of them.
+		paths := make([]string, 0, len(rev.Files))
 		for _, f := range rev.Files {
 			if f.Generated() && !rf.Generated {
 				continue
 			}
-			fmt.Println(f.Path)
+			paths = append(paths, f.Path)
 		}
-		return nil
+		return emitNames(paths)
 	}
 	hintSinceLastReview(os.Stderr, rev, src)
 	hintReviewPrompt(os.Stderr, rev, rf)

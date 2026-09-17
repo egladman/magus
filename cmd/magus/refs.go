@@ -149,12 +149,21 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
-	case outputName:
-		for _, r := range out.Refs {
-			fmt.Println(r.File)
+		if err := emitFormatted(opts, out); err != nil {
+			return err
 		}
-		return nil
+		// stderr, because the record on stdout must stay parseable; the exit status is
+		// what a script reads, and it is the only channel a structured caller has.
+		return reportIndexStaleness(os.Stderr, out.Answer)
+	case outputName:
+		names := make([]string, 0, len(out.Refs))
+		for _, r := range out.Refs {
+			names = append(names, r.File)
+		}
+		if err := emitNames(names); err != nil {
+			return err
+		}
+		return reportIndexStaleness(os.Stderr, out.Answer)
 	}
 
 	fmt.Printf("symbol: %s", out.Symbol)
@@ -171,7 +180,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	if len(out.Refs) == 0 {
 		fmt.Println("no references found")
 		printVerdict(os.Stdout, out.Answer, "")
-		printIndexStaleness(os.Stdout, out.Answer)
+		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
+			return err
+		}
 		// "nothing uses this" is a NEGATIVE claim, so it follows the verdict the same way
 		// an unresolved name does: exit 1 when magus could not verify it. Absent stays 0
 		// here, unlike the unresolved branch above: the symbol resolved and its empty
@@ -187,8 +198,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	// Under the rows, never instead of them. A found answer from a stale index is the
 	// dangerous one: it looks complete, and nothing else on this path would say otherwise.
-	printIndexStaleness(os.Stdout, out.Answer)
-	return nil
+	return reportIndexStaleness(os.Stdout, out.Answer)
 }
 
 // refsTextCmd implements `magus refs <pattern> --text`: a raw substring search that
@@ -326,26 +336,41 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, out)
+		if err := emitFormatted(opts, out); err != nil {
+			return err
+		}
+		// stale_files and verified_count are in the record, and a reader who does not
+		// compare them against occurrence_count gets a list of ranges that no longer
+		// point at the symbol. The notice rides stderr, where it cannot corrupt the
+		// record, and the exit status matches the two arms below.
+		if out.VerifiedCount < out.OccurrenceCount {
+			fmt.Fprint(os.Stderr, unverifiedNotice(out))
+			return errSilent{exitCode: 1}
+		}
+		return nil
 	case outputName:
 		// file:line:col, the form every editor and `xargs` already understands. Only
 		// verified sites: -o name has nowhere to put a status, and emitting an unverified
 		// range in a list that looks actionable is exactly the confusion the status exists
 		// to prevent.
+		var names []string
 		for _, f := range out.Files {
 			for _, occ := range f.Occurrences {
 				if occ.Status == types.SymbolOccurrenceVerified {
-					fmt.Printf("%s:%d:%d\n", f.File, occ.Line, occ.Column)
+					names = append(names, fmt.Sprintf("%s:%d:%d", f.File, occ.Line, occ.Column))
 				}
 			}
+		}
+		if err := emitNames(names); err != nil {
+			return err
 		}
 		// Filtering to verified sites is what makes this format safe to pipe, and it is also
 		// what makes a wholly stale index print NOTHING: byte-identical to a symbol with no
 		// occurrences at all. This is the format a script reads, so the difference has to
 		// live in the exit status, which is the only channel it has left.
 		if out.VerifiedCount < out.OccurrenceCount {
-			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; re-run this project's scip target\n",
-				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount)
+			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; refresh with `%s`\n",
+				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount, hint.GraphBuild)
 			return errSilent{exitCode: 1}
 		}
 		// Deliberately NOT exitForVerdict here. The coverage verdict is `unknown` whenever any
@@ -394,9 +419,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		// The count alone does not say what to do about it, and the wrong response (edit
 		// the good ones, skip the rest) produces a half-renamed tree that still compiles
 		// in some languages.
-		fmt.Printf("\n%d site(s) in %d file(s) did not verify: the index no longer matches the tree.\n",
-			out.OccurrenceCount-out.VerifiedCount, out.StaleFiles)
-		fmt.Println("Re-run this project's scip target and try again; sites may also be MISSING from a stale index.")
+		fmt.Print(unverifiedNotice(out))
 		printVerdict(os.Stdout, out.Answer, "")
 		return errSilent{exitCode: 1}
 	}

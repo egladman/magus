@@ -216,10 +216,19 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if err := emitFormatted(opts, queryWithNext{KnowledgeQueryOutput: out, Next: next}); err != nil {
 			return err
 		}
+		// Before exitForQuery, which passes a POPULATED answer whatever its verdict: a
+		// short list from a stale index is exactly the shape that reads as complete.
+		// The notice goes to stderr so the record on stdout stays parseable.
+		if err := reportIndexStaleness(os.Stderr, out.Answer); err != nil {
+			return err
+		}
 		return exitForQuery(out)
 	case outputName:
-		for _, m := range out.Matches {
-			fmt.Println(m.ID)
+		if err := emitNamesOf(out.Matches, func(m types.KnowledgeMatch) string { return m.ID }); err != nil {
+			return err
+		}
+		if err := reportIndexStaleness(os.Stderr, out.Answer); err != nil {
+			return err
 		}
 		return exitForQuery(out)
 	}
@@ -229,7 +238,9 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if out.MatchCount == 0 {
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
 		emitNearest(os.Stdout, g.NearestNode(input))
-		printIndexStaleness(os.Stdout, out.Answer)
+		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
+			return err
+		}
 		// An empty result set is still a legitimate answer to a search, so this exits 0 on
 		// `absent` and only fails on `unknown`. See exitForQuery.
 		return exitForQuery(out)
@@ -247,8 +258,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	fmt.Printf("\nneighborhood: %d nodes, %d edges\n", len(out.Nodes), len(out.Links))
 	fmt.Println("Run with -o json for the full subgraph.")
 	printNext(os.Stdout, nx, next)
-	printIndexStaleness(os.Stdout, out.Answer)
-	return nil
+	return reportIndexStaleness(os.Stdout, out.Answer)
 }
 
 // outputRefOpts carries the options for `magus query output <ref>`.
@@ -450,8 +460,7 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 		}
 		return emitFormatted(out, rec)
 	case outputName:
-		fmt.Println(header.ID)
-		return nil
+		return emitNames([]string{header.ID})
 	}
 
 	fmt.Printf("inv:     %s\n", header.ID)
@@ -547,8 +556,7 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(out, outputIdentityRecord{OutputDescriptor: desc, Invocation: inv, ClassDigests: digests})
 	case outputName:
-		fmt.Println(desc.Ref)
-		return nil
+		return emitNames([]string{desc.Ref})
 	}
 	fmt.Printf("ref:     %s\n", desc.Ref)
 	fmt.Printf("project: %s\n", desc.Project)
@@ -766,8 +774,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 			KnowledgeExplainOutput: out, Next: next, AgentSessions: sessionContact(root, out.Node),
 		})
 	case outputName:
-		fmt.Println(out.Node.ID)
-		return nil
+		return emitNames([]string{out.Node.ID})
 	}
 
 	fmt.Print(render.ExplainText(out))
@@ -787,8 +794,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	printNext(os.Stdout, nx, next)
 	// explain's output carries no answer record, so the found branch builds the one every
 	// other surface builds rather than reaching past it for the raw observation.
-	printIndexStaleness(os.Stdout, knowledge.Answer(pos[0], true, symbolCoverage(ctx, root, pos[0], seedsLazyLayer)))
-	return nil
+	return reportIndexStaleness(os.Stdout, knowledge.Answer(pos[0], true, symbolCoverage(ctx, root, pos[0], seedsLazyLayer)))
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {

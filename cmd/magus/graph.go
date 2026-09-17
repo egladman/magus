@@ -334,10 +334,11 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	case outputMermaid:
 		return render.WriteKnowledgeMermaid(os.Stdout, out)
 	case outputName:
+		names := make([]string, 0, len(out.Nodes))
 		for _, n := range out.Nodes {
-			fmt.Println(n.ID)
+			names = append(names, n.ID)
 		}
-		return nil
+		return emitNames(names)
 	}
 
 	// text / wide: a routing summary, not a data dump (counts by kind and relation).
@@ -436,10 +437,11 @@ func graphStats(ctx context.Context, root string, args []string) error {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
 		return emitFormatted(outOpts, out)
 	case outputName:
+		names := make([]string, 0, len(out.Gods))
 		for _, god := range out.Gods {
-			fmt.Println(god.ID)
+			names = append(names, god.ID)
 		}
-		return nil
+		return emitNames(names)
 	}
 	return statsText(out)
 }
@@ -613,10 +615,11 @@ func renderWorkspaceGraph(ctx context.Context, ws types.WorkspaceRepository, opt
 		return emitFormatted(outOpts, magus.ComposeGraph(ws, composeOpts...))
 	case outputName:
 		out := magus.ComposeGraph(ws, composeOpts...)
+		names := make([]string, 0, len(out.Nodes))
 		for _, n := range out.Nodes {
-			fmt.Println(n.Path)
+			names = append(names, n.Path)
 		}
-		return nil
+		return emitNames(names)
 	case outputDot:
 		return render.WriteGraphDOT(os.Stdout, magus.ComposeGraph(ws, composeOpts...))
 	case outputMermaid:
