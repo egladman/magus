@@ -2,7 +2,9 @@ package proc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -82,6 +84,21 @@ var (
 	configReloadExchange   = exchange{op: "config.reload", request: typeConfigReload, reply: typeConfigReloadReply}
 )
 
+// ctxCause reports the context's error alongside err when the context is what ended the
+// exchange. The socket carries ctx's deadline, and its timer can fire before ctx marks
+// itself done, so a socket deadline error on a ctx that HAS a deadline is that deadline,
+// whether or not ctx.Err has caught up. A caller testing for context.DeadlineExceeded must
+// not see a bare i/o timeout on the runs where the socket won.
+func ctxCause(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return fmt.Errorf("%w: %w", ctxErr, err)
+	}
+	if _, ok := ctx.Deadline(); ok && errors.Is(err, os.ErrDeadlineExceeded) {
+		return fmt.Errorf("%w: %w", context.DeadlineExceeded, err)
+	}
+	return err
+}
+
 // roundTrip sends req to the daemon at addr as x and decodes the reply. Errors read
 // "proc: <op>: ...".
 //
@@ -110,11 +127,11 @@ func roundTrip[Reply any](ctx context.Context, addr string, x exchange, req any)
 	}
 
 	if err := writeFrame(conn, x.request, req); err != nil {
-		return reply, fmt.Errorf("proc: %s: write: %w", x.op, err)
+		return reply, fmt.Errorf("proc: %s: write: %w", x.op, ctxCause(ctx, err))
 	}
 	typ, line, err := readFrameCtx(ctx, conn)
 	if err != nil {
-		return reply, fmt.Errorf("proc: %s: read: %w", x.op, err)
+		return reply, fmt.Errorf("proc: %s: read: %w", x.op, ctxCause(ctx, err))
 	}
 	if typ == typeError {
 		var er errorReply
