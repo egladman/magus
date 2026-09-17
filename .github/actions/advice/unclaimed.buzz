@@ -16,9 +16,12 @@ import "std";
 
 final section = "unclaimed";
 
+// changed lists the files the pull request leaves in the tree. Deletions are filtered out:
+// a file that no longer exists seeds no project and cannot be declared, so listing it is a
+// finding nobody can act on.
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
-    final res = proc\exec("git", args: ["diff", "--name-only", advice\diffRange(base, head: head)],
+    final res = proc\exec("git", args: ["diff", "--name-only", "--diff-filter=d", advice\diffRange(base, head: head)],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
