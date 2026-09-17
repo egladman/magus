@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
@@ -17,7 +19,7 @@ func TestSpawnRequiresTheMultiAgentBrief(t *testing.T) {
 
 	t.Run("the first spawn of a session is denied and names the skill", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "session-a")
-		reason := denySpawnWithoutBrief(g, true)
+		reason := denySpawnWithoutBrief(g, true, "")
 		require.NotEmpty(t, reason)
 		assert.Contains(t, reason, multiAgentSkill.String())
 	})
@@ -25,25 +27,25 @@ func TestSpawnRequiresTheMultiAgentBrief(t *testing.T) {
 	t.Run("loading the skill clears it for the rest of the session", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "session-b")
 		require.True(t, recordSkillLoad(g, multiAgentSkill.String()))
-		assert.Empty(t, denySpawnWithoutBrief(g, true))
+		assert.Empty(t, denySpawnWithoutBrief(g, true, ""))
 	})
 
 	t.Run("a different skill does not clear it", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "session-c")
 		recordSkillLoad(g, "magus-run")
-		assert.NotEmpty(t, denySpawnWithoutBrief(g, true),
+		assert.NotEmpty(t, denySpawnWithoutBrief(g, true, ""),
 			"any skill standing in for the brief would make the rule unfalsifiable")
 	})
 
 	t.Run("two sessions do not share the marker", func(t *testing.T) {
 		dir := t.TempDir()
 		recordSkillLoad(hint.NewGate(dir, "session-d"), multiAgentSkill.String())
-		assert.NotEmpty(t, denySpawnWithoutBrief(hint.NewGate(dir, "session-e"), true),
+		assert.NotEmpty(t, denySpawnWithoutBrief(hint.NewGate(dir, "session-e"), true, ""),
 			"the marker is keyed on the session, so one session's load is not another's")
 	})
 
 	t.Run("a host reporting no session is not guarded here", func(t *testing.T) {
-		assert.Empty(t, denySpawnWithoutBrief(hint.NewGate(t.TempDir(), ""), true),
+		assert.Empty(t, denySpawnWithoutBrief(hint.NewGate(t.TempDir(), ""), true, ""),
 			"with no session pointer every spawn everywhere would share one bucket: the first denies and the rest pass")
 		assert.False(t, recordSkillLoad(hint.NewGate(t.TempDir(), ""), multiAgentSkill.String()))
 	})
@@ -65,9 +67,9 @@ func TestSpawnRuleStandsDownWhereLoadsGoUnobserved(t *testing.T) {
 	t.Parallel()
 
 	g := hint.NewGate(t.TempDir(), "unobserved-host")
-	assert.Empty(t, denySpawnWithoutBrief(g, false),
+	assert.Empty(t, denySpawnWithoutBrief(g, false, ""),
 		"a host that cannot report a skill load must not be held to having reported one")
-	assert.NotEmpty(t, denySpawnWithoutBrief(g, true),
+	assert.NotEmpty(t, denySpawnWithoutBrief(g, true, ""),
 		"the same session denies once the wiring declares it observes loads")
 }
 
@@ -78,7 +80,7 @@ func TestEitherCopyClearsTheBrief(t *testing.T) {
 
 	g := hint.NewGate(t.TempDir(), "session-full")
 	require.True(t, recordSkillLoad(g, agent.FullTwinName(multiAgentSkill.String())))
-	assert.Empty(t, denySpawnWithoutBrief(g, true))
+	assert.Empty(t, denySpawnWithoutBrief(g, true, ""))
 }
 
 // TestDenyNamesOnlyTheAlwaysInstalledCopy pins that the reason never points at the full
@@ -87,7 +89,30 @@ func TestEitherCopyClearsTheBrief(t *testing.T) {
 func TestDenyNamesOnlyTheAlwaysInstalledCopy(t *testing.T) {
 	t.Parallel()
 
-	reason := denySpawnWithoutBrief(hint.NewGate(t.TempDir(), "session-g"), true)
+	reason := denySpawnWithoutBrief(hint.NewGate(t.TempDir(), "session-g"), true, "")
 	require.NotEmpty(t, reason)
 	assert.NotContains(t, reason, agent.FullTwinName(multiAgentSkill.String()))
+}
+
+// TestDenyNamesTheInstallWhenTheSkillIsMissing pins the stale-install trap: a workspace whose
+// installed skills predate the one the deny asks for. Telling that reader to load a skill no
+// location carries is a deny nothing clears, so the remedy is the install that puts it there.
+func TestDenyNamesTheInstallWhenTheSkillIsMissing(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	stale := filepath.Join(workspace, ".claude", "skills", "magus-delegate-ultra")
+	require.NoError(t, os.MkdirAll(stale, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stale, "SKILL.md"), []byte("old"), 0o644))
+
+	reason := denySpawnWithoutBrief(hint.NewGate(t.TempDir(), "session-stale"), true, workspace)
+	require.NotEmpty(t, reason)
+	assert.Contains(t, reason, "not installed in .claude/skills")
+	assert.Contains(t, reason, "magus agent install .claude/skills --force")
+
+	current := filepath.Join(workspace, ".claude", "skills", multiAgentSkill.String())
+	require.NoError(t, os.MkdirAll(current, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(current, "SKILL.md"), []byte("new"), 0o644))
+	reason = denySpawnWithoutBrief(hint.NewGate(t.TempDir(), "session-installed"), true, workspace)
+	assert.NotContains(t, reason, "not installed", "an installed skill only needs loading")
 }

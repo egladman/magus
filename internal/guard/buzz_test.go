@@ -18,7 +18,7 @@ func TestBuzzWriteRequiresTheBuzzSkill(t *testing.T) {
 
 	t.Run("the first Buzz write of a session is denied and names the skill", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-a")
-		reason := denyBuzzWriteWithoutSkill(g, true, "spells/typescript/spell.buzz")
+		reason := denyBuzzWriteWithoutSkill(g, true, "", "spells/typescript/spell.buzz")
 		require.NotEmpty(t, reason)
 		assert.Contains(t, reason, buzzWriteSkill.String())
 		assert.NotContains(t, reason, agent.FullTwinName(buzzWriteSkill.String()),
@@ -28,20 +28,20 @@ func TestBuzzWriteRequiresTheBuzzSkill(t *testing.T) {
 	t.Run("loading the skill clears it for the rest of the session", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-b")
 		require.True(t, recordSkillLoad(g, buzzWriteSkill.String()))
-		assert.Empty(t, denyBuzzWriteWithoutSkill(g, true, "magusfile.buzz"))
+		assert.Empty(t, denyBuzzWriteWithoutSkill(g, true, "", "magusfile.buzz"))
 	})
 
 	t.Run("the multi-agent brief does not clear it", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-c")
 		recordSkillLoad(g, multiAgentSkill.String())
-		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "tools/host-schemas.buzz"),
+		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "", "tools/host-schemas.buzz"),
 			"the two rules gate different skills and must not satisfy each other")
 	})
 
 	t.Run("a host that cannot report a skill load is not held to having reported one", func(t *testing.T) {
 		g := hint.NewGate(t.TempDir(), "buzz-d")
-		assert.Empty(t, denyBuzzWriteWithoutSkill(g, false, "magusfile.buzz"))
-		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "magusfile.buzz"))
+		assert.Empty(t, denyBuzzWriteWithoutSkill(g, false, "", "magusfile.buzz"))
+		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(g, true, "", "magusfile.buzz"))
 	})
 }
 
@@ -75,7 +75,7 @@ func TestSkillMarkerRefusesANameThatIsNotOne(t *testing.T) {
 	// And the refusal reaches the recorder, so a traversing name marks nothing at all.
 	g := hint.NewGate(t.TempDir(), "session-traversal")
 	assert.False(t, recordSkillLoad(g, "../../../../tmp/pwn"))
-	assert.NotEmpty(t, denySpawnWithoutBrief(g, true),
+	assert.NotEmpty(t, denySpawnWithoutBrief(g, true, ""),
 		"a name that cannot be a skill must not clear a gate that wants one")
 }
 
@@ -87,13 +87,13 @@ func TestANamespacedSkillStillClearsItsGate(t *testing.T) {
 
 	g := hint.NewGate(t.TempDir(), "session-namespaced")
 	require.True(t, recordSkillLoad(g, "some-plugin:"+multiAgentSkill.String()))
-	assert.Empty(t, denySpawnWithoutBrief(g, true))
+	assert.Empty(t, denySpawnWithoutBrief(g, true, ""))
 
 	// The namespace is stripped, never walked: a separator that could traverse is still
 	// refused, however it is dressed up as a namespace.
 	bad := hint.NewGate(t.TempDir(), "session-namespaced-bad")
 	assert.False(t, recordSkillLoad(bad, "plugin:../../escape"))
-	assert.NotEmpty(t, denySpawnWithoutBrief(bad, true))
+	assert.NotEmpty(t, denySpawnWithoutBrief(bad, true, ""))
 }
 
 // TestASkillGateStandsDownWithNowhereToRecord pins the second way this rule could deny
@@ -105,8 +105,8 @@ func TestASkillGateStandsDownWithNowhereToRecord(t *testing.T) {
 	g := hint.NewGate("", "session-no-cache-dir")
 	assert.False(t, recordSkillLoad(g, multiAgentSkill.String()),
 		"nothing can be recorded, and reporting otherwise would claim a marker exists")
-	assert.Empty(t, denySpawnWithoutBrief(g, true))
-	assert.Empty(t, denyBuzzWriteWithoutSkill(g, true, "magusfile.buzz"))
+	assert.Empty(t, denySpawnWithoutBrief(g, true, ""))
+	assert.Empty(t, denyBuzzWriteWithoutSkill(g, true, "", "magusfile.buzz"))
 }
 
 // TestOnlyBuzzSourceIsGated pins the extension test. Buzz has no directory of its own, so
@@ -122,7 +122,7 @@ func TestOnlyBuzzSourceIsGated(t *testing.T) {
 		"docs/render.BUZZ",
 	}
 	for _, p := range gated {
-		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(hint.NewGate(t.TempDir(), "gated"), true, p), p)
+		assert.NotEmpty(t, denyBuzzWriteWithoutSkill(hint.NewGate(t.TempDir(), "gated"), true, "", p), p)
 	}
 
 	passed := []string{
@@ -134,7 +134,7 @@ func TestOnlyBuzzSourceIsGated(t *testing.T) {
 		"",
 	}
 	for _, p := range passed {
-		assert.Empty(t, denyBuzzWriteWithoutSkill(hint.NewGate(t.TempDir(), "passed"), true, p), p)
+		assert.Empty(t, denyBuzzWriteWithoutSkill(hint.NewGate(t.TempDir(), "passed"), true, "", p), p)
 	}
 }
 
@@ -157,7 +157,7 @@ func TestBuzzAuthoringOnACommandLineRequiresTheSkill(t *testing.T) {
 	for name, command := range authors {
 		t.Run(name, func(t *testing.T) {
 			g := hint.NewGate(t.TempDir(), "buzz-cmd-"+name)
-			reason := denyBuzzAuthorWithoutSkill(g, true, command, DialectBash)
+			reason := denyBuzzAuthorWithoutSkill(g, true, "", command, DialectBash)
 			require.NotEmpty(t, reason, "must demand the skill")
 			assert.Contains(t, reason, buzzWriteSkill.String())
 		})
@@ -176,16 +176,16 @@ func TestBuzzAuthoringOnACommandLineRequiresTheSkill(t *testing.T) {
 	for name, command := range reads {
 		t.Run(name, func(t *testing.T) {
 			g := hint.NewGate(t.TempDir(), "buzz-read-"+name)
-			assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash))
+			assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, "", command, DialectBash))
 		})
 	}
 
 	t.Run("loading the skill clears the command road too", func(t *testing.T) {
 		const command = `magus buzz -e 'fun main() > void {}'`
 		g := hint.NewGate(t.TempDir(), "buzz-cmd-cleared")
-		require.NotEmpty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash))
+		require.NotEmpty(t, denyBuzzAuthorWithoutSkill(g, true, "", command, DialectBash))
 		require.True(t, recordSkillLoad(g, buzzWriteSkill.String()))
-		assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, command, DialectBash),
+		assert.Empty(t, denyBuzzAuthorWithoutSkill(g, true, "", command, DialectBash),
 			"the write road and the command road share one marker: reading the skill once is enough")
 	})
 

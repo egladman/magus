@@ -36,11 +36,11 @@ var buzzWriteSkill = agent.MustSkill("magus-buzz-write")
 // The extension is the whole test. Buzz lives in magusfiles, spells and tools/*.buzz, and
 // the one thing they share is the suffix; keying on a directory would miss a workspace that
 // puts its spells somewhere else, which is exactly the shape magus-workspace-rules invites.
-func denyBuzzWriteWithoutSkill(markers hint.Gate, observesSkillLoads bool, writePath string) string {
+func denyBuzzWriteWithoutSkill(markers hint.Gate, observesSkillLoads bool, workspace, writePath string) string {
 	if !isBuzzSource(writePath) {
 		return ""
 	}
-	return denyUntilSkillLoaded(markers, observesSkillLoads, buzzWriteSkill,
+	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, buzzWriteSkill,
 		"writing Buzz",
 		"No model has Buzz in its weights, so the shape it guesses from Go or TypeScript parses just often enough to ship a bug.")
 }
@@ -89,11 +89,11 @@ func buzzAuthoredBy(command string, d Dialect) string {
 }
 
 // denyBuzzAuthorWithoutSkill is buzz-unbriefed for a command line rather than a file write.
-func denyBuzzAuthorWithoutSkill(markers hint.Gate, observesSkillLoads bool, command string, d Dialect) string {
+func denyBuzzAuthorWithoutSkill(markers hint.Gate, observesSkillLoads bool, workspace, command string, d Dialect) string {
 	if buzzAuthoredBy(command, d) == "" {
 		return ""
 	}
-	return denyUntilSkillLoaded(markers, observesSkillLoads, buzzWriteSkill,
+	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, buzzWriteSkill,
 		"writing Buzz",
 		"No model has Buzz in its weights, so the shape it guesses from Go or TypeScript parses just often enough to ship a bug.")
 }

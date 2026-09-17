@@ -27,8 +27,8 @@ var multiAgentSkill = agent.MustSkill("magus-multi-agent")
 // Fires once per session by construction: the first spawn is denied, the model loads the
 // skill, the marker lands, and every later spawn passes. A session that never spawns never
 // sees it.
-func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool) string {
-	return denyUntilSkillLoaded(markers, observesSkillLoads, multiAgentSkill,
+func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace string) string {
+	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, multiAgentSkill,
 		"spawning",
 		"It carries the lease, worktree, model-naming and git rules a spawn cannot be fixed for later.")
 }

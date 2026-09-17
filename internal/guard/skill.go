@@ -1,6 +1,9 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
@@ -123,7 +126,7 @@ func skillLoaded(markers hint.Gate, skill agent.SkillRef) bool {
 // anyway would deny for the life of the session with no action the reader could take.
 //
 // Three lines, like every other deny here: what happened, why it matters, what to do.
-func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, skill agent.SkillRef, act, carries string) string {
+func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace string, skill agent.SkillRef, act, carries string) string {
 	if !observesSkillLoads {
 		return ""
 	}
@@ -147,10 +150,62 @@ func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, skill agen
 	if skillLoaded(markers, skill) {
 		return ""
 	}
+	// A skill that no declared location carries cannot be loaded, however the reader tries,
+	// so the remedy is the install that puts it there. Observed 2026-09-17: installed copies
+	// predating a rename lacked this skill, the deny kept naming it, and the host listed it
+	// the turn after `magus agent install` ran.
+	if dest, missing := missingSkillInstall(workspace, skill); missing {
+		return act + " before the " + skill.String() + " skill loaded.\n" +
+			carries + "\n" +
+			"It is not installed in " + dest + ": run `" + hint.AgentInstall.String() + " " + dest +
+			" --force`, then load Skill(" + skill.String() + ") and retry."
+	}
 	// The SHORT name, always. The full twin is not installed everywhere (one shipped harness
 	// asks for the short form alone), and naming a skill the reader cannot load is the
 	// failure agent.MustSkill exists to prevent.
 	return act + " before the " + skill.String() + " skill loaded.\n" +
 		carries + "\n" +
 		"Load Skill(" + skill.String() + "), then retry."
+}
+
+// missingSkillInstall reports a workspace-relative skill directory that holds a magus install
+// but not this skill, which is the shape a stale install takes. A workspace with no install
+// at all reports nothing: that reader loads skills from somewhere magus does not know about,
+// and telling them to install would be a guess.
+//
+// It looks under `<root>/.*/skills`, the one layout every host magus installs for shares,
+// rather than through harness descriptors: a workspace may declare its harnesses as spells
+// the descriptor loader does not read, and the guard may not name a host.
+func missingSkillInstall(workspace string, skill agent.SkillRef) (string, bool) {
+	if workspace == "" {
+		return "", false
+	}
+	dirs, err := filepath.Glob(filepath.Join(workspace, ".*", "skills"))
+	if err != nil {
+		return "", false
+	}
+	slices.Sort(dirs)
+	for _, dir := range dirs {
+		if !hasMagusSkill(dir) {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, skill.String(), "SKILL.md")); os.IsNotExist(err) {
+			rel, relErr := filepath.Rel(workspace, dir)
+			if relErr != nil {
+				return "", false
+			}
+			return filepath.ToSlash(rel), true
+		}
+	}
+	return "", false
+}
+
+func hasMagusSkill(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	return slices.ContainsFunc(entries, func(e os.DirEntry) bool {
+		return e.IsDir() && strings.HasPrefix(e.Name(), "magus-")
+	})
 }
