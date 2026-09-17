@@ -6,9 +6,9 @@
 //   magus\harness.provider(opencode)
 //
 // To adapt without modifying Magus source: copy this spell into the workspace,
-// change only the import path (keep provider), edit Buzz. Apply writes nothing
-// when config path is empty; verify does not claim guard coverage from a missing
-// config. See magus-workspace-rules "Adapting a Buzz harness".
+// change only the import path (keep provider), edit Buzz. Apply writes no hook
+// config when config path is empty, only the push permission in opencode.json
+// (harness_prompts); verify does not claim guard coverage from a missing config. See magus-workspace-rules "Adapting a Buzz harness".
 
 import "magus/spell";
 import "assert";
@@ -63,6 +63,47 @@ fun opencode_mcp() > {str: any} {
 
 export fun harness_mcp(target: Target, cb: fun(any)) > {str: any} {
     return opencode_mcp();
+}
+
+// opencode_prompts makes OpenCode ask before every git push. A plugin cannot ask (throwing
+// is all tool.execute.before can do), so the prompt is OpenCode's own permission, and the
+// guard plugin's permission.ask hook answers it: allow for a push a gate covers, ask for an
+// ungated one, deny for a leased worker. Both keys, because "git push *" does not match a
+// bare "git push".
+fun opencode_prompts() > [any] {
+    final prompts: mut [any] = mut [];
+    // Every backend magus drives publishes through its own verb.
+    foreach (verb in ["git push", "hg push", "sl push", "jj git push"]) {
+        prompts.append({
+            "path": "opencode.json",
+            "key": ["permission", "bash", verb],
+            "value": "ask",
+        });
+        prompts.append({
+            "path": "opencode.json",
+            "key": ["permission", "bash", verb + " *"],
+            "value": "ask",
+        });
+    }
+    return prompts;
+}
+
+export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
+    return opencode_prompts();
+}
+
+test "harness_prompts asks before every backend's bare push and push with arguments" {
+    final prompts = opencode_prompts();
+    assert\equal(prompts.len(), 8, "a bare and an argument key per backend");
+    foreach (p in prompts) {
+        assert\equal("{p["path"]}", "opencode.json", "the project config OpenCode loads");
+        assert\equal("{p["value"]}", "ask", "OpenCode prompts rather than refuses");
+    }
+    final want = ["git push", "git push *", "hg push", "hg push *", "sl push", "sl push *", "jj git push", "jj git push *"];
+    foreach (i, verb in want) {
+        final key = prompts[i]["key"] as [str];
+        assert\equal(key[2], verb, "permission key {i}");
+    }
 }
 
 test "mgs_getName is the harness id apply and verify look up" {

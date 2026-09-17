@@ -102,6 +102,12 @@ scripts are the glue; harness apply only merges the fragments that name them.
 See [guard templates](guard-templates.md) for the files and the variables that
 adapt them.
 
+A push at a commit no passing gate covers gets the verdict `ask`, and the command
+template renders it as `permissionDecision: "ask"`: Claude Code shows you the
+reason, which names the commit and the gate state, and approving publishes it. A
+push the gate covers runs without a prompt. A session bound to a job lease is
+denied instead, because workers do not publish.
+
 ### Maintaining the workspace harness
 
 This host is a Buzz harness spell. Adapt without Magus source edits by forking

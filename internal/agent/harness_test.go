@@ -704,3 +704,130 @@ func TestRemoveHarnessDryRunPlansWithoutWriting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after), "a dry run must not touch the file")
 }
+
+const promptRules = "prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"
+
+// writePromptHarness installs a skills-only descriptor that keeps two host-native approval
+// prompts: a whole rules file, and one key inside a JSON config the person also edits.
+func writePromptHarness(t *testing.T, root string) {
+	t.Helper()
+	dir := filepath.Join(root, "harnesses")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompter.json"), []byte(`{
+  "schema_version": 2,
+  "id": "prompter",
+  "display": {"name": "Prompter"},
+  "skills": {"paths": [".agents/skills"], "form": "both"},
+  "prompts": [
+    {"path": ".codex/rules/magus.rules", "content": `+strconvQuote(promptRules)+`},
+    {"path": "opencode.json", "key": ["permission", "bash", "git push *"], "value": "ask"}
+  ]
+}`), 0o644))
+}
+
+func strconvQuote(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// TestApplyHarnessWritesNativePrompts pins that apply puts the host's own approval prompt in
+// place and leaves the rest of a shared config alone, and that verify then reports it.
+func TestApplyHarnessWritesNativePrompts(t *testing.T) {
+	root := t.TempDir()
+	writePromptHarness(t, root)
+	config := filepath.Join(root, "opencode.json")
+	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "permission": {"edit": "ask"}}`), 0o644))
+
+	before, err := VerifyHarness(context.Background(), root, "prompter")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, before.PromptStatus)
+	assert.Contains(t, before.PromptReason, ".codex/rules/magus.rules")
+
+	update, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+	assert.Equal(t, []string{
+		filepath.Join(root, ".codex/rules/magus.rules"),
+		filepath.Join(root, "opencode.json"),
+	}, update.Prompts)
+
+	rules, err := os.ReadFile(filepath.Join(root, ".codex/rules/magus.rules"))
+	require.NoError(t, err)
+	assert.Equal(t, promptRules, string(rules))
+	var got map[string]any
+	body, err := os.ReadFile(config)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &got))
+	assert.Equal(t, map[string]any{
+		"model":      "m",
+		"permission": map[string]any{"edit": "ask", "bash": map[string]any{"git push *": "ask"}},
+	}, got)
+
+	again, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
+	require.NoError(t, err)
+	assert.False(t, again.Changed, "a second apply must be idempotent")
+
+	after, err := VerifyHarness(context.Background(), root, "prompter")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, after.PromptStatus)
+	assert.Empty(t, after.PromptReason)
+}
+
+// TestApplyHarnessRefusesAPromptThePersonOverrode pins that apply does not overwrite a value
+// someone chose, and says which one: the prompt is missing either way, and silence would
+// leave every ungated push refused with no clue why.
+func TestApplyHarnessRefusesAPromptThePersonOverrode(t *testing.T) {
+	root := t.TempDir()
+	writePromptHarness(t, root)
+	config := filepath.Join(root, "opencode.json")
+	const chosen = `{"permission": {"bash": {"git push *": "allow"}}}`
+	require.NoError(t, os.WriteFile(config, []byte(chosen), 0o644))
+
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "permission.bash.git push *")
+	body, err := os.ReadFile(config)
+	require.NoError(t, err)
+	assert.Equal(t, chosen, string(body))
+
+	result, err := VerifyHarness(context.Background(), root, "prompter")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.PromptStatus)
+}
+
+// TestRemoveHarnessDeletesItsPrompts pins remove as apply's inverse for prompts too.
+func TestRemoveHarnessDeletesItsPrompts(t *testing.T) {
+	root := t.TempDir()
+	writePromptHarness(t, root)
+	config := filepath.Join(root, "opencode.json")
+	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m"}`), 0o644))
+	_, err := ApplyHarness(context.Background(), HarnessApplyOptions{Root: root, ID: "prompter"})
+	require.NoError(t, err)
+
+	update, err := RemoveHarness(context.Background(), HarnessRemoveOptions{Root: root, ID: "prompter"})
+	require.NoError(t, err)
+	assert.True(t, update.Changed)
+	assert.NoFileExists(t, filepath.Join(root, ".codex/rules/magus.rules"))
+	body, err := os.ReadFile(config)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(body, &got))
+	assert.Equal(t, map[string]any{"model": "m"}, got)
+}
+
+// TestHarnessDescriptorRejectsAMalformedPrompt pins that a prompt names exactly one of a file
+// body or a JSON key, inside the workspace.
+func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "p", Display: HarnessDisplay{Name: "P"}, Skills: HarnessSkills{Form: "both"}}
+	for name, prompt := range map[string]HarnessPrompt{
+		"no path":      {Content: "x"},
+		"escapes":      {Path: "../x", Content: "x"},
+		"neither body": {Path: "x"},
+		"both bodies":  {Path: "x", Content: "x", Key: []string{"k"}, Value: "ask"},
+		"key no value": {Path: "x", Key: []string{"k"}},
+	} {
+		d := base
+		d.Prompts = []HarnessPrompt{prompt}
+		assert.Error(t, validateHarnessDescriptor(d), name)
+	}
+}

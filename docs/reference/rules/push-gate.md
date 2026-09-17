@@ -1,16 +1,16 @@
 ---
-title: "push-gate: a push with no gate run since the last change"
-description: "An advisory: it explains, and blocks nothing, on a push with no gate run since the last change."
+title: "push-gate: a push the run log does not prove ungated, which names the gate and lets it through"
+description: "An advisory: it explains, and blocks nothing, on a push the run log does not prove ungated, which names the gate and lets it through."
 tags: [guard, rules, push-gate, advise]
 ---
 
 # push-gate
 
-An advisory: it explains, and blocks nothing, on a push with no gate run since the last change.
+An advisory: it explains, and blocks nothing, on a push the run log does not prove ungated, which names the gate and lets it through.
 
 ## What it catches
 
-A push with no gate run since the last change.
+A push the run log does not prove ungated, which names the gate and lets it through.
 
 ## Seeing it
 

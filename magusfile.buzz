@@ -164,6 +164,11 @@ magus\project({
         // not editor metadata. The descriptor selects which one applies; this
         // generic input keeps cache keys aligned without naming a host here.
         ".*/hooks.json",
+        // The approval prompts a harness keeps beside its hooks: a Codex prompt rule and
+        // OpenCode's push permission. The hook templates answer a prompt only where one of
+        // these asks, so an edit to either changes what a push does.
+        ".codex/rules/*.rules",
+        "opencode.json",
         // The one hook config the glob above cannot reach, because Claude Code
         // keeps its hooks in settings.json rather than a file named for them.
         // host_schema_test.go grades this exact path against the vendored schema

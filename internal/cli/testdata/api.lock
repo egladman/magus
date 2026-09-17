@@ -188,6 +188,7 @@ flag shell/lease
 flag shell/observe
 flag shell/observes-skill-loads
 flag shell/path
+flag shell/renders-ask
 flag shell/session
 flag shell/transcript
 flag status/W

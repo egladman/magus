@@ -19,7 +19,11 @@ const GuardSchemaVersion = 1
 // guardDecisions is every decision a verdict can carry. A new entry here is a
 // promise that all four host glues can express it; the dogfood parity test is
 // what collects on that promise.
-var guardDecisions = []string{"pass", "advise", "deny"}
+//
+// "ask" blocks the call until the PERSON approves it through the host's own prompt. It
+// is never an escape the agent can clear, and a glue that cannot prompt renders it as a
+// deny, never as an allow.
+var guardDecisions = []string{"pass", "advise", "deny", "ask"}
 
 // guardSurfaces is every input the guard judges: a shell command, a file path
 // an edit is about to write (`magus shell --path`), or an MCP tool call
@@ -133,7 +137,15 @@ var guardSurfaces = []string{"command", "path", "mcp"}
 // search is biased toward package/docs URLs this tree already depends on. A copy
 // that predates this lets WebSearch run unbound against the open web with no
 // pointer at the citation index.
-const GuardTemplateVersion = 14
+//
+// 15: the contract grew the decision `ask`, which the push gate returns for an ungated
+// push from a session no job lease binds, and every template learned to render it through
+// its host's own approval prompt: from the hook where the hook can ask, and elsewhere by
+// answering the approval request a prompt rule the harness writes raises. Every template
+// now refuses a decision it does not know instead of allowing it. A copy that predates
+// this renders an ask as NOTHING, which each host takes as allow: an ungated push goes out
+// with nobody asked.
+const GuardTemplateVersion = 15
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

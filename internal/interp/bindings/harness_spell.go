@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 )
@@ -68,7 +69,30 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessMCPContract, err)
 		}
 	}
+	promptsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessPromptsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
+		}
+	} else if promptsResp.Data != nil {
+		if err := decodeHarnessPrompts(promptsResp.Data, &d); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
+		}
+	}
 	return d, "spell:" + id, true, nil
+}
+
+// decodeHarnessPrompts reads the prompts list through the descriptor's own JSON shape, so a
+// spell and a JSON descriptor cannot disagree about a field.
+func decodeHarnessPrompts(data any, d *agent.HarnessDescriptor) error {
+	if _, ok := data.([]any); !ok {
+		return fmt.Errorf("want list, got %T", data)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, &d.Prompts)
 }
 
 func isMissingHarnessOp(err error) bool {

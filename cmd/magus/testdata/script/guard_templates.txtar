@@ -431,6 +431,245 @@ exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
+# --- the push gate: consent comes from the person, through the host's prompt --
+#
+# An ungated push from a session no job lease binds gets the verdict ask. These cases run
+# in a workspace with a commit and a run log that holds no gate at it, so the gate state
+# is PROVEN absent: with no run log the rule stands down, and every push case above passes.
+# Last in the file because the skip below would otherwise take every case after it along.
+[!exec:git] skip 'the push cases need a git commit for the gate to be judged against'
+env TMPDIR=$WORK/n-push
+cd $WORK/push-ws
+exec git init -q
+exec git -c user.email=t@example.com -c user.name=T add magusfile.buzz
+exec git -c user.email=t@example.com -c user.name=T commit -q -m init
+mkdir .magus/runs
+
+# case: path/ask unreachable - the push gate is the only rule that asks, and it reads a shell
+# command; no rule asks about a write. The rendered arm is graded in host_schema_test.go.
+# case: mcp/ask unreachable - the same: no rule asks about an MCP call.
+
+# hosts: claude-code
+
+# case: command/ask
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"ask"'
+stdout 'Approving publishes'
+
+# case: command/deny
+# A caller that does not claim --renders-ask never receives an ask. A hook installed before
+# the decision existed renders one as nothing, and its host reads nothing as allow, so magus
+# refuses the push itself and says how to get the prompt back.
+stdin $WORK/push-line.txt
+! exec magus shell -o json
+stdout '"decision": "deny"'
+stdout 'predates approval prompts'
+stdout 'magus agent harness apply'
+! stdout '"decision": "ask"'
+
+# case: command/deny
+# The same holds for a template whose reply the reader wrote: only a reply the template
+# assembled claims the flag.
+env HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{end}}'
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'predates approval prompts'
+env HOST_RESPONSE=
+
+# hosts: codex
+env __MAGUS_AGENT_NAME=codex
+
+# case: command/ask
+# Codex parses a hook ask, marks the hook failed and runs the call, so this file never
+# sends it. With no prompt rule in the project nothing would ask the person either: the
+# push is refused, naming their own terminal.
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'own terminal'
+stdout 'magus agent harness apply --id codex'
+! stdout '"permissionDecision":"ask"'
+
+mkdir .codex/rules
+cp $WORK/push-rules.rules .codex/rules/magus.rules
+
+# case: command/ask
+# The rule prompts, so PreToolUse lets the call reach it and hands the model the reason.
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+
+# case: command/ask
+# A permission mode that never prompts would skip the rule, so the push is refused.
+stdin $WORK/push-command-bypass.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'never prompts'
+! stdout '"permissionDecision":"ask"'
+
+# case: command/ask
+# A push no prefix rule matches would run unprompted, so it is refused too.
+stdin $WORK/push-command-dir.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'only a plain git push'
+
+# case: command/ask
+# The approval request Codex raises before its prompt gets no decision: the person decides.
+stdin $WORK/push-approval.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
+
+# case: command/ask
+# A Codex wiring that forgot __MAGUS_AGENT_NAME is still Codex: its event carries turn_id,
+# and it still never receives permissionDecision "ask", which Codex would run unasked.
+env __MAGUS_AGENT_NAME=
+stdin $WORK/push-command-turn.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+! stdout '"permissionDecision":"ask"'
+stdout '"additionalContext":"pushing'
+env __MAGUS_AGENT_NAME=codex
+
+# case: command/pass
+# A request magus did not configure is never approved on the guard's say-so.
+stdin $WORK/other-approval.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '^\{"hookSpecificOutput":\{"hookEventName":"PermissionRequest"\}\}$'
+! stdout 'allow'
+
+# case: command/pass
+# A push a passing gate covers is approved, so nobody is asked.
+exec sh -c 'printf "{\"ts\":1,\"inv\":\"g\",\"kind\":\"started\",\"command\":{\"arguments\":[\"affected\",\"ci\"]},\"magus_version\":\"v0.0.0-1-g%s\"}\n{\"ts\":2,\"inv\":\"g\",\"kind\":\"finished\",\"status\":\"pass\"}\n" "$(git rev-parse HEAD)" > .magus/runs/gate.jsonl'
+stdin $WORK/push-approval.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+! stdout 'permissionDecision'
+
+# case: command/pass
+# Every backend magus drives publishes through its own verb, and each plain push a gate
+# covers is approved the same way.
+stdin $WORK/push-approval-hg.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+stdin $WORK/push-approval-sl.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+stdin $WORK/push-approval-jj.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"decision":\{"behavior":"allow"\}'
+rm .magus/runs/gate.jsonl
+
+# case: command/ask
+# An ungated push on each of them reaches its own prompt rule, so PreToolUse lets it through
+# to that prompt rather than refusing it.
+stdin $WORK/push-command-hg.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+stdin $WORK/push-command-sl.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+stdin $WORK/push-command-jj.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"additionalContext":"pushing'
+! stdout 'permissionDecision'
+
+# case: command/deny
+# A session bound to a job lease is a worker, and workers do not publish: refused outright.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus job fork harness/push-worker --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job exec harness/push-worker
+stdin $WORK/push-approval.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"behavior":"deny"'
+stdout 'workers do not publish'
+
+# hosts: claude-code
+env __MAGUS_AGENT_NAME=testscript
+
+# case: command/deny
+stdin $WORK/push-command.json
+exec sh $__MAGUS_TEMPLATES/magus-hook-command.sh
+stdout '"permissionDecision":"deny"'
+stdout 'workers do not publish'
+
+# hosts: cursor
+
+# case: command/deny
+stdin $WORK/cursor-push.json
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+stdout '"permission":"deny"'
+stdout 'workers do not publish'
+rm .magus/lease
+env HOME=/no-home
+env XDG_STATE_HOME=
+
+# case: command/ask
+stdin $WORK/cursor-push.json
+exec sh $__MAGUS_TEMPLATES/cursor-hook.sh
+stdout '"permission":"ask"'
+stdout 'Approving publishes'
+cd $WORK
+
+-- push-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of an ungated push matters here",
+});
+-- push-rules.rules --
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = ["hg", "push"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = ["sl", "push"],
+    decision = "prompt",
+)
+prefix_rule(
+    pattern = ["jj", "git", "push"],
+    decision = "prompt",
+)
+-- push-approval-hg.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "hg push -r ."}}
+-- push-approval-sl.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "sl push --to main"}}
+-- push-approval-jj.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "jj git push -b main"}}
+-- push-command-hg.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "hg push"}}
+-- push-command-sl.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "sl push --to main"}}
+-- push-command-jj.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "jj git push"}}
+-- push-command.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- push-line.txt --
+git push origin HEAD
+-- push-command-turn.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "turn_id": "t1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- push-command-bypass.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "bypassPermissions", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- push-command-dir.json --
+{"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git -C . push origin HEAD"}}
+-- push-approval.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- other-approval.json --
+{"hook_event_name": "PermissionRequest", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- cursor-push.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c1", "command": "git push origin HEAD", "cwd": ".", "sandbox": false}
 -- stale-magus --
 #!/bin/sh
 # Stands in for the binary a month behind the workspace: it answers `version` and knows

@@ -155,6 +155,20 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// moment the work stops being yours alone.
 		{command: "git push origin HEAD", context: "magus affected ci"},
 		{command: "git push --force-with-lease", context: "magus affected ci"},
+		// A global option before the subcommand is still a push. Missing it let
+		// `git -C . push` past the push gate, and with it past the person's approval.
+		{command: "git -C . push origin HEAD", context: "magus affected ci"},
+		{command: "git -c push.default=current push", context: "magus affected ci"},
+		// Every backend magus drives publishes, and each push reaches the same gate. A push
+		// the gate cannot see is a push nobody is asked about.
+		{command: "hg push", context: "magus affected ci"},
+		{command: "hg -R ../other push -r .", context: "magus affected ci"},
+		{command: "hg --cwd ../other push", context: "magus affected ci"},
+		{command: "sl push --to main", context: "magus affected ci"},
+		{command: "sl -R . push --to main", context: "magus affected ci"},
+		{command: "jj git push", context: "magus affected ci"},
+		{command: "jj -R ../other git push -b main", context: "magus affected ci"},
+		{command: "jj --at-op @ git push --all", context: "magus affected ci"},
 		// Stage-everything DENIES: `git add <path>` is an exact equivalent, so the
 		// deny costs nothing, and one such call swept 69 files (a regenerated docs
 		// site plus five untouched sources) into a commit about four methods.
@@ -1054,6 +1068,30 @@ func TestGitGuardFallbackPrefersTheDeny(t *testing.T) {
 	// Reading a stash is still safe, whether or not the line parses.
 	for _, cmd := range []string{"git stash list && (", "git stash show && ("} {
 		assert.Empty(t, Evaluate(testDependencies(), cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// TestPushFallbackCoversEveryBackend pins that an unparsable line still reaches the push
+// gate for each backend, relocated or not: with no AST there is nothing else to ask.
+func TestPushFallbackCoversEveryBackend(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git push && (",
+		"git -C ../other push && (",
+		"hg push && (",
+		"hg -R ../other push && (",
+		"sl push --to main && (",
+		"sl -R . push --to main && (",
+		"jj git push && (",
+		"jj -R ../other git push -b main && (",
+	} {
+		_, parsed := ParseCommands(cmd)
+		require.False(t, parsed, "%q must be unparsable or it does not exercise the fallback", cmd)
+		v := Evaluate(testDependencies(), cmd)
+		assert.Equal(t, string(advisoryPushGate), v.RuleName(), "%q must reach the push gate on the fallback path", cmd)
+	}
+	for _, cmd := range []string{"hg pull && (", "jj git fetch && (", "sl pull && ("} {
+		assert.NotEqual(t, string(advisoryPushGate), Evaluate(testDependencies(), cmd).RuleName(), "%q does not publish", cmd)
 	}
 }
 
