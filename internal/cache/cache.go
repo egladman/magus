@@ -166,7 +166,15 @@ type Step struct {
 	// derived from declared writer-before-reader footprints (DeriveTargetOrder).
 	// Unlike DependsOn it crosses target names and is exact. Scheduling only:
 	// never hashed, never folded into Deps, never part of the affected set.
-	RunAfter      []string
+	RunAfter []string
+	// RunAfterMembers holds the chain members this step must wait for, each named with
+	// the step that runs it: a writer inside another step's chain, waited out on its
+	// own rather than by that step's whole run.
+	RunAfterMembers []MemberWait
+	// Releases are node keys of this step's chain members that some RunAfterMembers
+	// names. Each opens when ReleaseTarget reports the member finished, and at the
+	// latest when this step ends.
+	Releases      []string
 	WorkspaceRoot string
 	Target        string   // mixed into key to distinguish targets on the same sources
 	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
@@ -1169,7 +1177,13 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			// markDone on every exit so a failing upstream cascades to its dependents,
 			// carrying this step's own result so a dependent's wait can tell success
 			// from failure rather than just "done" (see waitForDeps).
-			defer func() { barrier.markDone(stepKey(s), stepErr) }()
+			defer func() {
+				// A member the step never reached, or replayed from cache, opens here.
+				for _, k := range s.Releases {
+					barrier.release(MemberWait{Member: k, Step: stepKey(s)}, stepErr)
+				}
+				barrier.markDone(stepKey(s), stepErr)
+			}()
 			// fail routes a step's outcome: the barrier always hears it, the group only
 			// when the budget is spent (returning non-nil is what cancels the batch).
 			fail := func(e error) error {
@@ -1273,6 +1287,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 			r, err := c.Run(stepCtx, s, func(ctx context.Context) error {
 				ctx = ContextWithLimiter(ctx, lim)
 				ctx = WithSlotsHeld(ctx, slots)
+				ctx = withReleaser(ctx, barrier, stepKey(s))
 				return fn(ctx, s)
 			}, opts...)
 			// Write key before markDone; the markDone→waitForDeps happens-before edge

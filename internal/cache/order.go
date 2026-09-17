@@ -101,9 +101,10 @@ type DerivedEdge struct {
 	// weak marks an edge whose writer or reader side is a baseline fallback rather
 	// than an explicit declaration; weak edges yield when they close a cycle.
 	weak bool
-	// Ordered reports the batch schedule honors this edge: the writer's step(s) all
-	// run strictly before the reader's, via a coarse DependsOn edge or a derived
-	// RunAfter edge. An unordered edge is a settling candidate for the caller.
+	// Ordered reports the batch schedule honors this edge: the writer finishes before
+	// every step running the reader starts, via a coarse DependsOn edge on the writer's
+	// whole step or a derived RunAfter edge on the writer itself. An unordered edge is a
+	// settling candidate for the caller.
 	Ordered bool
 }
 
@@ -126,9 +127,14 @@ type DerivedOrder struct {
 	// schedule and out of TopoNodes, but the caller folds them back in as
 	// permanently unordered edges so their readers can still settle.
 	Dropped []DroppedEdge
-	// RunAfter maps a step's node key to the step node keys it must wait for,
-	// beyond its coarse DependsOn. RunAll's barrier waits these exactly.
+	// RunAfter maps a step's node key to the step keys it must wait for, beyond its
+	// coarse DependsOn. RunAll's barrier waits these exactly.
 	RunAfter map[string][]string
+	// RunAfterMembers maps a step's node key to the individual runs of chain members it
+	// must wait for; Releases maps a step's node key to the members it opens. See
+	// Step.RunAfterMembers.
+	RunAfterMembers map[string][]MemberWait
+	Releases        map[string][]string
 	// SameStep holds the overlaps inside one step that nothing sequences. They are not
 	// edges: no schedule can express them, and settling cannot repair them either, since
 	// both targets run in one window. The caller refuses the run over them.
@@ -153,7 +159,11 @@ type DerivedOrder struct {
 // DependsOn edges always win over derived ones: project-level ordering (and the
 // affected set) is never widened or narrowed here.
 func DeriveTargetOrder(steps []Step, nodes []TargetNode, witness OverlapWitness) *DerivedOrder {
-	d := &DerivedOrder{Nodes: nodes, RunAfter: map[string][]string{}, SameStep: FindSameStepConflicts(nodes, witness)}
+	d := &DerivedOrder{
+		Nodes: nodes, RunAfter: map[string][]string{},
+		RunAfterMembers: map[string][]MemberWait{}, Releases: map[string][]string{},
+		SameStep: FindSameStepConflicts(nodes, witness),
+	}
 
 	for w := range nodes {
 		for r := range nodes {
@@ -424,6 +434,10 @@ func (d *DerivedOrder) findCycle() []int {
 	return nil
 }
 
+// stepEdge is one ordering edge between two batch steps, induced by the fine edges
+// between the targets they run.
+type stepEdge struct{ from, to string }
+
 // projectOntoSteps turns fine edges into step-level RunAfter ordering where the
 // combined step graph stays acyclic, and marks the rest unordered. Coarse
 // DependsOn edges are never dropped: where a derived direction conflicts with
@@ -445,7 +459,6 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 		}
 	}
 
-	type stepEdge struct{ from, to string }
 	induced := map[stepEdge][]int{}
 	for ei, e := range d.Edges {
 		for _, sw := range d.Nodes[e.Writer].Steps {
@@ -514,14 +527,80 @@ func (d *DerivedOrder) projectOntoSteps(steps []Step) {
 			}
 		}
 	}
+	// ordersBefore reports whether the schedule already puts step before reader, which is
+	// what makes waiting on that step's copy of a member safe to add.
+	ordersBefore := func(step, reader string) bool {
+		return step == reader || kept[stepEdge{step, reader}] || reachable(step, reader)
+	}
 	for e := range kept {
-		if !slices.Contains(d.RunAfter[e.to], e.from) {
-			d.RunAfter[e.to] = append(d.RunAfter[e.to], e.from)
+		members, ok := d.memberWaits(e, induced[e], inScope, ordersBefore)
+		if !ok {
+			if !slices.Contains(d.RunAfter[e.to], e.from) {
+				d.RunAfter[e.to] = append(d.RunAfter[e.to], e.from)
+			}
+			continue
+		}
+		for _, w := range members {
+			if !slices.Contains(d.RunAfterMembers[e.to], w) {
+				d.RunAfterMembers[e.to] = append(d.RunAfterMembers[e.to], w)
+			}
+			if !slices.Contains(d.Releases[w.Step], w.Member) {
+				d.Releases[w.Step] = append(d.Releases[w.Step], w.Member)
+			}
 		}
 	}
 	for k := range d.RunAfter {
 		slices.Sort(d.RunAfter[k])
 	}
+	for k := range d.RunAfterMembers {
+		slices.SortFunc(d.RunAfterMembers[k], func(a, b MemberWait) int {
+			if a.Member != b.Member {
+				return strings.Compare(a.Member, b.Member)
+			}
+			return strings.Compare(a.Step, b.Step)
+		})
+	}
+	for k := range d.Releases {
+		slices.Sort(d.Releases[k])
+	}
+}
+
+// memberWaits is what the reader step of e waits on to honor the fine edges (by index)
+// that e's writer step induces on it: each writer's own run inside that step, rather than
+// the step's whole run. Every step that runs the writer is named, so no copy of it is
+// still to come when the reader starts. ok is false when the reader has to wait out the
+// writer step itself.
+//
+// A writer whose key is a batch step's is the one such case: that step's own end already
+// speaks for it. A writer the reader step runs TOO is not: the reader waits out the other
+// steps' copies and not its own, which is its body's own sequencing (the same-step
+// question, reported in SameStep rather than scheduled here).
+//
+// Only copies in steps ordersBefore admits are waited on. A copy in a step the schedule
+// cannot put ahead of the reader is what makes this edge unordered in the loop above, and
+// waiting on it would ask the barrier for a cycle it was built to refuse.
+//
+// The edge stays Ordered either way. A kept edge's reader waits on every writer inducing
+// it, and projectOntoSteps never relies on reachability through a kept edge for ordering,
+// only for keeping the step graph acyclic.
+func (d *DerivedOrder) memberWaits(e stepEdge, edges []int, inScope map[string]bool,
+	ordersBefore func(step, reader string) bool,
+) ([]MemberWait, bool) {
+	var waits []MemberWait
+	for _, ei := range edges {
+		w := d.Nodes[d.Edges[ei].Writer]
+		if w.Key() == e.from || inScope[w.Key()] {
+			return nil, false
+		}
+		for _, owner := range w.Steps {
+			m := MemberWait{Member: w.Key(), Step: owner}
+			if !ordersBefore(owner, e.to) || slices.Contains(waits, m) {
+				continue
+			}
+			waits = append(waits, m)
+		}
+	}
+	return waits, len(waits) > 0
 }
 
 // SameStepConflict is one target reading, inside a single step, what another target of

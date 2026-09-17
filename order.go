@@ -54,6 +54,16 @@ func (m *Magus) deriveBatchOrder(ctx context.Context, steps []cache.Step) (*cach
 				steps[i].RunAfter = append(steps[i].RunAfter, up)
 			}
 		}
+		for _, w := range order.RunAfterMembers[key] {
+			if !slices.Contains(steps[i].RunAfterMembers, w) {
+				steps[i].RunAfterMembers = append(steps[i].RunAfterMembers, w)
+			}
+		}
+		for _, member := range order.Releases[key] {
+			if !slices.Contains(steps[i].Releases, member) {
+				steps[i].Releases = append(steps[i].Releases, member)
+			}
+		}
 	}
 	// Answers "why did these steps serialize" / "why did that target re-run" at -vv
 	// without a debugger, like the barrier's schedule.wait trace.

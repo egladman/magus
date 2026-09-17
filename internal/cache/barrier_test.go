@@ -225,6 +225,128 @@ func TestRunAllRunAfterUpstreamFailureReleasesWaiter(t *testing.T) {
 	assert.False(t, ran["docs"], "reader must not run after its RunAfter writer failed")
 }
 
+// TestRunAllReleasedMemberStartsTheReaderBeforeItsStepEnds: a reader waiting on a chain
+// member starts once ReleaseTarget reports that member, while the step running it is
+// still busy, and the step then finishes normally.
+func TestRunAllReleasedMemberStartsTheReaderBeforeItsStepEnds(t *testing.T) {
+	root, c := openCache(t)
+	member := DepKey("libs/a", "format")
+	steps := []Step{
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
+			RunAfterMembers: []MemberWait{{Member: member, Step: DepKey("libs/a", "ci")}}},
+	}
+	readerStarted := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.RunAll(t.Context(), steps, func(ctx context.Context, s Step) error {
+			if s.ProjectPath == "." {
+				close(readerStarted)
+				return nil
+			}
+			ReleaseTarget(ctx, "libs/a", "format")
+			select {
+			case <-readerStarted:
+				return nil
+			case <-time.After(30 * time.Second):
+				return errors.New("reader still waiting on the whole writer step")
+			}
+		}, WithLimiter(NewLimiter(8)))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("RunAll deadlocked")
+	}
+}
+
+// TestRunAllUnreleasedMemberOpensWhenItsStepEnds: a member the step never reports (a
+// replayed step, or a branch not taken) still opens, with the step's verdict.
+func TestRunAllUnreleasedMemberOpensWhenItsStepEnds(t *testing.T) {
+	root, c := openCache(t)
+	member := DepKey("libs/a", "format")
+	rec := newOrderRecorder()
+	steps := []Step{
+		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root,
+			RunAfterMembers: []MemberWait{{Member: member, Step: DepKey("libs/a", "ci")}}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+	}
+	_, err := c.RunAll(t.Context(), steps, func(_ context.Context, s Step) error {
+		if s.ProjectPath == "." {
+			assert.True(t, rec.doneBefore("libs/a"), "reader started before the unreleased member's step ended")
+		}
+		rec.start(s.ProjectPath)
+		rec.finish(s.ProjectPath)
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.NoError(t, err)
+	assert.Len(t, rec.started, 2)
+
+	failing := DepKey("libs/b", "format")
+	_, err = c.RunAll(t.Context(), []Step{
+		{ProjectPath: "x", Target: "ci", WorkspaceRoot: root,
+			RunAfterMembers: []MemberWait{{Member: failing, Step: DepKey("libs/b", "ci")}}},
+		{ProjectPath: "libs/b", Target: "ci", WorkspaceRoot: root, Releases: []string{failing}},
+	}, func(_ context.Context, s Step) error {
+		if s.ProjectPath == "libs/b" {
+			return errors.New("boom")
+		}
+		return nil
+	}, WithLimiter(NewLimiter(8)))
+	require.ErrorContains(t, err, "boom")
+	assert.NotContains(t, err.Error(), "dependency", "a failed owner fails its waiter, which is a consequence and not reported")
+}
+
+// TestRunAllMemberCycleRejected: waiting on a member is waiting on the step that runs
+// it, so a cycle through one is refused before launch rather than deadlocking.
+func TestRunAllMemberCycleRejected(t *testing.T) {
+	root, c := openCache(t)
+	member := DepKey("a", "format")
+	_, err := c.RunAll(t.Context(), []Step{
+		{ProjectPath: "a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}, RunAfter: []string{DepKey("b", "ci")}},
+		{ProjectPath: "b", Target: "ci", WorkspaceRoot: root,
+			RunAfterMembers: []MemberWait{{Member: member, Step: DepKey("a", "ci")}}},
+	}, func(_ context.Context, _ Step) error { return nil })
+	require.ErrorContains(t, err, "dependency cycle")
+}
+
+// TestRunAllStepRunningTheMemberItselfDoesNotWaitOnItsOwnCopy: a step that both waits on
+// a member and runs it waits out the other step's copy only. Waiting on its own would be
+// waiting on its own body, which never starts.
+func TestRunAllStepRunningTheMemberItselfDoesNotWaitOnItsOwnCopy(t *testing.T) {
+	root, c := openCache(t)
+	member := DepKey("libs/a", "format")
+	writer, reader := DepKey("libs/a", "ci"), DepKey(".", "ci")
+	rec := newOrderRecorder()
+	steps := []Step{
+		{ProjectPath: ".", Target: "ci", WorkspaceRoot: root, Releases: []string{member},
+			RunAfterMembers: []MemberWait{{Member: member, Step: writer}, {Member: member, Step: reader}}},
+		{ProjectPath: "libs/a", Target: "ci", WorkspaceRoot: root, Releases: []string{member}},
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.RunAll(t.Context(), steps, func(ctx context.Context, s Step) error {
+			if s.ProjectPath == "." {
+				assert.True(t, rec.doneBefore("libs/a"), "reader started before the other step's copy finished")
+				return nil
+			}
+			rec.start(s.ProjectPath)
+			ReleaseTarget(ctx, "libs/a", "format")
+			rec.finish(s.ProjectPath)
+			return nil
+		}, WithLimiter(NewLimiter(8)))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(60 * time.Second):
+		t.Fatal("RunAll deadlocked: a step waited on its own run of a member")
+	}
+}
+
 // TestRunAllRunAfterOutOfScope verifies a RunAfter key naming a step outside
 // the batch is skipped, not blocked on forever.
 func TestRunAllRunAfterOutOfScope(t *testing.T) {
