@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -337,4 +338,88 @@ func TestLeaseCheckRoundTripsThroughItsRenderedLine(t *testing.T) {
 	_, err = ParseLeaseRunLine("magus affected ci --no-default-charms")
 	require.Error(t, err, "a set of runs is not one run, so no ref can be bound to it")
 	assert.Contains(t, err.Error(), "is not one")
+}
+
+func dependent(id string, state JobState, dependsOn string, paths ...string) Job {
+	return Job{ID: id, State: state, WritePaths: paths, DependsOn: []string{dependsOn}}
+}
+
+func TestJobOverlapsOmitsADependentThatIsNotReady(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []JobState{StateDeclared, StateRunning, StateExited} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+
+			rows := []Job{owner("dep", state, "internal/job"), dependent("waiter", StateDeclared, "dep", "internal/job")}
+			report := NewJobList(rows)
+			assert.Empty(t, report.Overlaps, "a job waiting on dep claims nothing dep could collide with")
+			assert.Equal(t, []JobBlock{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
+		})
+	}
+
+	t.Run("a third live job is not shielded by the waiter", func(t *testing.T) {
+		t.Parallel()
+
+		rows := []Job{
+			owner("dep", StateRunning, "types"),
+			dependent("waiter", StateDeclared, "dep", "internal/job"),
+			owner("other", StateRunning, "internal/job"),
+		}
+		assert.Empty(t, NewJobList(rows).Overlaps)
+	})
+}
+
+func TestJobOverlapsReportsADependentOnceEveryDependencyPasses(t *testing.T) {
+	t.Parallel()
+
+	rows := []Job{
+		owner("dep", StateRunning, "types"),
+		{ID: "waiter", State: StateDeclared, WritePaths: []string{"internal/job"}, DependsOn: []string{"dep", "dep2"}},
+		owner("dep2", StatePass),
+		owner("other", StateRunning, "internal/job"),
+	}
+	assert.Empty(t, NewJobList(rows).Overlaps, "one dependency still running keeps the waiter out")
+
+	rows[0].State = StatePass
+	report := NewJobList(rows)
+	assert.Equal(t, []JobOverlap{{JobA: "waiter", JobB: "other", PathsA: []string{"internal/job"}, PathsB: []string{"internal/job"}}}, report.Overlaps)
+	assert.Empty(t, report.Blocked)
+}
+
+func TestJobListNamesWhyAJobOwnsNothing(t *testing.T) {
+	t.Parallel()
+
+	for _, state := range []JobState{StateFail, StateNoReturn} {
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+
+			rows := []Job{owner("dep", state), dependent("waiter", StateDeclared, "dep", "internal/job"), owner("other", StateRunning, "internal/job")}
+			report := NewJobList(rows)
+			assert.Empty(t, report.Overlaps)
+			assert.Equal(t, []JobBlock{{Job: "waiter", On: "dep", State: state}}, report.Blocked)
+		})
+	}
+
+	t.Run("an undeclared dependency", func(t *testing.T) {
+		t.Parallel()
+
+		report := NewJobList([]Job{dependent("waiter", StateDeclared, "gone", "internal/job"), owner("other", StateRunning, "internal/job")})
+		assert.Empty(t, report.Overlaps)
+		assert.Equal(t, []JobBlock{{Job: "waiter", On: "gone"}}, report.Blocked)
+	})
+
+	t.Run("a terminal dependent is not reported", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, NewJobList([]Job{owner("dep", StateFail), dependent("waiter", StateNoReturn, "dep")}).Blocked)
+	})
+
+	t.Run("json names the reason", func(t *testing.T) {
+		t.Parallel()
+
+		got, err := json.Marshal(NewJobList([]Job{owner("dep", StateFail), dependent("waiter", StateDeclared, "dep")}))
+		require.NoError(t, err)
+		assert.Contains(t, string(got), `"blocked":[{"job":"waiter","on":"dep","state":"fail"}]`)
+	})
 }

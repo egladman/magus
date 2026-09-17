@@ -193,6 +193,12 @@ func printJobTree(out io.Writer, report types.JobList) {
 			fmt.Fprintf(out, "  %s: if nobody holds it, `%s`\n", id, hint.JobExit.With(id))
 		}
 	}
+	if len(report.Blocked) > 0 {
+		fmt.Fprintln(out, "\nblocked: own no paths until every dependency passes")
+		for _, b := range report.Blocked {
+			fmt.Fprintf(out, "  %s: %s\n", b.Job, b.String())
+		}
+	}
 
 	if len(report.Overlaps) == 0 {
 		return
@@ -1042,7 +1048,8 @@ func leasedBoundary(row types.Job, leases []types.Job) []job.TermsBoundary {
 	ancestors := types.JobAncestors(leases, row.ID)
 	var out []job.TermsBoundary
 	for _, other := range leases {
-		if other.ID == row.ID || !other.State.Live() || slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
+		if _, blocked := types.JobBlockedOn(leases, other); other.ID == row.ID || !other.State.Live() || blocked ||
+			slices.ContainsFunc(ancestors, func(a types.Job) bool { return a.ID == other.ID }) {
 			continue
 		}
 		for _, p := range other.WritePaths {

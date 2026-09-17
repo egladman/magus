@@ -824,3 +824,52 @@ func TestGradeLeasedWriteHandsBackTheWideningCall(t *testing.T) {
 		assert.NotContains(t, refused.Reason, "op=put")
 	})
 }
+
+// dependentFleet is a plan where "waiter" is queued behind "dep" and declares the lane dep
+// has to write in. dep declares no write paths, which scopes nothing, so the only thing
+// that can deny its write is another job's ownership.
+func dependentFleet(depState types.JobState) []types.Job {
+	registered := func(j types.Job) types.Job {
+		j.Checkpoint, j.ReportedBase, j.BaseVerdict, j.Registered = "rev-a", "rev-a", types.BaseMatch, 1
+		return j
+	}
+	return []types.Job{
+		registered(types.Job{ID: "dep", Criteria: "land the store", State: depState}),
+		registered(types.Job{ID: "waiter", Criteria: "build on the store", WritePaths: []string{"internal/job/**"}, DependsOn: []string{"dep"}, State: types.StateDeclared}),
+		registered(types.Job{ID: "other", Criteria: "unrelated", WritePaths: []string{"docs/**"}, State: types.StateRunning}),
+	}
+}
+
+func TestGradeLeasedWriteQueuedDependentDoesNotBlockItsDependency(t *testing.T) {
+	ctx, root := fleetFixture(t, dependentFleet(types.StateRunning)...)
+	got := gradeLeasedWrite(ctx, Dependencies{}, "dep", filepath.Join(root, "internal/job/store.go"))
+	assert.Empty(t, got.Decision, got.Reason)
+
+	stray := gradeLeasedWrite(ctx, Dependencies{}, "other", filepath.Join(root, "internal/job/store.go"))
+	assert.NotContains(t, stray.Reason, "waiter", "a queued job is nobody's owner")
+}
+
+func TestGradeLeasedWriteDependentBlocksOnceItsDependencyPasses(t *testing.T) {
+	for _, tt := range []struct {
+		state types.JobState
+		owns  bool
+	}{
+		{types.StateDeclared, false},
+		{types.StateRunning, false},
+		{types.StateExited, false},
+		{types.StateFail, false},
+		{types.StateNoReturn, false},
+		{types.StatePass, true},
+	} {
+		t.Run(string(tt.state), func(t *testing.T) {
+			ctx, root := fleetFixture(t, dependentFleet(tt.state)...)
+			got := gradeLeasedWrite(ctx, Dependencies{}, "other", filepath.Join(root, "internal/job/verify.go"))
+			if !tt.owns {
+				assert.NotContains(t, got.Reason, "owned by lease waiter")
+				return
+			}
+			require.Equal(t, "deny", got.Decision)
+			assert.Contains(t, got.Reason, "owned by lease waiter")
+		})
+	}
+}
