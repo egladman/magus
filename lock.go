@@ -503,6 +503,19 @@ func (l *projectLocker) emitWaiting(ctx context.Context, projectPath string) {
 		p = "."
 	}
 	fmt.Fprintf(l.out, "magus: project %s is being changed by another magus process%s; waiting for it to finish. This run starts automatically once it does; set MAGUS_NO_WAIT=1 to fail fast instead.\n", p, heldBy(l.describeOwner(projectPath)))
+	// What is SAFE while you wait, which is the question a blocked caller actually has and
+	// the one the line above leaves open.
+	//
+	// Measured on one session: ten gate runs in two hours, thirty-eight minutes of wall
+	// clock, and most of the waiting was a caller who had stopped working entirely because
+	// it could not tell which edits would spoil the run. Nothing said. The cost of that
+	// silence is a person or an agent idling for the length of a full gate, repeatedly,
+	// and it is worse than the cost this message was written to explain.
+	//
+	// The rule is narrow enough to state: a run reads the locked project's files, so
+	// editing THOSE makes its verdict describe a tree that no longer exists. Everything
+	// else in the workspace is untouched by it.
+	fmt.Fprintf(l.out, "magus: while it runs, editing files OUTSIDE %s is safe; editing files INSIDE it makes this run's verdict describe a tree that no longer exists.\n", p)
 	// Also as a record, so the sticky terminal region can PIN the wait. The stderr
 	// line above announces the event and then scrolls away; a run that is blocked
 	// needs the state to stay on screen, because the alternative a reader sees is
