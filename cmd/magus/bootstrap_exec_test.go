@@ -66,8 +66,19 @@ func TestResolveBootstrapExecTargetNoMagusfileAnywhereAbove(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// unsetBootstrapExecEnv clears both env vars bootstrapExecDecision reads. A magus
+// that already bootstrap-exec'd exports the sentinel to every process it spawns,
+// `go test` included, so without this the ambient value decides the tests below
+// rather than the branch each one names.
+func unsetBootstrapExecEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(bootstrapExecSentinelVar, "")
+	t.Setenv(bootstrapExecOptOutVar, "")
+}
+
 // Test 3: the sentinel prevents a second hop.
 func TestBootstrapExecDecisionSentinelPreventsSecondHop(t *testing.T) {
+	unsetBootstrapExecEnv(t)
 	dir := t.TempDir()
 	writeBootstrapFixtureWorkspace(t, dir)
 	t.Setenv(bootstrapExecSentinelVar, "1")
@@ -78,6 +89,7 @@ func TestBootstrapExecDecisionSentinelPreventsSecondHop(t *testing.T) {
 
 // Test 6: the opt-out disables the whole mechanism.
 func TestBootstrapExecDecisionOptOut(t *testing.T) {
+	unsetBootstrapExecEnv(t)
 	dir := t.TempDir()
 	writeBootstrapFixtureWorkspace(t, dir)
 	t.Setenv(bootstrapExecOptOutVar, "1")
@@ -89,6 +101,7 @@ func TestBootstrapExecDecisionOptOut(t *testing.T) {
 
 // Test 4: --root picks the named tree rather than $PWD.
 func TestBootstrapExecDecisionHonorsRootOverCwd(t *testing.T) {
+	unsetBootstrapExecEnv(t)
 	namedRoot := t.TempDir()
 	want := writeBootstrapFixtureWorkspace(t, namedRoot)
 

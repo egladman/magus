@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { order, visibleFiles, settled, stats, riskChips } from "./order";
 import type { DiffFile } from "./parse";
-import type { DiffAnnotation, DiffSession } from "./session";
+import type { DiffAnnotation, DiffSession, DiffSymbol } from "./session";
 
 function file(path: string, additions = 1, deletions = 0): DiffFile {
   return {
@@ -155,6 +155,40 @@ test("risk chips state facts and name the API", () => {
     ["public surface", "43 referents", "62% covered"],
   );
   assert.match(chips[0]?.title ?? "", /Open/);
+});
+
+// Only the classes a consumer cannot absorb earn a chip, and only for symbols a consumer
+// can see: every changed file has body changes, and a private helper moves no bump.
+test("removed and re-signed public symbols each earn a chip", () => {
+  const symbol = (label: string, over: Partial<DiffSymbol>): DiffSymbol => ({
+    id: label,
+    label,
+    qualified: label,
+    ref_count: 1,
+    file_count: 1,
+    external_file_count: 0,
+    module_api: true,
+    ...over,
+  });
+  const chips = riskChips(
+    ann("api.go", {
+      surface: "public",
+      reach: 0,
+      symbols: [
+        symbol("Close", { change: "removed" }),
+        symbol("Open", { change: "signature" }),
+        symbol("Steady", { change: "body" }),
+        symbol("hidden", { change: "removed", module_api: false }),
+      ],
+    }),
+  );
+  assert.deepEqual(
+    chips.map((c) => c.text),
+    ["public surface", "1 removed", "1 re-signed"],
+  );
+  assert.equal(chips[1]?.tone, "danger");
+  assert.match(chips[1]?.title ?? "", /Close/);
+  assert.match(chips[2]?.title ?? "", /renamed parameter/);
 });
 
 // The circling detector. Hot AND accelerating is the combination worth interrupting for;

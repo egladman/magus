@@ -23,6 +23,7 @@ var RuntimeBoundaryTypes = []BoundaryType{
 	{Name: "CompressResult", Zero: types.CompressResult{}, Encode: func(v any) vm.Value { return ObjectCompressResult(v.(types.CompressResult)) }},
 	{Name: "CrossTargetRef", Zero: types.CrossTargetRef{}, Encode: func(v any) vm.Value { return ObjectCrossTargetRef(v.(types.CrossTargetRef)) }},
 	{Name: "Diff", Zero: types.Diff{}, Encode: func(v any) vm.Value { return ObjectDiff(v.(types.Diff)) }},
+	{Name: "DiffAPI", Zero: types.DiffAPI{}, Encode: func(v any) vm.Value { return ObjectDiffAPI(v.(types.DiffAPI)) }},
 	{Name: "DiffChurn", Zero: types.DiffChurn{}, Encode: func(v any) vm.Value { return ObjectDiffChurn(v.(types.DiffChurn)) }},
 	{Name: "DiffFile", Zero: types.DiffFile{}, Encode: func(v any) vm.Value { return ObjectDiffFile(v.(types.DiffFile)) }},
 	{Name: "DiffReviewed", Zero: types.DiffReviewed{}, Encode: func(v any) vm.Value { return ObjectDiffReviewed(v.(types.DiffReviewed)) }},
