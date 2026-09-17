@@ -50,11 +50,11 @@ env:
   # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
   # A CEILING, not a target: the forecaster picks the count, and may raise it to
-  # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -
-  # shard count is not runner spend, but it is runner *concurrency*, and the OOM
-  # that made this knob interesting turned out to be one magusfile allocating 13GB,
-  # not too much work on one machine. Raise it when a measurement asks for it.
-  MAGUS_CI_MAX_SHARDS: '2'
+  # split a shard predicted to exceed the runner's memory. Shard count is not runner
+  # spend, but it is runner *concurrency*, so it is raised on measurement rather than
+  # taste. At 2, the shard holding the root project ran 21m against the other's 2m,
+  # because the projects the derived order chains together all land on one shard.
+  MAGUS_CI_MAX_SHARDS: '3'
   # Stream every target's output live instead of withholding it until something
   # fails. magus collapses on success by default, which is right on a terminal you
   # are sitting at and wrong in a log nobody reads until it goes red: a green run
